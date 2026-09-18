@@ -4,11 +4,11 @@ kind: program
 exercises: [recursive named type, higher-order parameter, Map over children, crisp combine]
 program:
   $lambda:
-    type: "Lambda<{ root: Unit }, Num>"
+    type: 'Lambda<{ root: Unit }, Num>'
     types:
       Unit: "{ name: Text, reports: Unit[] }"
     instructions: |
-      Count how many units in the tree `in/root`, at any depth, are named after a fruit.
+      Count how many units in the tree `args/root`, at any depth, are named after a fruit.
 inputs:
   root:
     name: "Head Office"

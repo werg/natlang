@@ -69,15 +69,15 @@ labels/   Lambda<{ inbox: List[Text], rubric: Text },
   *partial*. Partial application is well-typed; **reducing a partial lambda is
   a type error.** Currying is now visible to the type checker.
 - **`returns`** as before.
-- **No working state, no inference.** A lambda has `instructions`, `in`, and
+- **No working state, no inference.** A lambda has `instructions`, `args`, and
   `return`, nothing else (`PLAN.md` §2.2.1). Intermediate data is a parameter
   of the lambda that will consume it. **Every node is created with an explicit
   type chosen by the agent**; `Lambda<P, T>` is constructible like any other
   type. There is no `Any` scratch area: prose drafts live in `Text`,
   structured drafts are covered by `Draft<T>`.
-- **`in` is frozen on reduce.** The parent may write a child's `in` while the
+- **`args` is frozen on reduce.** The parent may write a child's `args` while the
   child is unreduced (accumulate, edit, then ship). Once `reduce` is
-  triggered, `in` is immutable, and it is always read-only to the lambda
+  triggered, `args` is immutable, and it is always read-only to the lambda
   itself. It unfreezes if the child fails.
 - **Crisp lambdas and combinators are typed too** (`PLAN.md` §2.4). A crisp
   lambda's `code` is statically checked against its `params` and `returns`

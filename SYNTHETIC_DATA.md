@@ -240,7 +240,7 @@ states (https://arxiv.org/abs/2401.09074).
 | Join | event line says children done/failed | consume results or repair | mixed outcomes |
 | Return | finished work in tree, declared `returns` | well-typed `return`, empty instructions | optional fields, nested records |
 | Continuation | multi-step instructions where step 2 needs step 1's result | construct continuation Lambda in `return` with a typed param slot; `move` the remaining lines into it | scalar small enough to substitute into the text instead |
-| Copy | value at one path needed at another | `copy(src, dst)` into the type-compatible slot | sub-ranges; distractor slots of the wrong type; frozen `in` |
+| Copy | value at one path needed at another | `copy(src, dst)` into the type-compatible slot | sub-ranges; distractor slots of the wrong type; frozen `args` |
 | Type repair | previous action + real type-error message | corrected action | real TypeScript diagnostics from the actual checker |
 | Edit-miss repair | "old string not found" | corrected edit | whitespace, line drift |
 | Loop boundary | loop on last item / empty collection | terminate correctly | off-by-one twins |

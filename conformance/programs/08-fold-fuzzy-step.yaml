@@ -4,9 +4,9 @@ kind: program
 exercises: [Fold, accumulator typing, fuzzy step]
 program:
   $lambda:
-    type: "Lambda<{ messages: Text[] }, { address: Text, changes: Num }>"
+    type: 'Lambda<{ messages: Text[] }, { address: Text, changes: Num }>'
     instructions: |
-      Go through `in/messages` in order, keeping the customer's latest delivery
+      Go through `args/messages` in order, keeping the customer's latest delivery
       address and how many times it changed. Start from address "unknown" and 0 changes.
 inputs:
   messages:

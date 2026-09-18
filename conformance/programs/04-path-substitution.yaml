@@ -4,7 +4,7 @@ kind: program
 exercises: [path substitution, child lambda, copy into in, dependencies first]
 program:
   $lambda:
-    type: "Lambda<{ reviews: Text[] }, Text>"
+    type: 'Lambda<{ reviews: Text[] }, Text>'
     instructions: |
       1. Pick out the reviews that mention delivery.
       2. Write one sentence saying what those reviews have in common.

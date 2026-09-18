@@ -3,39 +3,38 @@ title: Partial lambdas cannot be triggered; in is frozen on trigger and thawed o
 kind: harness
 stub_agent:
   # keyed by a substring of the child's instructions
-  "Say hello": [ { close: "I cannot proceed: no name was given that I recognise." } ]
+  "Say hello":
+    - action: |
+        set args/name : Text
+        Bob
+      expect: { result: rejected, codes: [not-writable] }   # a lambda's own `args` is read-only
+    - close: "I cannot proceed: no name was given that I recognise."
 setup:
   $lambda:
-    type: "Lambda<{ name: Text }, Text>"
+    type: 'Lambda<{ name: Text }, Text>'
     instructions: |
       Get a greeting written.
-    in:
+    args:
       name: "Ada"
 script:
   - action: |
       set return : Lambda<{ name: Text }, Text>
-      instructions: Say hello to `in/name`.
+      instructions: Say hello to `args/name`.
     expect: { result: ok }
   - action: |
       reduce return
-    expect: { result: refused, codes: [unbound-param], paths: [return/in/name] }
+    expect: { result: refused, codes: [unbound-param], paths: [return/args/name] }
   - action: |
-      copy in/name to return/in/name
+      copy args/name to return/args/name
     expect: { result: ok }
   - action: |
-      set in/name : Text
+      set args/name : Text
       Grace
     expect: { result: rejected, codes: [not-writable] }
   - action: |
       reduce return
     expect: { result: quiesced, note_contains: "cannot proceed" }
-    during:
-      # attempted by the child's stub before closing; must be rejected
-      - action: |
-          set in/name : Text
-          Bob
-        expect: { result: rejected, codes: [frozen] }
   - action: |
-      set return/in/name : Text
+      set return/args/name : Text
       Grace
     expect: { result: ok }   # thawed after quiescence

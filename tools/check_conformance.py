@@ -212,15 +212,15 @@ class Checker:
             has_i, has_c = "instructions" in body, "code" in body
             if has_i == has_c:
                 self.err(f"{where}: exactly one of instructions/code required")
-            extra = set(body) - META - {"instructions", "code", "in", "return"}
+            extra = set(body) - META - {"instructions", "code", "args", "return"}
             if extra:
                 self.err(f"{where}: unexpected keys {sorted(extra)}")
             if t is not None:
                 params = t[1][1]
-                for k in (body.get("in") or {}):
+                for k in (body.get("args") or {}):
                     if k not in params:
-                        self.err(f"{where}: in/{k} is not a declared parameter")
-            self.walk(body.get("in"), scope, f"{where}/in")
+                        self.err(f"{where}: args/{k} is not a declared parameter")
+            self.walk(body.get("args"), scope, f"{where}/args")
             self.walk(body.get("return"), scope, f"{where}/return")
         else:
             extra = set(body) - META - PARTS[kind] - {"acc", "at", "state", "iteration"}
@@ -300,7 +300,7 @@ def check_file(path):
                         if k not in t[1][1]:
                             c.err(f"inputs/{k} is not a declared parameter")
                     for k, (_, optional) in t[1][1].items():
-                        if not optional and k not in doc["inputs"] and k not in (body.get("in") or {}):
+                        if not optional and k not in doc["inputs"] and k not in (body.get("args") or {}):
                             c.err(f"required parameter {k!r} is not bound")
                 except TypeErr:
                     pass

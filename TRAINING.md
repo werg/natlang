@@ -207,7 +207,7 @@ volume and accuracy per skill, not per dataset.
 | S2 | Decide: write a finite-typed value (`Bool`, enum); reify decisions that matter as small typed child lambdas; decide trivial branches inline | crisp truth or teacher |
 | S3 | Iterate: construct a `Map`, `Fold`, or `Iterate` with a correctly typed body lambda where its result is needed, trigger it, handle partial results; never unroll or recurse to iterate | reference policy |
 | S4 | Call: construct a child Lambda with explicit `params` and `returns`; carve continuations out of own instructions; place each where its result is needed | reference policy + teacher |
-| S4b | Move data: `copy` between paths and sub-ranges into type-compatible slots; fill a child's `in` before reducing | reference policy |
+| S4b | Move data: `copy` between paths and sub-ranges into type-compatible slots; fill a child's `args` before reducing | reference policy |
 | S5 | Reduce and join: `reduce`, `reduce_all`, `wait`; consume results | reference policy |
 | S6 | Crisp routing: `eval` to inspect and to act on the world (result comes back as a tool result; the agent writes what it learned into the tree), crisp lambda to produce values for the tree | reference policy |
 | S6b | Loop check: given recent states of an `Iterate`, write reasoning then a verdict (`continue`, `done`, `degenerate`) | constructed loops with known outcome |
@@ -217,7 +217,7 @@ volume and accuracy per skill, not per dataset.
 | S10 | Repair: recover from type errors, edit misses, failed children | perturbation + reference policy |
 | S11 | Decompose: notice an input is too large or a task too broad, and split | teacher |
 | S11b | Cold restart: pick up a partially reduced or re-triggered lambda from the tree alone; delete steps whose results already exist | reference policy |
-| S11c | Quiesce: stop with a useful closing note when no progress is possible; as a parent, read a child's note, edit its instructions or `in`, re-trigger; `reopen` a value that is not good enough | reference policy + teacher |
+| S11c | Quiesce: stop with a useful closing note when no progress is possible; as a parent, read a child's note, edit its instructions or `args`, re-trigger; `reopen` a value that is not good enough | reference policy + teacher |
 | S12 | Abstain/escalate: mark a leaf as uncertain rather than guess | calibrated from margins |
 | S13 | Draft through holes: keep following instructions while incompleteness diagnostics are visible | reference policy |
 | S14 | Commit: check before completing; on a refused commit fix exactly the blocking diagnostics; fail upward on repeated refusal | validator + reference policy |
@@ -256,7 +256,7 @@ canonical actions. Additions specific to training:
   paraphrases ("for each / go through every / map over / per item").
 - **Conventions to instill**: delete completed steps; collapse finished loop
   iterations to a one-line note; **no scratch state**: intermediate data goes
-  into the `in` of the lambda that will consume it; sequencing by
+  into the `args` of the lambda that will consume it; sequencing by
   continuation lambdas, iteration by `Map` and `Fold`, scalar and path
   substitution into instruction text;
   data moves by `copy`, never by re-emitting values; never inline oversized

@@ -4,14 +4,14 @@ kind: program
 exercises: [cold restart, progress inferred from the tree, effect journal consulted, no repeated effect]
 start_state:
   $lambda:
-    type: "Lambda<{ alerts: { id: Text, level: Text }[] }, { emitted: Num, summary: Text }>"
+    type: 'Lambda<{ alerts: { id: Text, level: Text }[] }, { emitted: Num, summary: Text }>'
     effects: [out.emit]
     status: quiesced
     note: "budget exhausted"
     instructions: |
-      1. Emit one output record { id } for every critical alert in `in/alerts`; put the count in return/emitted.
+      1. Emit one output record { id } for every critical alert in `args/alerts`; put the count in return/emitted.
       2. Write a one-line summary of the alerts in return/summary.
-    in:
+    args:
       alerts:
         - { id: "a1", level: "critical" }
         - { id: "a2", level: "info" }

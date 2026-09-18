@@ -4,19 +4,19 @@ kind: program
 exercises: [root combinator, open list, state threading by the harness, effects in step, narrowed decision]
 program:
   $fold:
-    type: "Fold<Event, Shop>"
+    type: 'Fold<Event, Shop>'
     types:
       Event: "{ text: Text }"
       Shop: "{ stock: Dict<Num>, coins: Num }"
     init: { stock: { apple: 0, pear: 3 }, coins: 0 }
     step:
       $lambda:
-        type: "Lambda<{ acc: Shop, item: Event }, Shop>"
+        type: 'Lambda<{ acc: Shop, item: Event }, Shop>'
         effects: [out.emit]
         instructions: |
           You keep a small fruit stall. Each unit costs 2 coins.
-          1. Decide what to do about the customer message `in/item/text`. Only legal actions:
-             you can sell a fruit only if `in/acc/stock` has at least one of it. Declining is always legal.
+          1. Decide what to do about the customer message `args/item/text`. Only legal actions:
+             you can sell a fruit only if `args/acc/stock` has at least one of it. Declining is always legal.
           2. Emit a reply record { action, text } with a short line in character.
           3. Return the shop state after the action: a sale removes one unit and adds 2 coins.
 streams:

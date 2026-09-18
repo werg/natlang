@@ -4,28 +4,28 @@ kind: harness
 decoding: unconstrained
 setup:
   $lambda:
-    type: "Lambda<{ names: Text[], n: Num }, { first_two: Text[], total: Num, plan: Text }>"
+    type: 'Lambda<{ names: Text[], n: Num }, { first_two: Text[], total: Num, plan: Text }>'
     instructions: |
       Line one.
       Line two.
       Line three.
-    in: { names: ["a", "b", "c"], n: 5 }
+    args: { names: ["a", "b", "c"], n: 5 }
 script:
   - action: |
-      copy in/names[0..1] to return/first_two
+      copy args/names[0..1] to return/first_two
     expect: { result: ok, read: { path: return/first_two, value: ["a", "b"] } }
   - action: |
-      copy in/names to return/total
+      copy args/names to return/total
     expect: { result: rejected, codes: [type-does-not-fit-slot] }
   - action: |
-      copy in/n to return/total
+      copy args/n to return/total
     expect: { result: ok }
   - action: |
       copy instructions[2..3] to return/plan
     expect: { result: ok, read: { path: return/plan, value: "Line two.\nLine three.\n" } }
   - action: |
-      copy in/names/0 to return/first_two/+
+      copy args/names/0 to return/first_two/+
     expect: { result: ok, read: { path: return/first_two, value: ["a", "b", "a"] } }
   - action: |
-      copy return/total to in/n
+      copy return/total to args/n
     expect: { result: rejected, codes: [not-writable] }

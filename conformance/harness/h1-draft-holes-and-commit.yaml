@@ -3,7 +3,7 @@ title: Holes are accepted while drafting and block completion
 kind: harness
 setup:
   $lambda:
-    type: "Lambda<{}, { id: Num, label: Text, score: Num }>"
+    type: 'Lambda<{}, { id: Num, label: Text, score: Num }>'
     instructions: |
       Fill in the record.
 script:

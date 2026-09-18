@@ -6,7 +6,7 @@ program:
   $lambda:
     type: 'Lambda<{ item: Text, rubric: Text }, "accept" | "reject">'
     instructions: |
-      Decide `in/item` strictly by `in/rubric`. If the rubric does not cover the case,
+      Decide `args/item` strictly by `args/rubric`. If the rubric does not cover the case,
       stop and say what is missing.
 inputs:
   rubric: |

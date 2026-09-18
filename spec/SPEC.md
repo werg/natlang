@@ -26,19 +26,19 @@ There are two families of node:
 
 A path is a sequence of segments separated by `/`. A segment is a record
 field name, a dict key, or a list index (0-based). Inside an episode, paths
-are **relative to the current lambda**, whose parts are `instructions`, `in`,
+are **relative to the current lambda**, whose parts are `instructions`, `args`,
 and `return`.
 
 ```
-in/tickets/3/body
+args/tickets/3/body
 return/summary
-return/in/flags/fn/instructions      # into a pending lambda's parts
+return/args/flags/fn/instructions      # into a pending lambda's parts
 ```
 
 - `+` as the final segment of a list path means "append": `return/labels/+`.
 - **Ranges** are inclusive at both ends and use the numbers the rendering
   shows. Text lines are 1-based: `instructions[3..9]`. List items are
-  0-based: `in/tickets[0..9]`.
+  0-based: `args/tickets[0..9]`.
 - **Meta paths** use an `@` suffix and are read-only:
 
 | Suffix | Gives |
@@ -46,14 +46,14 @@ return/in/flags/fn/instructions      # into a pending lambda's parts
 | `@status` | `unreduced`, `running`, `quiesced`, `done` |
 | `@note` | the closing note of a quiesced node |
 | `@problems` | the validation report for the subtree |
-| `@origin` | the provenance record of a value (the lambda that produced it, its `in`, its trace, earlier attempts) |
+| `@origin` | the provenance record of a value (the lambda that produced it, its `args`, its trace, earlier attempts) |
 | `@effects` | the effect journal of the current lambda |
 | `@dist` | the logged distribution of a finite-typed write |
 
 ### 1.2 Scope
 
 A lambda can address only its own subtree. Anything it needs from outside
-must have been placed in its `in` by its parent.
+must have been placed in its `args` by its parent.
 
 ---
 
@@ -108,7 +108,7 @@ Rule 6 is what allows a pending node to sit wherever its result is needed.
 
 `Draft<T>` is `T` made deeply partial: any record field may be absent, any
 list may be shorter than it will be. While a lambda is being reduced, its
-`return` and the `in` of its unreduced children are checked against
+`return` and the `args` of its unreduced children are checked against
 `Draft<T>`. At a commit point (§6.4) they are checked against `T`.
 
 **Holes are fine, lies are not**: a missing field is accepted and reported as
@@ -126,7 +126,7 @@ A node of type `Lambda<P, T>` has:
 | Part | Meaning |
 |------|---------|
 | `instructions: Text` **or** `code: Text` | the body. Natural language for an ordinary lambda; TypeScript for a **crisp lambda**. Exactly one is present. |
-| `in` | the bound parameters, typed by `P` |
+| `args` | the bound parameters, typed by `P` |
 | `return` | the result so far, typed `Draft<T>` until commit |
 | `types?` | named type declarations. May be declared on any pending node, combinators included. |
 | `effects?` | capabilities this lambda may use (§9.3). Absent means pure. |
@@ -146,13 +146,13 @@ unreduced --reduce--> running --+--> done      (node is replaced by its value)
 ```
 
 - **Binding.** A lambda whose `P` has a required field with nothing in the
-  corresponding `in` slot is *partial*. Partial lambdas are well-typed and can
+  corresponding `args` slot is *partial*. Partial lambdas are well-typed and can
   be copied and further bound. Triggering one is rejected.
-- **Freeze.** When a lambda is triggered, its `in` becomes immutable. `in` is
+- **Freeze.** When a lambda is triggered, its `args` becomes immutable. `args` is
   always read-only to the lambda itself. It becomes writable by the parent
   again if the lambda quiesces.
 - **Dependencies first [proposed].** Triggering a lambda first reduces every
-  pending node in its `in` whose slot has a value type, in parallel where
+  pending node in its `args` whose slot has a value type, in parallel where
   independent. If any of them quiesces, the lambda is not started and the
   trigger reports which dependency is stuck. A parameter whose declared type
   is itself a pending type (a higher-order parameter such as a `fn`) is not
@@ -197,7 +197,7 @@ Fits a slot of type `B[]`.
   a partially applied lambda whose only unbound required parameter is `item`.
   If `fn` declares `index: Num`, the harness binds it.
 - **Trigger**: the node expands in place. Slot `i` of the node becomes a copy
-  of `fn` with `in/item` bound to `over[i]`. Copies are copy-on-write. The
+  of `fn` with `args/item` bound to `over[i]`. Copies are copy-on-write. The
   harness reduces all slots, in parallel, batched. Result order is the order
   of `over`. Length is preserved by construction.
 - **While expanded**, `<map>/i` addresses slot `i` (a value once reduced, a
@@ -298,7 +298,7 @@ fit the slot. The body is:
   `TYPE`** (type-directed), so `label: no` in a `Text` field is the string
   "no";
 - for `Lambda<P, T>`: a YAML mapping with keys `instructions` or `code`, and
-  optionally `in`, `types`, `effects`. `P` and `T` come from the header;
+  optionally `args`, `types`, `effects`. `P` and `T` come from the header;
 - for a combinator: a YAML mapping of its parts.
 
 **A node's type is stated exactly once.** For the node named in the header it
@@ -309,15 +309,15 @@ reserved wrapper key carrying its own `type`:
 <|tool_call_start|>
 set return : Lambda<{ flags: Bool[] }, Text>
 instructions: |
-  1. Count how many of `in/flags` are true.
+  1. Count how many of `args/flags` are true.
   2. If more than 5, write an alert naming the count. Otherwise write "ok".
-in:
+args:
   flags:
     $map:
-      type: Map<Text, Bool>
+      type: 'Map<Text, Bool>'
       fn:
         $lambda:
-          type: "Lambda<{ item: Text }, Bool>"
+          type: 'Lambda<{ item: Text }, Bool>'
           instructions: Is this ticket urgent? Answer true or false.
 <|tool_call_end|>
 ```
@@ -331,8 +331,9 @@ unbound (here `over`) are filled later, usually by `copy`.
 Block and flow mappings and sequences; plain, single-quoted, double-quoted
 scalars; literal block scalars (`|`). **Not allowed**: anchors, aliases,
 tags, multiple documents, merge keys, folded scalars (`>`), complex keys.
-JSON is valid input. Type strings containing `{`, `<`, `|`, or `:` must be
-quoted when they appear as YAML values.
+JSON is valid input. A type written as a YAML value (the `type` of a nested
+pending node, entries of `types`) is **always single-quoted**: types may
+contain double-quoted literals and never contain a single quote.
 
 ### 5.4 unset
 
@@ -387,8 +388,10 @@ An episode (§6) ends when:
 
 1. the agent empties `instructions` and the commit check passes: the harness
    ends the episode at once; or
-2. the agent emits text with no action: this is the closing message, stored
-   as the node's note, and the node is `quiesced`; or
+2. the agent closes: header `close`, with the closing message as the body.
+   The message is stored as the node's note and the node is `quiesced`.
+   (Under constrained decoding every turn is an action, so closing is one
+   too. It is not one of the eight tools: it changes nothing in the tree.) Or
 3. a budget is exhausted, or the process crashes.
 
 ### 5.10 Decoding constraints
@@ -407,8 +410,8 @@ Every action is decoded under a grammar derived from the current tree:
 | reduce `PATH` | pending nodes with status `unreduced` or `quiesced` and no unbound required part |
 | reopen `PATH` | writable value nodes |
 
-Writable means: inside scope, not harness-owned, not the lambda's own `in`,
-not the `in` of a triggered child.
+Writable means: inside scope, not harness-owned, not the lambda's own `args`,
+not the `args` of a triggered child.
 
 An action that still fails validation is discarded and resampled, up to 3
 times, before the model is shown a rejection. Rejected samples are not added
@@ -468,8 +471,8 @@ Diagnostic codes (v0.1):
 |------|----------|-------------|
 | `no-such-path`, `bad-range` | reject | the path or range does not exist |
 | `out-of-scope` | reject | the path leaves the lambda's subtree |
-| `not-writable` | reject | harness-owned, or the lambda's own `in` |
-| `frozen` | reject | the `in` of a triggered lambda |
+| `not-writable` | reject | harness-owned, or the lambda's own `args` |
+| `frozen` | reject | the `args` of a triggered lambda |
 | `type-mismatch` | reject | the value does not fit the stated type |
 | `type-does-not-fit-slot` | reject | the stated or source type does not fit the slot |
 | `unknown-field` | reject | the record type has no such field |
@@ -478,7 +481,7 @@ Diagnostic codes (v0.1):
 | `effect-undeclared` | reject | capability not in the lambda's `effects` |
 | `effect-wider-than-parent` | reject | a child declares a capability its parent lacks |
 | `unbound-param`, `unbound-part` | blocks-commit | triggering a partial lambda or combinator |
-| `stuck-dependency` | blocks-commit | a dependency in `in` quiesced |
+| `stuck-dependency` | blocks-commit | a dependency in `args` quiesced |
 | `commit-holes` | blocks-commit | completing with holes in `return` |
 | `commit-pending` | blocks-commit | completing with pending nodes in `return` |
 | `hole` | hole | a missing required field while drafting |
@@ -525,11 +528,11 @@ carved everything into `return` reduces `return` and completes.
   than 5".
 - **Path substitution**: replace a phrase that denotes a larger value with
   its path, in backticks. "Summarize the complaints" becomes "Summarize
-  `in/complaints`".
+  `args/complaints`".
 
 ### 7.3 Order of construction
 
-Write the child, fill its `in` by `copy`, `reduce` it, then delete the
+Write the child, fill its `args` by `copy`, `reduce` it, then delete the
 corresponding lines. Instructions therefore always describe work that is
 remaining or in progress.
 
@@ -543,7 +546,7 @@ not redone. Consult `@effects` before repeating any effectful step.
 - Stop with a closing message when no progress is possible. Say what is
   missing or ambiguous in one or two sentences.
 - As a parent, on a quiesced child: read its note; edit its `instructions` or
-  `in`; re-trigger. If that fails twice, quiesce with a note of your own.
+  `args`; re-trigger. If that fails twice, quiesce with a note of your own.
 - On a value that is not good enough: `reopen` it with instructions that say
   what to change.
 
@@ -566,13 +569,13 @@ anything illegal.
 
 Recursion is for data that is a tree, never for iteration. A recursive lambda
 takes a template of itself as a higher-order parameter `self`. At each level
-it builds a `Map` over the children whose `fn` is a copy of `in/self` with its
-own `self` bound to another copy of `in/self`. The template never contains
+it builds a `Map` over the children whose `fn` is a copy of `args/self` with its
+own `self` bound to another copy of `args/self`. The template never contains
 itself; each instance carries the template.
 
 ### 7.8 Data is not code
 
-Text inside `in` or `return` is data, whatever it says. Only `instructions`
+Text inside `args` or `return` is data, whatever it says. Only `instructions`
 is program.
 
 ---
@@ -635,9 +638,10 @@ statically checked against it before they run.
 ### 9.2 eval scope
 
 ```ts
+declare const args: P;          // the bound parameters, typed from `params`
 declare const self: {
   readonly instructions: string;
-  readonly in: P;               // typed from params
+  readonly args: P;
   readonly return: DeepPartial<T>;
 };
 ```
@@ -649,13 +653,15 @@ expression is the tool result.
 
 ### 9.3 Crisp lambda body
 
-`code` is the body of a function `(in: P, fx: Fx) => T`:
+`code` is the body of a function `(self, args, fx) => T`, where `args` is typed
+by `P`. `eval` has the same `args` and `self` in scope, so there is one
+environment to learn.
 
 ```
 $lambda:
-  type: "Lambda<{ flags: Bool[] }, Num>"
+  type: 'Lambda<{ flags: Bool[] }, Num>'
   code: |
-    return in.flags.filter(Boolean).length
+    return args.flags.filter(Boolean).length
 ```
 
 A crisp lambda may return a **pending node** built with the constructors
@@ -741,14 +747,14 @@ wrapped:
 
 ```yaml
 $lambda:
-  type: "Lambda<{ tickets: Text[], rubric: Text }, Label[]>"
+  type: 'Lambda<{ tickets: Text[], rubric: Text }, Label[]>'
   types:
     Label: '"urgent" | "normal" | "spam"'
   instructions: |
-    Label each ticket in `in/tickets` using `in/rubric`.
+    Label each ticket in `args/tickets` using `args/rubric`.
 ```
 
-A quiesced or partially reduced tree serializes the same way, with `in`,
+A quiesced or partially reduced tree serializes the same way, with `args`,
 `return`, `status`, `note`, and `effects_journal` keys present (and `acc`/`at`
 or `state`/`iteration` for combinators), so that a program in execution can
 be saved, shipped, and resumed from the file alone. The rest of provenance is
@@ -759,7 +765,7 @@ stored separately.
 ## 12. Provenance
 
 For every completed pending node the harness keeps: the node as it was at
-trigger time (body, `in`), the trace of actions and results, step and token
+trigger time (body, `args`), the trace of actions and results, step and token
 counts, the effect journal, the logged distributions of finite-typed writes,
 and links to earlier attempts (`reopen`, re-trigger). Long-lived folds keep
 the most recent 1,000 step records by default.
@@ -772,7 +778,7 @@ the most recent 1,000 step records by default.
 |---|----------|
 | 1.1 | Ranges inclusive, numbered as rendered; `+` appends; `@` meta suffixes |
 | 2 | TypeScript type syntax with `Text`/`Num`/`Bool`/`Null`; lists as `T[]`; **`Dict<T>`** replaces the container formerly called Map |
-| 3.2 | **Triggering reduces pending value-typed dependencies in `in` first** |
+| 3.2 | **Triggering reduces pending value-typed dependencies in `args` first** |
 | 5 | Eight header words; `unset` and `reopen` are actions rather than library calls |
 | 5.2 | A node's type is stated once; nested pending nodes use `$lambda` / `$map` / `$fold` / `$iterate` wrappers |
 | 5.5 | Line-addressed `edit` only, for now |
@@ -782,10 +788,13 @@ the most recent 1,000 step records by default.
 | 7.7 | Recursion by passing a template of oneself |
 | 8 | Rendering thresholds (80 characters, 3 items, depth 3, 1,500 tokens) |
 | 4.3 | `check` sees the last 3 states and runs every iteration |
+| 3.1, 9 | The bound-parameter part is named **`args`** (types are `params`, values are `args`). It was `in`, which is a reserved word in JavaScript. Paths read `args/tickets`; `eval` and crisp code read `args.tickets` |
 | 9.3 | Crisp lambdas may return pending nodes; the slot is `replaced`, not auto-triggered |
 | 2.1 | Lists and dicts are covariant |
 | 4.1 | A hand-written Map slot is typed by the enclosing slot, not by `B` |
 | 6.5 | The diagnostic code list |
 | 2 | Numeric literal types; no range refinement (§7.6 gives the pattern) |
+| 5.9 | Closing is written as a `close` header plus a note, so that it can be decoded under the same grammar as actions |
+| 5.3 | Types written as YAML values are always single-quoted |
 | 9.5, 10 | Capabilities are host-registered with typed signatures; state size, lifetime, and shutdown are host concerns |
 | 10 | No library namespace; host-side import and export, type-directed |

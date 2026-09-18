@@ -4,9 +4,9 @@ kind: program
 exercises: [too large, crisp split, Map over lines, crisp aggregate, continuation]
 program:
   $lambda:
-    type: "Lambda<{ log: Text }, Num>"
+    type: 'Lambda<{ log: Text }, Num>'
     instructions: |
-      `in/log` has one customer comment per line. Return how many of the comments are complaints.
+      `args/log` has one customer comment per line. Return how many of the comments are complaints.
 inputs:
   log: |
     Arrived broken, very disappointed.
@@ -37,4 +37,4 @@ lint:
     - a crisp lambda splits lines into Text[]
     - "a Map<Text, Bool> judges each line"
     - the count is crisp
-  must_not: [read in/log without a range covering only a preview]
+  must_not: [read args/log without a range covering only a preview]

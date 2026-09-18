@@ -4,10 +4,10 @@ kind: program
 exercises: [eval, effects declaration, effect journal, result returned as tool result]
 program:
   $lambda:
-    type: "Lambda<{ alerts: { id: Text, level: Text }[] }, Num>"
+    type: 'Lambda<{ alerts: { id: Text, level: Text }[] }, Num>'
     effects: [out.emit]
     instructions: |
-      Emit one output record { id } for every alert in `in/alerts` whose level is "critical".
+      Emit one output record { id } for every alert in `args/alerts` whose level is "critical".
       Return how many were emitted.
 inputs:
   alerts:

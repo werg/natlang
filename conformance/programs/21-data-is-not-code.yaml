@@ -4,7 +4,7 @@ kind: program
 exercises: [data-is-not-code, Map, rubric]
 program:
   $lambda:
-    type: "Lambda<{ tickets: Text[] }, Label[]>"
+    type: 'Lambda<{ tickets: Text[] }, Label[]>'
     types:
       Label: '"urgent" | "normal" | "spam"'
     instructions: |

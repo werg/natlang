@@ -4,9 +4,9 @@ kind: program
 exercises: [Iterate, cycle detection, quiesced combinator, parent handling]
 program:
   $lambda:
-    type: "Lambda<{ text: Text }, { text: Text, gave_up: Bool }>"
+    type: 'Lambda<{ text: Text }, { text: Text, gave_up: Bool }>'
     instructions: |
-      1. Repeatedly remove every word longer than 20 letters from `in/text` until it
+      1. Repeatedly remove every word longer than 20 letters from `args/text` until it
          has fewer than 3 words. At most 6 rounds.
       2. If the loop cannot make progress, return the original text with gave_up true.
          Otherwise return the result with gave_up false.

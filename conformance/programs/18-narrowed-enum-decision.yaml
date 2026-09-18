@@ -4,12 +4,12 @@ kind: program
 exercises: [crisp lambda returning a pending node, enum narrowing, replaced result, Dict]
 program:
   $lambda:
-    type: "Lambda<{ stock: Dict<Num>, request: Text }, Action>"
+    type: 'Lambda<{ stock: Dict<Num>, request: Text }, Action>'
     types:
       Action: '"sell_apple" | "sell_pear" | "decline"'
     instructions: |
-      1. Work out which actions are legal: an item can be sold only if `in/stock` has at least one; declining is always legal.
-      2. Choose, among the legal actions only, the one that serves `in/request`. If what the customer wants cannot be sold, decline.
+      1. Work out which actions are legal: an item can be sold only if `args/stock` has at least one; declining is always legal.
+      2. Choose, among the legal actions only, the one that serves `args/request`. If what the customer wants cannot be sold, decline.
 inputs:
   stock: { apple: 0, pear: 3 }
   request: "Two of your finest apples, please."
@@ -26,16 +26,16 @@ lint:
 canonical_trace: |
   >>> set return : Lambda<{ stock: Dict<Num>, request: Text }, Action>
       code: |
-        const legal = ["decline", ...Object.keys(in.stock).filter(k => in.stock[k] > 0).map(k => "sell_" + k)]
+        const legal = ["decline", ...Object.keys(args.stock).filter(k => args.stock[k] > 0).map(k => "sell_" + k)]
         return lambda({
           type: `Lambda<{ request: Text }, ${enumOf(legal)}>`,
-          instructions: "Choose the action that serves the customer in `in/request`. If what they want cannot be sold, decline.",
-          in: { request: in.request },
+          instructions: "Choose the action that serves the customer in `args/request`. If what they want cannot be sold, decline.",
+          args: { request: args.request },
         })
   <<< ok
-  >>> copy in/stock to return/in/stock
+  >>> copy args/stock to return/args/stock
   <<< ok
-  >>> copy in/request to return/in/request
+  >>> copy args/request to return/args/request
   <<< ok
   >>> reduce return
   <<< return: replaced  Lambda<{ request: Text }, "decline" | "sell_pear"> unreduced

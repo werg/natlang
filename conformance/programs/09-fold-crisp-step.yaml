@@ -4,9 +4,9 @@ kind: program
 exercises: [Fold, crisp lambda as body, no model calls in the loop]
 program:
   $lambda:
-    type: "Lambda<{ lines: { sku: Text, qty: Num, unit_price: Num }[] }, Num>"
+    type: 'Lambda<{ lines: { sku: Text, qty: Num, unit_price: Num }[] }, Num>'
     instructions: |
-      Compute the order total from `in/lines`, carrying the running total line by line.
+      Compute the order total from `args/lines`, carrying the running total line by line.
 inputs:
   lines:
     - { sku: "A1", qty: 2, unit_price: 9.5 }

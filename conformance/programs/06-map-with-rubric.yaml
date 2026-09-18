@@ -4,11 +4,11 @@ kind: program
 exercises: [Map, partial application of fn, named types, enum]
 program:
   $lambda:
-    type: "Lambda<{ tickets: Text[], rubric: Text }, Label[]>"
+    type: 'Lambda<{ tickets: Text[], rubric: Text }, Label[]>'
     types:
       Label: '"billing" | "technical" | "spam"'
     instructions: |
-      Label each ticket in `in/tickets` according to `in/rubric`.
+      Label each ticket in `args/tickets` according to `args/rubric`.
 inputs:
   rubric: |
     billing: anything about charges, invoices, refunds, or payment methods.
@@ -32,12 +32,12 @@ canonical_trace: |
   >>> set return : Map<Text, Label>
       fn:
         $lambda:
-          type: "Lambda<{ item: Text, rubric: Text }, Label>"
-          instructions: Label the ticket in `in/item` according to `in/rubric`.
+          type: 'Lambda<{ item: Text, rubric: Text }, Label>'
+          instructions: Label the ticket in `args/item` according to `args/rubric`.
   <<< ok
-  >>> copy in/rubric to return/fn/in/rubric
+  >>> copy args/rubric to return/fn/args/rubric
   <<< ok
-  >>> copy in/tickets to return/over
+  >>> copy args/tickets to return/over
   <<< ok
   >>> reduce return
   <<< return: done  Label[] 5 items

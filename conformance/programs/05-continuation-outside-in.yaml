@@ -4,7 +4,7 @@ kind: program
 exercises: [continuation, outside-in construction, Map, nested pending literals, dependencies first, copy]
 program:
   $lambda:
-    type: "Lambda<{ tickets: Text[] }, Text>"
+    type: 'Lambda<{ tickets: Text[] }, Text>'
     instructions: |
       1. Decide for each ticket whether it is urgent.
       2. If more than 5 are urgent, write exactly "ALERT: N urgent" with N the count.
@@ -24,26 +24,26 @@ expect:
 lint:
   must:
     - "return is first set to a continuation Lambda<{ flags: Bool[] }, Text>"
-    - "its in/flags holds a Map<Text, Bool>"
-    - copy in/tickets to the Map's over
+    - "its args/flags holds a Map<Text, Bool>"
+    - copy args/tickets to the Map's over
     - a single reduce of return (dependencies reduce first)
     - counting done by eval or crisp lambda inside the continuation
-  must_not: [any node outside instructions/in/return, unrolled per-ticket steps in the parent, move]
+  must_not: [any node outside instructions/args/return, unrolled per-ticket steps in the parent, move]
 canonical_trace: |
   >>> set return : Lambda<{ flags: Bool[] }, Text>
       instructions: |
-        1. Count how many of `in/flags` are true.
+        1. Count how many of `args/flags` are true.
         2. If more than 5, write exactly "ALERT: N urgent" with N the count. Otherwise write exactly "ok".
-      in:
+      args:
         flags:
           $map:
-            type: Map<Text, Bool>
+            type: 'Map<Text, Bool>'
             fn:
               $lambda:
-                type: "Lambda<{ item: Text }, Bool>"
-                instructions: Is the ticket in `in/item` urgent? Answer true or false.
-  <<< ok   problems: 0 blocking · 1 hole (return/in/flags/over unbound)
-  >>> copy in/tickets to return/in/flags/over
+                type: 'Lambda<{ item: Text }, Bool>'
+                instructions: Is the ticket in `args/item` urgent? Answer true or false.
+  <<< ok   problems: 0 blocking · 1 hole (return/args/flags/over unbound)
+  >>> copy args/tickets to return/args/flags/over
   <<< ok
   >>> reduce return
   <<< return: done  "ALERT: 6 urgent"

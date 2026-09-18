@@ -12,7 +12,7 @@ Each file is one program with unambiguous toy inputs.
 |-----|---------|
 | `program` | the root pending node, in the serialization of SPEC §11 |
 | `start_state` | used instead of `program` when a test begins from a partly reduced tree |
-| `inputs` | values bound to the root's `in` |
+| `inputs` | values bound to the root's `args` |
 | `streams` | items fed to an open list; `$close` closes it |
 | `expect.value` | the exact final value |
 | `expect.checks` | properties, when the value is not unique: `crisp` (TypeScript over `value`) or `judge` (a yes/no question put to a strong model) |

@@ -4,7 +4,7 @@ kind: program
 exercises: [Map, quiescence without completion, closing note, partial result, parent repair]
 program:
   $lambda:
-    type: "Lambda<{ tickets: Text[] }, Label[]>"
+    type: 'Lambda<{ tickets: Text[] }, Label[]>'
     types:
       Label: '"question" | "complaint" | "unreadable"'
     instructions: |
@@ -29,10 +29,10 @@ canonical_trace: |
         $lambda:
           type: 'Lambda<{ item: Text }, "question" | "complaint">'
           instructions: |
-            Is the ticket in `in/item` a question or a complaint?
+            Is the ticket in `args/item` a question or a complaint?
             If it is neither or cannot be read, stop and say so.
   <<< ok
-  >>> copy in/tickets to return/over
+  >>> copy args/tickets to return/over
   <<< ok
   >>> reduce return
   <<< return: quiesced  2 of 3 reduced

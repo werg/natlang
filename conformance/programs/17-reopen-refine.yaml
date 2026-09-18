@@ -4,9 +4,9 @@ kind: program
 exercises: [reopen, draft return prefilled with the old value, provenance links attempts, eval as checker]
 program:
   $lambda:
-    type: "Lambda<{ report: Text }, Text>"
+    type: 'Lambda<{ report: Text }, Text>'
     instructions: |
-      1. Have a headline written for `in/report`.
+      1. Have a headline written for `args/report`.
       2. Check it is at most 8 words. If it is longer, reopen it and ask for it to be cut down. Check again.
 inputs:
   report: "Quarterly revenue grew by four percent, driven mainly by strong sales in the northern region, while costs remained flat compared with the previous quarter."
@@ -20,9 +20,9 @@ lint:
   must_not: [the parent rewriting the headline itself]
 canonical_trace: |
   >>> set return : Lambda<{ report: Text }, Text>
-      instructions: Write a headline for `in/report`.
+      instructions: Write a headline for `args/report`.
   <<< ok
-  >>> copy in/report to return/in/report
+  >>> copy args/report to return/args/report
   <<< ok
   >>> reduce return
   <<< return: done  "Quarterly revenue grows four percent on strong northern sales as costs hold"

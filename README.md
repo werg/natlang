@@ -17,10 +17,21 @@ sandboxed TypeScript.
 | `SYNTHETIC_DATA.md` | Detailed designs and prior art for the fifteen synthesized datasets |
 | `spec/` | The normative language specification (Phase 0) |
 | `conformance/` | The conformance suite: small programs, one per language construct |
+| `natlang/` | The harness (Python) |
 
-Status: Phase 0 (language specification and conformance suite) drafted and
-under review. No harness code yet.
+Status: Phase 0 (specification, conformance suite) done. Phase 1 (harness) in
+progress: the typed tree, validator, actions, sandbox, and combinators work
+and are tested without a model; model-backed decoding is next.
 
 ```
-python3 tools/check_conformance.py   # static checks on the suite
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e '.[js,dev]'
+.venv/bin/python -m pytest -q          # harness scripts + canonical trace replays
+python3 tools/check_conformance.py    # static checks on the suite
+```
+
+Running a program with a model (needs a llama.cpp `llama-server` serving a
+GGUF of the model on port 8080):
+
+```
+.venv/bin/python -m natlang run conformance/programs/06-map-with-rubric.yaml --trace trace.jsonl
 ```

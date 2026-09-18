@@ -6,23 +6,23 @@ stub_agent:
     - when_item: "bad"
       do: [ { close: "cannot echo this" } ]
     - otherwise:
-      do: [ { set_return_from: in/item }, { empty_instructions: true } ]
+      do: [ { set_return_from: args/item }, { empty_instructions: true } ]
 setup:
   $lambda:
-    type: "Lambda<{ xs: Text[] }, Text[]>"
+    type: 'Lambda<{ xs: Text[] }, Text[]>'
     instructions: |
       Echo every item.
-    in: { xs: ["a", "bad", "c"] }
+    args: { xs: ["a", "bad", "c"] }
 script:
   - action: |
       set return : Map<Text, Text>
       fn:
         $lambda:
-          type: "Lambda<{ item: Text }, Text>"
-          instructions: Echo `in/item`.
+          type: 'Lambda<{ item: Text }, Text>'
+          instructions: Echo `args/item`.
     expect: { result: ok }
   - action: |
-      copy in/xs to return/over
+      copy args/xs to return/over
     expect: { result: ok }
   - action: |
       reduce return
@@ -32,7 +32,7 @@ script:
       read: [ { path: return/0, value: "a" }, { path: return/2, value: "c" }, { path: "return/1@status", value: quiesced } ]
       episodes_started: 3
   - action: |
-      set return/1/in/item : Text
+      set return/1/args/item : Text
       b
     expect: { result: ok }
   - action: |

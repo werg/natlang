@@ -85,7 +85,7 @@ see 2.2.1).
 
 - `instructions: Text` – the natural-language program. Non-empty means
   unreduced.
-- `in` – the bound parameters, typed by `params: P`. Writable by the *parent*
+- `args` – the bound parameters, typed by `params: P`. Writable by the *parent*
   while the lambda is unreduced; **frozen when `reduce` is triggered**, and
   read-only to the lambda itself. This is what lets a parent accumulate and
   edit a child's inputs before shipping it.
@@ -95,18 +95,18 @@ see 2.2.1).
 - status (harness-owned): `unreduced | running | quiesced | done`, step
   count, and for `quiesced` a reason kind and the agent's closing note.
 
-The same shape is what the eval scope sees: `self.instructions`, `self.in`,
+The same shape is what the eval scope sees: `inputstructions`, `args`,
 `self.return`, with the generated `.d.ts` typed from `params` and `returns`.
 
 **Every node is created with an explicit type chosen by the agent.** There is
 no type inference. `Lambda` is a constructible type like any other: a `set`
 whose literal is a Lambda (instructions, `params`, `returns`, optional initial
-`in`) is how subroutines come into existence.
+`args`) is how subroutines come into existence.
 
 Semantics:
 
 - **Abstraction** is a Lambda node. **Application** is copying it and filling
-  `in`. **Partial application** is filling some of `in`; a lambda with unbound
+  `args`. **Partial application** is filling some of `args`; a lambda with unbound
   required params cannot be reduced.
 - **Reduction** is explicit and agent-triggered: the agent calls `reduce` on a
   path. `reduce` means *run the interpreter at this node until it is a
@@ -121,7 +121,7 @@ Semantics:
   hand. Recursion remains possible for tree-shaped data, bounded by the depth
   of the data.
 - **Swap-out**: on completion the node's path resolves to the plain value `T`.
-  The lambda record (instructions, `in`, trace, steps, cost) moves to a shadow
+  The lambda record (instructions, `args`, trace, steps, cost) moves to a shadow
   layer reachable through a meta path. The value tree stays pure data.
 - **Typing discipline**: reading a `Lambda<_, T>` where `T` is expected is a
   type error until reduced.
@@ -135,7 +135,7 @@ Semantics:
   stored as its note. Budget exhaustion, a crash, and repeatedly refused
   commits produce the same state with a harness-written reason. There is no
   separate failure representation. The parent sees the note in its event
-  line; the child's `in` and `instructions` are editable again; the parent may
+  line; the child's `args` and `instructions` are editable again; the parent may
   edit and re-trigger, replace it, or quiesce itself. A lambda that stops
   because it lacks information is a *residual program* awaiting more inputs,
   which is the same thing as a partial application.
@@ -151,7 +151,7 @@ Semantics:
   *changes* the type is not a reopen; it is a continuation built outside-in,
   and the type system forces that.
 - **Scope** is the subtree. A lambda sees its own node and nothing above. The
-  parent must copy anything the child needs into the child's `in`. This is
+  parent must copy anything the child needs into the child's `args`. This is
   what makes a lambda self-contained, shippable, and resumable.
 
 #### 2.2.1 Where intermediate data lives
@@ -163,13 +163,13 @@ will consume it**, placed where that lambda's result needs to go.
 
 - *Sequencing.* "Count the urgent ones; if more than 5, write an alert"
   becomes: `return` holds a continuation `Lambda<{ n: Num }, Text>` with the
-  rest of the instructions, and its `in/n` slot holds a
+  rest of the instructions, and its `args/n` slot holds a
   `Lambda<{ inbox }, Num>` that does the counting. Reduce the inner one, its
-  value lands in `in/n`, then reduce the continuation.
+  value lands in `args/n`, then reduce the continuation.
 - *Scalar and path substitution* (decided: a taught style). A small scalar
   result may be substituted into the instruction text, which is β-reduction
   proper; a larger result is referred to by substituting its **path** into the
-  text ("summarize the complaints" becomes "summarize `in/complaints`"). A
+  text ("summarize the complaints" becomes "summarize `args/complaints`"). A
   parameter binding is the same substitution delayed, and the only option for
   large or structured values.
 - *Iteration* uses the `Map` and `Fold` combinators (§2.4). The accumulator of
@@ -180,7 +180,7 @@ subroutines, which is the regime where a small model is reliable; every
 intermediate value is some lambda's return, so **every intermediate has a
 type, a declared consumer, and provenance** (re-run, memoization, and
 dataflow apply to all of it, not just to final results); the per-lambda
-rendering stays at instructions + `in` + `return`; and nothing needs type
+rendering stays at instructions + `args` + `return`; and nothing needs type
 inference or tidying up. The cost is heavier structural steps: the
 interpreter must carve continuations out of its own instructions and declare
 param types. That is what the `copy` tool (3.1) is for.
@@ -232,7 +232,7 @@ like lambdas.
 **Crisp lambdas** (decided). A `Lambda<P, T>` whose body is TypeScript instead
 of natural language: `code: Text` in place of `instructions`. It is typed,
 editable, copyable, and sits in the result tree like any lambda. Triggering it
-runs the code in the sandbox with `in` as its typed input, and the result
+runs the code in the sandbox with `args` as its typed input, and the result
 becomes the node's value. No model episode is involved. Crisp results get
 provenance and memoization like everything else, and large values land in
 their slot without passing through the model's tokens. A failing crisp lambda
@@ -265,7 +265,7 @@ lambdas do.
 | `Fold<A, S>` | `over: List[A]`, `init: S`, `step: Lambda<{ acc: S, item: A }, S>` | `S` |
 
 - *Triggering a `Map`* expands it in place into one copy of `fn` per item,
-  each with `in/item` bound (copy-on-write, so free). The expansion is visible
+  each with `args/item` bound (copy-on-write, so free). The expansion is visible
   in the tree as a list of pending lambdas. The harness reduces them in
   parallel, batched. When all are values the node is a `List[B]`. Length and
   order are preserved **by construction**.
@@ -328,7 +328,7 @@ Patterns the interpreter is trained on:
 
 - **Sequential steps**: consume `instructions` top-down; delete a step once
   its result exists. Use scalar and path substitution.
-- **Subroutine call**: construct a child lambda outside-in, fill its `in` by
+- **Subroutine call**: construct a child lambda outside-in, fill its `args` by
   `copy`, trigger it.
 - **Iteration**: construct a `Map`, `Fold`, or `Iterate` where its result is
   needed, trigger it. Never unroll loops by hand, never recurse to iterate.
@@ -348,12 +348,12 @@ Patterns the interpreter is trained on:
 | `edit`   | `edit(path, old, new)`                            | Search/replace on a `Text` node. The trained file-editing skill. |
 | `set`    | `set(path, type, literal)`                        | Create / replace / append / delete (literal `null` deletes). **The type is explicit at creation**; `Lambda` is a constructible type. |
 | `copy`   | `copy(src, dst)`                                  | **Type-aware path-to-path copy.** See below. |
-| `reduce` | `reduce(paths, blocking=true)` + `wait(paths, any\|all)` | Blocking by default. Non-blocking = spawn. Freezes the target's `in`. |
+| `reduce` | `reduce(paths, blocking=true)` + `wait(paths, any\|all)` | Blocking by default. Non-blocking = spawn. Freezes the target's `args`. |
 | `eval`   | `eval` + TypeScript body                          | Runs in the sandbox; the result comes back as the tool result. May cause external side effects (within declared `effects`); does not write to the tree (§2.4). |
 
 **`copy` is a first-class tool and likely the most used one.** With no
 working-state zone and subtree scoping, nearly all data movement is copying:
-passing inputs into a child's `in`, carving a continuation out of one's own
+passing inputs into a child's `args`, carving a continuation out of one's own
 instructions, moving a reduced value into the slot that needs it. Doing this
 through `set` would force values back through the model's tokens, which is
 slow, error-prone, and impossible for large values.
@@ -372,7 +372,7 @@ slow, error-prone, and impossible for large values.
   instructions therefore always describe work that is remaining or in
   progress, and deleting a step is the acknowledgment that it is done.
 - *Construction is outside-in.* Build the continuation first, with a typed
-  hole in its `in`; put the producer lambda in that hole. Lambda literals may
+  hole in its `args`; put the producer lambda in that hole. Lambda literals may
   nest, so this can be one `set`. The type system enforces the order: a
   `Lambda<_, List[Label]>` cannot sit in a `Text` slot.
 - **Data is never destroyed**, only superseded by a later write or archived to
@@ -873,6 +873,82 @@ Renamed by the spec: the string-keyed container is **`Dict<T>`**, so that
 
 - Search-and-replace and whole-text rewrite as alternatives to line-addressed
   `edit`.
+
+### 10.2b Phase 1 status (harness)
+
+Branch `phase-1-harness`. Package `natlang/`:
+
+| Module | Contents |
+|--------|----------|
+| `types.py` | type grammar parser, environments with named and recursive types, the fit relation |
+| `values.py` | type-directed construction of values and pending nodes, holes, unbound parts, serialization |
+| `nodes.py`, `refs.py`, `paths.py` | node kinds, typed slot references, path resolution with scope and writability |
+| `actions.py` | the header-plus-body action parser |
+| `runtime.py` | sessions that apply the eight actions with validation and commit checks; triggering of lambdas, crisp lambdas, `Map`, `Fold`, `Iterate`; dependencies first; swap-out; quiescence; effect journal; open lists |
+| `js.py`, `prelude.js` | QuickJS sandbox and the crisp standard library |
+| `render.py` | rendering policy `render/0.1` |
+| `agents.py` | stub, oracle, and replay agents for tests |
+
+Tests (33): the 6 harness conformance scripts; a replay of the 8 canonical
+traces end to end with small Python oracles standing in for the model; the
+generated grammars accepting every canonical action at its state and refusing
+ill-typed ones; the model agent's two-phase loop with a scripted decoder.
+
+**Found by building it** (spec corrected): `in` is a reserved word in
+JavaScript, so the bound-parameter part is now `args`; unbound parts of pending
+nodes in a draft count as holes.
+
+**Generation control** (decided 2026-09-19, from a survey of current backends;
+see `natlang/decoder.py`). An OpenAI-style chat endpoint is not enough: the
+harness needs a different grammar on every call, raw prompts with special
+tokens, continuation of one sequence under a second grammar, top-token
+probabilities, cheap resampling, and prefix-cache reuse.
+
+- The harness owns a small `Decoder` interface; backends plug in behind it.
+- **Grammar format: portable GBNF** with no token-id terminals and no `{m,n}`.
+  It is native to llama.cpp, accepted by XGrammar (the default in vLLM and
+  SGLang), and by llguidance. `natlang/grammar.py` derives a header grammar
+  from the tree (existing paths, writable slots, types that fit each slot,
+  reducible nodes) and a body grammar from the header's type (`Draft<T>`).
+  `natlang/gbnf.py` is a recognizer used to test them without an engine.
+- **Local development: llama.cpp `llama-server`, native `/completion`.** Per
+  the server README it takes a per-request grammar, raw or token-array
+  prompts, `n_probs`, `cache_prompt`, slots with continuous batching, `seed`,
+  and multiple completions. Two-phase decoding is two requests on one slot.
+- **Bulk generation and RL rollouts: SGLang first** (official LFM2.5 cookbook,
+  hybrid radix cache), vLLM where TRL requires it, via TRL's experimental
+  `rollout_func` for per-request grammars.
+- **What would force in-process bindings** (llama-cpp-python low level, or
+  transformers with llguidance): needing full unconstrained logits at every
+  step; token healing or mid-token grammar switches; misbehaving hybrid-state
+  caching that needs explicit state save/load; stateful masks GBNF cannot
+  express; or RL needing exactly mask-consistent log-probabilities.
+- **To verify on a running server**: that `n_probs` with
+  `post_sampling_probs=false` reports probabilities *before* the grammar mask
+  (needed for the mask-bind rate); that prefix reuse works for this hybrid
+  architecture (two open llama.cpp issues suggest it may not for sibling
+  requests; at 350M re-prefill is cheap either way); how the action's end is
+  signalled under a grammar (`<|tool_call_end|>` versus the end-of-turn token);
+  the exact LFM2.5 chat template for tool results.
+
+Also built: `model_agent.py` (two-phase constrained decoding, discard-and-
+resample of rejected actions without showing them to the model, `close`),
+`prompts/interpreter.md` (the interpreter's instructions, for a teacher or an
+untuned model), `host.py` and `python -m natlang run` (type-directed import,
+export, trace output).
+
+**Known limitations of the current code**
+- Not yet run against a real model. Large lists get an index pattern in the
+  path grammar that is validated afterwards, not bounded by the grammar.
+- Children run sequentially; no batching.
+- Copies are deep copies, not copy-on-write; the tree is in memory, not SQLite.
+- TypeScript type annotations are not stripped and eval is not statically
+  checked (type layer stage D).
+- The QuickJS binding cannot call into Python while a time limit is set, so
+  code in effect-declaring lambdas runs without the time limit. A subprocess
+  worker should replace this.
+- Provenance is minimal: origins for `reopen` and `@origin`, the effect
+  journal, and a flat action trace.
 
 ### 10.3 To be measured, not argued
 

@@ -4,9 +4,9 @@ kind: program
 exercises: [Iterate, natural-language check, reason before verdict, fresh episode per check]
 program:
   $lambda:
-    type: "Lambda<{ seed: Text[] }, Text[]>"
+    type: 'Lambda<{ seed: Text[] }, Text[]>'
     instructions: |
-      Starting from `in/seed`, keep adding one fruit that is not yet in the list.
+      Starting from `args/seed`, keep adding one fruit that is not yet in the list.
       Stop once the list contains four different fruits. At most 8 rounds.
 inputs:
   seed: ["apple"]

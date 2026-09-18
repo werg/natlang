@@ -4,9 +4,9 @@ kind: program
 exercises: [leaf, record return, optional field, type-directed YAML parsing]
 program:
   $lambda:
-    type: "Lambda<{ note: Text }, { customer: Text, order_id: Text, amount: Num, phone?: Text }>"
+    type: 'Lambda<{ note: Text }, { customer: Text, order_id: Text, amount: Num, phone?: Text }>'
     instructions: |
-      Extract the customer name, the order id, and the refund amount from `in/note`.
+      Extract the customer name, the order id, and the refund amount from `args/note`.
       Include the phone number only if one is given.
 inputs:
   note: "Spoke to Dana Whitfield about order no. 0077 - she is owed 42.50 back. She prefers email."
