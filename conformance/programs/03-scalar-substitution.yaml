@@ -1,0 +1,35 @@
+id: 03-scalar-substitution
+title: Exact work by eval, result substituted into the instruction text
+kind: program
+exercises: [sequence, eval, scalar substitution, erase after result]
+program:
+  $lambda:
+    type: "Lambda<{ amounts: Num[], limit: Num }, Text>"
+    instructions: |
+      1. Add up `in/amounts`.
+      2. If the total is above `in/limit`, write exactly "over budget by N" where N is the excess.
+         Otherwise write exactly "within budget".
+inputs:
+  amounts: [120, 80.5, 310]
+  limit: 400
+expect:
+  value: "over budget by 110.5"
+lint:
+  must: [eval for the sum, eval for the difference, substitute the total into the text]
+  must_not: [do arithmetic in generated text without eval, construct a child]
+canonical_trace: |
+  >>> eval
+      sum(self.in.amounts)
+  <<< 510.5
+  >>> edit instructions[1..3]
+      2. 510.5 is above the limit of 400: write exactly "over budget by N" where N is 510.5 - 400.
+  <<< ok
+  >>> eval
+      510.5 - 400
+  <<< 110.5
+  >>> set return : Text
+      over budget by 110.5
+  <<< ok
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< completed

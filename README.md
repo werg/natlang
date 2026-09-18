@@ -18,4 +18,9 @@ sandboxed TypeScript.
 | `spec/` | The normative language specification (Phase 0) |
 | `conformance/` | The conformance suite: small programs, one per language construct |
 
-Status: design phase. No harness code yet.
+Status: Phase 0 (language specification and conformance suite) drafted and
+under review. No harness code yet.
+
+```
+python3 tools/check_conformance.py   # static checks on the suite
+```

@@ -50,7 +50,7 @@ learn to create, read, and edit):
 | `Text`    | Markdown. Also holds code, instructions, prose.                    |
 | `Num`, `Bool`, `Null` | Scalars.                                               |
 | `List[T]` | Ordered. Optional element schema.                                  |
-| `Map`     | String-keyed. Optional schema (record type).                        |
+| `Dict<T>` | String-keyed. (Called "Map" in early drafts; renamed so `Map` is only the combinator.) |
 | `Lambda<T>` | A typed promise with provenance. See 2.2.                        |
 | `Blob`    | Bytes. Rare; only for opaque inputs.                                |
 
@@ -830,53 +830,49 @@ Nothing blocking. One later choice:
   aggregate; OOLONG as the benchmark; direct comparison with RLM). It also
   decides which fuzzy-leaf data to prioritize.
 
-### 10.2 Must be specified before the harness is built (Phase 0)
+### 10.2 Phase 0 status
 
-- **Conformance suite, by construct rather than by domain.** The ~20 Phase 0
-  programs each exercise one thing: sequencing with a continuation; scalar and
-  path substitution; `Map`, `Fold`, `Iterate` with its check; a crisp lambda;
-  an `eval` with a side effect; quiescing with a note; a parent repairing and
-  re-triggering a child; `reopen`; a cold restart on a half-reduced lambda.
-  This suite defines "the interpreter works" and is what the reference policy
-  and the first synthetic data must cover.
+**Done, under review.** `spec/SPEC.md` v0.1-draft specifies the tree, types,
+lambdas, combinators, the eight actions and their decoding constraints,
+episodes, validation and diagnostic codes, the interpreter conventions, the
+rendering policy, the TypeScript environment, the I/O boundary, serialization,
+and provenance. Its §13 lists every decision first made there; the ones most
+worth reviewing are the **granularity rule** (§7.1), **dependencies reduce
+first on trigger** (§3.2), **blocking `reduce` only** (§5.7), and the
+**rendering thresholds** (§8). `conformance/` holds 22 programs and 6 harness
+scripts, organized by construct; `tools/check_conformance.py` parses every
+type expression in them against the grammar.
 
-- **Granularity policy: when does the interpreter do a step itself and when
-  does it carve out a child?** With no working state this is the central
-  stylistic question of the language. It determines the reference policy, and
-  therefore all synthetic data. Candidate rule: a step whose result is the
-  lambda's own `return` and needs no intermediate value is done directly;
-  anything producing a value that another step consumes becomes a child.
-- **Effect journal format** and how it is rendered at a cold restart.
-- **`Iterate` details**: how many recent states `check` sees, whether it runs
-  every iteration or every k, and what it is shown when states are large.
-- **Concurrency and ownership.** With non-blocking `reduce`, parent and
-  children run at once on one tree. Proposed rule: a running lambda's subtree
-  is owned by its episode; the parent may read but not write until it
-  quiesces. Alternatively drop non-blocking `reduce` and `wait(any)` from v1.
-- **Open-list details**: state size bound, provenance retention for long-lived
-  folds, what happens to an in-flight step on shutdown, and whether bounded
-  numeric choices justify a range refinement.
-- **Combinator details**: partial-result and re-trigger semantics, budgets per
-  body lambda, ordering guarantees, nesting, how a `Map` over a very large
-  list is rendered, whether `fn` may read its index.
-- **The I/O boundary.** How external data (folders of files, JSON/YAML, APIs)
-  enters the tree and how results leave. The serializer is specified only for
-  inspection. Probably: import/export as effectful stdlib calls, with
-  parse-by-extension at the boundary.
-- **Syntax details.** One canonical type syntax (`List[T]` versus `T[]`); the
-  exact YAML subset; the exact header grammar per tool;
-  recursive named types (needed for trees such as org charts).
-- **Hand-filled lists.** `Map` fixes the length of its result by construction,
-  so the model-facing rendering can show "37 of 40 reduced". For a list the
-  interpreter fills by hand there is no expected length unless a postcondition
-  states one; decide whether that case matters.
-- **Edit format**: line-addressed, search/replace, or whole-text rewrite.
-- **Rendering policy**: inline thresholds, list previews, depth, how much of
-  the declared type to show. Versioned; part of the language.
-- **Meta-path syntax** for provenance, problems, and notes.
-- **Reusable lambdas**: whether a library namespace exists, or lambdas are
-  only ever passed in through `in`.
-- **`copy` typing with sub-ranges**, and `Draft<T>` sources into `T` slots.
+Renamed by the spec: the string-keyed container is **`Dict<T>`**, so that
+`Map` means only the combinator.
+
+**Not language questions** (settled 2026-09-19)
+
+- *State size of a long-lived `Fold`, and shutdown*: concerns of the host that
+  invokes the program (the CLI, or a client library embedding natlang in
+  another program). SPEC §10.
+- *Numeric range choices*: no range refinement. Numeric literal types cover
+  small ranges; large ranges are discretized into named options by crisp
+  code. SPEC §2, §7.6.
+- *Mock capabilities*: capabilities are registered by the host with typed
+  signatures, so a simulated environment is just a host registering fakes.
+  Which simulators to build is synthetic-data work (`SYNTHETIC_DATA.md` Y7),
+  not harness work. SPEC §9.5.
+
+**Remaining engineering for Phase 1** (work to do, not decisions)
+
+- The action grammar in the inference engine's format: a static part (tool
+  words, path and type syntax) and a per-turn part generated from the tree
+  (existing paths, types that fit the slot, the body grammar of the draft
+  type). Large lists need a compact path pattern or restriction to rendered
+  paths. Multi-phase decoding is done as separate generation calls joined by
+  prefix caching.
+- The capability registration interface.
+
+**To measure in Phase 2**
+
+- Search-and-replace and whole-text rewrite as alternatives to line-addressed
+  `edit`.
 
 ### 10.3 To be measured, not argued
 

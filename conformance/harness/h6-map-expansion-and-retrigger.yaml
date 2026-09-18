@@ -1,0 +1,40 @@
+id: h6-map-expansion-and-retrigger
+title: Map expands in order, quiesces partially, and re-runs only unreduced slots
+kind: harness
+stub_agent:
+  "Echo":
+    - when_item: "bad"
+      do: [ { close: "cannot echo this" } ]
+    - otherwise:
+      do: [ { set_return_from: in/item }, { empty_instructions: true } ]
+setup:
+  $lambda:
+    type: "Lambda<{ xs: Text[] }, Text[]>"
+    instructions: |
+      Echo every item.
+    in: { xs: ["a", "bad", "c"] }
+script:
+  - action: |
+      set return : Map<Text, Text>
+      fn:
+        $lambda:
+          type: "Lambda<{ item: Text }, Text>"
+          instructions: Echo `in/item`.
+    expect: { result: ok }
+  - action: |
+      copy in/xs to return/over
+    expect: { result: ok }
+  - action: |
+      reduce return
+    expect:
+      result: quiesced
+      reduced: "2 of 3"
+      read: [ { path: return/0, value: "a" }, { path: return/2, value: "c" }, { path: "return/1@status", value: quiesced } ]
+      episodes_started: 3
+  - action: |
+      set return/1/in/item : Text
+      b
+    expect: { result: ok }
+  - action: |
+      reduce return
+    expect: { result: done, value: ["a", "b", "c"], episodes_started: 1 }

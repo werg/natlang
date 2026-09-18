@@ -1,5 +1,9 @@
 # natlang: type safety and validation
 
+> The normative grammar, fit rules, and diagnostic codes are in
+> `spec/SPEC.md`. This document gives the rationale and the training-side
+> design. Where they differ, the spec wins.
+
 Companion to `PLAN.md` §2–4. Defines how lambdas are typed, what the harness
 validates and when, and how validation feedback reaches the model without
 turning it into a compulsive error-fixer. Status: draft, 2026-09-18.
@@ -33,8 +37,8 @@ A subset of TypeScript type syntax, as already used for `returns`.
 | Primitives | `Text`, `Num`, `Bool`, `Null`, `Blob` |
 | Literal unions (enums) | `"urgent" \| "normal" \| "spam"` |
 | Records, optional fields | `{ id: Num, label: Text, note?: Text }` |
-| Lists | `List[T]` / `T[]` |
-| Maps | `Map[T]` (string keys) |
+| Lists | `T[]` (canonical; `List[T]` in older text means the same) |
+| Dicts | `Dict<T>` (string keys) |
 | Unions | `Num \| Null` |
 | Lambda | `Lambda<P, T>`: params record `P`, return `T` |
 | Gradual escape | `Any` |

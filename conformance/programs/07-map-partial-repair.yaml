@@ -1,0 +1,52 @@
+id: 07-map-partial-repair
+title: A Map slot quiesces; the parent repairs it and completes
+kind: program
+exercises: [Map, quiescence without completion, closing note, partial result, parent repair]
+program:
+  $lambda:
+    type: "Lambda<{ tickets: Text[] }, Label[]>"
+    types:
+      Label: '"question" | "complaint" | "unreadable"'
+    instructions: |
+      1. Label each ticket as a question or a complaint.
+      2. Any ticket that could not be labelled gets the label "unreadable".
+inputs:
+  tickets:
+    - "Why was my order cancelled?"
+    - "xq zzv 0x00 ###"
+    - "This is the third time the courier has lost my parcel. Unacceptable."
+expect:
+  value: [question, unreadable, complaint]
+lint:
+  must:
+    - the fn's returns is the narrowed enum "question" | "complaint"
+    - slot 1 quiesces with a note
+    - the parent reads the note and sets return/1 itself
+  must_not: [the fn guessing a label for slot 1, re-running the whole Map]
+canonical_trace: |
+  >>> set return : Map<Text, "question" | "complaint">
+      fn:
+        $lambda:
+          type: 'Lambda<{ item: Text }, "question" | "complaint">'
+          instructions: |
+            Is the ticket in `in/item` a question or a complaint?
+            If it is neither or cannot be read, stop and say so.
+  <<< ok
+  >>> copy in/tickets to return/over
+  <<< ok
+  >>> reduce return
+  <<< return: quiesced  2 of 3 reduced
+      return/1: quiesced "The ticket is not readable text; it is neither a question nor a complaint."
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< ok
+  >>> set return/1 : "unreadable"
+      unreadable
+  <<< ok
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< completed
+notes: >
+  After slot 1 is set by hand every slot of the expanded Map is a value, so the
+  node is the list. Label[] accepts it because each element's enum is a subset
+  of Label.

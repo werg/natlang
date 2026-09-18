@@ -1,0 +1,52 @@
+id: 05-continuation-outside-in
+title: An intermediate value lives in the parameter of the lambda that consumes it
+kind: program
+exercises: [continuation, outside-in construction, Map, nested pending literals, dependencies first, copy]
+program:
+  $lambda:
+    type: "Lambda<{ tickets: Text[] }, Text>"
+    instructions: |
+      1. Decide for each ticket whether it is urgent.
+      2. If more than 5 are urgent, write exactly "ALERT: N urgent" with N the count.
+         Otherwise write exactly "ok".
+inputs:
+  tickets:
+    - "PRODUCTION IS DOWN. Customers cannot log in at all."
+    - "Could you update the logo in the footer when you get a chance?"
+    - "Payments are failing for every customer right now, we are losing sales by the minute."
+    - "Database is corrupting orders as we speak - need someone immediately."
+    - "Typo on the About page."
+    - "Security breach: admin passwords were leaked publicly an hour ago."
+    - "All outgoing email has stopped; password resets are impossible for everyone."
+    - "Site is returning 500 errors on checkout for all users since 09:00."
+expect:
+  value: "ALERT: 6 urgent"
+lint:
+  must:
+    - "return is first set to a continuation Lambda<{ flags: Bool[] }, Text>"
+    - "its in/flags holds a Map<Text, Bool>"
+    - copy in/tickets to the Map's over
+    - a single reduce of return (dependencies reduce first)
+    - counting done by eval or crisp lambda inside the continuation
+  must_not: [any node outside instructions/in/return, unrolled per-ticket steps in the parent, move]
+canonical_trace: |
+  >>> set return : Lambda<{ flags: Bool[] }, Text>
+      instructions: |
+        1. Count how many of `in/flags` are true.
+        2. If more than 5, write exactly "ALERT: N urgent" with N the count. Otherwise write exactly "ok".
+      in:
+        flags:
+          $map:
+            type: Map<Text, Bool>
+            fn:
+              $lambda:
+                type: "Lambda<{ item: Text }, Bool>"
+                instructions: Is the ticket in `in/item` urgent? Answer true or false.
+  <<< ok   problems: 0 blocking · 1 hole (return/in/flags/over unbound)
+  >>> copy in/tickets to return/in/flags/over
+  <<< ok
+  >>> reduce return
+  <<< return: done  "ALERT: 6 urgent"
+  >>> edit instructions[1..3]
+      (empty body)
+  <<< completed

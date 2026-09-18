@@ -1,0 +1,22 @@
+id: 12-iterate-model-check
+title: A model-based loop check writes its reasoning, then a verdict
+kind: program
+exercises: [Iterate, natural-language check, reason before verdict, fresh episode per check]
+program:
+  $lambda:
+    type: "Lambda<{ seed: Text[] }, Text[]>"
+    instructions: |
+      Starting from `in/seed`, keep adding one fruit that is not yet in the list.
+      Stop once the list contains four different fruits. At most 8 rounds.
+inputs:
+  seed: ["apple"]
+expect:
+  checks:
+    - { kind: crisp, code: "value.length === 4 && uniq(value.map(lower)).length === 4" }
+    - { kind: crisp, code: "lower(value[0]) === 'apple'" }
+    - { kind: judge, question: "Is every item a fruit?", answer: true }
+lint:
+  must:
+    - check is a natural-language lambda returning LoopVerdict
+    - in every check record, reason is written before verdict
+    - the final check's verdict is done

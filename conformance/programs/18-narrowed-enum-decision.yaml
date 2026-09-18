@@ -1,0 +1,46 @@
+id: 18-narrowed-enum-decision
+title: Legal actions computed crisply and enforced as a narrowed return type
+kind: program
+exercises: [crisp lambda returning a pending node, enum narrowing, replaced result, Dict]
+program:
+  $lambda:
+    type: "Lambda<{ stock: Dict<Num>, request: Text }, Action>"
+    types:
+      Action: '"sell_apple" | "sell_pear" | "decline"'
+    instructions: |
+      1. Work out which actions are legal: an item can be sold only if `in/stock` has at least one; declining is always legal.
+      2. Choose, among the legal actions only, the one that serves `in/request`. If what the customer wants cannot be sold, decline.
+inputs:
+  stock: { apple: 0, pear: 3 }
+  request: "Two of your finest apples, please."
+expect:
+  value: decline
+notes: >
+  "sell_apple" must be unrepresentable when the decision is written: the
+  decision lambda's returns is "decline" | "sell_pear".
+lint:
+  must:
+    - a crisp lambda computes the legal set and returns a decision lambda built with lambda(...) and enumOf(...)
+    - reduce reports the slot as replaced; a second reduce runs the decision
+  must_not: [the legal set typed out by the model in a type literal]
+canonical_trace: |
+  >>> set return : Lambda<{ stock: Dict<Num>, request: Text }, Action>
+      code: |
+        const legal = ["decline", ...Object.keys(in.stock).filter(k => in.stock[k] > 0).map(k => "sell_" + k)]
+        return lambda({
+          type: `Lambda<{ request: Text }, ${enumOf(legal)}>`,
+          instructions: "Choose the action that serves the customer in `in/request`. If what they want cannot be sold, decline.",
+          in: { request: in.request },
+        })
+  <<< ok
+  >>> copy in/stock to return/in/stock
+  <<< ok
+  >>> copy in/request to return/in/request
+  <<< ok
+  >>> reduce return
+  <<< return: replaced  Lambda<{ request: Text }, "decline" | "sell_pear"> unreduced
+  >>> reduce return
+  <<< return: done  "decline"
+  >>> edit instructions[1..2]
+      (empty body)
+  <<< completed

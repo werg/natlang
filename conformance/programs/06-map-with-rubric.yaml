@@ -1,0 +1,46 @@
+id: 06-map-with-rubric
+title: Map a judgment with a pre-bound rubric; enum results
+kind: program
+exercises: [Map, partial application of fn, named types, enum]
+program:
+  $lambda:
+    type: "Lambda<{ tickets: Text[], rubric: Text }, Label[]>"
+    types:
+      Label: '"billing" | "technical" | "spam"'
+    instructions: |
+      Label each ticket in `in/tickets` according to `in/rubric`.
+inputs:
+  rubric: |
+    billing: anything about charges, invoices, refunds, or payment methods.
+    technical: anything about the product not working.
+    spam: unsolicited advertising or messages unrelated to our product.
+  tickets:
+    - "I was charged twice for my March invoice."
+    - "The app crashes every time I open the settings page."
+    - "CHEAP WATCHES!!! Visit our store today for 90% off."
+    - "Please change the card on file, the old one expired."
+    - "Export to CSV produces an empty file."
+expect:
+  value: [billing, technical, spam, billing, technical]
+lint:
+  must:
+    - "return is a Map<Text, Label>"
+    - "fn has params { item: Text, rubric: Text } with rubric bound by copy before the trigger"
+  must_not: [label tickets in the parent episode, re-emit the rubric text]
+  max_actions: 6
+canonical_trace: |
+  >>> set return : Map<Text, Label>
+      fn:
+        $lambda:
+          type: "Lambda<{ item: Text, rubric: Text }, Label>"
+          instructions: Label the ticket in `in/item` according to `in/rubric`.
+  <<< ok
+  >>> copy in/rubric to return/fn/in/rubric
+  <<< ok
+  >>> copy in/tickets to return/over
+  <<< ok
+  >>> reduce return
+  <<< return: done  Label[] 5 items
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< completed

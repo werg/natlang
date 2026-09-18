@@ -1,0 +1,28 @@
+id: 04-path-substitution
+title: A phrase denoting a large value is replaced by its path
+kind: program
+exercises: [path substitution, child lambda, copy into in, dependencies first]
+program:
+  $lambda:
+    type: "Lambda<{ reviews: Text[] }, Text>"
+    instructions: |
+      1. Pick out the reviews that mention delivery.
+      2. Write one sentence saying what those reviews have in common.
+inputs:
+  reviews:
+    - "Delivery took nine days. Never again."
+    - "Lovely colour, fits well."
+    - "The courier left it in the rain - delivery was a mess."
+    - "Great value for the price."
+    - "Arrived a week later than promised, delivery tracking was useless."
+expect:
+  checks:
+    - { kind: judge, question: "Does the sentence say the delivery was slow, late, or badly handled?", answer: true }
+    - { kind: crisp, code: "wordCount(value) <= 40" }
+lint:
+  must:
+    - continuation in return with a param typed Text[]
+    - "Map<Text, Bool> or equivalent producing the selection"
+    - remaining instruction text refers to the selection by path in backticks
+    - copy used to bind reviews
+  must_not: [re-emit review text through set, unroll the loop]

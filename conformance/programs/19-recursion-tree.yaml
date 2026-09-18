@@ -1,0 +1,32 @@
+id: 19-recursion-tree
+title: Recursion over tree-shaped data by passing a template of oneself
+kind: program
+exercises: [recursive named type, higher-order parameter, Map over children, crisp combine]
+program:
+  $lambda:
+    type: "Lambda<{ root: Unit }, Num>"
+    types:
+      Unit: "{ name: Text, reports: Unit[] }"
+    instructions: |
+      Count how many units in the tree `in/root`, at any depth, are named after a fruit.
+inputs:
+  root:
+    name: "Head Office"
+    reports:
+      - name: "Apple"
+        reports:
+          - { name: "Logistics", reports: [] }
+          - { name: "Mango", reports: [] }
+      - name: "Finance"
+        reports:
+          - name: "Cherry"
+            reports:
+              - { name: "Plum", reports: [] }
+expect:
+  value: 4
+lint:
+  must:
+    - a lambda with a parameter `self` whose type is a Lambda type
+    - a Map over `reports` at each level
+    - sums computed by eval or a crisp lambda
+  must_not: [flattening the tree by reading it whole, tail recursion used for iteration]

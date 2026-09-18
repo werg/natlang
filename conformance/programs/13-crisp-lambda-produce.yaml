@@ -1,0 +1,20 @@
+id: 13-crisp-lambda-produce
+title: A value that belongs in the tree is produced by a crisp lambda, not by tokens
+kind: program
+exercises: [crisp lambda, large value never passes through the model, provenance of crisp results]
+program:
+  $lambda:
+    type: "Lambda<{ emails: Text[] }, Text[]>"
+    instructions: |
+      Return the distinct email addresses from `in/emails`, lower-cased and sorted.
+inputs:
+  emails: ["Zed@x.org", "amy@x.org", "AMY@x.org", "bob@y.com", "zed@X.org", "cy@z.net"]
+expect:
+  value: ["amy@x.org", "bob@y.com", "cy@z.net", "zed@x.org"]
+lint:
+  must:
+    - "return set to a crisp Lambda<{ emails: Text[] }, Text[]>"
+    - copy to bind emails
+    - reduce
+  must_not: [set return to a literal list, eval followed by re-typing the result]
+  max_actions: 5

@@ -1,0 +1,24 @@
+id: 01-leaf-judgment
+title: A single judgment written directly to return
+kind: program
+exercises: [leaf, finite-typed write, completion]
+program:
+  $lambda:
+    type: "Lambda<{ message: Text }, Bool>"
+    instructions: |
+      Is `in/message` a complaint? Answer true or false.
+inputs:
+  message: "The package arrived two weeks late and the box was crushed. I want a refund."
+expect:
+  value: true
+lint:
+  must: [single set of return, instructions emptied]
+  must_not: [construct a child, eval]
+  max_actions: 3
+canonical_trace: |
+  >>> set return : Bool
+      true
+  <<< ok
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< completed

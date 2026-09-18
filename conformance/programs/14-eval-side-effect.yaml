@@ -1,0 +1,23 @@
+id: 14-eval-side-effect
+title: An eval with a declared side effect; the agent records what it learned
+kind: program
+exercises: [eval, effects declaration, effect journal, result returned as tool result]
+program:
+  $lambda:
+    type: "Lambda<{ alerts: { id: Text, level: Text }[] }, Num>"
+    effects: [out.emit]
+    instructions: |
+      Emit one output record { id } for every alert in `in/alerts` whose level is "critical".
+      Return how many were emitted.
+inputs:
+  alerts:
+    - { id: "a1", level: "critical" }
+    - { id: "a2", level: "info" }
+    - { id: "a3", level: "critical" }
+expect:
+  value: 2
+  emitted: [ { id: "a1" }, { id: "a3" } ]
+  journal_entries: 2
+lint:
+  must: [one eval that emits and evaluates to the count, agent writes the count with set]
+  must_not: [eval attempting to write the tree]

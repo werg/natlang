@@ -1,0 +1,32 @@
+id: 15-cold-restart
+title: Resume a half-reduced lambda from the tree alone
+kind: program
+exercises: [cold restart, progress inferred from the tree, effect journal consulted, no repeated effect]
+start_state:
+  $lambda:
+    type: "Lambda<{ alerts: { id: Text, level: Text }[] }, { emitted: Num, summary: Text }>"
+    effects: [out.emit]
+    status: quiesced
+    note: "budget exhausted"
+    instructions: |
+      1. Emit one output record { id } for every critical alert in `in/alerts`; put the count in return/emitted.
+      2. Write a one-line summary of the alerts in return/summary.
+    in:
+      alerts:
+        - { id: "a1", level: "critical" }
+        - { id: "a2", level: "info" }
+        - { id: "a3", level: "critical" }
+    return:
+      emitted: 2
+    effects_journal:
+      - { seq: 1, capability: out.emit, function: emit, args_preview: '{ id: "a1" }', status: ok }
+      - { seq: 2, capability: out.emit, function: emit, args_preview: '{ id: "a3" }', status: ok }
+expect:
+  checks:
+    - { kind: crisp, code: "value.emitted === 2" }
+    - { kind: judge, question: "Is the summary a one-line description of three alerts, two of them critical?", answer: true }
+  emitted: []
+notes: No new records may be emitted by the restarted episode.
+lint:
+  must: [first action deletes step 1 or reads @effects, step 2 done directly]
+  must_not: [any out.emit call]

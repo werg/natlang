@@ -1,0 +1,25 @@
+id: 08-fold-fuzzy-step
+title: Fold with a judged step; the harness threads the accumulator
+kind: program
+exercises: [Fold, accumulator typing, fuzzy step]
+program:
+  $lambda:
+    type: "Lambda<{ messages: Text[] }, { address: Text, changes: Num }>"
+    instructions: |
+      Go through `in/messages` in order, keeping the customer's latest delivery
+      address and how many times it changed. Start from address "unknown" and 0 changes.
+inputs:
+  messages:
+    - "Hi, please send it to 12 Oak Lane, Bristol."
+    - "Any idea when it ships?"
+    - "Actually I've moved - use 4 Mill Road, Leeds instead."
+    - "Thanks!"
+    - "Sorry, one more change: 9 Quay Street, Hull."
+expect:
+  value: { address: "9 Quay Street, Hull", changes: 3 }
+notes: The first address counts as a change from "unknown".
+lint:
+  must:
+    - return is a Fold with init bound
+    - "step params are { acc, item }"
+  must_not: [the parent reading messages one by one, recursion, unrolling]

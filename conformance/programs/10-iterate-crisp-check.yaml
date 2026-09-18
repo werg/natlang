@@ -1,0 +1,44 @@
+id: 10-iterate-crisp-check
+title: Refine until a crisp check passes
+kind: program
+exercises: [Iterate, fuzzy step, crisp check, LoopVerdict, mandatory max]
+program:
+  $lambda:
+    type: "Lambda<{ text: Text }, Text>"
+    instructions: |
+      Shorten `in/text` step by step until it is at most 12 words, keeping its meaning.
+      Give up after 5 rounds.
+inputs:
+  text: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday."
+expect:
+  checks:
+    - { kind: crisp, code: "wordCount(value) <= 12" }
+    - { kind: judge, question: "Does it say the shop is closed on Monday?", answer: true }
+lint:
+  must:
+    - "Iterate<Text> with max 5"
+    - check is a crisp lambda returning LoopVerdict
+  must_not: [a hand-driven loop in the parent]
+canonical_trace: |
+  >>> set return : Iterate<Text>
+      max: 5
+      step:
+        $lambda:
+          type: "Lambda<{ state: Text }, Text>"
+          instructions: Rewrite `in/state` to be noticeably shorter while keeping its meaning.
+      check:
+        $lambda:
+          type: "Lambda<{ recent: Text[], iteration: Num }, LoopVerdict>"
+          code: |
+            const n = wordCount(in.recent[in.recent.length - 1])
+            return n <= 12
+              ? { reason: `${n} words`, verdict: "done" }
+              : { reason: `${n} words, still too long`, verdict: "continue" }
+  <<< ok
+  >>> copy in/text to return/init
+  <<< ok
+  >>> reduce return
+  <<< return: done  "The shop will be closed on Monday."
+  >>> edit instructions[1..2]
+      (empty body)
+  <<< completed

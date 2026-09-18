@@ -1,0 +1,45 @@
+id: 17-reopen-refine
+title: A value that is not good enough is reopened with the reason
+kind: program
+exercises: [reopen, draft return prefilled with the old value, provenance links attempts, eval as checker]
+program:
+  $lambda:
+    type: "Lambda<{ report: Text }, Text>"
+    instructions: |
+      1. Have a headline written for `in/report`.
+      2. Check it is at most 8 words. If it is longer, reopen it and ask for it to be cut down. Check again.
+inputs:
+  report: "Quarterly revenue grew by four percent, driven mainly by strong sales in the northern region, while costs remained flat compared with the previous quarter."
+expect:
+  checks:
+    - { kind: crisp, code: "wordCount(value) <= 8" }
+    - { kind: judge, question: "Is it a headline about revenue growth?", answer: true }
+lint:
+  must: [headline produced by a child lambda in return, eval wordCount after it completes]
+  may: [reopen return with new instructions, then reduce]
+  must_not: [the parent rewriting the headline itself]
+canonical_trace: |
+  >>> set return : Lambda<{ report: Text }, Text>
+      instructions: Write a headline for `in/report`.
+  <<< ok
+  >>> copy in/report to return/in/report
+  <<< ok
+  >>> reduce return
+  <<< return: done  "Quarterly revenue grows four percent on strong northern sales as costs hold"
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< ok
+  >>> eval
+      wordCount(self.return)
+  <<< 12
+  >>> reopen return
+      The headline is 12 words. Cut it to at most 8 words.
+  <<< ok   return: Lambda<{ report: Text }, Text> unreduced, draft return prefilled
+  >>> reduce return
+  <<< return: done  "Revenue grows four percent on northern sales"
+  >>> eval
+      wordCount(self.return)
+  <<< 7
+  >>> edit instructions[1..1]
+      (empty body)
+  <<< completed

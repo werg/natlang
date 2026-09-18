@@ -1,0 +1,40 @@
+id: 22-oversize-chunk
+title: An input too large to inline is split crisply and mapped
+kind: program
+exercises: [too large, crisp split, Map over lines, crisp aggregate, continuation]
+program:
+  $lambda:
+    type: "Lambda<{ log: Text }, Num>"
+    instructions: |
+      `in/log` has one customer comment per line. Return how many of the comments are complaints.
+inputs:
+  log: |
+    Arrived broken, very disappointed.
+    Love it, thank you!
+    Still waiting after three weeks. This is ridiculous.
+    Works as described.
+    The colour is nothing like the photo and nobody answers my emails.
+    Five stars.
+    Charged twice and no refund yet - terrible.
+    Does what it says.
+    Quick delivery, nicely packed.
+    Stopped working after two days. Want my money back.
+    Perfect gift.
+    Great price.
+    Instructions were missing and support hung up on me.
+    Happy with the purchase.
+    Would buy again.
+    The zip broke the first time I used it, poor quality.
+    Lovely.
+    Exactly what I needed.
+    Wrong size sent, return label never arrived, awful service.
+    Nice and sturdy.
+expect:
+  value: 8
+lint:
+  must:
+    - the log is never read whole by the model
+    - a crisp lambda splits lines into Text[]
+    - "a Map<Text, Bool> judges each line"
+    - the count is crisp
+  must_not: [read in/log without a range covering only a preview]

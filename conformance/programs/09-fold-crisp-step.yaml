@@ -1,0 +1,22 @@
+id: 09-fold-crisp-step
+title: A Fold whose step is a crisp lambda; no model episode below the parent
+kind: program
+exercises: [Fold, crisp lambda as body, no model calls in the loop]
+program:
+  $lambda:
+    type: "Lambda<{ lines: { sku: Text, qty: Num, unit_price: Num }[] }, Num>"
+    instructions: |
+      Compute the order total from `in/lines`, carrying the running total line by line.
+inputs:
+  lines:
+    - { sku: "A1", qty: 2, unit_price: 9.5 }
+    - { sku: "B7", qty: 1, unit_price: 120 }
+    - { sku: "C3", qty: 10, unit_price: 0.75 }
+expect:
+  value: 146.5
+notes: >
+  A single crisp lambda would also be correct. The instructions ask for a
+  running total to force the Fold; the point is a combinator with a crisp body.
+lint:
+  must: [step is a crisp lambda]
+  must_not: [arithmetic in generated text]

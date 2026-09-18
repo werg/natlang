@@ -1,0 +1,27 @@
+id: h1-draft-holes-and-commit
+title: Holes are accepted while drafting and block completion
+kind: harness
+setup:
+  $lambda:
+    type: "Lambda<{}, { id: Num, label: Text, score: Num }>"
+    instructions: |
+      Fill in the record.
+script:
+  - action: |
+      set return : { id: Num, label: Text, score: Num }
+      id: 7
+    expect: { result: ok, problems: { blocking: 0, holes: 2 } }
+  - action: |
+      edit instructions[1..1]
+    expect: { result: refused, codes: [commit-holes], paths: [return/label, return/score], tree_changed: false }
+  - action: |
+      set return/label : Text
+      fine
+    expect: { result: ok, problems: { blocking: 0, holes: 1 } }
+  - action: |
+      set return/score : Num
+      0.9
+    expect: { result: ok, problems: { blocking: 0, holes: 0 } }
+  - action: |
+      edit instructions[1..1]
+    expect: { result: completed, value: { id: 7, label: "fine", score: 0.9 } }
