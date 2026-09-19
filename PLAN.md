@@ -423,6 +423,23 @@ each in a data manifest with its license.
 | Y14 | Long-horizon stress sets | Y1/Y2 machinery | eval, some training |
 | Y15 | Style corpus for the renderer (unlabeled) | – | surface diversity |
 
+### 5.7 Hand-written code bases
+
+Real programs keep the synthesizer honest, feed the teacher-as-interpreter
+runs (§5.4), and are the demonstrations of the thesis. The first six:
+
+| code base | shape it forces |
+|---|---|
+| **shopkeeper** | a long-lived fold over an open list of events; state in the accumulator; legal actions passed as inputs and checked by a crisp function |
+| **legal-move checking** | exact rules in crisp functions next to fuzzy reading of a position described in prose; some declared recursion |
+| **moderation with escalation** | conditionals, blockers that propagate, a second opinion by copy-edit-call |
+| **semantic highlighter for natlang** | input is a natlang code base itself: a call over files, then over lines/spans; every span gets a semantic role (signature, call, local, control flow, exact step, prose step, type); crisp functions assemble a format that tools can use (HTML with classes, or LSP semantic-token arrays). Data-is-not-code under maximum pressure: the input *is* instructions |
+| **web server** | every HTTP request is an event handled by natlang: routing, reading state, deciding, and generating the page; effects (`http`, `store`) behind capabilities; a host adapter turns the open-list fold into a real listening server. Complete means: routing, static and generated pages, forms, sessions, errors, logging |
+| **natural-language Prolog** | a knowledge base of facts and rules in prose; a query is resolved by backward chaining: `candidates` (which rules or facts could answer this goal), `unify` (does this fact answer the goal, with what bindings), recursion over sub-goals with a declared depth bound, a fold that collects solutions, cycle and depth limits giving "unknown" rather than a guess |
+
+Each lives on disk as `name.nl` + `name/`, has inputs with known answers where
+the domain allows it, and becomes a conformance program.
+
 ## 6. Training
 
 1. **Base model**: LFM2.5-350M for development. Shrink to 230M only after the
@@ -526,6 +543,15 @@ frontier model on quality, latency, and cost.
   shutdown are host concerns.
 - This machine proves out the whole system, including data generation; real
   training runs elsewhere; a memory-constrained training mode is a goal.
+- **Teacher paraphrases vary wording, dialect and names, never structure.**
+  Rewriting structure is not forbidden in principle, but there is little to
+  gain from instilling it through training data; structural variety comes
+  from the synthesizer, where the twin still knows the answer.
+- **Generative leaves get teacher-written reference outputs**, accepted by
+  checks (crisp constraints plus a judge question) and stored with the latent
+  world, so that programs that produce text are part of the corpus.
+- **The first hand-written code bases** (`codebases/`, §5.7): six, chosen to
+  differ in shape.
 
 ### 10.2 Status (2026-09-19)
 

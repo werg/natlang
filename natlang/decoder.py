@@ -68,6 +68,10 @@ class LlamaServerDecoder:
         """One assistant turn with native tool calling. The server renders the model's own chat
         template, constrains arguments to each tool's JSON schema, and parses the model's native
         tool-call format, so this is the same call for every model."""
+        # `x-...` keys are for our own grammar (natlang/native.py); a server only reads plain JSON Schema,
+        # and the alternatives are most of the schema's size
+        tools = [{**t, "function": {**t["function"], "parameters": {
+            k: v for k, v in (t["function"].get("parameters") or {}).items() if not k.startswith("x-")}}} for t in tools]
         if self.tool_aliases:
             out_name = lambda n: self.tool_aliases.get(n, n)
             tools = [{**t, "function": {**t["function"], "name": out_name(t["function"]["name"])}} for t in tools]
