@@ -66,7 +66,7 @@ def test_composed_programs_are_varied_and_verified():
     assert len(texts) == 25 and {"each", "plain"} <= kinds
 
 
-@pytest.mark.parametrize("name", ["cb_legal_move", "cb_moderation", "cb_nlprolog", "cb_shopkeeper", "cb_webserver", "cb_highlighter"])
+@pytest.mark.parametrize("name", ["cb_legal_move", "cb_moderation", "cb_nlprolog", "cb_shopkeeper", "cb_webserver", "cb_highlighter", "cb_mail_rules"])
 def test_hand_written_code_bases_yield_verified_trajectories(name):
     """Inputs from a latent world, a reference script per pseudocode function: every turn is accepted by the
     harness and by its grammar, and the outcome is what the world says it must be."""

@@ -536,3 +536,56 @@ def highlighter(rng: random.Random) -> Program:
 
 
 CODEBASES.update({"cb_shopkeeper": shopkeeper, "cb_webserver": webserver, "cb_highlighter": highlighter})
+
+
+# ------------------------------------------------------------------------------------------ mail_rules
+MAIL = {"landlord": ["The boiler will be serviced, please be home.", "The rent increases as announced.", "The stairwell will be painted."],
+        "other": ["Your parcel is ready for collection.", "Shall we have lunch?", "Our autumn catalogue is out."]}
+DATES = ["Friday 14 March", "2 May", "next Tuesday", "the first of the month"]
+
+
+def mail_rules(rng: random.Random) -> Program:
+    mails, truth = [], {}
+    for _ in range(rng.randint(2, 5)):
+        landlord, date = rng.random() < 0.5, (rng.choice(DATES) if rng.random() < 0.6 else "")
+        text = rng.choice(MAIL["landlord" if landlord else "other"]) + (f" This is on {date}." if date else "") + \
+            (" Regards, H. Petersen, your landlord" if landlord else " Best, Jana")
+        if text not in truth:
+            truth[text] = (landlord, date)
+            mails.append(text)
+    added = []
+
+    def handle(lam):
+        landlord, date = truth[lam.in_["email"]]
+        yield call("from_landlord", "let/landlord", email="args/email")
+        yield [("read", {"path": "let/landlord"})]
+        if not landlord:
+            yield [("taken", 'action: "archive"')]
+            yield [("write", {"path": "return", "type": "Decision", "value": {"action": "archive", "date": ""}})]
+            return
+        yield call("find_date", "let/date", email="args/email")
+        yield [("read", {"path": "let/date"})]
+        if date == "":
+            yield [("taken", 'action: "reply_later"')]
+            yield [("write", {"path": "return", "type": "Decision", "value": {"action": "reply_later", "date": ""}})]
+            return
+        yield call("add_to_calendar", "let/added", date="let/date", email="args/email")
+        yield [("taken", 'action: "calendar"')]
+        yield [("write", {"path": "return/action", "type": '"calendar" | "reply_later" | "archive"', "value": "calendar"})]
+        yield [("write", {"path": "return/date", "type": "Text", "source": "let/date"})]
+
+    def root(lam):
+        yield [("call", {"function": "handle_mail", "to": "let/decisions", "over": "args/emails"})]
+        yield call("tally_actions", "return", decisions="let/decisions")
+
+    want = {"calendar": sum(1 for l, d in truth.values() if l and d), "reply_later": sum(1 for l, d in truth.values() if l and not d),
+            "archived": sum(1 for l, d in truth.values() if not l)}
+    plans = {"process_mail": Plan("script", script=with_marks(root), note="Handled every email, then tallied."),
+             "handle_mail": Plan("script", script=with_marks(handle), note="Applied my rules to the email."),
+             "from_landlord": leaf(lambda a: truth[a["email"]][0]), "find_date": leaf(lambda a: truth[a["email"]][1])}
+    return Program("cb_mail_rules", {}, {}, lambda v: v == want and len(added) == want["calendar"], plans,
+                   loader=lambda: load(CB / "mail_rules" / "process_mail.nl", {"emails": mails}),
+                   capabilities={"calendar.add": lambda a: added.append(a[0])})
+
+
+CODEBASES["cb_mail_rules"] = mail_rules
