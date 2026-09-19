@@ -33,7 +33,7 @@
       "id": "scripted-turn-usage",
       "tests": ["test_reply_ends_the_episode_and_is_never_the_result", "test_reply_without_a_result_is_nudged_then_quiesces", "test_several_calls_in_one_turn"],
       "current_behavior": "A ChatTurn without completion_tokens consumes its entire requested allowance, so a second scripted turn cannot complete.",
-      "decision": "Preserve the current behavior in the compatibility profile; fix the scripted-driver fixture or introduce an explicit new accounting policy separately."
+      "decision": "Preserve conservative accounting in the compatibility profile; scripted-driver fixtures now report one completion token explicitly."
     },
     {
       "id": "open-list-close-token",
