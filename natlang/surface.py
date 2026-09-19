@@ -80,7 +80,8 @@ def _enum_or_string(values: list, description: str) -> dict:
 class ToolSurface:
     name = "tools-v2"
 
-    def __init__(self, marks: Optional[bool] = None):
+    def __init__(self, marks: Optional[bool] = None, *, error_tool: bool = True):
+        self.error_tool = error_tool
         # numbered listing + the `mark` tool for functions that have a code base. NATLANG_MARKS=0 turns it off, to
         # evaluate models trained before marks existed.
         self.marks = MARKS_DEFAULT if marks is None else marks
@@ -94,7 +95,7 @@ class ToolSurface:
         from .render import pending_lines
         lam = session.lam
         return pending_lines(lam.original_body or lam.body, lam.marks) if self.marking(session) and lam.marks else []
-    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker")   # `call` only when there are functions
+    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker", "report_error")   # `call` only when there are functions
 
     def slots(self, session):
         return enumerate_slots(session.lam, session.outer_env)
@@ -314,6 +315,12 @@ class ToolSurface:
                                    "does not cover the case. Say exactly what is missing. This ends the task without "
                                    "a result; do not guess instead.",
                  {"missing": {"type": "string"}}, ["missing"]))
+        if self.error_tool:
+            tools.append(tool("report_error", "The executed instructions cannot be satisfied: a contradiction, invalid "
+                              "operation, or incompatible required result prevents correct completion. Explain the "
+                              "error. This ends the task without a result. Do not change the requirements to succeed. "
+                              "Use report_blocker for missing information instead.",
+                              {"message": {"type": "string"}}, ["message"]))
         return tools
 
     # -- what the model is shown ----------------------------------------------------

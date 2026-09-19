@@ -677,6 +677,14 @@ class Session:
         self.blocker = missing
         return Result("blocked", "blocked: " + missing)
 
+    def _op_report_error(self, args):
+        """Explicit program failure; same quiescence as a blocker, distinct diagnostic."""
+        message = str(args.get("message") or "").strip()
+        if len(message) < 8:
+            raise reject("message", "bad-action", "a sentence explaining the error")
+        self.blocker = message
+        return Result("blocked", "error: " + message)
+
     # -- code-base calls (spec/CODEBASES.md 4) ---------------------------------------------------------
     def _local_type(self, path: str, type_text: str, extra_types: dict):
         """Create the local `let/<name>` with this type if `path` names a local that does not exist yet.

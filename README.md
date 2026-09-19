@@ -9,7 +9,7 @@ variables, organised as a **code base** of `.nl` files (frontmatter plus a
 pseudocode body; `somefun.nl` with an optional companion folder `somefun/`;
 `.ts` files for exact functions; reuse through `uses` links). The author
 states the structure. The model carries it out one small step at a time with
-seven tools (`read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`);
+eight tools (`read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`);
 every function instance is a fresh short episode over a typed object tree.
 Prompt-like tasks (judge, classify, extract, rewrite) are the leaves. The
 harness provides memory, typing, a sandbox and I/O; it parses no instructions
@@ -151,3 +151,22 @@ cb_reconciliation cb_dependency_plan cb_order_saga`. These families are availabl
 explicitly; the existing v7 mixture remains stable until the application pass is
 reviewed. The oracles compare final state and, for the saga, the exact delivered
 command sequence. The model remains responsible for interpreting each `.nl` body.
+
+### Explicit execution errors
+
+`report_blocker(missing=...)` signals missing information or an uncovered case.
+`report_error(message=...)` signals contradictory instructions, an invalid operation,
+or an impossible required result on the executed path. Both end the current episode
+without a completed return and pass a diagnostic to the caller. Existing effects
+remain; neither tool automatically retries. The distinction is model-facing, not
+an additional runtime failure state.
+
+The anti-fudging prompt is experimental:
+
+```bash
+.venv/bin/python scripts/validation_probe.py --policies local --system-file scripts/prompts/no_fudging.md --out runs/no-fudging.json
+```
+
+Omit `--system-file` for the usual prompt; add `--no-error-tool` to reproduce the
+previous tool inventory. Use `--controlled-only` for matched execution mistakes
+and contradictory programs after the same injected validation error.

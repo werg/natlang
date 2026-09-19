@@ -853,3 +853,41 @@ its incomplete/timed-out rows are not used above. Healthy single-server artifact
 are `runs/student-v5-validation-healthy.json`,
 `runs/student-v5-validation-controlled.json`, and
 `runs/student-v7-validation*-healthy.json` (draft-preserving rerun also saved).
+
+
+### Explicit error tool and anti-fudging prompt (2026-09-19)
+
+Added `report_error(message=...)` alongside `report_blocker(missing=...)`. Both
+produce the existing blocked tool outcome and quiesced lambda; an explicit error
+has an `error:` diagnostic. No new scheduling or deterministic interpretation is
+introduced. Tests cover grammar availability, malformed diagnostics, propagation
+to a caller under both feedback policies, and stopping further actions after an
+error while preserving an earlier effect.
+
+On the same nine diagnostic fixtures, v7 at temperature zero with local feedback:
+
+| Intervention | Valid controls correct | Impossible tasks accepted | Explicit failure reports |
+| --- | --- | --- | --- |
+| Error tool, usual prompt | 3/3 | 6/6 | 0 |
+| Error tool + anti-fudging prompt | 3/3 | 5/6 | 0 |
+
+The remaining impossible case exhausted its budget; this is not a justified
+refusal. On the controlled pair, the anti-fudging prompt still exhausted the local
+budget on both the repairable mistake and contradictory instruction (eight
+rejections each). Caller mode stopped on the injected rejection, as designed;
+this does not demonstrate model recognition of either case. These small runs do
+not establish that the new tool name helps. They do show that adding it and this
+admonition did not solve fudging in the current student. Keep the prompt opt-in.
+Next training coverage should include explicit error targets, missing-information
+blockers, and closely matched successful executions and legitimate repairs.
+
+Artifacts: `runs/student-v7-error-tool.json`, `runs/student-v7-no-fudging.json`,
+`runs/student-v7-no-fudging-controlled.json`. The probe saves exact prompt and
+whether the error tool was exposed; successful failure reports are scored
+separately from rejected attempts to report one.
+
+The ongoing r3-tail generation was already running with its original imported
+code and manifest when the tool was added. Retain that manifest and finish that
+process; do not resume that directory under the changed source hash. Any new
+batch uses the new tool inventory and a new manifest. Existing training targets
+remain compatible but do not teach the new error action.
