@@ -353,9 +353,7 @@ Families refer to the use cases in `TRAINING.md` §1 (A triage, B extraction,
 C entity resolution and cleaning, D long-input aggregation, E rules and
 policies, F human-written procedures, G decomposed QA, H summarization,
 I judged refinement, J segment-wise transformation). Names are recorded from
-memory: **verify license, availability, and version before use**, and track
-each in a data manifest with its license.
-
+memory.
 **Existing datasets: natural programs with verifiable outcomes**
 
 | Dataset | Family | Role | Verification |

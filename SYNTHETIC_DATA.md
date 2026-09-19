@@ -189,16 +189,16 @@ shapes and the long tail of operations that a hand-built AST grammar misses.
 
 **Prior art and assets.**
 
-| Asset | Size | License | Note |
-|-------|------|---------|------|
-| BREAK / QDMR | 83,978 decompositions | MIT | ordered NL steps with `#k` back-references: https://github.com/allenai/Break |
-| QDMR→SQL (Wolfson 2022) | ~7k executable (NL procedure, SQL) pairs; 77.8 % of 9,313 execute to the right answer | see repo | https://github.com/tomerwolgithub/question-decomposition-to-sql |
-| STEPS (EMNLP'23) | rule-based SQL → step-by-step NL explanation | see repo | reusable as a deterministic renderer: https://github.com/magic-YuanTian/STEPS |
-| Gretel synthetic_text_to_sql | 105,851 rows, 100 domains, with an explanation field | Apache-2.0 | https://huggingface.co/datasets/gretelai/synthetic_text_to_sql |
-| SynSQL-2.5M | 2.54M (db, question, SQL, CoT) over 16,583 DBs | Apache-2.0 | https://huggingface.co/datasets/seeklhy/SynSQL-2.5M |
-| Spider / BIRD | 8.6k / 12.7k | CC BY-SA 4.0 | derived data is share-alike |
-| WikiSQL | 80,654 questions, 24,241 tables | BSD-3 | simple single-table queries |
-| SPoC | 18,356 programs, 677 problems, line-level pseudocode, tests | **license not found** *[unverified]* | https://cs.stanford.edu/~sumith/spoc/ |
+| Asset | Size | Note |
+|-------|------|------|
+| BREAK / QDMR | 83,978 decompositions | ordered NL steps with `#k` back-references: https://github.com/allenai/Break |
+| QDMR→SQL (Wolfson 2022) | ~7k executable (NL procedure, SQL) pairs; 77.8 % of 9,313 execute to the right answer | https://github.com/tomerwolgithub/question-decomposition-to-sql |
+| STEPS (EMNLP'23) | rule-based SQL → step-by-step NL explanation | reusable as a deterministic renderer: https://github.com/magic-YuanTian/STEPS |
+| Gretel synthetic_text_to_sql | 105,851 rows, 100 domains, with an explanation field | https://huggingface.co/datasets/gretelai/synthetic_text_to_sql |
+| SynSQL-2.5M | 2.54M (db, question, SQL, CoT) over 16,583 DBs | https://huggingface.co/datasets/seeklhy/SynSQL-2.5M |
+| Spider / BIRD | 8.6k / 12.7k | |
+| WikiSQL | 80,654 questions, 24,241 tables | simple single-table queries |
+| SPoC | 18,356 programs, 677 problems, line-level pseudocode, tests | https://cs.stanford.edu/~sumith/spoc/ |
 
 Methods: instruction backtranslation with self-filtering (Humpback,
 https://arxiv.org/abs/2308.06259); OSS-Instruct from seed code
@@ -231,8 +231,7 @@ fraction fuzzified, dialect, whether schema is described or must be
 discovered by `read`.
 
 **Pitfalls.** Back-translations that leak SQL keywords (strip and paraphrase;
-lint for `SELECT`, `GROUP BY`); ambiguous NL (round-trip filter); share-alike
-licenses (keep Spider/BIRD-derived data in a separable shard).
+lint for `SELECT`, `GROUP BY`); ambiguous NL (round-trip filter).
 
 **First build.** QDMR→SQL pairs plus Gretel explanations over SQLite, rule
 renderer plus one LLM paraphrase, no fuzzification. ~50k programs.
@@ -294,7 +293,7 @@ every answer is a query over the hidden world.
 - *SynthIE* (EMNLP'23): sample coherent triplet sets from Wikidata, have an
   LLM write text expressing them; 1.8M examples; Flan-T5 at 220M/770M beat
   prior SOTA by 57 micro-F1 points. They had to flatten relation-frequency
-  skew. MIT. https://github.com/epfl-dlab/SynthIE
+  skew. https://github.com/epfl-dlab/SynthIE
 - *HoloBench* (ICLR'25) is the closest published match to "SQL over a hidden
   DB": rows from 5 Spider databases verbalized with 5 templates per table,
   gold from executing SQL on the sampled subset. Finding: the **amount of
@@ -322,7 +321,7 @@ every answer is a query over the hidden world.
   https://github.com/onyx-dot-app/EnterpriseRAG-Bench
 - *Noise models for entity resolution*: Febrl dsgen (Zipf-distributed
   duplicates, up to 5 per record, typo/OCR/phonetic edits), GeCo, and **Gecko**
-  (2024, MIT, NumPy/pandas: https://github.com/ul-mds/gecko). DeepMatcher's
+  (2024, NumPy/pandas: https://github.com/ul-mds/gecko). DeepMatcher's
   "dirty" sets move each attribute into the title with p = 0.5. WDC Products
   controls the share of corner-case pairs and keeps an unseen-entity split;
   every system degrades on unseen entities (https://arxiv.org/abs/2301.09521).
@@ -345,7 +344,6 @@ every answer is a query over the hidden world.
    property) plus borrowed Spider/BIRD/TPC-H schemas (DuckDB `tpch`
    extension). Values from Faker/Mimesis (both MIT) with realistic
    distributions: Zipfian customers, seasonal timestamps, correlated fields.
-   Avoid SDV (BSL license, needs real data to fit).
 2. *Events and documents.* Entities emit events (order placed, shipment late,
    refund requested). Each event projects into one or more documents: email,
    ticket, chat, invoice, review, call note. A projection spec says which
@@ -506,7 +504,7 @@ with gold at every iteration.
 **Prior art.** RuleTaker/ProofWriter: synthetic Datalog theories rendered via
 templates; ~500k questions across depths 0–5; closed- and open-world variants;
 ParaRules for crowd paraphrases (generator:
-https://github.com/allenai/ruletaker; dataset license *[unverified]*). All-at-
+https://github.com/allenai/ruletaker; dataset). All-at-
 once proof generation collapses at unseen depths while the **iterative
 one-step model generalizes much better**
 (https://ar5iv.labs.arxiv.org/html/2012.13048). FaiRR splits each step into
@@ -555,18 +553,18 @@ synthetic-text cleanliness inside multi-step programs.
 
 **Assets (permissive first).**
 
-| Dataset | Annotations on the same items | License |
-|---------|------------------------------|---------|
-| MASSIVE | intent (60), slots (55), domain (18), 51 parallel languages, 1M utterances | CC BY 4.0 |
-| Schema-Guided Dialogue | service, intent, slots, dialogue state; 20k+ dialogues | CC BY-SA 4.0 |
-| MultiWOZ | domain, intent, slots, state | MIT / Apache-2.0 (2.2) |
-| CivilComments | toxicity subtypes, identity mentions; ~2M comments | CC0 |
-| GoEmotions | 27 emotions, multi-label; 58k | Apache-2.0 |
-| Stack Exchange | tags, score, accepted flag, dates | CC BY-SA |
-| arXiv metadata | categories, dates, authors | CC0 *[from memory]* |
-| Amazon Reviews 2023 | rating, category tree, helpfulness, verified, price; 571M | no explicit license |
-| Yelp | rating, categories, attributes | non-commercial academic |
-| OntoNotes | NER, coreference, SRL | LDC, not redistributable |
+| Dataset | Annotations on the same items |
+|---------|------------------------------|
+| MASSIVE | intent (60), slots (55), domain (18), 51 parallel languages, 1M utterances
+| Schema-Guided Dialogue | service, intent, slots, dialogue state; 20k+ dialogues|
+| MultiWOZ | domain, intent, slots, state |
+| CivilComments | toxicity subtypes, identity mentions; ~2M comments |
+| GoEmotions | 27 emotions, multi-label; 58k |
+| Stack Exchange | tags, score, accepted flag, dates |
+| arXiv metadata | categories, dates, authors |
+| Amazon Reviews 2023 | rating, category tree, helpfulness, verified, price; 571M |
+| Yelp | rating, categories, attributes |
+| OntoNotes | NER, coreference, SRL |
 
 OOLONG-synth already does the simplest version of this over 10
 classification sets.
@@ -714,21 +712,16 @@ Training on paraphrases helps: Unnatural Instructions gained +12.1 on BBH with
 ~3.5 paraphrases per instruction (https://arxiv.org/abs/2212.09689);
 PromptSource suggests 5–10 templates per dataset.
 
-**Seed corpora, by license.**
+**Seed corpora**
 
-| Use freely (with attribution where required) | Research / non-commercial only |
 |----------------------------------------------|--------------------------------|
-| MASSIVE (CC BY 4.0): real command phrasing, 51 languages | wikiHow, WikiLingua (CC BY-NC-SA; wikiHow text after 2025-03-24 is not CC at all) |
-| Stack Exchange how-to answers (CC BY-SA; dump access restricted since 2024) | iFixit / MyFixit (CC BY-NC-SA) |
-| BioProBench protocol sets (CC BY 4.0) | RecipeNLG, Recipe1M+ (research only) |
-| NL2Bash (MIT), BREAK (MIT) | Amazon SOP-Bench (CC BY-NC; synthetic anyway) |
-| Aya Dataset (Apache-2.0): 204K human-written, 65 languages | Yelp |
-| READMEs from permissively licensed repos; public-domain government SOPs | |
-| SOPBench (Li et al., CC BY 4.0) | SPoC (license not found) |
-
-Whether ShareAlike attaches to LLM output conditioned on few-shot exemplars is
-legally unsettled; if the model may ship commercially, stay in the left
-column. Record provenance of every seed.
+| MASSIVE: real command phrasing, 51 languages | wikiHow, WikiLingua |
+| Stack Exchange how-to answers | iFixit / MyFixit |
+| BioProBench protocol sets | RecipeNLG, Recipe1M+ |
+| NL2Bash, BREAK | Amazon SOP-Bench |
+| Aya Dataset: 204K human-written, 65 languages | Yelp |
+| READMEs from available repos; government SOPs | |
+| SOPBench | SPoC |
 
 **Renderer design.**
 1. *Separate surface from semantics.* Input = AST + 1–3 retrieved real
@@ -765,26 +758,26 @@ effectful crisp functions, precondition checks, refusal and blockers, with
 gold from a simulator instead of a judge.
 
 **Prior art.**
-- *AppWorld* (Apache-2.0): 9 apps, 457 APIs, 101 tables, 750 tasks;
+- *AppWorld*: 9 apps, 457 APIs, 101 tables, 750 tasks;
   **state-based unit tests** so any valid path passes, plus a
   **collateral-damage check** for unexpected changes. Closest match.
   https://arxiv.org/pdf/2407.18901
-- *tau-bench / tau2-bench* (MIT): tools over a domain DB plus a policy
+- *tau-bench / tau2-bench*: tools over a domain DB plus a policy
   document; gold via DB-state assertions, communication assertions, and action
   assertions. https://github.com/sierra-research/tau2-bench
-- *ToolSandbox* (Apple, custom license): implicit state dependencies between
+- *ToolSandbox*: implicit state dependencies between
   tools; gold as a DAG of **milestones** plus **minefields** (events that must
   never happen). https://arxiv.org/pdf/2408.04682
-- *BFCL v3 multi-turn* (Apache-2.0): writes checked by state comparison; reads
+- *BFCL v3 multi-turn*: writes checked by state comparison; reads
   by response, redundant calls allowed.
-- *APIGen-MT* (CC BY 4.0): **blueprint first** — ground-truth actions
+- *APIGen-MT*: **blueprint first** — ground-truth actions
   validated by format check, execution, policy rules written as Python unit
   tests, and LLM-judge vote; trajectories kept only if state and output match.
   A 1B model trained on it reaches 43 % on BFCL v3 multi-turn.
   https://arxiv.org/html/2504.03601v3
-- *WorkBench* (MIT): 5 DBs, 26 tools, 690 tasks, one unambiguous outcome DB
+- *WorkBench*: 5 DBs, 26 tools, 690 tasks, one unambiguous outcome DB
   per task. https://arxiv.org/abs/2405.00823
-- *SOP-Bench* (Amazon): 2,000+ tasks, 12 domains; finding that **adding more
+- *SOP-Bench*: 2,000+ tasks, 12 domains; finding that **adding more
   tools lowers success**. *SOP-Agent* compiles SOPs to decision graphs and
   notes pseudocode-style indented SOPs in practice
   (https://arxiv.org/html/2501.09316). No public runbook-automation dataset
@@ -816,10 +809,6 @@ forbidden events never occurred. Policy clauses: the unit tests.
 
 **Knobs.** Tools available vs needed, SOP branching, dependency depth,
 precondition-failure rate, tool-failure rate, collection size.
-
-**Licensing.** AppWorld, tau2, WorkBench are MIT/Apache and can seed schemas.
-Review before reuse: Jericho (GPL-2.0), ToolScale (NVIDIA), ToolSandbox
-(Apple), SOP-Bench (non-standard).
 
 **First build.** Ticketing + inventory, 40 SOP blueprints × paraphrases,
 state-diff and collateral checks. 10K episodes.
@@ -873,7 +862,7 @@ untuned and tuned 350M one-shot against interpreted, by K.
 "Rewrite until it satisfies the constraints" with a checker in the loop.
 Also the cleanest RL reward in the project.
 
-**Prior art.** *AutoIF* (Apache-2.0) is the fullest recipe: per instruction
+**Prior art.** *AutoIF* is the fullest recipe: per instruction
 the LLM writes verification functions and test cases; keep a checker if it
 compiles and **mutual pass rate > 0.5** between functions and cases;
 back-translate the checker into an instruction and NLI-filter contradictions;
@@ -884,7 +873,7 @@ one verifier each, binary reward. *IFBench*: 58 held-out constraints;
 generalizes better**; 1–5 constraints per prompt
 (https://arxiv.org/abs/2507.02833). *VerIF*: hard constraints by code, soft
 ones by a reasoning judge (https://arxiv.org/abs/2506.09942). Reasoning Gym,
-SynLogic, Enigmata: generator + verifier suites, permissively licensed.
+SynLogic, Enigmata: generator + verifier suites.
 
 **Generator design.**
 1. *Constraint library.* Hard, code-checked: length and counts, format and
@@ -980,8 +969,7 @@ accuracy**.
 models often fail evaluations on format. Evaluate capability with a tolerant
 parser; at inference use grammar constraints plus MAKER-style discard.
 
-**Tooling.** distilabel (Apache-2.0), DataDreamer (MIT), Bespoke Curator
-(Apache-2.0), NeMo Data Designer (Apache-2.0; seed sampling, column
+**Tooling.** distilabel, DataDreamer, Bespoke Curator, NeMo Data Designer (seed sampling, column
 dependencies, validators), NeMo Curator for GPU dedup, Argilla for human
 audit.
 
@@ -1033,12 +1021,6 @@ Y15's style seeding and the quality pipeline apply from Wave 1.
 
 ## Items needing verification before use
 
-- SPoC license (not found). ProofWriter dataset license. OpenPI, ProPara
-  licenses.
-- Persona Hub public subset size and license (from memory: ~200K,
-  non-commercial).
-- Amazon Reviews 2023 has no stated license; Yelp is non-commercial;
-  OntoNotes is LDC.
 - Several 2026 arXiv entries were read from abstracts or summaries only:
   Recursive Agent Optimization (2605.06639), AttackEval (2604.03598),
   "Polyglot Teachers" (2604.11290).

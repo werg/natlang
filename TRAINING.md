@@ -4,10 +4,6 @@ Companion to `PLAN.md`. Covers target use cases, the skill taxonomy, data
 sources (synthetic, existing datasets, teacher distillation), the training
 recipe, and evaluation. Status: draft, 2026-09-19.
 
-Dataset names below are listed from memory. **Verify license, availability,
-and current version of each before use.** LFM2.5 itself ships under the
-`lfm1.0` license; check its terms for the intended deployment.
-
 ## 0. What the base model tells us
 
 Facts from the LFM2.5 model cards and Liquid's release post (fetched
@@ -299,10 +295,34 @@ collections as the inputs of code-base programs (families A–E).
   MASSIVE (multilingual).
 - Support/email: Bitext customer-support, Twitter customer support corpus,
   Enron (triage, threading), GitHub issues with labels, StackExchange tags.
+- SaaS sales conversations: [DeepMostInnovations/saas-sales-conversations](https://huggingface.co/datasets/DeepMostInnovations/saas-sales-conversations)
+  (100,000 synthetic conversations, one published train split).
+  Keep the role-tagged `conversation` turns and `conversation_id`; use customer
+  turns or conversation prefixes as inputs for objection/intent detection,
+  buying-signal triage, and next-action routing. Jev can label these bounded
+  choices; then the reference policy can turn accepted labels into typed leaf
+  trajectories and map/fold programs. The CSV is about 7.17 GB because it also
+  stores 3,072 embedding columns; ignore those columns for the text pipeline.
+  Its `outcome` is a synthetic whole-conversation conversion label, while
+  `probability_trajectory`, `customer_engagement`, and `sales_effectiveness`
+  are automatic annotations, not independently checked probabilities. Do not
+  expose future turns, `scenario`, or these annotations to a prefix decision.
+  Split by company/product or scenario family before deriving turn-level rows,
+  and evaluate on real conversations before claiming transfer.
 - Topic/sentiment: AG News, DBpedia-14, 20 Newsgroups, Yahoo Answers,
   GoEmotions, TweetEval, SST-2, Yelp/Amazon reviews (+ aspect sets such as
   SemEval ABSA).
 - Moderation: Civil Comments / Jigsaw (policy-as-rubric).
+- Security input triage: [Sajid576 SQL Injection Dataset](https://www.kaggle.com/datasets/sajid576/sql-injection-dataset)
+  supplies `Query,Label` rows for a Bool leaf (0 = benign, 1 = injection).
+  Version 1 has 30,919 rows (19,537 negative, 11,382 positive). Use both
+  the source labels and Jev judgments to audit disagreements before making
+  reference trajectories. Exclude empty queries and exact strings with
+  conflicting labels; group normalized payloads and SQL templates across
+  splits so superficial variants cannot leak. Include `unknown`/blocker cases
+  when a fragment lacks enough context to judge. The Kaggle metadata reports
+  its license as Unknown, so settle reuse terms before adding its records to
+  a distributed training corpus.
 - Screening: CLEF eHealth TAR, SYNERGY (inclusion criteria as instructions,
   boolean return, map over abstracts).
 - Domain: PubMed-RCT sentence roles, LEDGAR, LexGLUE.
@@ -391,8 +411,7 @@ reference policy. The teacher supplies what neither can:
 
 | | K2 Horizon 7B (MBZUAI IFM) | Ternary Bonsai 2 27B (Prism ML) |
 |---|---|---|
-| Released | 2026-09-03 | 2026-09-17 |
-| License | Apache 2.0; training data, recipes, checkpoints also open | Apache 2.0 |
+| Released | 2026-09-03 | 2026-09-17 | Apa; training data, recipes, checkpoints also open |
 | Nature | Dense 7B **reasoning model**; thinking cannot be turned off, only budgeted via `reasoning_effort`; card recommends ≥ 32k output tokens and states that truncated reasoning is a failed response | Qwen3.8 27B with ternary weights, 1.76 bits/weight, 5.9 GB; retains 98.2 % of the base's aggregate score |
 | Context | 512K | 262K |
 | Reported scores | SWE-bench Verified 70.6, BrowseComp 59.0, **tau3-Banking 25.8** | Instruction following 82.7, **agentic and tool calling 77.6**, coding 81.6, reasoning 84.0 |
@@ -667,7 +686,6 @@ laptop-CPU numbers for the on-device story.
 | Leaf skills regress as algorithmic data dominates | Replay slice; per-skill early stopping; monitor IFEval and leaf benchmarks. |
 | Reward hacking in RL (early well-typed wrong returns) | Outcome-based reward dominates; step penalties small; KL anchor; audit samples. |
 | Benchmark contamination in teacher or base model | Report on private hand-written programs as the primary number. |
-| Licenses (datasets and `lfm1.0`) restrict commercial use | Track license per source in the data manifest; build a permissive-only mix variant. |
 
 ## Sources
 
