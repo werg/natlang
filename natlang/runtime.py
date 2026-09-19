@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 import yaml
 
 from . import js
+from .invocation import Invocation, RunOptions
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
 from .nodes import (DONE, MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
@@ -82,9 +83,10 @@ class Outcome:
 
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
-                 max_episodes: int = 256, max_depth: int = 8):
+                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None):
         self.agent_factory = agent_factory
-        self.max_episodes, self.max_depth = max_episodes, max_depth   # run-level budgets (SPEC 6.3)
+        self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
+        self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
         self.deadline = None
         self._depth = 0
         self._fn_stack: list = []   # names of the code-base functions currently being reduced
@@ -96,6 +98,7 @@ class Runtime:
         self.trace: list = []
         self.episodes_started = 0
         self._ids = 0
+        self.invocations: list[Invocation] = []
 
     # ------------------------------------------------------------------ running programs
     def run_root(self, root: Pending, env: Optional[TypeEnv] = None):
@@ -205,11 +208,18 @@ class Runtime:
         cold = node.status == QUIESCED
         node.status, node.note = RUNNING, ""
         node.attempts += 1
+        parent = self.invocations[-1].path if self.invocations else None
+        invocation = Invocation(self.options.run_id, ref.path, node.attempts, parent)
         if node.original_body is None:
             node.original_body = node.body
         self.episodes_started += 1
         session = Session(self, node, ref.env, cold=cold)
-        note = self.agent_factory(node).run(session)
+        session.invocation = invocation
+        self.invocations.append(invocation)
+        try:
+            note = self.agent_factory(node).run(session)
+        finally:
+            self.invocations.pop()
         if session.completed:
             return self._swap_out(node, ref, node.ret)
         return self._quiesce(node, ref, note or "budget exhausted")

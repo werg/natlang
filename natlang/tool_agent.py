@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -75,7 +76,24 @@ class ToolAgent:
         previous_runtime_deadline = session.rt.deadline
         if previous_runtime_deadline is not None:
             deadline = min(deadline, previous_runtime_deadline)
-        self.dec.deadline = session.rt.deadline = deadline
+        # New backends keep request deadlines in a per-call context. Older test
+        # drivers still support the compatibility mutable attribute.
+        request_scope = getattr(self.dec, "request_scope", None)
+        scope = request_scope(deadline=deadline) if request_scope else nullcontext()
+        if not request_scope:
+            self.dec.deadline = deadline
+        session.rt.deadline = deadline
+        try:
+            with scope:
+                return self._run_turns(session, s, messages, deadline, opening, nudges, turns, tokens, withdrawals)
+        finally:
+            if not request_scope:
+                self.dec.deadline = previous_deadline
+            session.rt.deadline = previous_runtime_deadline
+            if self.transcript is not None:
+                self.transcript[:] = messages
+
+    def _run_turns(self, session, s, messages, deadline, opening, nudges, turns, tokens, withdrawals):
         try:
             while True:
                 if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
@@ -85,8 +103,12 @@ class ToolAgent:
                     allowance = min(allowance, self.turn_tokens)
                 available_tools = s.tools(session)
                 offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
+                invocation = getattr(session, "invocation", None)
+                call_path = invocation.path if invocation else ""
+                attempt = invocation.attempt if invocation else 1
+                policy = session.rt.options.seed
                 turn = self.dec.chat(messages, available_tools, temperature=self.temperature,
-                                     seed=0, max_tokens=allowance)
+                                     seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=allowance)
                 turns += 1
                 teacher_turn = None
                 if self.teacher_turns is not None:
@@ -126,7 +148,9 @@ class ToolAgent:
                             allowance = min(allowance, self.turn_tokens)
                         name, args = turn.calls[index]
                         fork = review_messages(messages, turn.calls, index, self.review_prompt)
-                        answer = getattr(self.dec, "review", self.dec.chat)(fork, review_tools(self.review_order), temperature=0, seed=0, max_tokens=allowance)
+                        answer = getattr(self.dec, "review", self.dec.chat)(
+                            fork, review_tools(self.review_order), temperature=0,
+                            seed=policy.seed(call_path, attempt, "review", turns), max_tokens=allowance)
                         turns += 1
                         used = getattr(answer, "completion_tokens", None)
                         tokens += allowance if used is None else max(1, used)
@@ -233,11 +257,6 @@ class ToolAgent:
                     return "validation failed: " + results[-1].text
         except TimeoutError:
             return "episode wall-clock budget exhausted"
-        finally:
-            self.dec.deadline = previous_deadline
-            session.rt.deadline = previous_runtime_deadline
-            if self.transcript is not None:
-                self.transcript[:] = messages
 
 
 def _raw(calls):
