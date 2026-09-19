@@ -23,7 +23,7 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
                     format_type, is_pending_type, parse_type, FoldT, IterateT, MapT)
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 
-MAX_ACTIONS = 24
+MAX_ACTIONS = 40
 MAX_NESTING = 6
 MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
@@ -450,13 +450,22 @@ class Session:
             return Result("error", "the task has already finished")
         if self.actions >= MAX_ACTIONS:
             return Result("budget", "action budget exhausted")
-        self.actions += 1
-        self.lam.steps += 1
+        if name != "mark_done":                 # bookkeeping does not spend the budget of work
+            self.actions += 1
+            self.lam.steps += 1
         op = getattr(self, "_op_" + name, None)
         try:
             if op is None:
                 raise reject(name, "bad-action", "a known tool")
+            done = args.pop("done", None) if name in ("write", "call") and isinstance(args, dict) else None
+            if done is not None:                # validate the en-passant mark before the work, apply it after success
+                rng_ = done if isinstance(done, list) else [done]
+                if not (1 <= len(rng_) <= 2) or not all(isinstance(v, int) and not isinstance(v, bool) for v in rng_):
+                    raise reject("done", "bad-range", "a line number, or [first, last]")
             result = op(args)
+            if done is not None and result.kind in ("ok", "done"):
+                marked = self._op_mark_done({"start": rng_[0], "end": rng_[-1]})
+                result.text = result.text.rstrip() + "\n" + marked.text.split("\n", 1)[1]
         except Reject as e:
             result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
         except Refuse as e:
@@ -629,6 +638,20 @@ class Session:
         self.lam.body = ""
         self.completed = True
         return True
+
+    def _op_mark_done(self, args):
+        """mark_done(start, end?, skipped?): lines of the (immutable) instructions are finished, or did not apply."""
+        from .render import listing, program_lines
+        lines = program_lines(self.lam.original_body or self.lam.body)
+        start = args.get("start")
+        end = args.get("end", start)
+        status = "skipped" if args.get("skipped") is True else "done"
+        if not all(isinstance(v, int) and not isinstance(v, bool) for v in (start, end)) or not (1 <= start <= end <= len(lines)):
+            raise reject("start", "bad-range", f"line numbers between 1 and {len(lines)}, start <= end", f"{start}..{end}")
+        for n, _, markable in lines[start - 1:end]:
+            if markable:
+                self.lam.marks[n] = status
+        return Result("ok", "ok\n" + listing(self.lam.original_body or self.lam.body, self.lam.marks, compact=True, window=3))
 
     def _op_report_blocker(self, args):
         """The inputs do not determine the result. Ends the episode; the lambda quiesces with the note."""

@@ -141,6 +141,7 @@ class Ctx:
     calls: list = field(default_factory=list)      # reference steps of the root
     indent: int = 0
     blockable: bool = False
+    line_meta: list = field(default_factory=list)
 
     def use_leaf(self, canon: str, into: Optional[dict] = None) -> str:
         aliases, args, returns, body, oracle = LEAVES[canon]
@@ -162,10 +163,11 @@ class Ctx:
         self.fns[name] = _fn_doc(name, args, returns, desc, code, kind="code")
         return name
 
-    def say(self, a: str, b: str):
+    def say(self, a: str, b: str, skipped: bool = False):
         pad = "    " * self.indent
         self.lines_a.append(pad + a)
         self.lines_b.append(pad + b)
+        self.line_meta.append((len(self.calls), skipped))       # the steps from here on belong to this line
 
 
 def _ref(path: str) -> str:            # how a path reads inside pseudocode
@@ -219,6 +221,23 @@ def call_std(c: Ctx, out_path: str, name: str, inputs: dict, value: Any, a: str,
 
 
 # ------------------------------------------------------------------------------------------ program shapes
+MARK_STYLES = ("standalone", "grouped", "en_passant")
+
+
+def marks_on() -> bool:
+    from ..surface import MARKS_DEFAULT
+    return MARKS_DEFAULT
+
+
+def mark_style(rng) -> str:
+    """How the reference interpreter marks lines in this program: `mark_done` in a turn of its own, `mark_done`
+    grouped with the next action, or the `done` argument of the action that finishes a line. NATLANG_MARK_STYLE
+    forces one style (for experiments); otherwise programs are spread over all three."""
+    import os
+    forced = os.environ.get("NATLANG_MARK_STYLE")
+    return forced if forced in MARK_STYLES else rng.choice(MARK_STYLES)
+
+
 def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, expected: Any, types: list,
             fn_name: str, note: str) -> Program:
     dialect = c.rng.choice("ab")
@@ -236,13 +255,61 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
         text = header + "\n\n" + "\n".join(out)
     calls = list(c.calls)
 
+    meta = list(c.line_meta)
+    # line numbers: 1 is the header, 2 is blank, the said lines start at 3. A line is finished once the steps
+    # that belong to it are done, i.e. when the next line's first step is about to start.
+    finished_at = [meta[i + 1][0] if i + 1 < len(meta) else len(calls) for i in range(len(meta))]
+    todo = [(1, 0, False)] + [(i + 3, finished_at[i], meta[i][1]) for i in range(len(meta))]
+
+    def marks_ready(k, marked):
+        if not marks_on():
+            return []
+        ready = [(n, sk) for n, at, sk in todo if at <= k and n not in marked]
+        out, i = [], 0
+        while i < len(ready):
+            j = i
+            while j + 1 < len(ready) and ready[j + 1][1] == ready[i][1] and ready[j + 1][0] <= ready[j][0] + 2:
+                j += 1
+            args = {"start": ready[i][0]}
+            if j > i:
+                args["end"] = ready[j][0]
+            if ready[i][1]:
+                args["skipped"] = True
+            out.append(("mark_done", args))
+            i = j + 1
+        marked.update(n for n, _ in ready)
+        return out
+
+    style = mark_style(c.rng)
+    owner = {}                                   # step index -> the line it belongs to, when it is that line's last step
+    for i in range(len(meta)):
+        if finished_at[i] > meta[i][0]:
+            owner[finished_at[i] - 1] = i + 3
+
     def script(lam):
-        for st in calls:
-            r = yield [st if st[0] == "glue" else (st[0], st[1])]
+        marked = set()
+        for k, st in enumerate(calls):
+            marks = marks_ready(k, marked)                       # close what is finished
+            if marks and style == "standalone":                  # ... in a turn of its own
+                yield marks
+                marks = []
+            extra = {}
+            if style == "en_passant" and k in owner and owner[k] not in marked and marks_on():
+                extra = {"done": owner[k]}                       # ... or as an argument of the action that finishes the line
+                marked.add(owner[k])
+            if st[0] == "glue":
+                _, code, path, ty = st
+                r = yield marks + [("run_code", {"code": code})]
+                r = yield [("write", {"path": path, "type": ty, "value": r.value, **extra})]
+            else:
+                r = yield marks + [(st[0], {**st[1], **extra})]
             if r is not None and r.kind == "quiesced":          # a callee reported a blocker: pass it up, do not guess
                 yield [("report_blocker", {"missing": f"{st[1].get('function')} did not finish for every item: "
-                                                       + r.text.splitlines()[-1][:160]})]
+                                                       + r.text.splitlines()[0][:160]})]
                 return
+        rest = marks_ready(len(calls), marked)
+        if rest:
+            yield rest
     c.plans[fn_name] = Plan("script", script=script, note=note)
     root = {"$lambda": {"type": "Lambda<{ " + ", ".join(f"{n}: {t}" for n, t in sig_args.items()) + f" }}, {returns}>",
                         "types": {t: TYPES[t] for t in types}, "instructions": text, "codebase": c.fns,
@@ -269,8 +336,8 @@ def ticket_report(rng: random.Random) -> Program:
     if chosen:
         n = call_std(c, "return/urgent", "count_true", {"flags": "let/urgent_flags"}, sum(urgent),
                      "urgent = count_true(urgent_flags)", "Count the true flags with count_true: that is `urgent`.")
-    else:                      # the policy still has to notice that the list is empty: the Map over [] is skipped
-        c.lines_a.append(""); n = 0
+    else:
+        n = 0
     by_label = {}
     for l in labels:
         by_label[l] = by_label.get(l, 0) + 1
@@ -345,8 +412,8 @@ def expense_audit(rng: random.Random) -> Program:
     n = call_std(c, "return/flagged", "count_true", {"flags": "let/flagged"}, sum(bad),
                  "flagged_count = count_true(flagged)", "Count the flagged claims with count_true.")
     decision = "approve" if not any(bad) else "review"
-    c.say('if flagged_count == 0: decision = "approve"', 'If nothing is flagged, the decision is "approve".')
-    c.say('else: decision = "review"', 'Otherwise the decision is "review".')
+    c.say('if flagged_count == 0: decision = "approve"', 'If nothing is flagged, the decision is "approve".', skipped=decision != "approve")
+    c.say('else: decision = "review"', 'Otherwise the decision is "review".', skipped=decision == "approve")
     c.say("return { payable, flagged: flagged_count, decision }", "Return payable, the number flagged, and the decision.")
     c.calls.append(("write", {"path": "return/decision", "type": '"approve" | "review"', "value": decision}))
     return _finish(c, "expense_audit", {"notes": "Text[]"},
@@ -368,9 +435,30 @@ def nested_assessment(rng: random.Random) -> Program:
             f"  urgent = {f_urg}(ticket)\n  return {{ label, urgent }}")
     c.fns[assess] = _fn_doc(assess, {"ticket": "Text", "rubric": "Text"}, "Assessment",
                             "Label one ticket and say whether it is urgent.", body, codebase=inner)
-    c.plans[assess] = Plan("calls", note="Labelled the ticket and judged its urgency.", steps=[
-        ("call", {"function": f_cls, "to": "return/label", "inputs": {"ticket": "args/ticket", "rubric": "args/rubric"}}),
-        ("call", {"function": f_urg, "to": "return/urgent", "inputs": {"ticket": "args/ticket"}})])
+    style = mark_style(rng)
+
+    def assess_script(lam):
+        label = ("call", {"function": f_cls, "to": "return/label", "inputs": {"ticket": "args/ticket", "rubric": "args/rubric"}})
+        urgent = ("call", {"function": f_urg, "to": "return/urgent", "inputs": {"ticket": "args/ticket"}})
+        m = lambda a, b=None: ("mark_done", {"start": a, **({"end": b} if b else {})})
+        if not marks_on():
+            yield [label]
+            yield [urgent]
+        elif style == "standalone":
+            yield [m(1)]
+            yield [label]
+            yield [m(3)]
+            yield [urgent]
+            yield [m(4, 5)]
+        elif style == "grouped":
+            yield [m(1), label]
+            yield [m(3), urgent]
+            yield [m(4, 5)]
+        else:
+            yield [m(1), (label[0], {**label[1], "done": 3})]
+            yield [(urgent[0], {**urgent[1], "done": 4})]
+            yield [m(5)]
+    c.plans[assess] = Plan("script", script=assess_script, note="Labelled the ticket and judged its urgency.")
     c.say(f"reports = for each t in tickets: {assess}(t, rubric)",
           f"For every ticket, call {assess} with the rubric; keep the results as reports.")
     c.calls.append(("call", {"function": assess, "to": "let/reports", "over": "args/tickets", "inputs": {"rubric": "args/rubric"}}))
@@ -560,7 +648,9 @@ class Composer:
         self.c.say(f"if {name} is empty:", f"If {name} is empty:")
         self.c.indent += 1
         empty_value = 0 if LEAF_KIND[leaf] == "flags" else {}
-        self.c.say(f"{field} = {json.dumps(empty_value)}", f"{field} is {json.dumps(empty_value)}.")
+        self.c.say(f"{field} = {json.dumps(empty_value)}", f"{field} is {json.dumps(empty_value)}.", skipped=bool(sel))
+        if not sel:
+            self.c.calls.append(("write", {"path": f"return/{field}", "type": "Num" if empty_value == 0 else "Dict<Num>", "value": empty_value}))
         self.c.indent -= 1
         self.c.say("else:", "Otherwise:")
         self.c.indent += 1
@@ -575,10 +665,9 @@ class Composer:
             fn = self.c.use_leaf(leaf)
             std = self.c.use_std("count_true" if LEAF_KIND[leaf] == "flags" else "group_count")
             self.c.say(f"{inner} = for each x in {name}: {fn}(x" + (", rubric)" if leaf == "classify" else ")"),
-                       f"For every item of {name}, call {fn}; keep the results as {inner}.")
-            self.c.say(f"{field} = {std}({inner})", f"Apply {std} to {inner}: that is {field}.")
+                       f"For every item of {name}, call {fn}; keep the results as {inner}.", skipped=True)
+            self.c.say(f"{field} = {std}({inner})", f"Apply {std} to {inner}: that is {field}.", skipped=True)
             result = empty_value
-            self.c.calls.append(("write", {"path": f"return/{field}", "type": "Num" if result == 0 else "Dict<Num>", "value": result}))
         self.c.indent -= 1
         self.types.update({"classify": ["Label"], "topic_of": ["Topic"]}.get(leaf, []))
         self.fields[field] = ("Num" if LEAF_KIND[leaf] == "flags" else "Dict<Num>", result)

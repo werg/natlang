@@ -110,3 +110,51 @@ def opening(lam: Lambda, outer_env: TypeEnv, *, events: str = "none", holes: int
     lines += ["", f"return  {format_type(lam.type.returns)}"]
     lines += render(lam.ret, lam.type.returns, env, 1, 0)
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------- the program listing with its marks
+BOX = {"done": "[x]", "skipped": "[-]", None: "[ ]"}
+
+
+def program_lines(body: str) -> list:
+    """[(number, text, markable)] for the lines of a function body. Numbering only: nothing is parsed. Blank lines
+    and lines that are only a comment have a number and no box."""
+    out = []
+    for i, line in enumerate(body.strip("\n").split("\n"), 1):
+        t = line.strip()
+        out.append((i, line.rstrip(), bool(t) and not t.startswith("#")))
+    return out
+
+
+def pending_lines(body: str, marks: dict) -> list:
+    return [n for n, _, markable in program_lines(body) if markable and n not in marks]
+
+
+def listing(body: str, marks: dict, compact: bool = False, window: int = 0) -> str:
+    """The numbered listing. `compact` collapses finished stretches to one line, so what remains is what is left to
+    do; `window` shows only that many open lines after them (the rest is counted)."""
+    lines = program_lines(body)
+    width = len(str(len(lines)))
+    out, run = [], []
+
+    def flush():
+        if run:
+            a, b = run[0], run[-1]
+            kinds = {marks[n] for n in run if n in marks}
+            box = BOX["done"] if kinds == {"done"} else BOX["skipped"] if kinds == {"skipped"} else "[x/-]"
+            out.append(f"{str(a) if a == b else f'{a}-{b}':>{width}} {box}")
+            run.clear()
+    for n, text, markable in lines:
+        closed = (n in marks) or (not markable and bool(run))
+        if compact and closed:
+            run.append(n)
+            continue
+        flush()
+        out.append(f"{n:>{width}} {BOX[marks.get(n)] if markable else '   '} {text}".rstrip())
+    flush()
+    if window:
+        open_at = [i for i, l in enumerate(out) if "[ ]" in l[: width + 5]]
+        if len(open_at) > window:
+            cut = open_at[window]
+            out = out[:cut] + [f"{'':>{width}} … {len(open_at) - window} more lines to do"]
+    return "\n".join(out)

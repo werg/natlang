@@ -53,6 +53,13 @@ class ToolAgent:
                     break
 
                 if not turn.calls:                # the reply: the normal end of an agent episode
+                    open_ = s.pending(session) if hasattr(s, "pending") else []
+                    if open_ and nudges < MAX_NUDGES:             # no data in a nudge: line numbers only
+                        nudges += 1
+                        messages += [{"role": "assistant", "content": turn.text or "(no reply)"},
+                                     {"role": "user", "content": "Lines still marked [ ]: " + ", ".join(map(str, open_)) +
+                                                                 ". Finish them, or mark them done or skipped."}]
+                        continue
                     if session.finish():
                         session.lam.note = turn.text
                         return None

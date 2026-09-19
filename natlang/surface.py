@@ -22,6 +22,8 @@ type, and cannot choose a wrong one.
 """
 from __future__ import annotations
 
+import os
+
 import json
 from typing import Any, Optional
 
@@ -33,6 +35,7 @@ from .types import (DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Prim, Rec
 from .values import problems
 
 MAX_PATHS = 48
+MARKS_DEFAULT = os.environ.get("NATLANG_MARKS", "1") != "0"
 NOTHING_HIDDEN = "(nothing is hidden: every value is already shown in full)"
 
 
@@ -76,6 +79,21 @@ def _enum_or_string(values: list, description: str) -> dict:
 
 class ToolSurface:
     name = "tools-v2"
+
+    def __init__(self, marks: Optional[bool] = None):
+        # numbered listing + the `mark` tool for functions that have a code base. NATLANG_MARKS=0 turns it off, to
+        # evaluate models trained before marks existed.
+        self.marks = MARKS_DEFAULT if marks is None else marks
+        self.done_arg = self.marks and os.environ.get("NATLANG_DONE_ARG", "1") != "0"   # `done=` on write and call
+
+    def marking(self, session) -> bool:
+        return self.marks and bool(session.lam.codebase)
+
+    def pending(self, session) -> list:
+        """Lines still open, once marking has begun; [] otherwise (a leaf is never asked to mark)."""
+        from .render import pending_lines
+        lam = session.lam
+        return pending_lines(lam.original_body or lam.body, lam.marks) if self.marking(session) and lam.marks else []
     TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker")   # `call` only when there are functions
 
     def slots(self, session):
@@ -111,7 +129,8 @@ class ToolSurface:
         definable = [s for s in slots if not s.ref.deny and s.ref.type is not None and not own_args(s)
                      and not is_body(s) and s.path.count("/") <= 3][:MAX_PATHS]
         texts = [s for s in existing if isinstance(s.value, str) and not s.ref.deny
-                 and (is_body(s) or format_type(s.ref.type) == "Text")]
+                 and (is_body(s) or format_type(s.ref.type) == "Text")
+                 and not (self.marking(session) and s.ref.holder is lam and is_body(s))]   # own instructions are immutable
         pending = [s for s in existing if is_pending(s.value) and s.value.status in (UNREDUCED, QUIESCED)
                    and not s.ref.deny]
         retryable = [s for s in existing if not is_pending(s.value) and not s.ref.deny
@@ -269,6 +288,27 @@ class ToolSurface:
                                                for n in functions for p_ in
                                                [sl.path for sl in existing if is_pending(sl.value)
                                                 and sl.value.status in (UNREDUCED, QUIESCED)][:4]]))
+        if self.marking(session):
+            from .render import pending_lines
+            open_ = pending_lines(lam.original_body or lam.body, lam.marks)
+            if open_:
+                yes = {"const": True}
+                tools.append(
+                    tool("mark_done", "Mark lines of your program as finished. `start` alone for one line, `start` and `end` "
+                                      "for a range. Add skipped=true when the lines did not apply, such as the branch of an "
+                                      "`if` that was not taken. Mark a line only after everything it asks for is finished.",
+                         {"start": {"type": "integer"}, "end": {"type": "integer"}, "skipped": {"type": "boolean"}}, ["start"],
+                         alternatives=[{"start": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]},
+                                       {"start": {"enum": open_}, "end": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]}]))
+                if self.done_arg:                       # en passant: the same mark as an argument of the action that finishes the line
+                    line = {"anyOf": [{"enum": open_}, {"type": "array", "items": {"enum": open_}, "minItems": 1}]}
+                    for t in tools:
+                        if t["function"]["name"] in ("write", "call"):
+                            t["function"]["parameters"]["properties"]["done"] = {
+                                **line, "description": "line (or [first, last]) of your program that this action finishes; marked if it succeeds"}
+                            for alt in t["function"]["parameters"].get("x-natlang-alternatives") or []:
+                                alt["done"] = line
+                                alt["x-optional"] = list(alt.get("x-optional") or []) + ["done"]
         tools.append(
             tool("report_blocker", "The task cannot be done as asked: the inputs do not determine the result, or a rule "
                                    "does not cover the case. Say exactly what is missing. This ends the task without "
@@ -282,6 +322,10 @@ class ToolSurface:
         shares a channel with instructions: the workspace arrives as a tool result (`opening_read`)."""
         lam = session.lam
         body = lam.body.strip() or "(no instructions left)"
+        if self.marking(session):
+            from .render import listing
+            body = (listing(lam.original_body or lam.body, lam.marks) +
+                    "\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.")
         fns = self.functions(session)
         return f"{body}\n\nWrite the result to `return` ({format_type(lam.type.returns)})." + (f"\n\n{fns}" if fns else "")
 
@@ -328,11 +372,6 @@ class ToolSurface:
         lam = session.lam
         if lam.ret is MISSING:
             return f"`return` has not been written yet. Write a {format_type(lam.type.returns)} to `return`."
-        for n, t in lam.let_types.items():
-            v = lam.let.get(n, MISSING)
-            if v is not MISSING:
-                kind = f"a copy of {lam.fn_copies[n].name}, editable" if n in lam.fn_copies else format_type(t)
-                out.append(f"  let/{n} ({kind}): {'' if n in lam.fn_copies else _preview(v)}".rstrip(": ").rstrip())
         filled, todo, subs = [], [], []
         self._walk(lam.ret, lam.type.returns, session.env, "return", filled, todo, subs)
         if subs:

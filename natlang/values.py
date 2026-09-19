@@ -155,7 +155,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
 # --------------------------------------------------------------------------- pending nodes
 
 _LAMBDA_KEYS = {"type", "types", "effects", "instructions", "code", "args", "return", "status", "note",
-                "effects_journal", "codebase", "let", "let_types", "function"}
+                "effects_journal", "codebase", "let", "let_types", "function", "marks"}
 
 
 def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: str,
@@ -228,6 +228,7 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
             for fn in node.codebase.values():
                 check(fn)
         node.fn_name = str(body.get("function") or "")
+        node.marks = {int(k): str(v) for k, v in (body.get("marks") or {}).items()}
         for k, text in (body.get("let_types") or {}).items():          # a swapped-out lambda gets its locals back
             node.let_types[str(k)] = parse_type(text)
             if k in (body.get("let") or {}):
@@ -405,6 +406,8 @@ def dump(x: Any) -> Any:
             body["effects_journal"] = [dict(j) for j in x.journal]
         if x.fn_name:
             body["function"] = x.fn_name
+        if x.marks:
+            body["marks"] = {int(k): v for k, v in sorted(x.marks.items())}
         if x.let:
             body["let"] = {k: dump(v) for k, v in x.let.items()}
         if _WITH_CODEBASE:

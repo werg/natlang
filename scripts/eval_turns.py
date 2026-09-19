@@ -35,7 +35,7 @@ def main():
                 break
             if rng.random() < 0.15:
                 s = json.loads(line)
-                cells[(group(s["family"]), s["skill"])].append(s)
+                cells[(group(s["family"]), s["skill"].replace("mark+mark+", "mark+").replace("mark+mark+", "mark+"))].append(s)
     dec = NativeCallDecoder(a.server, timeout=300)
     rows = {}
     for cell, samples in sorted(cells.items()):
@@ -50,12 +50,13 @@ def main():
                 exact += not got; tool += not got
                 continue
             exact += got == want
-            tool += bool(got) and got[0][0] == want[0][0]
-            if want[0][0] == "call":
-                fn += bool(got) and got[0][0] == "call" and got[0][1].get("function") == want[0][1].get("function")
+            tool += [n for n, _ in got] == [n for n, _ in want]          # a turn may hold several calls (mark + action)
+            fns = lambda calls: [a.get("function") for n, a in calls if n == "call"]
+            if fns(want):
+                fn += fns(got) == fns(want)
         rows[cell] = (n, exact, tool, fn)
         print(f"{cell[0]:<9} {cell[1]:<15} n={n:<3} exact={exact / n:4.0%}  right tool={tool / n:4.0%}"
-              + (f"  right function={fn / n:4.0%}" if cell[1] == "call" else ""), flush=True)
+              + (f"  right function={fn / n:4.0%}" if "call" in cell[1].split("+") else ""), flush=True)
     total = sum(r[0] for r in rows.values())
     print(f"\nall turns: exact={sum(r[1] for r in rows.values()) / total:.0%}  right tool={sum(r[2] for r in rows.values()) / total:.0%}  (n={total})")
 

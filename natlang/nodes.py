@@ -61,6 +61,7 @@ class Lambda(Pending):
     let_types: dict = field(default_factory=dict)  # name -> Type, fixed by the write that created the local
     codebase: dict = field(default_factory=dict)   # name -> FunctionDef; immutable, shared by reference
     fn_name: str = ""                              # the function this lambda is an instance of, if any
+    marks: dict = field(default_factory=dict)      # line number of the instructions -> "done" | "skipped"
     fn_copies: dict = field(default_factory=dict)  # local name -> FunctionDef it was copied from
 
     @property
