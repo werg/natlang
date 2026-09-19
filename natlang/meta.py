@@ -48,24 +48,30 @@ class SourceWorkspace:
 
     def invoke(self, name: str, inputs: dict, *, agent_factory, options: RunOptions,
                executors: dict | None = None, capabilities: dict | None = None,
-               parent_call_id: str | None = None, max_episodes: int = 32) -> ChildResult:
+               parent_call_id: str | None = None, max_episodes: int = 32,
+               parent_runtime: Runtime | None = None) -> ChildResult:
         if max_episodes < 1 or max_episodes > options.max_episodes:
             raise ValueError("child episode budget must be positive and bounded by parent")
         graph, root = load_definitions(self.definitions, name, inputs)
-        child_options = RunOptions(seed=options.seed, max_episodes=max_episodes,
+        child_options = RunOptions(seed=options.seed, model=options.model,
+                                   world_seed=options.world_seed, max_episodes=max_episodes,
                                    max_depth=options.max_depth)
         recorder = TraceRecorder({"run_id": child_options.run_id, "source_sha256": graph.revision,
                                   "parent_call_id": parent_call_id, "seed_policy": vars(options.seed),
                                   "capture": "reduction"})
         runtime = Runtime(agent_factory, options=child_options, executors=executors,
-                          capabilities=capabilities, trace_sink=recorder)
+                          capabilities=capabilities, trace_sink=recorder,
+                          _budget=parent_runtime._budget if parent_runtime else None,
+                          _parent_path=parent_call_id)
         out, value = runtime.run_root(root)
+        if parent_runtime is not None:
+            parent_runtime.episodes_started = parent_runtime._budget.used
         return ChildResult(graph.revision, parent_call_id, out.kind,
                            dump(value) if out.kind == "done" else None, recorder.events)
 
 
 def meta_capabilities(workspace: SourceWorkspace, *, agent_factory, options: RunOptions,
-                      executors: dict | None = None) -> dict:
+                      executors: dict | None = None, parent_runtime: Runtime | None = None) -> dict:
     """Choose individual wrappers to put in a lambda's declared effects.
 
     This does not pass through the caller's locals, capabilities, or native host
@@ -82,7 +88,8 @@ def meta_capabilities(workspace: SourceWorkspace, *, agent_factory, options: Run
         result = workspace.invoke(request["name"], request.get("inputs") or {},
                                   agent_factory=agent_factory, options=options, executors=executors,
                                   parent_call_id=request.get("parent_call_id"),
-                                  max_episodes=request.get("max_episodes", 32))
+                                  max_episodes=request.get("max_episodes", min(32, options.max_episodes)),
+                                  parent_runtime=parent_runtime)
         return {"source_revision": result.source_revision, "parent_call_id": result.parent_call_id,
                 "outcome": result.outcome, "value": result.value, "trace": result.trace}
 

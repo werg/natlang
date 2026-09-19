@@ -31,3 +31,17 @@ def test_eval_can_use_selected_meta_capability_with_parent_link():
                 "return child.value;"}})
     out, value = Runtime(None, capabilities={"meta.invoke": caps["meta.invoke"]}).run_root(root)
     assert (out.kind, value) == ("done", 6)
+
+
+def test_child_run_cannot_reset_parent_episode_budget():
+    workspace = SourceWorkspace({"cell": {"args": {}, "returns": "Num",
+                                       "instructions": "Return one."}}, "cell")
+    options = RunOptions(max_episodes=1)
+    parent = Runtime(None, options=options)
+    assert parent._budget.reserve()
+    parent.episodes_started = 1
+    child = workspace.invoke("cell", {}, agent_factory=None, options=options,
+                             max_episodes=1, parent_runtime=parent,
+                             parent_call_id="$root@1")
+    assert child.outcome == "quiesced" and parent._budget.used == 1
+    assert child.trace[0]["parent_call_id"] == "$root@1"

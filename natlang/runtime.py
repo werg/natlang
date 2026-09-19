@@ -283,7 +283,7 @@ class Runtime:
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
         if self._depth >= self.max_depth:
             return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
-        if self._budget.used >= self.max_episodes:
+        if self.episodes_started >= self.max_episodes or self._budget.used >= self._budget.limit:
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
         if key in self._stack:
