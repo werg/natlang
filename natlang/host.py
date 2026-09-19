@@ -37,7 +37,7 @@ def load(program_file: Path, inputs: dict) -> Pending:
             ft = root.type.params.get(name)
             if ft is None:
                 raise ValueError(f"{name} is not a parameter of the program")
-            value = import_path(Path(src), ft[0], env) if isinstance(src, (str, Path)) and Path(src).exists() else src
+            value = import_path(Path(src), ft[0], env) if _is_file(src) else src
             root.in_[name] = coerce(value, ft[0], env, yaml=False, path=f"args/{name}")
     return root
 
@@ -47,3 +47,10 @@ def export(value: Any, fmt: str = "yaml") -> str:
     data = dump(value)
     return json.dumps(data, indent=2, ensure_ascii=False) if fmt == "json" else \
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
+def _is_file(src) -> bool:
+    """An input may name a file to import. A long text is a value, not a path (and probing it raises ENAMETOOLONG)."""
+    if isinstance(src, Path):
+        return src.exists()
+    return isinstance(src, str) and len(src) < 256 and "\n" not in src and Path(src).exists()

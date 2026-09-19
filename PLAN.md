@@ -1192,15 +1192,36 @@ Two teacher-side quirks, both now absorbed by the harness rather than fought:
 With those fixes Bonsai solved programs 01 and (as far as the run got) 02
 cleanly: `read` → whole-record `write` → reply.
 
-**Blocker: host memory, not GPU memory.** This laptop has 14 GB of RAM. With
-Bonsai serving, the system reached ~100 MB available and 10 GB of swap, and
-Claude Code's memory guard killed the conformance run. Stopping the Bonsai
-container freed ~6 GB. The teacher therefore cannot run here alongside a
-desktop session for hours; it needs either a machine with more RAM (the
-larger GPU box), or a closed-down desktop, or a smaller teacher for local
-proving (official Qwen3-8B/4B GGUFs run on mainline llama.cpp). The
-conformance run with Bonsai and `scripts/paraphrase.py` are ready to run and
-have NOT been completed.
+**Host memory: solved (2026-09-19).** The first attempt exhausted this
+laptop's 14 GB of RAM. Two causes, both llama-server defaults: the mapped
+weights stayed in host RAM, and the host-side prompt cache (default 8 GB)
+grew without bound. `scripts/serve_bonsai.sh` now passes `--no-mmap` and
+`--cache-ram 1024` and caps the container at 5 GB; Bonsai then costs ~0.8 GB
+of host RAM and runs for hours beside a desktop session.
+`scripts/watch_bonsai.sh` restarts it if the health check fails.
+
+**Local data generation, first full pass (2026-09-19), all on this machine.**
+- Reference policy, CPU only: 2000 programs -> 14,365 verified samples
+  (`data/ref-v1.jsonl`), about a minute.
+- Teacher paraphrase round trip: 16 base texts -> 61 paraphrases kept, 1
+  dropped for a wrong answer (8 more were lost to the context bug below and
+  re-asked). ~80 s per candidate; the whole pass took ~1.5 h. 32% of samples
+  in `ref-v1` carry a verified paraphrase as the root instruction.
+- Bug found by the run: sub-task alternatives were offered for every element
+  of a filled list, so a four-item `return` grew the `write` schema from 6k
+  to 21k characters and the request past the teacher's context. They are now
+  offered for named slots only; context raised to 12k.
+
+**Bonsai on the conformance suite** (server tool calling, thinking 512,
+temperature 0.6): 15 of 20 correct, **0 rejected calls in 94 turns**, 25-210 s
+per program. The five misses are not interpreter failures: 04, 10, 12, 17
+have free-text answers that the baseline compares by equality, and 16 expects
+a quiesce where the teacher chose to answer. Notable: the 27B almost never
+decomposes (19 of 20 programs in a single episode; only the crisp fold spawned
+children). It reads, answers whole, replies. So the teacher is a good
+*oracle* and paraphraser, but a poor source of *decomposition* trajectories:
+those must keep coming from the reference policy, with the teacher checking
+answers. The baseline needs a judged comparison for free-text expectations.
 
 **Consequences**
 - Write-time typing cannot be delegated to the server for this model. The

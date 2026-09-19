@@ -26,6 +26,8 @@ def test_family_generates_valid_trajectories(family):
 
 def test_dependent_calls_are_in_separate_turns():
     rng = random.Random(3)
-    samples, _ = run_program(FAMILIES["map_then_count"](rng))
-    root_turns = [s["skill"] for s in samples if "How many" in s["messages"][1]["content"] or "Count" in s["messages"][1]["content"]]
+    prog = FAMILIES["map_then_count"](rng)
+    samples, _ = run_program(prog)
+    root_task = samples[0]["messages"][1]["content"]           # the root episode comes first, whatever its wording
+    root_turns = [s["skill"] for s in samples if s["messages"][1]["content"] == root_task]
     assert root_turns == ["write", "write", "run", "reply"]
