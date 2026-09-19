@@ -16,26 +16,33 @@ class SQLiteExecutor:
         self.connection.row_factory = sqlite3.Row
         self.closed = False
         self.events = []
+        self.dropped_events = 0
         self.in_transaction = False
 
     def prepare_schema(self, schema: str):
         """Host-only setup, before the model executes statements."""
         self.connection.executescript(schema)
 
+    def _record(self, event):
+        if len(self.events) >= 1024:
+            self.events.pop(0)
+            self.dropped_events += 1
+        self.events.append(event)
+
     def begin(self):
         self.connection.execute("BEGIN")
         self.in_transaction = True
-        self.events.append({"operation": "sql.begin"})
+        self._record({"operation": "sql.begin"})
 
     def commit(self):
         self.connection.commit()
         self.in_transaction = False
-        self.events.append({"operation": "sql.commit"})
+        self._record({"operation": "sql.commit"})
 
     def rollback(self):
         self.connection.rollback()
         self.in_transaction = False
-        self.events.append({"operation": "sql.rollback"})
+        self._record({"operation": "sql.rollback"})
 
     def run(self, request: CrispRequest, effect):
         if self.closed:
@@ -57,15 +64,18 @@ class SQLiteExecutor:
                 result = {"rows_affected": cursor.rowcount, "last_insert_id": cursor.lastrowid}
             if not self.in_transaction and self.connection.in_transaction:
                 self.connection.commit()
-            self.events.append({"operation": "sql.execute", "statement": request.code,
-                                "bindings": sorted(bindings), "rows": len(result) if isinstance(result, list) else result["rows_affected"]})
+            self._record({"operation": "sql.execute", "statement": request.code,
+                          "bindings": sorted(bindings), "rows": len(result) if isinstance(result, list) else result["rows_affected"]})
             return result
         except (sqlite3.Error, ExecutionError) as exc:
-            self.events.append({"operation": "sql.error", "message": str(exc)})
+            self._record({"operation": "sql.error", "message": str(exc)})
             raise ExecutionError(str(exc)) from exc
 
     def drain_events(self):
         events, self.events = self.events, []
+        if self.dropped_events:
+            events.insert(0, {"operation": "observation.dropped", "count": self.dropped_events})
+            self.dropped_events = 0
         return events
 
     def close(self):

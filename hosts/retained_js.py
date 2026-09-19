@@ -28,6 +28,7 @@ class RetainedJSExecutor:
         self.process = subprocess.Popen(["node", str(WORKER)], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         self.events = []
+        self.dropped_events = 0
 
     def run(self, request: CrispRequest, effect):
         if self.process.poll() is not None:
@@ -47,7 +48,11 @@ class RetainedJSExecutor:
         if not line:
             raise ExecutionError("retained JS worker exited")
         message = json.loads(line)
-        self.events.extend(message.get("events") or [])
+        incoming = message.get("events") or []
+        self.events.extend(incoming)
+        if len(self.events) > 1024:
+            self.dropped_events += len(self.events) - 1024
+            self.events = self.events[-1024:]
         if message.get("kind") == "error":
             raise ExecutionError(message.get("message", "retained JS error"))
         if message.get("kind") != "result":
@@ -56,6 +61,9 @@ class RetainedJSExecutor:
 
     def drain_events(self):
         events, self.events = self.events, []
+        if self.dropped_events:
+            events.insert(0, {"operation": "observation.dropped", "count": self.dropped_events})
+            self.dropped_events = 0
         return events
 
     def close(self):

@@ -10,9 +10,16 @@ const MAX_JOBS = 32, MAX_BUFFERS = 32, MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 let retainedBufferBytes = 0;
 let nextId = 1;
 let events = [];
+let droppedEvents = 0;
+let pendingEvents = [], droppedPending = 0, executing = false;
 const id = (prefix) => `${prefix}-${nextId++}`;
 const bounded = (value) => String(value ?? '').slice(0, 1024 * 1024);
-const record = (operation, detail) => events.push({ operation, ...detail });
+const record = (operation, detail) => {
+  const target = executing ? events : pendingEvents;
+  if (target.length < 1024) target.push({ operation, ...detail });
+  else if (executing) droppedEvents++;
+  else droppedPending++;
+};
 
 const host = Object.freeze({
   readText(path) {
@@ -121,16 +128,24 @@ function portableResult(value, seen = new Set()) {
   return result;
 }
 function execute(request) {
-  events = [];
-  const scope = structuredClone(request.scope);
-  context.self = scope;
-  context.args = scope.args;
-  context.locals = scope.let || {};
-  const code = request.body
-    ? `(function(self,args,host){ 'use strict'; ${request.code}\n})(self,args,host)`
-    : request.code;
-  const result = vm.runInContext(code, context, { timeout: request.timeoutMs ?? 2000 });
-  return { kind: 'result', value: portableResult(result === undefined ? null : result), events };
+  events = pendingEvents;
+  droppedEvents = droppedPending;
+  pendingEvents = []; droppedPending = 0;
+  executing = true;
+  try {
+    const scope = structuredClone(request.scope);
+    context.self = scope;
+    context.args = scope.args;
+    context.locals = scope.let || {};
+    const code = request.body
+      ? `(function(self,args,host){ 'use strict'; ${request.code}\n})(self,args,host)`
+      : request.code;
+    const result = vm.runInContext(code, context, { timeout: request.timeoutMs ?? 2000 });
+    if (droppedEvents) events.push({ operation: 'observation.dropped', count: droppedEvents });
+    return { kind: 'result', value: portableResult(result === undefined ? null : result), events };
+  } finally {
+    executing = false;
+  }
 }
 
 const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -145,6 +160,7 @@ lines.on('line', line => {
     }
     process.stdout.write(JSON.stringify(execute(request)) + '\n');
   } catch (error) {
+    if (droppedEvents) events.push({ operation: 'observation.dropped', count: droppedEvents });
     process.stdout.write(JSON.stringify({ kind: 'error', message: error.message, events }) + '\n');
   }
 });
