@@ -81,9 +81,12 @@ class RemoteDecoder:
 class RemoteTypeScriptExecutor:
     name = "typescript-host"
     parallel_safe = False
+    authority = "shared-node-host"
+    native_state_replayable = False
 
-    def __init__(self, channel):
+    def __init__(self, channel, mode):
         self.channel = channel
+        self.environment_mode = mode
         self.events = []
 
     def run(self, request: CrispRequest, effect):
@@ -165,7 +168,7 @@ def main():
         agent_factory = lambda _: ToolAgent(decoder)
         engines = {"quickjs-isolated": QuickJSExecutor()}
         if start.get("typescript", True):
-            engines["typescript-host"] = RemoteTypeScriptExecutor(channel)
+            engines["typescript-host"] = RemoteTypeScriptExecutor(channel, start.get("environment_mode", "fresh"))
         trace_path = Path(start["trace_path"]) if start.get("trace_path") else None
         names = start.get("capabilities") or []
         if not isinstance(names, list) or any(not isinstance(name, str) or "." not in name for name in names):

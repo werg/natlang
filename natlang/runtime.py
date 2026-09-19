@@ -151,6 +151,11 @@ class Runtime:
                                              "model_settings": vars(self.options.model) if self.options.model else None,
                                              "tool_schema": "tools-v3" if self.engine_selection else "tools-v2",
                                              "engines": sorted(self.executors),
+                                             "engine_contracts": {
+                                                 name: {"environment_mode": getattr(engine, "environment_mode", "unknown"),
+                                                        "authority": getattr(engine, "authority", "host-defined"),
+                                                        "native_state_replayable": getattr(engine, "native_state_replayable", False)}
+                                                 for name, engine in sorted(self.executors.items())},
                                              "engine_selection": self.engine_selection,
                                              "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
         elif self.trace_path is not None:

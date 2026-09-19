@@ -62,6 +62,7 @@ export class NatlangHost {
       map_workers: request.mapWorkers ?? 1, trace_path: request.tracePath,
       stream_parts: Object.keys(streams),
       capabilities: Object.keys(request.capabilities ?? {}),
+      environment_mode: this.environment.mode,
       typescript: request.typescript ?? true };
     return new Promise<RunResult>((resolveRun, rejectRun) => {
       let settled = false;

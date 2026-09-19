@@ -58,6 +58,9 @@ class QuickJSExecutor:
 
     name = "quickjs-isolated"
     parallel_safe = True
+    environment_mode = "fresh"
+    authority = "declared-effects-only"
+    native_state_replayable = False
 
     def run(self, request: CrispRequest, effect: Callable[[str, str, list], Any]) -> Any:
         scope = {key: js.to_js(value) for key, value in request.scope.items()}

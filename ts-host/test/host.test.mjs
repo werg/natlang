@@ -60,6 +60,9 @@ test('checked definitions, input binding and trace work from TypeScript', async 
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 10);
     assert.equal(result.trace[0].kind, 'manifest');
+    assert.deepEqual(result.trace[0].engine_contracts['typescript-host'], {
+      environment_mode: 'fresh', authority: 'shared-node-host', native_state_replayable: false,
+    });
     assert.match(readFileSync(tracePath, 'utf8'), /typescript-host/);
   } finally { host.close(); rmSync(dir, { recursive: true, force: true }); }
 });
