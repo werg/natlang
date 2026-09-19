@@ -13,6 +13,7 @@ from typing import Any, Callable, Optional
 import yaml
 
 from . import js
+from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
@@ -83,9 +84,11 @@ class Outcome:
 
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
-                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None):
+                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
+                 executor=None):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
+        self.executor = executor or QuickJSExecutor()
         self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
         self.deadline = None
         self._depth = 0
@@ -164,12 +167,12 @@ class Runtime:
         node.status = RUNNING
         if node.original_body is None:
             node.original_body = node.body
-        scope = {"args": js.to_js(node.in_), "return": js.to_js(node.ret)}
+        scope = {"args": node.in_, "return": node.ret}
         try:
-            raw = js.run(node.body, scope, self._fx(node), body=True, path=ref.path,
-                         effectful=bool(node.effects))
+            raw = portable(self.executor.run(CrispRequest(node.body, scope, True, ref.path,
+                                                          bool(node.effects)), self._fx(node)))
             value = coerce(raw, node.type.returns, inner, yaml=False, path=ref.path)
-        except js.JsError as e:
+        except ExecutionError as e:
             return self._quiesce(node, ref, f"code error: {e}")
         except Reject as e:
             return self._quiesce(node, ref, f"rejected: {e}")
@@ -455,7 +458,7 @@ class Session:
             result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)), e.diags)
         except Refuse as e:
             result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)), e.diags)
-        except js.JsError as e:
+        except (js.JsError, ExecutionError) as e:
             result = Result("error", f"error: {e}")
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
                               "kind": result.kind, "result": result.text})
@@ -491,7 +494,7 @@ class Session:
             result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
         except Refuse as e:
             result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
-        except js.JsError as e:
+        except (js.JsError, ExecutionError) as e:
             result = Result("error", f"error: {e}")
         except (KeyError, TypeError, AttributeError) as e:
             result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
@@ -1149,10 +1152,10 @@ class Session:
 
     # -- eval
     def _do_eval(self, a: Action) -> Result:
-        scope = {"instructions": self.lam.body, "args": js.to_js(self.lam.in_), "return": js.to_js(self.lam.ret),
-                 "let": {k: js.to_js(v) for k, v in self.lam.let.items() if not is_pending(v)}}
-        out = js.run(a.body, scope, self.rt._fx(self.lam), body=False, path="eval",
-                     effectful=bool(self.lam.effects))
+        scope = {"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
+                 "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}}
+        out = portable(self.rt.executor.run(CrispRequest(a.body, scope, False, "eval",
+                                                        bool(self.lam.effects)), self.rt._fx(self.lam)))
         text = json.dumps(out, ensure_ascii=False)
         return Result("ok", text if len(text) <= 400 else text[:400] + f" … ({len(text)} chars)", value=out)
 
