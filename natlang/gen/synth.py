@@ -551,6 +551,7 @@ class Composer:
         self.applied: set = set()
         self.used: set = set()
         self.names_taken: set = set()
+        self.emptied = False
 
     # -- helpers
     def fresh(self, options):
@@ -787,6 +788,26 @@ class Composer:
                  to=f"return/{field}")
             self.fields[field] = ("Num", limit)
 
+    def guard_empty(self, empty: bool):
+        """`if <list> is empty: return <defaults>` as the first lines. With empty input nothing else applies."""
+        c = self.c
+        zero = lambda ty: 0 if ty == "Num" else {}
+        defaults = {n: zero(t) for n, (t, _) in self.fields.items()}
+        shown = "{ " + ", ".join(f"{n}: {json.dumps(v)}" for n, v in defaults.items()) + " }"
+        shift = 2
+        guard = [(f"if {self.arg} is empty:", f"If {self.arg} is empty:", False),
+                 (f"    return {shown}", f"    Return {shown}.", not empty)]
+        if empty:
+            self.emptied = True
+            c.calls = [("write", {"path": f"return/{n}", "type": t, "value": defaults[n]}) for n, (t, _) in self.fields.items()]
+            c.line_meta = [(0, False), (0, False)] + [(len(c.calls), True) for _ in c.line_meta]
+            self.fields = {n: (t, defaults[n]) for n, (t, _) in self.fields.items()}
+            self.vars[self.arg].value = []
+        else:
+            c.line_meta = [(0, False), (0, True)] + list(c.line_meta)
+        c.lines_a = [g[0] for g in guard] + c.lines_a
+        c.lines_b = [g[1] for g in guard] + c.lines_b
+
     def build(self) -> Program:
         rng = self.rng
         self.m_leaf()
@@ -799,7 +820,9 @@ class Composer:
             if not self.m_aggregate():
                 break
         c = self.c
-        if len(self.fields) == 1 and rng.random() < 0.5:        # a single result: return it directly
+        if rng.random() < 0.15:                                 # a guard for empty input, sometimes with empty input
+            self.guard_empty(empty=rng.random() < 0.45)
+        if len(self.fields) == 1 and rng.random() < 0.5 and not self.emptied:        # a single result: return it directly
             (field, (ty, value)), = self.fields.items()
             c.calls = [(s[0], {**s[1], "to": "return"}) if s[0] == "call" and s[1].get("to") == f"return/{field}" else
                        ("glue", s[1], "return", s[3]) if s[0] == "glue" and s[2] == f"return/{field}" else
@@ -808,7 +831,7 @@ class Composer:
             c.say(f"return {field}", f"Return {field}.")
             returns, expected = ty, value
         else:
-            c.say("return { " + ", ".join(self.fields) + " }", "Return the record: " + ", ".join(self.fields) + ".")
+            c.say("return { " + ", ".join(self.fields) + " }", "Return the record: " + ", ".join(self.fields) + ".", skipped=self.emptied)
             returns = "{ " + ", ".join(f"{n}: {t}" for n, (t, _) in self.fields.items()) + " }"
             expected = {n: v for n, (_, v) in self.fields.items()}
         sig = {self.arg: "Text[]"}
