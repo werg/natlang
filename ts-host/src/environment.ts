@@ -110,6 +110,7 @@ export class TypeScriptEnvironment {
   private capture(request: EvalRequest, status: string): HostEvent[] {
     const host = this.host as { drainEvents?: () => HostEvent[] };
     const events = typeof host.drainEvents === 'function' ? host.drainEvents() : [];
+    for (const event of events) this.observe?.(event);
     const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body,
       effectful: request.effectful, sharedHost: true, status, nativeEffectsReplayable: false };
     this.observe?.(evalEvent);

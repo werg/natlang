@@ -97,12 +97,15 @@ test('desktop bindings retain bytes and jobs while reporting effects', async () 
   const path = join(dir, 'data.txt');
   writeFileSync(path, 'abc');
   const native = new DesktopBindings();
-  const environment = new TypeScriptEnvironment({ mode: 'retained', host: native });
+  const observed = [];
+  const environment = new TypeScriptEnvironment({ mode: 'retained', host: native,
+    observe: event => observed.push(event) });
   try {
     const id = environment.execute({ code: `host.readBytes(${JSON.stringify(path)})`, scope: {}, body: false,
       path: 'eval', effectful: true }).result;
     assert.equal(environment.execute({ code: `host.buffer(${JSON.stringify(id)}).length`, scope: {}, body: false,
       path: 'eval', effectful: true }).result, 3);
+    assert.ok(observed.some(event => event.operation === 'file.readBytes'));
     const job = native.start(['node', '-e', 'process.stdout.write("done")']);
     let state;
     for (let i = 0; i < 40; i++) {
