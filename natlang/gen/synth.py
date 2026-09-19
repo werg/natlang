@@ -847,6 +847,7 @@ class Composer:
                  (f"    return {shown}", f"    Return {shown}.", not empty)]
         if empty:
             self.emptied = True
+            c.blockable = False  # the early return removes every call that could encounter an uncovered item
             c.calls = [("write", {"path": f"return/{n}", "type": t, "value": defaults[n]}) for n, (t, _) in self.fields.items()]
             c.line_meta = [(0, False), (0, False)] + [(len(c.calls), True) for _ in c.line_meta]
             self.fields = {n: (t, defaults[n]) for n, (t, _) in self.fields.items()}

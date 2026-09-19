@@ -49,6 +49,13 @@ def test_recovery_does_not_inject_a_call_forbidden_by_the_current_grammar():
     run_program(prog, recovery_seed='71:1992:recovery', recovery_rate=.15)
 
 
+def test_empty_guard_does_not_require_an_unreachable_leaf_to_succeed():
+    family, prog = make_program(71, 6186, MIXES['v7_arch'])
+    assert family == 'composed'
+    assert prog.expected == {'tally': {}, 'matching': 0, 'n_is_billing': 0}
+    run_program(prog)
+
+
 def test_phrase_filter_preserves_placeholders_and_rejects_listing_markers():
     base = 'return {field}'
     for candidate in ['- return {field}', '- [ ] return {field}', '=> {field}', '1. return {field}', 'return {other}']:

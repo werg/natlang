@@ -32,8 +32,11 @@ ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model t
 ap.add_argument("--alias", action="append", default=[], help="tool renames for this model's server, e.g. call=call_function")
 ap.add_argument("--out", type=Path, help="machine-readable results; defaults to runs/baseline-<timestamp>.json")
 ap.add_argument("--model-label", default="unspecified")
+ap.add_argument("--validation-feedback", choices=("local", "caller"), default="local")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
+if a.surface != "tools" and a.validation_feedback != "local":
+    ap.error("--validation-feedback=caller requires --surface=tools")
 root = Path(__file__).resolve().parent.parent
 files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
@@ -61,6 +64,7 @@ for f in files:
         print(f"  > {f.stem}", flush=True)
     if a.surface == "tools":
         make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
+                                     validation_feedback=a.validation_feedback,
                                      **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     else:
         make = lambda lam: ModelAgent(dec, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
@@ -102,6 +106,7 @@ result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
 result_path.parent.mkdir(parents=True, exist_ok=True)
 result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": a.surface,
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
+                                  "validation_feedback": a.validation_feedback,
                                   "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                                   "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")
 print(f"results: {result_path}")

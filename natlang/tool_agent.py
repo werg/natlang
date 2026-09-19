@@ -21,7 +21,11 @@ FAILED = ("rejected", "refused", "error", "budget")
 class ToolAgent:
     def __init__(self, decoder: Decoder, *, surface: Optional[ToolSurface] = None, temperature: float = 0.2,
                  system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
-                 max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900):
+                 max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
+                 validation_feedback: str = "local"):
+        if validation_feedback not in ("local", "caller"):
+            raise ValueError("validation_feedback must be local or caller")
+        self.validation_feedback = validation_feedback
         self.dec, self.surface = decoder, surface or ToolSurface()
         self.temperature, self.system = temperature, system_prompt
         self.log = log if log is not None else []
@@ -69,6 +73,8 @@ class ToolAgent:
                     # never silently replay it or refund the work/turn budget.
 
                 if not turn.calls:                # the reply: the normal end of an agent episode
+                    if self.validation_feedback == "caller" and (missing := s.missing(session)):
+                        return "validation failed: " + missing
                     open_ = s.pending(session) if hasattr(s, "pending") else []
                     if open_ and nudges < MAX_NUDGES:             # no data in a nudge: line numbers only
                         nudges += 1
@@ -81,6 +87,8 @@ class ToolAgent:
                     if session.finish():
                         session.lam.note = turn.text
                         return None
+                    if self.validation_feedback == "caller":
+                        return "validation failed: " + s.missing(session)
                     nudges += 1
                     if nudges > MAX_NUDGES:
                         return "replied without writing `return`: " + turn.text[:280]
@@ -106,6 +114,8 @@ class ToolAgent:
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})
                 for c, r in zip(raw, results):
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
+                if self.validation_feedback == "caller" and results[-1].kind in ("rejected", "refused"):
+                    return "validation failed: " + results[-1].text
         except TimeoutError:
             return "episode wall-clock budget exhausted"
         finally:

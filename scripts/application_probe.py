@@ -23,6 +23,7 @@ def main():
     ap.add_argument('--n', type=int, default=2, help='programs per family')
     ap.add_argument('--seconds', type=float, default=120, help='wall-clock budget per program, including callees')
     ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='local')
     args = ap.parse_args()
     decoder = NativeCallDecoder(args.server, timeout=120)
     prompt = (ROOT / 'natlang/prompts/tools_delegate.md').read_text()
@@ -37,6 +38,7 @@ def main():
                 entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': []}
                 logs.append(entry)
                 return ToolAgent(decoder, system_prompt=prompt, temperature=0,
+                                 validation_feedback=args.validation_feedback,
                                  log=entry['actions'], transcript=entry['transcript'], max_turns=24)
 
             rt = Runtime(factory, capabilities=prog.capabilities, max_episodes=48)
@@ -49,7 +51,8 @@ def main():
                          'value': actual, 'detail': outcome.detail, 'episodes': rt.episodes_started,
                          'seconds': time.monotonic() - start, 'logs': logs})
             args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(json.dumps({'server': args.server, 'rows': rows, 'usage': decoder.usage}, indent=2) + '\n')
+            args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
+                                           'rows': rows, 'usage': decoder.usage}, indent=2) + '\n')
             print(f'{family}/{seed}: {outcome.kind} correct={correct} episodes={rt.episodes_started} '
                   f'{rows[-1]["seconds"]:.1f}s', flush=True)
 

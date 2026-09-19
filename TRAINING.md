@@ -754,8 +754,8 @@ well-typed tool use alone does not establish correct program execution.
 With the clarified prompt, Bonsai's expanded mixed-style run got 5/5 values and
 4/5 marking checks right. The remaining failure bypassed an untaken early return
 correctly, then marked it done in a broad range. No completion nudge was present
-in that failure's transcript. This is still a model marking error; prompt
-clarification has not established reliable progress state. The expanded run's
+in that trace. This is a disagreement with the strict marking convention; prompt
+clarification did not make the strict executed/skipped distinction reliable. The expanded run's
 style differs from the original three-style probe, so it is not a controlled
 estimate of improvement.
 
@@ -775,8 +775,12 @@ fresh `ref-v7-arch-r2` manifest records the corrected generator. Earlier complet
 shards remain valid and the pilot records exactly which ones it uses.
 
 The matched en-passant rerun passed both original cases (2/2 values and marks),
-with the same thinking budget and temperature as before. The separate expanded
-probe still supplies the failing early-return counterexample.
+with the same thinking budget and temperature as before. These figures measure
+the strict executed/skipped convention. Following the project discussion,
+both marks mean closed/discharged for progress tracking; confusing them is not
+an execution failure. Bonsai got all five expanded outputs right. The marking
+probe now also reports closed-line coverage separately. Prematurely closing
+applicable unfinished work remains a different, substantive concern.
 
 The initial 8,192-token memory check ran out of memory projecting the entire
 prompt to vocabulary scores. Training now uses `logits_to_keep` to project only
@@ -787,3 +791,58 @@ passed an 8,192-token forward/backward/optimizer step at 1.90 GiB peak allocated
 and 2.25 GiB peak reserved, with the v5 server still resident. Actual peaks depend
 on completion length. This permits the longer pilot without dropping its
 architectural examples merely to retain the old context cap.
+
+### Validation feedback: local repair versus caller failure
+
+`ToolAgent(validation_feedback="caller")` is an experimental alternative to the
+unchanged `"local"` default. A rejected/refused tool operation or an attempt to
+finish with an incomplete return quiesces the lambda with its diagnostic,
+without another decoder request to that lambda. The caller receives the normal
+quiesced-call result. Successful partial writes remain legal. There is no
+automatic replay, rollback, or retry; already performed effects remain performed.
+`report_blocker` remains the agent's explicit failure signal. JavaScript runtime
+errors are outside this validation-policy switch.
+
+`scripts/validation_probe.py` contains three solvable controls and six tasks
+that cannot be fulfilled as specified: incompatible return requirements,
+missing evidence, forbidden return construction, an impossible numerical
+constraint, a conditional whose taken branch conflicts with its return type,
+and an effect followed by an incompatible return. It records outputs, draft
+returns, tool failures, local completion feedback, deliberate blockers, budget
+failures and duplicate effects. An untaken incompatible branch is a valid control.
+
+`--controlled-only` injects the same grammar-legal, type-invalid first call into
+two tasks: a repairable execution mistake under valid instructions, and a
+faithful call under contradictory instructions. Every subsequent action is
+model-generated. This distinguishes error-feedback effects from mistakes the
+model makes before feedback. Unit tests additionally exercise propagation to a
+caller, incremental return construction, and preserving prior effects exactly once.
+
+Single-server results, temperature zero, one run per case (small diagnostic
+samples, not a policy-selection benchmark):
+
+| Model / controlled case | Local feedback | Caller feedback |
+|---|---|---|
+| v5 / valid instructions, injected mistake | Repaired correctly | Quiesced on first rejection |
+| v5 / contradictory instructions | Returned a forbidden wrapped result | Quiesced on first rejection |
+| v7 / valid instructions, injected mistake | Fabricated draft, then exhausted budget | Quiesced on first rejection |
+| v7 / contradictory instructions | Fabricated draft, then exhausted budget | Quiesced on first rejection |
+
+Without injected faults, both policies passed the three solvable controls. v5
+accepted all six impossible tasks without any validation feedback. v7 accepted
+five and exhausted its budget on the effect case; it did not deliberately
+identify that contradiction. Thus bubbling validation failures alone cannot
+prevent a well-typed invention made before a rejection. Budget exhaustion is
+reported separately and is not counted as a justified refusal.
+
+Keep both policies available. Next training coverage should pair impossible
+instructions with closely matched solvable controls and explicit blockers;
+further probes should include model callers choosing between supplying missing
+information, changing a faulty program, and returning a declared failure value.
+Do not infer that local repair is always appropriate from eventual type validity.
+
+The first v7 probe attempt suffered host-memory pressure with two model servers;
+its incomplete/timed-out rows are not used above. Healthy single-server artifacts
+are `runs/student-v5-validation-healthy.json`,
+`runs/student-v5-validation-controlled.json`, and
+`runs/student-v7-validation*-healthy.json` (draft-preserving rerun also saved).

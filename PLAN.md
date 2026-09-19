@@ -629,16 +629,25 @@ investigation and reference-label corrections are recorded in TRAINING.md.
 Keep mixed marking styles until model runs support choosing one; the initial
 Bonsai style probe had instruction violations and is not a clean comparison.
 
-**Active run (2026-09-19):** `runs/lora-v7-arch-pilot`, 300 optimizer steps,
+**Completed pilot (2026-09-19):** `runs/lora-v7-arch-pilot`, 300 optimizer steps,
 8,192-token cap, 41,965 training turns and 313 held-out turns from 12 whole
 programs. Inputs are recorded in `data/sft-v7-pilot.manifest.json`. The full
-20,000-program `data/ref-v7-arch-r2` generation continues independently on two
-CPU workers. Bonsai and its watchdog are stopped for training; v5 remains on
-8080. On successful training completion, conversion and a separate v7 preview
-on 8082 are queued, followed by marking, application and conformance probes
-(`runs/student-v7-*`). The v5 conformance run uses the same current prompt and
-harness (`runs/student-v5-current-conformance.*`). Judge-dependent checks remain
-ungraded while Bonsai is stopped. These are running jobs, not completed results.
+corpus retains 6,100 verified programs in `data/ref-v7-arch-r2`; generation of
+indices 6100–19999 continues in `data/ref-v7-arch-r3-tail` on two CPU workers.
+The old expected-blocker flag incorrectly survived an empty-input early return;
+seed 71 / index 6186 now has a regression test. Unreachable bad instructions do
+not require failure. Each batch has its own source manifest.
+
+Held-out loss went from 2.5908 to 0.0249; all 4,800 sampled training turns fit
+the 8,192-token cap. These loss figures are not execution accuracy. With the
+same current prompt and harness, conformance changed from v5's 3 correct / 16
+incorrect / 2 ungraded to v7's 5 / 15 / 1. Architectural outcomes changed from
+1/6 to 3/6; the five-case branch probe still had 4/5 correct values. Conversion
+is complete. Bonsai and its watchdog remain stopped; serve one student version
+at a time because simultaneous servers caused severe host-memory pressure.
+V7 is now served at the normal 8080 endpoint; the v5 GGUF is retained for
+comparisons. No training is currently running.
+Validation-feedback experiments and their limits are recorded in TRAINING.md.
 
 ### 10.3 Findings worth keeping
 

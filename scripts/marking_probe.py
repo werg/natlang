@@ -87,6 +87,7 @@ def assess(marks, expected, log, style, transcript=None):
             wrong_ranges.extend(n for n in range(first, last + 1) if expected.get(n) == 'skipped')
     return {'marks_correct': len(expected) - len(errors), 'marks_total': len(expected),
             'all_marks_correct': not errors, 'mark_errors': errors,
+            'scored_lines_closed': all(marks.get(n) in ('done', 'skipped') for n in expected),
             'untaken_lines_marked_done': sorted(set(wrong_ranges)),
             'style_violations': violations,
             'style_compliant': not violations if transcript is not None or violations else None}
@@ -95,6 +96,7 @@ def assess(marks, expected, log, style, transcript=None):
 def summarize(rows):
     return {'episodes': len(rows), 'correct_results': sum(r['correct'] for r in rows),
             'correct_marking_episodes': sum(r['all_marks_correct'] for r in rows),
+            'closed_marking_episodes': sum(r['scored_lines_closed'] for r in rows),
             'style_compliant_episodes': sum(r['style_compliant'] is True for r in rows),
             'style_unassessed_episodes': sum(r['style_compliant'] is None for r in rows)}
 

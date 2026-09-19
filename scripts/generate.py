@@ -101,6 +101,7 @@ def main():
     import gzip, multiprocessing, os
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=100)
+    ap.add_argument("--start-index", type=int, default=0, help="first program index; --n is the number to generate")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("data/ref-v0.jsonl"),
                     help="a .jsonl / .jsonl.gz file, or a directory: then shards are written and finished shards are kept on a rerun")
@@ -112,6 +113,8 @@ def main():
     ap.add_argument("--shard", type=int, default=250, help="programs per shard")
     ap.add_argument("--recovery-rate", type=float, default=0, help="chance to add verified error/correction history before exact work")
     a = ap.parse_args()
+    if a.start_index < 0 or a.n < 0:
+        ap.error("--start-index and --n must be nonnegative")
     if not 0 <= a.recovery_rate <= 1:
         ap.error("--recovery-rate must be between 0 and 1")
     families = MIXES[a.mix] if a.mix else (a.families or list(FAMILIES))
@@ -122,6 +125,7 @@ def main():
                              for p in (root_dir / folder).rglob("*")
                              if p.is_file() and p.suffix in (".py", ".js", ".nl", ".ts", ".md"))
     identity = {"version": "generation/2", "seed": a.seed, "n": a.n, "families": families,
+                "start_index": a.start_index,
                 "shard": a.shard, "recovery_rate": a.recovery_rate,
                 "marks": os.environ.get("NATLANG_MARKS", "1"), "mark_style": os.environ.get("NATLANG_MARK_STYLE", "mixed"),
                 "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
@@ -137,8 +141,9 @@ def main():
         ap.error("existing shards have no manifest; use a new output directory")
     manifest_path.write_text(json.dumps(identity, indent=2) + "\n")
     name = lambda first: a.out / f"part-{first:07d}.jsonl.gz"
-    jobs = [(a.seed, first, min(first + a.shard, a.n), families, a.keep_template_leaves, a.keep_alternatives, a.recovery_rate)
-            for first in range(0, a.n, a.shard) if not (sharded and name(first).exists())]
+    end_index = a.start_index + a.n
+    jobs = [(a.seed, first, min(first + a.shard, end_index), families, a.keep_template_leaves, a.keep_alternatives, a.recovery_rate)
+            for first in range(a.start_index, end_index, a.shard) if not (sharded and name(first).exists())]
     stats, episodes, total = Counter(), 0, 0
     single = None if sharded else (gzip.open(a.out, "wt") if a.out.suffix == ".gz" else a.out.open("w"))
     with multiprocessing.Pool(a.workers) as pool:

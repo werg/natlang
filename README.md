@@ -86,6 +86,23 @@ scripts/serve.sh &                      # llama.cpp CUDA server on 127.0.0.1:808
 .venv/bin/python -m natlang run examples/triage/main.nl --in tickets=./tickets/ --in rubric=./rubric.md
 ```
 
+Validation-policy experiments (current student server):
+
+```
+.venv/bin/python scripts/validation_probe.py --out runs/validation.json
+.venv/bin/python scripts/validation_probe.py --controlled-only --out runs/validation-controlled.json
+.venv/bin/python scripts/application_probe.py --validation-feedback caller --out runs/applications-caller.json
+```
+
+The default interpreter feeds validation errors back locally. The experimental
+`ToolAgent(validation_feedback="caller")` instead leaves the failed lambda
+quiesced and returns its diagnostic to the caller. `baseline.py` also accepts
+`--validation-feedback caller`. This does not roll back effects or automatically
+retry. The probe distinguishes impossible instructions from repairable execution
+mistakes, and counts budget exhaustion separately from deliberate failure.
+Results and limitations are in TRAINING.md. `serve.sh` caps its host prompt cache
+at 256 MiB; override with `NATLANG_CACHE_RAM` if needed.
+
 Teacher (Ternary Bonsai 2 27B on an 8 GB GPU; about 1 GB of host RAM):
 
 ```
