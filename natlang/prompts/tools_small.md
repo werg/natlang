@@ -15,4 +15,6 @@ Exact work, such as counting or arithmetic. Task: "How many of `args/words` are 
   [write(path="return", type="Num", value=7)]
 
 The same thing for every item of a list. Task: "Grade each answer in `args/answers` using `args/key`."
-  [write(path="return", type="Map<Text, Grade>", value={"over": "args/answers", "instructions": "Grade the answer in `args/item` using `args/key`.", "inputs": {"key": "args/key"}}), run(paths=["return"])]
+  [write(path="return", type="Map<Text, Grade>", value={"over": "args/answers", "instructions": "Grade the answer in `args/item` using `args/key`.", "inputs": {"key": "args/key"}})]
+  -> ok
+  [run(paths=["return"])]

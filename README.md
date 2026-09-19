@@ -39,3 +39,16 @@ scripts/serve.sh &                      # llama.cpp CUDA server on 127.0.0.1:808
 .venv/bin/python scripts/baseline.py --decode server 01   # the server's own tool calling, unconstrained
 .venv/bin/python -m natlang run conformance/programs/06-map-with-rubric.yaml --trace trace.jsonl
 ```
+
+Teacher (Ternary Bonsai 2 27B, needs ~6 GB of free host RAM in addition to the GPU):
+
+```
+docker build -t natlang-prism-runtime -f docker/prism.Dockerfile docker
+# binaries: PrismML-Eng/llama.cpp release, CUDA 12.8 tarball, unpacked into vendor/prism/bin
+# model:    prism-ml/Ternary-Bonsai-2-27B-gguf  Ternary-Bonsai-2-27B-PTQ1_0.gguf  -> models/
+# template: prism-ml/Ternary-Bonsai-2-27B-mlx-2bit chat_template.jinja -> models/templates/Ternary-Bonsai-2-27B.jinja
+scripts/serve_bonsai.sh 8081 &          # stop: docker stop natlang-bonsai
+.venv/bin/python scripts/baseline.py --decode server --server http://127.0.0.1:8081 --thinking 256 --temperature 0.7 --verbose
+.venv/bin/python scripts/paraphrase.py --server http://127.0.0.1:8081
+.venv/bin/python scripts/generate.py --n 1000 --out data/ref-v0.jsonl
+```

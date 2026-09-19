@@ -147,15 +147,16 @@ class ToolSurface:
                     "additionalProperties": False}
 
         text = {"type": "string"}
+        later = {"type": "object", "additionalProperties": {"type": "string"}}   # name -> type, produced by a sub-task
         task_alts = []
-        for sl in [x for x in definable if x.path.count("/") <= 1]:
+        for sl in [x for x in definable if x.path.count("/") <= 2]:
             t, env_ = sl.ref.type, sl.ref.env
             rt, ft = env_.resolve(t), format_type(t)
             if isinstance(rt, PENDING_TYPES):
                 continue
             alt_ = lambda ty, val: {"path": {"const": sl.path}, "type": {"const": ty}, "value": val}
-            task_alts.append(alt_(f"Task<{ft}>", body({"instructions": text}, {"inputs": inputs})))
-            task_alts.append(alt_(f"Code<{ft}>", body({"code": text}, {"inputs": inputs})))
+            task_alts.append(alt_(f"Task<{ft}>", body({"instructions": text}, {"inputs": inputs, "params": later})))
+            task_alts.append(alt_(f"Code<{ft}>", body({"code": text}, {"inputs": inputs, "params": later})))
             for over, a in lists:
                 fa = format_type(a)
                 if isinstance(rt, ListT):
@@ -170,6 +171,15 @@ class ToolSurface:
         value_alts = [{"path": {"const": s.path}, "type": {"const": format_type(s.ref.type)},
                        "value": schema_of(s.ref.type, s.ref.env)} for s in writable]
         write_alts = value_alts + task_alts
+        shapes, seen_shapes = [], set()              # for servers that read plain JSON Schema: every shape `value` may take
+        for a_ in write_alts:
+            k_ = json.dumps(a_["value"], sort_keys=True, default=str)
+            if k_ not in seen_shapes:
+                seen_shapes.add(k_)
+                shapes.append(a_["value"])
+        any_value = {"description": "For a plain type: the value itself (not wrapped in an object). "
+                                    "For a sub-task type: an object with instructions or code.",
+                     "anyOf": shapes} if shapes else {}
         all_types = list(dict.fromkeys(a["type"]["const"] for a in write_alts))
 
         sub = {"type": "object", "description": "A sub-task: its type, and either instructions or code.",
@@ -189,11 +199,12 @@ class ToolSurface:
                           "exact work. Map<A, B>: do the instructions once for every item of the list `over` (the item "
                           "is `args/item`). Fold<A, S>: carry `init` through the list item by item (`args/acc`, "
                           "`args/item`). Iterate<S>: repeat from `init` until `until` holds, at most `max` times. "
-                          "`inputs` maps a name to a path whose value the sub-task receives as `args/<name>`. "
+                          "`inputs` maps a name to a path whose value the sub-task receives as `args/<name>`; `params` "
+                          "declares inputs (name -> type) that another sub-task, written into `<path>/args/<name>`, will produce. "
                           "After writing a sub-task, `run` it.",
                  {"path": _enum_or_string([s.path for s in definable], "where the value or the result belongs"),
                   "type": _enum_or_string(all_types, "what is being written"),
-                  "value": {}}, ["path", "type", "value"], alternatives=write_alts),
+                  "value": any_value}, ["path", "type", "value"], alternatives=write_alts),
             tool("edit", "Replace text: `old` must occur exactly once in the text at `path`. "
                          "Use it to delete finished steps from `instructions` (new = \"\") or to substitute a "
                          "result into them.",

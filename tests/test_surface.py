@@ -137,3 +137,20 @@ def test_several_calls_in_one_turn():
                         ChatTurn([], "Done.")])
     out, value = Runtime(lambda lam: ToolAgent(dec)).run_root(_root(doc))
     assert out.kind == "done" and value == doc["expect"]["value"]
+
+
+def test_wrapped_values_are_unwrapped_and_value_has_a_schema():
+    doc, s = _session("01-leaf-judgment.yaml")
+    write = [t for t in S.tools(s) if t["function"]["name"] == "write"][0]["function"]["parameters"]["properties"]
+    assert {"type": "boolean"} in write["value"]["anyOf"]
+    assert s.apply("write", {"path": "return", "type": "Bool", "value": {"value": True}}).kind == "ok"
+    assert s.lam.ret is True
+
+
+def test_values_delivered_as_json_text_are_parsed():
+    doc, s = _session("02-leaf-extraction.yaml")
+    r = s.apply("write", {"path": "return", "type": "x",
+                          "value": '{"customer": "Dana Whitfield", "order_id": "0077", "amount": 42.5}'})
+    assert r.kind == "ok" and s.lam.ret == doc["expect"]["value"]
+    doc, s = _session("03-scalar-substitution.yaml")             # a Text slot keeps text that happens to look like JSON
+    assert s.apply("write", {"path": "return", "type": "Text", "value": "42"}).kind == "ok" and s.lam.ret == "42"

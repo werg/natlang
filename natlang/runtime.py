@@ -19,7 +19,7 @@ from .nodes import (DONE, MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, Itera
 from .paths import Path, parse_path
 from .refs import Ref, pending_refs_under, resolve
 from .render import opening, pending_line, render, scalar
-from .types import (TEXT, LambdaT, ListT, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
+from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
                     format_type, is_pending_type, parse_type, FoldT, IterateT, MapT)
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 
@@ -481,8 +481,30 @@ class Session:
         ty = str(args.get("type") or "")
         m = re.match(r"^(Task|Code|Map|Fold|Iterate)<(.*)>$", ty.strip(), re.S)
         if not m:
-            return self._set_value(args["path"], None, args["value"], yaml=False)
+            value = args["value"]
+            if isinstance(value, dict) and set(value) == {"value"}:      # a common tool-calling habit: {"value": X}
+                _, ref = self.resolve(args["path"], create=True)
+                rt = ref.env.resolve(ref.type) if ref.type is not None else None
+                if not (isinstance(rt, Record) and rt.get("value")):
+                    value = value["value"]
+            if isinstance(value, str):
+                # XML-style tool-call formats deliver every parameter as text. If the slot does not take
+                # that text as it is, but the text is JSON for a value the slot does take, use that.
+                try:
+                    return self._set_value(args["path"], None, value, yaml=False)
+                except Reject as first:
+                    try:
+                        parsed = json.loads(value)
+                    except (ValueError, TypeError):
+                        raise first
+                    return self._set_value(args["path"], None, parsed, yaml=False)
+            return self._set_value(args["path"], None, value, yaml=False)
         kind, inner, v = m.group(1), m.group(2), args.get("value")
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except (ValueError, TypeError):
+                pass
         if not isinstance(v, dict):
             raise reject(args["path"], "type-mismatch", f"an object describing the {kind}")
         inputs = v.get("inputs") or {}
@@ -492,6 +514,9 @@ class Session:
             if sref.type is None or sref.get() is MISSING:
                 raise reject(str(src), "no-such-path", "an existing value to pass as input")
             params.append(f"{name}: {format_type(sref.type)}")
+
+        for name, ty_text in (v.get("params") or {}).items():  # inputs a sub-task will produce later
+            params.append(f"{name}: {ty_text}")
 
         def lam_type(fixed: list, result: str) -> str:
             fields = fixed + params
@@ -888,7 +913,7 @@ _HINTS = {
     "commit-pending": "A sub-task has not produced its result yet: call run on it, then done.",
     "not-writable": "args are read-only. Write into return, or into the args of a sub-task you defined.",
     "frozen": "That sub-task is running; its args cannot change now.",
-    "type-mismatch": "The value must have the type shown as expected.",
+    "type-mismatch": "Pass the value itself with the type shown as expected, not wrapped in another object: for Bool `true`, for Num `42.5`, for Text a string, for a record an object with exactly its fields.",
     "type-does-not-fit-slot": "That slot needs the type shown as expected.",
     "unknown-field": "Use one of the fields listed as expected.",
     "unbound-param": "Give the sub-task its inputs first: copy a value into the path shown, or define it with args_from.",

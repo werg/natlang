@@ -889,7 +889,7 @@ Branch `phase-1-harness`. Package `natlang/`:
 | `render.py` | rendering policy `render/0.1` |
 | `agents.py` | stub, oracle, and replay agents for tests |
 
-Tests (53): the 6 harness conformance scripts; a replay of the 8 canonical
+Tests (62): the 6 harness conformance scripts; a replay of the 8 canonical
 traces end to end with small Python oracles standing in for the model; the
 generated grammars accepting every canonical action at its state and refusing
 ill-typed ones; the model agent's two-phase loop with a scripted decoder.
@@ -1138,6 +1138,69 @@ must-stop program correct; no rejected calls; new failure shape: the cheapest
 well-typed value (`write return Label[] = []`) ends a list task at once. Not
 patched: an empty list is sometimes the right answer, and this is what
 fine-tuning is for.
+
+**Reference policy and first synthetic generator (built, `natlang/gen/`,
+`scripts/generate.py`).** A miniature latent world (tickets, reviews, notes
+with hidden fields) feeds six program families: `judge`, `classify`,
+`extract`, `crisp_scalar`, `map_leaf`, `map_then_count` (the outside-in
+continuation: a `Code` consumer with a declared param, a `Map` written into
+that param, one `run`). The reference policy follows a plan, never the
+natural-language text; it performs every call through the real harness and
+records each assistant turn as one sample `(messages so far, the turn's
+tools) → target`, in exactly the ToolAgent's message structure. Three checks
+run on everything it emits: every call is accepted by the harness, every
+target is accepted by **the grammar of its own turn**, and the final value
+equals the expected one (for exact work the oracle is the code itself).
+120 programs → 344 episodes → 897 samples in a few seconds on the CPU.
+
+*Found by the grammar self-check:* a turn's grammar is built from the state
+before the turn, so a call that depends on what an earlier call created
+(writing into the param slot of a task just written; running it) must go into
+the next turn. Only independent calls may share a turn. The reference policy
+and the prompt example follow that rule.
+
+**Teacher: Ternary Bonsai 2 27B** (`scripts/serve_bonsai.sh`), set up from
+the lab's own materials: Prism ML's llama.cpp fork (mainline cannot read the
+`PTQ1_0` quantization), the official `chat_template.jinja` rather than the
+GGUF's, q4_0 KV cache, a capped thinking budget, the lab's sampling
+settings. The fork's prebuilt binaries run on this glibc but do not bundle
+the CUDA runtime, so they run inside `nvidia/cuda:12.8.1-runtime-ubuntu22.04`.
+Tool calls are Qwen-coder-style XML, parsed by the server.
+`scripts/paraphrase.py` uses the teacher for surface diversity with a
+round-trip check: a paraphrase of an instruction is kept only if the teacher
+itself, executing the paraphrased program through the harness, reaches the
+known answer on fresh instances.
+
+**Bonsai as teacher: what happened (2026-09-19).** It runs: Prism ML's fork
+inside `natlang-prism-runtime` (`docker/prism.Dockerfile`: CUDA 12.8 runtime
+plus `libgomp1`, which the prebuilt binaries need and do not bundle), the
+lab's official template, PTQ1_0 weights, q4_0 KV cache at 8K context.
+**GPU: 6.0 of 8.2 GB. Decode 23.5 tok/s, 6–8 s per agent turn** with a
+256-token thinking budget. Tool calling through the server works (Qwen-coder
+XML, parsed server-side); standard `tool_calls` history works with the
+official template.
+
+Two teacher-side quirks, both now absorbed by the harness rather than fought:
+- it wrapped a plain value as `{"value": true}`. Cause: my regression, `value`
+  had an empty JSON schema after `define` was folded into `write`. `value` now
+  lists every shape it may take; a `{"value": X}` wrapper is unwrapped when the
+  slot is not a record with that field; the type-mismatch hint gives examples.
+- its XML call format delivers every parameter as text, so a record arrived
+  as a JSON string. A string is tried as text first; if the slot does not take
+  it but it is JSON for a value the slot does take, the parsed value is used.
+
+With those fixes Bonsai solved programs 01 and (as far as the run got) 02
+cleanly: `read` → whole-record `write` → reply.
+
+**Blocker: host memory, not GPU memory.** This laptop has 14 GB of RAM. With
+Bonsai serving, the system reached ~100 MB available and 10 GB of swap, and
+Claude Code's memory guard killed the conformance run. Stopping the Bonsai
+container freed ~6 GB. The teacher therefore cannot run here alongside a
+desktop session for hours; it needs either a machine with more RAM (the
+larger GPU box), or a closed-down desktop, or a smaller teacher for local
+proving (official Qwen3-8B/4B GGUFs run on mainline llama.cpp). The
+conformance run with Bonsai and `scripts/paraphrase.py` are ready to run and
+have NOT been completed.
 
 **Consequences**
 - Write-time typing cannot be delegated to the server for this model. The

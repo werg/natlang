@@ -44,8 +44,12 @@ class LlamaServerDecoder:
     and that prefix reuse works for this hybrid architecture.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120):
+    def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120,
+                 chat_extra: Optional[dict] = None):
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
+        # extra fields for /v1/chat/completions, e.g. {"thinking_budget_tokens": 512, "top_p": 0.95, "top_k": 20}
+        self.chat_extra = chat_extra or {}
+        self.usage = {"turns": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def format(self, messages: list) -> str:
         """Render messages with the loaded model's own chat template, ending at the
@@ -65,10 +69,17 @@ class LlamaServerDecoder:
                    "max_tokens": max_tokens, "parallel_tool_calls": True}
         if seed is not None:
             payload["seed"] = seed
+        payload.update(self.chat_extra)
         req = urllib.request.Request(self.base_url + "/v1/chat/completions", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
+        import time
+        t0 = time.time()
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            msg = json.loads(resp.read())["choices"][0]["message"]
+            out = json.loads(resp.read())
+        msg = out["choices"][0]["message"]
+        self.usage["turns"] += 1
+        self.usage["seconds"] += time.time() - t0
+        self.usage["completion_tokens"] += (out.get("usage") or {}).get("completion_tokens", 0)
         calls = []
         for c in msg.get("tool_calls") or []:
             fn = c.get("function", {})
