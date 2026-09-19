@@ -1,23 +1,47 @@
 id: 11-iterate-degenerate
-title: A loop that cannot progress is caught; the parent handles it
+title: A loop that cannot progress quiesces; the root writes the fallback
 kind: program
-exercises: [Iterate, cycle detection, quiesced combinator, parent handling]
+exercises: [code base, call with init+until+max (iterate), quiesced call, root writes fallback]
 program:
   $lambda:
-    type: 'Lambda<{ text: Text }, { text: Text, gave_up: Bool }>'
+    type: 'Lambda<{ text: Text }, Result>'
+    function: trim_long_words
+    types:
+      Result: '{ text: Text, gave_up: Bool }'
     instructions: |
-      1. Repeatedly remove every word longer than 20 letters from `args/text` until it
-         has fewer than 3 words. At most 6 rounds.
-      2. If the loop cannot make progress, return the original text with gave_up true.
-         Otherwise return the result with gave_up false.
+      function trim_long_words(text) -> Result
+
+        start = text
+        trimmed = remove_long_words applied repeatedly to start, at most 6 times, until short_enough
+        if that did not finish:
+            return { text: text, gave_up: true }
+        else:
+            return { text: trimmed, gave_up: false }
+    codebase:
+      remove_long_words:
+        description: Remove every word longer than 20 letters from the text.
+        args: { state: Text }
+        returns: Text
+        code: return args.state.split(/\s+/).filter(w => w.length <= 20).join(" ")
+      short_enough:
+        description: Does the text have fewer than 3 words?
+        args: { state: Text }
+        returns: Bool
+        code: return args.state.trim().split(/\s+/).length < 3
 inputs:
   text: "the quick brown fox"
 expect:
   value: { text: "the quick brown fox", gave_up: true }
 notes: >
-  No word is longer than 20 letters, so the state never changes. The harness
-  detects the repeated state by content hash and quiesces the Iterate as
-  degenerate after the second round.
+  No word is longer than 20 letters, so the state never changes; the call quiesces as degenerate
+  (repeated state) well before the max of 6 rounds.
 lint:
-  must: [Iterate with max 6, parent reads the quiesce note, parent writes the fallback]
-  must_not: [retrying the loop unchanged]
+  must: [remove_long_words called with init+until+max (an iterate), the root reads the quiesced note and writes the fallback itself]
+  must_not: [retrying the loop unchanged, guessing a trimmed result]
+reference:
+  trim_long_words:
+    calls:
+      - { tool: write, args: { path: let/start, type: Text, value: "the quick brown fox" } }
+      - { tool: call, args: { function: remove_long_words, to: let/trimmed, init: let/start, until: short_enough, max: 6 } }
+      - { tool: write, args: { path: return/text, type: Text, value: "the quick brown fox" } }
+      - { tool: write, args: { path: return/gave_up, type: Bool, value: true } }

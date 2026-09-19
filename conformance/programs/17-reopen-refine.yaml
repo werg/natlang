@@ -1,13 +1,31 @@
 id: 17-reopen-refine
-title: A value that is not good enough is reopened with the reason
+title: A function copy is edited and called when the first draft is not good enough
 kind: program
-exercises: [reopen, draft return prefilled with the old value, provenance links attempts, eval as checker]
+exercises: [copy a function into a local, edit its instructions, call the copy, crisp check]
 program:
   $lambda:
     type: 'Lambda<{ report: Text }, Text>'
+    function: headline_for
     instructions: |
-      1. Have a headline written for `args/report`.
-      2. Check it is at most 8 words. If it is longer, reopen it and ask for it to be cut down. Check again.
+      function headline_for(report) -> Text
+
+        headline = write_headline(report)
+        if too_long(headline):
+            strict   = a copy of write_headline, edited to require at most 8 words
+            headline = strict(report)
+        return headline
+    codebase:
+      write_headline:
+        description: A headline for a report.
+        args: { report: Text }
+        returns: Text
+        instructions: |
+          Write a headline for `args/report`, at most 15 words.
+      too_long:
+        description: Is the text more than 8 words?
+        args: { text: Text }
+        returns: Bool
+        code: return wordCount(args.text) > 8
 inputs:
   report: "Quarterly revenue grew by four percent, driven mainly by strong sales in the northern region, while costs remained flat compared with the previous quarter."
 expect:
@@ -15,31 +33,20 @@ expect:
     - { kind: crisp, code: "wordCount(value) <= 8" }
     - { kind: judge, question: "Is it a headline about revenue growth?", answer: true }
 lint:
-  must: [headline produced by a child lambda in return, eval wordCount after it completes]
-  may: [reopen return with new instructions, then reduce]
-  must_not: [the parent rewriting the headline itself]
-canonical_trace: |
-  >>> set return : Lambda<{ report: Text }, Text>
-      instructions: Write a headline for `args/report`.
-  <<< ok
-  >>> copy args/report to return/args/report
-  <<< ok
-  >>> reduce return
-  <<< return: done  "Quarterly revenue grows four percent on strong northern sales as costs hold"
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< ok
-  >>> eval
-      wordCount(self.return)
-  <<< 12
-  >>> reopen return
-      The headline is 12 words. Cut it to at most 8 words.
-  <<< ok   return: Lambda<{ report: Text }, Text> unreduced, draft return prefilled
-  >>> reduce return
-  <<< return: done  "Revenue grows four percent on northern sales"
-  >>> eval
-      wordCount(self.return)
-  <<< 7
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< completed
+  must:
+    - a first headline produced by write_headline, checked crisply with too_long
+    - "on failure: write(path, type=Function<write_headline>) to copy it into a local, edit its instructions, then call the copy"
+  must_not: [the root rewriting the headline itself]
+reference:
+  headline_for:
+    calls:
+      - { tool: call, args: { function: write_headline, to: let/headline, inputs: { report: args/report } } }
+      - { tool: call, args: { function: too_long, to: let/bad, inputs: { text: let/headline } } }
+      - { tool: write, args: { path: let/strict, type: "Function<write_headline>" } }
+      - { tool: edit, args: { path: let/strict/instructions, old: "Write a headline for `args/report`, at most 15 words.", new: "Write a headline for `args/report`, at most 8 words." } }
+      - { tool: call, args: { function: let/strict, to: return, inputs: { report: args/report } } }
+  write_headline:
+    variants:
+      - if_body_contains: "at most 8 words"
+        answer: "Revenue grows four percent on northern sales"
+      - answer: "Quarterly revenue grows four percent on strong northern sales as costs hold"

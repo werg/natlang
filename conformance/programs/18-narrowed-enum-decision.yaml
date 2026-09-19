@@ -1,46 +1,42 @@
 id: 18-narrowed-enum-decision
-title: Legal actions computed crisply and enforced as a narrowed return type
+title: A decision constrained to the legal actions, computed crisply
 kind: program
-exercises: [crisp lambda returning a pending node, enum narrowing, replaced result, Dict]
+exercises: [code base, crisp function, Dict, enum]
 program:
   $lambda:
     type: 'Lambda<{ stock: Dict<Num>, request: Text }, Action>'
+    function: choose_action
     types:
       Action: '"sell_apple" | "sell_pear" | "decline"'
     instructions: |
-      1. Work out which actions are legal: an item can be sold only if `args/stock` has at least one; declining is always legal.
-      2. Choose, among the legal actions only, the one that serves `args/request`. If what the customer wants cannot be sold, decline.
+      function choose_action(stock, request) -> Action
+
+        return decide_action(stock, request)
+    codebase:
+      decide_action:
+        description: >
+          Choose, among the legal actions (an item can be sold only if stock has at least one; declining
+          is always legal), the one that serves the request. If what the customer wants cannot be sold,
+          decline.
+        args: { stock: 'Dict<Num>', request: Text }
+        returns: '"sell_apple" | "sell_pear" | "decline"'
+        code: |
+          const legal = new Set(["decline", ...Object.keys(args.stock).filter(k => args.stock[k] > 0).map(k => "sell_" + k)])
+          const wants = Object.keys(args.stock).find(k => args.request.toLowerCase().includes(k))
+          const wanted = wants ? "sell_" + wants : "decline"
+          return legal.has(wanted) ? wanted : "decline"
 inputs:
   stock: { apple: 0, pear: 3 }
   request: "Two of your finest apples, please."
 expect:
   value: decline
 notes: >
-  "sell_apple" must be unrepresentable when the decision is written: the
-  decision lambda's returns is "decline" | "sell_pear".
+  decide_action computes the legal set and the decision together, in code, so an illegal action
+  (selling something with no stock) is never representable in the result.
 lint:
-  must:
-    - a crisp lambda computes the legal set and returns a decision lambda built with lambda(...) and enumOf(...)
-    - reduce reports the slot as replaced; a second reduce runs the decision
-  must_not: [the legal set typed out by the model in a type literal]
-canonical_trace: |
-  >>> set return : Lambda<{ stock: Dict<Num>, request: Text }, Action>
-      code: |
-        const legal = ["decline", ...Object.keys(args.stock).filter(k => args.stock[k] > 0).map(k => "sell_" + k)]
-        return lambda({
-          type: `Lambda<{ request: Text }, ${enumOf(legal)}>`,
-          instructions: "Choose the action that serves the customer in `args/request`. If what they want cannot be sold, decline.",
-          args: { request: args.request },
-        })
-  <<< ok
-  >>> copy args/stock to return/args/stock
-  <<< ok
-  >>> copy args/request to return/args/request
-  <<< ok
-  >>> reduce return
-  <<< return: replaced  Lambda<{ request: Text }, "decline" | "sell_pear"> unreduced
-  >>> reduce return
-  <<< return: done  "decline"
-  >>> edit instructions[1..2]
-      (empty body)
-  <<< completed
+  must: [decide_action computes the legal set and the decision crisply, in one call]
+  must_not: [the root working out legality itself, the legal set typed out by the model]
+reference:
+  choose_action:
+    calls:
+      - { tool: call, args: { function: decide_action, to: return, inputs: { stock: args/stock, request: args/request } } }

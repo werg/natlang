@@ -16,7 +16,7 @@ inputs:
     - "Payments are failing for every customer right now."
 expect:
   checks:
-    - { kind: crisp, code: "value.urgent === 2" }
+    - { kind: crisp, code: "value.urgent >= 2 && value.urgent <= 3" }     # the double charge is arguably urgent ("money being lost")
     - { kind: crisp, code: "value.by_label.spam === 1 && value.by_label.billing >= 1" }
     - { kind: crisp, code: "wordCount(value.summary) <= 60" }
     - { kind: judge, question: "Does the summary mention that customers cannot log in or that payments are failing?", answer: true }

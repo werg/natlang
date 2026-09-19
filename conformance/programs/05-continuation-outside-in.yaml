@@ -1,14 +1,38 @@
 id: 05-continuation-outside-in
-title: An intermediate value lives in the parameter of the lambda that consumes it
+title: A count computed over a map feeds a later crisp decision
 kind: program
-exercises: [continuation, outside-in construction, Map, nested pending literals, dependencies first, copy]
+exercises: [code base, call over a list, crisp aggregate, locals feeding a later call, conditional]
 program:
   $lambda:
     type: 'Lambda<{ tickets: Text[] }, Text>'
+    function: ticket_alert
     instructions: |
-      1. Decide for each ticket whether it is urgent.
-      2. If more than 5 are urgent, write exactly "ALERT: N urgent" with N the count.
-         Otherwise write exactly "ok".
+      function ticket_alert(tickets) -> Text
+
+        flags = for each t in tickets: is_urgent(t)
+        n     = count_true(flags)
+        if n > 5:
+            return alert_message(n)
+        else:
+            return "ok"
+    codebase:
+      is_urgent:
+        description: Is this ticket urgent?
+        args: { ticket: Text }
+        returns: Bool
+        instructions: |
+          Is the ticket in `args/ticket` urgent: are people blocked, is money being lost, or is security at
+          risk, right now? Answer true or false.
+      count_true:
+        description: How many flags are true.
+        args: { flags: 'Bool[]' }
+        returns: Num
+        code: return args.flags.filter(Boolean).length
+      alert_message:
+        description: 'The "ALERT: N urgent" message for a count.'
+        args: { n: Num }
+        returns: Text
+        code: 'return `ALERT: ${args.n} urgent`'
 inputs:
   tickets:
     - "PRODUCTION IS DOWN. Customers cannot log in at all."
@@ -23,30 +47,23 @@ expect:
   value: "ALERT: 6 urgent"
 lint:
   must:
-    - "return is first set to a continuation Lambda<{ flags: Bool[] }, Text>"
-    - "its args/flags holds a Map<Text, Bool>"
-    - copy args/tickets to the Map's over
-    - a single reduce of return (dependencies reduce first)
-    - counting done by eval or crisp lambda inside the continuation
-  must_not: [any node outside instructions/args/return, unrolled per-ticket steps in the parent, move]
-canonical_trace: |
-  >>> set return : Lambda<{ flags: Bool[] }, Text>
-      instructions: |
-        1. Count how many of `args/flags` are true.
-        2. If more than 5, write exactly "ALERT: N urgent" with N the count. Otherwise write exactly "ok".
-      args:
-        flags:
-          $map:
-            type: 'Map<Text, Bool>'
-            fn:
-              $lambda:
-                type: 'Lambda<{ item: Text }, Bool>'
-                instructions: Is the ticket in `args/item` urgent? Answer true or false.
-  <<< ok   problems: 0 blocking · 1 hole (return/args/flags/over unbound)
-  >>> copy args/tickets to return/args/flags/over
-  <<< ok
-  >>> reduce return
-  <<< return: done  "ALERT: 6 urgent"
-  >>> edit instructions[1..3]
-      (empty body)
-  <<< completed
+    - is_urgent called once, over args/tickets, not per-ticket by hand
+    - count_true computes n crisply
+    - alert_message called only because n is above 5
+  must_not: [the root judging urgency itself, the root doing the count itself]
+reference:
+  ticket_alert:
+    calls:
+      - { tool: call, args: { function: is_urgent, to: let/flags, over: args/tickets } }
+      - { tool: call, args: { function: count_true, to: let/n, inputs: { flags: let/flags } } }
+      - { tool: call, args: { function: alert_message, to: return, inputs: { n: let/n } } }
+  is_urgent:
+    answer_by:
+      "PRODUCTION IS DOWN. Customers cannot log in at all.": true
+      "Could you update the logo in the footer when you get a chance?": false
+      "Payments are failing for every customer right now, we are losing sales by the minute.": true
+      "Database is corrupting orders as we speak - need someone immediately.": true
+      "Typo on the About page.": false
+      "Security breach: admin passwords were leaked publicly an hour ago.": true
+      "All outgoing email has stopped; password resets are impossible for everyone.": true
+      "Site is returning 500 errors on checkout for all users since 09:00.": true

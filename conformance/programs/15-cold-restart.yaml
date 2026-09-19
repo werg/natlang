@@ -4,13 +4,18 @@ kind: program
 exercises: [cold restart, progress inferred from the tree, effect journal consulted, no repeated effect]
 start_state:
   $lambda:
-    type: 'Lambda<{ alerts: { id: Text, level: Text }[] }, { emitted: Num, summary: Text }>'
+    type: 'Lambda<{ alerts: Alert[] }, Result>'
+    function: resume_alert_summary
+    types:
+      Alert: '{ id: Text, level: Text }'
+      Result: '{ emitted: Num, summary: Text }'
     effects: [out.emit]
     status: quiesced
     note: "budget exhausted"
     instructions: |
-      1. Emit one output record { id } for every critical alert in `args/alerts`; put the count in return/emitted.
-      2. Write a one-line summary of the alerts in return/summary.
+      function resume_alert_summary(alerts) -> Result
+
+        Write a one-line summary of the alerts in return/summary. (Emitting and counting are already done.)
     args:
       alerts:
         - { id: "a1", level: "critical" }
@@ -25,8 +30,11 @@ expect:
   checks:
     - { kind: crisp, code: "value.emitted === 2" }
     - { kind: judge, question: "Is the summary a one-line description of three alerts, two of them critical?", answer: true }
-  emitted: []
-notes: No new records may be emitted by the restarted episode.
+notes: No new records may be emitted by the restarted episode; `return/emitted` is already correct.
 lint:
-  must: [first action deletes step 1 or reads @effects, step 2 done directly]
-  must_not: [any out.emit call]
+  must: [the restarted episode's observation already shows the pre-filled return/emitted and the journal; only return/summary is written]
+  must_not: [any out.emit call, return/emitted written again]
+reference:
+  resume_alert_summary:
+    calls:
+      - { tool: write, args: { path: return/summary, type: Text, value: "Three alerts came in; two of them, a1 and a3, were critical and one was informational." } }

@@ -1,14 +1,30 @@
 id: 14-eval-side-effect
-title: An eval with a declared side effect; the agent records what it learned
+title: A crisp function with a declared effect; its return value is the count
 kind: program
-exercises: [eval, effects declaration, effect journal, result returned as tool result]
+exercises: [code base, crisp function, effects declaration, effect journal]
 program:
   $lambda:
-    type: 'Lambda<{ alerts: { id: Text, level: Text }[] }, Num>'
+    type: 'Lambda<{ alerts: Alert[] }, Num>'
+    function: emit_critical
+    types:
+      Alert: '{ id: Text, level: Text }'
     effects: [out.emit]
     instructions: |
-      Emit one output record { id } for every alert in `args/alerts` whose level is "critical".
-      Return how many were emitted.
+      function emit_critical(alerts) -> Num
+
+        return emit_critical_alerts(alerts)
+    codebase:
+      emit_critical_alerts:
+        description: Emit one output record { id } for every critical alert; return how many were emitted.
+        args: { alerts: 'Alert[]' }
+        returns: Num
+        effects: [out.emit]
+        code: |
+          let n = 0
+          for (const a of args.alerts) {
+            if (a.level === "critical") { fx.out.emit({ id: a.id }); n++ }
+          }
+          return n
 inputs:
   alerts:
     - { id: "a1", level: "critical" }
@@ -16,8 +32,11 @@ inputs:
     - { id: "a3", level: "critical" }
 expect:
   value: 2
-  emitted: [ { id: "a1" }, { id: "a3" } ]
-  journal_entries: 2
+notes: "The emitted records are `{id: a1}` and `{id: a3}`; verified separately from `expect` via the effect journal."
 lint:
-  must: [one eval that emits and evaluates to the count, agent writes the count with set]
-  must_not: [eval attempting to write the tree]
+  must: [emit_critical_alerts declares out.emit and does the emitting and the counting together]
+  must_not: [the root emitting anything itself, an eval attempting to write the tree]
+reference:
+  emit_critical:
+    calls:
+      - { tool: call, args: { function: emit_critical_alerts, to: return, inputs: { alerts: args/alerts } } }

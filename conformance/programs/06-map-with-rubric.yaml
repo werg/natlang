@@ -1,14 +1,24 @@
 id: 06-map-with-rubric
-title: Map a judgment with a pre-bound rubric; enum results
+title: Map a judgment with a rubric passed to every instance; enum results
 kind: program
-exercises: [Map, partial application of fn, named types, enum]
+exercises: [code base, call over a list, named types, enum, crisp library functions]
 program:
   $lambda:
     type: 'Lambda<{ tickets: Text[], rubric: Text }, Label[]>'
+    function: label_tickets
     types:
       Label: '"billing" | "technical" | "spam"'
     instructions: |
-      Label each ticket in `args/tickets` according to `args/rubric`.
+      function label_tickets(tickets, rubric) -> Label[]
+
+        return for each t in tickets: classify(t, rubric)
+    codebase:
+      classify:
+        description: Label one ticket using the rubric.
+        args: { item: Text, rubric: Text }
+        returns: '"billing" | "technical" | "spam"'
+        instructions: |
+          Label the ticket in `args/item` according to `args/rubric`.
 inputs:
   rubric: |
     billing: anything about charges, invoices, refunds, or payment methods.
@@ -24,23 +34,16 @@ expect:
   value: [billing, technical, spam, billing, technical]
 lint:
   must:
-    - "return is a Map<Text, Label>"
-    - "fn has params { item: Text, rubric: Text } with rubric bound by copy before the trigger"
-  must_not: [label tickets in the parent episode, re-emit the rubric text]
-  max_actions: 6
-canonical_trace: |
-  >>> set return : Map<Text, Label>
-      fn:
-        $lambda:
-          type: 'Lambda<{ item: Text, rubric: Text }, Label>'
-          instructions: Label the ticket in `args/item` according to `args/rubric`.
-  <<< ok
-  >>> copy args/rubric to return/fn/args/rubric
-  <<< ok
-  >>> copy args/tickets to return/over
-  <<< ok
-  >>> reduce return
-  <<< return: done  Label[] 5 items
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< completed
+    - classify called once, over args/tickets, with rubric passed to every instance
+  must_not: [the root labelling tickets itself, one call per ticket]
+reference:
+  label_tickets:
+    calls:
+      - { tool: call, args: { function: classify, to: return, over: args/tickets, inputs: { rubric: args/rubric } } }
+  classify:
+    answer_by:
+      "I was charged twice for my March invoice.": billing
+      "The app crashes every time I open the settings page.": technical
+      "CHEAP WATCHES!!! Visit our store today for 90% off.": spam
+      "Please change the card on file, the old one expired.": billing
+      "Export to CSV produces an empty file.": technical

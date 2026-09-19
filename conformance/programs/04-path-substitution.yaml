@@ -1,13 +1,34 @@
 id: 04-path-substitution
-title: A phrase denoting a large value is replaced by its path
+title: A crisp filter selects a sublist, a leaf summarizes only the selection
 kind: program
-exercises: [path substitution, child lambda, copy into in, dependencies first]
+exercises: [code base, crisp filter, call over a list, locals feeding a later call]
 program:
   $lambda:
     type: 'Lambda<{ reviews: Text[] }, Text>'
+    function: delivery_theme
     instructions: |
-      1. Pick out the reviews that mention delivery.
-      2. Write one sentence saying what those reviews have in common.
+      function delivery_theme(reviews) -> Text
+
+        flags    = for each r in reviews: mentions_delivery(r)
+        selected = select_by_flags(reviews, flags)
+        return summarize_delivery(selected)
+    codebase:
+      mentions_delivery:
+        description: Does this review mention delivery?
+        args: { review: Text }
+        returns: Bool
+        code: return lower(args.review).includes("delivery")
+      select_by_flags:
+        description: The items whose flag (same position) is true.
+        args: { items: 'Text[]', flags: 'Bool[]' }
+        returns: 'Text[]'
+        code: return args.items.filter((_, i) => args.flags[i])
+      summarize_delivery:
+        description: One short sentence about what a set of delivery-related reviews have in common.
+        args: { reviews: 'Text[]' }
+        returns: Text
+        instructions: |
+          Write one sentence, at most 40 words, saying what `args/reviews` have in common about delivery.
 inputs:
   reviews:
     - "Delivery took nine days. Never again."
@@ -21,8 +42,15 @@ expect:
     - { kind: crisp, code: "wordCount(value) <= 40" }
 lint:
   must:
-    - continuation in return with a param typed Text[]
-    - "Map<Text, Bool> or equivalent producing the selection"
-    - remaining instruction text refers to the selection by path in backticks
-    - copy used to bind reviews
-  must_not: [re-emit review text through set, unroll the loop]
+    - mentions_delivery called over args/reviews, once per review
+    - select_by_flags used to pick the delivery-related reviews
+    - summarize_delivery called once, over the selection only
+  must_not: [the root reading every review's full text itself, an unrolled per-review summary]
+reference:
+  delivery_theme:
+    calls:
+      - { tool: call, args: { function: mentions_delivery, to: let/flags, over: args/reviews } }
+      - { tool: call, args: { function: select_by_flags, to: let/selected, inputs: { items: args/reviews, flags: let/flags } } }
+      - { tool: call, args: { function: summarize_delivery, to: return, inputs: { reviews: let/selected } } }
+  summarize_delivery:
+    answer: "Several reviews describe delivery as slow or mishandled, citing long waits, rough treatment by the courier, and unreliable tracking."

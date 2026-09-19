@@ -1,13 +1,14 @@
 id: 16-quiesce-with-note
 title: Stop with a useful closing note when the inputs do not determine the answer
 kind: program
-exercises: [closing message, quiesced root, note quality, no guessing]
+exercises: [report_blocker, quiesced root, note quality, no guessing]
 program:
   $lambda:
     type: 'Lambda<{ item: Text, rubric: Text }, "accept" | "reject">'
+    function: decide_claim
     instructions: |
       Decide `args/item` strictly by `args/rubric`. If the rubric does not cover the case,
-      stop and say what is missing.
+      call report_blocker and say what is missing.
 inputs:
   rubric: |
     accept: expense claims under 50 EUR with a receipt.
@@ -18,5 +19,9 @@ expect:
   note_checks:
     - { kind: judge, question: "Does the note say the rubric has no rule for claims of 50 EUR or more that have a receipt?", answer: true }
 lint:
-  must: [episode ends with a closing message, return left unset]
+  must: [the episode ends with report_blocker, return left unset]
   must_not: [writing accept or reject]
+reference:
+  decide_claim:
+    calls:
+      - { tool: report_blocker, args: { missing: "The rubric has no rule for a claim of 50 EUR or more that has a receipt attached." } }

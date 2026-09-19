@@ -43,8 +43,47 @@ def _script(actions):
     return outs
 
 
-def _run(name, actions):
-    doc = yaml.safe_load((PROGRAMS / name).read_text())
+# A Map-shaped program with a canonical trace, kept here (not in conformance/programs, which was migrated
+# to the code-base style) purely to exercise two-phase decoding of a Map's header (`set`) and its `fn:`
+# continuation through the old text-action surface.
+MAP_PROGRAM = yaml.safe_load("""
+program:
+  $lambda:
+    type: 'Lambda<{ tickets: Text[], rubric: Text }, Label[]>'
+    types:
+      Label: '"billing" | "technical" | "spam"'
+    instructions: |
+      Label each ticket in `args/tickets` according to `args/rubric`.
+expect:
+  value: [billing, technical, spam, billing, technical]
+""")
+MAP_INPUTS = {
+    "rubric": "billing: charges, invoices, refunds, payment methods.\ntechnical: the product not working.\n"
+              "spam: unsolicited advertising.\n",
+    "tickets": ["I was charged twice for my March invoice.", "The app crashes every time I open the settings page.",
+               "CHEAP WATCHES!!! Visit our store today for 90% off.", "Please change the card on file, the old one expired.",
+               "Export to CSV produces an empty file."],
+}
+MAP_TRACE = """
+>>> set return : Map<Text, Label>
+    fn:
+      $lambda:
+        type: 'Lambda<{ item: Text, rubric: Text }, Label>'
+        instructions: Label the ticket in `args/item` according to `args/rubric`.
+<<< ok
+>>> copy args/rubric to return/fn/args/rubric
+<<< ok
+>>> copy args/tickets to return/over
+<<< ok
+>>> reduce return
+<<< return: done  Label[] 5 items
+>>> edit instructions[1..1]
+    (empty body)
+<<< completed
+"""
+
+
+def _run(doc, actions):
     root = _root(doc)
     dec = ScriptedDecoder(_script(actions))
     log = []
@@ -53,10 +92,22 @@ def _run(name, actions):
     return doc, dec, log, out, value
 
 
+def _map_doc():
+    doc = dict(MAP_PROGRAM)
+    doc["program"]["$lambda"] = {**doc["program"]["$lambda"]}
+    doc.setdefault("inputs", MAP_INPUTS)
+    return doc
+
+
+def _run_named(name, actions):
+    doc = yaml.safe_load((PROGRAMS / name).read_text())
+    return _run(doc, actions)
+
+
 def test_two_phase_decoding_runs_a_program():
-    name = "06-map-with-rubric.yaml"
-    actions = [a for a, _ in parse_trace(yaml.safe_load((PROGRAMS / name).read_text())["canonical_trace"])]
-    doc, dec, log, out, value = _run(name, actions)
+    doc = _map_doc()
+    actions = [a for a, _ in parse_trace(MAP_TRACE)]
+    doc, dec, log, out, value = _run(doc, actions)
     assert not dec.violations, dec.violations
     assert out.kind == "done" and value == doc["expect"]["value"]
     # header and body are separate constrained calls, and the body call continues the header
@@ -68,11 +119,11 @@ def test_two_phase_decoding_runs_a_program():
 
 
 def test_rejected_sample_is_discarded_and_resampled():
-    name = "06-map-with-rubric.yaml"
-    good = [a for a, _ in parse_trace(yaml.safe_load((PROGRAMS / name).read_text())["canonical_trace"])]
+    doc = _map_doc()
+    good = [a for a, _ in parse_trace(MAP_TRACE)]
     # a grammar-valid but ill-typed copy: Text into a Text[] slot. Validation rejects it.
     actions = good[:1] + ["copy args/rubric to return/over"] + good[1:]
-    doc, dec, log, out, value = _run(name, actions)
+    doc, dec, log, out, value = _run(doc, actions)
     kinds = [(l["action"].splitlines()[0], l["kind"], l["attempt"]) for l in log]
     assert ("copy args/rubric to return/over", "rejected", 0) in kinds
     assert out.kind == "done" and value == doc["expect"]["value"]
@@ -81,6 +132,6 @@ def test_rejected_sample_is_discarded_and_resampled():
 
 
 def test_stuck_quiesces_with_the_note():
-    doc, dec, log, out, value = _run("16-quiesce-with-note.yaml",
-                                     ["stuck\nThe rubric has no rule for claims of 50 EUR or more with a receipt."])
+    doc, dec, log, out, value = _run_named("16-quiesce-with-note.yaml",
+                                           ["stuck\nThe rubric has no rule for claims of 50 EUR or more with a receipt."])
     assert out.kind == "quiesced" and "no rule" in out.detail

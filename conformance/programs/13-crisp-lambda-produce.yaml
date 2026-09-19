@@ -1,20 +1,29 @@
 id: 13-crisp-lambda-produce
-title: A value that belongs in the tree is produced by a crisp lambda, not by tokens
+title: A value that belongs in the tree is produced by a crisp function, not by tokens
 kind: program
-exercises: [crisp lambda, large value never passes through the model, provenance of crisp results]
+exercises: [code base, crisp function, large value never passes through the model]
 program:
   $lambda:
     type: 'Lambda<{ emails: Text[] }, Text[]>'
+    function: distinct_emails
     instructions: |
-      Return the distinct email addresses from `args/emails`, lower-cased and sorted.
+      function distinct_emails(emails) -> Text[]
+
+        return normalize_emails(emails)
+    codebase:
+      normalize_emails:
+        description: The distinct email addresses, lower-cased and sorted.
+        args: { emails: 'Text[]' }
+        returns: 'Text[]'
+        code: return uniq(args.emails.map(lower)).sort()
 inputs:
   emails: ["Zed@x.org", "amy@x.org", "AMY@x.org", "bob@y.com", "zed@X.org", "cy@z.net"]
 expect:
   value: ["amy@x.org", "bob@y.com", "cy@z.net", "zed@x.org"]
 lint:
-  must:
-    - "return set to a crisp Lambda<{ emails: Text[] }, Text[]>"
-    - copy to bind emails
-    - reduce
-  must_not: [set return to a literal list, eval followed by re-typing the result]
-  max_actions: 5
+  must: [normalize_emails called once, with the whole list, and its result returned unchanged]
+  must_not: [the root retyping or re-emitting the list itself]
+reference:
+  distinct_emails:
+    calls:
+      - { tool: call, args: { function: normalize_emails, to: return, inputs: { emails: args/emails } } }

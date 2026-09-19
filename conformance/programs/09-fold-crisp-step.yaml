@@ -1,12 +1,23 @@
 id: 09-fold-crisp-step
-title: A Fold whose step is a crisp lambda; no model episode below the parent
+title: A fold whose step is a crisp function; no model episode below the root
 kind: program
-exercises: [Fold, crisp lambda as body, no model calls in the loop]
+exercises: [code base, call with over+init (fold), crisp step, no model calls in the loop]
 program:
   $lambda:
-    type: 'Lambda<{ lines: { sku: Text, qty: Num, unit_price: Num }[] }, Num>'
+    type: 'Lambda<{ lines: Line[] }, Num>'
+    function: order_total
+    types:
+      Line: '{ sku: Text, qty: Num, unit_price: Num }'
     instructions: |
-      Compute the order total from `args/lines`, carrying the running total line by line.
+      function order_total(lines) -> Num
+
+        return fold over lines, starting from 0, adding each line's amount with add_line
+    codebase:
+      add_line:
+        description: Running total plus one order line's amount.
+        args: { item: Line, acc: Num }
+        returns: Num
+        code: return args.acc + args.item.qty * args.item.unit_price
 inputs:
   lines:
     - { sku: "A1", qty: 2, unit_price: 9.5 }
@@ -14,9 +25,11 @@ inputs:
     - { sku: "C3", qty: 10, unit_price: 0.75 }
 expect:
   value: 146.5
-notes: >
-  A single crisp lambda would also be correct. The instructions ask for a
-  running total to force the Fold; the point is a combinator with a crisp body.
 lint:
-  must: [step is a crisp lambda]
-  must_not: [arithmetic in generated text]
+  must: [add_line called with over+init (a fold), the step is crisp]
+  must_not: [arithmetic done by the root itself]
+reference:
+  order_total:
+    calls:
+      - { tool: write, args: { path: let/start, type: Num, value: 0 } }
+      - { tool: call, args: { function: add_line, to: return, over: args/lines, init: let/start } }

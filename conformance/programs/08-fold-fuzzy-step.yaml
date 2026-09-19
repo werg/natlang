@@ -1,13 +1,28 @@
 id: 08-fold-fuzzy-step
 title: Fold with a judged step; the harness threads the accumulator
 kind: program
-exercises: [Fold, accumulator typing, fuzzy step]
+exercises: [code base, call with over+init (fold), accumulator typing, natural-language step]
 program:
   $lambda:
-    type: 'Lambda<{ messages: Text[] }, { address: Text, changes: Num }>'
+    type: 'Lambda<{ messages: Text[] }, Addr>'
+    function: track_address
+    types:
+      Addr: '{ address: Text, changes: Num }'
     instructions: |
-      Go through `args/messages` in order, keeping the customer's latest delivery
-      address and how many times it changed. Start from address "unknown" and 0 changes.
+      function track_address(messages) -> Addr
+
+        start = { address: "unknown", changes: 0 }
+        return fold over messages, starting from start, updating the address with update_address
+    codebase:
+      update_address:
+        description: Given the running state and one more message, the new address-tracking state.
+        args: { item: Text, acc: Addr }
+        returns: '{ address: Text, changes: Num }'
+        instructions: |
+          `args/acc` holds the customer's latest known delivery address and how many times it has
+          changed. `args/item` is the next message. If it states a delivery address different from
+          `args/acc/address`, return the new address with changes increased by one. Otherwise return
+          `args/acc` unchanged.
 inputs:
   messages:
     - "Hi, please send it to 12 Oak Lane, Bristol."
@@ -19,7 +34,17 @@ expect:
   value: { address: "9 Quay Street, Hull", changes: 3 }
 notes: The first address counts as a change from "unknown".
 lint:
-  must:
-    - return is a Fold with init bound
-    - "step params are { acc, item }"
-  must_not: [the parent reading messages one by one, recursion, unrolling]
+  must: [update_address called with over+init (a fold), step has params acc and item]
+  must_not: [the root reading messages one by one itself, unrolling the fold]
+reference:
+  track_address:
+    calls:
+      - { tool: write, args: { path: let/start, type: Addr, value: { address: "unknown", changes: 0 } } }
+      - { tool: call, args: { function: update_address, to: return, over: args/messages, init: let/start } }
+  update_address:
+    answer_by:
+      "Hi, please send it to 12 Oak Lane, Bristol.": { address: "12 Oak Lane, Bristol", changes: 1 }
+      "Any idea when it ships?": { address: "12 Oak Lane, Bristol", changes: 1 }
+      "Actually I've moved - use 4 Mill Road, Leeds instead.": { address: "4 Mill Road, Leeds", changes: 2 }
+      "Thanks!": { address: "4 Mill Road, Leeds", changes: 2 }
+      "Sorry, one more change: 9 Quay Street, Hull.": { address: "9 Quay Street, Hull", changes: 3 }

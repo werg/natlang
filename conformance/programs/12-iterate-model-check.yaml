@@ -1,13 +1,29 @@
 id: 12-iterate-model-check
-title: A model-based loop check writes its reasoning, then a verdict
+title: A natural-language check function drives the iterate's stop condition
 kind: program
-exercises: [Iterate, natural-language check, reason before verdict, fresh episode per check]
+exercises: [code base, call with init+until+max (iterate), natural-language check returning Bool]
 program:
   $lambda:
     type: 'Lambda<{ seed: Text[] }, Text[]>'
+    function: collect_fruits
     instructions: |
-      Starting from `args/seed`, keep adding one fruit that is not yet in the list.
-      Stop once the list contains four different fruits. At most 8 rounds.
+      function collect_fruits(seed) -> Text[]
+
+        start = seed
+        return add_fruit applied repeatedly to start, at most 8 times, until has_four_distinct_fruits
+    codebase:
+      add_fruit:
+        description: Add one fruit not already in the list.
+        args: { state: 'Text[]' }
+        returns: 'Text[]'
+        instructions: |
+          Add one fruit that is not already in `args/state` to the end of the list, and return the new list.
+      has_four_distinct_fruits:
+        description: Does the list contain four different fruits?
+        args: { state: 'Text[]' }
+        returns: Bool
+        instructions: |
+          Does `args/state` contain four different fruits? Answer true or false.
 inputs:
   seed: ["apple"]
 expect:
@@ -17,6 +33,22 @@ expect:
     - { kind: judge, question: "Is every item a fruit?", answer: true }
 lint:
   must:
-    - check is a natural-language lambda returning LoopVerdict
-    - in every check record, reason is written before verdict
-    - the final check's verdict is done
+    - add_fruit called with init+until+max (an iterate), until names has_four_distinct_fruits
+    - has_four_distinct_fruits is a natural-language function, not crisp
+  must_not: [the root deciding when to stop itself]
+reference:
+  collect_fruits:
+    calls:
+      - { tool: write, args: { path: let/start, type: 'Text[]', value: ["apple"] } }
+      - { tool: call, args: { function: add_fruit, to: return, init: let/start, until: has_four_distinct_fruits, max: 8 } }
+  add_fruit:
+    answer_by:
+      '["apple"]': ["apple", "banana"]
+      '["apple", "banana"]': ["apple", "banana", "cherry"]
+      '["apple", "banana", "cherry"]': ["apple", "banana", "cherry", "date"]
+  has_four_distinct_fruits:
+    answer_by:
+      '["apple"]': false
+      '["apple", "banana"]': false
+      '["apple", "banana", "cherry"]': false
+      '["apple", "banana", "cherry", "date"]': true

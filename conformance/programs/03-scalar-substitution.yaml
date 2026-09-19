@@ -1,35 +1,42 @@
 id: 03-scalar-substitution
-title: Exact work by eval, result substituted into the instruction text
+title: A crisp step computes a number, a locals holds it, a crisp step formats the message
 kind: program
-exercises: [sequence, eval, scalar substitution, erase after result]
+exercises: [code base, crisp function, locals, conditional]
 program:
   $lambda:
     type: 'Lambda<{ amounts: Num[], limit: Num }, Text>'
+    function: budget_check
     instructions: |
-      1. Add up `args/amounts`.
-      2. If the total is above `args/limit`, write exactly "over budget by N" where N is the excess.
-         Otherwise write exactly "within budget".
+      function budget_check(amounts, limit) -> Text
+
+        total = sum_amounts(amounts)
+        if total > limit:
+            return over_message(total, limit)
+        else:
+            return "within budget"
+    codebase:
+      sum_amounts:
+        description: Add up a list of amounts.
+        args: { amounts: 'Num[]' }
+        returns: Num
+        code: return sum(args.amounts)
+      over_message:
+        description: The "over budget by N" message for an excess.
+        args: { total: Num, limit: Num }
+        returns: Text
+        code: return `over budget by ${Math.round((args.total - args.limit) * 100) / 100}`
 inputs:
   amounts: [120, 80.5, 310]
   limit: 400
 expect:
   value: "over budget by 110.5"
 lint:
-  must: [eval for the sum, eval for the difference, substitute the total into the text]
-  must_not: [do arithmetic in generated text without eval, construct a child]
-canonical_trace: |
-  >>> eval
-      sum(args.amounts)
-  <<< 510.5
-  >>> edit instructions[1..3]
-      2. 510.5 is above the limit of 400: write exactly "over budget by N" where N is 510.5 - 400.
-  <<< ok
-  >>> eval
-      510.5 - 400
-  <<< 110.5
-  >>> set return : Text
-      over budget by 110.5
-  <<< ok
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< completed
+  must:
+    - sum_amounts called once to get the total
+    - over_message called only because the total is above the limit
+  must_not: [the root doing arithmetic itself, the root writing the message text directly]
+reference:
+  budget_check:
+    calls:
+      - { tool: call, args: { function: sum_amounts, to: let/total, inputs: { amounts: args/amounts } } }
+      - { tool: call, args: { function: over_message, to: return, inputs: { total: let/total, limit: args/limit } } }

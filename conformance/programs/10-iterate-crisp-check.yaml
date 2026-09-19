@@ -1,13 +1,30 @@
 id: 10-iterate-crisp-check
 title: Refine until a crisp check passes
 kind: program
-exercises: [Iterate, fuzzy step, crisp check, LoopVerdict, mandatory max]
+exercises: [code base, call with init+until+max (iterate), fuzzy step, crisp check, mandatory max]
 program:
   $lambda:
     type: 'Lambda<{ text: Text }, Text>'
+    function: shorten_text
     instructions: |
-      Shorten `args/text` step by step until it is at most 12 words, keeping its meaning.
-      Give up after 5 rounds.
+      function shorten_text(text) -> Text
+
+        draft = text
+        repeat at most 5 times, until is_short(draft):
+            draft = shorten(draft)
+        return draft
+    codebase:
+      shorten:
+        description: Make a text noticeably shorter without losing facts.
+        args: { text: Text }
+        returns: Text
+        instructions: |
+          Rewrite `args/text` to be noticeably shorter, at most 12 words. Keep every fact; drop filler.
+      is_short:
+        description: Is the text at most 12 words?
+        args: { text: Text }
+        returns: Bool
+        code: return wordCount(args.text) <= 12
 inputs:
   text: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday."
 expect:
@@ -15,30 +32,12 @@ expect:
     - { kind: crisp, code: "wordCount(value) <= 12" }
     - { kind: judge, question: "Does it say the shop is closed on Monday?", answer: true }
 lint:
-  must:
-    - "Iterate<Text> with max 5"
-    - check is a crisp lambda returning LoopVerdict
-  must_not: [a hand-driven loop in the parent]
-canonical_trace: |
-  >>> set return : Iterate<Text>
-      max: 5
-      step:
-        $lambda:
-          type: 'Lambda<{ state: Text }, Text>'
-          instructions: Rewrite `args/state` to be noticeably shorter while keeping its meaning.
-      check:
-        $lambda:
-          type: 'Lambda<{ recent: Text[], iteration: Num }, LoopVerdict>'
-          code: |
-            const n = wordCount(args.recent[args.recent.length - 1])
-            return n <= 12
-              ? { reason: `${n} words`, verdict: "done" }
-              : { reason: `${n} words, still too long`, verdict: "continue" }
-  <<< ok
-  >>> copy args/text to return/init
-  <<< ok
-  >>> reduce return
-  <<< return: done  "The shop will be closed on Monday."
-  >>> edit instructions[1..2]
-      (empty body)
-  <<< completed
+  must: [shorten called with init+until+max (an iterate) with max 5, until names is_short]
+  must_not: [a hand-driven loop in the root]
+reference:
+  shorten_text:
+    calls:
+      - { tool: write, args: { path: let/draft, type: Text, value: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday." } }
+      - { tool: call, args: { function: shorten, to: return, init: let/draft, until: is_short, max: 5 } }
+  shorten:
+    answer: "The shop will be closed on Monday."

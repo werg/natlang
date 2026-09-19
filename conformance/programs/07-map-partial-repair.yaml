@@ -1,15 +1,25 @@
 id: 07-map-partial-repair
-title: A Map slot quiesces; the parent repairs it and completes
+title: A call over a list where one item first blocks; the root resumes it
 kind: program
-exercises: [Map, quiescence without completion, closing note, partial result, parent repair]
+exercises: [code base, call over a list, report_blocker inside a mapped leaf, resume]
 program:
   $lambda:
     type: 'Lambda<{ tickets: Text[] }, Label[]>'
+    function: label_readable
     types:
       Label: '"question" | "complaint" | "unreadable"'
     instructions: |
-      1. Label each ticket as a question or a complaint.
-      2. Any ticket that could not be labelled gets the label "unreadable".
+      function label_readable(tickets) -> Label[]
+
+        return for each t in tickets: classify_readable(t)
+    codebase:
+      classify_readable:
+        description: Is this ticket a question or a complaint?
+        args: { ticket: Text }
+        returns: '"question" | "complaint" | "unreadable"'
+        instructions: |
+          Is the ticket in `args/ticket` a question or a complaint?
+          If it cannot be read as text, say what is missing instead of guessing.
 inputs:
   tickets:
     - "Why was my order cancelled?"
@@ -19,34 +29,16 @@ expect:
   value: [question, unreadable, complaint]
 lint:
   must:
-    - the fn's returns is the narrowed enum "question" | "complaint"
-    - slot 1 quiesces with a note
-    - the parent reads the note and sets return/1 itself
-  must_not: [the fn guessing a label for slot 1, re-running the whole Map]
-canonical_trace: |
-  >>> set return : Map<Text, "question" | "complaint">
-      fn:
-        $lambda:
-          type: 'Lambda<{ item: Text }, "question" | "complaint">'
-          instructions: |
-            Is the ticket in `args/item` a question or a complaint?
-            If it is neither or cannot be read, stop and say so.
-  <<< ok
-  >>> copy args/tickets to return/over
-  <<< ok
-  >>> reduce return
-  <<< return: quiesced  2 of 3 reduced
-      return/1: quiesced "The ticket is not readable text; it is neither a question nor a complaint."
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< ok
-  >>> set return/1 : "unreadable"
-      unreadable
-  <<< ok
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< completed
-notes: >
-  After slot 1 is set by hand every slot of the expanded Map is a value, so the
-  node is the list. Label[] accepts it because each element's enum is a subset
-  of Label.
+    - classify_readable called once, over args/tickets
+    - the item that cannot be read blocks first, then is resumed with function and to only
+  must_not: [the root labelling tickets itself, re-running the whole call for items already done]
+reference:
+  label_readable:
+    calls:
+      - { tool: call, args: { function: classify_readable, to: return, over: args/tickets } }
+      - { tool: call, args: { function: classify_readable, to: return }, resume: true }
+  classify_readable:
+    answer_by:
+      "Why was my order cancelled?": question
+      "xq zzv 0x00 ###": { blocker: "The ticket is not readable text; it is neither a question nor a complaint.", then: unreadable }
+      "This is the third time the courier has lost my parcel. Unacceptable.": complaint

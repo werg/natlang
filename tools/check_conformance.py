@@ -194,6 +194,39 @@ class Checker:
                 self.err(f"{where}: reserved key {k!r}")
             self.walk(v, scope, f"{where}/{k}")
 
+    def check_codebase(self, entries, scope, where):
+        """Inline `codebase:` (CODEBASES.md): a dict of function name -> definition."""
+        if not isinstance(entries, dict):
+            self.err(f"{where}: codebase must be a mapping of function name to definition")
+            return
+        for name, doc in entries.items():
+            fwhere = f"{where}/{name}"
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(name)):
+                self.err(f"{fwhere}: function name is not an identifier")
+            if not isinstance(doc, dict):
+                self.err(f"{fwhere}: expected a function definition")
+                continue
+            fn_scope = set(scope)
+            for tname, ttext in (doc.get("types") or {}).items():
+                fn_scope.add(tname)
+            for tname, ttext in (doc.get("types") or {}).items():
+                self.check_type(ttext, fn_scope, f"{fwhere}/types/{tname}")
+            has_i, has_c = "instructions" in doc, "code" in doc
+            if has_i == has_c:
+                self.err(f"{fwhere}: exactly one of instructions/code required")
+            if "returns" not in doc:
+                self.err(f"{fwhere}: returns required")
+            else:
+                self.check_type(str(doc["returns"]), fn_scope, f"{fwhere}/returns")
+            for aname, atext in (doc.get("args") or {}).items():
+                self.check_type(str(atext), fn_scope, f"{fwhere}/args/{aname}")
+            extra = set(doc) - {"description", "args", "returns", "types", "instructions", "code",
+                                "codebase", "effects"}
+            if extra:
+                self.err(f"{fwhere}: unexpected keys {sorted(extra)}")
+            if doc.get("codebase"):
+                self.check_codebase(doc["codebase"], fn_scope, f"{fwhere}/codebase")
+
     def pending(self, wrapper, body, scope, where):
         kind = WRAPPERS[wrapper]
         if not isinstance(body, dict) or "type" not in body:
@@ -212,7 +245,7 @@ class Checker:
             has_i, has_c = "instructions" in body, "code" in body
             if has_i == has_c:
                 self.err(f"{where}: exactly one of instructions/code required")
-            extra = set(body) - META - {"instructions", "code", "args", "return"}
+            extra = set(body) - META - {"instructions", "code", "args", "return", "codebase", "function"}
             if extra:
                 self.err(f"{where}: unexpected keys {sorted(extra)}")
             if t is not None:
@@ -222,6 +255,10 @@ class Checker:
                         self.err(f"{where}: args/{k} is not a declared parameter")
             self.walk(body.get("args"), scope, f"{where}/args")
             self.walk(body.get("return"), scope, f"{where}/return")
+            if body.get("function") is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(body["function"])):
+                self.err(f"{where}: function name {body['function']!r} is not an identifier")
+            if body.get("codebase"):
+                self.check_codebase(body["codebase"], scope, f"{where}/codebase")
         else:
             extra = set(body) - META - PARTS[kind] - {"acc", "at", "state", "iteration"}
             if extra:
