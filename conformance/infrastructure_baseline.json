@@ -21,10 +21,21 @@
     {"file": "16-quiesce-with-note.yaml", "outcome": "quiesced", "effects": []},
     {"file": "17-reopen-refine.yaml", "outcome": "done", "effects": []}
   ],
+  "action_fixtures": [
+    {"file": "02-leaf-extraction.yaml", "calls": [
+      {"name": "write", "arguments": {"path": "return/amount", "value": "lots"},
+       "outcome": "rejected", "codes": ["type-mismatch"]},
+      {"name": "write", "arguments": {"path": "args/note", "value": "x"},
+       "outcome": "rejected", "codes": ["not-writable"]},
+      {"name": "write", "arguments": {"path": "return", "value": {
+        "customer": "Dana Whitfield", "order_id": "0077", "amount": 42.5}},
+       "outcome": "ok", "codes": []}
+    ], "finish": true}
+  ],
   "action_contracts": {
     "typed_write_and_rejection": "tests/test_surface.py::test_write_is_typed_and_hints_on_failure",
-    "missing_vs_empty": "tests/test_surface.py::test_absent_optional_input_is_visible_and_distinct_from_empty_text",
-    "completion_marks": "tests/test_surface.py::test_mark_done",
+    "missing_null_empty": "tests/test_infrastructure_baseline.py::test_optional_missing_null_and_empty_are_three_distinct_observations",
+    "completion_marks": "tests/test_marking_probe.py::test_reference_marks_real_branch_occurrences_and_constructed_returns",
     "failure_after_effect": "tests/test_failure_references.py",
     "canonical_actions": "tests/test_canonical_traces.py"
   },
