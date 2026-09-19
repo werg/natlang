@@ -70,14 +70,23 @@ def main():
     report = []
     for fam in a.families:
         for base in P.BASE_TEXTS[fam]:
+            if len(accepted.get(base, [])) >= a.k - 1:      # resumable: this base is already covered
+                continue
             t0 = time.time()
-            cands = ask_paraphrases(dec, base, a.k)
+            try:
+                cands = ask_paraphrases(dec, base, a.k)
+            except OSError as e:                            # server restarting: wait and move on
+                print(f"[{fam}] server error {e!r}; waiting", flush=True); time.sleep(90); continue
             for para in cands:
                 if para in accepted.get(base, []):
                     continue
                 log, results = [], []
                 for _ in range(a.trials):
-                    results.append(teacher_solves(dec, fam, base, para, rng, log))
+                    try:
+                        results.append(teacher_solves(dec, fam, base, para, rng, log))
+                    except OSError as e:
+                        print(f"[{fam}] server error {e!r}; waiting", flush=True); time.sleep(90)
+                        results.append((False, "server-error", None, None))
                     if not results[-1][0]:
                         break
                 keep = all(r[0] for r in results) and len(results) == a.trials

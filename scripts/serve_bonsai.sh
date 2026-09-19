@@ -7,15 +7,16 @@
 # Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL]          stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PORT="${1:-8081}"; CTX="${2:-8192}"; NGL="${3:-99}"
+PORT="${1:-8081}"; CTX="${2:-12288}"; NGL="${3:-99}"
 MODEL="Ternary-Bonsai-2-27B-PTQ1_0.gguf"
 [ -f "$ROOT/models/$MODEL" ] || { echo "missing models/$MODEL"; exit 1; }
 [ -x "$ROOT/vendor/prism/bin/llama-server" ] || { echo "missing vendor/prism/bin (see README)"; exit 1; }
 docker rm -f natlang-bonsai >/dev/null 2>&1 || true
-exec docker run --rm --name natlang-bonsai --gpus all \
+# --no-mmap: weights go straight to the GPU instead of staying mapped in host RAM; the memory cap protects the desktop.
+exec docker run --rm --name natlang-bonsai --gpus all --memory "${BONSAI_MEM:-5g}" --memory-swap "${BONSAI_MEM:-5g}" \
   -v "$ROOT/vendor/prism/bin:/prism:ro" -v "$ROOT/models:/models:ro" -e LD_LIBRARY_PATH=/prism \
   -p "127.0.0.1:$PORT:8080" natlang-prism-runtime \
   /prism/llama-server -m "/models/$MODEL" --host 0.0.0.0 --port 8080 \
-    -ngl "$NGL" -fa on -c "$CTX" --cache-type-k q4_0 --cache-type-v q4_0 -np 1 \
+    -ngl "$NGL" -fa on -c "$CTX" --cache-type-k q4_0 --cache-type-v q4_0 -np 1 --no-mmap --cache-ram 1024 \
     --jinja --chat-template-file /models/templates/Ternary-Bonsai-2-27B.jinja \
     --temp 1.0 --top-p 0.95 --top-k 20 --reasoning-budget 1024 --no-webui

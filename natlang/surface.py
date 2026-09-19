@@ -149,7 +149,10 @@ class ToolSurface:
         text = {"type": "string"}
         later = {"type": "object", "additionalProperties": {"type": "string"}}   # name -> type, produced by a sub-task
         task_alts = []
-        for sl in [x for x in definable if x.path.count("/") <= 2]:
+        # Sub-task forms are offered for named slots only: offering them for every element of a filled list
+        # multiplies the tool schema by the list length (a four-item `return` cost 15k characters).
+        is_element = lambda x: x.path.rsplit("/", 1)[-1].isdigit()
+        for sl in [x for x in definable if x.path.count("/") <= 2 and not is_element(x)]:
             t, env_ = sl.ref.type, sl.ref.env
             rt, ft = env_.resolve(t), format_type(t)
             if isinstance(rt, PENDING_TYPES):
