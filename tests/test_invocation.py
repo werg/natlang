@@ -1,5 +1,5 @@
 from natlang.decoder import ChatTurn, LlamaServerDecoder
-from natlang.invocation import Invocation, RunOptions, SeedPolicy
+from natlang.invocation import Invocation, ModelSettings, RunOptions, SeedPolicy
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import load_program
@@ -7,10 +7,11 @@ from natlang.values import load_program
 
 class RecordedTurns:
     def __init__(self):
-        self.seeds = []
+        self.seeds, self.requests = [], []
 
     def chat(self, messages, tools, *, temperature, seed, max_tokens):
         self.seeds.append(seed)
+        self.requests.append((temperature, max_tokens))
         if len(self.seeds) == 1:
             return ChatTurn(calls=[("write", {"path": "return", "value": True})], completion_tokens=1)
         return ChatTurn(text="done", completion_tokens=1)
@@ -50,3 +51,16 @@ def test_decoder_deadline_context_restores_without_mutating_backend():
         else:
             raise AssertionError("expired request was accepted")
     assert decoder.deadline is None and decoder.request_timeout() == 120
+
+
+def test_run_owned_model_settings_and_separate_world_randomness():
+    driver = RecordedTurns()
+    root = load_program({"$lambda": {"type": "Lambda<{}, Bool>", "instructions": "Return true."}})
+    options = RunOptions(seed=SeedPolicy("derived", 43), world_seed=43,
+                         model=ModelSettings(temperature=0.7, max_tokens=20, turn_tokens=5))
+    outcome, value = Runtime(lambda lam: ToolAgent(driver), options=options).run_root(root)
+    assert (outcome.kind, value) == ("done", True)
+    assert driver.requests == [(0.7, 5), (0.7, 5)]
+    assert options.world_rng("fixture").random() == options.world_rng("fixture").random()
+    assert options.world_rng("other").random() != options.world_rng("fixture").random()
+    assert options.seed.backend_range.endswith("2147483647)")

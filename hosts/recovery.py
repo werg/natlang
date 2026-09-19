@@ -10,6 +10,10 @@ import sqlite3
 from pathlib import Path
 
 from natlang.execution import portable
+from natlang.nodes import DONE, WAITING, FoldNode
+from natlang.streams import StreamBuffer
+from natlang.types import TypeEnv
+from natlang.values import coerce
 
 
 class RecoveryStore:
@@ -39,6 +43,28 @@ class RecoveryStore:
                                     "ON CONFLICT(workflow) DO UPDATE SET revision=excluded.revision, "
                                     "position=excluded.position, state_json=excluded.state_json",
                                     (workflow, revision, position, encoded))
+
+    def checkpoint_fold(self, workflow: str, revision: int, root: FoldNode):
+        if not isinstance(root, FoldNode) or not isinstance(root.over, StreamBuffer):
+            raise ValueError("checkpoint_fold requires a stream Fold")
+        if root.status not in (WAITING, DONE) or root.current is not None:
+            raise ValueError("Fold checkpoint requires a completed step boundary")
+        self.checkpoint(workflow, revision, root.over.position, {"acc": root.acc})
+
+    def restore_fold(self, workflow: str, root: FoldNode, source):
+        saved = self.load(workflow)["checkpoint"]
+        if saved is None:
+            raise ValueError("no Fold checkpoint")
+        if not isinstance(root, FoldNode):
+            raise ValueError("restore_fold requires a Fold")
+        root.over = StreamBuffer(source)
+        root.over.position = saved["position"]
+        root.acc = coerce(saved["state"]["acc"], root.type.s, root.env(TypeEnv()),
+                          yaml=False, path="acc")
+        root.at = saved["position"]
+        root.current = None
+        root.status = WAITING
+        return root
 
     def load(self, workflow: str) -> dict:
         row = self.connection.execute("SELECT * FROM checkpoints WHERE workflow=?", (workflow,)).fetchone()

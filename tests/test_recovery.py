@@ -1,6 +1,9 @@
 import pytest
 
 from hosts.recovery import RecoveryStore
+from natlang.runtime import Runtime
+from natlang.streams import QueueSource, StreamBuffer
+from natlang.values import load_program
 
 
 class Remote:
@@ -65,3 +68,27 @@ def test_unresolved_dispatch_stays_uncertain_and_checkpoint_restores_position(tm
         assert store.load("wf")["operations"][0]["status"] == "dispatched"
         with pytest.raises(ValueError):
             store.checkpoint("wf", 2, 11, {"acc": 8})
+
+
+def test_fold_checkpoint_restores_at_completed_step_boundary(tmp_path):
+    def fold(source):
+        root = load_program({"$fold": {"type": "Fold<Num, Num>", "init": 0,
+            "step": {"$lambda": {"type": "Lambda<{ acc: Num, item: Num }, Num>",
+                                "code": "return args.acc + args.item;"}}}})
+        root.over = StreamBuffer(source)
+        return root
+    before = QueueSource()
+    before.put(2); before.put(3)
+    root = fold(before)
+    out, _ = Runtime(None).run_root(root)
+    assert out.kind == "waiting"
+    path = tmp_path / "fold.sqlite"
+    with RecoveryStore(path) as store:
+        store.checkpoint_fold("wf", 1, root)
+    after = QueueSource()
+    after.put(4); after.close()
+    with RecoveryStore(path) as store:
+        restored = store.restore_fold("wf", fold(QueueSource()), after)
+        assert restored.over.position == 2 and restored.acc == 5
+        out, value = Runtime(None).run_root(restored)
+        assert (out.kind, value) == ("done", 9)

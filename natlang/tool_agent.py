@@ -60,7 +60,16 @@ class ToolAgent:
 
     def run(self, session) -> Optional[str]:
         s = self.surface
-        messages = [{"role": "system", "content": self.system},
+        settings = session.rt.options.model
+        max_turns = settings.max_turns if settings else self.max_turns
+        max_tokens = settings.max_tokens if settings else self.max_tokens
+        max_seconds = settings.max_seconds if settings else self.max_seconds
+        turn_tokens = settings.turn_tokens if settings else self.turn_tokens
+        temperature = settings.temperature if settings else self.temperature
+        system = self.system
+        if session.rt.engine_selection:
+            system += "\nFor run_code, always name an engine offered in its current tool schema."
+        messages = [{"role": "system", "content": system},
                     {"role": "user", "content": s.render_request(session)}]
         opening = s.opening_read(session)
         if opening:                               # data reaches the model only through the tool channel
@@ -70,7 +79,7 @@ class ToolAgent:
                          {"role": "tool", "tool_call_id": "call_0", "content": text}]
         nudges = turns = tokens = withdrawals = 0
         previous_deadline = getattr(self.dec, "deadline", None)
-        deadline = time.monotonic() + self.max_seconds
+        deadline = time.monotonic() + max_seconds
         if previous_deadline is not None:
             deadline = min(deadline, previous_deadline)
         previous_runtime_deadline = session.rt.deadline
@@ -85,7 +94,8 @@ class ToolAgent:
         session.rt.deadline = deadline
         try:
             with scope:
-                return self._run_turns(session, s, messages, deadline, opening, nudges, turns, tokens, withdrawals)
+                return self._run_turns(session, s, messages, deadline, nudges, turns, tokens, withdrawals,
+                                       max_turns, max_tokens, turn_tokens, temperature)
         finally:
             if not request_scope:
                 self.dec.deadline = previous_deadline
@@ -93,21 +103,22 @@ class ToolAgent:
             if self.transcript is not None:
                 self.transcript[:] = messages
 
-    def _run_turns(self, session, s, messages, deadline, opening, nudges, turns, tokens, withdrawals):
+    def _run_turns(self, session, s, messages, deadline, nudges, turns, tokens, withdrawals,
+                   max_turns, max_tokens, turn_tokens, temperature):
         try:
             while True:
-                if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
+                if turns >= max_turns or tokens >= max_tokens or time.monotonic() >= deadline:
                     return "episode turn, token, or wall-clock budget exhausted"
-                allowance = self.max_tokens - tokens
-                if self.turn_tokens is not None:
-                    allowance = min(allowance, self.turn_tokens)
+                allowance = max_tokens - tokens
+                if turn_tokens is not None:
+                    allowance = min(allowance, turn_tokens)
                 available_tools = s.tools(session)
                 offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
                 invocation = getattr(session, "invocation", None)
                 call_path = invocation.path if invocation else ""
                 attempt = invocation.attempt if invocation else 1
                 policy = session.rt.options.seed
-                turn = self.dec.chat(messages, available_tools, temperature=self.temperature,
+                turn = self.dec.chat(messages, available_tools, temperature=temperature,
                                      seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=allowance)
                 turns += 1
                 teacher_turn = None
@@ -123,7 +134,7 @@ class ToolAgent:
                 # A backend without usage is charged its entire requested allowance.
                 used = getattr(turn, "completion_tokens", None)
                 tokens += allowance if used is None else max(1, used)
-                if time.monotonic() >= deadline or tokens > self.max_tokens:
+                if time.monotonic() >= deadline or tokens > max_tokens:
                     return "episode token or wall-clock budget exhausted"
                 if turn.calls:
                     proposal = {"calls": turn.calls, "value_confidence": turn.value_confidence,
@@ -141,11 +152,11 @@ class ToolAgent:
                             name in ("call", "mark_done", "edit") or "done" in args or "source" in args)
                         if not (low_value or structural):
                             continue
-                        if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
+                        if turns >= max_turns or tokens >= max_tokens or time.monotonic() >= deadline:
                             return "careful review budget exhausted before applying proposal"
-                        allowance = self.max_tokens - tokens
-                        if self.turn_tokens is not None:
-                            allowance = min(allowance, self.turn_tokens)
+                        allowance = max_tokens - tokens
+                        if turn_tokens is not None:
+                            allowance = min(allowance, turn_tokens)
                         name, args = turn.calls[index]
                         fork = review_messages(messages, turn.calls, index, self.review_prompt)
                         answer = getattr(self.dec, "review", self.dec.chat)(
@@ -159,7 +170,7 @@ class ToolAgent:
                                   "text": answer.text, "order": self.review_order,
                                   "trigger": "structural" if structural else "confidence", "prompt_variant": self.review_prompt}
                         self.reviews.append(review)
-                        if time.monotonic() >= deadline or tokens > self.max_tokens:
+                        if time.monotonic() >= deadline or tokens > max_tokens:
                             return "careful review budget exhausted before applying proposal"
                         if len(answer.calls) != 1 or answer.calls[0][0] != "review_write":
                             return "careful review invalid response; proposal not applied"

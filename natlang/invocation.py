@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
@@ -35,10 +36,31 @@ class SeedPolicy:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         return int.from_bytes(hashlib.sha256(encoded).digest()[:8], "big") % (2**31)
 
+    @property
+    def backend_range(self) -> str:
+        return "llama.cpp signed nonnegative 31-bit seed (0..2147483647)"
+
+
+@dataclass(frozen=True)
+class ModelSettings:
+    temperature: float = 0.2
+    max_turns: int = 64
+    max_tokens: int = 4000
+    max_seconds: float = 900
+    turn_tokens: Optional[int] = None
+
+    def __post_init__(self):
+        if self.max_turns < 1 or self.max_tokens < 1 or self.max_seconds <= 0:
+            raise ValueError("model budgets must be positive")
+        if self.turn_tokens is not None and self.turn_tokens < 1:
+            raise ValueError("turn token budget must be positive")
+
 
 @dataclass(frozen=True)
 class RunOptions:
     seed: SeedPolicy = field(default_factory=SeedPolicy)
+    model: Optional[ModelSettings] = None  # None keeps per-agent compatibility settings
+    world_seed: Optional[int] = None
     max_episodes: int = 256
     max_depth: int = 8
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -46,6 +68,14 @@ class RunOptions:
     @classmethod
     def compatibility(cls, **kwargs) -> "RunOptions":
         return cls(**kwargs)
+
+    def world_rng(self, purpose: str, path: str = "") -> random.Random:
+        if self.world_seed is None:
+            raise ValueError("world RNG needs a separately supplied world seed")
+        payload = json.dumps({"version": "world-sha256-json-v1", "seed": self.world_seed,
+                              "purpose": purpose, "path": path}, sort_keys=True,
+                             separators=(",", ":"), ensure_ascii=False).encode()
+        return random.Random(int.from_bytes(hashlib.sha256(payload).digest()[:8], "big"))
 
 
 @dataclass(frozen=True)

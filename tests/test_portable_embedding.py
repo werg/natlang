@@ -52,10 +52,11 @@ def test_browser_reader_opens_python_trace_without_execution(tmp_path):
       import {{ readTrace }} from './web/natlang_lite.mjs';
       const events = fs.readFileSync({json.dumps(str(path))}, 'utf8').trim().split('\\n').map(JSON.parse);
       const result = readTrace(events);
-      console.log(JSON.stringify({{ final: result.final, outcome: result.outcome,
+      console.log(JSON.stringify({{ final: result.final, reconstructed: result.reconstructed, outcome: result.outcome,
                                      version: result.manifest.version }}));
     """)
-    assert inspected == {"final": 7, "outcome": "done", "version": "reduction-trace/1"}
+    assert inspected == {"final": 7, "reconstructed": 7,
+                         "outcome": "done", "version": "reduction-trace/1"}
     assert TraceReader.open(path).final_state() == 7
 
 
@@ -80,3 +81,17 @@ def test_browser_recorded_decisions_and_source_snapshot():
     """)
     assert result == {"value": True, "outcome": "done", "source": "Write true.",
                       "actions": 1, "unsupported": True}
+
+
+def test_browser_driver_receives_explicit_seed_and_call_identity():
+    result = node("""
+      import { checkedGraph, runGraph } from './web/natlang_lite.mjs';
+      let seen;
+      const run = await runGraph(checkedGraph({ cell: { returns: 'Bool',
+        instructions: 'Decide.' } }, 'cell'), {}, { seed: 43,
+        driver: async request => { seen = request; return [
+          { name: 'write', arguments: { path: 'return', value: true } }]; } });
+      console.log(JSON.stringify({ value: run.value, seed: seen.seed, callId: seen.callId }));
+    """)
+    assert result == {"value": True, "seed": SeedPolicy("derived", 43).seed("", 1, "model-turn", 0),
+                      "callId": "$root@1"}

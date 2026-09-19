@@ -21,6 +21,8 @@ def test_trace_reconstructs_state_and_excludes_rejected_action(tmp_path):
     reader = TraceReader.open(path)
     assert (out.kind, value) == ("done", 2)
     assert reader.final_state() == dump_state(value)
+    assert reader.reconstruct() == dump_state(value)
+    assert reader.of_kind("reduction")
     assert [e["outcome"] for e in reader.of_kind("action")] == ["rejected", "ok"]
     assert reader.of_kind("state")[1]["value"]["$lambda"].get("return") is None
     assert reader.coverage()["native_effects_replayable"] is False
@@ -38,4 +40,5 @@ def test_effect_before_failure_is_ordered_and_reader_has_no_effects(tmp_path):
     effects = reader.of_kind("effect")
     assert [e["phase"] for e in effects] == ["requested", "completed"]
     assert reader.of_kind("eval")[-1]["phase"] == "failed"
+    assert reader.reconstruct() == reader.final_state()
     assert rt.emitted == [{"id": "first"}]  # opening the trace did not execute it again

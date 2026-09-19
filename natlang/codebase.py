@@ -222,6 +222,16 @@ def check(root: FunctionDef) -> None:
         if id(fn) in seen:
             return
         seen.add(id(fn))
+        from .types import TypeEnv, TypeSyntaxError, parse_type
+        try:
+            named = {name: parse_type(text) for name, text in fn.types.items()}
+            env = TypeEnv(named)
+            signature = parse_type(fn.type_text)
+            env.check_names(signature)
+            for declared in named.values():
+                env.check_names(declared)
+        except TypeSyntaxError as exc:
+            raise reject(fn.source, "type-mismatch", "a valid checked function signature", str(exc)) from exc
         if len(fn.codebase) > MAX_FUNCTIONS:
             raise reject(fn.source, "codebase-too-large", f"at most {MAX_FUNCTIONS} functions", str(len(fn.codebase)))
         stack.append(fn)

@@ -37,6 +37,10 @@ def test_missing_and_cyclic_links_fail_before_execution():
     cyclic["helper"]["uses"] = {"main": "main"}
     with pytest.raises(Reject):
         from_definitions(cyclic, "main")
+    invalid = sources()
+    invalid["unused"] = {"args": {"x": "Imaginary"}, "returns": "Num", "code": "return 1;"}
+    with pytest.raises(Reject):
+        from_definitions(invalid, "main")
 
 
 def test_input_text_is_value_even_if_it_looks_like_a_path(tmp_path):

@@ -18,7 +18,7 @@ import yaml
 from . import js
 from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
-from .trace import TraceRecorder
+from .trace import TraceRecorder, _view, changes
 from .streams import StreamBuffer
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
@@ -141,20 +141,26 @@ class Runtime:
         holder = _Box(root)
         self._root_holder = holder
         if self.trace_path is not None and self.trace_sink is None:
-            initial = dump_state(root)
-            digest = hashlib.sha256(json.dumps(initial, sort_keys=True, default=str).encode()).hexdigest()
+            initial = _view(dump_state(root))
+            digest = hashlib.sha256(json.dumps(initial, sort_keys=True).encode()).hexdigest()
             self.trace_sink = TraceRecorder({"run_id": self.options.run_id, "source_sha256": digest,
                                              "seed_policy": vars(self.options.seed),
+                                             "backend_seed_range": self.options.seed.backend_range,
+                                             "world_seed": self.options.world_seed,
+                                             "model_settings": vars(self.options.model) if self.options.model else None,
+                                             "tool_schema": "tools-v3" if self.engine_selection else "tools-v2",
                                              "engines": sorted(self.executors),
                                              "engine_selection": self.engine_selection,
                                              "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
         elif self.trace_path is not None:
             self.trace_sink.reopen()
-        self._observe("state", phase="initial", value=dump_state(root))
+        initial_state = _view(dump_state(root))
+        self._trace_last_state = initial_state
+        self._observe("state", phase="initial", value=initial_state)
         ref = Ref(type=None, env=env or TypeEnv(), path="", holder=holder, attr="value")
         try:
             out = self.trigger(ref, acting_effects=None)
-            self._observe("state", phase="final", value=dump_state(holder.value), outcome=out.kind)
+            self._observe_state("final", outcome=out.kind)
             return out, holder.value
         finally:
             if self.trace_path is not None:
@@ -164,9 +170,14 @@ class Runtime:
         if self.trace_sink is not None:
             self.trace_sink.emit(kind, **data)
 
-    def _observe_state(self, phase: str):
+    def _observe_state(self, phase: str, outcome: Optional[str] = None):
         if self.trace_sink is not None and hasattr(self, "_root_holder"):
-            self._observe("state", phase=phase, value=dump_state(self._root_holder.value))
+            state = _view(dump_state(self._root_holder.value))
+            delta = changes(self._trace_last_state, state)
+            if delta:
+                self._observe("reduction", phase=phase, changes=delta)
+            self._observe("state", phase=phase, value=state, **({"outcome": outcome} if outcome else {}))
+            self._trace_last_state = state
 
     def _executor(self, engine: str):
         selected = self.executors.get(engine)

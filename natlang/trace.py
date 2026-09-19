@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import threading
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,44 @@ def _view(value):
     if isinstance(value, dict):
         return {str(k): _view(v) for k, v in value.items()}
     return {"$opaque": type(value).__name__, "reconstructable": False}
+
+
+def _type_name(value):
+    if value is None:
+        return "Null"
+    if isinstance(value, bool):
+        return "Bool"
+    if isinstance(value, (int, float)):
+        return "Num"
+    if isinstance(value, str):
+        return "Text"
+    if isinstance(value, list):
+        return "List"
+    if isinstance(value, dict):
+        for body in value.values():
+            if isinstance(body, dict) and "type" in body and any(k.startswith("$") for k in value):
+                return body["type"]
+        return "Record"
+    return "Opaque"
+
+
+def changes(before, after, path=()):
+    """Typed, presence-aware changes between portable state snapshots."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        result = []
+        for key in sorted(before.keys() | after.keys(), key=str):
+            if key not in before or key not in after:
+                result.append({"path": [*path, key], "before_present": key in before,
+                               "after_present": key in after,
+                               "before": before.get(key), "after": after.get(key),
+                               "type": _type_name(after.get(key)) if key in after else None})
+            else:
+                result.extend(changes(before[key], after[key], (*path, key)))
+        return result
+    if before == after:
+        return []
+    return [{"path": list(path), "before_present": True, "after_present": True,
+             "before": before, "after": after, "type": _type_name(after)}]
 
 
 class TraceRecorder:
@@ -77,6 +116,28 @@ class TraceReader:
         if not snapshots:
             raise ValueError("trace has no captured state")
         return snapshots[-1]["value"]
+
+    def reconstruct(self) -> Any:
+        states = self.of_kind("state")
+        if not states or states[0].get("phase") != "initial":
+            raise ValueError("trace has no initial state")
+        current = copy.deepcopy(states[0]["value"])
+        for event in self.of_kind("reduction"):
+            for change in event["changes"]:
+                path = change["path"]
+                if not path:
+                    current = copy.deepcopy(change["after"])
+                    continue
+                target = current
+                for key in path[:-1]:
+                    target = target[key]
+                if change["after_present"]:
+                    target[path[-1]] = copy.deepcopy(change["after"])
+                else:
+                    del target[path[-1]]
+        if current != states[-1]["value"]:
+            raise ValueError("reduction changes do not reconstruct the final state")
+        return current
 
     def coverage(self) -> dict:
         snapshots = self.of_kind("state")
