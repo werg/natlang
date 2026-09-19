@@ -316,7 +316,11 @@ A list may be **open**: a harness attribute meaning an external source keeps
 appending to it. Its type is still `A[]`. A `Fold` or `Map` over an open list
 does not complete while the list is open. A long-lived reactive program is a
 top-level `Fold` over an open list of events, with outputs emitted as effects
-inside `step`. Open lists are bound only at the I/O boundary (§10).
+inside `step`. Open lists are bound only at the I/O boundary (§10): the host
+builds the root `Fold` from a step function `f(acc: S, item: A) -> S`, an
+initial state, and a source of events (`host.load_fold`); the run ends when
+the source ends or yields `$close`. `codebases/webserver` (a listening HTTP
+server) and `codebases/shopkeeper` are such programs.
 
 ---
 ---
@@ -591,7 +595,11 @@ never restate data in a call.
 ### 7.3 Keeping the place
 
 Progress is in the tree: a statement whose local or return part exists is
-done. The interpreter may also delete finished statements from its own
+done. The harness says so after every change: the result of each `write`,
+`edit` and `call` ends with two lines, `locals: <name> (<size>), ...` and
+`return: not written yet | has <parts>; still missing <parts> | complete`, so
+that the place in a long program is found by comparing those lines with the
+program text, at no extra turn. The interpreter may also delete finished statements from its own
 `instructions`, or substitute a small result into them ("if the count is more
 than 5" becomes "if 7 is more than 5"). After a cold restart (§6.2), infer
 progress from `let` and `return` and continue; consult `@effects` before
@@ -678,6 +686,7 @@ Workspace:
 | Call in progress | one line: function, status, and for quiesced the note |
 | Function copy | `a copy of <f>, editable` |
 | `return` | `not written yet` / `partly written` / `written`; filled parts are listed apart from what is missing, and no value-like placeholder is ever shown |
+| After `write`, `edit`, `call` | two lines: the locals that exist with their sizes, and what `return` has and still lacks (§7.3) |
 | Nudges and hints | never carry data |
 
 Target: an opening exchange of at most 1,500 tokens.
