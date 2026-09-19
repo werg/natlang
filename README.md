@@ -210,11 +210,36 @@ To diagnose whether typed decoding hides incorrect writes:
 .venv/bin/python scripts/validation_probe.py --policies caller --write-constraints runtime --trace-probs --out runs/runtime-write-types.json
 ```
 
-`--write-constraints runtime` relaxes only literal write types/values in the
-native grammar; tool syntax and path choices stay constrained, and runtime
-validation remains active. The default remains `typed`. This is an ablation,
-not a guarantee that every attempted type mismatch will surface: runtime
-compatibility coercions still parse numeric strings and unwrap `{value: ...}`.
+`--write-constraints runtime` is now the native-decoder default: literal write
+types/values reach the runtime validator, while tool syntax and path choices
+stay constrained. Use `--write-constraints typed` for comparisons. A single
+JSON-text layer can still be parsed, and scalar values can acquire missing quotes
+for a Text slot. Existing Text is preserved verbatim. Extra `{value: ...}` object
+wrappers are rejected unless the destination actually expects that record.
 `--trace-probs` saves selected token IDs/logprobs and top alternatives before
 sampling constraints. These are next-token probabilities, not calibrated
 probabilities that the action is correct. Missing top-k entries are unknown.
+
+
+### Experimental careful mode
+
+`--careful-threshold P` enables a check before applying low-confidence writes or
+edits in validation/application/conformance probes. The score is the geometric
+mean of raw selected-token probabilities over the proposed value. It is **not**
+a calibrated probability of correctness; unknown confidence stays unknown.
+
+The review forks the pre-action context with the pending proposal. Its guided
+response contains a short reason followed by `approve`, `error`, or `blocker`.
+Only approval releases the unchanged proposal to normal runtime validation.
+The review conversation never enters the original agent history. Budgets cover
+both execution and reviews, and no action in a reviewed batch executes before
+all required reviews approve. Careful mode is off by default.
+
+```bash
+.venv/bin/python scripts/validation_probe.py --policies caller --careful-threshold 0.5 --out runs/careful.json
+.venv/bin/python scripts/confidence_probe.py --groups 10 --out runs/confidence.json
+```
+
+See [careful-mode results and limitations](CAREFUL_MODE.md) for the measured
+threshold, instance-held-out results, and examples of confident errors and false
+rejections. The threshold is experimental and specific to this model/task mix.

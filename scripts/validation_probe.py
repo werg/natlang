@@ -40,6 +40,9 @@ class ForcedFirstAction:
     def deadline(self, value):
         self.inner.deadline = value
 
+    def review(self, messages, tools, **kwargs):
+        return self.inner.review(messages, tools, **kwargs)
+
     def chat(self, messages, tools, **kwargs):
         if self.first:
             self.first = False
@@ -91,13 +94,13 @@ def score(status, value, expected, must_fail, log, transcript, emitted, detail='
                                'A sub-task has not been run yet:' in m.get('content', '')) for m in transcript)
     deliberate = any(x['action'].startswith('report_blocker ') and x['kind'] == 'blocked' for x in log)
     error = any(x['action'].startswith('report_error ') and x['kind'] == 'blocked' for x in log)
-    failure_reason = ('validation' if detail.startswith('validation failed:') else
+    failure_reason = ('careful_review' if detail.startswith(('careful review error:', 'careful review blocker:')) else 'validation' if detail.startswith('validation failed:') else
                       'deliberate_error' if error else 'deliberate_blocker' if deliberate else
                       'budget' if 'budget' in detail or 'deadline' in detail else 'other') if status != 'done' else None
     return {'correct_value': not must_fail and status == 'done' and value == expected,
             'invalid_task_accepted': must_fail and status == 'done',
             'expected_failure_preserved': must_fail and status == 'quiesced',
-            'justified_failure': must_fail and status == 'quiesced' and failure_reason in ('validation', 'deliberate_blocker', 'deliberate_error'),
+            'justified_failure': must_fail and status == 'quiesced' and failure_reason in ('validation', 'deliberate_blocker', 'deliberate_error', 'careful_review'),
             'failure_reason': failure_reason,
             'invalid_accept_after_feedback': must_fail and status == 'done' and bool(rejected or completion_feedback),
             'invalid_accept_without_feedback': must_fail and status == 'done' and not (rejected or completion_feedback),
@@ -115,8 +118,10 @@ def main():
     ap.add_argument('--no-error-tool', action='store_true')
     ap.add_argument('--policies', nargs='+', choices=['local', 'caller'], default=['local', 'caller'])
     ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
-    ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="typed")
+    ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="runtime")
     ap.add_argument("--trace-probs", action="store_true", help="save pre-mask selected-token probabilities and top alternatives")
+    ap.add_argument("--careful-threshold", type=float, help="review before applying values below this raw geometric-mean token probability")
+    ap.add_argument("--review-order", choices=["reason_first", "decision_first"], default="reason_first")
     args = ap.parse_args()
     if args.workers < 1:
         ap.error("workers must be positive")
@@ -131,10 +136,11 @@ def main():
         probabilities = [] if args.trace_probs else None
         dec = NativeCallDecoder(args.server, timeout=120, write_constraints=args.write_constraints, probability_log=probabilities)
         root = load_program(doc)
-        log, transcript = [], []
+        log, transcript, proposals, reviews = [], [], [], []
         episode_decoder = ForcedFirstAction(dec) if args.controlled_only else dec
         rt = Runtime(lambda lam: ToolAgent(episode_decoder, surface=ToolSurface(error_tool=not args.no_error_tool), validation_feedback=policy, system_prompt=prompt,
-            temperature=0, max_turns=12, max_tokens=2000, max_seconds=90, log=log, transcript=transcript))
+            temperature=0, max_turns=12, max_tokens=2000, max_seconds=90, log=log, transcript=transcript,
+                careful_threshold=args.careful_threshold, proposals=proposals, reviews=reviews, review_order=args.review_order))
         start = time.monotonic()
         outcome, value = rt.run_root(root)
         actual = dump(value) if outcome.kind == 'done' else None
@@ -143,7 +149,8 @@ def main():
                'value': actual, 'draft_return': None if root.ret is MISSING else dump(root.ret),
                'detail': outcome.detail, 'emitted': rt.emitted,
                **score(outcome.kind, actual, expected, must_fail, log, transcript, rt.emitted, outcome.detail),
-               'seconds': time.monotonic() - start, 'log': log, 'transcript': transcript}
+               'seconds': time.monotonic() - start, 'log': log, 'transcript': transcript,
+               'proposals': proposals, 'reviews': reviews}
         row['usage'] = dec.usage
         if probabilities is not None:
             row['probability_trace'] = probabilities
@@ -155,7 +162,7 @@ def main():
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps({'server': args.server, 'system_prompt': prompt, 'error_tool': not args.no_error_tool,
-                                       'workers': args.workers, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
+                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'review_order': args.review_order, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["case"]}/{row["policy"]}: {row["status"]} valid={row["correct_value"]} '
               f'invalid_accept={row["invalid_task_accepted"]} rejects={row["validation_rejections"]}', flush=True)

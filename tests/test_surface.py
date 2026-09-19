@@ -150,12 +150,13 @@ def test_several_calls_in_one_turn():
     assert out.kind == "done" and value == doc["expect"]["value"]
 
 
-def test_wrapped_values_are_unwrapped_and_value_has_a_schema():
+def test_extra_object_wrapper_is_rejected_and_value_has_a_schema():
     doc, s = _session("01-leaf-judgment.yaml")
     write = [t for t in S.tools(s) if t["function"]["name"] == "write"][0]["function"]["parameters"]["properties"]
     assert {"type": "boolean"} in write["value"]["anyOf"]
-    assert s.apply("write", {"path": "return", "type": "Bool", "value": {"value": True}}).kind == "ok"
-    assert s.lam.ret is True
+    assert s.apply("write", {"path": "return", "type": "Bool", "value": {"value": True}}).kind == "rejected"
+    from natlang.values import MISSING
+    assert s.lam.ret is MISSING
 
 
 def test_values_delivered_as_json_text_are_parsed():

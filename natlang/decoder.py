@@ -27,6 +27,7 @@ class Generation:
 
 @dataclass
 class ChatTurn:
+    value_confidence: list = field(default_factory=list, kw_only=True)  # one optional score per proposed call
     calls: list = field(default_factory=list)       # [(tool name, arguments dict)]
     text: str = ""
     raw_calls: list = field(default_factory=list)   # the API's tool_calls, for the history

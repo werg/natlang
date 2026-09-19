@@ -26,6 +26,8 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='caller')
     ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
+    ap.add_argument("--careful-threshold", type=float)
+    ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="runtime")
     args = ap.parse_args()
     if args.workers < 1:
         ap.error("workers must be positive")
@@ -37,15 +39,15 @@ def main():
     def run(job):
         family, seed = job
         make = ARCHITECTURES[family]
-        decoder = NativeCallDecoder(args.server, timeout=120)
+        decoder = NativeCallDecoder(args.server, timeout=120, write_constraints=args.write_constraints)
         prog = make(random.Random(seed))
         logs = []
 
         def factory(lam):
-            entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': []}
+            entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': [], 'reviews': []}
             logs.append(entry)
             return ToolAgent(decoder, system_prompt=prompt, temperature=0,
-                             validation_feedback=args.validation_feedback,
+                             validation_feedback=args.validation_feedback, careful_threshold=args.careful_threshold, reviews=entry["reviews"],
                              log=entry['actions'], transcript=entry['transcript'], max_turns=24)
 
         rt = Runtime(factory, capabilities=prog.capabilities, max_episodes=48)
@@ -64,7 +66,7 @@ def main():
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
-                                       'workers': args.workers, 'wall_seconds': time.monotonic() - started,
+                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["family"]}/{row["seed"]}: {row["status"]} correct={row["correct"]} '
               f'episodes={row["episodes"]} {row["seconds"]:.1f}s', flush=True)

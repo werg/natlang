@@ -22,9 +22,18 @@ class ToolAgent:
     def __init__(self, decoder: Decoder, *, surface: Optional[ToolSurface] = None, temperature: float = 0.2,
                  system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
                  max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
-                 validation_feedback: str = "caller"):
+                 validation_feedback: str = "caller", careful_threshold: Optional[float] = None,
+                 proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first"):
+        if review_order not in ("reason_first", "decision_first"):
+            raise ValueError("review_order must be reason_first or decision_first")
+        self.review_order = review_order
         if validation_feedback not in ("local", "caller"):
             raise ValueError("validation_feedback must be local or caller")
+        if careful_threshold is not None and not 0 <= careful_threshold <= 1:
+            raise ValueError("careful_threshold must be between zero and one")
+        self.careful_threshold = careful_threshold
+        self.proposals = proposals if proposals is not None else []
+        self.reviews = reviews if reviews is not None else []
         self.validation_feedback = validation_feedback
         self.dec, self.surface = decoder, surface or ToolSurface()
         self.temperature, self.system = temperature, system_prompt
@@ -64,6 +73,50 @@ class ToolAgent:
                 tokens += allowance if used is None else max(1, used)
                 if time.monotonic() >= deadline or tokens > self.max_tokens:
                     return "episode token or wall-clock budget exhausted"
+                if turn.calls:
+                    proposal = {"calls": turn.calls, "value_confidence": turn.value_confidence,
+                                "released": False}
+                    self.proposals.append(proposal)
+                    # All reviews precede every operation in this proposed batch.
+                    # The review uses a fork of the pre-action messages, never the
+                    # main history. Approval commits the original proposal only.
+                    for index, confidence in enumerate(turn.value_confidence):
+                        if (self.careful_threshold is None or confidence is None or
+                                confidence["geometric_mean"] >= self.careful_threshold):
+                            continue
+                        if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
+                            return "careful review budget exhausted before applying proposal"
+                        allowance = min(700, self.max_tokens - tokens)
+                        name, args = turn.calls[index]
+                        prompt = ("Are you sure this proposed " + name + " is correct? Nothing in this proposed batch "
+                                  "has been executed. Check the exact value against the program and available evidence. "
+                                  "Do not invent facts, change requirements, or substitute a different value. "
+                                  "Approve only if the original proposal should be applied. Otherwise report error "
+                                  "for a conflict or blocker for missing information. Use review_write once.\n" +
+                                  json.dumps({"proposed_batch": turn.calls, "check_call_index": index}, ensure_ascii=False))
+                        fork = [*messages, {"role": "user", "content": prompt}]
+                        answer = getattr(self.dec, "review", self.dec.chat)(fork, review_tools(self.review_order), temperature=0, seed=0, max_tokens=allowance)
+                        turns += 1
+                        used = getattr(answer, "completion_tokens", None)
+                        tokens += allowance if used is None else max(1, used)
+                        review = {"proposal": len(self.proposals) - 1, "call_index": index,
+                                  "confidence": confidence, "messages": fork, "calls": answer.calls,
+                                  "text": answer.text, "order": self.review_order}
+                        self.reviews.append(review)
+                        if time.monotonic() >= deadline or tokens > self.max_tokens:
+                            return "careful review budget exhausted before applying proposal"
+                        if len(answer.calls) != 1 or answer.calls[0][0] != "review_write":
+                            return "careful review invalid response; proposal not applied"
+                        verdict = answer.calls[0][1]
+                        decision = verdict.get("decision")
+                        if decision not in ("approve", "error", "blocker") or not isinstance(verdict.get("reason"), str):
+                            return "careful review invalid verdict; proposal not applied"
+                        review["decision"] = decision
+                        self.log.append({"action": "review_write " + json.dumps(verdict),
+                                         "kind": "ok" if decision == "approve" else "blocked", "attempt": 0})
+                        if decision != "approve":
+                            return "careful review " + decision + ": " + verdict["reason"]
+                    proposal["released"] = True
                 first = None
                 if turn.calls:
                     name, args = turn.calls[0]
@@ -127,3 +180,21 @@ class ToolAgent:
 
 def _raw(calls):
     return [{"id": "", "type": "function", "function": {"name": n, "arguments": json.dumps(a)}} for n, a in calls]
+
+
+REVIEW_TOOLS = [{"type": "function", "function": {
+    "name": "review_write", "description": "Decide whether the exact pending proposal can be applied unchanged.",
+    "parameters": {"type": "object", "properties": {
+        "decision": {"enum": ["approve", "error", "blocker"]}, "reason": {"type": "string"}},
+        "required": ["decision", "reason"], "additionalProperties": False}}}]
+
+
+def review_tools(order="reason_first"):
+    """Let the model state its check before committing to a verdict by default."""
+    import copy
+    tools = copy.deepcopy(REVIEW_TOOLS)
+    params = tools[0]["function"]["parameters"]
+    names = ["reason", "decision"] if order == "reason_first" else ["decision", "reason"]
+    params["properties"] = {name: params["properties"][name] for name in names}
+    params["required"] = names
+    return tools

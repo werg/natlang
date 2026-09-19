@@ -584,26 +584,26 @@ class Session:
             raise
 
     def _write_plain(self, args):
-        m = None
-        if not m:
-            value = args["value"]
-            if isinstance(value, dict) and set(value) == {"value"}:      # a common tool-calling habit: {"value": X}
-                _, ref = self.resolve(args["path"], create=True)
-                rt = ref.env.resolve(ref.type) if ref.type is not None else None
-                if not (isinstance(rt, Record) and rt.get("value")):
-                    value = value["value"]
-            if isinstance(value, str):
-                # XML-style tool-call formats deliver every parameter as text. If the slot does not take
-                # that text as it is, but the text is JSON for a value the slot does take, use that.
-                try:
-                    return self._set_value(args["path"], None, value, yaml=False)
-                except Reject as first:
-                    try:
-                        parsed = json.loads(value)
-                    except (ValueError, TypeError):
-                        raise first
-                    return self._set_value(args["path"], None, parsed, yaml=False)
+        value = args["value"]
+        try:
             return self._set_value(args["path"], None, value, yaml=False)
+        except Reject as first:
+            if isinstance(value, str):
+                # A single JSON-text layer (e.g. XML tool parameters / excess quotes).
+                try:
+                    parsed = json.loads(value)
+                except (ValueError, TypeError):
+                    raise first
+                return self._set_value(args["path"], None, parsed, yaml=False)
+            _, ref = self.resolve(args["path"], create=True)
+            if ref.env.resolve(ref.type) == TEXT and (value is None or isinstance(value, (bool, int, float))):
+                # Missing quotes around a scalar; never stringify/unwrap objects.
+                try:
+                    text = json.dumps(value, allow_nan=False)
+                except (ValueError, TypeError):
+                    raise first
+                return self._set_value(args["path"], None, text, yaml=False)
+            raise
 
     def _op_edit(self, args):
         p, ref = self.resolve(args["path"])

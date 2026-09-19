@@ -33,16 +33,20 @@ ap.add_argument("--alias", action="append", default=[], help="tool renames for t
 ap.add_argument("--out", type=Path, help="machine-readable results; defaults to runs/baseline-<timestamp>.json")
 ap.add_argument("--model-label", default="unspecified")
 ap.add_argument("--validation-feedback", choices=("local", "caller"), default=None)
+ap.add_argument("--careful-threshold", type=float)
+ap.add_argument("--write-constraints", choices=("typed", "runtime"), default="runtime")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 a.validation_feedback = a.validation_feedback or ("caller" if a.surface == "tools" else "local")
+if a.careful_threshold is not None and a.surface != "tools":
+    ap.error("--careful-threshold requires --surface=tools")
 if a.surface != "tools" and a.validation_feedback != "local":
     ap.error("--validation-feedback=caller requires --surface=tools")
 root = Path(__file__).resolve().parent.parent
 files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
 extra = {} if a.thinking is None else {"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20}
-dec = (NativeCallDecoder(a.server, timeout=a.timeout) if a.decode == "native"
+dec = (NativeCallDecoder(a.server, timeout=a.timeout, write_constraints=a.write_constraints) if a.decode == "native"
        else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra,
                                tool_aliases=dict(x.split("=", 1) for x in a.alias)))
 from natlang.checks import grade, make_judge
@@ -65,7 +69,7 @@ for f in files:
         print(f"  > {f.stem}", flush=True)
     if a.surface == "tools":
         make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
-                                     validation_feedback=a.validation_feedback,
+                                     validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold,
                                      **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     else:
         make = lambda lam: ModelAgent(dec, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
@@ -107,14 +111,15 @@ result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
 result_path.parent.mkdir(parents=True, exist_ok=True)
 result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": a.surface,
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
-                                  "validation_feedback": a.validation_feedback,
+                                  "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold,
+                                  "write_constraints": a.write_constraints,
                                   "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                                   "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")
 print(f"results: {result_path}")
 if a.decode == "native" and dec.stats["p_call_first"]:
-    pc = dec.stats["p_call_first"]
+    pc = [p for p in dec.stats["p_call_first"] if p is not None]
     print(f"\nturns={dec.stats['turns']} tool-call turns={dec.stats['turns']-dec.stats['replies']} replies={dec.stats['replies']} "
-          f"mean P(model starts a call)={sum(pc)/len(pc):.2f}")
+          f"mean P(model starts a call)={sum(pc)/len(pc) if pc else 'unavailable'}")
 u = dec.usage
 if u["turns"]:
     print(f"server usage: {u['turns']} turns, {u['completion_tokens']} completion tokens, {u['seconds']:.0f}s "

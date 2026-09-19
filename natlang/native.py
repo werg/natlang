@@ -1,20 +1,19 @@
 """Constrained decoding of tool calls in a model's native call text.
 
-llama.cpp does not enforce tool argument schemas for LFM2.5's Pythonic call format, so the harness
-does it: the prompt is rendered by the model's own chat template, and the completion runs under a
-grammar built from the turn's tool schemas. The grammar covers the whole assistant turn:
+llama.cpp does not enforce argument schemas for LFM2.5's Pythonic calls, so we
+constrain native tool syntax and available paths ourselves. Literal write types
+and values are proposals by default: the runtime validates before applying them.
+The optional typed mode also constrains those proposals during decoding.
 
-    root ::= "<|tool_call_start|>[" call (", " call)* "]"  |  reply
-
-so the model still chooses freely between calling tools and replying, but a call cannot name a path
-that does not exist, put a value of the wrong type into a slot, invent a field, or omit a required
-one. A tool may carry "x-natlang-alternatives": argument sets that belong together (a path and the
-value type of that path), which JSON Schema alone cannot express at the top level.
+The grammar covers the whole assistant turn, with a reply alternative for normal
+execution. A careful-mode review requires exactly one guided review-tool call.
 """
+
 from __future__ import annotations
 
 import ast
 import copy
+import math
 import json
 from typing import Optional
 
@@ -147,16 +146,17 @@ class PyGrammar:
         body = self._fields(params.get("properties") or {}, params.get("required") or [], 0, key=kw)
         return self.fresh("call", f'{lit(fn["name"] + "(")} {body} ")"')
 
-    def text(self, tools: list, allow_reply: bool = True) -> str:
+    def text(self, tools: list, allow_reply: bool = True, single_call: bool = False) -> str:
         calls = self.fresh("anycall", " | ".join(self.call(t) for t in tools))
-        turn = f'{lit(CALL_OPEN + "[")} {calls} ( ", " {calls} )* "]"'
+        tail = '"]"' if single_call else f'( ", " {calls} )* "]"'
+        turn = f'{lit(CALL_OPEN + "[")} {calls} {tail}'
         root = f"{turn} | reply" if allow_reply else turn
         dyn = "\n".join(f"{k} ::= {v}" for k, v in self.rules.items())
         return f"root ::= {root}\n{dyn}\n{_STATIC.strip()}\n"
 
 
-def call_grammar(tools: list, allow_reply: bool = True) -> str:
-    return PyGrammar().text(tools, allow_reply)
+def call_grammar(tools: list, allow_reply: bool = True, *, single_call: bool = False) -> str:
+    return PyGrammar().text(tools, allow_reply, single_call)
 
 
 
@@ -213,10 +213,58 @@ def _literal(node):
     return ast.literal_eval(ast.fix_missing_locations(Fix().visit(node)))
 
 
+
+def written_value_confidence(text, details):
+    """Align token bytes to AST literal spans; missing/ambiguous data stays unknown.
+
+    This is raw next-token likelihood for write.value or edit.new, not a
+    calibrated probability of semantic correctness. Include overlapping tokens
+    whole: a token can span the value boundary as well as its first/last bytes.
+    """
+    raw = text.encode("utf-8")
+    reconstructed = b"".join(bytes(t.get("bytes", [])) for t in details)
+    if not details or reconstructed != raw:
+        return []
+    try:
+        tree = ast.parse(text, mode="eval").body
+    except (SyntaxError, ValueError):
+        return []
+    if not isinstance(tree, ast.List):
+        return []
+    lines = raw.splitlines(keepends=True)
+    offsets, total = [], 0
+    for line in lines:
+        offsets.append(total)
+        total += len(line)
+    spans, pos = [], 0
+    for t in details:
+        end = pos + len(t.get("bytes", []))
+        if end > pos:
+            spans.append((pos, end, t))
+        pos = end
+    scores = []
+    for call in tree.elts:
+        score = None
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
+            key = {"write": "value", "edit": "new"}.get(call.func.id)
+            node = next((k.value for k in call.keywords if k.arg == key), None) if key else None
+            if node is not None:
+                start = offsets[node.lineno - 1] + node.col_offset
+                end = offsets[node.end_lineno - 1] + node.end_col_offset
+                selected = [t for a, b, t in spans if a < end and b > start]
+                logps = [t.get("logprob") for t in selected]
+                if logps and all(isinstance(p, (int, float)) and math.isfinite(p) and p <= 0 for p in logps):
+                    score = {"geometric_mean": math.exp(sum(logps) / len(logps)),
+                             "minimum": math.exp(min(logps)), "tokens": len(logps),
+                             "field": key, "byte_span": [start, end]}
+        scores.append(score)
+    return scores
+
+
 class NativeCallDecoder(LlamaServerDecoder):
     """Tool calling by raw completion under our own grammar, in the model's native call text."""
 
-    def __init__(self, *a, allow_reply: bool = True, write_constraints: str = "typed", probability_log: Optional[list] = None, **kw):
+    def __init__(self, *a, allow_reply: bool = True, write_constraints: str = "runtime", probability_log: Optional[list] = None, **kw):
         if write_constraints not in ("typed", "runtime"):
             raise ValueError("write_constraints must be typed or runtime")
         self.write_constraints = write_constraints
@@ -233,10 +281,14 @@ class NativeCallDecoder(LlamaServerDecoder):
         with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             return json.loads(resp.read())["prompt"]
 
-    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700, allow_reply: Optional[bool] = None):
+    def review(self, messages, tools, **kwargs):
+        """Exactly one review-tool call; no free-text affirmative interpretation."""
+        return self.chat(messages, tools, allow_reply=False, single_call=True, **kwargs)
+
+    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700, allow_reply: Optional[bool] = None, single_call: bool = False):
         allow = self.allow_reply if allow_reply is None else allow_reply
         prompt = self.render(messages, tools)
-        gen = self.generate(prompt, grammar=call_grammar(write_grammar_tools(tools, self.write_constraints), allow), max_tokens=max_tokens,
+        gen = self.generate(prompt, grammar=call_grammar(write_grammar_tools(tools, self.write_constraints), allow, single_call=single_call), max_tokens=max_tokens,
                             temperature=temperature, seed=seed, stop=[], n_probs=6)
         self.stats["turns"] += 1
         if self.probability_log is not None:
@@ -258,7 +310,8 @@ class NativeCallDecoder(LlamaServerDecoder):
                 self.stats["calls"] += len(calls)
                 raw = [{"id": f"c{self.stats['turns']}_{i}", "type": "function",
                         "function": {"name": n, "arguments": json.dumps(a)}} for i, (n, a) in enumerate(calls)]
-                return ChatTurn(calls, "", raw, gen.completion_tokens)
+                return ChatTurn(calls, "", raw, gen.completion_tokens,
+                                value_confidence=written_value_confidence(gen.text, gen.token_details))
         self.stats["replies"] += 1
         return ChatTurn([], text, [], gen.completion_tokens)
 
