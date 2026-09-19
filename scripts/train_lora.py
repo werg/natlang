@@ -7,6 +7,7 @@ weights instead (needs far more memory).
 
   docker run --rm --gpus all -v "$PWD:/work" -e HF_HOME=/work/models/hf natlang-train \\
     python scripts/train_lora.py data/sft-v5-small.jsonl runs/lora-v5 --steps 300
+To cut a run short and keep the model: `docker stop -t 180 natlang-train` (it finishes the step, merges, saves).
 """
 import argparse, json, math, random, time
 from pathlib import Path
