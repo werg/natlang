@@ -80,8 +80,9 @@ def _enum_or_string(values: list, description: str) -> dict:
 class ToolSurface:
     name = "tools-v2"
 
-    def __init__(self, marks: Optional[bool] = None, *, error_tool: bool = True):
+    def __init__(self, marks: Optional[bool] = None, *, error_tool: bool = True, state_view: bool = False):
         self.error_tool = error_tool
+        self.state_view = state_view
         # numbered listing + the `mark` tool for functions that have a code base. NATLANG_MARKS=0 turns it off, to
         # evaluate models trained before marks existed.
         self.marks = MARKS_DEFAULT if marks is None else marks
@@ -95,7 +96,7 @@ class ToolSurface:
         from .render import pending_lines
         lam = session.lam
         return pending_lines(lam.original_body or lam.body, lam.marks) if self.marking(session) and lam.marks else []
-    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker", "report_error")   # `call` only when there are functions
+    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker", "report_error", "done")   # `call` only when there are functions
 
     def slots(self, session):
         return enumerate_slots(session.lam, session.outer_env)
@@ -237,12 +238,17 @@ class ToolSurface:
         write_alts = value_alts + source_alts + copy_alts
         shapes, seen_shapes = [], set()
         for a_ in value_alts:
-            k_ = json.dumps(a_["value"], sort_keys=True, default=str)
-            if k_ not in seen_shapes:
-                seen_shapes.add(k_)
-                shapes.append(a_["value"])
+            # Untyped schemas produced object wrappers through the teacher's
+            # XML tool interface. Expose scalar alternatives explicitly.
+            alternatives = [a_["value"]] if a_["value"] else [
+                {"type": t} for t in ("string", "number", "boolean", "null", "object", "array")]
+            for shape in alternatives:
+                k_ = json.dumps(shape, sort_keys=True, default=str)
+                if k_ not in seen_shapes:
+                    seen_shapes.add(k_)
+                    shapes.append(shape)
         any_value = {"description": "The value itself, complete (not wrapped in an object).",
-                     "anyOf": shapes}              # the last shape ({}) is a new local: any value of its stated type
+                     "anyOf": shapes}              # explicit JSON shapes allow new locals and invalid proposals
 
         tools = [
             tool("read", "Read a value from the workspace. Optional line or item range for long ones. "
@@ -252,8 +258,11 @@ class ToolSurface:
                   "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
                  alternatives=read_alts + [{"path": {"const": f"codebase/{n}"}} for n in lam.codebase]),
             tool("write", "Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name "
-                          "creates the local; `type` says what it holds). The value must be complete; to reuse a value that "
-                          "already exists, give `source` (its path) instead of `value`. "
+                          "creates the local; `type` says what it holds). Supply `value` or `source`; a type alone is not a value. "
+                          "The value must be complete; to reuse a value that "
+                          "already exists, give `source` (its path) instead of `value`. Source copying preserves the value and type; "
+                          "it does not wrap or convert. Use the destination requested by the program; "
+                          "do not append a field name to make incompatible types fit. "
                           "To change how a function works, copy it first: type `Function<name>` with path "
                           "`let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.",
                  {"path": {"type": "string", "description": "`return`, a part of it, or let/<name>"},
@@ -277,18 +286,29 @@ class ToolSurface:
                 tool("call", "Call one of your functions and put its result at `to` (`return`, a part of it, or a "
                              "local `let/<name>`). `inputs` maps each parameter to the path of its value. With "
                              "`over`: call it once for every item of that list (the item goes to the one parameter "
-                             "you left out); the result is the list of results. With `over` and `init`: carry `acc` "
+                             "you left out). Do not put the mapped item in inputs. The result is the list of results. "
+                             "With `over` and `init`, omit both item and acc from inputs: carry `acc` "
                              "through the list. With `init`, `until`, `max`: repeat from the value at `init` until "
                              "the function `until` says true, at most `max` times. Calling again with only "
                              "`function` and `to` retries what did not finish.",
                      {"function": {"enum": list(functions)}, "to": {"type": "string"},
-                      "inputs": {"type": "object", "additionalProperties": {"type": "string"}},
-                      "over": {"type": "string"}, "init": {}, "until": {"type": "string"},
+                      "inputs": {"type": "object", "properties": {n.rstrip("?"): {"type": "string"}
+                          for f in functions.values() for n in f.args}, "additionalProperties": False},
+                      "over": {"type": "string"}, "init": {"anyOf": [{"type": t} for t in
+                          ("string", "number", "boolean", "null", "object", "array")]}, "until": {"type": "string"},
                       "max": {"type": "integer"}}, ["function", "to"],
                      alternatives=call_alts + [{"function": {"const": n}, "to": {"enum": [p_]}}
                                                for n in functions for p_ in
                                                [sl.path for sl in existing if is_pending(sl.value)
                                                 and sl.value.status in (UNREDUCED, QUIESCED)][:4]]))
+        # A literal write must carry a value, a reference copy a source. Only
+        # copying a named function can omit both. Keep the server schema as
+        # explicit about this as the native grammar's alternatives already are.
+        write_params = tools[1]["function"]["parameters"]
+        write_params["anyOf"] = [{"required": ["value"]}, {"required": ["source"]}]
+        if lam.codebase:
+            write_params["anyOf"].append({"properties": {"type": {
+                "enum": [f"Function<{n}>" for n in lam.codebase]}}, "required": ["type"]})
         if self.marking(session):
             from .render import pending_lines
             open_ = pending_lines(lam.original_body or lam.body, lam.marks)
@@ -302,7 +322,7 @@ class ToolSurface:
                          alternatives=[{"start": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]},
                                        {"start": {"enum": open_}, "end": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]}]))
                 if self.done_arg:                       # en passant: the same mark as an argument of the action that finishes the line
-                    line = {"anyOf": [{"enum": open_}, {"type": "array", "items": {"enum": open_}, "minItems": 1}]}
+                    line = {"anyOf": [{"enum": open_}, {"type": "array", "items": {"enum": open_}, "minItems": 1, "maxItems": 2}]}
                     for t in tools:
                         if t["function"]["name"] in ("write", "call"):
                             t["function"]["parameters"]["properties"]["done"] = {
@@ -321,6 +341,9 @@ class ToolSurface:
                               "error. This ends the task without a result. Do not change the requirements to succeed. "
                               "Use report_blocker for missing information instead.",
                               {"message": {"type": "string"}}, ["message"]))
+        tools.append(tool("done", "Finish successfully after the required result is written and all numbered lines "
+                          "are closed. This validates the return value and ends the task. Use report_error only for "
+                          "a real failure, never to announce successful completion.", {}, []))
         return tools
 
     # -- what the model is shown ----------------------------------------------------
@@ -339,9 +362,9 @@ class ToolSurface:
     def opening_read(self, session):
         """A first step the harness performs on the agent's behalf: read the workspace. Returns
         (tool name, arguments, result text), or None when there is nothing to read."""
-        if not session.lam.in_:
+        if not session.lam.in_ and not session.lam.type.params.fields and not self.state_view:
             return None
-        return "read", {"path": "args"}, self.render_state(session)
+        return "read", {"path": "args"}, self.execution_state(session) if self.state_view else self.render_state(session)
 
     def functions(self, session) -> str:
         from .codebase import listing
@@ -356,6 +379,10 @@ class ToolSurface:
         for n, ft, _ in lam.type.params.fields:
             if n in lam.in_:
                 out.append(f"  args/{n} ({format_type(ft)}, read-only): {_preview(lam.in_[n])}")
+            else:
+                out.append(f"  args/{n} ({format_type(ft)}, read-only): not supplied")
+        if self.state_view and not lam.let_types:
+            out.append("  locals: none computed")
         for n, t in lam.let_types.items():
             v = lam.let.get(n, MISSING)
             if v is not MISSING:
@@ -365,13 +392,23 @@ class ToolSurface:
         self._walk(lam.ret, lam.type.returns, env, "return", filled, todo, subs)
         out.append(f"  return ({format_type(lam.type.returns)}): " +
                    ("not written yet" if lam.ret is MISSING else "written" if not todo and not subs else "partly written"))
-        if filled and (todo or subs):
+        if filled and (self.state_view or todo or subs):
             out.append("    written so far: " + "; ".join(filled))
         if todo and lam.ret is not MISSING:
             out.append("    still missing: " + ", ".join(todo))
         if subs:
             out.append("    sub-tasks: " + "; ".join(subs))
         return "\n".join(out)
+
+    def execution_state(self, session) -> str:
+        """Factual state only: no inferred next action or parsing of pseudocode."""
+        from .render import listing
+        parts = [self.render_state(session)]
+        if self.marking(session):
+            parts.append("Current program marks:\n" + listing(session.lam.original_body or session.lam.body, session.lam.marks))
+        if self.functions(session):
+            parts.append(self.functions(session))
+        return "\n\n".join(parts)
 
     def missing(self, session) -> str:
         """One line saying what `return` still needs, or '' when complete. No data in it: this goes
@@ -410,7 +447,12 @@ class ToolSurface:
 
     # -- tool call -> harness operation -----------------------------------------
     def apply(self, session, name: str, args: dict):
-        return session.apply(name, args or {})
+        if name == "done":
+            args = {**(args or {}), "require_closed": self.marking(session)}
+        result = session.apply(name, args or {})
+        if self.state_view and result.kind in ("ok", "done", "quiesced"):
+            result.text = result.text.rstrip() + "\n\n" + self.execution_state(session)
+        return result
 
 
 def _declared(env, name: str) -> bool:

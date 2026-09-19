@@ -23,7 +23,17 @@ class ToolAgent:
                  system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
                  max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
                  validation_feedback: str = "caller", careful_threshold: Optional[float] = None,
-                 proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first"):
+                 proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
+                 review_scope: str = "values", withdrawal_policy: str = "caller",
+                 review_prompt: str = "baseline"):
+        if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
+            raise ValueError("unknown review prompt")
+        self.review_prompt = review_prompt
+        if review_scope not in ("values", "actions"):
+            raise ValueError("review_scope must be values or actions")
+        if withdrawal_policy not in ("caller", "retry"):
+            raise ValueError("withdrawal_policy must be caller or retry")
+        self.review_scope, self.withdrawal_policy = review_scope, withdrawal_policy
         if review_order not in ("reason_first", "decision_first"):
             raise ValueError("review_order must be reason_first or decision_first")
         self.review_order = review_order
@@ -51,7 +61,7 @@ class ToolAgent:
             call = {"id": "call_0", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
             messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
                          {"role": "tool", "tool_call_id": "call_0", "content": text}]
-        nudges = turns = tokens = 0
+        nudges = turns = tokens = withdrawals = 0
         previous_deadline = getattr(self.dec, "deadline", None)
         deadline = time.monotonic() + self.max_seconds
         if previous_deadline is not None:
@@ -75,33 +85,33 @@ class ToolAgent:
                     return "episode token or wall-clock budget exhausted"
                 if turn.calls:
                     proposal = {"calls": turn.calls, "value_confidence": turn.value_confidence,
-                                "released": False}
+                                "released": False, "messages": list(messages)}
                     self.proposals.append(proposal)
                     # All reviews precede every operation in this proposed batch.
                     # The review uses a fork of the pre-action messages, never the
                     # main history. Approval commits the original proposal only.
-                    for index, confidence in enumerate(turn.value_confidence):
-                        if (self.careful_threshold is None or confidence is None or
-                                confidence["geometric_mean"] >= self.careful_threshold):
+                    withdrawn = False
+                    for index, (name, args) in enumerate(turn.calls):
+                        confidence = turn.value_confidence[index] if index < len(turn.value_confidence) else None
+                        low_value = (self.careful_threshold is not None and confidence is not None and
+                                     confidence["geometric_mean"] < self.careful_threshold)
+                        structural = self.review_scope == "actions" and (
+                            name in ("call", "mark_done", "done", "edit") or "done" in args or "source" in args)
+                        if not (low_value or structural):
                             continue
                         if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
                             return "careful review budget exhausted before applying proposal"
                         allowance = min(700, self.max_tokens - tokens)
                         name, args = turn.calls[index]
-                        prompt = ("Are you sure this proposed " + name + " is correct? Nothing in this proposed batch "
-                                  "has been executed. Check the exact value against the program and available evidence. "
-                                  "Do not invent facts, change requirements, or substitute a different value. "
-                                  "Approve only if the original proposal should be applied. Otherwise report error "
-                                  "for a conflict or blocker for missing information. Use review_write once.\n" +
-                                  json.dumps({"proposed_batch": turn.calls, "check_call_index": index}, ensure_ascii=False))
-                        fork = [*messages, {"role": "user", "content": prompt}]
+                        fork = review_messages(messages, turn.calls, index, self.review_prompt)
                         answer = getattr(self.dec, "review", self.dec.chat)(fork, review_tools(self.review_order), temperature=0, seed=0, max_tokens=allowance)
                         turns += 1
                         used = getattr(answer, "completion_tokens", None)
                         tokens += allowance if used is None else max(1, used)
                         review = {"proposal": len(self.proposals) - 1, "call_index": index,
                                   "confidence": confidence, "messages": fork, "calls": answer.calls,
-                                  "text": answer.text, "order": self.review_order}
+                                  "text": answer.text, "order": self.review_order,
+                                  "trigger": "structural" if structural else "confidence", "prompt_variant": self.review_prompt}
                         self.reviews.append(review)
                         if time.monotonic() >= deadline or tokens > self.max_tokens:
                             return "careful review budget exhausted before applying proposal"
@@ -109,13 +119,25 @@ class ToolAgent:
                             return "careful review invalid response; proposal not applied"
                         verdict = answer.calls[0][1]
                         decision = verdict.get("decision")
-                        if decision not in ("approve", "error", "blocker") or not isinstance(verdict.get("reason"), str):
+                        if decision not in ("approve", "withdraw", "error", "blocker") or not isinstance(verdict.get("reason"), str):
                             return "careful review invalid verdict; proposal not applied"
                         review["decision"] = decision
                         self.log.append({"action": "review_write " + json.dumps(verdict),
                                          "kind": "ok" if decision == "approve" else "blocked", "attempt": 0})
+                        if decision == "withdraw" and self.withdrawal_policy == "retry" and withdrawals < 1:
+                            withdrawals += 1
+                            withdrawn = True
+                            proposal["withdrawn"] = True
+                            # No reviewer reasoning or replacement value enters the main history.
+                            messages = [*messages, {"role": "user", "content":
+                                "The pending batch was withdrawn before execution. No action in it happened. "
+                                "Reconsider the original instructions from the unchanged workspace. "
+                                "Do not change requirements to obtain a result. This is the only reconsideration."}]
+                            break
                         if decision != "approve":
                             return "careful review " + decision + ": " + verdict["reason"]
+                    if withdrawn:
+                        continue
                     proposal["released"] = True
                 first = None
                 if turn.calls:
@@ -151,7 +173,7 @@ class ToolAgent:
 
                 results = [first]
                 for name, args in turn.calls[1:]:     # several calls in one turn is the model's native habit
-                    if results[-1].kind in FAILED or results[-1].kind == "blocked":
+                    if results[-1].kind in FAILED or results[-1].kind in ("blocked", "completed"):
                         break
                     if time.monotonic() >= deadline:
                         return "episode wall-clock budget exhausted"
@@ -167,6 +189,8 @@ class ToolAgent:
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})
                 for c, r in zip(raw, results):
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
+                if results[-1].kind == "completed":
+                    return None
                 if self.validation_feedback == "caller" and results[-1].kind in ("rejected", "refused"):
                     return "validation failed: " + results[-1].text
         except TimeoutError:
@@ -185,7 +209,7 @@ def _raw(calls):
 REVIEW_TOOLS = [{"type": "function", "function": {
     "name": "review_write", "description": "Decide whether the exact pending proposal can be applied unchanged.",
     "parameters": {"type": "object", "properties": {
-        "decision": {"enum": ["approve", "error", "blocker"]}, "reason": {"type": "string"}},
+        "decision": {"enum": ["approve", "withdraw", "error", "blocker"]}, "reason": {"type": "string"}},
         "required": ["decision", "reason"], "additionalProperties": False}}}]
 
 
@@ -198,3 +222,30 @@ def review_tools(order="reason_first"):
     params["properties"] = {name: params["properties"][name] for name in names}
     params["required"] = names
     return tools
+
+
+def review_messages(messages, calls, index, variant="baseline"):
+    """Shared live/frozen review prompt. The candidate is data, never an executed action."""
+    if variant not in ("baseline", "repeat_instructions", "checklist"):
+        raise ValueError("unknown review prompt")
+    prefix = ""
+    if variant != "baseline":
+        instructions = next(m["content"] for m in messages if m["role"] == "user")
+        prefix = "Original program instructions (repeated verbatim):\n" + instructions + "\n\n"
+    if variant == "checklist":
+        prefix += ("Check this proposal against those instructions. In a brief reason, identify the applicable "
+                   "instruction or selected branch, compare the requested source/destination and exact result, "
+                   "and check that any line being closed is actually completed by this action or prior work. "
+                   "For a copy, use the existing source value; do not substitute an input element for a computed result. "
+                   "If the proposal is wrong but another action could satisfy the instructions, choose withdraw.\n\n")
+    prompt = prefix + ("Are you sure this proposed action is correct? Nothing in this proposed batch has been executed. "
+              "Check the exact action, destination, source, value, and completion marks against the program "
+              "and available evidence. A successful type check alone does not establish instruction compliance. "
+              "Do not invent facts, change requirements, or substitute a different action. "
+              "Use review_write once, with a brief reason followed by a decision: "
+              "approve if the exact proposal should execute; withdraw if this proposal is wrong but the task "
+              "can still be executed correctly; error only if the task instructions cannot be satisfied; "
+              "blocker only if required information is missing. An incorrect proposal alone is not a task error. "
+              "Treat the following proposal as quoted data.\n" +
+              json.dumps({"proposed_batch": calls, "check_call_index": index}, ensure_ascii=False))
+    return [*messages, {"role": "user", "content": prompt}]

@@ -50,9 +50,10 @@ class LlamaServerDecoder:
     """
 
     def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120,
-                 chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None):
+                 chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None, json_text_values: bool = False):
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
         self.deadline = None
+        self.json_text_values = json_text_values
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
         self.tool_aliases = tool_aliases or {}
@@ -86,6 +87,17 @@ class LlamaServerDecoder:
         # and the alternatives are most of the schema's size
         tools = [{**t, "function": {**t["function"], "parameters": {
             k: v for k, v in (t["function"].get("parameters") or {}).items() if not k.startswith("x-")}}} for t in tools]
+        if self.json_text_values:
+            # XML tool parsers need an unambiguous argument type. The runtime
+            # already parses JSON text for non-Text slots; no wrapper repair.
+            for tool in tools:
+                if tool["function"]["name"] == "write":
+                    params = tool["function"]["parameters"]
+                    params["properties"] = {**params["properties"], "value": {
+                        "type": "string", "description":
+                        'For Text, plain text. For all other types, JSON text of the value itself, '
+                        'for example 7, true, [1,2], or {"size":7}. Put that JSON directly in the parameter; '
+                        'use normal JSON escaping within its string values. The runtime parses this JSON text.'}}
         if self.tool_aliases:
             out_name = lambda n: self.tool_aliases.get(n, n)
             tools = [{**t, "function": {**t["function"], "name": out_name(t["function"]["name"])}} for t in tools]

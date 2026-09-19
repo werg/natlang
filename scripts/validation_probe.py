@@ -111,6 +111,7 @@ def score(status, value, expected, must_fail, log, transcript, emitted, detail='
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
     ap.add_argument('--server', default='http://127.0.0.1:8080')
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--controlled-only', action='store_true', help='same forced rejected call, valid vs contradictory instructions')
@@ -121,6 +122,9 @@ def main():
     ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="runtime")
     ap.add_argument("--trace-probs", action="store_true", help="save pre-mask selected-token probabilities and top alternatives")
     ap.add_argument("--careful-threshold", type=float, help="review before applying values below this raw geometric-mean token probability")
+    ap.add_argument("--state-view", action="store_true", help="experimental expanded execution state")
+    ap.add_argument("--review-scope", choices=["values", "actions"], default="values")
+    ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="caller")
     ap.add_argument("--review-order", choices=["reason_first", "decision_first"], default="reason_first")
     args = ap.parse_args()
     if args.workers < 1:
@@ -138,9 +142,9 @@ def main():
         root = load_program(doc)
         log, transcript, proposals, reviews = [], [], [], []
         episode_decoder = ForcedFirstAction(dec) if args.controlled_only else dec
-        rt = Runtime(lambda lam: ToolAgent(episode_decoder, surface=ToolSurface(error_tool=not args.no_error_tool), validation_feedback=policy, system_prompt=prompt,
+        rt = Runtime(lambda lam: ToolAgent(episode_decoder, surface=ToolSurface(error_tool=not args.no_error_tool, state_view=args.state_view), validation_feedback=policy, system_prompt=prompt,
             temperature=0, max_turns=12, max_tokens=2000, max_seconds=90, log=log, transcript=transcript,
-                careful_threshold=args.careful_threshold, proposals=proposals, reviews=reviews, review_order=args.review_order))
+                careful_threshold=args.careful_threshold, review_scope=args.review_scope, withdrawal_policy=args.withdrawal_policy, review_prompt=args.review_prompt, proposals=proposals, reviews=reviews, review_order=args.review_order))
         start = time.monotonic()
         outcome, value = rt.run_root(root)
         actual = dump(value) if outcome.kind == 'done' else None
@@ -162,7 +166,7 @@ def main():
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps({'server': args.server, 'system_prompt': prompt, 'error_tool': not args.no_error_tool,
-                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'review_order': args.review_order, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
+                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'state_view': args.state_view, 'review_scope': args.review_scope, 'review_prompt': args.review_prompt, 'withdrawal_policy': args.withdrawal_policy, 'review_order': args.review_order, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["case"]}/{row["policy"]}: {row["status"]} valid={row["correct_value"]} '
               f'invalid_accept={row["invalid_task_accepted"]} rejects={row["validation_rejections"]}', flush=True)

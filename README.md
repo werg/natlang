@@ -243,3 +243,21 @@ all required reviews approve. Careful mode is off by default.
 See [careful-mode results and limitations](CAREFUL_MODE.md) for the measured
 threshold, instance-held-out results, and examples of confident errors and false
 rejections. The threshold is experimental and specific to this model/task mix.
+
+
+### Experimental agent support
+
+[TEACHER_SETUP.md](TEACHER_SETUP.md) describes the simple teacher configuration,
+teacher-specific interface fixes, behavioral audits, and audited leaf collection.
+[LEARNING_LESSONS.md](LEARNING_LESSONS.md) links observed teacher/student
+difficulties to honesty, persistence, and calibration training contrasts.
+
+[AGENT_SUPPORT.md](AGENT_SUPPORT.md) records the execution-state, action-review,
+and prompt-reminder experiments. Expanded state is opt-in (`--state-view`);
+the current checkpoint regressed with it. `--review-scope actions` also checks
+calls, completion marks, edits, and source copies. `--withdrawal-policy retry`
+allows one reconsideration of a withdrawn batch; the default returns to the
+caller. `--review-prompt repeat_instructions` or `checklist` changes only the
+isolated review fork. These options are available in the baseline, application,
+validation, and confidence probes. `scripts/review_probe.py` compares decisions
+on identical saved proposals without executing them.

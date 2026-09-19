@@ -529,6 +529,8 @@ class Session:
         if "from" not in args and "to" not in args:          # a read shows the whole value, not a preview
             p, ref = self.resolve(path)
             v = ref.get()
+            if not p.meta and v is MISSING:
+                return Result("ok", f"{path}: not supplied (missing value; not empty text)")
             if not p.meta and not is_pending(v) and v is not MISSING:
                 text = v if isinstance(v, str) else json.dumps(dump(v), ensure_ascii=False, indent=1)
                 if len(text) <= 6000:
@@ -757,7 +759,7 @@ class Session:
         self.lam.fn_copies[path[4:]] = fn
         return Result("ok", f"ok   {path} is a copy of {fn.signature}. Edit {path}/{fn.kind}, then call it.")
 
-    def _init(self, init):
+    def _init(self, init, state_type, types=None):
         """`init` is a path when it names an existing value, otherwise the value itself."""
         if isinstance(init, str):
             try:
@@ -766,6 +768,20 @@ class Session:
                     return {"init_from": init}
             except Reject:
                 pass
+        env = self.env.child({n: parse_type(t) for n, t in (types or {}).items()})
+        expected = parse_type(state_type)
+        try:
+            coerce(init, expected, env, yaml=False, path="init")
+        except Reject:
+            if isinstance(init, str):
+                try:
+                    parsed = json.loads(init)
+                except ValueError:
+                    return {"init": init}
+                coerce(parsed, expected, env, yaml=False, path="init")
+                init = parsed
+            elif env.resolve(expected) == TEXT and (init is None or isinstance(init, (bool, int, float))):
+                init = json.dumps(init, allow_nan=False)
         return {"init": init}
 
     def _place_call(self, path: str, fn_name: str, v: dict):
@@ -797,7 +813,7 @@ class Session:
                 raise reject("max", "type-mismatch", "a whole number: the most rounds allowed")
             if init is None:
                 raise reject("init", "type-mismatch", "`init`: the path of the starting state")
-            d.update(type=f"Iterate<{st}>", **self._init(init), max=v["max"], state_name=unbound[0],
+            d.update(type=f"Iterate<{st}>", **self._init(init, st, fn.types), max=v["max"], state_name=unbound[0],
                      check_name=chk.required()[0].rstrip("?"), step=lam_spec,
                      check={"type": chk.type_text, chk.kind: chk.body, "types": chk.types or None, "function": chk.name})
             slot_type = st
@@ -805,7 +821,7 @@ class Session:
             rest = [n for n in unbound if n not in ("acc", "item")]
             if rest:
                 raise reject("inputs", "bad-call", f"inputs for: {', '.join(rest)}", fn.signature)
-            d.update(type=f"Fold<{names['item']}, {names['acc']}>", over_from=over, **self._init(init), step=lam_spec)
+            d.update(type=f"Fold<{names['item']}, {names['acc']}>", over_from=over, **self._init(init, names['acc'], fn.types), step=lam_spec)
             slot_type = names["acc"]
         elif over is not None:                                                  # Map
             if len(unbound) != 1:
@@ -851,6 +867,12 @@ class Session:
         return self._do_reduce(Action("reduce", paths=[path]))
 
     def _op_done(self, args):
+        if args.get("require_closed"):
+            from .render import pending_lines
+            open_lines = pending_lines(self.lam.original_body or self.lam.body, self.lam.marks)
+            if open_lines:
+                raise Refuse(Diagnostic("instructions", "unfinished-lines", BLOCKS,
+                                        "close completed or skipped lines before done", str(open_lines)))
         if self.lam.ret is MISSING:
             raise Refuse(Diagnostic("return", "commit-holes", BLOCKS, format_type(self.lam.type.returns)))
         self._commit_check()

@@ -67,7 +67,7 @@ def test_schema_of_types():
 def test_tool_list_is_constant_and_schemas_narrow():
     doc, s = _session("02-leaf-extraction.yaml")
     names = [t["function"]["name"] for t in S.tools(s)]
-    assert names == ["read", "write", "edit", "run_code", "report_blocker", "report_error"]      # `call` appears with a code base
+    assert names == ["read", "write", "edit", "run_code", "report_blocker", "report_error", "done"]      # `call` appears with a code base
     alts = S.tools(s)[1]["function"]["parameters"]["x-natlang-alternatives"]
     paths = [a["path"].get("const") for a in alts]
     assert "return" in paths and "args/note" not in paths
@@ -154,6 +154,9 @@ def test_extra_object_wrapper_is_rejected_and_value_has_a_schema():
     doc, s = _session("01-leaf-judgment.yaml")
     write = [t for t in S.tools(s) if t["function"]["name"] == "write"][0]["function"]["parameters"]["properties"]
     assert {"type": "boolean"} in write["value"]["anyOf"]
+    assert {} not in write["value"]["anyOf"]
+    for kind in ("string", "number", "boolean", "null", "object", "array"):
+        assert {"type": kind} in write["value"]["anyOf"]
     assert s.apply("write", {"path": "return", "type": "Bool", "value": {"value": True}}).kind == "rejected"
     from natlang.values import MISSING
     assert s.lam.ret is MISSING
@@ -166,3 +169,15 @@ def test_values_delivered_as_json_text_are_parsed():
     assert r.kind == "ok" and s.lam.ret == doc["expect"]["value"]
     doc, s = _session("03-scalar-substitution.yaml")             # a Text slot keeps text that happens to look like JSON
     assert s.apply("write", {"path": "return", "type": "Text", "value": "42"}).kind == "ok" and s.lam.ret == "42"
+
+
+def test_absent_optional_input_is_visible_and_distinct_from_empty_text():
+    from natlang.values import load_program
+    surface = ToolSurface(state_view=False)
+    def session(args):
+        return Session(Runtime(None), load_program({'$lambda':{'type':'Lambda<{ document?: Text }, Text>',
+            'instructions':'Return the supplied document.', 'args':args}}), TypeEnv())
+    missing = surface.opening_read(session({}))[2]
+    empty = surface.opening_read(session({'document':''}))[2]
+    assert 'args/document (Text, read-only): not supplied' in missing
+    assert 'not supplied' not in empty and 'args/document (Text, read-only): ""' in empty

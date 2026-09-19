@@ -2,6 +2,10 @@
 
 Implemented and tested on the v8 350M interpreter, 2026-09-19.
 
+For subsequent action review, withdrawal, prompt experiments, and state-view
+results, see [AGENT_SUPPORT.md](AGENT_SUPPORT.md). Measurements below describe
+the original three-verdict experiment; the current interface adds `withdraw`.
+
 ## Execution behavior
 
 - Literal write proposals reach runtime validation by default. Native grammar
@@ -32,11 +36,13 @@ not zero confidence. Source-copy writes have no generated value score.
    the proposal as quoted JSON in an "Are you sure?" check against instructions
    and available evidence. The numerical score is not shown to the reviewer.
 3. Constrain the response to exactly one `review_write` call with a free-text
-   reason and a decision from `approve`, `error`, `blocker`. Reason comes first
+   reason and a decision from `approve`, `withdraw`, `error`, `blocker`. Reason comes first
    by default; `--review-order decision_first` reproduces the alternative.
 4. Approval releases the **original, unchanged** batch to normal runtime
    validation. The review cannot substitute another value. An error/blocker
-   quiesces the lambda and returns its diagnostic to the caller. Malformed
+   quiesces the lambda and returns its diagnostic to the caller. Withdrawal also
+   returns to the caller by default; `withdrawal_policy="retry"` permits one
+   reconsideration per episode without reviewer reasoning in the main history. Malformed
    responses and exhausted budgets leave the proposal unapplied.
 5. Resume the original agent conversation after successful execution. Review
    messages are saved separately and never inserted into that conversation.

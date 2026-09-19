@@ -87,9 +87,9 @@ def test_review_respects_turn_budget_and_unknown_confidence_is_not_zero():
     assert out.kind == 'done' and val == 17 and len(dec.requests) == 2
 
 
-def test_review_grammar_offers_three_verdicts_and_exactly_one_call():
+def test_review_grammar_offers_four_verdicts_and_exactly_one_call():
     grammar = call_grammar(REVIEW_TOOLS, allow_reply=False, single_call=True)
-    for decision in ('approve', 'error', 'blocker'):
+    for decision in ('approve', 'withdraw', 'error', 'blocker'):
         call = ('review_write', {'decision': decision, 'reason': 'Because of the instructions.'})
         assert gbnf.accepts(grammar, native_text([call]))
         assert not gbnf.accepts(grammar, native_text([call, call]))
@@ -148,3 +148,53 @@ def test_review_reason_can_precede_verdict_in_guided_response():
     call = ('review_write', {'reason': 'The required evidence is absent.', 'decision': 'blocker'})
     assert gbnf.accepts(grammar, native_text([call]))
     assert not gbnf.accepts(grammar, native_text([('review_write', {'decision': 'approve', 'reason': 'Yes.'})]))
+
+
+def test_withdrawal_bubbles_by_default_without_applying_batch():
+    root = root_program()
+    dec = Scripted([proposal(), verdict('withdraw')])
+    out, _ = Runtime(lambda lam: ToolAgent(dec, careful_threshold=.5)).run_root(root)
+    assert out.detail.startswith('careful review withdraw:') and root.ret is MISSING
+
+
+def test_withdrawal_allows_only_one_reconsideration_and_no_reviewer_reason_leaks():
+    root = root_program()
+    dec = Scripted([proposal(), verdict('withdraw'), proposal(), verdict('withdraw')])
+    proposals = []
+    out, _ = Runtime(lambda lam: ToolAgent(dec, careful_threshold=.5, withdrawal_policy='retry', proposals=proposals)).run_root(root)
+    assert out.detail.startswith('careful review withdraw:') and root.ret is MISSING
+    assert len(proposals) == 2 and all(not p['released'] for p in proposals)
+    assert not any('Checked the original' in str(m) for m in dec.requests[2])
+    assert 'withdrawn before execution' in dec.requests[2][-1]['content']
+
+
+def test_fresh_proposal_after_withdrawal_can_succeed():
+    root = root_program()
+    dec = Scripted([proposal(), verdict('withdraw'), proposal(), verdict('approve'), ChatTurn(text='Done', completion_tokens=1)])
+    out, val = Runtime(lambda lam: ToolAgent(dec, careful_threshold=.5, withdrawal_policy='retry')).run_root(root)
+    assert out.kind == 'done' and val == 17
+
+
+@pytest.mark.parametrize('call', [('call', {'function':'size_of', 'to':'return/size'}),
+                                  ('mark_done', {'start':1}),
+                                  ('done', {}),
+                                  ('write', {'path':'return','type':'Num','source':'let/size'})])
+def test_structural_review_needs_no_value_logprobs(call):
+    root = root_program()
+    reviews = []
+    dec = Scripted([ChatTurn([call], completion_tokens=1), verdict('withdraw')])
+    out, _ = Runtime(lambda lam: ToolAgent(dec, review_scope='actions', reviews=reviews)).run_root(root)
+    assert out.detail.startswith('careful review withdraw:') and root.ret is MISSING
+    assert reviews[0]['trigger'] == 'structural' and reviews[0]['confidence'] is None
+
+
+def test_instruction_reminder_is_verbatim_and_only_in_review_fork():
+    from natlang.tool_agent import review_messages
+    history = [{'role':'system','content':'Interpreter'}, {'role':'user','content':'If enabled, return 7. Otherwise fail.'},
+               {'role':'tool','content':'enabled = false'}]
+    for variant in ('repeat_instructions', 'checklist'):
+        fork = review_messages(history, [('write', {'path':'return','value':7})], 0, variant)
+        assert history[1]['content'] in fork[-1]['content']
+        assert fork[:-1] == history and len(history) == 3
+        assert 'withdraw' in fork[-1]['content']
+    assert 'Original program instructions' not in review_messages(history, [], 0)[-1]['content']

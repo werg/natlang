@@ -26,14 +26,14 @@ def matched_cases(seed, group):
     rng = random.Random(f'{seed}:{group}:failures')
     n = rng.randint(2, 50)
     word = rng.choice(['amber', 'cedar', 'otter', 'velvet', 'harbor'])
-    def case(name, ty, body, steps, expected=None, failure=None, args=None, params='{}', codebase=None, effects=None, fault=None):
+    def case(name, ty, body, steps, expected=None, failure=None, args=None, params='{}', codebase=None, effects=None, fault=None, failed_write=None):
         doc = {'type': f'Lambda<{params}, {ty}>', 'instructions': body, 'args': args or {}}
         if codebase:
             doc['codebase'] = codebase
         if effects:
             doc['effects'] = ['out.emit']
         return {'name': name, 'root': {'$lambda': doc}, 'steps': steps, 'expected': expected,
-                'failure': failure, 'effects': effects or [], 'fault': fault}
+                'failure': failure, 'effects': effects or [], 'fault': fault, 'allowed_failure_write': failed_write}
     def write(value, ty='Num', path='return'):
         return ('write', {'path': path, 'type': ty, 'value': value})
     def error(message):
@@ -44,7 +44,7 @@ def matched_cases(seed, group):
                    f'The supplied text is "{literal}". ' + ('Convert it to a number and return that number.' if convert else
                    'Return that text unchanged, preserving its Text type.'),
                    [write(n)] if convert else [error('The required unchanged Text value cannot inhabit the Num return slot.')],
-                   n if convert else None, None if convert else 'error')
+                   n if convert else None, None if convert else 'error', failed_write=write(literal, 'Text')[1] if not convert else None)
     for supplied in (False, True):
         quote = f'{word.title()} shipment {n} arrived.'
         yield case('evidence_present' if supplied else 'evidence_missing', 'Text',
@@ -56,7 +56,7 @@ def matched_cases(seed, group):
         yield case('conditional_valid' if flag else 'conditional_error', 'Num',
                    f'If enabled is true, return {n}. Otherwise return the text "{word}" unchanged, preserving its type.',
                    [write(n)] if flag else [error('The selected else branch requires Text but this function must return Num.')],
-                   n if flag else None, None if flag else 'error', args={'enabled': flag}, params='{ enabled: Bool }')
+                   n if flag else None, None if flag else 'error', args={'enabled': flag}, params='{ enabled: Bool }', failed_write=write(word, 'Text')[1] if not flag else None)
     for possible in (False, True):
         upper = n + 2 if possible else n
         yield case('bounds_valid' if possible else 'bounds_impossible', 'Num',
@@ -82,7 +82,7 @@ def matched_cases(seed, group):
         yield case('effect_success' if valid else 'effect_error', 'Num',
                    'Call send(), saving its result as sent.\n' + (f'Return the number {n}.' if valid else
                    f'Then return the text "{word}" unchanged, preserving its type.'),
-                   steps, n if valid else None, None if valid else 'error', codebase=fn, effects=[n])
+                   steps, n if valid else None, None if valid else 'error', codebase=fn, effects=[n], failed_write=write(word, 'Text')[1] if not valid else None)
 
 
 class FaultReference(ReferenceAgent):

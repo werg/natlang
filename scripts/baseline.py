@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.decoder import WRAPPERS, LlamaServerDecoder
 from natlang.host import load
 from natlang.model_agent import SMALL_PROMPT, SYSTEM_PROMPT, ModelAgent
+from natlang.surface import ToolSurface
 from natlang.tool_agent import ToolAgent
 from natlang.native import NativeCallDecoder
 from natlang.runtime import Runtime
@@ -15,6 +16,7 @@ from natlang.values import dump
 from natlang.corpus import file_digest
 
 ap = argparse.ArgumentParser()
+ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
 ap.add_argument("--surface", default="tools", choices=("tools", "text"))
 ap.add_argument("--decode", default="native", choices=("native", "server"),
                 help="native: our grammar over the model's native call text; server: the server's tool calling")
@@ -34,12 +36,15 @@ ap.add_argument("--out", type=Path, help="machine-readable results; defaults to 
 ap.add_argument("--model-label", default="unspecified")
 ap.add_argument("--validation-feedback", choices=("local", "caller"), default=None)
 ap.add_argument("--careful-threshold", type=float)
+ap.add_argument("--state-view", action="store_true", help="experimental expanded execution state")
+ap.add_argument("--review-scope", choices=["values", "actions"], default="values")
+ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="caller")
 ap.add_argument("--write-constraints", choices=("typed", "runtime"), default="runtime")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 a.validation_feedback = a.validation_feedback or ("caller" if a.surface == "tools" else "local")
-if a.careful_threshold is not None and a.surface != "tools":
-    ap.error("--careful-threshold requires --surface=tools")
+if (a.careful_threshold is not None or a.review_scope != "values") and a.surface != "tools":
+    ap.error("careful review requires --surface=tools")
 if a.surface != "tools" and a.validation_feedback != "local":
     ap.error("--validation-feedback=caller requires --surface=tools")
 root = Path(__file__).resolve().parent.parent
@@ -69,7 +74,7 @@ for f in files:
         print(f"  > {f.stem}", flush=True)
     if a.surface == "tools":
         make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
-                                     validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold,
+                                     validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold, surface=ToolSurface(state_view=a.state_view), review_scope=a.review_scope, withdrawal_policy=a.withdrawal_policy, review_prompt=a.review_prompt,
                                      **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     else:
         make = lambda lam: ModelAgent(dec, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
@@ -111,7 +116,7 @@ result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
 result_path.parent.mkdir(parents=True, exist_ok=True)
 result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": a.surface,
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
-                                  "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold,
+                                  "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold, "state_view": a.state_view, "review_scope": a.review_scope, "review_prompt": a.review_prompt, "withdrawal_policy": a.withdrawal_policy,
                                   "write_constraints": a.write_constraints,
                                   "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                                   "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")

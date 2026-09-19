@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 from natlang.gen.architectures import ARCHITECTURES
 from natlang.native import NativeCallDecoder
 from natlang.runtime import Runtime
+from natlang.surface import ToolSurface
 from natlang.tool_agent import ToolAgent
 from natlang.values import dump
 from scripts.probe_parallel import completed_cases, total_usage
@@ -19,6 +20,7 @@ from scripts.probe_parallel import completed_cases, total_usage
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
     ap.add_argument('--server', default='http://127.0.0.1:8080')
     ap.add_argument('--seed', type=int, default=19)
     ap.add_argument('--n', type=int, default=2, help='programs per family')
@@ -27,6 +29,9 @@ def main():
     ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='caller')
     ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
     ap.add_argument("--careful-threshold", type=float)
+    ap.add_argument("--state-view", action="store_true", help="experimental expanded execution state")
+    ap.add_argument("--review-scope", choices=["values", "actions"], default="values")
+    ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="caller")
     ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="runtime")
     args = ap.parse_args()
     if args.workers < 1:
@@ -47,7 +52,7 @@ def main():
             entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': [], 'reviews': []}
             logs.append(entry)
             return ToolAgent(decoder, system_prompt=prompt, temperature=0,
-                             validation_feedback=args.validation_feedback, careful_threshold=args.careful_threshold, reviews=entry["reviews"],
+                             validation_feedback=args.validation_feedback, careful_threshold=args.careful_threshold, surface=ToolSurface(state_view=args.state_view), review_scope=args.review_scope, withdrawal_policy=args.withdrawal_policy, review_prompt=args.review_prompt, reviews=entry["reviews"],
                              log=entry['actions'], transcript=entry['transcript'], max_turns=24)
 
         rt = Runtime(factory, capabilities=prog.capabilities, max_episodes=48)
@@ -66,7 +71,7 @@ def main():
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
-                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
+                                       'workers': args.workers, 'careful_threshold': args.careful_threshold, 'state_view': args.state_view, 'review_scope': args.review_scope, 'review_prompt': args.review_prompt, 'withdrawal_policy': args.withdrawal_policy, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["family"]}/{row["seed"]}: {row["status"]} correct={row["correct"]} '
               f'episodes={row["episodes"]} {row["seconds"]:.1f}s', flush=True)

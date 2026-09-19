@@ -29,7 +29,9 @@ def native_text(calls) -> str:
 
 class ReferenceAgent:
     def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
-                 recovery_rng=None, recovery_rate: float = 0):
+                 recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT, terminal_tool: bool = False):
+        self.terminal_tool = terminal_tool
+        self.system_prompt = system_prompt
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)
         self.recovery_rate, self.recovered = recovery_rate, False
@@ -97,7 +99,7 @@ class ReferenceAgent:
 
     def run(self, session) -> Optional[str]:
         s = self.s
-        messages = [{"role": "system", "content": TOOLS_PROMPT},
+        messages = [{"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": s.render_request(session)}]
         opening = s.opening_read(session)
         if opening:
@@ -142,6 +144,12 @@ class ReferenceAgent:
                 return results[-1].text
             if results[-1].kind == "quiesced" and self.plan.kind != "script":
                 raise AssertionError(f"a reference call did not finish: {calls} -> {results[-1].text}")
+        if self.terminal_tool:
+            self._emit(session, messages, s.tools(session), calls=[("done", {})])
+            result = s.apply(session, "done", {})
+            if result.kind != "completed":
+                raise AssertionError("reference completion failed: " + result.text)
+            return None
         if session.lam.ret is MISSING or not session.finish():
             raise AssertionError("reference policy ended without a valid `return`")
         self._emit(session, messages, s.tools(session), reply=self.plan.note or "Done.")

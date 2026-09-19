@@ -18,6 +18,7 @@ from natlang.decoder import ChatTurn
 from natlang.runtime import Runtime, Session
 from natlang.types import TypeEnv
 from natlang.tool_agent import ToolAgent
+from natlang.surface import ToolSurface
 from natlang.values import load_program, dump
 
 
@@ -104,12 +105,17 @@ def calibrate_threshold(rows):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
     ap.add_argument('--server', default='http://127.0.0.1:8080')
     ap.add_argument('--groups', type=int, default=10)
     ap.add_argument('--seed', type=int, default=992)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--careful-threshold', type=float)
+    ap.add_argument('--review-scope', choices=['values', 'actions'], default='values')
+    ap.add_argument('--withdrawal-policy', choices=['caller', 'retry'], default='caller')
+    ap.add_argument('--state-view', action=argparse.BooleanOptionalAction, default=False)
+    ap.add_argument('--support-prompt', action='store_true')
     ap.add_argument('--inject-fault', action='store_true', help='shared first rejected call; caller policy will stop before model on those cases')
     ap.add_argument("--partition", choices=["all", "calibration", "test"], default="all")
     args = ap.parse_args()
@@ -117,7 +123,7 @@ def main():
         ap.error('groups and workers must be positive')
     jobs = [(g, c) for g in range(args.groups) if args.partition == "all" or g % 2 == (args.partition == "test")
             for c in matched_cases(args.seed, g)]
-    prompt = (ROOT / 'natlang/prompts/tools_delegate.md').read_text()
+    prompt = (ROOT / 'natlang/prompts' / ('tools_delegate_support.md' if args.support_prompt else 'tools_delegate.md')).read_text()
     def run(job):
         group, c = job
         dec = NativeCallDecoder(args.server)
@@ -125,7 +131,9 @@ def main():
         proposals, reviews, log = [], [], []
         rt = Runtime(lambda lam: ToolAgent(wrapper, system_prompt=prompt, temperature=0, max_turns=16,
             max_tokens=2400, max_seconds=90, careful_threshold=args.careful_threshold,
-            proposals=proposals, reviews=reviews, log=log))
+            proposals=proposals, reviews=reviews, log=log,
+            surface=ToolSurface(state_view=args.state_view), review_scope=args.review_scope,
+            withdrawal_policy=args.withdrawal_policy, review_prompt=args.review_prompt))
         out, val = rt.run_root(load_program(c['root']))
         if c['failure']:
             correct = out.kind == 'quiesced' and (out.detail.startswith(c['failure'] + ':') or out.detail.startswith('validation failed:') or out.detail.startswith('careful review ' + ('error:' if c['failure'] == 'error' else 'blocker:')))
@@ -142,7 +150,7 @@ def main():
                                'metrics': confidence, 'released': proposal['released']})
         return {'group': group, 'case': c['name'], 'status': out.kind, 'detail': out.detail,
                 'correct': correct and rt.emitted == c['effects'], 'values': values,
-                'reviews': reviews, 'log': log, 'usage': dec.usage}
+                'reviews': reviews, 'proposals': proposals, 'log': log, 'usage': dec.usage}
     rows, started = [], time.monotonic()
     for index, row in completed_cases(run, jobs, args.workers):
         rows.append({'index': index, **row})
