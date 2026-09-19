@@ -11,8 +11,9 @@ from .trace import TraceReader
 class ScenarioContract:
     outcome: str
     value: Any = None
-    effects: tuple = ()
+    effects: tuple | None = None
     required_actions: tuple = ()
+    constrained_calls: tuple = ()
 
 
 def admit(reader: TraceReader, contract: ScenarioContract) -> dict:
@@ -23,9 +24,15 @@ def admit(reader: TraceReader, contract: ScenarioContract) -> dict:
         raise ValueError("final captured value does not match the contract")
     requested = [event for event in replay["effects"] if event["phase"] == "requested"]
     observed_effects = tuple((e["capability"], e.get("args")) for e in requested)
-    if contract.effects and observed_effects != contract.effects:
+    if contract.effects is not None and observed_effects != contract.effects:
         raise ValueError("ordered effect sequence does not match the contract")
-    applied = [e for e in replay["actions"] if e["outcome"] in ("ok", "done", "completed")]
+    for rule in contract.constrained_calls:
+        for event in replay["actions"]:
+            if event.get("name") == "call" and event.get("arguments", {}).get("function") == rule["function"]:
+                arguments = event["arguments"]
+                if arguments.get("to") != rule["to"] or arguments.get("inputs", {}) != rule["inputs"]:
+                    raise ValueError("required call destination or inputs changed")
+    applied = [e for e in replay["actions"] if e["outcome"] in ("ok", "done", "completed", "blocked")]
     cursor = 0
     for required in contract.required_actions:
         while cursor < len(applied) and (applied[cursor].get("name") != required.get("name") or

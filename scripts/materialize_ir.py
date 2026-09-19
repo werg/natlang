@@ -58,7 +58,15 @@ def materialize_record(record, recovery_rate=0, trace_dir=None):
         if program.expected == BLOCKED:
             expected_kind = "quiesced"
         expected_value = replay["final"] if callable(program.expected) or expected_kind != "done" else program.expected
-        admission = admit(reader, ScenarioContract(expected_kind, expected_value))
+        semantic_contract = record["semantics"].get("contract") if record["kind"] == "lambda_scenario" else None
+        required = tuple({"name": item["tool"], "arguments": item["arguments"]}
+                         for item in (semantic_contract or {}).get("required_actions", []))
+        constraints = tuple((semantic_contract or {}).get("constrained_calls", []))
+        effects = (tuple(("out.emit", [payload]) for payload in program.expected_effects)
+                   if program.expected_effects is not None else None)
+        admission = admit(reader, ScenarioContract(expected_kind, expected_value,
+                                                   effects=effects, required_actions=required,
+                                                   constrained_calls=constraints))
         admission["trace_sha256"] = hashlib.sha256(trace_file.read_bytes()).hexdigest()
     else:
         admission = None

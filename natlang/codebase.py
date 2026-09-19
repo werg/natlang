@@ -201,14 +201,14 @@ def from_definitions(entries: dict[str, dict], root: str) -> CheckedGraph:
                 raise reject(f"memory:{name}/uses/{alias}", "no-such-path", "a supplied definition", target)
             fn.codebase[str(alias)] = definitions[target]
     for fn in definitions.values():
-        check(fn)
+        check(fn, strict_names=True)
     digest = hashlib.sha256(json.dumps(supplied, sort_keys=True, separators=(",", ":"),
                                       ensure_ascii=False).encode()).hexdigest()
     return CheckedGraph(definitions[root], definitions, digest)
 
 
 # -- load-time checks --------------------------------------------------------------------------------------
-def check(root: FunctionDef) -> None:
+def check(root: FunctionDef, *, strict_names: bool = False) -> None:
     """Listing budget, and no recursion: a function can never reach itself. Repetition is `call` with
     over / init / until, whose bounds the harness controls."""
     seen, stack = set(), []
@@ -227,9 +227,10 @@ def check(root: FunctionDef) -> None:
             named = {name: parse_type(text) for name, text in fn.types.items()}
             env = TypeEnv(named)
             signature = parse_type(fn.type_text)
-            env.check_names(signature)
-            for declared in named.values():
-                env.check_names(declared)
+            if strict_names:
+                env.check_names(signature)
+                for declared in named.values():
+                    env.check_names(declared)
         except TypeSyntaxError as exc:
             raise reject(fn.source, "type-mismatch", "a valid checked function signature", str(exc)) from exc
         if len(fn.codebase) > MAX_FUNCTIONS:
