@@ -119,6 +119,12 @@ def test_token_budget_caps_each_request():
     assert [c['max_tokens'] for c in dec.calls] == [6, 3]
 
 
+def test_default_has_no_separate_per_turn_token_cap():
+    dec = RepeatingDecoder(tokens=1)
+    assert 'budget' in ToolAgent(dec, max_tokens=1000, max_turns=1).run(session())
+    assert dec.calls[0]['max_tokens'] == 1000
+
+
 def test_failed_effect_is_observed_not_silently_replayed():
     s = session()
     s.lam.effects = ['out.emit']

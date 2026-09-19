@@ -99,8 +99,8 @@ def main():
     ap.add_argument("--seed", type=int, default=31)
     ap.add_argument("--server", default="http://127.0.0.1:8081")
     ap.add_argument("--thinking", type=int, default=256)
-    ap.add_argument("--turn-tokens", type=int, default=1600,
-                    help="maximum generated tokens for one teacher turn; HTML leaves exceed 700")
+    ap.add_argument("--turn-tokens", type=int,
+                    help="optional maximum generated tokens for one teacher turn")
     ap.add_argument("--limit", type=int, default=10**9, help="stop after this many leaves")
     ap.add_argument("--temperature", type=float, default=0)
     ap.add_argument("--reasoning-effort", choices=("low", "medium", "xhigh"), default="low")
@@ -110,7 +110,7 @@ def main():
     ap.add_argument("--trajectory-out", type=Path,
                     help="linked teacher trajectory IR (defaults beside audit in --ir mode)")
     a = ap.parse_args()
-    if a.turn_tokens < 1:
+    if a.turn_tokens is not None and a.turn_tokens < 1:
         ap.error("--turn-tokens must be positive")
     audit_path = a.audit_out or ROOT / "runs" / f"teacher-leaves-audit-{time.time_ns()}.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
