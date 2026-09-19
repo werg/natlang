@@ -51,6 +51,16 @@ def _ticket(rng):
     return {"text": text, "category": cat, "urgent": urgent, "angry": angry}
 
 
+T_UNCOVERED = [("Could you update the logo in the footer some time", "a design request"),
+               ("Do you have any job openings in Berlin", "a job enquiry"),
+               ("I would like to interview your CEO for our magazine", "a press request")]
+
+
+def _odd_ticket(rng):
+    text, what = rng.choice(T_UNCOVERED)
+    return {"text": text + rng.choice(T_CALM), "category": "billing", "urgent": False, "angry": False, "uncovered": what}
+
+
 def _review(rng):
     topic, pos = rng.choice(list(R_TOPIC)), rng.random() < 0.5
     text = rng.choice(R_TOPIC[topic][0 if pos else 1]).format(p=rng.choice(PRODUCTS)) + "."
@@ -130,14 +140,21 @@ class Ctx:
     lines_b: list = field(default_factory=list)    # dialect B: numbered steps in English
     calls: list = field(default_factory=list)      # reference steps of the root
     indent: int = 0
+    blockable: bool = False
 
     def use_leaf(self, canon: str, into: Optional[dict] = None) -> str:
         aliases, args, returns, body, oracle = LEAVES[canon]
         alias = self.names.setdefault(canon, self.rng.choice(aliases))
         item_param = next(iter(args))
         (self.fns if into is None else into)[alias] = _fn_doc(alias, args, returns, DESCRIPTIONS[canon], body)
-        self.plans[alias] = Plan("leaf", gold=lambda a, o=oracle, p=item_param: o(self.hidden[a[p]]),
-                                 note="Done.")
+        def script(lam, o=oracle, p=item_param, canon=canon):
+            from ..types import format_type
+            h = self.hidden[lam.in_[p]]
+            if canon == "classify" and h.get("uncovered"):
+                yield [("report_blocker", {"missing": "The rubric has no label for this ticket: it is about " + h["uncovered"] + "."})]
+            else:
+                yield [("write", {"path": "return", "type": format_type(lam.type.returns), "value": o(h)})]
+        self.plans[alias] = Plan("script", script=script, note="Done.")
         return alias
 
     def use_std(self, name: str) -> str:
@@ -210,10 +227,22 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
         text = header + "\n\n" + "\n".join(f"{i}. {l}" if not l.startswith(" ") else f"   {l.strip()}"
                                            for i, l in enumerate(c.lines_b, 1))
     calls = list(c.calls)
-    c.plans[fn_name] = Plan("calls", steps=calls, note=note)
+
+    def script(lam):
+        for st in calls:
+            r = yield [st if st[0] == "glue" else (st[0], st[1])]
+            if r is not None and r.kind == "quiesced":          # a callee reported a blocker: pass it up, do not guess
+                yield [("report_blocker", {"missing": f"{st[1].get('function')} did not finish for every item: "
+                                                       + r.text.splitlines()[-1][:160]})]
+                return
+    c.plans[fn_name] = Plan("script", script=script, note=note)
+    c.blockable = any(st[0] == "call" and st[1].get("function") == c.names.get("classify") for st in calls)
     root = {"$lambda": {"type": "Lambda<{ " + ", ".join(f"{n}: {t}" for n, t in sig_args.items()) + f" }}, {returns}>",
                         "types": {t: TYPES[t] for t in types}, "instructions": text, "codebase": c.fns,
                         "function": fn_name}}
+    if c.blockable and any(h.get("uncovered") for h in c.hidden.values()):
+        from .programs import BLOCKED
+        expected = BLOCKED
     return Program(family, root, inputs, expected, c.plans)
 
 
@@ -393,6 +422,8 @@ class Composer:
         self.domain = rng.choice(list(DOMAINS))
         make, self.leaves = DOMAINS[self.domain]
         items = _distinct(rng, make, rng.randint(4, 10))
+        if self.domain == "tickets" and rng.random() < 0.12:        # one ticket that no rubric label covers
+            items[rng.randrange(len(items))] = _odd_ticket(rng)
         self.c = Ctx(rng, {i["text"]: i for i in items})
         self.arg = {"tickets": "tickets", "reviews": "reviews", "expenses": "notes"}[self.domain]
         self.vars = {self.arg: Var(self.arg, f"args/{self.arg}", "texts", [i["text"] for i in items], self.domain, self.arg)}
