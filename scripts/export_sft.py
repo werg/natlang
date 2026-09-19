@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.native import _strip_private
+from natlang.corpus import program_id
 
 END = "<|im_end|>"
 
@@ -52,7 +53,7 @@ def main():
                 completion = full[len(base):].split("<|im_start|>assistant\n", 1)[1].split(END)[0] + END
             else:
                 completion = s["target"]["content"] + END
-            out.write(json.dumps({"id": s["id"], "family": s["family"], "skill": s["skill"], "prompt": prompt,
+            out.write(json.dumps({"id": s["id"], "program_id": program_id(s), "family": s["family"], "skill": s["skill"], "prompt": prompt,
                                   "completion": completion}, ensure_ascii=False) + "\n")
             n += 1
             if n % 2000 == 0:

@@ -1,0 +1,74 @@
+{
+ "each": [
+  {
+   "a": "{out} = map(x => {fn}(x), {over})",
+   "b": "Apply {fn} to each item of {over} and save the results as {out}."
+  },
+  {
+   "a": "{out} = map(x => {fn}(x), {over})",
+   "b": "Please call {fn} for every item of {over} and keep the results as {out}."
+  },
+  {
+   "a": "{out} = [{fn}(x) for x in {over}]",
+   "b": "Apply {fn} to each item of {over} and save the results as {out}."
+  },
+  {
+   "a": "{out} = [{fn}(x) for x in {over}]",
+   "b": "Please call {fn} for every item of {over} and keep the results as {out}."
+  },
+  {
+   "a": "{out} = {over}.map(x -> {fn}(x))",
+   "b": "Apply {fn} to each item of {over} and save the results as {out}."
+  },
+  {
+   "a": "{out} = {over}.map(x -> {fn}(x))",
+   "b": "Please call {fn} for every item of {over} and keep the results as {out}."
+  },
+  {
+   "a": "let {out} = for x in {over} do {fn}(x)",
+   "b": "Apply {fn} to each item of {over} and save the results as {out}."
+  },
+  {
+   "a": "let {out} = for x in {over} do {fn}(x)",
+   "b": "Please call {fn} for every item of {over} and keep the results as {out}."
+  }
+ ],
+ "flags_eq": [
+  {
+   "a": "{name} = for each l in {labels}: l == \"{label}\"          # exact: use code",
+   "b": "Could you use code to turn {labels} into {name} flags that are true where the value is \"{label}\"?"
+  }
+ ],
+ "return_record": [
+  {
+   "a": "return {{ {fields} }}",
+   "b": "Please return the record: {fields}."
+  }
+ ],
+ "each_with": [
+  {
+   "a": "{out} = for each x in {over}: {fn}(x, {extra})",
+   "b": "Apply {fn} to each item of {over} with {extra}, storing the results as {out}."
+  },
+  {
+   "a": "{out} = for each x in {over}: {fn}(x, {extra})",
+   "b": "Please call {fn} with {extra} for every item of {over} and save the results as {out}."
+  }
+ ],
+ "group_count": [
+  {
+   "a": "{field} = group_count({values})",
+   "b": "Count {values} occurrences using group_count: {field}."
+  },
+  {
+   "a": "{field} = group_count({values})",
+   "b": "Could you count how often each value of {values} occurs with group_count: {field}?"
+  }
+ ],
+ "return_one": [
+  {
+   "a": "return ({field})",
+   "b": "Please return {field}."
+  }
+ ]
+}

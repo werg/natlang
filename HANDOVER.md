@@ -229,9 +229,9 @@ at times: not ours, do not kill), `nvidia-smi`, `docker ps`. The watchdog log is
 
 ## 7. What to do next, in order
 
-1. When `scripts/paraphrase_steps.py` finishes: read `runs/paraphrase-steps.log` and
-   `data/phrases.json`; delete bad variants by hand; `git add -f data/phrases.json`;
-   run the tests (the generator tests exercise the bank).
+1. (done) The phrase bank's first pass finished: 28 kept, reviewed by hand (dropped: list-marker and
+   checkbox variants, which collide with the `[ ]` listing; garbled `count_true` lines; `=>` for return);
+   `data/phrases.json` is in git. `select` and `flags_neq` got no variants: rerun for them, and key more sites.
 2. (done) `export_sft.py` reads shard directories and `.gz`.
 3. Key the remaining `say()` sites in `synth.py`; extend glue variety; add recovery
    trajectories (perturb a reference state, record the fix).

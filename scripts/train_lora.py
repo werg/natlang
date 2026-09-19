@@ -16,8 +16,11 @@ A servable model can be exported from the latest checkpoint at any time, also wh
   docker stop -t 120 natlang-train                                             # stop cleanly (a checkpoint is written)
   ... python scripts/train_lora.py data/sft.jsonl runs/lora --merge-only       # runs/lora/merged from the checkpoint
 """
-import argparse, json, math, os, random, shutil, signal, time
+import argparse, json, math, os, random, shutil, signal, time, sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from natlang.corpus import split_programs, file_digest, digest
 
 import torch
 from peft import LoraConfig, PeftModel, get_peft_model
@@ -36,7 +39,7 @@ def main():
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--holdout", type=int, default=200, help="pairs kept out for a loss check")
+    ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint every N optimizer steps")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint and start over")
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
@@ -50,6 +53,20 @@ def main():
     if a.merge_only and not resume:
         raise SystemExit(f"no checkpoint in {ckpt}")
 
+    if not a.merge_only:
+        pairs = [json.loads(l) for l in a.data.open()]
+        held, train, split = split_programs(pairs, a.holdout, a.seed)
+        identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
+                    "max_len": a.max_len, "model": a.model, "accum": a.accum}
+        if resume and state.get("corpus") != identity:
+            raise SystemExit("Checkpoint corpus/split/settings differ (or predate program splits). "
+                             "Use --merge-only to export it, or a new output directory for this training run.")
+        state["corpus"] = identity
+        a.out.mkdir(parents=True, exist_ok=True)
+        (a.out / "split.json").write_text(json.dumps(split, indent=2) + "\n")
+        print(f"program split: {len(train)} training turns, {len(held)} held-out turns "
+              f"from {len(split['held_programs'])} programs", flush=True)
+    torch.manual_seed(a.seed)
     tok = AutoTokenizer.from_pretrained(a.model)
     base_src = str(ckpt / "weights") if (resume and a.full) else a.model
     model = AutoModelForCausalLM.from_pretrained(base_src, dtype=torch.bfloat16).cuda()
@@ -68,16 +85,13 @@ def main():
         merged = model.merge_and_unload() if not a.full else model
         merged.save_pretrained(a.out / "merged", safe_serialization=True)
         tok.save_pretrained(a.out / "merged")
-        (a.out / "merged" / "natlang_training.json").write_text(json.dumps({k: state[k] for k in ("step", "cursor")} | {"data": str(a.data)}))
+        (a.out / "merged" / "natlang_training.json").write_text(json.dumps({k: state[k] for k in ("step", "cursor")} | {"data": str(a.data), "corpus": state.get("corpus")}))
         print(f"saved {a.out / 'merged'} (step {state['step']})", flush=True)
 
     if a.merge_only:
         export_merged()
         return
 
-    pairs = [json.loads(l) for l in a.data.open()]
-    random.Random(a.seed).shuffle(pairs)                   # the order depends on the seed only: resumable
-    held, train = pairs[: a.holdout], pairs[a.holdout:]
 
     def encode(p):                       # the pairs are already rendered by the chat template: no special tokens added
         x = tok(p["prompt"], add_special_tokens=False)["input_ids"]
@@ -95,7 +109,9 @@ def main():
             if e:
                 tot += model(input_ids=e[0], labels=e[1]).loss.item(); n += 1
         model.train()
-        return tot / max(n, 1)
+        if held and not n:
+            raise ValueError("Every held-out example exceeds --max-len")
+        return tot / n if n else None
 
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=a.lr, weight_decay=0.0)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / 20) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / a.steps))))
@@ -107,7 +123,7 @@ def main():
     else:
         torch.manual_seed(a.seed)
         state["heldout_before"] = heldout_loss()
-        print(f"{len(train)} training pairs; held-out loss before: {state['heldout_before']:.4f}", flush=True)
+        print(f"{len(train)} training pairs; held-out loss before: {state['heldout_before']}", flush=True)
 
     def save_checkpoint():
         tmp = a.out / "checkpoint.tmp"
@@ -139,7 +155,10 @@ def main():
         running = 0.0
         for _ in range(a.accum):
             e = None
+            start_cursor = state["cursor"]
             while e is None:
+                if state["cursor"] - start_cursor >= len(train):
+                    raise ValueError("Every training example exceeds --max-len")
                 e = encode(train[state["cursor"] % len(train)]); state["cursor"] += 1
                 state["skipped"] += e is None
             loss = model(input_ids=e[0], labels=e[1]).loss / a.accum
@@ -160,7 +179,7 @@ def main():
               f"or --merge-only to export this state.", flush=True)
         return
     state["heldout_after"] = heldout_loss()
-    print(f"held-out loss after: {state['heldout_after']:.4f}; pairs seen {state['cursor']}, too long {state['skipped']}", flush=True)
+    print(f"held-out loss after: {state['heldout_after']}; pairs seen {state['cursor']}, too long {state['skipped']}", flush=True)
     save_checkpoint()
     export_merged()
 

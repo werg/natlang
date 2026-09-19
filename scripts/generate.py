@@ -85,7 +85,7 @@ def _shard(job):
                 continue                      # generative leaves wait for teacher-written references
             if not keep_alternatives:         # the per-turn grammar alternatives are most of a sample's size and are
                 s = {**s, "tools": _strip_private(s["tools"])}     # only needed to evaluate under the grammar
-            lines.append(json.dumps({"id": f"{fam}-{i}-{j}", "family": fam, **s}, default=str))
+            lines.append(json.dumps({"id": f"{fam}-{i}-{j}", "program_id": f"{seed}:{fam}:{i}", "family": fam, **s}, default=str))
             stats[(fam, s["skill"])] += 1
     return first, lines, stats, episodes
 
