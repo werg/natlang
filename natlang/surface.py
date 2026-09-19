@@ -94,6 +94,19 @@ class ToolSurface:
                 return False
             return not isinstance(s.ref.env.resolve(s.ref.type), PENDING_TYPES)
 
+        # The inside of a sub-task is not a place to work: only the inputs it still waits for are offered.
+        # (A Fold written into `return` otherwise exposes over/init/step/... and the schema grows tenfold.)
+        pending_roots = [x.path for x in slots if x.value is not MISSING and is_pending(x.value)]
+
+        def inside_subtask(x):
+            for r in pending_roots:
+                if x.path.startswith(r + "/"):
+                    rest = x.path[len(r) + 1:].split("/")
+                    if not (len(rest) == 2 and rest[0] == "args" and x.value is MISSING):
+                        return True
+            return False
+
+        slots = [x for x in slots if not inside_subtask(x)]
         writable = [s for s in slots if value_slot(s) and s.path.count("/") <= 3][:MAX_PATHS]
         definable = [s for s in slots if not s.ref.deny and s.ref.type is not None and not own_args(s)
                      and not is_body(s) and s.path.count("/") <= 3][:MAX_PATHS]
