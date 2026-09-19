@@ -891,3 +891,103 @@ code and manifest when the tool was added. Retain that manifest and finish that
 process; do not resume that directory under the changed source hash. Any new
 batch uses the new tool inventory and a new manifest. Existing training targets
 remain compatible but do not teach the new error action.
+
+### Resource use and v8 references (2026-09-19)
+
+The 20,000-program v7 corpus (r2 prefix + r3 tail) and 300-program evaluation set
+finished. The next four-worker seed-72 batch completed 10,000 programs / 320,774
+turns. A further seed-73 batch of 10,000 is running with four workers. Generation
+uses CPU reference execution; model training and inference use the GPU.
+
+`scripts/generate_failures.py` generated and verified 1,200 programs / 2,600 turns
+in `data/ref-v8-failures.jsonl`, with a hash manifest. The twelve matched cases
+cover unchanged text versus authorized numeric conversion, absent versus supplied
+evidence, taken versus untaken invalid branches, satisfiable versus impossible
+bounds, invalid direct call destinations versus permitted wrapping after a shared
+injected rejection, and success/error after an irreversible emission. References
+check exact results, explicit diagnostic outcomes, emitted values, and native
+call grammar. The bad injected call is history, never a supervised target. Each
+twelve-program group stays together across the program-level split.
+
+The next pilot input `data/sft-v8-pilot.jsonl` contains 12,000 fresh architectural
+mix turns plus all 2,600 failure-reference turns. Its manifest records both inputs'
+hashes. Architectural source shards are frozen in `runs/v8-pilot-reference` with
+a source manifest and shard hashes. This is synthetic coverage, not evidence that
+a model has learned the distinction yet.
+
+Training now supports right-padded microbatches, a padded-token budget, an optional
+SQLite token cache bound to source/tokenizer hashes, and selectable checkpointing.
+The objective remains the mean of per-example completion-token losses; longer
+answers do not silently get more weight. Only the completion-containing suffix
+is projected to vocabulary logits. Short/long examples are grouped only within
+an optimizer step. `--accum` retains its original meaning (examples per step).
+One loss scalar is read from GPU per optimizer step instead of per sequence.
+Metrics include actual/padded/completion tokens, preparation time, step time,
+software versions, and peak CUDA memory; writes are atomic and resume drops
+metrics beyond the restored checkpoint.
+
+Five-step pilots on the same 80 examples, excluding the first step from speed
+calculations, measured approximately:
+
+| Configuration | Input tokens/second | Peak allocated GPU memory |
+| --- | ---: | ---: |
+| One example, checkpointing, baseline kernels | 4,634 | 1.84 GiB |
+| Two examples, checkpointing | 4,025 | 2.53 GiB |
+| Four examples, checkpointing | 3,896 | 2.67 GiB |
+| One example, optimized convolution | 4,670 | 1.84 GiB |
+| Two examples, optimized convolution | 4,004 | 2.53 GiB |
+
+These are short operational measurements, not controlled performance guarantees;
+CPU generation was active and laptop clocks varied. Larger microbatches are
+available but remain opt-in because they were slower. The optional
+`natlang-train-kernels` image pins causal-conv1d 1.7.0 and builds against installed
+PyTorch/CUDA without upgrading dependencies. It removes the reported slow
+convolution fallback, but did not materially improve end-to-end speed here.
+Disabling checkpointing globally or below 4,096 padded tokens exhausted VRAM
+with the ~902 MiB inference server resident. Never promote these settings based
+solely on low checkpointed peak memory.
+
+Validation probes now schedule independent cases across four workers, keeping
+per-case decoders/runtime/deadlines isolated and serializing result-file writes.
+The same nine-case local-feedback probe took 1.81 seconds serial versus 1.33
+seconds with four workers; all statuses and values matched (20 requests / 244
+completion tokens in each run). This small cached workload shows a 1.37x gain,
+not a fourfold gain. JSON retains wall time separately from summed request time.
+Application probes use the same scheduler; they still require functional grading.
+
+
+Adaptive checkpointing at 2,048 tokens completed the same benchmark at 5,159
+input tokens/second (about 11% above the baseline), peak allocated memory
+3.52 GiB. This setting also uses the optimized-kernel image and expandable CUDA
+allocator segments; the result measures that configuration together, not the
+isolated causal effect of each option. It keeps checkpointing on longer examples
+and uses microbatch one. The 4,096-token experiment's OOM is retained in
+`runs/throughput-adaptive.log`; the successful run is
+`runs/throughput-adaptive-2048/throughput.json`.
+
+`runs/lora-v8-failures-pilot` is now training from the merged v7 model for 300
+steps, rank 32, learning rate 1e-4, seed 81, maximum 8,192 tokens, 16 examples per
+step, one-example microbatches, and the 2,048-token checkpointing threshold.
+The input split contains 14,089 training and 511 held-out turns from 15 held-out
+program groups. Initial held-out loss is 0.27164. This value is not comparable to
+v7's old held-out loss because the corpus differs. The student server remains on
+v7 at port 8080; Bonsai remains stopped. Sampling during the new training run
+showed 98–100% GPU compute, ~59 W, and ~4.7 GB total GPU memory including serving.
+
+Verification: 150 harness tests passed, one training-only module skipped in the
+lightweight environment. Six training tests passed in the optimized image,
+including CUDA loss/gradient equivalence through attention and convolution;
+two CPU convolution variants are skipped there because the installed kernel
+requires CUDA. The baseline image separately passed those CPU fallback tests.
+The tiny FP32 CUDA equivalence tests disable TF32 to make the gradient comparison
+meaningful; production training remains bf16.
+
+The three current-v7 application cases were also run serially and with four
+workers. Both runs graded 0/3; dependency and saga statuses/values matched, while
+reconciliation produced different incorrect values. Do not assume bitwise output
+invariance from greedy decoding under different batching/cache conditions. The
+serial application rerun overlapped training, so its wall time is not an inference
+speed comparison. Logs are `runs/applications-workers4.json` and
+`runs/applications-workers1-current.json`. The new pilot reached step 10 with no
+overlength skips, loss 0.0282, and peak allocated memory 3.4 GiB; execution quality
+still awaits evaluation after training.

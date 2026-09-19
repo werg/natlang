@@ -17,6 +17,7 @@ from natlang.native import NativeCallDecoder
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.surface import ToolSurface
+from scripts.probe_parallel import completed_cases, total_usage
 from natlang.values import load_program, dump, MISSING
 from natlang.decoder import ChatTurn
 from natlang import gbnf
@@ -113,34 +114,46 @@ def main():
     ap.add_argument('--system-file', type=Path, default=ROOT / 'natlang/prompts/tools_delegate.md')
     ap.add_argument('--no-error-tool', action='store_true')
     ap.add_argument('--policies', nargs='+', choices=['local', 'caller'], default=['local', 'caller'])
+    ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
     args = ap.parse_args()
-    dec = NativeCallDecoder(args.server, timeout=120)
+    if args.workers < 1:
+        ap.error("workers must be positive")
     prompt = args.system_file.read_text()
     rows = []
     selected = list(controlled_cases()) if args.controlled_only else list(cases())
-    for name, doc, expected, must_fail in selected:
-        for policy in args.policies:
-            root = load_program(doc)
-            log, transcript = [], []
-            episode_decoder = ForcedFirstAction(dec) if args.controlled_only else dec
-            rt = Runtime(lambda lam: ToolAgent(episode_decoder, surface=ToolSurface(error_tool=not args.no_error_tool), validation_feedback=policy, system_prompt=prompt,
-                temperature=0, max_turns=12, max_tokens=2000, max_seconds=90, log=log, transcript=transcript))
-            start = time.monotonic()
-            outcome, value = rt.run_root(root)
-            actual = dump(value) if outcome.kind == 'done' else None
-            row = {'case': name, 'policy': policy, 'forced_initial_action': args.controlled_only,
-                   'must_fail': must_fail, 'status': outcome.kind,
-                   'value': actual, 'draft_return': None if root.ret is MISSING else dump(root.ret),
-                   'detail': outcome.detail, 'emitted': rt.emitted,
-                   **score(outcome.kind, actual, expected, must_fail, log, transcript, rt.emitted, outcome.detail),
-                   'seconds': time.monotonic() - start, 'log': log, 'transcript': transcript}
-            rows.append(row)
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(json.dumps({'server': args.server, 'system_prompt': prompt, 'error_tool': not args.no_error_tool,
-                                           'rows': rows, 'usage': dec.usage}, indent=2) + '\n')
-            print(f'{name}/{policy}: {outcome.kind} valid={row["correct_value"]} '
-                  f'invalid_accept={row["invalid_task_accepted"]} rejects={row["validation_rejections"]} '
-                  f'completion_feedback={row["completion_feedback_messages"]}', flush=True)
+    jobs = [(case, policy) for case in selected for policy in args.policies]
+    started = time.monotonic()
+
+    def run(job):
+        (name, doc, expected, must_fail), policy = job
+        dec = NativeCallDecoder(args.server, timeout=120)
+        root = load_program(doc)
+        log, transcript = [], []
+        episode_decoder = ForcedFirstAction(dec) if args.controlled_only else dec
+        rt = Runtime(lambda lam: ToolAgent(episode_decoder, surface=ToolSurface(error_tool=not args.no_error_tool), validation_feedback=policy, system_prompt=prompt,
+            temperature=0, max_turns=12, max_tokens=2000, max_seconds=90, log=log, transcript=transcript))
+        start = time.monotonic()
+        outcome, value = rt.run_root(root)
+        actual = dump(value) if outcome.kind == 'done' else None
+        row = {'case': name, 'policy': policy, 'forced_initial_action': args.controlled_only,
+               'must_fail': must_fail, 'status': outcome.kind,
+               'value': actual, 'draft_return': None if root.ret is MISSING else dump(root.ret),
+               'detail': outcome.detail, 'emitted': rt.emitted,
+               **score(outcome.kind, actual, expected, must_fail, log, transcript, rt.emitted, outcome.detail),
+               'seconds': time.monotonic() - start, 'log': log, 'transcript': transcript}
+        row['usage'] = dec.usage
+        return row
+
+    for index, row in completed_cases(run, jobs, args.workers):
+        row['case_index'] = index
+        rows.append(row)
+        rows.sort(key=lambda r: r['case_index'])
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps({'server': args.server, 'system_prompt': prompt, 'error_tool': not args.no_error_tool,
+                                       'workers': args.workers, 'wall_seconds': time.monotonic() - started,
+                                       'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
+        print(f'{row["case"]}/{row["policy"]}: {row["status"]} valid={row["correct_value"]} '
+              f'invalid_accept={row["invalid_task_accepted"]} rejects={row["validation_rejections"]}', flush=True)
 
 
 if __name__ == '__main__':

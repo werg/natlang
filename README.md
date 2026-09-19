@@ -170,3 +170,36 @@ The anti-fudging prompt is experimental:
 Omit `--system-file` for the usual prompt; add `--no-error-tool` to reproduce the
 previous tool inventory. Use `--controlled-only` for matched execution mistakes
 and contradictory programs after the same injected validation error.
+
+### Throughput controls
+
+The validation and application probes default to four independent workers (matching
+`scripts/serve.sh`'s four server slots). Use `--workers 1` for a serial comparison.
+Each case owns its decoder, usage counters, deadlines, and runtime; calls within a
+program retain their dependencies. Results include wall time and per-case usage.
+
+Training supports `--microbatch N`, `--batch-tokens N`, `--token-cache PATH`, and
+`--[no-]gradient-checkpointing`. `--accum` still counts **examples per optimizer
+step**, so changing microbatch size preserves the intended loss weighting.
+`--checkpoint-above-tokens N` retains checkpointing only above that padded-token
+count. Larger batches and disabling checkpointing are opt-in: neither is reliably
+faster or memory-safe on the laptop. Per-step throughput is saved in
+`throughput.json`; `--benchmark-steps N` runs without saving a trained model.
+
+Build the optional CUDA convolution kernel against the existing training image:
+
+```bash
+docker build -f docker/kernels.Dockerfile -t natlang-train-kernels .
+```
+
+Generate matched error/blocker/success/repair references with grammar, return, and
+effect verification:
+
+```bash
+.venv/bin/python scripts/generate_failures.py --groups 100 --workers 4 --out data/ref-failures.jsonl
+```
+
+Each group contains twelve programs; paired variants share a program identifier
+so a training/held-out split cannot separate the pair. Invalid injected actions
+appear only in history; supervised targets are successful repairs or explicit
+failure reports.

@@ -632,8 +632,9 @@ Bonsai style probe had instruction violations and is not a clean comparison.
 **Completed pilot (2026-09-19):** `runs/lora-v7-arch-pilot`, 300 optimizer steps,
 8,192-token cap, 41,965 training turns and 313 held-out turns from 12 whole
 programs. Inputs are recorded in `data/sft-v7-pilot.manifest.json`. The full
-corpus retains 6,100 verified programs in `data/ref-v7-arch-r2`; generation of
-indices 6100–19999 continues in `data/ref-v7-arch-r3-tail` on two CPU workers.
+corpus retains 6,100 verified programs in `data/ref-v7-arch-r2`; indices
+6100–19999 in `data/ref-v7-arch-r3-tail` and the 300-program evaluation set
+are complete.
 The old expected-blocker flag incorrectly survived an empty-input early return;
 seed 71 / index 6186 now has a regression test. Unreachable bad instructions do
 not require failure. Each batch has its own source manifest.
@@ -646,7 +647,19 @@ incorrect / 2 ungraded to v7's 5 / 15 / 1. Architectural outcomes changed from
 is complete. Bonsai and its watchdog remain stopped; serve one student version
 at a time because simultaneous servers caused severe host-memory pressure.
 V7 is now served at the normal 8080 endpoint; the v5 GGUF is retained for
-comparisons. No training is currently running.
+comparisons.
+
+**Active v8 pilot:** `runs/lora-v8-failures-pilot` continues from v7's merged
+weights for 300 optimizer steps at learning rate 1e-4. Its 14,600-turn input mixes
+12,000 fresh architectural turns with 2,600 verified error/blocker/repair turns
+(1,200 matched programs). The split reserves 511 turns from 15 program groups;
+paired failure/success variants stay together. Checkpointing is retained above
+2,048 tokens; one-example microbatches were faster than larger ones in local
+measurements. GPU sampling during training showed 98–100% compute utilization.
+The four-worker seed-72 batch completed 10,000 additional programs; a further
+10,000-program seed-73 batch is running. Independent validation/application
+probes now use four workers with separate decoder/runtime state per case.
+No v8 execution-quality result is available until training and conversion finish.
 Validation-feedback experiments and their limits are recorded in TRAINING.md.
 
 ### 10.3 Findings worth keeping

@@ -14,6 +14,7 @@ from natlang.native import NativeCallDecoder
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import dump
+from scripts.probe_parallel import completed_cases, total_usage
 
 
 def main():
@@ -24,37 +25,49 @@ def main():
     ap.add_argument('--seconds', type=float, default=120, help='wall-clock budget per program, including callees')
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='local')
+    ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
     args = ap.parse_args()
-    decoder = NativeCallDecoder(args.server, timeout=120)
+    if args.workers < 1:
+        ap.error("workers must be positive")
     prompt = (ROOT / 'natlang/prompts/tools_delegate.md').read_text()
     rows = []
-    for family, make in ARCHITECTURES.items():
-        for index in range(args.n):
-            seed = args.seed + index
-            prog = make(random.Random(seed))
-            logs = []
+    started = time.monotonic()
+    jobs = [(family, args.seed + index) for family in ARCHITECTURES for index in range(args.n)]
 
-            def factory(lam):
-                entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': []}
-                logs.append(entry)
-                return ToolAgent(decoder, system_prompt=prompt, temperature=0,
-                                 validation_feedback=args.validation_feedback,
-                                 log=entry['actions'], transcript=entry['transcript'], max_turns=24)
+    def run(job):
+        family, seed = job
+        make = ARCHITECTURES[family]
+        decoder = NativeCallDecoder(args.server, timeout=120)
+        prog = make(random.Random(seed))
+        logs = []
 
-            rt = Runtime(factory, capabilities=prog.capabilities, max_episodes=48)
-            start = time.monotonic()
-            rt.deadline = start + args.seconds
-            outcome, value = rt.run_root(prog.loader())
-            actual = dump(value) if outcome.kind == 'done' else None
-            correct = outcome.kind == 'done' and (prog.expected(actual) if callable(prog.expected) else actual == prog.expected)
-            rows.append({'family': family, 'seed': seed, 'status': outcome.kind, 'correct': correct,
-                         'value': actual, 'detail': outcome.detail, 'episodes': rt.episodes_started,
-                         'seconds': time.monotonic() - start, 'logs': logs})
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
-                                           'rows': rows, 'usage': decoder.usage}, indent=2) + '\n')
-            print(f'{family}/{seed}: {outcome.kind} correct={correct} episodes={rt.episodes_started} '
-                  f'{rows[-1]["seconds"]:.1f}s', flush=True)
+        def factory(lam):
+            entry = {'function': lam.fn_name, 'body': lam.body, 'actions': [], 'transcript': []}
+            logs.append(entry)
+            return ToolAgent(decoder, system_prompt=prompt, temperature=0,
+                             validation_feedback=args.validation_feedback,
+                             log=entry['actions'], transcript=entry['transcript'], max_turns=24)
+
+        rt = Runtime(factory, capabilities=prog.capabilities, max_episodes=48)
+        start = time.monotonic()
+        rt.deadline = start + args.seconds
+        outcome, value = rt.run_root(prog.loader())
+        actual = dump(value) if outcome.kind == 'done' else None
+        correct = outcome.kind == 'done' and (prog.expected(actual) if callable(prog.expected) else actual == prog.expected)
+        return {'family': family, 'seed': seed, 'status': outcome.kind, 'correct': correct,
+                'value': actual, 'detail': outcome.detail, 'episodes': rt.episodes_started,
+                'seconds': time.monotonic() - start, 'logs': logs, 'usage': decoder.usage}
+
+    for index, row in completed_cases(run, jobs, args.workers):
+        row['case_index'] = index
+        rows.append(row)
+        rows.sort(key=lambda r: r['case_index'])
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
+                                       'workers': args.workers, 'wall_seconds': time.monotonic() - started,
+                                       'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
+        print(f'{row["family"]}/{row["seed"]}: {row["status"]} correct={row["correct"]} '
+              f'episodes={row["episodes"]} {row["seconds"]:.1f}s', flush=True)
 
 
 if __name__ == '__main__':
