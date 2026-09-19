@@ -646,21 +646,54 @@ incorrect / 2 ungraded to v7's 5 / 15 / 1. Architectural outcomes changed from
 1/6 to 3/6; the five-case branch probe still had 4/5 correct values. Conversion
 is complete. Bonsai and its watchdog remain stopped; serve one student version
 at a time because simultaneous servers caused severe host-memory pressure.
-V7 is now served at the normal 8080 endpoint; the v5 GGUF is retained for
-comparisons.
+V8 is now served at the normal 8080 endpoint; the v5 and v7 GGUFs are retained
+for comparisons.
 
-**Active v8 pilot:** `runs/lora-v8-failures-pilot` continues from v7's merged
-weights for 300 optimizer steps at learning rate 1e-4. Its 14,600-turn input mixes
-12,000 fresh architectural turns with 2,600 verified error/blocker/repair turns
-(1,200 matched programs). The split reserves 511 turns from 15 program groups;
-paired failure/success variants stay together. Checkpointing is retained above
-2,048 tokens; one-example microbatches were faster than larger ones in local
-measurements. GPU sampling during training showed 98–100% compute utilization.
-The four-worker seed-72 batch completed 10,000 additional programs; a further
-10,000-program seed-73 batch is running. Independent validation/application
-probes now use four workers with separate decoder/runtime state per case.
-No v8 execution-quality result is available until training and conversion finish.
-Validation-feedback experiments and their limits are recorded in TRAINING.md.
+**Completed v8 pilot (2026-09-19):** `runs/lora-v8-failures-pilot` continued
+from v7's merged weights for 300 optimizer steps at learning rate 1e-4. Its
+14,600-turn input mixes 12,000 fresh architectural turns with 2,600 verified
+error/blocker/repair turns (1,200 matched programs). The split reserves 511 turns
+from 15 program groups; paired variants stay together. All 4,800 sampled turns
+fit the 8,192-token cap. Held-out loss fell from 0.27164 to 0.01577. The optimizer
+loop took 2,365 seconds; recorded steps processed 12,182,181 input tokens at
+5,155 tokens/second, with 3.51 GiB peak allocated memory. Checkpointing above
+2,048 tokens retained the measured throughput improvement across the full run.
+
+Conversion completed to `models/natlang-350M-v8-failures-pilot-Q8_0.gguf`.
+Both four-worker 10,000-program generation batches are complete: seed 72 produced
+320,774 turns, seed 73 produced 314,900. No training or generation is currently
+running; v8 serving remains up and Bonsai remains stopped.
+
+Post-training execution probes:
+
+- Architectural applications: **3/6 correct** (both reconciliation cases and
+  dependency seed 19); both saga cases and dependency seed 20 remain incorrect.
+- Natural validation fixtures, local feedback: **3/3 valid controls correct,
+  6/6 impossible tasks accepted**. The usual delegate prompt, training's small
+  prompt, and explicit anti-fudging prompt all had these totals.
+- Caller feedback: 3/3 controls correct and 5/6 impossible tasks accepted; the
+  remaining failure was runtime validation, not a deliberate model error report.
+- Controlled rejected-call pair: local feedback now elicits `report_error` on
+  **both** cases, including the valid instruction that should be repaired.
+  Failure explanations are also imprecise. Caller mode stops on the injected
+  rejection as designed; that is not model recognition.
+- Fresh inputs under the familiar training templates: **9/12 correct**, with
+  all six successful controls correct. Missing-document, unchanged-text, and
+  post-effect error cases succeeded; impossible bounds, a selected invalid
+  branch, and forbidden call-result wrapping failed. This probes familiar
+  templates, not broad generalization or a pristine held-out dataset.
+
+The student learned some error-tool use, but the intended semantic distinction
+has not generalized. Next coverage should vary wording, return types, record
+context, branch placement, and named functions across matched errors and valid
+repairs, with separate novel templates for checking transfer. Further low-loss
+training on these same few templates is not enough evidence of progress.
+
+Artifacts: `runs/student-v8-validation*.json`,
+`runs/student-v8-applications.json`, `runs/student-v8-familiar-patterns.json`,
+and `runs/lora-v8-failures-pilot/throughput.json`. The familiar-template probe
+source is `runs/probe-v8-familiar.py`. Earlier validation-feedback experiments
+and their limits are recorded in TRAINING.md.
 
 ### 10.3 Findings worth keeping
 
