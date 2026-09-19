@@ -9,7 +9,7 @@ variables, organised as a **code base** of `.nl` files (frontmatter plus a
 pseudocode body; `somefun.nl` with an optional companion folder `somefun/`;
 `.ts` files for exact functions; reuse through `uses` links). The author
 states the structure. The model carries it out one small step at a time with
-six tools (`read`, `write`, `edit`, `run_code`, `call`, `report_blocker`);
+seven tools (`read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`);
 every function instance is a fresh short episode over a typed object tree.
 Prompt-like tasks (judge, classify, extract, rewrite) are the leaves. The
 harness provides memory, typing, a sandbox and I/O; it parses no instructions

@@ -8,7 +8,7 @@ A natlang program is a **pseudocode algorithm**: functions with typed
 signatures, subroutine calls, loops, conditions, local variables, organised as
 a **code base** of files. The author states the structure. The interpreter, a
 small language model, carries it out: it reads the pseudocode, decides the next
-step, and performs it with six tools. The harness provides memory, typing, a
+step, and performs it with seven tools. The harness provides memory, typing, a
 sandbox and I/O. It parses no instructions, holds no cursor and owns no
 control flow; every constraint it imposes is type-level and applies at write
 time.
@@ -138,7 +138,7 @@ touch is a part of it:
 | Part | Written by | Meaning |
 |------|-----------|---------|
 | `type` | author | `Lambda<P, T>`, from the function's signature |
-| `instructions: Text` **or** `code: Text` | author; the interpreter may edit its own `instructions` | the body. Pseudocode or prose for an ordinary function; TypeScript for a **crisp function**. Exactly one is present. |
+| `instructions: Text` **or** `code: Text` | author; immutable while the lambda runs | the body. Pseudocode or prose for an ordinary function; TypeScript for a **crisp function**. Exactly one is present. |
 | `args` | the caller | the bound parameters, typed by `P`. Frozen when the instance starts; read-only to the lambda itself |
 | `let` | the interpreter | typed locals, `let/<name>` (§3.2) |
 | `return` | the interpreter | the result so far, typed `Draft<T>` until commit |
@@ -344,6 +344,7 @@ every turn.
 | `edit` | `path`, `old`, `new` | replace text |
 | `run_code` | `code` | exact work in TypeScript; the result comes back |
 | `call` | `function`, `to`, `inputs?`, `values?`, `over?`, `init?`, `until?`, `max?` | run a function of the code base, result at `to` |
+| `mark_done` | `start`, `end?`, `skipped?` | lines of the own program are finished, or did not apply (§7.3). `write` and `call` also take `done?`: a line, or `[first, last]`, marked if the action succeeds |
 | `report_blocker` | `missing` | end without a result, saying what is missing |
 
 Several calls may share a turn if they are independent. A call that depends on
@@ -385,8 +386,8 @@ structure: specialization belongs in arguments.
 
 `old` must occur exactly once in the text at `path` and is replaced by `new`;
 an empty `new` deletes it (a whole line, if `old` was one). Editable texts: the
-lambda's own `instructions` (deleting finished steps, substituting results,
-§7.3) and the instructions of function copies.
+instructions of function copies held in locals (§5.3). A lambda's own
+`instructions` are immutable while it runs; what is done is state (§7.3).
 
 ### 5.5 call
 
@@ -594,16 +595,35 @@ never restate data in a call.
 
 ### 7.3 Keeping the place
 
-Progress is in the tree: a statement whose local or return part exists is
-done. The harness says so after every change: the result of each `write`,
-`edit` and `call` ends with two lines, `locals: <name> (<size>), ...` and
-`return: not written yet | has <parts>; still missing <parts> | complete`, so
-that the place in a long program is found by comparing those lines with the
-program text, at no extra turn. The interpreter may also delete finished statements from its own
-`instructions`, or substitute a small result into them ("if the count is more
-than 5" becomes "if 7 is more than 5"). After a cold restart (§6.2), infer
-progress from `let` and `return` and continue; consult `@effects` before
-repeating an effectful step.
+**What is done is state, not text.** The instructions of a running lambda
+never change. The lambda carries `marks`: for each line of its instructions,
+`done` or `skipped` (or nothing: still to do). Marks survive swap-out like
+`let` and `return`.
+
+- The request shows the body as a numbered listing with a box per line:
+  `[ ]` still to do, `[x]` done, `[-]` did not apply (the branch of an `if`
+  that was not taken; everything after a `return` that was). Blank lines and
+  comment-only lines have a number and no box. Numbering parses nothing.
+- `mark_done(start, end?, skipped?)` marks a line or a range. Marking is
+  separate from acting: a line may need several actions before it is marked,
+  and one mark may close several lines. Its result shows the finished
+  stretch collapsed (`1-6 [x]`) and the next open lines, so what remains to
+  read is what remains to do.
+- Three equivalent ways to mark, all in the corpus: `mark_done` in a turn of
+  its own; `mark_done` in the same turn as the *next* action (no extra turn);
+  the `done` argument of the `write` or `call` that finishes a line (applied
+  only if that action succeeds). A line is never marked in the same turn as
+  the call that carries it out, except through `done`.
+- The harness never says which line is next, and never requires marks. A
+  reply while marked programs still have open lines gets one nudge that
+  names the open line numbers (no data). Marking does not spend the action
+  budget. Leaves (no code base) have no listing boxes and no `mark_done`.
+
+Beside the marks, the result of each `write`, `edit` and `call` ends with
+two lines, `locals: <name> (<size>), ...` and `return: not written yet | has
+<parts>; still missing <parts> | complete`. After a cold restart (§6.2) the
+listing with its marks, the locals and `return` say where the run stands;
+consult `@effects` before repeating an effectful step.
 
 ### 7.4 When something does not finish
 
@@ -686,6 +706,7 @@ Workspace:
 | Call in progress | one line: function, status, and for quiesced the note |
 | Function copy | `a copy of <f>, editable` |
 | `return` | `not written yet` / `partly written` / `written`; filled parts are listed apart from what is missing, and no value-like placeholder is ever shown |
+| Own `instructions` of a function with a code base | numbered listing with `[ ]` `[x]` `[-]`; after `mark_done` the collapsed form with the next three open lines |
 | After `write`, `edit`, `call` | two lines: the locals that exist with their sizes, and what `return` has and still lacks (§7.3) |
 | Nudges and hints | never carry data |
 

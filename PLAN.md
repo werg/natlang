@@ -80,7 +80,7 @@ episode can touch:
 
 | Part | Written by | |
 |------|-----------|--|
-| `type`, `instructions` \| `code`, `types`, `effects`, `codebase` | the author | the interpreter may edit its own `instructions` for bookkeeping |
+| `type`, `instructions` \| `code`, `types`, `effects`, `codebase` | the author | immutable while the lambda runs |
 | `args` | the caller | frozen at start, read-only to the instance |
 | `let` | the interpreter | typed locals `let/<name>`, created by the first write, private |
 | `return` | the interpreter | checked as `Draft<T>` while drafting, as `T` at completion |
@@ -181,15 +181,16 @@ not determine the result, `report_blocker`.
 
 ## 3. The agent interface
 
-### 3.1 Tools (six)
+### 3.1 Tools (seven)
 
 | Tool | Arguments | Notes |
 |------|-----------|-------|
 | `read` | `path`, `start?`, `end?` | a value, a range of it, or `codebase/<f>` |
 | `write` | `path`, `type`, `value` \| `source` | a complete plain value into `return` or a local; `source` copies an existing value; type `Function<f>` copies a function into a local |
-| `edit` | `path`, `old`, `new` | `old` must occur exactly once; own `instructions` and function copies |
+| `edit` | `path`, `old`, `new` | `old` must occur exactly once; function copies in locals only |
 | `run_code` | `code` | exact glue; sees `args` and `locals`; the result comes back |
 | `call` | `function`, `to`, `inputs?`, `values?`, `over?`, `init?`, `until?`, `max?` | place and run an instance in one action; again with only `function` + `to` to resume. Present only when the lambda has functions |
+| `mark_done` | `start`, `end?`, `skipped?` | what is done is state: lines of the own program are finished or did not apply; `write` and `call` also take `done?` |
 | `report_blocker` | `missing` | end without a result, saying exactly what is missing |
 
 The tool list is fixed; only argument schemas change, regenerated each turn
@@ -524,7 +525,12 @@ frontier model on quality, latency, and cost.
   anonymous lambdas; `call` is the only way to start a sub-task; copy, edit,
   call the copy to vary a function; `let` locals; the lambda holds every zone
   of state** (2026-09-19).
-- Six fixed tools; no selective filtering of the tool list; the reply never
+- **Instructions are immutable while a lambda runs; what is done is state**
+  (`marks` per line, shown as `[ ]` `[x]` `[-]` in a numbered listing,
+  written by `mark_done` or the `done` argument). Crossing finished steps off
+  by editing the text is gone. Which way of marking models prefer is to be
+  measured (standalone, grouped with the next action, en passant).
+- Seven fixed tools; no selective filtering of the tool list; the reply never
   carries the result; data only through the tool channel.
 - Template-agnostic by default: the prompt is rendered by the loaded model's
   own official chat template; per-model adaptations (wrappers, tool aliases)
