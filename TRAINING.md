@@ -841,6 +841,13 @@ further probes should include model callers choosing between supplying missing
 information, changing a faulty program, and returning a declared failure value.
 Do not infer that local repair is always appropriate from eventual type validity.
 
+On the broader v7 fixtures, caller feedback yielded 4/21 correct conformance
+outcomes (17 incorrect, none ungraded), versus local feedback's 5/21 (15
+incorrect, one ungraded). It used 189 model turns versus 366. Architectural
+outcomes were 2/6 versus 3/6. These small fixture sets show a cost/completion
+trade-off, not evidence for changing the default. Both runners accept
+`--validation-feedback caller` and record the setting in their JSON results.
+
 The first v7 probe attempt suffered host-memory pressure with two model servers;
 its incomplete/timed-out rows are not used above. Healthy single-server artifacts
 are `runs/student-v5-validation-healthy.json`,
