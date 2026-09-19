@@ -45,8 +45,11 @@ class LlamaServerDecoder:
     """
 
     def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120,
-                 chat_extra: Optional[dict] = None):
+                 chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None):
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
+        # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
+        # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
+        self.tool_aliases = tool_aliases or {}
         # extra fields for /v1/chat/completions, e.g. {"thinking_budget_tokens": 512, "top_p": 0.95, "top_k": 20}
         self.chat_extra = chat_extra or {}
         self.usage = {"turns": 0, "completion_tokens": 0, "seconds": 0.0}
@@ -65,6 +68,11 @@ class LlamaServerDecoder:
         """One assistant turn with native tool calling. The server renders the model's own chat
         template, constrains arguments to each tool's JSON schema, and parses the model's native
         tool-call format, so this is the same call for every model."""
+        if self.tool_aliases:
+            out_name = lambda n: self.tool_aliases.get(n, n)
+            tools = [{**t, "function": {**t["function"], "name": out_name(t["function"]["name"])}} for t in tools]
+            messages = [{**m, "tool_calls": [{**c, "function": {**c["function"], "name": out_name(c["function"]["name"])}}
+                                             for c in m["tool_calls"]]} if m.get("tool_calls") else m for m in messages]
         payload = {"messages": messages, "tools": tools, "tool_choice": "auto", "temperature": temperature,
                    "max_tokens": max_tokens, "parallel_tool_calls": True}
         if seed is not None:
@@ -81,8 +89,11 @@ class LlamaServerDecoder:
         self.usage["seconds"] += time.time() - t0
         self.usage["completion_tokens"] += (out.get("usage") or {}).get("completion_tokens", 0)
         calls = []
+        back = {v: k for k, v in self.tool_aliases.items()}
         for c in msg.get("tool_calls") or []:
             fn = c.get("function", {})
+            if fn.get("name") in back:
+                fn["name"] = back[fn["name"]]
             try:
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:

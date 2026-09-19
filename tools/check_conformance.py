@@ -287,7 +287,11 @@ def check_file(path):
     names = all_type_names(doc)
     if doc.get("kind") == "program":
         root = doc.get("program") or doc.get("start_state")
-        if not root:
+        if doc.get("program_file"):                     # a code base on disk (spec/CODEBASES.md)
+            import os
+            if not os.path.exists(os.path.join(os.path.dirname(path), doc["program_file"])):
+                c.err(f"program_file not found: {doc['program_file']}")
+        elif not root:
             c.err("program or start_state required")
         else:
             c.walk(root, set(), "program")

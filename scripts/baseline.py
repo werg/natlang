@@ -27,6 +27,7 @@ ap.add_argument("--prompt", default="small", choices=("small", "full"))
 ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
 ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model that answers judge checks; 'none' to skip")
+ap.add_argument("--alias", action="append", default=[], help="tool renames for this model's server, e.g. call=call_function")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 root = Path(__file__).resolve().parent.parent
@@ -34,7 +35,8 @@ files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
 extra = {} if a.thinking is None else {"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20}
 dec = (NativeCallDecoder(a.server, timeout=a.timeout) if a.decode == "native"
-       else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra))
+       else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra,
+                               tool_aliases=dict(x.split("=", 1) for x in a.alias)))
 from natlang.checks import grade, make_judge
 judge = None if a.judge_server == "none" else make_judge(
     LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
@@ -42,7 +44,7 @@ prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
 print(f"surface={a.surface} decode={a.decode}")
 for f in files:
     doc = yaml.safe_load(f.read_text())
-    if "program" not in doc or "streams" in doc:
+    if ("program" not in doc and "program_file" not in doc) or "streams" in doc:
         continue
     class Live(list):
         def append(self, x):
@@ -61,7 +63,8 @@ for f in files:
     rt = Runtime(make, max_episodes=a.max_episodes)
     t = time.time()
     try:
-        out, value = rt.run_root(load(f, doc.get("inputs") or {}))
+        src = (f.parent / doc["program_file"]) if doc.get("program_file") else f
+        out, value = rt.run_root(load(src, doc.get("inputs") or {}))
         kind = out.kind
     except Exception as e:
         kind, value = f"crash: {type(e).__name__}: {e}"[:60], None
@@ -72,7 +75,9 @@ for f in files:
         verdict, why = "?", [f"judge unavailable: {e}"]
     correct = verdict == "yes"
     shapes = sorted({m.group(1) for l in log if l["kind"] == "ok"
-                     for m in [re.search(r'"type": "(Task|Code|Map|Fold|Iterate)<', l["action"])] if m})
+                     for m in [re.search(r'^(call) ', l["action"])] if m} |
+                    {m.group(1) for l in log if l["kind"] in ("ok", "done")
+                     for m in [re.search(r'"function": "([\w/]+)"', l["action"])] if m})
     rejected = sum(1 for l in log if l["kind"] in ("rejected", "error"))
     first = log[0]["action"].splitlines()[0][:60] if log else ""
     print(f"{f.stem:<32} {kind:<10} correct={verdict:<3} actions={len(log):<3} "

@@ -1,0 +1,28 @@
+id: 23-codebase-triage
+title: A pseudocode program with a code base - calls, a loop over a list, a condition, locals
+kind: program
+exercises: [code base, call, call over a list, locals, conditional, crisp library functions, nested code base, Iterate with a check function]
+program_file: ../../examples/triage/main.nl
+inputs:
+  rubric: |
+    billing: anything about charges, invoices, refunds, or payment methods.
+    technical: anything about the product not working.
+    spam: unsolicited advertising or messages unrelated to our product.
+  tickets:
+    - "I was charged twice for my March invoice."
+    - "CHEAP WATCHES!!! Visit our store today for 90% off."
+    - "PRODUCTION IS DOWN. Customers cannot log in at all."
+    - "Export to CSV produces an empty file, no rush."
+    - "Payments are failing for every customer right now."
+expect:
+  checks:
+    - { kind: crisp, code: "value.urgent === 2" }
+    - { kind: crisp, code: "value.by_label.spam === 1 && value.by_label.billing >= 1" }
+    - { kind: crisp, code: "wordCount(value.summary) <= 60" }
+    - { kind: judge, question: "Does the summary mention that customers cannot log in or that payments are failing?", answer: true }
+lint:
+  must:
+    - labels produced by one call of classify over args/tickets
+    - is_urgent called over the non-spam tickets only
+    - summarize called once, only because some ticket is urgent
+  must_not: [the root labelling or judging tickets itself, one call per ticket]
