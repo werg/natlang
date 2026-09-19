@@ -149,6 +149,11 @@ class Runtime:
             raise ExecutionError(f"engine {engine!r} is unavailable; available: {', '.join(sorted(self.executors))}")
         return selected
 
+    def _drain_executor_events(self, executor):
+        if self.trace_sink is not None and hasattr(executor, "drain_events"):
+            for event in executor.drain_events():
+                self._observe("host", engine=getattr(executor, "name", type(executor).__name__), **event)
+
     # ------------------------------------------------------------------ trigger
     def trigger(self, ref: Ref, acting_effects) -> Outcome:
         node = ref.get()
@@ -216,8 +221,11 @@ class Runtime:
                       engine=node.engine,
                       code=node.body, effectful=bool(node.effects))
         try:
-            raw = portable(executor.run(CrispRequest(node.body, scope, True, ref.path,
-                                                          bool(node.effects)), self._fx(node)))
+            try:
+                raw = portable(executor.run(CrispRequest(node.body, scope, True, ref.path,
+                                                              bool(node.effects)), self._fx(node)))
+            finally:
+                self._drain_executor_events(executor)
             value = coerce(raw, node.type.returns, inner, yaml=False, path=ref.path)
         except ExecutionError as e:
             self._observe("eval", phase="failed", path=ref.path, error=str(e))
@@ -1228,8 +1236,11 @@ class Session:
         self.rt._observe("eval", phase="start", path="eval", mode="expression", engine=engine,
                          code=a.body, effectful=bool(self.lam.effects))
         try:
-            out = portable(executor.run(CrispRequest(a.body, scope, False, "eval",
-                                                            bool(self.lam.effects)), self.rt._fx(self.lam)))
+            try:
+                out = portable(executor.run(CrispRequest(a.body, scope, False, "eval",
+                                                                bool(self.lam.effects)), self.rt._fx(self.lam)))
+            finally:
+                self.rt._drain_executor_events(executor)
         except (ExecutionError, Reject) as exc:
             self.rt._observe("eval", phase="failed", path="eval", error=str(exc))
             raise
