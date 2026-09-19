@@ -185,6 +185,8 @@ def map_leaf(c: Ctx, out: str, canon: str, over: str, items: list, extra: Option
     if extra:
         step["inputs"] = dict(extra)
     c.calls.append(("call", step))
+    if canon == "classify" and any(c.hidden[t].get("uncovered") for t in items):
+        c.blockable = True                       # this call is carried out, and one of its items has no label
     c.env[out] = [oracle(c.hidden[t]) for t in items]
     return c.env[out]
 
@@ -224,8 +226,14 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
     if dialect == "a":
         text = header + "\n\n" + "\n".join("  " + l for l in c.lines_a)
     else:
-        text = header + "\n\n" + "\n".join(f"{i}. {l}" if not l.startswith(" ") else f"   {l.strip()}"
-                                           for i, l in enumerate(c.lines_b, 1))
+        out, k = [], 0                                       # only top-level steps are numbered
+        for l in c.lines_b:
+            if l.startswith(" "):
+                out.append("   " + l.strip())
+            else:
+                k += 1
+                out.append(f"{k}. {l}")
+        text = header + "\n\n" + "\n".join(out)
     calls = list(c.calls)
 
     def script(lam):
@@ -236,11 +244,10 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
                                                        + r.text.splitlines()[-1][:160]})]
                 return
     c.plans[fn_name] = Plan("script", script=script, note=note)
-    c.blockable = any(st[0] == "call" and st[1].get("function") == c.names.get("classify") for st in calls)
     root = {"$lambda": {"type": "Lambda<{ " + ", ".join(f"{n}: {t}" for n, t in sig_args.items()) + f" }}, {returns}>",
                         "types": {t: TYPES[t] for t in types}, "instructions": text, "codebase": c.fns,
                         "function": fn_name}}
-    if c.blockable and any(h.get("uncovered") for h in c.hidden.values()):
+    if c.blockable:
         from .programs import BLOCKED
         expected = BLOCKED
     return Program(family, root, inputs, expected, c.plans)
@@ -432,13 +439,18 @@ class Composer:
         self.types: set = set()
         self.applied: set = set()
         self.used: set = set()
+        self.names_taken: set = set()
 
     # -- helpers
     def fresh(self, options):
-        for n in self.rng.sample(options, len(options)):
-            if n not in self.vars and n not in self.fields:
-                return n
-        return f"{options[0]}_{len(self.vars)}"
+        taken = set(self.vars) | set(self.fields) | self.names_taken
+        name = next((n for n in self.rng.sample(options, len(options)) if n not in taken), None)
+        k = 2
+        while name is None:
+            name = f"{options[0]}_{k}" if f"{options[0]}_{k}" not in taken else None
+            k += 1
+        self.names_taken.add(name)
+        return name
 
     def add(self, v: Var):
         self.vars[v.name] = v
