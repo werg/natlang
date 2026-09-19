@@ -22,7 +22,7 @@ from .diag import reject
 MAX_FUNCTIONS = 12                     # listing budget per code base
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _FRONT_TS = re.compile(r"\A\s*/\*---\n(.*?)\n---\*/\n?(.*)\Z", re.S)
-_KEYS = {"description", "args", "returns", "types", "uses", "effects"}
+_KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine"}
 
 
 @dataclass(eq=False)
@@ -32,6 +32,7 @@ class FunctionDef:
     body: str
     args: dict                         # name -> type text, in signature order
     returns: str
+    engine: str = "quickjs-isolated"
     types: dict = field(default_factory=dict)      # name -> type text; own and inherited (lexical)
     description: str = ""
     effects: list = field(default_factory=list)
@@ -60,6 +61,8 @@ class FunctionDef:
             doc["types"] = dict(self.types)
         if self.effects:
             doc["effects"] = list(self.effects)
+        if self.kind == "code" and self.engine != "quickjs-isolated":
+            doc["engine"] = self.engine
         if self.codebase:
             doc["codebase"] = {n: f.to_inline() for n, f in self.codebase.items()}
         return doc
@@ -71,6 +74,8 @@ class FunctionDef:
             doc["types"] = dict(self.types)
         if self.effects:
             doc["effects"] = list(self.effects)
+        if self.kind == "code" and self.engine != "quickjs-isolated":
+            doc["engine"] = self.engine
         return doc
 
 
@@ -84,6 +89,7 @@ def _make(name: str, meta: dict, body: str, kind: str, inherited: dict, source: 
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         raise reject(source, "type-mismatch", "a function name that is an identifier", name)
     return FunctionDef(name=name, kind=kind, body=body.strip("\n") + "\n",
+                       engine=str(meta.get("engine") or "quickjs-isolated"),
                        args={str(k): str(v) for k, v in (meta.get("args") or {}).items()},
                        returns=str(meta["returns"]),
                        types={**inherited, **{str(k): str(v) for k, v in (meta.get("types") or {}).items()}},

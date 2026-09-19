@@ -89,10 +89,13 @@ class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
                  max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
                  executor=None, trace_sink: Optional[TraceRecorder] = None,
-                 trace_path: Optional[FilePath] = None):
+                 trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
+                 engine_selection: bool = False):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
         self.executor = executor or QuickJSExecutor()
+        self.executors = dict(executors or {getattr(self.executor, "name", "quickjs-isolated"): self.executor})
+        self.engine_selection = engine_selection
         self.trace_sink = trace_sink
         self.trace_path = trace_path
         self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
@@ -119,7 +122,8 @@ class Runtime:
             digest = hashlib.sha256(json.dumps(initial, sort_keys=True, default=str).encode()).hexdigest()
             self.trace_sink = TraceRecorder({"run_id": self.options.run_id, "source_sha256": digest,
                                              "seed_policy": vars(self.options.seed),
-                                             "engine": getattr(self.executor, "name", type(self.executor).__name__),
+                                             "engines": sorted(self.executors),
+                                             "engine_selection": self.engine_selection,
                                              "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
         self._observe("state", phase="initial", value=dump_state(root))
         ref = Ref(type=None, env=env or TypeEnv(), path="", holder=holder, attr="value")
@@ -138,6 +142,12 @@ class Runtime:
     def _observe_state(self, phase: str):
         if self.trace_sink is not None and hasattr(self, "_root_holder"):
             self._observe("state", phase=phase, value=dump_state(self._root_holder.value))
+
+    def _executor(self, engine: str):
+        selected = self.executors.get(engine)
+        if selected is None:
+            raise ExecutionError(f"engine {engine!r} is unavailable; available: {', '.join(sorted(self.executors))}")
+        return selected
 
     # ------------------------------------------------------------------ trigger
     def trigger(self, ref: Ref, acting_effects) -> Outcome:
@@ -198,11 +208,15 @@ class Runtime:
         if node.original_body is None:
             node.original_body = node.body
         scope = {"args": node.in_, "return": node.ret}
+        try:
+            executor = self._executor(node.engine)
+        except ExecutionError as e:
+            return self._quiesce(node, ref, f"code error: {e}")
         self._observe("eval", phase="start", path=ref.path, mode="body",
-                      engine=getattr(self.executor, "name", type(self.executor).__name__),
+                      engine=node.engine,
                       code=node.body, effectful=bool(node.effects))
         try:
-            raw = portable(self.executor.run(CrispRequest(node.body, scope, True, ref.path,
+            raw = portable(executor.run(CrispRequest(node.body, scope, True, ref.path,
                                                           bool(node.effects)), self._fx(node)))
             value = coerce(raw, node.type.returns, inner, yaml=False, path=ref.path)
         except ExecutionError as e:
@@ -700,7 +714,12 @@ class Session:
         return self._do_reopen(Action("reopen", path=args["path"], body=args.get("feedback", "")))
 
     def _op_run_code(self, args):
-        return self._do_eval(Action("eval", body=args["code"]))
+        engine = args.get("engine")
+        if self.rt.engine_selection and engine is None:
+            raise reject("engine", "bad-action", "an explicit available engine")
+        if engine is None:
+            engine = "quickjs-isolated"
+        return self._do_eval(Action("eval", body=args["code"]), engine=engine)
 
     def finish(self) -> bool:
         """The agent replied instead of calling a tool. Complete the lambda if `return` is valid."""
@@ -1202,14 +1221,14 @@ class Session:
         return Result("ok", f"ok   {ref.path}: {pending_line(lam)}, draft return prefilled")
 
     # -- eval
-    def _do_eval(self, a: Action) -> Result:
+    def _do_eval(self, a: Action, engine: str = "quickjs-isolated") -> Result:
         scope = {"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
                  "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}}
-        self.rt._observe("eval", phase="start", path="eval", mode="expression",
-                         engine=getattr(self.rt.executor, "name", type(self.rt.executor).__name__),
+        executor = self.rt._executor(engine)
+        self.rt._observe("eval", phase="start", path="eval", mode="expression", engine=engine,
                          code=a.body, effectful=bool(self.lam.effects))
         try:
-            out = portable(self.rt.executor.run(CrispRequest(a.body, scope, False, "eval",
+            out = portable(executor.run(CrispRequest(a.body, scope, False, "eval",
                                                             bool(self.lam.effects)), self.rt._fx(self.lam)))
         except (ExecutionError, Reject) as exc:
             self.rt._observe("eval", phase="failed", path="eval", error=str(exc))

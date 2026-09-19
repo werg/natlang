@@ -154,7 +154,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
 
 # --------------------------------------------------------------------------- pending nodes
 
-_LAMBDA_KEYS = {"type", "types", "effects", "instructions", "code", "args", "return", "status", "note",
+_LAMBDA_KEYS = {"type", "types", "effects", "engine", "instructions", "code", "args", "return", "status", "note",
                 "effects_journal", "codebase", "let", "let_types", "function", "marks"}
 
 
@@ -210,6 +210,7 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
         if not isinstance(effects, list):
             raise reject(f"{path}/effects", "type-mismatch", "a list of capabilities")
         node = Lambda(kind="instructions" if has_i else "code", body=_norm_text(text),
+                      engine=str(body.get("engine") or "quickjs-isolated"),
                       effects=[str(e) for e in effects], **common)
         raw_in = body.get("args") or {}
         if not isinstance(raw_in, dict):
@@ -397,6 +398,8 @@ def dump(x: Any) -> Any:
     if isinstance(x, Lambda):
         if x.effects:
             body["effects"] = list(x.effects)
+        if x.is_crisp and x.engine != "quickjs-isolated":
+            body["engine"] = x.engine
         body["instructions" if x.kind == "instructions" else "code"] = x.body
         if x.in_:
             body["args"] = {k: dump(v) for k, v in x.in_.items()}
