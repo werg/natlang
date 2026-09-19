@@ -25,6 +25,11 @@ Run paths above are under `runs/`. The teacher setup and trial sequence are in
 from inferred causes: prompt examples may encourage redirection, but that has
 not been isolated as its cause.
 
+Follow-up: `teacher-destination-effects-s886.json` passed all eight affected
+failure/control cases across two groups after the short wording changes. Keep
+the original failures in this log: a passing follow-up does not remove the
+need for those training contrasts or establish general reliability.
+
 ## Training implementation
 
 `scripts/generate_agent_support.py --reviews ...` creates paired proposals at

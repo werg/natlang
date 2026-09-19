@@ -40,6 +40,7 @@ interpreter for the program's instructions. The model still chooses its actions.
 | `teacher-simple-full-s884.json` | 18/21, one wrong success | Missing direct read still returned an ambiguous placeholder; map binding and quoted fold initializer failed. |
 | `teacher-simple-focused-s885.json` | 4/4 | Missing versus empty, map, and fold pass after the targeted fixes. |
 | `teacher-simple-full-s886.json` | 19/21, one wrong success | Teacher redirected an impossible direct return into a record field; another case attempted a premature error with truncated tool arguments. |
+| `teacher-destination-effects-s886.json` | 8/8, zero wrong successes | Revised prompt passes both affected failure cases and their valid controls, on the original group and one fresh group. |
 
 Schema isolation probes reproduced unexpected `{ "value": ... }` objects with
 an untyped tool parameter. Explicit JSON shapes improved scalar handling but
@@ -61,6 +62,13 @@ explanation. The earlier field-copy example was removed from the general write
 description. These changes address observed failures; their effectiveness must
 be measured rather than assumed. The full s886 run used the preceding prompt,
 preserved verbatim in its artifact.
+
+The targeted follow-up passed all eight cases. Impossible direct bindings
+attempted the requested destination and failed validation; valid bindings
+succeeded. Required effects occurred before the later reported type conflict,
+and the matching success cases completed. This addresses the observed failures
+on those instances; the latest wording has not had another complete 21-case
+run or a broad unseen-template evaluation. Keep per-sample admission checks.
 
 ## Reproduce and inspect
 
