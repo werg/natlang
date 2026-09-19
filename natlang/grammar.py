@@ -128,7 +128,7 @@ def enumerate_slots(lam: Lambda, outer_env: TypeEnv):
 
 def _parts(node):
     if isinstance(node, Lambda):
-        return [node.kind, "args", "return"]
+        return [node.kind, "args", "return"] + [f"let/{n}" for n in node.let_types]
     if isinstance(node, MapNode):
         slots = [str(i) for i in range(min(len(node.slots or []), MAX_ENUM_PATHS))]
         return ["over", "fn"] + slots

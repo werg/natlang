@@ -57,6 +57,11 @@ class Lambda(Pending):
     effects: list = field(default_factory=list)
     journal: list = field(default_factory=list)
     original_body: Optional[str] = None  # body at first trigger, for reopen
+    let: dict = field(default_factory=dict)        # typed locals (CODEBASES 2.1): name -> value or pending node
+    let_types: dict = field(default_factory=dict)  # name -> Type, fixed by the write that created the local
+    codebase: dict = field(default_factory=dict)   # name -> FunctionDef; immutable, shared by reference
+    fn_name: str = ""                              # the function this lambda is an instance of, if any
+    fn_copies: dict = field(default_factory=dict)  # local name -> FunctionDef it was copied from
 
     @property
     def is_crisp(self) -> bool:
@@ -69,6 +74,7 @@ class MapNode(Pending):
     over: Any = MISSING
     fn: Any = MISSING
     slots: Optional[list] = None  # None until expanded
+    item_name: str = "item"       # the parameter of `fn` that receives the item
 
 
 @dataclass(eq=False)
@@ -94,6 +100,8 @@ class IterateNode(Pending):
     recent: list = field(default_factory=list)
     seen_hashes: list = field(default_factory=list)
     current: Any = None
+    state_name: str = "state"     # the parameter of `step` that receives the state
+    check_name: str = ""          # "" : check(recent, iteration) -> LoopVerdict.  else: check(<name>: S) -> Bool
 
 
 WRAPPERS = {"$lambda": Lambda, "$map": MapNode, "$fold": FoldNode, "$iterate": IterateNode}

@@ -55,26 +55,6 @@ def test_several_calls_and_replies():
     assert not gbnf.accepts(call_grammar(S.tools(s), allow_reply=False), "It is a complaint.")
 
 
-def test_a_map_is_a_typed_write_with_every_type_derived():
-    s, g = _g("06-map-with-rubric.yaml")
-    text = ("[write(path=\"return\", type=\"Map<Text, Label>\", value={'over': 'args/tickets', "
-            "'instructions': 'Label the ticket in `args/item` according to `args/rubric`.', "
-            "'inputs': {'rubric': 'args/rubric'}}), run(paths=['return'])]")
-    assert ok(g, text)
-    assert not ok(g, text.replace("Map<Text, Label>", "Map<Text, Bool>"))              # the parroted wrong type
-    assert not ok(g, text.replace("'over': 'args/tickets'", "'over': 'args/rubric'"))  # not a list
-    assert ok(g, "[write(path=\"return\", type=\"Task<Label[]>\", value={'instructions': 'Label them all.'})]")
-    assert ok(g, "[write(path=\"return\", type=\"Code<Label[]>\", value={'code': 'return []'})]")
-    calls = parse_calls(text)
-    assert [n for n, _ in calls] == ["write", "run"]
-    assert s.apply(*calls[0]).kind == "ok"
-    from natlang.types import format_type
-    node = s.lam.ret
-    assert format_type(node.type) == "Map<Text, Label>"
-    assert format_type(node.fn.type) == "Lambda<{ item: Text, rubric: Text }, Label>"   # derived from the inputs
-    assert node.fn.in_["rubric"].startswith("billing:") and len(node.over) == 5
-
-
 def test_parse_calls_and_argument_names():
     assert parse_calls('[write(path="return", type="Bool", value=True)]') == \
         [("write", {"path": "return", "type": "Bool", "value": True})]

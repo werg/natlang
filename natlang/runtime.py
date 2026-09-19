@@ -24,7 +24,8 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 
 MAX_ACTIONS = 24
-MAX_NESTING = 6          # pending nodes nested inside one another, below the acting lambda
+MAX_NESTING = 6
+MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
 
@@ -210,7 +211,7 @@ class Runtime:
             node.slots = []
             for i, item in enumerate(node.over):
                 inst = _instantiate(node.fn)
-                inst.in_["item"] = copy.deepcopy(item)
+                inst.in_[node.item_name] = copy.deepcopy(item)
                 if wants_index:
                     inst.in_["index"] = i
                 node.slots.append(inst)
@@ -263,7 +264,7 @@ class Runtime:
         while node.iteration < node.max:
             if node.current is None:
                 inst = _instantiate(node.step)
-                inst.in_["state"] = copy.deepcopy(node.state)
+                inst.in_[node.state_name] = copy.deepcopy(node.state)
                 node.current = inst
             cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
             out = self.trigger(cref, None)
@@ -277,13 +278,18 @@ class Runtime:
             node.seen_hashes.append(h)
             node.recent = (node.recent + [copy.deepcopy(node.state)])[-3:]
             chk = _instantiate(node.check)
-            chk.in_["recent"], chk.in_["iteration"] = copy.deepcopy(node.recent), node.iteration
+            if node.check_name:                      # check(state) -> Bool, a function of the code base
+                chk.in_[node.check_name] = copy.deepcopy(node.state)
+            else:
+                chk.in_["recent"], chk.in_["iteration"] = copy.deepcopy(node.recent), node.iteration
             box = _Box(chk)
             kref = Ref(type=chk.type.returns, env=inner, path=f"{ref.path}/check", holder=box, attr="value")
             out = self.trigger(kref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"check {out.kind}: {out.detail}")
             verdict = box.value
+            if node.check_name:
+                verdict = {"verdict": "done" if verdict is True else "continue", "reason": ""}
             if verdict["verdict"] == "done":
                 return self._swap_out(node, ref, node.state)
             if verdict["verdict"] == "degenerate":
@@ -325,6 +331,19 @@ def _instantiate(template: Lambda) -> Lambda:
 
 def _hash(x) -> str:
     return hashlib.sha256(json.dumps(dump(x), sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _fn_of(node) -> str:
+    lam = node if isinstance(node, Lambda) else getattr(node, "fn", None) or getattr(node, "step", None)
+    return lam.fn_name if isinstance(lam, Lambda) else ""
+
+
+def _known(env, name: str) -> bool:
+    try:
+        env.check_names(parse_type(name))
+        return True
+    except TypeSyntaxError:
+        return False
 
 
 def _split2(inner: str):
@@ -447,6 +466,15 @@ class Session:
 
     def _op_read(self, args):
         path = args["path"]
+        if path == "codebase" or path.startswith("codebase/"):      # the code base is read-only text
+            from .codebase import listing
+            name = path[9:]
+            if not name:
+                return Result("ok", listing(self.lam.codebase) or "(no functions)")
+            fn = self.lam.codebase.get(name)
+            if fn is None:
+                raise reject(path, "no-such-path", "one of: " + ", ".join(self.lam.codebase))
+            return Result("ok", f"{fn.signature}\n{fn.description}\n\n{fn.body}")
         args = {**args, **{k: args[a] for a, k in (("start", "from"), ("end", "to")) if a in args}}
         if "from" not in args and "to" not in args:          # a read shows the whole value, not a preview
             p, ref = self.resolve(path)
@@ -479,7 +507,22 @@ class Session:
         """write(path, type, value). A sub-task type (Task, Code, Map, Fold, Iterate) puts a pending
         node at the path; the harness derives every type the model did not have to choose."""
         ty = str(args.get("type") or "")
-        m = re.match(r"^(Task|Code|Map|Fold|Iterate)<(.*)>$", ty.strip(), re.S)
+        m = re.match(r"^Function<\s*([A-Za-z_]\w*)\s*>$", ty.strip())
+        if m:
+            return self._copy_function(str(args.get("path") or ""), m.group(1))
+        if re.match(r"^(Task|Code|Call|Map|Fold|Iterate|Lambda)<", ty.strip()):
+            raise reject("type", "anonymous-lambda", "`call` with a function of the code base: " +
+                         (", ".join(self.lam.codebase) or "(none; do the task yourself)"))
+        undo = self._local_type(str(args.get("path") or ""), ty, {}) if str(args.get("path") or "").startswith("let/") else None
+        try:
+            return self._write_plain(args)
+        except (Reject, Refuse):
+            if undo:
+                undo()
+            raise
+
+    def _write_plain(self, args):
+        m = None
         if not m:
             value = args["value"]
             if isinstance(value, dict) and set(value) == {"value"}:      # a common tool-calling habit: {"value": X}
@@ -499,53 +542,6 @@ class Session:
                         raise first
                     return self._set_value(args["path"], None, parsed, yaml=False)
             return self._set_value(args["path"], None, value, yaml=False)
-        kind, inner, v = m.group(1), m.group(2), args.get("value")
-        if isinstance(v, str):
-            try:
-                v = json.loads(v)
-            except (ValueError, TypeError):
-                pass
-        if not isinstance(v, dict):
-            raise reject(args["path"], "type-mismatch", f"an object describing the {kind}")
-        inputs = v.get("inputs") or {}
-        params = []
-        for name, src in inputs.items():                      # parameter types come from their sources
-            _, sref = self.resolve(str(src))
-            if sref.type is None or sref.get() is MISSING:
-                raise reject(str(src), "no-such-path", "an existing value to pass as input")
-            params.append(f"{name}: {format_type(sref.type)}")
-
-        for name, ty_text in (v.get("params") or {}).items():  # inputs a sub-task will produce later
-            params.append(f"{name}: {ty_text}")
-
-        def lam_type(fixed: list, result: str) -> str:
-            fields = fixed + params
-            return "Lambda<" + ("{ " + ", ".join(fields) + " }" if fields else "{}") + f", {result}>"
-
-        body_key = "code" if kind == "Code" or (v.get("code") and not v.get("instructions")) else "instructions"
-        spec = {body_key: v.get(body_key), "args_from": inputs}
-        if spec[body_key] is None:
-            raise reject(args["path"], "type-mismatch", f"`{body_key}` for the {kind}")
-        d = {"path": args["path"]}
-        if kind in ("Task", "Code"):
-            d.update(type=lam_type([], inner), **spec)
-        elif kind == "Map":
-            a, b = _split2(inner)
-            d.update(type=f"Map<{a}, {b}>", over_from=v.get("over"), fn={"type": lam_type([f"item: {a}"], b), **spec})
-        elif kind == "Fold":
-            a, st = _split2(inner)
-            d.update(type=f"Fold<{a}, {st}>", over_from=v.get("over"), init=v.get("init"),
-                     step={"type": lam_type([f"acc: {st}", f"item: {a}"], st), **spec})
-        else:
-            st = inner
-            until = v.get("until") or "Is the work finished?"
-            d.update(type=f"Iterate<{st}>", init=v.get("init"), max=v.get("max") or 5,
-                     step={"type": lam_type([f"state: {st}"], st), **spec},
-                     check={"type": f"Lambda<{{ recent: ({st})[], iteration: Num }}, LoopVerdict>",
-                            "instructions": "Look at the most recent states in `args/recent`. " + until +
-                                            " Give your reason, then the verdict: done, continue, or degenerate "
-                                            "if the states are not making progress."})
-        return self._op_define(d)
 
     def _op_edit(self, args):
         p, ref = self.resolve(args["path"])
@@ -600,6 +596,169 @@ class Session:
         self.blocker = missing
         return Result("blocked", "blocked: " + missing)
 
+    # -- code-base calls (spec/CODEBASES.md 4) ---------------------------------------------------------
+    def _local_type(self, path: str, type_text: str, extra_types: dict):
+        """Create the local `let/<name>` with this type if `path` names a local that does not exist yet.
+        Returns an undo function (or None)."""
+        segs = path.split("/")
+        if segs[0] != "let" or len(segs) < 2 or segs[1] in self.lam.let_types:
+            return None
+        if len(segs) != 2 or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", segs[1]):
+            raise reject(path, "no-such-path", "let/<name> with an identifier as name")
+        if len(self.lam.let_types) >= MAX_LOCALS:
+            raise reject(path, "too-many-locals", f"at most {MAX_LOCALS} locals")
+        try:
+            t = parse_type(type_text)
+        except TypeSyntaxError as e:
+            raise reject(path, "type-mismatch", "a type for the new local", str(e))
+        added = []
+        for n, text in (extra_types or {}).items():       # named types the callee brings along
+            if n not in self.lam.types and not _known(self.env, n):
+                self.lam.types[n] = parse_type(text)
+                self.lam.types_src[n] = text
+                added.append(n)
+        self.env = self.lam.env(self.outer_env)
+        try:
+            self.env.check_names(t)
+        except TypeSyntaxError as e:
+            for n in added:
+                self.lam.types.pop(n, None); self.lam.types_src.pop(n, None)
+            self.env = self.lam.env(self.outer_env)
+            raise reject(path, "type-mismatch", "a type whose names are declared", str(e))
+        name = segs[1]
+        self.lam.let_types[name] = t
+
+        def undo():
+            if name not in self.lam.let:
+                self.lam.let_types.pop(name, None)
+        return undo
+
+    def _function(self, ref_text: str):
+        """A function to call: a name of the (immutable) code base, or `let/<name>` holding an edited copy."""
+        from .codebase import FunctionDef
+        cb = self.lam.codebase
+        if ref_text in cb:
+            return cb[ref_text]
+        if ref_text.startswith("let/"):
+            tpl = self.lam.let.get(ref_text[4:])
+            if isinstance(tpl, Lambda) and tpl.fn_name:
+                base = self.lam.fn_copies.get(ref_text[4:])
+                return FunctionDef(name=base.name, kind=tpl.kind, body=tpl.body, args=base.args, returns=base.returns,
+                                   types=base.types, description=base.description, effects=base.effects,
+                                   codebase=base.codebase, source=ref_text)
+        raise reject("function", "no-such-function", "one of: " + (", ".join(cb) or "(this task has no functions)"), ref_text)
+
+    def _copy_function(self, path: str, fn_name: str):
+        """write(path="let/x", type="Function<f>"): an editable copy of a code-base function, as a local."""
+        fn = self.lam.codebase.get(fn_name)
+        if fn is None:
+            raise reject("type", "no-such-function", "one of: " + ", ".join(self.lam.codebase), fn_name)
+        if not path.startswith("let/"):
+            raise reject(path, "not-writable", "a local: let/<name>")
+        undo = self._local_type(path, fn.type_text, fn.types)
+        try:
+            self._op_define({"path": path, "type": fn.type_text, fn.kind: fn.body, "types": fn.types or None,
+                             "function": fn.name})
+        except (Reject, Refuse):
+            if undo:
+                undo()
+            raise
+        self.lam.fn_copies[path[4:]] = fn
+        return Result("ok", f"ok   {path} is a copy of {fn.signature}. Edit {path}/{fn.kind}, then call it.")
+
+    def _init(self, init):
+        """`init` is a path when it names an existing value, otherwise the value itself."""
+        if isinstance(init, str):
+            try:
+                _, r = self.resolve(init)
+                if r.get() is not MISSING:
+                    return {"init_from": init}
+            except Reject:
+                pass
+        return {"init": init}
+
+    def _place_call(self, path: str, fn_name: str, v: dict):
+        """Put an instance of a code-base function (plain, or under Map / Fold / Iterate) at `path`.
+        Everything is derived from the function's signature; nothing is parsed from instructions."""
+        cb = self.lam.codebase
+        fn = self._function(fn_name)
+        v = v or {}
+        inputs = dict(v.get("inputs") or {})
+        values = dict(v.get("values") or {})
+        later = []
+        names = {n.rstrip("?"): t for n, t in fn.args.items()}
+        for n in list(inputs) + list(values) + later:
+            if n not in names:
+                raise reject(f"inputs/{n}", "unknown-field", fn.signature)
+        unbound = [n.rstrip("?") for n in fn.required() if n not in inputs and n not in values and n not in later]
+        over, init, until = v.get("over"), v.get("init"), v.get("until")
+        lam_spec = {"type": fn.type_text, fn.kind: fn.body, "args_from": inputs, "args": values or None,
+                    "types": fn.types or None, "effects": fn.effects or None, "function": fn.name}
+        d = {"path": path, "types": fn.types or None}
+        if until is not None or v.get("max") is not None:                       # Iterate
+            if len(unbound) != 1:
+                raise reject("inputs", "bad-call", f"exactly one parameter left for the state: {fn.signature}", ", ".join(unbound))
+            st = names[unbound[0]]
+            chk = cb.get(str(until))
+            if chk is None or len(chk.required()) != 1:
+                raise reject("until", "no-such-function", "a function of one parameter returning Bool", str(until))
+            if not isinstance(v.get("max"), int) or isinstance(v.get("max"), bool):
+                raise reject("max", "type-mismatch", "a whole number: the most rounds allowed")
+            if init is None:
+                raise reject("init", "type-mismatch", "`init`: the path of the starting state")
+            d.update(type=f"Iterate<{st}>", **self._init(init), max=v["max"], state_name=unbound[0],
+                     check_name=chk.required()[0].rstrip("?"), step=lam_spec,
+                     check={"type": chk.type_text, chk.kind: chk.body, "types": chk.types or None, "function": chk.name})
+            slot_type = st
+        elif over is not None and ("acc" in names and "item" in names) and init is not None:   # Fold
+            rest = [n for n in unbound if n not in ("acc", "item")]
+            if rest:
+                raise reject("inputs", "bad-call", f"inputs for: {', '.join(rest)}", fn.signature)
+            d.update(type=f"Fold<{names['item']}, {names['acc']}>", over_from=over, **self._init(init), step=lam_spec)
+            slot_type = names["acc"]
+        elif over is not None:                                                  # Map
+            if len(unbound) != 1:
+                raise reject("inputs", "bad-call", f"exactly one parameter left for the item: {fn.signature}", ", ".join(unbound) or "none")
+            d.update(type=f"Map<{names[unbound[0]]}, {fn.returns}>", over_from=over, item_name=unbound[0], fn=lam_spec)
+            slot_type = f"({fn.returns})[]"
+        else:                                                                   # plain call
+            if unbound:
+                raise reject("inputs", "bad-call", f"inputs for: {', '.join(unbound)}", fn.signature)
+            d.update(lam_spec)
+            d["types"] = fn.types or None
+            slot_type = fn.returns
+        undo = self._local_type(path, slot_type, fn.types)
+        try:
+            result = self._op_define(d)
+        except (Reject, Refuse):
+            if undo:
+                undo()
+            raise
+        _, ref = self.resolve(path)
+        node = ref.get()
+        for lam, f in ((node, fn),) if isinstance(node, Lambda) else \
+                ((getattr(node, "fn", None), fn), (getattr(node, "step", None), fn),
+                 (getattr(node, "check", None), cb.get(str(until)))):
+            if isinstance(lam, Lambda) and f is not None:
+                lam.codebase, lam.fn_name = f.codebase, f.name
+        return result
+
+    def _op_call(self, args):
+        """call(function, to, inputs, ...): place an instance of a function and run it, in one action."""
+        path = str(args.get("to") or "")
+        fn_ref = str(args.get("function") or "")
+        try:                                   # the same function, unfinished, already at `to`: resume it, so
+            _, ref = self.resolve(path)        # that only what failed runs again (there is no separate `run`)
+            node = ref.get()
+        except Reject:
+            node = None
+        if is_pending(node) and node.status in (UNREDUCED, QUIESCED) and _fn_of(node) == self._function(fn_ref).name \
+                and not any(args.get(k) is not None for k in ("inputs", "values", "over", "init", "until", "max")):
+            return self._do_reduce(Action("reduce", paths=[path]))
+        v = {k: args[k] for k in ("inputs", "values", "over", "init", "until", "max") if args.get(k) is not None}
+        self._place_call(path, str(args.get("function") or ""), v)
+        return self._do_reduce(Action("reduce", paths=[path]))
+
     def _op_done(self, args):
         if self.lam.ret is MISSING:
             raise Refuse(Diagnostic("return", "commit-holes", BLOCKS, format_type(self.lam.type.returns)))
@@ -617,13 +776,14 @@ class Session:
         copies = []
 
         def sub(spec, where):
-            body = {k: spec[k] for k in ("type", "instructions", "code", "args", "types", "effects") if spec.get(k) is not None}
+            body = {k: spec[k] for k in ("type", "instructions", "code", "args", "types", "effects", "function") if spec.get(k) is not None}
             copies.extend((src, f"{where}/args/{n}") for n, src in (spec.get("args_from") or {}).items())
             return {"$lambda": body}
 
         kind = type(stated).__name__
-        keys = {"LambdaT": ("instructions", "code", "args", "types", "effects"),
-                "MapT": ("types",), "FoldT": ("init", "types"), "IterateT": ("init", "max", "types")}.get(kind)
+        keys = {"LambdaT": ("instructions", "code", "args", "types", "effects", "function"),
+                "MapT": ("types", "item_name"), "FoldT": ("init", "types"),
+                "IterateT": ("init", "max", "types", "state_name", "check_name")}.get(kind)
         if keys is None:
             raise reject(path, "type-mismatch", "a Lambda, Map, Fold or Iterate type", args["type"])
         body = {k: args[k] for k in keys if args.get(k) is not None}
@@ -633,6 +793,8 @@ class Session:
         copies.extend((src, f"{path}/args/{n}") for n, src in (args.get("args_from") or {}).items())
         if args.get("over_from"):
             copies.append((args["over_from"], f"{path}/over"))
+        if args.get("init_from"):
+            copies.append((args["init_from"], f"{path}/init"))
 
         _, ref = self.resolve(path, create=True)
         before = ref.get()
@@ -878,7 +1040,8 @@ class Session:
 
     # -- eval
     def _do_eval(self, a: Action) -> Result:
-        scope = {"instructions": self.lam.body, "args": js.to_js(self.lam.in_), "return": js.to_js(self.lam.ret)}
+        scope = {"instructions": self.lam.body, "args": js.to_js(self.lam.in_), "return": js.to_js(self.lam.ret),
+                 "let": {k: js.to_js(v) for k, v in self.lam.let.items() if not is_pending(v)}}
         out = js.run(a.body, scope, self.rt._fx(self.lam), body=False, path="eval",
                      effectful=bool(self.lam.effects))
         text = json.dumps(out, ensure_ascii=False)

@@ -155,7 +155,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
 # --------------------------------------------------------------------------- pending nodes
 
 _LAMBDA_KEYS = {"type", "types", "effects", "instructions", "code", "args", "return", "status", "note",
-                "effects_journal"}
+                "effects_journal", "codebase", "let", "function"}
 
 
 def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: str,
@@ -222,15 +222,24 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
         if "return" in body:
             node.ret = coerce(body["return"], t.returns, inner, yaml=yaml, path=f"{path}/return")
         node.journal = list(body.get("effects_journal") or [])
+        if body.get("codebase"):
+            from .codebase import check, from_inline
+            node.codebase = from_inline(body["codebase"], dict(types_src), path or "program")
+            for fn in node.codebase.values():
+                check(fn)
+        node.fn_name = str(body.get("function") or "")
         return node
 
     parts = {MapNode: ("over", "fn"), FoldNode: ("over", "init", "step"),
              IterateNode: ("init", "step", "check", "max")}[cls]
-    state_keys = {"acc", "at", "state", "iteration"}
+    state_keys = {"acc", "at", "state", "iteration", "item_name", "state_name", "check_name"}
     extra = set(map(str, body)) - set(parts) - {"type", "types", "status", "note"} - state_keys
     if extra:
         raise reject(f"{path}/{sorted(extra)[0]}", "unknown-field", f"a {cls.__name__} part")
     node = cls(**common)
+    for k in ("item_name", "state_name", "check_name"):
+        if k in body and hasattr(node, k):
+            setattr(node, k, str(body[k]))
     for part in parts:
         if part in body:
             setattr(node, part, coerce(body[part], part_type(node, part), inner, yaml=yaml,
@@ -257,15 +266,16 @@ def part_type(node: Pending, part: str):
     t = node.type
     if isinstance(node, MapNode):
         return {"over": ListT(t.a),
-                "fn": LambdaT(Record((("item", t.a, False),)), t.b)}[part]
+                "fn": LambdaT(Record(((node.item_name, t.a, False),)), t.b)}[part]
     if isinstance(node, FoldNode):
         return {"over": ListT(t.a), "init": t.s, "acc": t.s,
                 "step": LambdaT(Record((("acc", t.s, False), ("item", t.a, False))), t.s)}[part]
     if isinstance(node, IterateNode):
         return {"init": t.s, "state": t.s, "max": NUM,
-                "step": LambdaT(Record((("state", t.s, False),)), t.s),
-                "check": LambdaT(Record((("recent", ListT(t.s), False), ("iteration", NUM, False))),
-                                 Name("LoopVerdict"))}[part]
+                "step": LambdaT(Record(((node.state_name, t.s, False),)), t.s),
+                "check": (LambdaT(Record(((node.check_name, t.s, False),)), BOOL) if node.check_name else
+                          LambdaT(Record((("recent", ListT(t.s), False), ("iteration", NUM, False))),
+                                  Name("LoopVerdict")))}[part]
     raise KeyError(part)
 
 
@@ -374,12 +384,18 @@ def dump(x: Any) -> Any:
             body["return"] = dump(x.ret)
         if x.journal:
             body["effects_journal"] = [dict(j) for j in x.journal]
+        if x.fn_name:
+            body["function"] = x.fn_name
+        if x.let:
+            body["let"] = {k: dump(v) for k, v in x.let.items()}
     elif isinstance(x, MapNode):
         for part in ("over", "fn"):
             if getattr(x, part) is not MISSING:
                 body[part] = dump(getattr(x, part))
         if x.slots is not None:
             body["slots"] = [dump(s) for s in x.slots]
+        if x.item_name != "item":
+            body["item_name"] = x.item_name
     elif isinstance(x, FoldNode):
         for part in ("over", "init", "step", "acc"):
             if getattr(x, part) is not MISSING:
@@ -392,6 +408,10 @@ def dump(x: Any) -> Any:
                 body[part] = dump(getattr(x, part))
         if x.iteration:
             body["iteration"] = x.iteration
+        if x.state_name != "state":
+            body["state_name"] = x.state_name
+        if x.check_name:
+            body["check_name"] = x.check_name
     return {WRAPPER_OF[type(x)]: body}
 
 

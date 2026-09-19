@@ -20,7 +20,8 @@ def run_program(prog, check_grammar=True):
     samples = []
 
     def factory(lam):
-        plan = prog.plans.get((lam.original_body or lam.body).strip()) or prog.plans.get(lam.body)
+        plan = prog.plans.get(lam.fn_name) if lam.fn_name else None         # a function of the code base
+        plan = plan or prog.plans.get((lam.original_body or lam.body).strip()) or prog.plans.get(lam.body)
         if plan is None:
             plan = next((p for k, p in prog.plans.items() if k.strip() == lam.body.strip()), None)
         assert plan is not None, f"no plan for: {lam.body!r}"

@@ -102,6 +102,19 @@ class Ref:
         raise reject(path, "no-such-path", "a container")
 
 
+class LetRef(Ref):
+    """`let`: the locals of a lambda. Each local has the type given by the write that created it."""
+
+    def __init__(self, lam, env, deny):
+        super().__init__(type=None, env=env, path="let", holder=lam, attr="let", deny=deny)
+
+    def child(self, seg: str, *, create: bool = False) -> Ref:
+        t = self.holder.let_types.get(seg)
+        if t is None:
+            raise reject(f"let/{seg}", "no-such-path", "an existing local (a write with a type creates one)")
+        return Ref(type=t, env=self.env, path=f"let/{seg}", container=self.holder.let, key=seg, deny=self.deny)
+
+
 def _pick_member(u: UnionT, value, seg, env):
     for m in u.members:
         rm = env.resolve(m)
@@ -128,7 +141,9 @@ def _enter(node: Pending, seg: str, env: TypeEnv, path: str, deny: str, acting: 
             return Ref(type=node.type.params, env=inner, path=p, holder=node, attr="in_", deny=d)
         if seg == "return":
             return Ref(type=node.type.returns, env=inner, path=p, holder=node, attr="ret", deny=frozen)
-        raise reject(p, "no-such-path", "instructions, args, or return")
+        if seg == "let" and node is acting:          # locals are private to the lambda that owns them
+            return LetRef(node, inner, deny)
+        raise reject(p, "no-such-path", "instructions, args, let, or return")
     if isinstance(node, MapNode):
         if seg in ("over", "fn"):
             return Ref(type=part_type(node, seg), env=inner, path=p, holder=node, attr=seg, deny=frozen)

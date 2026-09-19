@@ -30,10 +30,10 @@ def test_schema_of_types():
 def test_tool_list_is_constant_and_schemas_narrow():
     doc, s = _session("02-leaf-extraction.yaml")
     names = [t["function"]["name"] for t in S.tools(s)]
-    assert names == ["read", "write", "edit", "run_code", "run", "report_blocker"]
-    write = S.tools(s)[1]["function"]["parameters"]["properties"]
-    assert "return" in write["path"]["enum"] and "args/note" not in write["path"]["enum"]
-    assert "Task<{ customer: Text, order_id: Text, amount: Num, phone?: Text }>" in write["type"]["enum"]
+    assert names == ["read", "write", "edit", "run_code", "report_blocker"]      # `call` appears with a code base
+    alts = S.tools(s)[1]["function"]["parameters"]["x-natlang-alternatives"]
+    paths = [a["path"].get("const") for a in alts]
+    assert "return" in paths and "args/note" not in paths
     s.apply("write", {"path": "return", "type": "x", "value": {"customer": "Dana", "order_id": "0077", "amount": 42.5}})
     assert [t["function"]["name"] for t in S.tools(s)] == names          # same tools after the state changed
 
@@ -68,34 +68,6 @@ def test_edit_is_classic_substitution():
     assert s.apply("edit", {"path": "instructions", "old": "args/", "new": "x"}).codes == ["old-not-unique"]
     r = s.apply("edit", {"path": "instructions", "old": "1. Add up `args/amounts`.\n", "new": ""})
     assert r.kind == "ok" and s.lam.body.startswith("2.")
-
-
-def test_a_map_written_with_inputs_wired_in_one_call():
-    doc = yaml.safe_load((PROGRAMS / "06-map-with-rubric.yaml").read_text())
-    root = _root(doc)
-    rt = Runtime(lambda lam: OracleAgent(oracle, lam))
-    s = Session(rt, root, TypeEnv())
-    r = s.apply("write", {"path": "return", "type": "Map<Text, Label>",
-                          "value": {"over": "args/tickets", "inputs": {"rubric": "args/rubric"},
-                                    "instructions": "Label the ticket in `args/item` according to `args/rubric`."}})
-    assert r.kind == "ok", r.text
-    assert s.apply("run", {"paths": ["return"]}).kind == "done"
-    assert s.finish() and s.lam.ret == doc["expect"]["value"]
-
-
-def test_a_sub_task_write_is_all_or_nothing():
-    doc, s = _session("06-map-with-rubric.yaml")
-    r = s.apply("write", {"path": "return", "type": "Map<Text, Label>",          # `over` is a Text, not a list
-                          "value": {"over": "args/rubric", "instructions": "x"}})
-    assert r.kind == "rejected" and not s.lam.ret
-
-
-def test_code_and_fold_sub_tasks():
-    doc, s = _session("09-fold-crisp-step.yaml")
-    r = s.apply("write", {"path": "return", "type": "Code<Num>", "value": {
-        "code": "return sum(args.lines, l => l.qty * l.unit_price)", "inputs": {"lines": "args/lines"}}})
-    assert r.kind == "ok", r.text
-    assert s.apply("run", {"paths": ["return"]}).kind == "done" and s.lam.ret == doc["expect"]["value"]
 
 
 class ScriptedChat:

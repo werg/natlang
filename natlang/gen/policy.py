@@ -45,19 +45,10 @@ class ReferenceAgent:
             result = yield [("run_code", {"code": p.code})]
             yield [("write", {"path": "return", "type": rtype, "value": result})]
         # A turn's grammar is built from the state BEFORE the turn, so a call that depends on what an
-        # earlier call created goes into the next turn. Independent calls may share a turn.
-        elif p.kind == "map":
-            value = {"over": p.over, "instructions": p.body}
-            if p.inputs:
-                value["inputs"] = p.inputs
-            yield [("write", {"path": "return", "type": f"Map<{p.item_type}, {p.result_type}>", "value": value})]
-            yield [("run", {"paths": ["return"]})]
-        elif p.kind == "map_then_code":                      # outside-in: the consumer first, then its producer
-            yield [("write", {"path": "return", "type": f"Code<{rtype}>",
-                              "value": {"code": p.code, "params": {"flags": f"{p.result_type}[]"}}})]
-            yield [("write", {"path": "return/args/flags", "type": f"Map<{p.item_type}, {p.result_type}>",
-                              "value": {"over": p.over, "instructions": p.body}})]
-            yield [("run", {"paths": ["return"]})]
+        # earlier call created goes into the next turn.
+        elif p.kind == "calls":
+            for name, args in p.steps:
+                yield [(name, args)]
         else:
             raise ValueError(p.kind)
 

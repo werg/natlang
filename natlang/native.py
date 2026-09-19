@@ -25,6 +25,7 @@ CALL_OPEN, CALL_CLOSE = "<|tool_call_start|>", "<|tool_call_end|>"
 _STATIC = r'''
 pystr ::= "\"" ( [^"\\\n] | "\\" [^\n] )* "\"" | "'" ( [^'\\\n] | "\\" [^\n] )* "'"
 pystr1 ::= "\"" ( [^"\\\n] | "\\" [^\n] )+ "\"" | "'" ( [^'\\\n] | "\\" [^\n] )+ "'"
+pylocal ::= "\"let/" [a-z_] [a-z0-9_]* "\"" | "'let/" [a-z_] [a-z0-9_]* "'"
 pyint ::= "-"? [0-9]+
 pynum ::= "-"? [0-9]+ ( "." [0-9]+ )?
 pybool ::= "True" | "False"
@@ -77,6 +78,8 @@ class PyGrammar:
         if "anyOf" in s or "oneOf" in s:
             return self.fresh("any", " | ".join(self.value(x, depth + 1) for x in s.get("anyOf") or s["oneOf"]))
         t = s.get("type")
+        if s.get("x-natlang") == "new-local":          # the name of a local that does not exist yet
+            return "pylocal"
         if t == "string":
             return "pystr"
         if t == "integer":
@@ -134,7 +137,11 @@ class PyGrammar:
         alts = params.get("x-natlang-alternatives")
         kw = lambda k: lit(f"{k}=")
         if alts:
-            bodies = [self._fields(a, list(a), 0, key=kw) for a in alts]
+            bodies = []
+            for a in alts:                             # "x-optional": keys of this alternative that may be left out
+                opt = a.get("x-optional") or []
+                props = {k: v for k, v in a.items() if k != "x-optional"}
+                bodies.append(self._fields(props, [k for k in props if k not in opt], 0, key=kw))
             return self.fresh("call", " | ".join(f'{lit(fn["name"] + "(")} {b} ")"' for b in bodies))
         body = self._fields(params.get("properties") or {}, params.get("required") or [], 0, key=kw)
         return self.fresh("call", f'{lit(fn["name"] + "(")} {body} ")"')

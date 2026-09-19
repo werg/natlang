@@ -76,7 +76,7 @@ def _enum_or_string(values: list, description: str) -> dict:
 
 class ToolSurface:
     name = "tools-v2"
-    TOOLS = ("read", "write", "edit", "run_code", "run", "report_blocker")
+    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker")   # `call` only when there are functions
 
     def slots(self, session):
         return enumerate_slots(session.lam, session.outer_env)
@@ -147,96 +147,117 @@ class ToolSurface:
             pos = positions(sl.value)
             if pos:                                           # a range can only name positions that exist
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
-        sources = [sl.path for sl in existing if not is_body(sl) and not is_pending(sl.value)
-                   and sl.path.count("/") <= 2][:MAX_PATHS]
-        inputs = {"type": "object", "additionalProperties": {"enum": sources}} if sources else None
-        lists = [(sl.path, sl.ref.env.resolve(sl.ref.type).elem) for sl in existing
-                 if isinstance(sl.value, list) and sl.ref.type is not None
-                 and isinstance(sl.ref.env.resolve(sl.ref.type), ListT)]
+        NEW_LOCAL = {"type": "string", "x-natlang": "new-local",
+                     "description": "let/<name>: a new local, created by this call"}
+        plain = [sl for sl in existing if not is_body(sl) and not is_pending(sl.value)]
+        def fitting(type_text, env_types):
+            """Paths of existing values that fit a parameter of this type."""
+            from .types import fits, parse_type
+            try:
+                want = parse_type(type_text)
+            except Exception:
+                return [sl.path for sl in plain][:MAX_PATHS]
+            out = []
+            for sl in plain:
+                env_ = sl.ref.env.child({n: parse_type(t) for n, t in (env_types or {}).items()
+                                         if not _declared(sl.ref.env, n)})
+                try:
+                    if sl.ref.type is not None and fits(sl.ref.type, want, env_):
+                        out.append(sl.path)
+                except Exception:
+                    pass
+            return out[:MAX_PATHS]
 
-        def body(required: dict, optional: dict = None) -> dict:
-            props = {**required, **{k: v for k, v in (optional or {}).items() if v}}
-            return {"type": "object", "properties": props, "required": list(required),
-                    "additionalProperties": False}
+        targets = [sl.path for sl in definable if not sl.path.startswith("args")][:MAX_PATHS]
+        to_schema = {"anyOf": ([{"enum": targets}] if targets else []) + [NEW_LOCAL]}
+        functions = dict(lam.codebase)
+        for name, tpl in lam.let.items():                  # edited copies are callable too
+            if isinstance(tpl, Lambda) and name in lam.fn_copies:
+                functions[f"let/{name}"] = lam.fn_copies[name]
+        checks = [n for n, f in lam.codebase.items() if f.returns.strip() == "Bool" and len(f.required()) == 1]
+        call_alts = []
+        for ref_name, f in functions.items():
+            names = {n.rstrip("?"): t for n, t in f.args.items()}
+            in_props = {n: {"enum": fitting(t, f.types)} for n, t in names.items()}
+            in_props = {n: sch for n, sch in in_props.items() if sch["enum"]}
+            inputs_schema = {"type": "object", "properties": in_props, "required": [], "additionalProperties": False}
+            base = {"function": {"const": ref_name}, "to": to_schema}
+            req_names = [n.rstrip("?") for n in f.required()]
+            if all(n in in_props for n in req_names):                      # a plain call
+                call_alts.append({**base, **({"inputs": {**inputs_schema, "required": req_names}} if names else {})})
+            list_paths = [sl.path for sl in plain if isinstance(sl.value, list)]
+            if list_paths and names:                                       # once per item of a list
+                call_alts.append({**base, "over": {"enum": list_paths}, "inputs": inputs_schema,
+                                  "x-optional": ["inputs"]})
+                if "acc" in names and "item" in names:                     # carried along a list
+                    call_alts.append({**base, "over": {"enum": list_paths}, "init": {}, "inputs": inputs_schema,
+                                      "x-optional": ["inputs"]})
+            if checks and names:                                           # repeated until a check holds
+                call_alts.append({**base, "init": {"enum": [sl.path for sl in plain][:MAX_PATHS]},
+                                  "until": {"enum": checks}, "max": {"type": "integer"},
+                                  "inputs": inputs_schema, "x-optional": ["inputs"]})
 
-        text = {"type": "string"}
-        later = {"type": "object", "additionalProperties": {"type": "string"}}   # name -> type, produced by a sub-task
-        task_alts = []
-        # Sub-task forms are offered for named slots only: offering them for every element of a filled list
-        # multiplies the tool schema by the list length (a four-item `return` cost 15k characters).
-        is_element = lambda x: x.path.rsplit("/", 1)[-1].isdigit()
-        for sl in [x for x in definable if x.path.count("/") <= 2 and not is_element(x)]:
-            t, env_ = sl.ref.type, sl.ref.env
-            rt, ft = env_.resolve(t), format_type(t)
-            if isinstance(rt, PENDING_TYPES):
-                continue
-            alt_ = lambda ty, val: {"path": {"const": sl.path}, "type": {"const": ty}, "value": val}
-            task_alts.append(alt_(f"Task<{ft}>", body({"instructions": text}, {"inputs": inputs, "params": later})))
-            task_alts.append(alt_(f"Code<{ft}>", body({"code": text}, {"inputs": inputs, "params": later})))
-            for over, a in lists:
-                fa = format_type(a)
-                if isinstance(rt, ListT):
-                    task_alts.append(alt_(f"Map<{fa}, {format_type(rt.elem)}>",
-                                          body({"over": {"const": over}, "instructions": text}, {"inputs": inputs})))
-                task_alts.append(alt_(f"Fold<{fa}, {ft}>",
-                                      body({"over": {"const": over}, "init": schema_of(t, env_), "instructions": text},
-                                           {"inputs": inputs})))
-            task_alts.append(alt_(f"Iterate<{ft}>",
-                                  body({"init": schema_of(t, env_), "instructions": text, "until": text,
-                                        "max": {"type": "integer"}}, {"inputs": inputs})))
         value_alts = [{"path": {"const": s.path}, "type": {"const": format_type(s.ref.type)},
                        "value": schema_of(s.ref.type, s.ref.env)} for s in writable]
-        write_alts = value_alts + task_alts
-        shapes, seen_shapes = [], set()              # for servers that read plain JSON Schema: every shape `value` may take
-        for a_ in write_alts:
+        value_alts.append({"path": NEW_LOCAL, "type": {"type": "string"}, "value": {}})
+        copy_alts = [{"path": NEW_LOCAL, "type": {"const": f"Function<{n}>"}} for n in lam.codebase]
+        write_alts = value_alts + copy_alts
+        shapes, seen_shapes = [], set()
+        for a_ in value_alts:
             k_ = json.dumps(a_["value"], sort_keys=True, default=str)
             if k_ not in seen_shapes:
                 seen_shapes.add(k_)
                 shapes.append(a_["value"])
-        any_value = {"description": "For a plain type: the value itself (not wrapped in an object). "
-                                    "For a sub-task type: an object with instructions or code.",
-                     "anyOf": shapes} if shapes else {}
-        all_types = list(dict.fromkeys(a["type"]["const"] for a in write_alts))
+        any_value = {"description": "The value itself, complete (not wrapped in an object).",
+                     "anyOf": shapes}              # the last shape ({}) is a new local: any value of its stated type
 
-        sub = {"type": "object", "description": "A sub-task: its type, and either instructions or code.",
-               "properties": {"type": {"type": "string", "description": "e.g. Lambda<{ item: Text }, Bool>"},
-                              "instructions": {"type": "string"}, "code": {"type": "string"},
-                              "args": {"type": "object"},
-                              "args_from": {"type": "object", "additionalProperties": {"type": "string"}}},
-               "required": ["type"]}
-        paths = [s.path for s in existing]
-        return [
-            tool("read", "Read a value from the workspace. Optional line or item range for long ones.",
-                 {"path": _enum_or_string((["args"] if lam.in_ else []) + [s.path for s in readable], "what to read"),
-                  "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"], alternatives=read_alts),
-            tool("write", "Write into the workspace. `type` says what you are putting at `path`. A plain type (as shown "
-                          "for the slot): `value` is the value itself, complete. Task<T>: a sub-task whose result goes "
-                          "there; `value` = {instructions, inputs}. Code<T>: the same with {code} in TypeScript, for "
-                          "exact work. Map<A, B>: do the instructions once for every item of the list `over` (the item "
-                          "is `args/item`). Fold<A, S>: carry `init` through the list item by item (`args/acc`, "
-                          "`args/item`). Iterate<S>: repeat from `init` until `until` holds, at most `max` times. "
-                          "`inputs` maps a name to a path whose value the sub-task receives as `args/<name>`; `params` "
-                          "declares inputs (name -> type) that another sub-task, written into `<path>/args/<name>`, will produce. "
-                          "After writing a sub-task, `run` it.",
-                 {"path": _enum_or_string([s.path for s in definable], "where the value or the result belongs"),
-                  "type": _enum_or_string(all_types, "what is being written"),
-                  "value": any_value}, ["path", "type", "value"], alternatives=write_alts),
+        tools = [
+            tool("read", "Read a value from the workspace. Optional line or item range for long ones. "
+                         "`codebase/<function>` shows the text of a function.",
+                 {"path": _enum_or_string((["args"] if lam.in_ else []) + [s.path for s in readable] +
+                                          [f"codebase/{n}" for n in lam.codebase], "what to read"),
+                  "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
+                 alternatives=read_alts + [{"path": {"const": f"codebase/{n}"}} for n in lam.codebase]),
+            tool("write", "Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name "
+                          "creates the local; `type` says what it holds). The value must be complete. "
+                          "To change how a function works, copy it first: type `Function<name>` with path "
+                          "`let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.",
+                 {"path": {"type": "string", "description": "`return`, a part of it, or let/<name>"},
+                  "type": {"type": "string", "description": "the type of what is written"},
+                  "value": any_value}, ["path", "type"], alternatives=write_alts),
             tool("edit", "Replace text: `old` must occur exactly once in the text at `path`. "
-                         "Use it to delete finished steps from `instructions` (new = \"\") or to substitute a "
-                         "result into them.",
+                         "Use it to delete finished steps from `instructions` (new = \"\"), to substitute a "
+                         "result into them, or to adapt a copied function.",
                  {"path": _enum_or_string([s.path for s in texts], "a text"),
                   "old": {"type": "string"}, "new": {"type": "string"}}, ["path", "old", "new"]),
             tool("run_code", "Run TypeScript for exact work (counting, arithmetic, sorting, string operations). "
-                             "Your inputs are in `args`. The value of the last expression comes back to you.",
+                             "Your inputs are in `args`, your locals in `locals`. The value of the last expression "
+                             "comes back to you.",
                  {"code": {"type": "string"}}, ["code"]),
-            tool("run", "Run sub-tasks you defined and wait for their results.",
-                 {"paths": {"type": "array", "minItems": 1,
-                            "items": _enum_or_string([s.path for s in pending], "a sub-task")}}, ["paths"]),
+        ]
+        if functions:
+            tools.append(
+                tool("call", "Call one of your functions and put its result at `to` (`return`, a part of it, or a "
+                             "local `let/<name>`). `inputs` maps each parameter to the path of its value. With "
+                             "`over`: call it once for every item of that list (the item goes to the one parameter "
+                             "you left out); the result is the list of results. With `over` and `init`: carry `acc` "
+                             "through the list. With `init`, `until`, `max`: repeat from the value at `init` until "
+                             "the function `until` says true, at most `max` times. Calling again with only "
+                             "`function` and `to` retries what did not finish.",
+                     {"function": {"enum": list(functions)}, "to": {"type": "string"},
+                      "inputs": {"type": "object", "additionalProperties": {"type": "string"}},
+                      "over": {"type": "string"}, "init": {}, "until": {"type": "string"},
+                      "max": {"type": "integer"}}, ["function", "to"],
+                     alternatives=call_alts + [{"function": {"const": n}, "to": {"enum": [p_]}}
+                                               for n in functions for p_ in
+                                               [sl.path for sl in existing if is_pending(sl.value)
+                                                and sl.value.status in (UNREDUCED, QUIESCED)][:4]]))
+        tools.append(
             tool("report_blocker", "The task cannot be done as asked: the inputs do not determine the result, or a rule "
                                    "does not cover the case. Say exactly what is missing. This ends the task without "
                                    "a result; do not guess instead.",
-                 {"missing": {"type": "string"}}, ["missing"]),
-        ]
+                 {"missing": {"type": "string"}}, ["missing"]))
+        return tools
 
     # -- what the model is shown ----------------------------------------------------
     def render_request(self, session) -> str:
@@ -244,7 +265,8 @@ class ToolSurface:
         shares a channel with instructions: the workspace arrives as a tool result (`opening_read`)."""
         lam = session.lam
         body = lam.body.strip() or "(no instructions left)"
-        return f"{body}\n\nWrite the result to `return` ({format_type(lam.type.returns)})."
+        fns = self.functions(session)
+        return f"{body}\n\nWrite the result to `return` ({format_type(lam.type.returns)})." + (f"\n\n{fns}" if fns else "")
 
     def opening_read(self, session):
         """A first step the harness performs on the agent's behalf: read the workspace. Returns
@@ -252,6 +274,11 @@ class ToolSurface:
         if not session.lam.in_:
             return None
         return "read", {"path": "args"}, self.render_state(session)
+
+    def functions(self, session) -> str:
+        from .codebase import listing
+        text = listing(session.lam.codebase)
+        return ("Functions you can call:\n" + text) if text else ""
 
     def render_state(self, session) -> str:
         """The workspace. Small values are shown inline; long ones are listed for `read`.
@@ -261,6 +288,11 @@ class ToolSurface:
         for n, ft, _ in lam.type.params.fields:
             if n in lam.in_:
                 out.append(f"  args/{n} ({format_type(ft)}, read-only): {_preview(lam.in_[n])}")
+        for n, t in lam.let_types.items():
+            v = lam.let.get(n, MISSING)
+            if v is not MISSING:
+                kind = f"a copy of {lam.fn_copies[n].name}, editable" if n in lam.fn_copies else format_type(t)
+                out.append(f"  let/{n} ({kind}): {'' if n in lam.fn_copies else _preview(v)}".rstrip(": ").rstrip())
         filled, todo, subs = [], [], []
         self._walk(lam.ret, lam.type.returns, env, "return", filled, todo, subs)
         out.append(f"  return ({format_type(lam.type.returns)}): " +
@@ -279,6 +311,11 @@ class ToolSurface:
         lam = session.lam
         if lam.ret is MISSING:
             return f"`return` has not been written yet. Write a {format_type(lam.type.returns)} to `return`."
+        for n, t in lam.let_types.items():
+            v = lam.let.get(n, MISSING)
+            if v is not MISSING:
+                kind = f"a copy of {lam.fn_copies[n].name}, editable" if n in lam.fn_copies else format_type(t)
+                out.append(f"  let/{n} ({kind}): {'' if n in lam.fn_copies else _preview(v)}".rstrip(": ").rstrip())
         filled, todo, subs = [], [], []
         self._walk(lam.ret, lam.type.returns, session.env, "return", filled, todo, subs)
         if subs:
@@ -311,6 +348,15 @@ class ToolSurface:
     # -- tool call -> harness operation -----------------------------------------
     def apply(self, session, name: str, args: dict):
         return session.apply(name, args or {})
+
+
+def _declared(env, name: str) -> bool:
+    from .types import TypeSyntaxError, parse_type
+    try:
+        env.check_names(parse_type(name))
+        return True
+    except TypeSyntaxError:
+        return False
 
 
 FULL_TEXT, FULL_LINES = 400, 8     # a text up to this size is shown whole: a cut-off rubric reads like a complete one

@@ -30,4 +30,4 @@ def test_dependent_calls_are_in_separate_turns():
     samples, _ = run_program(prog)
     root_task = samples[0]["messages"][1]["content"]           # the root episode comes first, whatever its wording
     root_turns = [s["skill"] for s in samples if s["messages"][1]["content"] == root_task]
-    assert root_turns == ["write", "write", "run", "reply"]
+    assert root_turns == ["call", "call", "reply"]        # the second call reads the local the first one made

@@ -28,9 +28,21 @@ def import_path(path: Path, t, env: TypeEnv) -> Any:
     return text if rt == TEXT else yaml.safe_load(text)
 
 
+def instantiate(fn) -> Lambda:
+    """A fresh root lambda for a function of a code base (natlang/codebase.py)."""
+    root = load_program({"$lambda": {**fn.to_lambda_doc(), "function": fn.name}})
+    root.codebase = fn.codebase
+    return root
+
+
 def load(program_file: Path, inputs: dict) -> Pending:
-    root = load_program(yaml.safe_load(program_file.read_text()).get("program")
-                        or yaml.safe_load(program_file.read_text()))
+    program_file = Path(program_file)
+    if program_file.suffix in (".nl", ".ts"):            # a code base on disk: main.nl + main/
+        from .codebase import load_function
+        root = instantiate(load_function(program_file))
+    else:
+        root = load_program(yaml.safe_load(program_file.read_text()).get("program")
+                            or yaml.safe_load(program_file.read_text()))
     if isinstance(root, Lambda):
         env = root.env(TypeEnv())
         for name, src in inputs.items():

@@ -353,6 +353,8 @@ def fits(a: Type, b: Type, env: TypeEnv, _seen=None) -> bool:
         return all(fits(m, b, env, _seen) for m in a.members)
     if isinstance(b, UnionT):
         return any(fits(a, m, env, _seen) for m in b.members)
+    if isinstance(a, Lit) and isinstance(b, Prim):      # a literal is a value of its base type: "spam" fits Text
+        return b == (TEXT if isinstance(a.value, str) else NUM)
     if isinstance(a, ListT) and isinstance(b, ListT):
         return fits(a.elem, b.elem, env, _seen)
     if isinstance(a, DictT) and isinstance(b, DictT):

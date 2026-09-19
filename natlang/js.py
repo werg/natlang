@@ -63,7 +63,7 @@ def run(code: str, scope: dict, fx: Callable[[str, str, list], Any], *, body: bo
         ctx.set_time_limit(TIME_LIMIT_S)
         ctx.eval('globalThis.__fx = () => JSON.stringify({ __error: "effect-undeclared" });')
     ctx.eval(_PRELUDE)
-    ctx.eval("globalThis.self = __deepFreeze(" + json.dumps(scope) + "); globalThis.args = self.args;")
+    ctx.eval("globalThis.self = __deepFreeze(" + json.dumps(scope) + "); globalThis.args = self.args; globalThis.locals = self.let || {};")
     runner = ctx.eval("__runBody" if body else "__runExpr")
     try:
         out = runner(code)

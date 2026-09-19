@@ -1,6 +1,8 @@
 # Code bases, calls and locals (proposal for SPEC v0.2)
 
-Status: **draft for discussion**, 2026-09-19. Nothing here is implemented yet. It
+Status: **agreed and implemented** (2026-09-19): `natlang/codebase.py`, `Session._place_call`,
+`tests/test_codebase.py`. Not yet done: serializing `codebase` on swap-out, `max_depth` enforcement at run time,
+`types.ts` beyond simple aliases. It
 extends SPEC.md §3 (lambdas) and §5 (the tool surface); where they disagree,
 this document is the proposal and SPEC.md is what runs today. A worked example
 is in `examples/triage/`.
@@ -82,7 +84,6 @@ Frontmatter:
 | `uses` | name -> relative path of a function defined elsewhere (a link) |
 | `effects` | capabilities (SPEC §9.5) |
 | `recursive`, `max_depth` | required when the function can reach itself (§3.3) |
-| `authoring` | `free` allows model-written sub-tasks (§4.3). Default: off |
 
 ### 3.2 Scope is lexical
 
@@ -115,77 +116,75 @@ or `{ $link: path }`, so conformance programs stay single files.
 
 ## 4. Calls
 
-The interpreter creates a sub-task by **instantiating a function of its code
-base**. The function is named in the type of the write; everything else is
-derived and checked by the harness.
+There are **no anonymous lambdas**. Every sub-task is an instance of a function
+of the acting lambda's code base, started with one tool, `call`, which places
+the instance and runs it in one action:
 
 ```
-write(path="let/labels", type="Map<classify>",
-      value={ over: "args/tickets", inputs: { rubric: "args/rubric" } })
-write(path="let/summary", type="Call<summarize>", value={ inputs: { tickets: "let/urgent" } })
-write(path="let/total",  type="Fold<add_line>",  value={ over: "args/lines", init: 0 })
-write(path="let/draft2", type="Iterate<shorten>", value={ init: "let/draft", until: "word_count", limit: 60, max: 3 })
-run(paths=["let/labels"])
+call(function="classify", to="let/labels", over="args/tickets", inputs={ rubric: "args/rubric" })
+call(function="summarize", to="return/summary", inputs={ tickets: "let/urgent" })
+call(function="add_line", to="let/total", over="args/lines", init=0)
+call(function="shorten", to="return", init="let/draft", until="is_short", max=3)
+call(function="classify", to="let/labels")            # again, arguments omitted: resume what did not finish
 ```
 
-Rules (all type-level, all enforced at write time):
+Rules (all type-level, enforced before anything enters the tree):
 
-- `Call<f>`: the slot must accept `f`'s return type. `inputs` maps each of
-  `f`'s parameters to a path whose value fits it, or `params` declares it as
-  produced later (SPEC §3, continuations). Unknown or missing parameters are
-  rejected with the signature in the hint.
-- `Map<f>`: the slot must accept `R[]`. Exactly one required parameter of `f`
-  is left unbound by `inputs`; it receives the item, and must accept the
-  element type of `over`.
-- `Fold<f>`: `f` has parameters named `acc` and `item`, and returns the type of `acc`.
-- `Iterate<f>`: `f` maps the state type to itself. The check is a function of
-  the code base returning `Bool` or `LoopVerdict`, applied to the state.
-  (Open: whether a one-line code expression is also allowed as the check.)
-- Under constrained decoding the function names, the parameter names and the
-  candidate paths are enums. The model chooses; it does not spell.
+- `function`: a name of the code base, or `let/<copy>` (§4.2).
+- `to`: `return`, a part of it, or a local. A new `let/<name>` is created
+  with the type derived from the signature; the interpreter states no type.
+- `inputs` maps parameters to paths of existing values that fit them.
+  (`values` may give small literals instead.) Unknown and missing parameters
+  are rejected with the signature in the message.
+- `over` (Map): exactly one required parameter is left unbound; it receives
+  the item and must accept the element type. The result is `R[]`.
+- `over` + `init` (Fold): the function has parameters `acc` and `item` and returns the type of `acc`.
+- `init` + `until` + `max` (Iterate): one parameter is left unbound and
+  receives the state; `until` names a code-base function of one parameter
+  returning Bool, applied to the state after every round; `max` is mandatory.
+- The same function, unfinished, already at `to`, and no other arguments: the
+  instance **resumes**. Only the failed items of a Map run again; a Fold or an
+  Iterate continues where it stopped. There is no separate `run`.
+- Under constrained decoding the function names, the parameter names, the
+  candidate paths (only those whose type fits) and the check functions are enums.
 
-What the model is shown: a listing, not the bodies.
+What the model is shown, after its instructions:
 
 ```
 Functions you can call:
   classify(ticket: Text, rubric: Text) -> Label      Label one ticket using the rubric.
   is_urgent(ticket: Text) -> Bool                    Does this ticket need attention within the hour?
-  select_by_flags(items: Text[], flags: Bool[]) -> Text[]   The items whose flag is true.
 ```
 
-`read(path="codebase/classify")` shows a body when the interpreter needs it.
+`read(path="codebase/classify")` shows a body.
+
+The tool set: `read, write, edit, run_code, call, report_blocker` (`call` is
+absent when the lambda has no functions: such a lambda is a leaf).
 
 ### 4.1 What the interpreter still does itself
 
-- Small steps of its own function ("write one paragraph about ...",
-  a condition such as `if urgent is empty`): by reading, thinking, and a plain
-  `write` to a local or to `return`.
+- Small steps of its own function ("write one paragraph about ...", a
+  condition such as `if urgent is empty`): read, think, plain `write`.
 - Exact glue the author did not name a function for (`l is not "spam"` over a
-  list): `run_code`, then a plain `write` of the result.
+  list): `run_code` (inputs in `args`, locals in `locals`), then a plain `write`.
 - Conditionals: evaluate the condition, then carry out only the branch taken.
   The harness knows nothing about branches.
 - Bookkeeping in its own `instructions`: deleting finished steps, substituting
   results (SPEC §7.2). Unchanged.
 
-### 4.2 Editing a copy
+### 4.2 Changing a function: copy, edit, call the copy
 
-After instantiating `f`, the interpreter may edit the instructions of the copy
-before running it. Allowed, discouraged: specialization belongs in arguments.
-The reference policy never does it.
-
-### 4.3 Free authoring
-
-`Task<T>`, `Code<T>`, and `Map<A, B>` with model-written instructions (the
-whole of today's surface) are available only in a lambda whose definition says
-`authoring: free`. Default off: a prose program without a code base is a
-leaf, and is answered whole. The capability stays in the language and in a
-slice of the training corpus.
+The code base is immutable. `write(path="let/strict", type="Function<is_urgent>")`
+puts an editable copy into a local; `edit(path="let/strict/instructions", ...)`
+changes it; `call(function="let/strict", ...)` instantiates from the copy.
+The copy keeps the signature and the code base of the original. This is the
+only form of authoring: there is no way to create a function from nothing,
+which also keeps recursion where the author put it (§3.3).
 
 ## 5. Open points
 
-1. Iterate's check: function only, or also a code expression?
-2. Does `authoring: free` inherit into the code base of the function that declares it? (Proposed: no.)
-3. Listing budget: how many functions may a code base have before the listing must be paged? (Proposed: 12.)
+1. Iterate's check is a function (decided). 
+2. Listing budget: how many functions may a code base have before the listing must be paged? (Proposed: 12.)
 4. A generic `std/`: which functions, and is it linked implicitly? (Proposed: explicit `uses` only.)
 5. Pseudocode dialect: none is normative. The corpus renders the same program
    in several (Python-like, numbered steps, structured prose).

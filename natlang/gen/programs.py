@@ -14,7 +14,7 @@ RECORD = "{ customer: Text, order_id: Text, amount: Num, phone?: Text }"
 
 @dataclass
 class Plan:
-    kind: str                      # leaf | crisp | map | map_then_code | blocked (note = what is missing)
+    kind: str                      # leaf | crisp | calls | blocked (note = what is missing)
     gold: Callable = None          # leaf: args -> value
     code: str = ""                 # crisp / map_then_code: TypeScript
     over: str = ""                 # map: path of the list
@@ -23,6 +23,7 @@ class Plan:
     body: str = ""                 # map: instructions of the body lambda
     inputs: dict = field(default_factory=dict)
     note: str = ""
+    steps: list = field(default_factory=list)   # calls: [(tool, args)], one per turn
 
 
 @dataclass
@@ -120,18 +121,27 @@ def crisp_scalar(rng, text=None) -> Program:
                    {"numbers": xs}, expected, {text: Plan("crisp", code=code, note="Computed it with code.")})
 
 
+CLASSIFY_FN = {"description": "Label one ticket using the rubric.", "args": {"ticket": "Text", "rubric": "Text"},
+               "returns": "Label", "instructions": "Label the ticket in `args/ticket` according to `args/rubric`."}
+URGENT_FN = {"description": "Is this ticket urgent?", "args": {"ticket": "Text"}, "returns": "Bool",
+             "instructions": "Is the ticket in `args/ticket` urgent? Answer true or false."}
+COUNT_FN = {"description": "How many flags are true.", "args": {"flags": "Bool[]"}, "returns": "Num",
+            "code": "return args.flags.filter(Boolean).length"}
+
+
 def map_leaf(rng, text=None) -> Program:
     items = world.distinct(rng, world.ticket, rng.randint(3, 7))
     gold = {i["text"]: i["category"] for i in items}
     text = _pick(rng, ["Label each ticket in `args/tickets` according to `args/rubric`.",
                        "Go through `args/tickets` and give every ticket its category from `args/rubric`."], family="map_leaf", text=text)
-    body = "Label the ticket in `args/item` according to `args/rubric`."
     return Program("map_leaf", {"$lambda": {"type": "Lambda<{ tickets: Text[], rubric: Text }, Label[]>",
-                                            "types": {"Label": LABEL}, "instructions": text}},
+                                            "types": {"Label": LABEL}, "instructions": text,
+                                            "codebase": {"classify": CLASSIFY_FN}}},
                    {"tickets": [i["text"] for i in items], "rubric": world.RUBRIC}, [i["category"] for i in items],
-                   {text: Plan("map", over="args/tickets", result_type="Label", body=body,
-                               inputs={"rubric": "args/rubric"}, note="Labelled every ticket with a Map."),
-                    body: Plan("leaf", gold=lambda a: gold[a["item"]], note="Labelled the ticket.")})
+                   {text: Plan("calls", steps=[("call", {"function": "classify", "to": "return", "over": "args/tickets",
+                                                        "inputs": {"rubric": "args/rubric"}})],
+                               note="Labelled every ticket with classify."),
+                    "classify": Plan("leaf", gold=lambda a: gold[a["ticket"]], note="Labelled the ticket.")})
 
 
 def map_then_count(rng, text=None) -> Program:
@@ -139,13 +149,14 @@ def map_then_count(rng, text=None) -> Program:
     gold = {i["text"]: i["urgent"] for i in items}
     text = _pick(rng, ["How many of the tickets in `args/tickets` are urgent?",
                        "Count the urgent tickets in `args/tickets`."], family="map_then_count", text=text)
-    body = "Is the ticket in `args/item` urgent? Answer true or false."
-    return Program("map_then_count", {"$lambda": {"type": "Lambda<{ tickets: Text[] }, Num>", "instructions": text}},
+    return Program("map_then_count", {"$lambda": {"type": "Lambda<{ tickets: Text[] }, Num>", "instructions": text,
+                                                  "codebase": {"is_urgent": URGENT_FN, "count_true": COUNT_FN}}},
                    {"tickets": [i["text"] for i in items]}, sum(1 for i in items if i["urgent"]),
-                   {text: Plan("map_then_code", over="args/tickets", result_type="Bool", body=body,
-                               code="return args.flags.filter(Boolean).length",
-                               note="Judged each ticket with a Map, then counted with code."),
-                    body: Plan("leaf", gold=lambda a: gold[a["item"]], note="Judged the ticket.")})
+                   {text: Plan("calls", steps=[("call", {"function": "is_urgent", "to": "let/flags", "over": "args/tickets"}),
+                                               ("call", {"function": "count_true", "to": "return",
+                                                         "inputs": {"flags": "let/flags"}})],
+                               note="Judged each ticket with is_urgent, then counted with count_true."),
+                    "is_urgent": Plan("leaf", gold=lambda a: gold[a["ticket"]], note="Judged the ticket.")})
 
 
 FAMILIES = {f.__name__: f for f in (judge, classify, extract, crisp_scalar, map_leaf, map_then_count)}
