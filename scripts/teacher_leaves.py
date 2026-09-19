@@ -115,6 +115,8 @@ def main():
     trajectory_path = a.trajectory_out or (audit_path.with_suffix(".trajectory.ir.jsonl") if a.ir else None)
     if trajectory_path and not a.ir:
         ap.error("--trajectory-out requires --ir to link trajectories to frozen programs")
+    if trajectory_path and trajectory_path.resolve() == audit_path.resolve():
+        ap.error("trajectory IR and raw audit need different output paths")
     if trajectory_path and trajectory_path.exists():
         ap.error(f"refusing overwrite: {trajectory_path}")
     links = program_links(a.ir) if a.ir else None
