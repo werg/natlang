@@ -90,3 +90,30 @@ The real collector dry run `runs/teacher-leaves-simple-s886.jsonl` passed all
 four selected shopkeeper leaves with the revised prompt, including its crisp
 checks and teacher judgments; zero references were admitted. This verifies
 that collection path for those examples, not all generative leaf families.
+
+## Reference backlog and first real backfill
+
+The current-code 10,000-program synthetic IR snapshot has 453 provisional
+programs with generated-text template stand-ins. Across them are 404 distinct
+missing leaf keys: 264 `say`, 139 `page_content`, and one `submission_page`.
+The reference bank initially had 33 entries, none matching these frozen keys.
+A webserver dry run (`runs/teacher-webserver-dry-s886.jsonl`) passed one page
+fragment and admitted none.
+
+The first seed-73 backfill used the `v7_arch` mix and the first 300 programs,
+whose 16 missing keys matched the frozen IR exactly in a replay check. Its
+audit is `runs/teacher-leaves-ir-backfill-s73-first8.jsonl`: eight of eight
+attempts passed the collector's checks and were admitted. The bank now has
+41 entries; eight match the frozen IR. If the same program inputs were rebuilt
+using these references, 11 of 453 provisional programs would become eligible,
+leaving 442 programs and 396 distinct missing keys. The frozen IR and traces
+still carry their original template outputs and provisional flags. A new IR
+build and materialization, with new manifests, is required to incorporate
+new references. The old historical v8 shard is not an exact replay because
+its original generator snapshot is unavailable.
+
+Before a full teacher pass, compare the generated task keys against the frozen
+IR key inventory. Source drift can make a seed replay produce different keys.
+Preserve rejected attempts and judge results in the audit, and sample accepted
+outputs by function. The eight-case pilot establishes the collector path on
+those inputs, not the acceptance rate or quality of all remaining leaves.
