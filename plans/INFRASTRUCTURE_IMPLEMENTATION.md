@@ -1,6 +1,6 @@
 # Infrastructure implementation plan for the complete project portfolio
 
-Planning revision: 2026-09-20. Status: concrete proposed implementation sequence; no work below is reported as implemented. All 20 project families are in scope. This document is the sequencing authority where earlier roadmap/refactor task ordering differs. The [execution interfaces](EXECUTION_INTERFACES.md) supply interface design; the [project index](projects/README.md) supplies product requirements and C0–C7 capability definitions.
+Planning revision: 2026-09-20. Status: implementation sequence with code delivered on `infrastructure-implementation`; see [implementation status](INFRASTRUCTURE_IMPLEMENTATION_STATUS.md) for patch evidence and remaining live-model evaluation. All 20 project families are in scope. This document is the sequencing authority where earlier roadmap/refactor task ordering differs. The [execution interfaces](EXECUTION_INTERFACES.md) supply interface design; the [project index](projects/README.md) supplies product requirements and C0–C7 capability definitions.
 
 ## 1. What to optimise
 
