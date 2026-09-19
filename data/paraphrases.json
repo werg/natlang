@@ -1,0 +1,95 @@
+{
+ "Is `args/message` a positive review? Answer true or false.": [
+  "Is `args/message` a positive review? Answer: true or false.",
+  "Could you please confirm whether `args/message` is a positive review? Answer true or false.",
+  "Checklist: Is `args/message` a positive review? Answer: true or false.",
+  "is `args/message` a positive review? answer true or false."
+ ],
+ "Tell me if the customer in `args/message` is happy with the purchase (true or false).": [
+  "Return true or false for whether the customer in `args/message` is happy with the purchase.",
+  "Could you please tell me, as true or false, whether the customer in `args/message` is happy with the purchase?",
+  "- Check if the customer in `args/message` is happy with the purchase; return true or false.",
+  "Say true or false: is the customer in `args/message` happy with the purchase?"
+ ],
+ "Decide whether the review in `args/message` is positive.": [
+  "Determine whether the review in `args/message` is positive.",
+  "Please decide whether the review in `args/message` is positive.",
+  "Check whether the review in `args/message` is positive.",
+  "Decide if the review in `args/message` is positive."
+ ],
+ "Label the ticket in `args/ticket` according to `args/rubric`.": [
+  "Label `args/ticket` using `args/rubric`.",
+  "Could you please label the ticket in `args/ticket` according to `args/rubric`?",
+  "- Label the ticket in `args/ticket` according to `args/rubric`.",
+  "label ticket in `args/ticket` per `args/rubric`"
+ ],
+ "Using the rubric in `args/rubric`, say which category `args/ticket` belongs to.": [
+  "Classify `args/ticket` into a category using `args/rubric`.",
+  "Could you please identify which category `args/ticket` belongs to, using the rubric in `args/rubric`?",
+  "Use the rubric in `args/rubric` and state which category `args/ticket` belongs to.",
+  "Use `args/rubric` to say what category `args/ticket` is in."
+ ],
+ "Which label from `args/rubric` fits `args/ticket`?": [
+  "Which label in `args/rubric` fits `args/ticket`?",
+  "Could you please tell me which label from `args/rubric` fits `args/ticket`?",
+  "- Identify the label from `args/rubric` that fits `args/ticket`",
+  "What `args/rubric` label fits `args/ticket`?"
+ ],
+ "Extract the customer name, the order id, and the refund amount from `args/note`.\nInclude the phone number only if one is given.": [
+  "Extract customer name, order id, refund amount from `args/note`; include phone number only if one is given.",
+  "Please extract the customer name, the order id, and the refund amount from `args/note`. Include the phone number only if one is given.",
+  "1. Extract the customer name, the order id, and the refund amount from `args/note`.\n2. Include the phone number only if one is given.",
+  "Grab customer name, order id, and refund amount from `args/note`; add phone number only if one is given."
+ ],
+ "From `args/note`, pull out who the customer is, the order id, and how much is owed. Add the phone number only when the note has one.": [
+  "Parse `args/note` for customer, order id, amount owed; include phone number only if present.",
+  "Please extract the customer, the order id, and the amount owed from `args/note`, and add the phone number only when the note contains one.",
+  "From `args/note`: extract customer; extract order id; extract amount owed; add phone number only if the note has one.",
+  "Grab from `args/note`: customer, order id, amount owed; add phone number only if note has one."
+ ],
+ "Add up the numbers in `args/numbers`.": [
+  "Sum the numbers in `args/numbers`.",
+  "Could you please add up the numbers in `args/numbers`?",
+  "- Add up the numbers in `args/numbers`",
+  "add up the numbers in `args/numbers`"
+ ],
+ "How many of the numbers in `args/numbers` are above 100?": [
+  "Count the numbers in `args/numbers` that are above 100.",
+  "Could you please tell me how many of the numbers in `args/numbers` are above 100?",
+  "Checklist item: How many numbers in `args/numbers` are above 100?",
+  "how many nums in `args/numbers` over 100?"
+ ],
+ "What is the largest number in `args/numbers`?": [
+  "What is the max number in `args/numbers`?",
+  "Could you please tell me the largest number in `args/numbers`?",
+  "Find the largest number in `args/numbers`.",
+  "max number in `args/numbers`?"
+ ],
+ "What is the average of `args/numbers`, rounded to two decimals?": [
+  "Return the average of `args/numbers`, rounded to two decimals.",
+  "Could you please calculate the average of `args/numbers`, rounded to two decimals?",
+  "- Calculate the average of `args/numbers`, rounded to two decimals.",
+  "avg of `args/numbers` rounded to two decimals"
+ ],
+ "Go through `args/tickets` and give every ticket its category from `args/rubric`.": [
+  "Traverse `args/tickets` and set each ticket's category from `args/rubric`.",
+  "Please review `args/tickets` and give each ticket its category from `args/rubric`.",
+  "1. Inspect `args/tickets`. 2. Assign each ticket the category from `args/rubric`.",
+  "Loop over `args/tickets` and tag each ticket with its category from `args/rubric`."
+ ],
+ "Count the urgent tickets in `args/tickets`.": [
+  "Count urgent tickets in `args/tickets`.",
+  "Please count the urgent tickets in `args/tickets`.",
+  "- Count the urgent tickets in `args/tickets`."
+ ],
+ "Label each ticket in `args/tickets` according to `args/rubric`.": [
+  "Label every ticket in `args/tickets` per `args/rubric`.",
+  "Label each ticket in `args/tickets` based on `args/rubric`."
+ ],
+ "How many of the tickets in `args/tickets` are urgent?": [
+  "Count urgent tickets in `args/tickets`.",
+  "Could you please tell me how many tickets in `args/tickets` are urgent?",
+  "Check: number of urgent tickets in `args/tickets`.",
+  "how many urgent tickets in `args/tickets`?"
+ ]
+}

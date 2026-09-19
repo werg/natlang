@@ -1,0 +1,185 @@
+[
+ {
+  "family": "map_leaf",
+  "base": "Label each ticket in `args/tickets` according to `args/rubric`.",
+  "paraphrase": "Label every ticket in `args/tickets` per `args/rubric`.",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    [
+     "spam",
+     "technical",
+     "billing",
+     "technical",
+     "technical",
+     "spam"
+    ],
+    [
+     "spam",
+     "technical",
+     "billing",
+     "technical",
+     "technical",
+     "spam"
+    ]
+   ],
+   [
+    "done",
+    [
+     "technical",
+     "billing",
+     "technical"
+    ],
+    [
+     "technical",
+     "billing",
+     "technical"
+    ]
+   ]
+  ]
+ },
+ {
+  "family": "map_leaf",
+  "base": "Label each ticket in `args/tickets` according to `args/rubric`.",
+  "paraphrase": "Please label each ticket in `args/tickets` in accordance with `args/rubric`.",
+  "kept": false,
+  "results": [
+   [
+    "done",
+    [
+     "spam",
+     "technical",
+     "billing",
+     "technical",
+     "billing",
+     "spam",
+     "technical"
+    ],
+    [
+     "spam",
+     "technical",
+     "billing",
+     "technical",
+     "billing",
+     "technical",
+     "technical"
+    ]
+   ]
+  ]
+ },
+ {
+  "family": "map_leaf",
+  "base": "Label each ticket in `args/tickets` according to `args/rubric`.",
+  "paraphrase": "Label each ticket in `args/tickets` based on `args/rubric`.",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    [
+     "technical",
+     "billing",
+     "spam",
+     "spam",
+     "billing",
+     "billing"
+    ],
+    [
+     "technical",
+     "billing",
+     "spam",
+     "spam",
+     "billing",
+     "billing"
+    ]
+   ],
+   [
+    "done",
+    [
+     "spam",
+     "billing",
+     "technical",
+     "billing"
+    ],
+    [
+     "spam",
+     "billing",
+     "technical",
+     "billing"
+    ]
+   ]
+  ]
+ },
+ {
+  "family": "map_then_count",
+  "base": "How many of the tickets in `args/tickets` are urgent?",
+  "paraphrase": "Count urgent tickets in `args/tickets`.",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    2,
+    2
+   ],
+   [
+    "done",
+    1,
+    1
+   ]
+  ]
+ },
+ {
+  "family": "map_then_count",
+  "base": "How many of the tickets in `args/tickets` are urgent?",
+  "paraphrase": "Could you please tell me how many tickets in `args/tickets` are urgent?",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    3,
+    3
+   ],
+   [
+    "done",
+    1,
+    1
+   ]
+  ]
+ },
+ {
+  "family": "map_then_count",
+  "base": "How many of the tickets in `args/tickets` are urgent?",
+  "paraphrase": "Check: number of urgent tickets in `args/tickets`.",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    3,
+    3
+   ],
+   [
+    "done",
+    3,
+    3
+   ]
+  ]
+ },
+ {
+  "family": "map_then_count",
+  "base": "How many of the tickets in `args/tickets` are urgent?",
+  "paraphrase": "how many urgent tickets in `args/tickets`?",
+  "kept": true,
+  "results": [
+   [
+    "done",
+    3,
+    3
+   ],
+   [
+    "done",
+    4,
+    4
+   ]
+  ]
+ }
+]
