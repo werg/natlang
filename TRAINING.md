@@ -773,3 +773,17 @@ destination. Recovery generation now filters such impossible errors before
 injection. The actual failing seed (71, program 1992) is a regression test; a
 fresh `ref-v7-arch-r2` manifest records the corrected generator. Earlier completed
 shards remain valid and the pilot records exactly which ones it uses.
+
+The matched en-passant rerun passed both original cases (2/2 values and marks),
+with the same thinking budget and temperature as before. The separate expanded
+probe still supplies the failing early-return counterexample.
+
+The initial 8,192-token memory check ran out of memory projecting the entire
+prompt to vocabulary scores. Training now uses `logits_to_keep` to project only
+the completion and its preceding prompt position; the transformer still reads
+the entire prompt. Three training-image tests confirm equal loss and parameter
+gradients, including single-token completions. The real 350M LoRA model then
+passed an 8,192-token forward/backward/optimizer step at 1.90 GiB peak allocated
+and 2.25 GiB peak reserved, with the v5 server still resident. Actual peaks depend
+on completion length. This permits the longer pilot without dropping its
+architectural examples merely to retain the old context cap.

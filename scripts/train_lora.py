@@ -27,6 +27,16 @@ from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+def completion_loss(model, encoded):
+    """Keep the preceding prompt position so the first completion token is trained.
+
+    The transformer still reads the whole input. Only the vocabulary projection
+    and cross-entropy for ignored prompt positions are omitted.
+    """
+    inputs, labels = encoded
+    return model(input_ids=inputs, labels=labels, logits_to_keep=labels.shape[-1]).loss
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("data", type=Path)
@@ -100,12 +110,14 @@ def main():
         p = json.loads(data_stream.readline())
         x = tok(p["prompt"], add_special_tokens=False)["input_ids"]
         y = tok(p["completion"], add_special_tokens=False)["input_ids"]
+        if not x or not y:
+            raise ValueError("Training pairs require a nonempty prompt and completion")
         if len(x) + len(y) > a.max_len:
             counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})
             family = p.get("family", "unknown")
             counts[family] = counts.get(family, 0) + 1
             return None
-        return torch.tensor([x + y]).cuda(), torch.tensor([[-100] * len(x) + y]).cuda()
+        return torch.tensor([x + y]).cuda(), torch.tensor([[-100] + y]).cuda()
 
     @torch.no_grad()
     def heldout_loss():
@@ -114,7 +126,7 @@ def main():
         for p in held[:100]:
             e = encode(p, phase="heldout")
             if e:
-                tot += model(input_ids=e[0], labels=e[1]).loss.item(); n += 1
+                tot += completion_loss(model, e).item(); n += 1
         model.train()
         if held and not n:
             raise ValueError("Every held-out example exceeds --max-len")
@@ -168,7 +180,7 @@ def main():
                     raise ValueError("Every training example exceeds --max-len")
                 e = encode(train[state["cursor"] % len(train)]); state["cursor"] += 1
                 state["skipped"] += e is None
-            loss = model(input_ids=e[0], labels=e[1]).loss / a.accum
+            loss = completion_loss(model, e) / a.accum
             loss.backward()
             running += loss.item()
         torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
