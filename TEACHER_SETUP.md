@@ -126,6 +126,12 @@ The harness now checks open marked lines when the assistant ends with a normal
 reply, and it records that reply in the transcript. Blank lines, comments, and
 function declarations are not markable instructions.
 
+Line closure is currently enforced only after marking has begun. Making marks
+mandatory for every codebase episode needs reference-plan updates: nine
+generator/IR test families still produce valid outcomes with no marks. Do not
+invent closing marks at the end of those trajectories; encode the actual
+done/skipped semantics when migrating them.
+
 The four-case dry run `runs/teacher-leaves-reply-only-s73-first4.jsonl` used
 the revised teacher prompt and passed 4/4 collector checks (three `say`, one
 `page_content`), admitting zero references. No terminal `done` call appeared.
