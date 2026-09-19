@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import random
+from decimal import Decimal
 from typing import Optional
 
 from .. import gbnf
@@ -22,9 +23,21 @@ from ..types import parse_type, TypeSyntaxError
 from ..diag import Reject
 
 
+def _native_repr(value):
+    # The native-call grammar accepts decimal literals, not Python's exponent
+    # notation. Preserve the round-trippable decimal digits of the float.
+    if isinstance(value, float):
+        return format(Decimal(str(value)), "f")
+    if isinstance(value, list):
+        return "[" + ", ".join(_native_repr(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{_native_repr(k)}: {_native_repr(v)}" for k, v in value.items()) + "}"
+    return repr(value)
+
+
 def native_text(calls) -> str:
     return CALL_OPEN + "[" + ", ".join(
-        f"{n}({', '.join(f'{k}={v!r}' for k, v in a.items())})" for n, a in calls) + "]"
+        f"{n}({', '.join(f'{k}={_native_repr(v)}' for k, v in a.items())})" for n, a in calls) + "]"
 
 
 class ReferenceAgent:

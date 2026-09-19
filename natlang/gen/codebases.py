@@ -219,8 +219,34 @@ def legal_move(rng: random.Random) -> Program:
         return v["legal"] == (cells[target] == "empty")
 
     blocked_expected = unclear and _playable(cells, player)
+    source = CB / "legal_move" / "check_move.nl"
+    source_ops = [
+        {"op": "invoke", "function": "read_position", "target": "let/cells",
+         "arguments": {"position": "args/position"}},
+        {"op": "invoke", "function": "board_problem", "target": "let/problem",
+         "arguments": {"cells": "let/cells", "player": "args/player"}},
+        {"op": "branch", "test_path": "let/problem", "test": "truthy",
+         "then": [
+             {"op": "invoke", "function": "draw", "target": "return/board", "arguments": {"cells": "let/cells"}},
+             {"op": "assign", "target": "return/reason", "value_type": "Text", "from": "let/problem"},
+             {"op": "assign", "target": "return/legal", "value_type": "Bool", "value": False},
+             {"op": "assign", "target": "return/wins", "value_type": "Bool", "value": False}],
+         "else": [
+             {"op": "invoke", "function": "read_move", "target": "let/target",
+              "arguments": {"move": "args/move"},
+              "on_quiesced": "The move does not name exactly one cell, so its legality cannot be checked."},
+             {"op": "invoke", "function": "judge_move", "target": "return",
+              "arguments": {"cells": "let/cells", "target": "let/target", "player": "args/player"}}]}]
     return Program("cb_legal_move", {}, {}, BLOCKED if blocked_expected else expected, plans,
-                   loader=lambda: load(CB / "legal_move" / "check_move.nl", {"position": position, "move": move, "player": player}))
+                   loader=lambda: load(source, {"position": position, "move": move, "player": player}),
+                   source_semantics={"codebase_file": str(source),
+                       "inputs": {"position": position, "move": move, "player": player},
+                       "operations": source_ops,
+                       "leaf_oracles": {
+                           "read_position": {"parameter": "position", "cases": [{"input": position, "output": cells}]},
+                           "read_move": {"parameter": "move", "cases": [{"input": move,
+                               **({"blocked_reason": "The move does not name exactly one cell."} if unclear else
+                                  {"output": target + 1})}]}}})
 
 
 def _playable(cells, player):
@@ -300,8 +326,46 @@ def moderation(rng: random.Random) -> Program:
     plans = {"moderate": Plan("script", script=with_marks(root), note="Checked every rule; acted on the outcome."),
              "violates": Plan("script", script=violates, note="Judged the rule."),
              "severity_of": leaf(lambda a: RULES[a["rule"]][0])}
+    source = CB / "moderation" / "moderate.nl"
+    def decision_ops(choice, source_path, note):
+        return [
+            {"op": "assign", "target": "return/action", "value_type": '"allow" | "warn" | "remove" | "escalate"', "value": choice},
+            {"op": "assign", "target": "return/rules", "value_type": "Text[]", **({"from": source_path} if source_path else {"value": []})},
+            {"op": "assign", "target": "return/note", "value_type": "Text", "value": note}]
+    source_ops = [
+        {"op": "invoke", "function": "split_rules", "target": "let/rules", "arguments": {"policy": "args/policy"}},
+        {"op": "invoke", "function": "violates", "target": "let/flags", "foreach": "let/rules", "arguments": {"post": "args/post"}},
+        {"op": "invoke", "function": "select_by_flags", "target": "let/hits",
+         "arguments": {"items": "let/rules", "flags": "let/flags"}},
+        {"op": "compute", "expression": "locals.hits.length", "target": "let/hit_count", "value_type": "Num"},
+        {"op": "branch", "test_path": "let/hit_count", "test": "zero",
+         "then": decision_ops("allow", None, "No rule applies."),
+         "else": [
+             {"op": "invoke", "function": "severity_of", "target": "let/severities",
+              "foreach": "let/hits", "arguments": {"post": "args/post"}},
+             {"op": "compute", "expression": "locals.severities.includes('high')", "target": "let/high", "value_type": "Bool"},
+             {"op": "branch", "test_path": "let/high", "test": "truthy",
+              "then": [
+                  {"op": "clone_function", "function": "violates", "target": "let/strict"},
+                  {"op": "edit_function", "target": "let/strict/instructions", "old": OLD, "new": NEW},
+                  {"op": "invoke", "function": "let/strict", "target": "let/confirmed_flags",
+                   "foreach": "let/hits", "arguments": {"post": "args/post"}},
+                  {"op": "invoke", "function": "select_by_flags", "target": "let/confirmed",
+                   "arguments": {"items": "let/hits", "flags": "let/confirmed_flags"}},
+                  {"op": "compute", "expression": "locals.confirmed.length", "target": "let/confirmed_count", "value_type": "Num"},
+                  {"op": "branch", "test_path": "let/confirmed_count", "test": "zero",
+                   "then": decision_ops("escalate", "let/hits", "A serious rule may apply, but it is not clear-cut. A human should look."),
+                   "else": decision_ops("remove", "let/confirmed", "A serious violation, confirmed on a strict reading.")}],
+              "else": decision_ops("warn", "let/hits", "Minor: the author is reminded of the rules.")}]}]
     return Program("cb_moderation", {}, {}, lambda v: v["action"] == action, plans,
-                   loader=lambda: load(CB / "moderation" / "moderate.nl", {"post": post, "policy": policy}))
+                   loader=lambda: load(source, {"post": post, "policy": policy}),
+                   source_semantics={"codebase_file": str(source), "inputs": {"post": post, "policy": policy},
+                       "operations": source_ops, "leaf_oracles": {
+                           "violates": {"parameter": "rule", "variant_marker": NEW,
+                               "cases": [{"input": rule, "output": truth.get(rule, (False, False))[0],
+                                          "variant_output": truth.get(rule, (False, False))[1]} for rule in rules]},
+                           "severity_of": {"parameter": "rule", "cases": [
+                               {"input": rule, "output": RULES[rule][0]} for rule in rules]}}})
 
 
 # ------------------------------------------------------------------------------------------ nlprolog
@@ -360,8 +424,54 @@ def nlprolog(rng: random.Random) -> Program:
              "derive": Plan("script", script=with_marks(derive), note="One round: applied every rule, merged."),
              "is_rule": leaf(lambda a: a["statement"] in rules), "same_claim": leaf(lambda a: a["known"] == a["goal"]),
              "conclusions": leaf(conclusions)}
+    # Compute the ordered fixed point, which is stronger gold than the legacy
+    # callable's unordered set check. The runtime's merge preserves rule order.
+    ordered_known = [statement for statement in kb if statement not in rules]
+    ordered_derived = []
+    ordered_rules = [statement for statement in kb if statement in rules]
+    for _ in range(6):
+        fresh = []
+        have = set(ordered_known)
+        for statement in ordered_rules:
+            concl, conds = rules[statement]
+            for who in people:
+                result = fact(who, concl)
+                if all(fact(who, part) in ordered_known for part in conds) and result not in have:
+                    have.add(result)
+                    fresh.append(result)
+        if not fresh:
+            break
+        ordered_known.extend(fresh)
+        ordered_derived.extend(fresh)
+    source = CB / "nlprolog" / "solve.nl"
+    root_ops = [
+        {"op": "invoke", "function": "is_rule", "target": "let/rule_flags", "foreach": "args/kb"},
+        {"op": "compute", "expression": "locals.rule_flags.map(f => !f)", "target": "let/fact_flags", "value_type": "Bool[]"},
+        {"op": "invoke", "function": "select_by_flags", "target": "let/rules", "arguments": {"items": "args/kb", "flags": "let/rule_flags"}},
+        {"op": "invoke", "function": "select_by_flags", "target": "let/facts", "arguments": {"items": "args/kb", "flags": "let/fact_flags"}},
+        {"op": "compute", "expression": "({ known: locals.facts, derived: [], grew: true })", "target": "let/start", "value_type": "State"},
+        {"op": "invoke", "function": "derive", "target": "let/final", "initial": "let/start", "until": "settled", "max_steps": 6,
+         "arguments": {"rules": "let/rules"}},
+        {"op": "invoke", "function": "same_claim", "target": "let/hits", "foreach": "let/final/known", "arguments": {"goal": "args/goal"}},
+        {"op": "invoke", "function": "any_true", "target": "let/found", "arguments": {"flags": "let/hits"}},
+        {"op": "branch", "test_path": "let/found", "test": "truthy",
+         "then": [{"op": "assign", "target": "return/verdict", "value_type": '"yes" | "unknown"', "value": "yes"}],
+         "else": [{"op": "assign", "target": "return/verdict", "value_type": '"yes" | "unknown"', "value": "unknown"}]},
+        {"op": "assign", "target": "return/derived", "value_type": "Text[]", "from": "let/final/derived"}]
+    derive_ops = [
+        {"op": "invoke", "function": "conclusions", "target": "let/found", "foreach": "args/rules",
+         "arguments": {"known": "args/state/known"}},
+        {"op": "invoke", "function": "merge", "target": "return",
+         "arguments": {"state": "args/state", "found": "let/found"}}]
     return Program("cb_nlprolog", {}, {}, lambda v: v["verdict"] == verdict and set(v["derived"]) == known - set(facts), plans,
-                   loader=lambda: load(CB / "nlprolog" / "solve.nl", {"goal": goal, "kb": kb}))
+                   loader=lambda: load(source, {"goal": goal, "kb": kb}),
+                   source_semantics={"codebase_file": str(source), "inputs": {"goal": goal, "kb": kb},
+                       "expected": {"verdict": verdict, "derived": ordered_derived},
+                       "operations": root_ops, "functions": {"derive": derive_ops},
+                       "leaf_oracles": {"is_rule": {"parameter": "statement",
+                           "cases": [{"input": statement, "output": statement in rules} for statement in kb]}},
+                       "leaf_rules": {"same_claim": {"kind": "equal_fields", "left": "known", "right": "goal"},
+                           "conclusions": {"kind": "forward_conclusions", "rules": rules, "people": people}}})
 
 
 CODEBASES = {"cb_legal_move": legal_move, "cb_moderation": moderation, "cb_nlprolog": nlprolog}
@@ -421,10 +531,30 @@ def shopkeeper(rng: random.Random) -> Program:
              "read_intent": leaf(lambda a: intents[a["text"]]), "choose_action": leaf(choose),
              "say": leaf(lambda a: SAY[a["action"]["code"]].format(**a["action"]), template=True)}
     total = sum(shop["stock"].values())
+    source = CB / "shopkeeper" / "serve.nl"
+    operations = [
+        {"op": "invoke", "function": "goods_of", "target": "let/goods", "arguments": {"acc": "args/acc"}},
+        {"op": "invoke", "function": "read_intent", "target": "let/intent",
+         "arguments": {"text": "args/item/text", "goods": "let/goods"}},
+        {"op": "invoke", "function": "legal_actions", "target": "let/legal",
+         "arguments": {"acc": "args/acc", "intent": "let/intent"}},
+        {"op": "invoke", "function": "choose_action", "target": "let/wish",
+         "arguments": {"persona": "args/acc/persona", "intent": "let/intent", "legal": "let/legal"}},
+        {"op": "invoke", "function": "checked_action", "target": "let/action",
+         "arguments": {"wish": "let/wish", "legal": "let/legal"}},
+        {"op": "invoke", "function": "say", "target": "let/line",
+         "arguments": {"persona": "args/acc/persona", "heard": "args/item/text", "action": "let/action"}},
+        {"op": "invoke", "function": "emit_reply", "target": "let/sent",
+         "arguments": {"to": "args/item/from", "line": "let/line", "action": "let/action"}},
+        {"op": "invoke", "function": "apply_action", "target": "return",
+         "arguments": {"acc": "args/acc", "action": "let/action", "customer": "args/item/from"}}]
     return Program("cb_shopkeeper", {}, {}, lambda v: len(v["ledger"]) == len(events) and sum(v["stock"].values()) <= total
                    and all(n >= 0 for n in v["stock"].values()), plans,
-                   loader=lambda: load_fold(CB / "shopkeeper" / "serve.nl", shop, iter(events)),
-                   capabilities={"out.emit": lambda a: said.append(a[0])})
+                   loader=lambda: load_fold(source, shop, iter(events)),
+                   capabilities={"out.emit": lambda a: said.append(a[0])},
+                   source_semantics={"fold": True, "inputs": {}, "events": events,
+                       "operations": operations,
+                       "capture_leaf_oracles": ["read_intent", "choose_action", "say"]})
 
 
 # ------------------------------------------------------------------------------------------ webserver
@@ -486,9 +616,55 @@ def webserver(rng: random.Random) -> Program:
     plans = {"handle": Plan("script", script=with_marks(root), note="Parsed, routed, took the one branch that applies, responded, logged."),
              "review_submission": leaf(review), "page_content": leaf(page, template=True),
              "submission_page": leaf(lambda a: f"<p>{a['review']['reason']}</p><p><a href=\"/\">home</a></p>", template=True)}
+    source = CB / "webserver" / "handle.nl"
+    def tail(site_path):
+        return [
+            {"op": "invoke", "function": "respond", "target": "let/sent",
+             "arguments": {"id": "args/item/id", "response": "let/response"}},
+            {"op": "invoke", "function": "log_request", "target": "return",
+             "arguments": {"site": site_path, "req": "let/req", "session": "let/session",
+                           "response": "let/response"}}]
+    static = [{"op": "invoke", "function": "static_response", "target": "let/response",
+               "arguments": {"acc": "args/acc", "route": "let/route"}}] + tail("args/acc")
+    page_ops = [
+        {"op": "invoke", "function": "page_content", "target": "let/content",
+         "arguments": {"purpose": "let/route/purpose", "site_name": "args/acc/name", "about": "args/acc/about",
+                       "entries": "args/acc/entries", "session": "let/session"}},
+        {"op": "invoke", "function": "wrap_page", "target": "let/response",
+         "arguments": {"acc": "args/acc", "route": "let/route", "content": "let/content",
+                       "session": "let/session"}}] + tail("args/acc")
+    form_ops = [
+        {"op": "invoke", "function": "review_submission", "target": "let/review",
+         "arguments": {"purpose": "let/route/purpose", "form": "let/req/form"}},
+        {"op": "invoke", "function": "apply_submission", "target": "let/site",
+         "arguments": {"acc": "args/acc", "review": "let/review"}},
+        {"op": "invoke", "function": "submission_page", "target": "let/content",
+         "arguments": {"purpose": "let/route/purpose", "review": "let/review"}},
+        {"op": "invoke", "function": "wrap_page", "target": "let/response",
+         "arguments": {"acc": "let/site", "route": "let/route", "content": "let/content",
+                       "session": "let/session"}}] + tail("let/site")
+    error = [{"op": "invoke", "function": "error_response", "target": "let/response",
+              "arguments": {"route": "let/route"}}] + tail("args/acc")
+    operations = [
+        {"op": "invoke", "function": "parse_request", "target": "let/req",
+         "arguments": {"item": "args/item"}},
+        {"op": "invoke", "function": "session_for", "target": "let/session",
+         "arguments": {"acc": "args/acc", "req": "let/req"}},
+        {"op": "invoke", "function": "match_route", "target": "let/route",
+         "arguments": {"routes": "args/acc/routes", "req": "let/req"}},
+        {"op": "branch", "test_path": "let/route/kind", "bind": "route_kind", "test": "equals", "value": "static",
+         "then": static,
+         "else": [{"op": "branch", "test_variable": "route_kind", "test": "equals", "value": "page",
+                   "then": page_ops,
+                   "else": [{"op": "branch", "test_variable": "route_kind", "test": "equals", "value": "form",
+                             "then": form_ops, "else": error}]}]}]
     return Program("cb_webserver", {}, {}, lambda v: [sent[r["id"]]["status"] for r in reqs] == expect_status and len(v["log"]) == len(reqs),
-                   plans, loader=lambda: load_fold(CB / "webserver" / "handle.nl", site, iter(reqs)),
-                   capabilities={"http.respond": lambda a: sent.__setitem__(a[0], a[1])})
+                   plans, loader=lambda: load_fold(source, site, iter(reqs)),
+                   capabilities={"http.respond": lambda a: sent.__setitem__(a[0], a[1])},
+                   source_semantics={"fold": True, "inputs": {}, "events": reqs,
+                       "operations": operations,
+                       "capture_leaf_oracles": ["review_submission", "page_content", "submission_page"],
+                       "capture_effect_args": True})
 
 
 # ------------------------------------------------------------------------------------------ highlighter
@@ -549,8 +725,33 @@ def highlighter(rng: random.Random) -> Program:
     plans = {"highlight": Plan("script", script=with_marks(root), note="Highlighted every file."),
              "highlight_file": Plan("script", script=with_marks(one), note="Split exactly, judged every line, rendered exactly."),
              "line_role": leaf(lambda a: _role(a["line"], a["functions"]))}
+    from .. import js
+    from ..codebase import load_function
+    split = load_function(CB / "highlighter" / "highlight" / "highlight_file" / "split_source.ts")
+    oracle_cases = []
+    for file in files:
+        parts = js.run(split.body, {"args": {"file": file}}, None, body=True, path="gen/highlighter")
+        if not parts["is_code"]:
+            oracle_cases.extend({"input": {"line": line, "functions": parts["functions"]},
+                                 "output": _role(line, parts["functions"])} for line in parts["lines"])
+    source = CB / "highlighter" / "highlight.nl"
+    one_ops = [
+        {"op": "invoke", "function": "split_source", "target": "let/parts", "arguments": {"file": "args/file"}},
+        {"op": "branch", "test_path": "let/parts/is_code", "test": "truthy",
+         "then": [{"op": "assign", "target": "let/roles", "value_type": "Role[]", "value": []}],
+         "else": [{"op": "invoke", "function": "line_role", "target": "let/roles",
+                   "foreach": "let/parts/lines", "arguments": {"functions": "let/parts/functions"}}]},
+        {"op": "invoke", "function": "render_html", "target": "return/html",
+         "arguments": {"file": "args/file", "parts": "let/parts", "roles": "let/roles"}},
+        {"op": "assign", "target": "return/roles", "value_type": "Role[]", "from": "let/roles"},
+        {"op": "assign", "target": "return/path", "value_type": "Text", "from": "args/file/path"}]
     return Program("cb_highlighter", {}, {}, lambda v: all(h["roles"][0] == "signature" and "nl-fn" in h["html"] for h in v), plans,
-                   loader=lambda: load(CB / "highlighter" / "highlight.nl", {"files": files}))
+                   loader=lambda: load(source, {"files": files}),
+                   source_semantics={"codebase_file": str(source), "inputs": {"files": files},
+                       "operations": [{"op": "invoke", "function": "highlight_file", "target": "return",
+                                       "foreach": "args/files"}],
+                       "functions": {"highlight_file": one_ops},
+                       "leaf_oracles": {"line_role": {"arg_mode": "all", "cases": oracle_cases}}})
 
 
 CODEBASES.update({"cb_shopkeeper": shopkeeper, "cb_webserver": webserver, "cb_highlighter": highlighter})
@@ -601,9 +802,42 @@ def mail_rules(rng: random.Random) -> Program:
     plans = {"process_mail": Plan("script", script=with_marks(root), note="Handled every email, then tallied."),
              "handle_mail": Plan("script", script=with_marks(handle), note="Applied my rules to the email."),
              "from_landlord": leaf(lambda a: truth[a["email"]][0]), "find_date": leaf(lambda a: truth[a["email"]][1])}
+    source = CB / "mail_rules" / "process_mail.nl"
+    handle_ops = [
+        {"op": "invoke", "function": "from_landlord", "target": "let/landlord",
+         "arguments": {"email": "args/email"}},
+        {"op": "branch", "test_path": "let/landlord", "test": "truthy",
+         "then": [
+             {"op": "invoke", "function": "find_date", "target": "let/date",
+              "arguments": {"email": "args/email"}},
+             {"op": "branch", "test_path": "let/date", "test": "empty",
+              "then": [{"op": "assign", "target": "return", "value_type": "Decision",
+                        "value": {"action": "reply_later", "date": ""}}],
+              "else": [
+                  {"op": "invoke", "function": "add_to_calendar", "target": "let/added",
+                   "arguments": {"date": "let/date", "email": "args/email"}},
+                  {"op": "assign", "target": "return/action", "value_type": '"calendar" | "reply_later" | "archive"', "value": "calendar"},
+                  {"op": "assign", "target": "return/date", "value_type": "Text", "from": "let/date"}]}],
+         "else": [{"op": "assign", "target": "return", "value_type": "Decision",
+                   "value": {"action": "archive", "date": ""}}]}]
+    effects = [{"date": date, "note": mail[:80]} for mail in mails
+               for landlord, date in [truth[mail]] if landlord and date]
     return Program("cb_mail_rules", {}, {}, lambda v: v == want and len(added) == want["calendar"], plans,
-                   loader=lambda: load(CB / "mail_rules" / "process_mail.nl", {"emails": mails}),
-                   capabilities={"calendar.add": lambda a: added.append(a[0])})
+                   loader=lambda: load(source, {"emails": mails}),
+                   capabilities={"calendar.add": lambda a: added.append(a[0])},
+                   source_semantics={"codebase_file": str(source), "inputs": {"emails": mails},
+                       "expected": want,
+                       "operations": [
+                           {"op": "invoke", "function": "handle_mail", "target": "let/decisions", "foreach": "args/emails"},
+                           {"op": "invoke", "function": "tally_actions", "target": "return",
+                            "arguments": {"decisions": "let/decisions"}}],
+                       "functions": {"handle_mail": handle_ops},
+                       "leaf_oracles": {
+                           "from_landlord": {"parameter": "email", "cases": [
+                               {"input": mail, "output": landlord} for mail, (landlord, _) in truth.items()]},
+                           "find_date": {"parameter": "email", "cases": [
+                               {"input": mail, "output": date} for mail, (_, date) in truth.items()]}},
+                       "effects": {"calendar.add": effects}})
 
 
 CODEBASES["cb_mail_rules"] = mail_rules

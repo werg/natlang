@@ -37,6 +37,10 @@ class Program:
     plans: dict                    # instructions text -> Plan
     loader: Callable = None        # () -> root node, for code bases on disk (then `root` and `inputs` are unused)
     capabilities: dict = field(default_factory=dict)
+    source_semantics: dict = field(default_factory=dict)  # generator facts before reference-policy rendering
+    outcome: str = "done"         # done | blocked | error for scenario training
+    expected_effects: list | None = None
+    injected_fault: tuple | None = None
 
 
 BLOCKED = "<blocked>"              # Program.expected when the inputs do not determine the result

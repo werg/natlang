@@ -5,15 +5,15 @@ inference (the llama.cpp server's /apply-template with the official template and
   scripts/export_sft.py data/ref-v5.jsonl data/sft-v5.jsonl --server http://127.0.0.1:8080 [--limit N] [--every K]
 Each output line: {"id", "family", "skill", "prompt", "completion"}; train on the completion only.
 """
-import argparse, json, sys, urllib.request
+import argparse, hashlib, json, sys, time, urllib.error, urllib.request
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.native import _strip_private
 from natlang.corpus import program_id
-
-END = "<|im_end|>"
-
+from natlang.terminal import reply_only_sample
 
 def main():
     ap = argparse.ArgumentParser()
@@ -22,12 +22,48 @@ def main():
     ap.add_argument("--server", default="http://127.0.0.1:8080")
     ap.add_argument("--limit", type=int, default=10**9)
     ap.add_argument("--every", type=int, default=1, help="keep every K-th sample")
+    ap.add_argument("--workers", type=int, default=1, help="bounded parallel template requests")
+    ap.add_argument("--resume", action="store_true", help="append after verifying the last existing ID")
+    ap.add_argument("--include-template", action="store_true",
+                    help="include programs with provisional generated-text gold (excluded by default)")
+    ap.add_argument("--end-token", default="<|im_end|>",
+                    help="assistant message terminator used by the selected model template")
+    ap.add_argument("--template-id", default="qwen-chatml",
+                    help="human-readable identity of the server's chat template")
     a = ap.parse_args()
+    if a.workers < 1 or a.every < 1 or a.limit < 1:
+        ap.error("workers, every and limit must be positive")
+
+    try:
+        props = json.loads(urllib.request.urlopen(a.server + "/props", timeout=10).read())
+    except (urllib.error.URLError, ValueError):
+        props = {}
+    template_source = props.get("chat_template_tool_use") or props.get("chat_template")
+    template_hash = hashlib.sha256(template_source.encode()).hexdigest() if isinstance(template_source, str) else None
+    renderer = {"version": "llama.cpp-apply-template/2", "template_id": a.template_id,
+                "template_sha256": template_hash, "end_token": a.end_token,
+                "server": a.server, "include_template": a.include_template,
+                "terminal_tool_policy": "reply-only-v1"}
+    manifest_path = a.dst.with_suffix(a.dst.suffix + ".manifest.json")
 
     def render(messages, tools):
         req = urllib.request.Request(a.server + "/apply-template", headers={"Content-Type": "application/json"},
                                      data=json.dumps({"messages": messages, "tools": _strip_private(tools)}).encode())
-        return json.loads(urllib.request.urlopen(req, timeout=120).read())["prompt"]
+        for attempt in range(5):
+            try:
+                return json.loads(urllib.request.urlopen(req, timeout=30).read())["prompt"]
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as exc:
+                if attempt == 4:
+                    raise
+                time.sleep(min(0.25 * 2 ** attempt, 4))
+
+    if renderer["template_sha256"] is None:
+        probe = render([{"role": "system", "content": "template identity probe"},
+                        {"role": "user", "content": "probe"}], [])
+        renderer["template_sha256"] = hashlib.sha256(probe.encode()).hexdigest()
+    if a.resume and a.dst.exists():
+        if not manifest_path.exists() or json.loads(manifest_path.read_text())["renderer"] != renderer:
+            ap.error("resume renderer differs from existing SFT manifest")
 
     import gzip
 
@@ -37,30 +73,85 @@ def main():
             with (gzip.open(path, "rt") if path.suffix == ".gz" else path.open()) as f:
                 yield from f
 
-    n = 0
-    with a.dst.open("w") as out:
-        for i, line in enumerate(lines()):
-            if n >= a.limit:
-                break
-            if i % a.every:
-                continue
+    def convert(s):
+        s = reply_only_sample(s)
+        prompt = render(s["messages"], s["tools"])
+        calls = s["target"].get("tool_calls")
+        if calls:                      # the template decides how a call reads: that is what the history will show
+            tgt = {**s["target"], "tool_calls": [{**c, "id": f"x{j}"} for j, c in enumerate(calls)]}
+            after = [{"role": "tool", "tool_call_id": f"x{j}", "content": "X"} for j in range(len(calls))]
+            full = render(s["messages"] + [tgt] + after, s["tools"])
+            if not full.startswith(prompt):
+                raise ValueError("template does not preserve the assistant prefix; choose a compatible renderer")
+            suffix = full[len(prompt):]
+            if a.end_token not in suffix:
+                raise ValueError("assistant end token is absent from rendered tool call")
+            completion = suffix.split(a.end_token, 1)[0] + a.end_token
+        else:
+            completion = s["target"]["content"] + a.end_token
+        source_groups = s.get("source_groups") or []
+        grouped = s.get("family") == "lambda_scenario" or s.get("kind") == "review"
+        return {"id": s["id"], "program_id": source_groups[0] if grouped and source_groups else program_id(s),
+                "source_groups": source_groups, "family": s.get("family", s.get("kind")),
+                "skill": s["skill"], "renderer": a.template_id,
+                "prompt": prompt, "completion": completion}
+
+    existing = 0
+    last_id = None
+    if a.resume and a.dst.exists():
+        with a.dst.open() as stream:
+            for line in stream:
+                last_id = json.loads(line)["id"]
+                existing += 1
+
+    def pending():
+        selected = 0
+        matched = existing == 0
+        eligible = 0
+        for line in lines():
             s = json.loads(line)
-            prompt = render(s["messages"], s["tools"])
-            calls = s["target"].get("tool_calls")
-            if calls:                      # the template decides how a call reads: that is what the history will show
-                tgt = {**s["target"], "tool_calls": [{**c, "id": f"x{j}"} for j, c in enumerate(calls)]}
-                after = [{"role": "tool", "tool_call_id": f"x{j}", "content": "X"} for j in range(len(calls))]
-                full = render(s["messages"] + [tgt] + after, s["tools"])
-                base = prompt[: prompt.rindex("<|im_start|>assistant")]
-                completion = full[len(base):].split("<|im_start|>assistant\n", 1)[1].split(END)[0] + END
-            else:
-                completion = s["target"]["content"] + END
-            out.write(json.dumps({"id": s["id"], "program_id": program_id(s), "family": s["family"], "skill": s["skill"], "prompt": prompt,
-                                  "completion": completion}, ensure_ascii=False) + "\n")
+            if (s.get("provisional_gold") or s.get("template")) and not a.include_template:
+                continue
+            if eligible % a.every:
+                eligible += 1
+                continue
+            eligible += 1
+            if selected >= a.limit:
+                break
+            if selected < existing:
+                if selected == existing - 1:
+                    if s["id"] != last_id:
+                        raise ValueError("resume destination does not match source at last ID")
+                    matched = True
+                selected += 1
+                continue
+            selected += 1
+            yield s
+        if not matched:
+            raise ValueError("resume destination has more rows than source")
+
+    n = existing
+    items = iter(pending())
+    with ThreadPoolExecutor(max_workers=a.workers) as pool, a.dst.open("a" if a.resume else "w") as out:
+        futures = deque()
+        for _ in range(a.workers * 4):
+            try:
+                futures.append(pool.submit(convert, next(items)))
+            except StopIteration:
+                break
+        while futures:
+            result = futures.popleft().result()
+            out.write(json.dumps(result, ensure_ascii=False) + "\n")
             n += 1
             if n % 2000 == 0:
                 print(n, flush=True)
+            try:
+                futures.append(pool.submit(convert, next(items)))
+            except StopIteration:
+                pass
     print(f"{n} pairs -> {a.dst}")
+    manifest_path.write_text(json.dumps({"renderer": renderer, "source": str(a.src),
+                                         "pairs": n, "every": a.every, "limit": a.limit}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

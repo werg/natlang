@@ -354,7 +354,9 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
     if c.blockable:
         from .programs import BLOCKED
         expected = BLOCKED
-    return Program(family, root, inputs, expected, c.plans)
+    return Program(family, root, inputs, expected, c.plans,
+                   source_semantics={"steps": calls, "line_meta": list(c.line_meta),
+                                     "hidden": c.hidden, "leaf_names": dict(c.names)})
 
 
 def ticket_report(rng: random.Random) -> Program:
@@ -505,10 +507,13 @@ def nested_assessment(rng: random.Random) -> Program:
     glue(c, "n", "Num", f"locals.reports.filter(r => r.urgent && r.label === {json.dumps(cat)}).length", n,
          f'return the number of reports that are urgent and labelled "{cat}"          # exact: use code',
          f'With code, count the reports that are urgent and labelled "{cat}". Return that number.', to="return")
-    return _finish(c, "nested_assessment", {"tickets": "Text[]", "rubric": "Text"}, "Num",
+    program = _finish(c, "nested_assessment", {"tickets": "Text[]", "rubric": "Text"}, "Num",
                    {"tickets": texts, "rubric": T_RUBRIC}, n, ["Label", "Assessment"],
                    rng.choice(["urgent_in_category", "count_hot_tickets"]),
                    "Assessed every ticket with the nested function, then counted with code.")
+    program.source_semantics["nested"] = {"kind": "assessment", "function": assess,
+        "label_function": f_cls, "flag_function": f_urg}
+    return program
 
 
 SHAPES = {f.__name__: f for f in (ticket_report, review_digest, expense_audit, nested_assessment)}
@@ -970,8 +975,14 @@ def per_item_condition(rng: random.Random) -> Program:
              "With code, count the findings whose flag is true. Return that number.", to="return")
     sig = {arg: "Text[]", **({"rubric": "Text"} if rub else {})}
     inputs = {arg: [i["text"] for i in items], **({"rubric": LEAF_RUBRIC[label_leaf]} if rub else {})}
-    return _finish(c, "per_item_condition", sig, "Num", inputs, n, LEAF_TYPES.get(label_leaf, []) + ["Finding_" + ltype],
-                   rng.choice(DOMAIN_NAMES[d]), "Assessed every item with the nested function, then counted with code.")
+    program = _finish(c, "per_item_condition", sig, "Num", inputs, n, LEAF_TYPES.get(label_leaf, []) + ["Finding_" + ltype],
+                      rng.choice(DOMAIN_NAMES[d]), "Assessed every item with the nested function, then counted with code.")
+    program.source_semantics["nested"] = {"kind": "conditional_flag", "function": fn,
+        "label_function": c.names[label_leaf], "flag_function": c.names[flag_leaf],
+        "label_parameter": next(iter(LEAVES[label_leaf][1])),
+        "flag_parameter": next(iter(LEAVES[flag_leaf][1])),
+        "target_label": target, "rubric": rub}
+    return program
 
 
 def fold_with_steps(rng: random.Random) -> Program:
@@ -1003,8 +1014,11 @@ def fold_with_steps(rng: random.Random) -> Program:
           f"Carry a count through {arg}, starting at 0, with {step}. Return it.")
     c.calls.append(("call", {"function": step, "to": "return", "over": f"args/{arg}", "init": 0}))
     n = sum(1 for i in items if i[fkey])
-    return _finish(c, "fold_with_steps", {arg: "Text[]"}, "Num", {arg: [i["text"] for i in items]}, n, [],
-                   rng.choice(DOMAIN_NAMES[d]), "Carried the count through the list with the step function.")
+    program = _finish(c, "fold_with_steps", {arg: "Text[]"}, "Num", {arg: [i["text"] for i in items]}, n, [],
+                      rng.choice(DOMAIN_NAMES[d]), "Carried the count through the list with the step function.")
+    program.source_semantics["nested"] = {"kind": "conditional_increment", "function": step,
+        "flag_function": c.names[flag_leaf], "flag_parameter": next(iter(LEAVES[flag_leaf][1]))}
+    return program
 
 
 def tiny(rng: random.Random) -> Program:

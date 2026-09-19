@@ -20,6 +20,16 @@ from natlang.types import TypeEnv
 from natlang.values import coerce, dump, load_program
 
 
+class InjectedFaultReferenceAgent(ReferenceAgent):
+    """Reproduce a specified failed proposal before the verified correction."""
+    def __init__(self, *args, injected_fault=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.injected_fault = injected_fault
+
+    def recovery_action(self, session, calls):
+        return self.injected_fault
+
+
 def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
     samples = []
     recovery_rng = random.Random(recovery_seed)
@@ -30,6 +40,10 @@ def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
         if plan is None:
             plan = next((p for k, p in prog.plans.items() if k.strip() == lam.body.strip()), None)
         assert plan is not None, f"no plan for: {lam.body!r}"
+        if prog.injected_fault:
+            return InjectedFaultReferenceAgent(plan, samples, check_grammar=check_grammar,
+                                               recovery_rng=recovery_rng, recovery_rate=1,
+                                               injected_fault=prog.injected_fault)
         return ReferenceAgent(plan, samples, check_grammar=check_grammar, recovery_rng=recovery_rng, recovery_rate=recovery_rate)
 
     if prog.loader is not None:
@@ -41,6 +55,11 @@ def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
             root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
     rt = Runtime(factory, max_episodes=2000, capabilities=prog.capabilities)
     out, value = rt.run_root(root)
+    if prog.expected_effects is not None:
+        assert rt.emitted == prog.expected_effects, (rt.emitted, prog.expected_effects)
+    if prog.outcome in ("blocked", "error"):
+        assert out.kind == "quiesced" and out.detail.startswith(prog.outcome + ": "), (out.kind, out.detail)
+        return samples, rt.episodes_started
     if prog.expected == BLOCKED:                 # undetermined on purpose: the right outcome is a blocker note
         assert out.kind == "quiesced" and out.detail.startswith("blocked: "), (out.kind, out.detail)
         return samples, rt.episodes_started

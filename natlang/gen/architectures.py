@@ -66,8 +66,20 @@ def reconciliation(rng):
         yield call('summarize', 'return', joined='let/joined', labels='let/labels')
         yield mark(4)
     plans = {'reconcile': Plan('script', script=root), 'assess': leaf(lambda a: truth[a['row']['message']])}
+    source = CB/'reconciliation/reconcile.nl'
     return Program('cb_reconciliation', {}, {}, expected, plans,
-                   loader=lambda: load(CB/'reconciliation/reconcile.nl', {'customers': customers, 'events': events}))
+                   loader=lambda: load(source, {'customers': customers, 'events': events}),
+                   source_semantics={'codebase_file': str(source),
+                       'inputs': {'customers': customers, 'events': events},
+                       'operations': [
+                           {'op': 'invoke', 'function': 'join_events', 'target': 'let/joined',
+                            'arguments': {'customers': 'args/customers', 'events': 'args/events'}},
+                           {'op': 'invoke', 'function': 'assess', 'target': 'let/labels',
+                            'foreach': 'let/joined/rows'},
+                           {'op': 'invoke', 'function': 'summarize', 'target': 'return',
+                            'arguments': {'joined': 'let/joined', 'labels': 'let/labels'}}],
+                       'leaf_oracles': {'assess': {'parameter': 'row', 'lookup_path': ['message'],
+                           'cases': [{'input': message, 'output': label} for message, label in truth.items()]}}})
 
 
 DESCRIPTIONS = [('Patch the active security vulnerability.', 0),
@@ -122,8 +134,29 @@ def dependency_plan(rng):
             yield mark(7)
     plans = {'plan': Plan('script', script=root), 'step': Plan('script', script=step),
              'choose': leaf(lambda a: min(a['ready'], key=lambda t: (priorities[t['id']], t['id']))['id'])}
+    source = CB/'dependency_plan/plan.nl'
+    root_ops = [
+        {'op': 'invoke', 'function': 'prepare', 'target': 'let/initial',
+         'arguments': {'tasks': 'args/tasks'}},
+        {'op': 'branch', 'test_path': 'let/initial/finished', 'test': 'truthy',
+         'then': [{'op': 'assign', 'target': 'return', 'value_type': 'State', 'from': 'let/initial'}],
+         'else': [{'op': 'invoke', 'function': 'step', 'target': 'return',
+                   'initial': 'let/initial', 'until': 'finished', 'max_steps': 16}]}]
+    step_ops = [
+        {'op': 'invoke', 'function': 'ready_tasks', 'target': 'let/ready',
+         'arguments': {'state': 'args/state'}},
+        {'op': 'branch', 'test_path': 'let/ready', 'test': 'empty',
+         'then': [{'op': 'invoke', 'function': 'stall', 'target': 'return',
+                   'arguments': {'state': 'args/state'}}],
+         'else': [{'op': 'invoke', 'function': 'choose', 'target': 'let/chosen',
+                   'arguments': {'ready': 'let/ready'}},
+                  {'op': 'invoke', 'function': 'advance', 'target': 'return',
+                   'arguments': {'state': 'args/state', 'chosen': 'let/chosen'}}]}]
     return Program('cb_dependency_plan', {}, {}, expected, plans,
-                   loader=lambda: load(CB/'dependency_plan/plan.nl', {'tasks': tasks}))
+                   loader=lambda: load(source, {'tasks': tasks}),
+                   source_semantics={'codebase_file': str(source), 'inputs': {'tasks': tasks},
+                       'operations': root_ops, 'functions': {'step': step_ops},
+                       'leaf_rules': {'choose': {'kind': 'min_priority_then_id', 'priorities': priorities}}})
 
 
 EVENT_TEXT = {'start': 'I would like to place this new order.', 'paid': 'Payment has succeeded.',
@@ -197,9 +230,31 @@ def order_saga(rng):
         yield call('clear_outbox', 'return', state='let/next')
         yield mark(11)
     plans = {'step': Plan('script', script=step), 'read_event': leaf(lambda a: kinds[a['text']])}
+    source = CB/'order_saga/step.nl'
+    initial = {'seen': [], 'orders': {}, 'outbox': []}
+    step_ops = [
+        {'op': 'invoke', 'function': 'seen', 'target': 'let/duplicate',
+         'arguments': {'acc': 'args/acc', 'item': 'args/item'}},
+        {'op': 'branch', 'test_path': 'let/duplicate', 'test': 'truthy',
+         'then': [{'op': 'assign', 'target': 'return', 'value_type': 'State', 'from': 'args/acc'}],
+         'else': [
+             {'op': 'invoke', 'function': 'read_event', 'target': 'let/kind',
+              'arguments': {'text': 'args/item/text'}},
+             {'op': 'invoke', 'function': 'transition', 'target': 'let/next',
+              'arguments': {'acc': 'args/acc', 'item': 'args/item', 'kind': 'let/kind'}},
+             {'op': 'invoke', 'function': 'dispatch', 'target': 'let/sent',
+              'arguments': {'commands': 'let/next/outbox'}, 'retry_on_quiesced': 1},
+             {'op': 'invoke', 'function': 'clear_outbox', 'target': 'return',
+              'arguments': {'state': 'let/next'}}]}]
     return Program('cb_order_saga', {}, {}, lambda v: v == expected and delivered == commands, plans,
-                   loader=lambda: load_fold(CB/'order_saga/step.nl', {'seen': [], 'orders': {}, 'outbox': []}, list(events)),
-                   capabilities={'queue.send': send})
+                   loader=lambda: load_fold(source, initial, list(events)),
+                   capabilities={'queue.send': send},
+                   source_semantics={'fold': True, 'inputs': {}, 'events': events,
+                       'expected': expected, 'operations': step_ops,
+                       'leaf_oracles': {'read_event': {'parameter': 'text', 'cases': [
+                           {'input': text, 'output': kind} for text, kind in kinds.items()]}},
+                       'effects': {'queue.send': {'kind': 'deliver_once_ack_loss',
+                           'fail_key': fail_key, 'expected_delivered': commands}}})
 
 
 ARCHITECTURES = {'cb_reconciliation': reconciliation, 'cb_dependency_plan': dependency_plan, 'cb_order_saga': order_saga}
