@@ -597,6 +597,27 @@ web server served real HTTP requests with Bonsai interpreting every step:
 correct pages, a form submission persisted across requests, a 404; 4 to 6
 minutes per request, which is the gap the tuned small model has to close.
 
+**The whole loop, proven on this laptop (2026-09-19).** `export_sft.py` (pairs
+rendered by the model's own template, exactly as at inference) → `train_lora.py`
+(LoRA r=32 on a bf16 base, gradient checkpointing, one sequence at a time:
+3.2 GiB of GPU memory, 6 s per optimizer step) → `to_gguf.sh` → `serve.sh` →
+`eval_turns.py` / `baseline.py`. 150 steps (15 minutes, 2,656 pairs seen):
+held-out loss 2.68 → 0.033.
+
+| LFM2.5-350M, unseen programs (seed 777) | untuned | after 15 min of LoRA |
+|---|---|---|
+| next turn exactly right | 29% | **75%** |
+| right tool | 43% | **88%** |
+| `call` turns exactly right (shapes / composed / code bases) | 0 / 0 / 0% | 100 / 60 / 40% |
+| conformance suite (21 programs; judge checks ungraded) | 2 correct; never calls | 6 correct + 3 ungraded; calls the named functions |
+| time per program | ~1 s | 0.1 to 6 s (Bonsai 27B: 25 to 640 s) |
+
+What the tuned model still gets wrong on the conformance suite: leaf
+judgments themselves (program 06 is structurally perfect, one `call` over the
+list, and wrong on the labels); folds and repeats (rare in the corpus: 53 and
+75 of 1,800 calls); blockers; long programs (23: 19 rejected calls). These are
+corpus-mix and training-length issues, not harness ones.
+
 ### 10.3 Findings worth keeping
 
 *Serving and formats*

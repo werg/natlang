@@ -195,8 +195,9 @@ class ToolSurface:
                 call_alts.append({**base, "over": {"enum": list_paths}, "inputs": inputs_schema,
                                   "x-optional": ["inputs"]})
                 if "acc" in names and "item" in names:                     # carried along a list
-                    call_alts.append({**base, "over": {"enum": list_paths}, "init": {}, "inputs": inputs_schema,
-                                      "x-optional": ["inputs"]})
+                    rest = {n: sch for n, sch in in_props.items() if n not in ("acc", "item")}   # the harness binds those two
+                    call_alts.append({**base, "over": {"enum": list_paths}, "init": {},
+                                      **({"inputs": {**inputs_schema, "properties": rest}, "x-optional": ["inputs"]} if rest else {})})
             if checks and names:                                           # repeated until a check holds
                 starts = list(dict.fromkeys(p_ for sch in in_props.values() for p_ in sch["enum"]))   # fits some parameter
                 call_alts.append({**base, "init": {"enum": starts or [sl.path for sl in plain][:MAX_PATHS]},
