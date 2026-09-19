@@ -28,8 +28,8 @@ pystr1 ::= "\"" ( [^"\\\n] | "\\" [^\n] )+ "\"" | "'" ( [^'\\\n] | "\\" [^\n] )+
 pylocal ::= "\"let/" [a-z_] [a-z0-9_]* "\"" | "'let/" [a-z_] [a-z0-9_]* "'"
 pyint ::= "-"? [0-9]+
 pynum ::= "-"? [0-9]+ ( "." [0-9]+ )?
-pybool ::= "True" | "False"
-pyany ::= pystr | pynum | pybool | "None" | "[" ( pyany ( ", " pyany )* )? "]" | "{" ( pystr ": " pyany ( ", " pystr ": " pyany )* )? "}"
+pybool ::= "True" | "False" | "true" | "false"
+pyany ::= pystr | pynum | pybool | "None" | "null" | "[" ( pyany ( ", " pyany )* )? "]" | "{" ( pystr ": " pyany ( ", " pystr ": " pyany )* )? "}"
 reply ::= [^<\[] ( [^\x00] )*
 '''
 
@@ -45,9 +45,9 @@ def _pylit(v) -> str:
         esc = v.replace("\\", "\\\\")
         return _alt([lit('"' + esc.replace('"', '\\"') + '"'), lit("'" + esc.replace("'", "\\'") + "'")])
     if v is True or v is False:
-        return lit(repr(v))
+        return _alt([lit(repr(v)), lit(repr(v).lower())])
     if v is None:
-        return lit("None")
+        return _alt([lit("None"), lit("null")])
     return lit(repr(v))
 
 
@@ -89,7 +89,7 @@ class PyGrammar:
         if t == "boolean":
             return "pybool"
         if t == "null":
-            return lit("None")
+            return _alt([lit("None"), lit("null")])
         if t == "array":
             item = self.value(s.get("items") or {}, depth + 1)
             least = ' ' if s.get("minItems") else '?'
@@ -170,8 +170,22 @@ def parse_calls(text: str) -> list:
     for node in tree.elts:
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.args:
             raise ValueError("expected name(keyword=value, ...)")
-        out.append((node.func.id, {k.arg: ast.literal_eval(k.value) for k in node.keywords}))
+        out.append((node.func.id, {k.arg: _literal(k.value) for k in node.keywords}))
     return out
+
+
+_JSON_NAMES = {"true": True, "false": False, "null": None}
+
+
+def _literal(node):
+    """A Python literal in which JSON's true / false / null may also appear: the model's own chat template
+    renders nested arguments as JSON, so that is what the model sees in its history and may write."""
+    class Fix(ast.NodeTransformer):
+        def visit_Name(self, n):
+            if n.id in _JSON_NAMES:
+                return ast.copy_location(ast.Constant(_JSON_NAMES[n.id]), n)
+            return n
+    return ast.literal_eval(ast.fix_missing_locations(Fix().visit(node)))
 
 
 class NativeCallDecoder(LlamaServerDecoder):
