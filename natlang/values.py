@@ -380,6 +380,11 @@ _WITH_CODEBASE = False
 
 def dump(x: Any) -> Any:
     """Plain YAML-able form of a value or pending node (SPEC 11)."""
+    from .streams import StreamBuffer
+    if isinstance(x, StreamBuffer):
+        return {"$stream": {"position": x.position,
+                            "admitted": x.current.kind if x.current else None,
+                            "history": "not-captured"}}
     if x is MISSING:
         return None
     if isinstance(x, list):

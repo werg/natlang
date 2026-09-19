@@ -30,7 +30,7 @@ class _Missing:
 
 MISSING = _Missing()
 
-UNREDUCED, RUNNING, QUIESCED, DONE = "unreduced", "running", "quiesced", "done"
+UNREDUCED, RUNNING, QUIESCED, WAITING, DONE = "unreduced", "running", "quiesced", "waiting", "done"
 
 
 @dataclass(eq=False)

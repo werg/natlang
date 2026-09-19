@@ -44,6 +44,10 @@ class TraceRecorder:
             self._stream.close()
             self._stream = None
 
+    def reopen(self):
+        if self.path is not None and self._stream is None:
+            self._stream = self.path.open("a", encoding="utf-8")
+
 
 class TraceReader:
     def __init__(self, events: list[dict]):
@@ -73,7 +77,11 @@ class TraceReader:
         return snapshots[-1]["value"]
 
     def coverage(self) -> dict:
+        snapshots = self.of_kind("state")
+        incomplete = any("$stream" in json.dumps(event.get("value")) or
+                         '"$opaque"' in json.dumps(event.get("value")) for event in snapshots)
         return {"state_reconstructable": bool(self.of_kind("state")),
+                "live_source_reconstructable": not incomplete,
                 "native_effects_replayable": False,
                 "effect_count": len(self.of_kind("effect")),
                 "mode": "recorded-observations-only"}

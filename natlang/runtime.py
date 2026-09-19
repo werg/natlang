@@ -17,9 +17,10 @@ from . import js
 from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
 from .trace import TraceRecorder
+from .streams import StreamBuffer
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
-from .nodes import (DONE, MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
+from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
                     MapNode, Pending, is_pending)
 from .paths import Path, parse_path
 from .refs import Ref, pending_refs_under, resolve
@@ -117,7 +118,7 @@ class Runtime:
         """Reduce a root pending node. Returns (outcome, value-or-node)."""
         holder = _Box(root)
         self._root_holder = holder
-        if self.trace_path is not None:
+        if self.trace_path is not None and self.trace_sink is None:
             initial = dump_state(root)
             digest = hashlib.sha256(json.dumps(initial, sort_keys=True, default=str).encode()).hexdigest()
             self.trace_sink = TraceRecorder({"run_id": self.options.run_id, "source_sha256": digest,
@@ -125,6 +126,8 @@ class Runtime:
                                              "engines": sorted(self.executors),
                                              "engine_selection": self.engine_selection,
                                              "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
+        elif self.trace_path is not None:
+            self.trace_sink.reopen()
         self._observe("state", phase="initial", value=dump_state(root))
         ref = Ref(type=None, env=env or TypeEnv(), path="", holder=holder, attr="value")
         try:
@@ -324,6 +327,8 @@ class Runtime:
         node.status = RUNNING
         if node.acc is MISSING:
             node.acc, node.at = copy.deepcopy(node.init), 0
+        if isinstance(node.over, StreamBuffer):
+            return self._run_stream_fold(node, ref, inner)
         while True:
             if node.at >= len(node.over):
                 if isinstance(node.over, OpenList) and node.over.pull():
@@ -340,6 +345,36 @@ class Runtime:
                 return self._quiesce(node, ref, f"step {node.at} {out.kind}: {out.detail}")
             node.acc, node.current, node.at = node.current, None, node.at + 1
         return self._swap_out(node, ref, node.acc)
+
+    def _run_stream_fold(self, node: FoldNode, ref: Ref, inner: TypeEnv) -> Outcome:
+        source = node.over
+        while True:
+            polled = source.peek()
+            if polled.kind == "empty":
+                node.status, node.note = WAITING, "waiting for stream input"
+                self._observe("stream", path=ref.path, phase="waiting", position=source.position)
+                return Outcome(ref.path, "waiting", node.note)
+            if polled.kind == "closed":
+                self._observe("stream", path=ref.path, phase="closed", position=source.position)
+                return self._swap_out(node, ref, node.acc)
+            if polled.kind == "failed":
+                self._observe("stream", path=ref.path, phase="failed", position=source.position,
+                              detail=polled.detail)
+                return self._quiesce(node, ref, "stream failed: " + polled.detail)
+            if node.current is None:
+                self._observe("stream", path=ref.path, phase="admitted", position=source.position,
+                              value=polled.value)
+                inst = _instantiate(node.step)
+                inst.in_["acc"] = copy.deepcopy(node.acc)
+                inst.in_["item"] = copy.deepcopy(polled.value)
+                node.current = inst
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            out = self.trigger(cref, None)
+            if out.kind != "done":
+                return self._quiesce(node, ref, f"step {source.position} {out.kind}: {out.detail}")
+            node.acc, node.current, node.at = node.current, None, node.at + 1
+            source.ack()
+            self._observe("stream", path=ref.path, phase="consumed", position=source.position)
 
     # -- Iterate
     def _run_iterate(self, node: IterateNode, ref: Ref, inner: TypeEnv) -> Outcome:

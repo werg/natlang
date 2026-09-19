@@ -54,6 +54,7 @@ def load_fold(step_file: Path, init, source) -> Pending:
     list is open, fed by `source` (an iterable of events; "$close" or exhaustion ends the run)."""
     from .codebase import load_function
     from .runtime import OpenList
+    from .streams import StreamBuffer
     fn = load_function(step_file)
     args = {n.rstrip("?"): t for n, t in fn.args.items()}
     if set(args) != {"acc", "item"} or args["acc"].strip() != fn.returns.strip():
@@ -61,7 +62,7 @@ def load_fold(step_file: Path, init, source) -> Pending:
     root = load_program({"$fold": {"type": f"Fold<{args['item']}, {args['acc']}>", "types": dict(fn.types), "init": init,
                                    "step": {"$lambda": {**fn.to_lambda_doc(), "function": fn.name}}}})
     root.step.codebase = fn.codebase
-    root.over = OpenList(source)
+    root.over = StreamBuffer(source) if hasattr(source, "poll") else OpenList(source)
     return root
 
 
@@ -81,9 +82,10 @@ def load(program_file: Path, inputs: dict, streams: dict | None = None) -> Pendi
         doc_streams = (yaml.safe_load(program_file.read_text()) or {}).get("streams") or {}
     for part, source in {**doc_streams, **(streams or {})}.items():
         from .runtime import OpenList
+        from .streams import StreamBuffer
         if not hasattr(root, part) or isinstance(root, Lambda):
             raise ValueError(f"a stream needs a root Map or Fold with a part `{part}`")
-        setattr(root, part, OpenList(source))
+        setattr(root, part, StreamBuffer(source) if hasattr(source, "poll") else OpenList(source))
     if isinstance(root, Lambda):
         env = root.env(TypeEnv())
         for name, src in inputs.items():
