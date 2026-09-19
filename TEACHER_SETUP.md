@@ -132,6 +132,59 @@ The current bank leaves 396 distinct keys in that snapshot (259 `say`, 136
 fresh audit path for each run. A rebuilt IR is still required to replace frozen
 template gold with accepted references.
 
+### Refreshing the frozen seed-73 corpus
+
+The seed-73 source programs are frozen. Regenerating them from the current
+generator can change their inputs, so apply checked references to that IR
+directly. The refresh replays each affected program to update its expected
+value and ordered effects, then verifies the result through the runtime. It
+writes a new IR and hash manifest; it never edits the source IR.
+
+```bash
+.venv/bin/python scripts/audit_provisional_leaves.py \
+  --ir data/external_pilot/synthetic-all-current.ir.jsonl \
+  --out data/external_pilot/provisional-leaf-audit.json
+.venv/bin/python scripts/refresh_synthetic_references.py \
+  data/external_pilot/synthetic-all-current.ir.jsonl \
+  data/external_pilot/synthetic-all-refreshed.ir.jsonl
+.venv/bin/python scripts/audit_program_ir.py \
+  data/external_pilot/synthetic-all-refreshed.ir.jsonl
+.venv/bin/python scripts/materialize_ir_shards.py \
+  data/external_pilot/synthetic-all-refreshed.ir.jsonl \
+  data/external_pilot/synthetic-all-refreshed-shards \
+  --workers 4 --shard-size 100
+```
+
+Use a new IR and shard destination after the reference bank changes. The SFT
+exporter excludes `provisional_gold` turns by default. To finish the backfill,
+run `teacher_leaves.py --ir` against the original frozen IR with a fresh audit
+path for each pass, then repeat the refresh and materialization. The teacher
+collector skips keys already admitted to `data/leaf_references.jsonl`. Once the
+audit reports zero missing keys, add `--require-complete` to the refresh command
+so an incomplete corpus cannot be mistaken for the final version.
+
+For a long teacher pass, `scripts/finalize_synthetic_backfill.py` can wait for
+its process, require the expected number of audit rows, then run the audit,
+refresh, IR audit, and sharded materialization automatically. Pass the teacher
+PID, its `/proc/PID/stat` start tick (field 22), the pass's original missing-key
+count as `--expected-attempts`, and its unique `--teacher-audit` path. The
+resulting filenames include the reference-bank hash. Its summary records
+`complete: false` and the remaining provisional count if some leaf attempts
+were rejected. A failed or truncated teacher pass publishes no snapshot.
+
+The first long frozen-IR pass stopped after 14 of 394 attempts. Its watcher
+correctly refused to publish (`runs/finalize-synthetic-backfill-pass1.log`).
+The resumed pass uses `--turn-tokens 1600`, started with 387 missing keys,
+and writes `runs/teacher-leaves-frozen-s73-extended-20260919.jsonl`. The
+original 700-token cap caused six responses to stop at `finish_reason=length`;
+four responses in the resumed audit also hit the 1600-token cap. The active
+watcher (`runs/finalize-synthetic-backfill-uncapped.log`) therefore runs one
+more pass over missing keys with no separate per-turn cap, writing
+`runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.jsonl`, before it
+creates `synthetic-all-after-uncapped-retry-<bank hash>` artifacts. All pass
+audits remain available; admitted references are shared through
+`data/leaf_references.jsonl`.
+
 ## End-of-turn completion
 
 The terminal `done` tool has been removed from the model-facing surface and
