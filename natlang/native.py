@@ -14,6 +14,7 @@ value type of that path), which JSON Schema alone cannot express at the top leve
 from __future__ import annotations
 
 import ast
+import copy
 import json
 from typing import Optional
 
@@ -158,6 +159,30 @@ def call_grammar(tools: list, allow_reply: bool = True) -> str:
     return PyGrammar().text(tools, allow_reply)
 
 
+
+def write_grammar_tools(tools, mode="typed"):
+    """Ablation: keep call syntax/paths, but defer literal write typing to runtime.
+
+    Rendering uses the original tools in both modes. No runtime validator is
+    weakened, and copied-function/source alternatives keep their constraints.
+    """
+    if mode not in ("typed", "runtime"):
+        raise ValueError("write_constraints must be typed or runtime")
+    if mode == "typed":
+        return tools
+    result = copy.deepcopy(tools)
+    for tool in result:
+        fn = tool["function"]
+        if fn["name"] != "write":
+            continue
+        params = fn["parameters"]
+        for alt in params.get("x-natlang-alternatives", []):
+            if "value" in alt:
+                alt["type"] = {"type": "string"}
+                alt["value"] = {}
+    return result
+
+
 def parse_calls(text: str) -> list:
     """`[write(path="return", value=True), run(paths=['return'])]` -> [(name, args), ...]"""
     text = text.strip()
@@ -191,7 +216,11 @@ def _literal(node):
 class NativeCallDecoder(LlamaServerDecoder):
     """Tool calling by raw completion under our own grammar, in the model's native call text."""
 
-    def __init__(self, *a, allow_reply: bool = True, **kw):
+    def __init__(self, *a, allow_reply: bool = True, write_constraints: str = "typed", probability_log: Optional[list] = None, **kw):
+        if write_constraints not in ("typed", "runtime"):
+            raise ValueError("write_constraints must be typed or runtime")
+        self.write_constraints = write_constraints
+        self.probability_log = probability_log
         super().__init__(*a, **kw)
         self.allow_reply = allow_reply
         self.stats = {"turns": 0, "calls": 0, "replies": 0, "p_call_first": []}
@@ -207,11 +236,15 @@ class NativeCallDecoder(LlamaServerDecoder):
     def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700, allow_reply: Optional[bool] = None):
         allow = self.allow_reply if allow_reply is None else allow_reply
         prompt = self.render(messages, tools)
-        gen = self.generate(prompt, grammar=call_grammar(tools, allow), max_tokens=max_tokens,
+        gen = self.generate(prompt, grammar=call_grammar(write_grammar_tools(tools, self.write_constraints), allow), max_tokens=max_tokens,
                             temperature=temperature, seed=seed, stop=[], n_probs=6)
         self.stats["turns"] += 1
-        if gen.probs:       # how much the model itself wanted to start a call, before the grammar
-            self.stats["p_call_first"].append(next((p for tok, p in gen.probs[0] if tok == ""), 0.0))
+        if self.probability_log is not None:
+            self.probability_log.append({"text": gen.text, "tokens": gen.token_details})
+        if gen.probs:
+            # Special tokens may all have empty display text. Empty text is not
+            # evidence for CALL_OPEN (it may be EOS); unavailable is not zero.
+            self.stats["p_call_first"].append(next((p for tok, p in gen.probs[0] if tok == CALL_OPEN), None))
         text = gen.text.strip()
         if text.startswith("["):
             try:

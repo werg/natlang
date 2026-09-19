@@ -114,3 +114,34 @@ def test_error_grammar_and_empty_diagnostic_rejection():
     assert surface.apply(session, 'report_error', {'message': ''}).kind == 'rejected'
     assert not session.completed
     assert 'report_error' not in [t['function']['name'] for t in ToolSurface(error_tool=False).tools(session)]
+
+
+def test_default_returns_validation_failure_without_local_retry():
+    root = load_program({'$lambda': {'type': 'Lambda<{}, Num>', 'instructions': 'Return the number 7.'}})
+    dec = Scripted([action('write', path='return', type='Text', value='seven'),
+                    action('write', path='return', type='Num', value=7), reply()])
+    out, _ = Runtime(lambda lam: ToolAgent(dec)).run_root(root)
+    assert out.kind == 'quiesced' and out.detail.startswith('validation failed:')
+    assert len(dec.requests) == 1
+
+
+def test_runtime_write_typing_allows_expression_but_rejects_mutation():
+    from natlang import gbnf
+    from natlang.gen.policy import native_text
+    from natlang.native import call_grammar, write_grammar_tools
+    from natlang.runtime import Session
+    from natlang.surface import ToolSurface
+    from natlang.types import TypeEnv
+    from natlang.values import MISSING
+    root = load_program({'$lambda': {'type': 'Lambda<{}, Num>', 'instructions': 'Return text unchanged.'}})
+    session = Session(Runtime(None), root, TypeEnv())
+    tools = ToolSurface().tools(session)
+    bad = ('write', {'path': 'return', 'type': 'Text', 'value': 'blue'})
+    good = ('write', {'path': 'return', 'type': 'Num', 'value': 7})
+    relaxed = write_grammar_tools(tools, 'runtime')
+    assert not gbnf.accepts(call_grammar(tools), native_text([bad]))
+    assert gbnf.accepts(call_grammar(relaxed), native_text([bad]))
+    assert gbnf.accepts(call_grammar(relaxed), native_text([good]))
+    assert not gbnf.accepts(call_grammar(tools), native_text([bad]))  # original untouched
+    assert session.apply(*bad).kind == 'rejected'
+    assert root.ret is MISSING

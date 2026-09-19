@@ -135,7 +135,7 @@ def test_reply_ends_the_episode_and_is_never_the_result():
 def test_reply_without_a_result_is_nudged_then_quiesces():
     doc = yaml.safe_load((PROGRAMS / "01-leaf-judgment.yaml").read_text())
     dec = ScriptedChat([ChatTurn([], "true"), ChatTurn([], "The answer is true."), ChatTurn([], "true!")])
-    out, _ = Runtime(lambda lam: ToolAgent(dec)).run_root(_root(doc))
+    out, _ = Runtime(lambda lam: ToolAgent(dec, validation_feedback="local")).run_root(_root(doc))
     assert out.kind == "quiesced" and "true" in out.detail                # the reply is a note, not a result
     assert "`return` has not been written yet" in dec.seen[1][-1]["content"]
 

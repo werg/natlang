@@ -695,6 +695,51 @@ and `runs/lora-v8-failures-pilot/throughput.json`. The familiar-template probe
 source is `runs/probe-v8-familiar.py`. Earlier validation-feedback experiments
 and their limits are recorded in TRAINING.md.
 
+
+**Validation policy and guided-write diagnosis (2026-09-19):** Per user direction,
+`ToolAgent` and native conformance/application runners now default to caller-visible
+validation failure. `local` remains opt-in; the paired probe still explicitly runs
+both policies. Ordinary successful tool results and JavaScript execution-error
+feedback are unchanged. This is a policy choice, not a claim that caller failure
+solves semantic fabrication.
+
+A new native-decoder option `write_constraints="runtime"` keeps tool syntax and
+path choices but lets literal write types/values reach the runtime validator.
+The rendered prompt/tool schemas stay identical. On the nine v8 caller-policy
+fixtures, both modes preserved all three valid controls. Typed decoding accepted
+5/6 impossible tasks; runtime write typing accepted 4/6. In the diagnostic
+unchanged-`blue` case, typed decoding fabricated Num 0; relaxed decoding attempted
+`write(path="return", type="Num", value="blue")`, which was rejected without
+mutating the return slot. This demonstrates one real failure hidden by guided
+value typing, not a general cure. Other type-valid fabricated answers remain.
+
+Optional probability traces now preserve selected token IDs/logprobs and top
+alternatives (`--trace-probs`). On that forced 0 token, raw logprob was -9.1785
+(~0.01% probability); leading alternatives began strings. A separate one-token
+forced-grammar request confirmed this server returns pre-mask alternatives and
+selected-token logprobs with `post_sampling_probs=false`. The old `p_call_first`
+heuristic incorrectly treated empty token text as the call marker, even though
+EOS and other special tokens can display empty text. It now reports unknown when
+the marker is not identifiable; raw IDs are preserved for future diagnostics.
+Top-six alternatives cannot recover exact total probability mass excluded by a
+grammar, and token likelihood is not semantic correctness confidence.
+
+Another independently reproduced issue: existing-slot writes normalize `"17"`
+to Num 17 and unwrap `{value: 17}` into 17, even if preservation was required.
+These compatibility conversions should become explicit/provider-specific before
+claiming that relaxed decoding reveals every type error. No normalization change
+has been made in this experiment.
+
+Next experiment: retain syntax guidance with strict runtime validation and
+explicit conversion semantics; offer a tagged error/blocker outcome outside the
+value domain. A bounded, optional pre-commit review should check the proposed
+write/edit against actual instructions and evidence, with commit or failure as
+outcomes. Avoid repeated "are you sure" retries and do not commit side effects
+before review. Raw likelihood/grammar-conflict signals can prioritize review,
+but thresholds need observed false-alarm/miss rates on valid and invalid cases.
+Artifacts: `runs/student-v8-{typed,runtime}-write-types.json`,
+`runs/student-v8-write-{typed,runtime}-probs.json`.
+
 ### 10.3 Findings worth keeping
 
 *Serving and formats*

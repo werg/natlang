@@ -20,6 +20,7 @@ from typing import Optional, Protocol
 class Generation:
     text: str
     probs: list = field(default_factory=list)  # per token: [(token_text, prob), ...] before the grammar
+    token_details: list = field(default_factory=list, kw_only=True)  # selected token ids/logprobs and top alternatives
     stopped: str = ""
     completion_tokens: Optional[int] = None
 
@@ -142,7 +143,8 @@ class LlamaServerDecoder:
             cands = t.get("top_logprobs") or t.get("top_probs") or []
             probs.append([(c.get("token", ""), c["prob"] if "prob" in c else math.exp(c.get("logprob", -99.0)))
                           for c in cands])
-        return Generation(out.get("content", ""), probs, out.get("stopping_word", ""), tokens)
+        return Generation(out.get("content", ""), probs, out.get("stopping_word", ""), tokens,
+                          token_details=out.get("completion_probabilities") or [])
 
 
 @dataclass(frozen=True)

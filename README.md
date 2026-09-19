@@ -94,10 +94,10 @@ Validation-policy experiments (current student server):
 .venv/bin/python scripts/application_probe.py --validation-feedback caller --out runs/applications-caller.json
 ```
 
-The default interpreter feeds validation errors back locally. The experimental
-`ToolAgent(validation_feedback="caller")` instead leaves the failed lambda
-quiesced and returns its diagnostic to the caller. `baseline.py` also accepts
-`--validation-feedback caller`. This does not roll back effects or automatically
+The default interpreter leaves a failed lambda quiesced and returns validation
+diagnostics to its caller (`validation_feedback="caller"`). Local repair remains
+an explicit experiment: `ToolAgent(validation_feedback="local")`, or
+`--validation-feedback local` in the application/conformance runners. This does not roll back effects or automatically
 retry. The probe distinguishes impossible instructions from repairable execution
 mistakes, and counts budget exhaustion separately from deliberate failure.
 Results and limitations are in TRAINING.md. `serve.sh` caps its host prompt cache
@@ -203,3 +203,18 @@ Each group contains twelve programs; paired variants share a program identifier
 so a training/held-out split cannot separate the pair. Invalid injected actions
 appear only in history; supervised targets are successful repairs or explicit
 failure reports.
+
+To diagnose whether typed decoding hides incorrect writes:
+
+```bash
+.venv/bin/python scripts/validation_probe.py --policies caller --write-constraints runtime --trace-probs --out runs/runtime-write-types.json
+```
+
+`--write-constraints runtime` relaxes only literal write types/values in the
+native grammar; tool syntax and path choices stay constrained, and runtime
+validation remains active. The default remains `typed`. This is an ablation,
+not a guarantee that every attempted type mismatch will surface: runtime
+compatibility coercions still parse numeric strings and unwrap `{value: ...}`.
+`--trace-probs` saves selected token IDs/logprobs and top alternatives before
+sampling constraints. These are next-token probabilities, not calibrated
+probabilities that the action is correct. Missing top-k entries are unknown.

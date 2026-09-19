@@ -24,7 +24,7 @@ def main():
     ap.add_argument('--n', type=int, default=2, help='programs per family')
     ap.add_argument('--seconds', type=float, default=120, help='wall-clock budget per program, including callees')
     ap.add_argument('--out', type=Path, required=True)
-    ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='local')
+    ap.add_argument('--validation-feedback', choices=('local', 'caller'), default='caller')
     ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
     args = ap.parse_args()
     if args.workers < 1:

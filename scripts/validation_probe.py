@@ -115,6 +115,8 @@ def main():
     ap.add_argument('--no-error-tool', action='store_true')
     ap.add_argument('--policies', nargs='+', choices=['local', 'caller'], default=['local', 'caller'])
     ap.add_argument("--workers", type=int, default=4, help="independent cases; match server slots")
+    ap.add_argument("--write-constraints", choices=["typed", "runtime"], default="typed")
+    ap.add_argument("--trace-probs", action="store_true", help="save pre-mask selected-token probabilities and top alternatives")
     args = ap.parse_args()
     if args.workers < 1:
         ap.error("workers must be positive")
@@ -126,7 +128,8 @@ def main():
 
     def run(job):
         (name, doc, expected, must_fail), policy = job
-        dec = NativeCallDecoder(args.server, timeout=120)
+        probabilities = [] if args.trace_probs else None
+        dec = NativeCallDecoder(args.server, timeout=120, write_constraints=args.write_constraints, probability_log=probabilities)
         root = load_program(doc)
         log, transcript = [], []
         episode_decoder = ForcedFirstAction(dec) if args.controlled_only else dec
@@ -142,6 +145,8 @@ def main():
                **score(outcome.kind, actual, expected, must_fail, log, transcript, rt.emitted, outcome.detail),
                'seconds': time.monotonic() - start, 'log': log, 'transcript': transcript}
         row['usage'] = dec.usage
+        if probabilities is not None:
+            row['probability_trace'] = probabilities
         return row
 
     for index, row in completed_cases(run, jobs, args.workers):
@@ -150,7 +155,7 @@ def main():
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps({'server': args.server, 'system_prompt': prompt, 'error_tool': not args.no_error_tool,
-                                       'workers': args.workers, 'wall_seconds': time.monotonic() - started,
+                                       'workers': args.workers, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["case"]}/{row["policy"]}: {row["status"]} valid={row["correct_value"]} '
               f'invalid_accept={row["invalid_task_accepted"]} rejects={row["validation_rejections"]}', flush=True)

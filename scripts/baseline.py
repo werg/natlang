@@ -32,9 +32,10 @@ ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model t
 ap.add_argument("--alias", action="append", default=[], help="tool renames for this model's server, e.g. call=call_function")
 ap.add_argument("--out", type=Path, help="machine-readable results; defaults to runs/baseline-<timestamp>.json")
 ap.add_argument("--model-label", default="unspecified")
-ap.add_argument("--validation-feedback", choices=("local", "caller"), default="local")
+ap.add_argument("--validation-feedback", choices=("local", "caller"), default=None)
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
+a.validation_feedback = a.validation_feedback or ("caller" if a.surface == "tools" else "local")
 if a.surface != "tools" and a.validation_feedback != "local":
     ap.error("--validation-feedback=caller requires --surface=tools")
 root = Path(__file__).resolve().parent.parent

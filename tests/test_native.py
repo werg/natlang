@@ -64,3 +64,17 @@ def test_parse_calls_and_argument_names():
     for t in S.tools(s):
         for arg in t["function"]["parameters"]["properties"]:
             assert not keyword.iskeyword(arg), (t["function"]["name"], arg)
+
+
+def test_probability_trace_keeps_ids_without_treating_empty_token_as_call(monkeypatch):
+    from natlang.decoder import Generation
+    from natlang.native import NativeCallDecoder
+    trace = []
+    dec = NativeCallDecoder(probability_log=trace)
+    monkeypatch.setattr(dec, 'render', lambda messages, tools: 'prompt')
+    details = [{'id': 7, 'token': '', 'logprob': -0.1, 'top_logprobs': []}]
+    monkeypatch.setattr(dec, 'generate', lambda *a, **kw: Generation('Done.', [[('', 0.9)]],
+                                                                  completion_tokens=1, token_details=details))
+    dec.chat([], [], temperature=0)
+    assert dec.stats['p_call_first'] == [None]
+    assert trace == [{'text': 'Done.', 'tokens': details}]

@@ -22,7 +22,7 @@ class ToolAgent:
     def __init__(self, decoder: Decoder, *, surface: Optional[ToolSurface] = None, temperature: float = 0.2,
                  system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
                  max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
-                 validation_feedback: str = "local"):
+                 validation_feedback: str = "caller"):
         if validation_feedback not in ("local", "caller"):
             raise ValueError("validation_feedback must be local or caller")
         self.validation_feedback = validation_feedback
