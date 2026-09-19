@@ -7,6 +7,8 @@ import json
 import re
 import sys
 import time
+import threading
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path as FilePath
 from typing import Any, Callable, Optional
@@ -86,20 +88,40 @@ class Outcome:
     value: Any = None
 
 
+class EpisodeBudget:
+    def __init__(self, limit: int):
+        self.limit, self.used = limit, 0
+        self.lock = threading.Lock()
+
+    def reserve(self) -> bool:
+        with self.lock:
+            if self.used >= self.limit:
+                return False
+            self.used += 1
+            return True
+
+
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
                  max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
                  executor=None, trace_sink: Optional[TraceRecorder] = None,
                  trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
-                 engine_selection: bool = False):
+                 engine_selection: bool = False, map_workers: int = 1,
+                 parallel_model_safe: bool = False, _budget: Optional[EpisodeBudget] = None,
+                 _parent_path: Optional[str] = None):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
+        self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
         self.executor = executor or QuickJSExecutor()
         self.executors = dict(executors or {getattr(self.executor, "name", "quickjs-isolated"): self.executor})
         self.engine_selection = engine_selection
+        if map_workers < 1:
+            raise ValueError("map_workers must be positive")
+        self.map_workers, self.parallel_model_safe = map_workers, parallel_model_safe
+        self._budget = _budget or EpisodeBudget(self.max_episodes)
+        self._parent_path = _parent_path
         self.trace_sink = trace_sink
         self.trace_path = trace_path
-        self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
         self.deadline = None
         self._depth = 0
         self._fn_stack: list = []   # names of the code-base functions currently being reduced
@@ -250,7 +272,7 @@ class Runtime:
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
         if self._depth >= self.max_depth:
             return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
-        if self.episodes_started >= self.max_episodes:
+        if self._budget.used >= self.max_episodes:
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
         if key in self._stack:
@@ -272,11 +294,13 @@ class Runtime:
         cold = node.status == QUIESCED
         node.status, node.note = RUNNING, ""
         node.attempts += 1
-        parent = self.invocations[-1].path if self.invocations else None
+        parent = self.invocations[-1].path if self.invocations else self._parent_path
         invocation = Invocation(self.options.run_id, ref.path, node.attempts, parent)
         if node.original_body is None:
             node.original_body = node.body
-        self.episodes_started += 1
+        if not self._budget.reserve():
+            return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
+        self.episodes_started = self._budget.used
         session = Session(self, node, ref.env, cold=cold)
         session.invocation = invocation
         self._observe("invocation", phase="start", call_id=invocation.call_id,
@@ -305,6 +329,8 @@ class Runtime:
         node.status = RUNNING
         rt = ref.env.resolve(ref.type) if ref.type is not None else None
         elem = rt.elem if isinstance(rt, ListT) else node.type.b
+        if self._can_parallel_map(node):
+            return self._run_map_parallel(node, ref, inner, elem)
         stuck = []
         for i, slot in enumerate(node.slots):
             if self.deadline is not None and time.monotonic() >= self.deadline:
@@ -315,6 +341,63 @@ class Runtime:
             out = self.trigger(sref, None)
             if out.kind != "done":
                 stuck.append(out)
+        if not stuck:
+            return self._swap_out(node, ref, list(node.slots))
+        done = len(node.slots) - len(stuck)
+        detail = f"{done} of {len(node.slots)} reduced\n" + "\n".join(
+            f"{o.path}: {o.kind} \"{o.detail}\"" for o in stuck)
+        return self._quiesce(node, ref, detail)
+
+    def _can_parallel_map(self, node: MapNode) -> bool:
+        if self.map_workers <= 1 or not self.parallel_model_safe or not isinstance(node.over, list):
+            return False
+        if any(not getattr(engine, "parallel_safe", False) for engine in self.executors.values()):
+            return False
+        def pure(fn, seen):
+            if id(fn) in seen:
+                return True
+            seen.add(id(fn))
+            return not fn.effects and all(pure(child, seen) for child in fn.codebase.values())
+        return isinstance(node.fn, Lambda) and pure(node.fn, set())
+
+    def _run_map_parallel(self, node: MapNode, ref: Ref, inner: TypeEnv, elem) -> Outcome:
+        pending = [i for i, slot in enumerate(node.slots) if is_pending(slot)]
+        results = {}
+        def reduce_slot(i):
+            child = Runtime(self.agent_factory, capabilities={}, options=self.options,
+                            executors=self.executors, engine_selection=self.engine_selection,
+                            trace_sink=self.trace_sink, _budget=self._budget,
+                            _parent_path=ref.path, map_workers=1)
+            child.deadline = self.deadline
+            child._depth = self._depth
+            child._stack = list(self._stack)
+            child._fn_stack = list(self._fn_stack)
+            slot_ref = Ref(type=elem, env=inner, path=f"{ref.path}/{i}", container=node.slots, key=i)
+            result = child.trigger(slot_ref, None)
+            return result, child.origins
+
+        with ThreadPoolExecutor(max_workers=self.map_workers) as pool:
+            cursor = iter(pending)
+            active = {}
+            for _ in range(min(self.map_workers, len(pending))):
+                i = next(cursor)
+                active[pool.submit(reduce_slot, i)] = i
+            while active:
+                done, _ = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    i = active.pop(future)
+                    outcome, origins = future.result()
+                    results[i] = outcome
+                    self.origins.update(origins)
+                    self._observe("map_slot", path=f"{ref.path}/{i}", slot=i,
+                                  outcome=outcome.kind, value=dump(node.slots[i]))
+                    try:
+                        following = next(cursor)
+                    except StopIteration:
+                        continue
+                    active[pool.submit(reduce_slot, following)] = following
+        self.episodes_started = self._budget.used
+        stuck = [results[i] for i in sorted(results) if results[i].kind != "done"]
         if not stuck:
             return self._swap_out(node, ref, list(node.slots))
         done = len(node.slots) - len(stuck)

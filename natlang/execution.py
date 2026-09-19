@@ -57,6 +57,7 @@ class QuickJSExecutor:
     """Existing isolated JS/TS behavior, including its legacy input view."""
 
     name = "quickjs-isolated"
+    parallel_safe = True
 
     def run(self, request: CrispRequest, effect: Callable[[str, str, list], Any]) -> Any:
         scope = {key: js.to_js(value) for key, value in request.scope.items()}

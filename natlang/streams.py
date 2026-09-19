@@ -90,3 +90,36 @@ class StreamDriver:
         if outcome.kind != "waiting":
             self.terminal = (outcome, value)
         return outcome, value
+
+
+class WindowedMap:
+    """Compose a stream with finite Map windows; results retain input order."""
+
+    def __init__(self, source: Source, map_window, width: int = 16):
+        if width < 1:
+            raise ValueError("window width must be positive")
+        self.source, self.map_window, self.width = source, map_window, width
+        self.ready = deque()
+        self.terminal: Poll | None = None
+
+    def poll(self) -> Poll:
+        if self.ready:
+            return Poll("item", self.ready.popleft())
+        if self.terminal is not None:
+            return self.terminal
+        items = []
+        while len(items) < self.width:
+            result = self.source.poll()
+            if result.kind == "item":
+                items.append(result.value)
+            else:
+                if result.kind in ("closed", "failed"):
+                    self.terminal = result
+                break
+        if items:
+            mapped = self.map_window(items)
+            if len(mapped) != len(items):
+                raise ValueError("finite Map window changed item count")
+            self.ready.extend(mapped)
+            return Poll("item", self.ready.popleft())
+        return self.terminal or Poll("empty")

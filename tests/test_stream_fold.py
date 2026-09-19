@@ -1,7 +1,7 @@
 import pytest
 
 from natlang.runtime import Runtime
-from natlang.streams import QueueSource, StreamBuffer
+from natlang.streams import QueueSource, StreamBuffer, WindowedMap
 from natlang.values import load_program
 
 
@@ -51,3 +51,16 @@ def test_long_stream_releases_consumed_payloads():
     source.close()
     out, value = rt.run_root(root)
     assert (out.kind, value) == ("done", 100)
+
+
+def test_windowed_map_forwards_ordered_results_without_infinite_list():
+    source = QueueSource(capacity=8)
+    for item in range(7):
+        source.put(item)
+    source.close()
+    mapped = WindowedMap(source, lambda items: [item * 2 for item in items], width=3)
+    results = []
+    while (polled := mapped.poll()).kind == "item":
+        results.append(polled.value)
+        assert len(mapped.ready) <= 2
+    assert polled.kind == "closed" and results == [i * 2 for i in range(7)]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -24,20 +25,21 @@ def _view(value):
 class TraceRecorder:
     def __init__(self, manifest: dict, path: Path | None = None):
         self.events: list[dict] = []
+        self._lock = threading.Lock()
         self.path = Path(path) if path is not None else None
         self._stream = self.path.open("w", encoding="utf-8") if self.path else None
         self.emit("manifest", **manifest)
 
     def emit(self, kind: str, **data) -> dict:
-        event = _view({"version": VERSION, "seq": len(self.events), "kind": kind, **data})
-        # Round trip at the boundary; traces must be readable by another host.
-        encoded = json.dumps(event, ensure_ascii=False, allow_nan=False)
-        clean = json.loads(encoded)
-        self.events.append(clean)
-        if self._stream:
-            self._stream.write(encoded + "\n")
-            self._stream.flush()
-        return clean
+        with self._lock:
+            event = _view({"version": VERSION, "seq": len(self.events), "kind": kind, **data})
+            encoded = json.dumps(event, ensure_ascii=False, allow_nan=False)
+            clean = json.loads(encoded)
+            self.events.append(clean)
+            if self._stream:
+                self._stream.write(encoded + "\n")
+                self._stream.flush()
+            return clean
 
     def close(self):
         if self._stream:
