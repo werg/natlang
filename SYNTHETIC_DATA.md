@@ -3,19 +3,28 @@
 Companion to `PLAN.md` and `TRAINING.md` §3.5. One section per synthesized
 dataset (Y1–Y15), each with: purpose, prior art, generator design, knobs,
 gold and verification, output format, pitfalls, and a first-build scope.
-Status: draft, 2026-09-18. Research was done by web survey on that date;
+Status: draft, 2026-09-19. Research was done by web survey on 2026-09-18;
 items marked *[unverified]* could not be confirmed and need a second look.
+
+**What every dataset here produces** is natlang programs in the sense of
+`spec/SPEC.md`: **code bases of pseudocode functions** (typed signatures,
+calls, `for each`, `repeat until`, `if`/`else`, locals, crisp `.ts` helpers)
+whose **leaves** are small prompt-like tasks (judge, classify, extract,
+rewrite). The author or the synthesizer states the structure; the interpreter
+carries it out with `call`, `write`, `run_code`, `read`, `edit`,
+`report_blocker`. Leaf-only programs remain about a quarter of the corpus.
+Skill codes (K1–K14 interpreting, L1–L6 leaves) are those of `TRAINING.md` §2.
 
 **Contents.** Sections are grouped by the machinery they share, not by number.
 - §0 Findings that shape everything
-- Program machinery: Y2 program-first programs, Y3 back-translated programs,
+- Program machinery: Y2 synthesized code bases, Y3 back-translated programs,
   Y8 interpreter drills
 - World and text machinery: Y1 latent worlds, Y5 schema-first extraction,
   Y4 rubrics and policies, Y6 rule worlds, Y10 dataset algebra
 - Decision quality and safety: Y11 minimal pairs and calibration,
   Y12 data-is-not-code
 - Surface realism: Y15 style corpus and multilingual rendering
-- Acting and scaling: Y7 simulated environments, Y9 decomposition,
+- Acting and scaling: Y7 simulated environments, Y9 scale sets,
   Y13 verifier-backed generation, Y14 long-horizon stress sets
 - Cross-cutting: quality pipeline, on-policy loop, build order, items to
   verify
@@ -33,10 +42,11 @@ erasure of finished work. Trained on traces of at most 128 lines, it executes
 human-written programs up to 7,552 lines perfectly, about 60× longer
 (https://arxiv.org/html/2604.25166). PENCIL itself gets a 25M model to 97 % on
 Einstein's puzzle with context that scales with space, not time
-(https://arxiv.org/abs/2503.14337). Our delete-the-completed-step convention
-is the same mechanism in natural language.
+(https://arxiv.org/abs/2503.14337). Our mechanism is the same in natural
+language: every function instance is a fresh short episode, finished work
+lives in typed locals, not in the context.
 
-**Statelessness is a feature, not a compromise.** "The Illusion of
+**Short, restartable episodes are a feature, not a compromise.** "The Illusion of
 Diminishing Returns" (2025) shows *self-conditioning*: accuracy drops when a
 model's own earlier errors are in its context, and scale does not fix it;
 context resets do (https://arxiv.org/pdf/2509.09677). The same paper gives the
@@ -62,7 +72,8 @@ programmatic tasks (https://arxiv.org/html/2405.16337v1). Think-and-Execute
 models (https://arxiv.org/abs/2404.02575). Chain of Code's "LMulator" is the
 closest precedent for our crisp/fuzzy split (https://arxiv.org/abs/2312.04474).
 CoRE/AIOS (2024) uses an LLM as interpreter of structured NL programs, but
-prompting only (https://arxiv.org/abs/2405.06907). Nobody appears to have
+prompting only (https://arxiv.org/abs/2405.06907). These results are the
+case for pseudocode code bases as the program form. Nobody appears to have
 *trained* a sub-1B interpreter for natural-language programs over a typed
 store; that is the gap this project sits in.
 
@@ -73,8 +84,8 @@ tokenization (https://arxiv.org/abs/2602.07672). SemCoder found concise
 natural-language descriptions of key state beat full dumps (61.8 vs 48.8 on
 CRUXEval-I; https://arxiv.org/pdf/2406.01006). CWM prints unchanged variables
 as `".."` (https://arxiv.org/pdf/2510.02387). Consequences: keep renderings
-sparse, route all string manipulation to eval, oversample string-state
-drills.
+sparse, route all string manipulation to crisp functions and `run_code`,
+oversample string-state drills.
 
 **Small models are unreliable at free-form search-and-replace.** Aider found
 weak models misuse diff formats (diff ~19–30 % vs whole-file ~39–46 % for
@@ -83,17 +94,19 @@ GPT-3.5) and JSON function-call edits were worse
 benefit little from any format choice (https://arxiv.org/abs/2510.12487).
 Fast-apply models at 1.5B succeed by emitting the whole merged text
 (https://huggingface.co/Kortix/FastApply-1.5B-v1.0).
-**Design implication, flagged for `PLAN.md`:** give `edit` a line-addressed
-form (`edit(path, lines=3..4, new="")`) alongside search/replace, render
-instruction text with line numbers, and keep instruction texts short enough
-that a whole-text rewrite is also viable. Measure all three in Phase 2.
+**Design consequence:** the interpreter almost never edits. It cannot author
+functions; `edit` is exact-once substitution, used for bookkeeping in its own
+instructions and for adapting a copied function, and both are rare in the
+corpus. Instruction texts stay short enough that the substitution is easy to
+get right.
 
 ---
 
-## Y2. Program-first synthetic programs
+## Y2. Synthesized code bases
 
-**Purpose.** The backbone for algorithmic skills S1–S6, S8–S10. Exact labels
-at every step, unlimited volume, full control of structure.
+**Purpose.** The backbone for the interpreting skills K1–K14. Exact labels at
+every turn, unlimited volume, full control of structure. Implemented first in
+`natlang/gen/synth.py`.
 
 **Prior art.** Learning to Execute (2014): two knobs, `length` and `nesting`;
 a *combined* curriculum that keeps easy items beats naive easy-to-hard
@@ -109,60 +122,64 @@ and an easy-to-hard curriculum (https://arxiv.org/abs/2305.05383).
 
 **Generator design.** Four layers, each independently testable.
 
-1. *Typed AST.* Node kinds: `Seq`, `Let(name, Leaf)`, `If(pred, a, b)`,
-   `While(pred, body)`, `ForEach(coll, var, body)`, `Map(coll, LambdaRef)`,
-   `Fold(coll, acc, LambdaRef)`, `Call(LambdaRef, args)`, `Return(expr)`,
-   `Assert(pred)`. Leaves are typed: `CrispLeaf(op, args) : T` from the stdlib,
-   `FuzzyLeaf(task, args) : T` backed by a real or Y1/Y4/Y5 item with gold.
-   Lambdas declare `returns`. Type-directed sampling guarantees well-typed
-   programs.
-2. *Two samplers.* (a) Grammar sampler with budgets: depth, node count,
-   number of bindings, number of child lambdas, side-effect count.
-   (b) **Plan sampler** targeting rare runtime states: last loop iteration,
-   empty collection, recursion base case, the step right after a failed
-   child, a value just over the inline threshold, a `wait` with mixed
-   done/failed children, name shadowing between parent and child. Random ASTs
-   almost never reach these; the plan sampler makes them common.
-3. *Surface renderer.* Deterministic template renderer per voice (numbered
-   steps, prose, bullets, terse pseudocode, SOP, recipe), seeded by the Y15
-   style corpus, followed by LLM paraphrase. A paraphrase is kept only if a
-   strong model, executing it in the harness, reaches the same final tree.
-   Keep code-like structure (numbering, indentation, named variables) in most
-   voices, per CoGEX and Think-and-Execute.
-4. *Reference policy.* Walks the AST against the live tree and emits the
-   canonical action per step, including the instruction edit that deletes the
-   completed step, child construction, `reduce`, stdlib evals, and `return`.
-   Where several actions are equally valid (order of independent steps), it
-   records the *set* of acceptable actions; SFT uses one, evaluation and RL
-   accept any.
+1. *Typed program structure.* A program is a list of steps over a latent world
+   (Y1): `CallOver(out, f, list, inputs)`, `Call(out, f, inputs)`,
+   `FoldOver(out, f, list, init)`, `RepeatUntil(out, f, init, check, max)`,
+   `Glue(out, type, expression)` (exact work no function covers),
+   `Select(out, items, flags)`, `If(cond, then, else)`, `Return(fields)`.
+   Functions are leaves with an oracle over hidden attributes, crisp `std/`
+   functions, or **nested pseudocode functions with their own code bases**.
+   Type-directed sampling guarantees well-typed programs.
+2. *Python twin.* Every step also computes its value from the hidden
+   attributes, never from the text, so gold exists for every local, every
+   branch condition and the final value.
+3. *Two samplers.* (a) Shape sampler with budgets: number of steps, calls,
+   locals, nesting depth of code bases, fraction of fuzzy leaves.
+   (b) **Plan sampler** targeting rare runtime states: an empty list after a
+   filter (the `for each` over it is skipped), the branch rarely taken, a
+   callee that reports a blocker, a quiesced item in a large call, a value
+   just over the listing threshold, name clashes between a caller's and a
+   callee's locals.
+4. *Rendering and reference policy.* The text is a rendering of the structure
+   in a dialect (Python-like, numbered steps, structured prose, SOP voice),
+   with randomized local and function names, then teacher paraphrase kept only
+   after a round trip. The reference policy **compiles the tool calls from the
+   structure, never from the text**; every call goes through the real harness
+   and is checked against the grammar of its own turn. Where several orders
+   are equally valid it records the set; SFT uses one, evaluation accepts any.
 
-**Degeneracy filters (by execution).** Step cap per program; reject dead
-code, constant predicates, zero- or one-iteration loops beyond a quota,
-steps that leave the tree unchanged, programs whose output ignores their
-inputs. Balance the histogram of action types and of skills per batch.
-Mutation operators for controlled edge cases: zero/one/reversed iteration,
-swapped branch, missing input, ill-typed input.
+**Tiers.** Leaf-only (about a quarter, always); one function with control
+flow; several functions; whole code bases on disk with companion folders and
+`uses` links, modelled on the project's use cases (triage pipeline, moderation
+queue, expense audit, legal-move checking, a shopkeeper as a fold over
+events).
 
-**Knobs.** Depth, length, state size, collection size, fraction of fuzzy
-leaves, voice, language, identifier style, inline-threshold pressure, failure
-injection rate. Curriculum moves the distribution but never drops easy items.
+**Degeneracy filters (by execution).** Call cap per program; reject dead
+steps, constant conditions, programs whose output ignores their inputs.
+Balance the histogram of tools and of skills per batch. Mutation operators for
+controlled edge cases: empty/one-item lists, swapped branch, missing input,
+an input of the wrong type offered among the candidates.
 
-**Gold and verification.** Per-step action sets from the reference policy;
-final tree from the reference interpreter. CI property test: executing the
-reference policy's actions in the real harness always reaches the reference
-final tree.
+**Knobs.** Steps, nesting depth, list sizes, fraction of fuzzy leaves, dialect,
+identifier style, listing-threshold pressure, failure injection rate.
+Curriculum moves the distribution but never drops easy items.
 
-**Output.** JSONL of `(program_id, step, observation, action, acceptable_set,
-skill_tags, knobs)`; plus whole-program records for DAgger and RL.
+**Gold and verification.** Per-turn targets from the reference policy; the
+final value from the twin. CI property: executing the reference policy in the
+real harness always reaches the twin's value, with zero rejected calls.
 
-**Pitfalls.** Renderer dialect (mitigated by Y15 and teacher-authored
-programs); reference policy becoming the only "right" style (mitigated by
-acceptable sets and teacher traces); strings in state (route to eval, keep
-short).
+**Output.** JSONL of `(program_id, turn, messages, tools, target,
+native_target, skill_tags, knobs)`; plus whole-program records for DAgger and
+RL.
 
-**First build.** Seq/Let/If/ForEach/Return with 30 crisp leaves and 10 fuzzy
-leaf tasks, grammar sampler only, three voices, English. Target 50k programs,
-~500k steps. Add plan sampler and calls/maps next.
+**Pitfalls.** Renderer dialect (mitigated by Y15, verified paraphrases and
+human-written code bases); generative leaves have no constructed gold (teacher
+drafts, crisp checkers, judged checks).
+
+**First build (done for four shapes).** Ticket report, review digest, expense
+audit, nested assessment: calls over lists, exact glue, filters, a
+conditional, a nested function, record assembly. Next: folds, `repeat until`
+with check functions, multi-file code bases, the plan sampler.
 
 ## Y3. Back-translated crisp programs
 
@@ -188,13 +205,15 @@ https://arxiv.org/abs/2308.06259); OSS-Instruct from seed code
 (https://arxiv.org/abs/2312.02120).
 
 **Generator design.**
-1. *SQL track.* Load each database; tables become `List[Map]` nodes. Parse SQL
+1. *SQL track.* Load each database; tables become lists of records. Parse SQL
    to a relational plan. Render the plan as a procedure two ways: rule-based
    (STEPS-style, execution order) and LLM back-translation conditioned on a
    voice. Execute the SQL for gold. Map plan operators to natlang idioms:
-   `WHERE` → filter via stdlib or, when the predicate is textual, a fuzzy
-   judge leaf; `GROUP BY`/aggregates → stdlib; joins → crisp join or fuzzy
-   match (bridging to Y1-C); subqueries → child lambdas.
+   `WHERE` → a crisp filter function or, when the predicate is textual, a
+   fuzzy judge leaf called over the rows plus `select_by_flags`; `GROUP
+   BY`/aggregates → crisp functions; joins → crisp join or fuzzy match
+   (bridging to Y1-C); subqueries → nested functions. The output is a code
+   base: `main.nl` plus its crisp and fuzzy helpers.
 2. *Fuzzification.* Replace a crisp predicate with a semantically equivalent
    fuzzy one over a text column ("where category = 'complaint'" becomes
    "keep the rows whose message is a complaint"), using Y1 worlds where the
@@ -203,13 +222,13 @@ https://arxiv.org/abs/2308.06259); OSS-Instruct from seed code
 3. *Python track.* Short pure functions (MBPP-style, ETL snippets) with
    sampled inputs. Back-translate at statement granularity; execute for gold.
    Keep only programs whose operations exist in the stdlib or are natural
-   child lambdas.
+   helper functions.
 4. *Round-trip filter.* A strong model executes the NL procedure in the
    harness; keep pairs whose result equals the original's execution result.
 
 **Knobs.** Query complexity (joins, nesting, aggregates), table size,
-fraction fuzzified, voice, whether schema is described or must be discovered
-by `read`.
+fraction fuzzified, dialect, whether schema is described or must be
+discovered by `read`.
 
 **Pitfalls.** Back-translations that leak SQL keywords (strip and paraphrase;
 lint for `SELECT`, `GROUP BY`); ambiguous NL (round-trip filter); share-alike
@@ -220,7 +239,7 @@ renderer plus one LLM paraphrase, no fuzzification. ~50k programs.
 
 ## Y8. Interpreter drills
 
-**Purpose.** Move per-step accuracy on S1–S10 quickly. Single-step,
+**Purpose.** Move per-turn accuracy on K1–K14 quickly. Single-turn,
 bulk-generated, exact.
 
 **Prior art.** Slicing single steps from traces is how CWM and NExT build
@@ -230,45 +249,38 @@ states (https://arxiv.org/abs/2401.09074).
 
 **Drill families.**
 
-| Drill | Observation | Target action | Variants |
-|-------|-------------|---------------|----------|
-| Advance | instructions with k steps, step 1 already satisfied in the tree | line-addressed edit deleting step 1 | steps spanning lines; nested bullets; step partly done |
-| What-next | instructions + tree | the single correct next action | near-miss twins where one tree detail flips the answer |
-| Navigate | truncated rendering, instruction needs a hidden value | `read(path, range)` | deep paths, list ranges, long Text |
-| Route | a step describing exact work | the right stdlib call | distractor functions; string ops; counting long lists |
-| Build child | "for each X do Y" with inputs | `set` of a well-formed Lambda (instructions, inputs, `returns`) | scope: must copy needed inputs |
-| Join | event line says children done/failed | consume results or repair | mixed outcomes |
-| Return | finished work in tree, declared `returns` | well-typed `return`, empty instructions | optional fields, nested records |
-| Continuation | multi-step instructions where step 2 needs step 1's result | construct continuation Lambda in `return` with a typed param slot; `move` the remaining lines into it | scalar small enough to substitute into the text instead |
-| Copy | value at one path needed at another | `copy(src, dst)` into the type-compatible slot | sub-ranges; distractor slots of the wrong type; frozen `args` |
-| Type repair | previous action + real type-error message | corrected action | real TypeScript diagnostics from the actual checker |
-| Edit-miss repair | "old string not found" | corrected edit | whitespace, line drift |
-| Loop boundary | loop on last item / empty collection | terminate correctly | off-by-one twins |
-| Predicate | item + yes/no question | logprob-read answer | Y11 minimal pairs |
-| Ignore embedded | data containing instructions | unaffected action | Y12 |
-| Loop check | recent states of an `Iterate` | reasoning, then `continue` / `done` / `degenerate` | progressing, converged, oscillating, drifting, and stalled-but-not-identical loops built with known outcome |
-| Draft through holes | typed `return` partly filled, holes visible, instructions unfinished | the next instruction step, not a fix | twin: same panel at commit time → fix |
-| Commit | work done; or commit just refused with blocking list | commit; or the targeted fix | repeated refusal → fail upward |
-| Check timing | bulk write just finished | `read("return@problems")` | twin: single small write → continue |
-| Elaborate | untyped lambda with bound inputs | proposed `params` / `returns` / `ensures` | inputs that under-determine the type |
+| Drill | State shown | Target turn | Variants |
+|-------|-------------|-------------|----------|
+| What-next | a function half carried out: some locals exist | the single correct next call | near-miss twins where one local flips the answer; all dialects |
+| For-each | one `for each` line, its functions, its lists | one `call ... over`, the item parameter left out | several lists; extra inputs; the list is a local |
+| Bind | a call whose parameters have several type-fitting candidates | the right `inputs` | distractor values of the right type and wrong meaning |
+| Glue | a line of exact work no function covers | one `run_code` expression, then the `write` | string ops; counting long lists; rounding |
+| Branch | an `if`/`else` and the values it depends on | the first call of the branch taken, only | twin with the condition flipped; empty-list conditions |
+| Return | finished locals, declared `returns` | calls straight `to` `return/<field>`, `write` with `source`, then the reply | optional fields, nested records |
+| Navigate | a listing that cuts a value off, a step that needs it | `read(path, start, end)` | deep paths, list ranges, long Text; twin where reading is unnecessary |
+| Resume | a call that quiesced with a note | `call` with `function` + `to` only; or with corrected arguments | partial Map; stopped Fold |
+| Call repair | previous call + real rejection and hint | corrected call | `bad-call`, `unknown-field`, type does not fit |
+| Blocker | inputs that do not determine the result | `report_blocker` with a precise note | twin where they do; a callee's blocker passed upward |
+| Copy-edit-call | a program line asking for a variation of a function | `Function<f>` copy, one `edit`, `call` of the copy | twin where an argument suffices |
+| Loop check | a state and a criterion | the `Bool` of a check function | met, nearly met, not met |
+| Leaf | item + question or rubric or record type | one complete typed `write` | Y11 minimal pairs |
+| Ignore embedded | data containing instructions | unaffected turn | Y12 |
+| Finish | "still missing: x" after a reply | exactly the missing write | twin: nothing missing → reply |
 
-The last four rows implement the draft-versus-fix balance of `TYPES.md` §8.
-Apply diagnostics dropout (hide the problems line in a fraction of examples)
-and track the dataset-wide rate at which *fix* is the labelled action given a
-visible diagnostic.
-
-**Generation.** All from the Y2 reference policy by slicing single steps and
+**Generation.** All from the Y2 reference policy by slicing single turns and
 by plan-sampling the target configuration directly. Every drill has a
 **near-miss twin**: same surface, one state detail changed, different correct
-action. This forces reading the state instead of pattern-matching.
+turn. This forces reading the state instead of pattern-matching. The
+draft-versus-fix balance of `TYPES.md` §8 applies to Finish and Call repair.
 
-**Verification.** Exact match against the acceptable-action set.
+**Verification.** Exact match against the acceptable-turn set, and the
+grammar of the turn.
 
 **Pitfalls.** Drills are out of distribution relative to whole programs if
-overused; cap at ~10 % of the mix and always draw observations through the
-real renderer.
+overused; cap at ~10 % of the mix and always draw states through the real
+listing.
 
-**First build.** Advance, What-next, Route, Return, Type repair. 20k each
+**First build.** What-next, For-each, Bind, Glue, Branch, Return. 20k each
 with twins.
 
 ## Y1. Latent-world corpora
@@ -388,7 +400,7 @@ trajectories taught recursion at 8B, so treat that as a floor for 350M.
 
 ## Y5. Schema-first extraction with validate-and-repair
 
-**Purpose.** Family B at scale, plus repair episodes (S8, S10) with known
+**Purpose.** Family B at scale, plus repair episodes (L3, K9) with known
 fixes. Shares machinery with Y1 but samples schemas freely instead of from a
 world.
 
@@ -409,9 +421,10 @@ task.
    missing fields (gold `null`), several records in one document (gold list),
    conflicting mentions (gold per a stated precedence rule, e.g. "latest
    wins"), distractor entities, values stated indirectly (dates as "next
-   Tuesday" relative to a stated date, which routes to crisp eval).
-4. Emit as a lambda: `instructions` = "extract …", `returns` = the type,
-   input = document.
+   Tuesday" relative to a stated date, which routes to a crisp function).
+4. Emit as a leaf function (`args: { document: Text }`, `returns` = the
+   type), and as the leaf of code bases that call it over a folder of
+   documents and aggregate the records with crisp code.
 5. **Repair episodes.** Corrupt a correct `return`: wrong type, missing
    required field, enum violation, hallucinated value not in text, list where
    record expected. Feed the real validator error. Target = the fixing
@@ -426,7 +439,7 @@ count, indirection rate, document length relative to the inline threshold
 (long documents force chunk-and-merge, bridging to Y9).
 
 **First build.** Flat and 2-level records, 5 genres, null handling, three
-corruption types. 100K lambdas, 30K repair episodes.
+corruption types. 100K leaf instances, 30K repair episodes.
 
 ## Y4. Label-first rubrics and policies
 
@@ -465,10 +478,12 @@ grids; precedence and exceptions. Balanced coverage of rare rules.
 3. *Label-first items.* Choose (rule, label, edge-case type, attributes) then
    generate the item, with AttrPrompt-style attribute randomization. Balance
    labels per rule.
-4. *Program shapes.* (a) flat map of a whole policy over items; (b) nested
-   map, one child lambda per (item, rule), then crisp combination under
-   precedence, which is the decomposition a small model needs; (c) two-pass
-   triage with a second look at low-margin items.
+4. *Program shapes.* (a) one leaf function applying the whole policy, called
+   over the items; (b) a code base with one leaf function per rule, called
+   per item by a nested `assess` function, then a crisp function combining
+   the verdicts under precedence, which is the structure a small model needs
+   and which the policy author states; (c) two-pass triage with a second look
+   at flagged items.
 
 **Verification.** Symbolic gold where attributes are structured. For free-text
 items: independent strong model labels **per single rule, blind to the
@@ -484,8 +499,9 @@ and nested program shapes. 5K policies × 40 items.
 
 ## Y6. Rule worlds
 
-**Purpose.** Forward-chaining loops with exactly controlled depth. Trains S3
-(loop until fixpoint), S2, and nested maps, with gold at every iteration.
+**Purpose.** Forward-chaining loops with exactly controlled depth. Trains
+`repeat until` with a check function (K3), leaf decisions, and nested calls,
+with gold at every iteration.
 
 **Prior art.** RuleTaker/ProofWriter: synthetic Datalog theories rendered via
 templates; ~500k questions across depths 0–5; closed- and open-world variants;
@@ -509,11 +525,14 @@ work found on sub-1B forward chaining.
    proofs.
 2. Render rules and facts to text: templates plus paraphrase; facts may be
    embedded in short documents (bridging to Y1).
-3. *Program shapes.* (a) **Forward**: `while new facts: for each rule, child
-   lambda "does this rule fire given these facts? if so, what follows?"`;
+3. *Program shapes.* (a) **Forward**: `repeat until nothing_new(facts): facts
+   = apply_rules(facts)`, where `apply_rules` calls the leaf "does this rule
+   fire given these facts? if so, what follows?" over the rules and merges
+   with crisp code;
    (b) **FaiRR-style** split into select-rule, select-facts, infer;
-   (c) **Backward, goal-directed**: recursive lambdas on subgoals, the natural
-   showcase for recursion and far cheaper in calls.
+   (c) **Backward, goal-directed**: a function declared `recursive` on
+   subgoals, the natural showcase for declared recursion and far cheaper in
+   calls.
 4. Closed- and open-world variants (Unknown label); distractor rules and
    facts; conflicting rules with precedence (links to Y4).
 
@@ -570,8 +589,8 @@ sources in a separable shard, out of anything released.
 
 ## Y11. Minimal pairs and calibration sets
 
-**Purpose.** Sharp predicate boundaries (S2), honest abstention (S12), and
-data to fit voting and escalation thresholds.
+**Purpose.** Sharp leaf boundaries (L1, L2), honest blockers (K11), and
+data to fit voting and escalation thresholds later.
 
 **Prior art.** Contrast sets drop model performance by up to 25 %
 (https://arxiv.org/abs/2004.02709). CheckList's INV (label must not change)
@@ -742,8 +761,8 @@ helps, extreme diversity hurts (https://arxiv.org/abs/2506.19262).
 
 ## Y7. Simulated environments for side effects
 
-**Purpose.** Families F and K: procedures that *do* things. Trains
-side-effecting eval calls, precondition checks, refusal and escalation, with
+**Purpose.** Families F and K: procedures that *do* things. Trains calls of
+effectful crisp functions, precondition checks, refusal and blockers, with
 gold from a simulator instead of a judge.
 
 **Prior art.**
@@ -776,9 +795,10 @@ gold from a simulator instead of a judge.
 1. *Simulators.* Each mock tool = typed tables + pure transition functions,
    seeded, with an explicit `initial_state`. Start with inventory, ticketing,
    calendar, file store, messaging. Include implicit cross-tool dependencies
-   (a ticket must reference an existing SKU). Exposed to eval as stdlib
-   modules; state lives in the tree under a reserved key so snapshots and
-   forks just work.
+   (a ticket must reference an existing SKU). Registered by the host as
+   capabilities and wrapped as crisp functions of the code base (`open_ticket`,
+   `reserve_stock`); simulator state is snapshotted with the tree so forks
+   just work.
 2. *Blueprint-first SOPs.* Sample a goal and a gold action sequence; execute
    it in the simulator; encode the SOP's policy clauses as unit tests over the
    trace; only then write the natural-language SOP and its paraphrases (Y15
@@ -787,7 +807,7 @@ gold from a simulator instead of a judge.
    **unmet preconditions where the correct action is refuse or escalate**;
    idempotency traps (retrying a non-idempotent call); partial failure of a
    tool with a documented recovery step.
-4. *Program shapes.* Single-lambda SOP; SOP with per-item child lambdas
+4. *Program shapes.* Single-function SOP; SOP with a helper called per item
    ("for every open ticket older than 7 days …"); SOP with a judged step
    ("if the customer sounds upset, …") mixing fuzzy leaves with side effects.
 
@@ -805,56 +825,48 @@ Review before reuse: Jericho (GPL-2.0), ToolScale (NVIDIA), ToolSandbox
 **First build.** Ticketing + inventory, 40 SOP blueprints × paraphrases,
 state-diff and collateral checks. 10K episodes.
 
-## Y9. Oversize and decomposition sets
+## Y9. Scale sets
 
-**Purpose.** S11: notice that an input is too large or a task too broad, split
-it, map, and recombine. The hardest skill to get from a teacher and the one
-with the least prior data.
+**Purpose.** The same code bases over inputs far larger than one episode can
+hold. The structure is stated by the author, so nothing has to be invented;
+what is trained is carrying it out **without reading what need not be read and
+without doing the items' work by hand**, and it is where the project's claim
+is measured: small model plus structure against the same model answering
+whole.
 
-**Prior art.** The RLM paper is the main data point for *training*
-decomposition: 2,250 teacher trajectories on 750 tasks filtered to 1,072 by
-dropping zero-score and single-turn runs; **each root turn is one SFT sample**
-(the same shape as our stateless steps); 300 steps at batch 64; OOLONG went
-0 → 32 %. Cleaning was needed: **16 % of turns misused FINAL, 13 %
-referenced bad variables**. Failure modes: **excessive sub-calls**, confusing
-a final answer with a thought, weak coders failing as RLMs
-(https://arxiv.org/html/2512.24601v2). Context-Folding trains branch/return
-with RL, penalizing unfolded tokens past 50 % of budget and out-of-scope
-branches (https://arxiv.org/abs/2510.11967). ADaPT decomposes only on
-executor failure (https://arxiv.org/abs/2311.05772). THREAD's children return
-only what the parent needs (https://arxiv.org/abs/2405.17402). **No
-quantitative study was found of when models fail to notice an input should be
-split**, which argues for building this set.
+**Prior art.** The RLM paper is the main data point for training a root that
+delegates: 2,250 teacher trajectories on 750 tasks filtered to 1,072; **each
+root turn is one SFT sample** (the same shape as ours); OOLONG went 0 → 32 %.
+Cleaning was needed: **16 % of turns misused FINAL, 13 % referenced bad
+variables**. Failure modes: **excessive sub-calls**, confusing a final answer
+with a thought (https://arxiv.org/html/2512.24601v2). THREAD's children return
+only what the parent needs (https://arxiv.org/abs/2405.17402). Those failure
+classes are what typed `call`, type-filtered inputs and "the reply is never
+the result" rule out by construction.
 
 **Generator design.**
-1. *Blob construction.* Take K leaf items with per-item gold (from Y1, Y4,
-   Y5, Y10, or real datasets) and fuse them: concatenated with varied
-   delimiters, interleaved, embedded in one long document, or as a list that
-   exceeds the inline threshold. **K ∈ {1, 2, 3, 5, 10, 30, 100}.** K = 1 and
-   small-K cases are *negatives* that teach not to over-split, directly
-   targeting RLM's excess-sub-call failure.
-2. *Broad-task construction.* Compose K known tasks into one instruction
-   ("clean up this contact list": dedupe + normalize phones + flag missing
-   emails). Gold = composed gold.
-3. *Label at the root state.* The reference policy's action: a crisp split
-   via stdlib (`splitOn`, `chunk`, `windows`), then `spawnEach` with the leaf
-   instructions, then `reduceAll`, then a crisp or judged combine.
-   Alternative acceptable actions are recorded (chunk sizes within a band).
-4. *Boundary cases.* Items that straddle chunk boundaries (requires overlap
-   or a repair pass); a combine step that needs cross-item information
-   (dedupe across chunks); recursion when a chunk is still too large.
-5. *Return discipline.* Children return only what the parent needs
-   (THREAD). Lint traces for the RLM failure classes: premature `return`,
-   references to nonexistent paths.
+1. *Scale sweeps.* Y2 programs with list sizes K ∈ {1, 3, 10, 30, 100, 1000}.
+   The reference trajectory is the same at every K: one `call ... over`.
+   Small K is included so that the model calls the function even when it could
+   have answered by hand.
+2. *Long texts.* One long document instead of a list: the program calls a
+   crisp `chunk` function, then a leaf over the chunks, then a crisp combine.
+   Boundary cases: items that straddle chunk boundaries (a program with an
+   overlap parameter), a combine step that needs cross-chunk information
+   (dedupe across chunks).
+3. *The one-shot baseline set.* For every program, the same task phrased as a
+   single prompt with the whole input, for the comparison of `TRAINING.md` §6.
+   Used for evaluation, not training.
+4. *Return discipline.* Callees return only what the signature says; lint for
+   reads of large values that the program never needs.
 
-**Verification.** Exact: per-item gold reused; final aggregate computed
+**Verification.** Exact: per-item gold reused; the final aggregate computed
 crisply.
 
-**Knobs.** K, item length, delimiter regularity, threshold pressure,
-cross-item dependency, recursion depth.
+**Knobs.** K, item length, chunk size, cross-item dependency, nesting depth.
 
-**First build.** Concatenation and long-list blobs over Y4 and Y5 items, K up
-to 30, with negatives. 40K root-state examples plus full trajectories.
+**First build.** Sweeps over the four Y2 shapes, K up to 100. Measure the
+untuned and tuned 350M one-shot against interpreted, by K.
 
 ## Y13. Verifier-backed generation
 
@@ -883,9 +895,10 @@ SynLogic, Enigmata: generator + verifier suites, permissively licensed.
 2. *Checker validation.* AutoIF's mutual-agreement filter, plus: every
    checker must pass known-good outputs and **fail mutated ones**.
 3. *Tasks.* Base rewriting/summarizing/formatting leaf + 1–5 sampled
-   constraints. Program shape: `draft → check (eval) → while failing: revise
-   given the checker's message → return`, with an iteration cap and a
-   graceful "best effort + which constraints failed" return.
+   constraints. Program shape: `draft = write(...)`, then `repeat at most n
+   times until passes(draft): draft = revise(draft)`, where `passes` is the
+   generated checker as a crisp `Bool` function, and a final branch that
+   reports which constraints still fail.
 4. *Conflicting constraints* (unsatisfiable sets) where the right result is
    to report the conflict.
 
@@ -916,10 +929,10 @@ result (0.) shows 60× length generalization is achievable with erasure.
 
 **Design.**
 - Sweeps: steps ∈ {10, 30, 100, 300, 1000}; recursion depth ∈ {2, 4, 8, 16};
-  map width up to 10³–10⁴ with exact work routed to eval; nested structures
+  list width up to 10³–10⁴ with exact work in crisp functions; nested structures
   (org charts, bills of materials, threaded discussions) from Y1 worlds.
-- **Per-step complexity capped at 1–2 operations.** If an instruction step
-  needs more, the correct behavior is to split it, which is itself tested.
+- **Per-statement complexity capped at 1–2 operations**, which is an
+  authoring rule for the generated programs.
 - Report per-skill step accuracy p, measured horizon H₀.₅, and predicted
   H₀.₅ = ln 0.5 / ln p. A gap between predicted and measured means errors are
   correlated, which is where voting fails.
@@ -1003,7 +1016,7 @@ GKDTrainer for the LLM-teacher case.
 4. Cap the student-driven prefix, or reset to an expert state after N
    divergent steps, so rollouts stay recoverable.
 5. Inject corrupted-but-recoverable states labelled with the expert's repair
-   (Agent-R), feeding S10.
+   (Agent-R), feeding K9.
 6. For teacher-labelled (non-scripted) programs, spend the budget on short
    teacher continuations at student-reached states, prioritized by the
    lowest-accuracy skills.
@@ -1012,8 +1025,8 @@ GKDTrainer for the LLM-teacher case.
 
 | Wave | Datasets | Why first |
 |------|----------|-----------|
-| 1 | Y2 (core grammar), Y8, Y5, Y12-lite | Algorithmic backbone, fastest per-step gains, the model's strongest leaf type, and injection robustness from round one |
-| 2 | Y1 (one domain), Y4, Y11, Y9 | Flagship families A–D; calibration data; the decomposition skill |
+| 1 | Y2 (all constructs, four tiers), Y8, Y5, Y12-lite | Interpreting backbone, fastest per-turn gains, the model's strongest leaf type, and injection robustness from round one |
+| 2 | Y1 (one domain), Y4, Y11, Y9 | Flagship families A–D; blockers; the scale measurements that test the thesis |
 | 3 | Y3, Y6, Y10, Y15 inverse direction | Real data shapes, loops with exact depth, real text in pipelines, human-written programs |
 | 4 | Y7, Y13, Y14 sweeps, multilingual | Side effects, refinement loops, the horizon measurements, the other nine languages |
 

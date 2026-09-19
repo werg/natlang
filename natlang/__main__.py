@@ -31,14 +31,20 @@ def main(argv=None) -> int:
     inputs = dict(kv.split("=", 1) for kv in a.inputs)
     doc_inputs = {}
     import yaml
-    doc = yaml.safe_load(a.program.read_text())
+    doc = None if a.program.suffix in (".nl", ".ts") else yaml.safe_load(a.program.read_text())
     if isinstance(doc, dict) and "inputs" in doc:     # conformance files carry their own inputs
         doc_inputs = doc["inputs"]
     root = load(a.program, {**doc_inputs, **inputs})
     decoder = LlamaServerDecoder(a.server)
     prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
-    rt = Runtime(lambda lam: ModelAgent(decoder, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
-                                           system_prompt=prompt))
+    if a.program.suffix in (".nl", ".ts"):            # a code base: the tool surface with native constrained decoding
+        from .native import NativeCallDecoder
+        from .tool_agent import ToolAgent
+        native = NativeCallDecoder(a.server)
+        rt = Runtime(lambda lam: ToolAgent(native, temperature=a.temperature))
+    else:
+        rt = Runtime(lambda lam: ModelAgent(decoder, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
+                                               system_prompt=prompt))
     out, value = rt.run_root(root)
     if a.trace:
         a.trace.write_text("".join(json.dumps(t, default=str) + "\n" for t in rt.trace))

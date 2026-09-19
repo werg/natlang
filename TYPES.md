@@ -4,14 +4,15 @@
 > `spec/SPEC.md`. This document gives the rationale and the training-side
 > design. Where they differ, the spec wins.
 
-Companion to `PLAN.md` §2–4. Defines how lambdas are typed, what the harness
-validates and when, and how validation feedback reaches the model without
-turning it into a compulsive error-fixer. Status: draft, 2026-09-18.
+Companion to `PLAN.md` §2–4. Defines how functions and their instances are
+typed, what the harness validates and when, and how validation feedback
+reaches the model without turning it into a compulsive error-fixer. Status:
+draft, 2026-09-19.
 
 ## 1. Goals
 
-1. Every lambda **can** be typed entirely: inputs, return, working state,
-   effects, and postconditions.
+1. Every function **is** typed entirely by its author: parameters, return,
+   effects; and every local an instance creates is typed at creation.
 2. The harness can validate **any** state, intermediate or final, against
    those types, as a pure function of the tree.
 3. Validation is first an *error-containment mechanism* for the runtime and a
@@ -30,7 +31,7 @@ turning it into a compulsive error-fixer. Status: draft, 2026-09-18.
 
 ## 2. The type language
 
-A subset of TypeScript type syntax, as already used for `returns`.
+A subset of TypeScript type syntax, used in function frontmatter and for locals.
 
 | Form | Example |
 |------|---------|
@@ -40,85 +41,65 @@ A subset of TypeScript type syntax, as already used for `returns`.
 | Lists | `T[]` (canonical; `List[T]` in older text means the same) |
 | Dicts | `Dict<T>` (string keys) |
 | Unions | `Num \| Null` |
-| Lambda | `Lambda<P, T>`: params record `P`, return `T` |
-| Gradual escape | `Any` |
-| Named types | `type Label = { ... }` declared on a lambda, visible to its subtree |
+| Function instance | `Lambda<P, T>`: params record `P`, return `T`; derived from a signature, never written by the interpreter |
+| Named types | declared in a function's `types` frontmatter or a folder's `types.ts`; visible in the function and inherited by its code base |
 
-**Refinements.** Crisp predicates attached to a type, written as short eval
+**Refinements.** Crisp predicates attached to a type, written as short TypeScript
 expressions: `Num where (x) => x >= 0 && x <= 1`, `Text where maxLen(200)`,
 `List[T] where nonEmpty`. A small library of named refinements covers the
 common cases so they rarely need code. Refinements are structural checks'
 slower cousins: always computed, but only *enforced* at commit points (§4).
 
-### 2.1 A fully typed lambda
+### 2.1 A fully typed function
 
 ```
-labels/   Lambda<{ inbox: List[Text], rubric: Text },
-                 List[{ id: Num, label: "urgent"|"normal"|"spam", confidence: Num }]>
-  instructions   Text
-  params         { inbox: List[Text], rubric: Text }
-  returns        List[{ id: Num, label: ..., confidence: Num where unit }]
-  effects?       []                                        # pure; or ["ticketing.write"]
-  ensures?       [ "return.length == inbox.length",
-                   "ids(return) == range(inbox.length)" ]  # crisp postconditions
-  inbox, rubric  (bound inputs)
-  return         (written during reduction)
+---
+description: Label every ticket and count the urgent ones.
+args:    { inbox: Text[], rubric: Text }
+returns: '{ id: Num, label: "urgent"|"normal"|"spam", confidence: Num }[]'
+effects: []                                  # pure; or ["ticketing.write"]
+---
 ```
 
-- **`params`** types the closure. A lambda with a required param unbound is
-  *partial*. Partial application is well-typed; **reducing a partial lambda is
-  a type error.** Currying is now visible to the type checker.
-- **`returns`** as before.
-- **No working state, no inference.** A lambda has `instructions`, `args`, and
-  `return`, nothing else (`PLAN.md` §2.2.1). Intermediate data is a parameter
-  of the lambda that will consume it. **Every node is created with an explicit
-  type chosen by the agent**; `Lambda<P, T>` is constructible like any other
-  type. There is no `Any` scratch area: prose drafts live in `Text`,
-  structured drafts are covered by `Draft<T>`.
-- **`args` is frozen on reduce.** The parent may write a child's `args` while the
-  child is unreduced (accumulate, edit, then ship). Once `reduce` is
-  triggered, `args` is immutable, and it is always read-only to the lambda
-  itself. It unfreezes if the child fails.
-- **Crisp lambdas and combinators are typed too** (`PLAN.md` §2.4). A crisp
-  lambda's `code` is statically checked against its `params` and `returns`
-  when written. `Map<A, B>` requires `over: List[A]` and
-  `fn: Lambda<{ item: A }, B>` and fits any slot of type `List[B]`;
-  `Fold<A, S>` requires `step: Lambda<{ acc: S, item: A }, S>` and fits a slot
-  of type `S`. `Iterate<S>` requires `step: Lambda<{ state: S }, S>`, a
-  `check` returning `LoopVerdict`, and a `max`, and fits a slot of type `S`.
-- **Enum narrowing** is the one subtyping rule: a lambda whose `returns` is a
-  narrower enum fits a slot declared with the wider enum. It lets crisp code
-  construct a decision lambda restricted to exactly the currently legal
-  options (`PLAN.md` §2.4).
-- **`effects`** lists the side-effect capabilities the lambda may use. A
-  lambda with no `effects` is pure. A child cannot have effects its parent
-  lacks. Effects can be caused by `eval` calls and by crisp lambdas; both are
-  checked against the enclosing lambda's declared `effects`. `eval` never
-  writes to the tree.
-- **`ensures`** are optional crisp postconditions over inputs and `return`:
-  checks the harness runs at commit that relate the result to the inputs,
-  which types alone cannot express. `Map` and `Fold` now guarantee length,
-  order, and accumulator typing by construction, so `ensures` matters mainly
-  for hand-built results. They are
-  the cheapest high-value check in the system for fuzzy maps: length
-  preserved, ids are a permutation, labels inside the enum, sums match.
-- **Higher-order.** `Lambda<P, T>` is a type, so params can be lambdas:
-  `classify: Lambda<{ item: Text }, Label>`. Generics live only in stdlib
-  signatures (`spawnEach<A, B>(xs: A[], f: Lambda<{item: A}, B>): Lambda<{}, B>[]`),
-  where TypeScript handles them; the tree's type language stays monomorphic.
+- **The signature is the author's.** `args` and `returns` in the frontmatter
+  give the instance its type `Lambda<P, T>`. The interpreter never states the
+  type of a sub-task: a `call` derives every type from the callee's signature
+  (the result slot, the element type of `over`, the accumulator, the state),
+  and refuses a call whose inputs do not fit or whose required parameters are
+  unbound.
+- **Locals are typed at creation.** `let/<name>` is created by the first
+  write: a plain `write` states the type, a `call` derives it, a `write` with
+  `source` takes the source's. There is no `Any` scratch area: prose drafts
+  live in `Text` locals, structured drafts are covered by `Draft<T>`.
+- **There are no anonymous lambdas.** A `write` whose type is a pending node
+  is rejected; functions come only from the immutable code base, or from an
+  editable copy of one of its functions, which keeps the original's signature.
+- **`args` is frozen** once the instance starts, and always read-only to the
+  instance itself.
+- **Crisp functions and combinators are typed too** (`PLAN.md` §2.4). A crisp
+  function's `code` is checked against its signature. `Map<A, B>` requires
+  `over: A[]` and a function whose one unbound parameter takes `A`, and fits
+  any slot of type `B[]`; `Fold<A, S>` requires a function `(acc: S, item: A)
+  -> S` and fits a slot of type `S`; `Iterate<S>` requires a step `S -> S`, a
+  check function `S -> Bool`, and a `max`, and fits a slot of type `S`. All
+  three are built only by `call`.
+- **Enum narrowing and literal widening**: a narrower enum fits a wider one,
+  and a literal fits its base type (`Label[]` fits `Text[]`), which is what
+  lets typed results flow into generic library functions.
+- **`effects`** lists the side-effect capabilities the function may use. A
+  function with no `effects` is pure. A callee cannot have effects its caller
+  lacks. Effects can be caused by `run_code` and by crisp functions; both are
+  checked against the enclosing function's declared `effects`. `run_code`
+  never writes to the tree.
+- **`ensures`** (deferred) are optional crisp postconditions over inputs and
+  `return`. `Map` and `Fold` guarantee length, order, and accumulator typing
+  by construction, so they matter mainly for hand-built results.
 
-### 2.2 Gradual typing and elaboration
+### 2.2 Elaboration (deferred)
 
-Typing is available everywhere and required nowhere: a user can write an
-untyped lambda (`params`, `returns` = `Any`). The more that is declared, the
-more the harness can contain errors.
-
-**Type elaboration** closes the gap for hand-written programs: before
-reduction, a typing pass proposes `params`, `returns`, and `ensures` for an
-untyped lambda. The pass is itself a lambda (run by the interpreter model, or
-escalated to a larger model), and its output is checked by the harness for
-consistency with the bound inputs. Synthetic training programs are generated
-fully typed, with a minority untyped or partially typed for robustness.
+Frontmatter is required, so every program is typed. A typing pass that
+proposes `args` and `returns` for a bare pseudocode text is an authoring-time
+aid and out of scope for the interpreter.
 
 ### 2.3 The invariant: type preservation
 
@@ -127,8 +108,8 @@ The harness enforces *subject reduction* for the object tree:
 > Every accepted action takes a draft-well-typed tree to a draft-well-typed
 > tree. Completion takes a node of type `Lambda<P, T>` to a node of type `T`.
 
-Consequently a slot declared `T` accepts either a `T` or a `Lambda<_, T>`
-(a typed promise), and the swap-out on completion can never break the parent's
+Consequently a slot declared `T` accepts either a `T` or a call in progress
+whose result type fits `T` (a typed promise), and the swap-out on completion can never break the parent's
 types. *Progress* is not guaranteed, since leaves are fuzzy; *preservation*
 is. This is a CI property for the harness and a filter for all training
 traces: a trace that violates preservation at any step is discarded.
@@ -164,14 +145,12 @@ correct version of the action the model was already taking.
 
 Full conformance is demanded only where an error would *escape*:
 
-1. **Completion**: emptying `instructions`. Requires `return : T`, all
-   `ensures` true, refinements satisfied, no unreduced children the return
-   depends on.
-2. **`reduce` of a child**: the child's `params` must be fully bound and
-   well-typed; its declared `returns` must fit the slot it occupies.
+1. **Completion**: the interpreter replies. Requires `return : T` with no
+   holes and no pending nodes (and, when enabled, `ensures` and refinements).
+2. **`call`**: every required parameter bound by a value that fits; the
+   callee's result type fits the slot at `to`.
 3. **Side-effecting calls**: arguments fully typed, effect declared.
    Hard-checked, never draft.
-4. **Explicit checks**: an `assert`/`check` step written in the instructions.
 
 A failed commit is refused, nothing changes, and the diagnostics that blocked
 it become the salient part of the next observation. At that moment, and only
@@ -198,8 +177,8 @@ feeds: runtime error containment (§6), trace filtering, per-skill metrics,
 DAgger labelling, RL reward at commit, and debugging. "Validate any
 intermediate or final state" is this function applied to any snapshot.
 
-**Eval code.** Because eval is TypeScript, the harness generates a `.d.ts`
-for the current lambda's scope from the declared types, and eval snippets are
+**Code.** Because `run_code` and crisp functions are TypeScript, the harness generates a `.d.ts`
+for the current scope from the declared types, and snippets are
 type-checked *statically* before they run, using a warm, persistent checker
 process. Snippets are a few lines against a small declaration file, so the
 budget is small; measure in Phase 1, and fall back to runtime validation at
@@ -224,35 +203,36 @@ take, never reads the instructions, and never owns control flow.
 
 ### 6.1 What "deep" means, tool by tool
 
-Every action is decoded under a grammar derived from the **current tree and
-its types**, so that ill-formed and ill-typed actions cannot be emitted.
+Every turn is decoded under a grammar derived from the **current tree, its
+types, and the code base**, over the model's native tool-call text, so that
+ill-formed and ill-typed calls cannot be emitted (`spec/SPEC.md` §5.8).
 
-| Part of the action | Constrained to |
-|--------------------|----------------|
-| Tool name | the six tools |
-| `read(path, range)` | paths that exist in the lambda's scope, plus meta suffixes (`@problems`, provenance); ranges within bounds |
-| `edit(path, …)` | paths of type `Text`; line ranges that exist |
-| `set(path, type, literal)` — path | existing paths, or a creatable child of an existing container, inside scope, not harness-owned |
-| `set(path, type, literal)` — type, literal | for a new node, a type literal that fits the parent slot, then the grammar of `Draft<T>` for it; for an existing node, the declared type at that path (`T` for side-effect arguments); enums to their members; records to their fields; a new `Lambda` literal to the Lambda schema, with `returns` required to fit the slot |
-| `copy(src, dst)` | `src`: existing paths and valid sub-ranges; `dst`: **only slots whose type accepts the source's type**, inside scope, not frozen |
-| `reduce(paths)` | paths whose type is `Lambda`, status unreduced or failed, params fully bound |
-| `eval` body | statically type-checked against the generated `.d.ts` before running (§5); optionally *type-constrained decoding* of the snippet itself (§6.3, stage F) |
+| Part of the call | Constrained to |
+|------------------|----------------|
+| Tool name | the six tools (`call` only when the lambda has functions) |
+| `read(path, start, end)` | paths that exist in scope, `codebase/<f>`; positions that exist |
+| `write(path, type, value)` | one alternative per writable slot: the path, **its type as a constant**, and the grammar of `Draft<T>` for the value; or a new `let/<name>` with a stated type |
+| `write(path, type, source)` | sources whose type fits the slot |
+| `write(path, "Function<f>")` | names of the code base |
+| `edit(path, old, new)` | editable texts: own `instructions`, instructions of function copies |
+| `call(function, to, inputs, …)` | function names of the code base and of copies; **per parameter, the paths whose type fits it**; `over` to lists; `until` to `Bool` functions of one parameter; `to` to writable slots or a new local |
+| `run_code` body | runtime validation at the boundary; static checking against a generated `.d.ts` is a later stage (§6.3) |
 
-Decoding is multi-phase: tool name, then path, then the harness selects the
-grammar for the remainder from the type at that path. Grammars are cached by
-type hash. JSON-schema-to-grammar exists in llama.cpp; XGrammar and Outlines
-provide the equivalent for vLLM and SGLang.
+Path, type and value belong together, which JSON Schema cannot say at the top
+level of a tool's arguments; tools therefore carry `x-natlang-alternatives`,
+and the grammar is built from those. Grammars are cached by type hash.
 
-Path constraint matters as much as literal constraint: in the RLM training
+Path constraint matters as much as value constraint: in the RLM training
 data, 13 % of turns referenced variables that did not exist
 (`SYNTHETIC_DATA.md` Y9). Under a tree-derived path grammar that class of
-error cannot occur.
+error cannot occur, and with type-filtered `inputs` neither can passing the
+wrong kind of value.
 
 ### 6.2 The layers that remain, in order
 
 1. **Unrepresentable**: type- and tree-directed decoding (§6.1).
 2. **Resample on reject**: whatever still fails validation (a contradiction
-   reachable only through `eval`, an over-long action, an effect violation)
+   the grammar cannot see, an over-long call, an effect violation)
    is discarded and resampled up to k times before the model sees anything.
    This is a loop around the sampler, and the only piece of the "statistical"
    family kept in v1.
@@ -280,11 +260,11 @@ speculative execution of both branches.
 | Stage | Contents |
 |-------|----------|
 | A | Type parser; structural validator; static tool-call grammar; resample-on-reject; preservation check in CI |
-| B | Tree-derived path grammars; type-directed literals for `set`; grammar cache |
+| B | Tree-derived path grammars; type-directed values for `write`; signature-derived `call` alternatives; grammar cache |
 | C | `Draft<T>`, commit gates, hole rendering, `@problems` |
-| D | `.d.ts` generation per scope; warm TypeScript checker for eval snippets |
+| D | `.d.ts` generation per scope; warm TypeScript checker for `run_code` and crisp functions |
 | E | Refinements, `ensures`, effects |
-| F | Type-constrained decoding of eval snippets (research-grade; prior work exists for TypeScript: Mündler et al., "Type-Constrained Code Generation with Language Models", 2025, *cited from memory, verify*) |
+| F | Type-constrained decoding of `run_code` snippets (research-grade; prior work exists for TypeScript: Mündler et al., "Type-Constrained Code Generation with Language Models", 2025, *cited from memory, verify*) |
 
 Stages A–C deliver most of the value. D–E deepen it. F is optional.
 
@@ -298,7 +278,7 @@ format beyond what the model is shown.
 | Per-step dynamic grammars are too slow or too complex to build | Static tool-call grammar + validate + resample (stage A only) |
 | Path grammars are too large on big trees | Constrain to paths present in the current rendering; or validate + resample |
 | The constraint distorts the model (see below) | Loosen to structural JSON only; rely on validate + resample |
-| Static checking of eval is too slow | Runtime validation at the tree boundary only (always present anyway) |
+| Static checking of code is too slow | Runtime validation at the tree boundary only (always present anyway) |
 | `Draft<T>` and commit semantics confuse the model | *Strict mode*: typed nodes accept only complete values; or *lenient mode*: validate only at commit |
 | Structuring all intermediate data as lambda params is too hard for the model | Add a typed `work` zone per lambda (additive) |
 | Refinements and `ensures` cost more than they catch | Structural types only |
@@ -354,12 +334,12 @@ reference policy defines the canonical behavior and the data makes sure that
 
 | Situation | Correct next action |
 |-----------|---------------------|
-| Holes present, instructions not finished | **continue with the next instruction step** |
+| Holes present, program not finished | **continue with the next statement** |
 | Hole concerns the node the current step is about | fill it (that *is* the step) |
 | Unmet refinement on a value a *later* step will consume | fix before that step |
-| Write rejected | retry the same intent, corrected |
+| Write or call rejected | retry the same intent, corrected from the hint |
 | Commit refused | fix the blocking diagnostics, then commit again |
-| Commit refused repeatedly on the same node | mark uncertain / fail upward |
+| Commit refused repeatedly on the same node | `report_blocker` |
 | Nothing blocking, work done | commit |
 
 **Data constructions**
@@ -379,8 +359,6 @@ reference policy defines the canonical behavior and the data makes sure that
   repeated refusal → fail upward. **Draft drills**: long fills of a typed
   `return` with holes visible throughout, where every correct action is
   "next item".
-- **Elaboration examples**: untyped lambda + bound inputs → proposed
-  `params`/`returns`/`ensures`.
 
 **Reward shaping (RL).** No per-step reward for reducing the diagnostic
 count; that is exactly the gradient that produces compulsive fixing. Small
@@ -413,8 +391,8 @@ needs adjusting.
   generation and warm TS checker; refinements, `ensures`, effects. Finite-type
   write distributions logged to provenance.
 - Reference policy: the §8 behavior table.
-- Data: diagnostic twins, commit and draft drills, elaboration examples,
-  dropout; preservation as a trace filter.
+- Data: diagnostic twins, commit and draft drills, dropout; preservation as
+  a trace filter.
 - Evaluation: the §8 metrics, reported per visibility mode.
 
 ## 10. Open questions
@@ -423,8 +401,7 @@ needs adjusting.
   useful, but they cost model calls. Probably opt-in, commit-only.
 - How much of the declared type to render inline versus on demand, given the
   observation token budget.
-- Exact typing rules for `copy` with sub-ranges (a `Text` line range is
-  `Text`; a `List[T]` slice is `List[T]`; a record field is its field type),
-  and how `Draft<T>` sources copy into `T` slots.
-- Latency of static checking per eval; whether to check only evals that
-  write to typed nodes.
+- Whether a `call` may narrow its result type (a decision restricted to the
+  currently legal options) or legality stays a matter of inputs plus a crisp
+  transaction that refuses.
+- Latency of static checking of `run_code` and crisp function bodies.
