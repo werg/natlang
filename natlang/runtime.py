@@ -422,7 +422,7 @@ class Runtime:
                 inst.in_["acc"] = copy.deepcopy(node.acc)
                 inst.in_["item"] = copy.deepcopy(node.over[node.at])
                 node.current = inst
-            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
             out = self.trigger(cref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"step {node.at} {out.kind}: {out.detail}")
@@ -451,7 +451,7 @@ class Runtime:
                 inst.in_["acc"] = copy.deepcopy(node.acc)
                 inst.in_["item"] = copy.deepcopy(polled.value)
                 node.current = inst
-            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
             out = self.trigger(cref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"step {source.position} {out.kind}: {out.detail}")
@@ -470,7 +470,7 @@ class Runtime:
                 inst = _instantiate(node.step)
                 inst.in_[node.state_name] = copy.deepcopy(node.state)
                 node.current = inst
-            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.iteration}", holder=node, attr="current")
             out = self.trigger(cref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"step {node.iteration} {out.kind}: {out.detail}")
@@ -487,7 +487,7 @@ class Runtime:
             else:
                 chk.in_["recent"], chk.in_["iteration"] = copy.deepcopy(node.recent), node.iteration
             box = _Box(chk)
-            kref = Ref(type=chk.type.returns, env=inner, path=f"{ref.path}/check", holder=box, attr="value")
+            kref = Ref(type=chk.type.returns, env=inner, path=f"{ref.path}/check/{node.iteration}", holder=box, attr="value")
             out = self.trigger(kref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"check {out.kind}: {out.detail}")
