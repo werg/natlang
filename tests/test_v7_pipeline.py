@@ -6,6 +6,7 @@ from natlang.gen import synth as S
 from scripts.generate import run_program
 from scripts.paraphrase_steps import valid_variant
 from scripts.teacher_leaves import CHECKS
+from natlang.gen.architectures import reconciliation
 
 
 def test_style_override_preserves_program_randomness(monkeypatch):
@@ -26,6 +27,18 @@ def test_recovery_history_is_not_a_bad_supervised_target():
     assert any(any(m['role'] == 'tool' and m['content'].startswith('error:') for m in s['messages']) for s in repaired)
     for s in samples:
         assert '__missing_value' not in s['native_target'] and "JSON.parse('{')" not in s['native_target']
+
+
+def test_wrong_call_destination_is_history_followed_by_a_correct_local_call():
+    samples, _ = run_program(reconciliation(random.Random(19)), recovery_rate=1)
+    corrections = [s for s in samples if s.get('recovery') and 'join_events' in s['native_target']]
+    assert corrections
+    first = corrections[0]
+    target = first['target']['tool_calls'][-1]['function']
+    assert json.loads(target['arguments'])['to'] == 'let/joined'
+    assert any(m['role'] == 'tool' and 'type-does-not-fit-slot' in m['content'] for m in first['messages'])
+    bad = [m for m in first['messages'] if m.get('tool_calls')][-1]['tool_calls'][0]['function']
+    assert json.loads(bad['arguments'])['to'] == 'return'
 
 
 def test_phrase_filter_preserves_placeholders_and_rejects_listing_markers():

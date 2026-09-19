@@ -740,3 +740,13 @@ three marking styles. Generate it as a supplement to `v7_arch`, preserving that
 mix's seed sequence and teacher-reference keys. Its expected values and line
 marks are checked independently. Keep the model responsible for choosing and
 marking steps; no pseudocode parser or deterministic execution cursor was added.
+
+The first v5 application probe returned the expected result in 1/6 cases (two
+seeds per architectural family). Even that case had 12 rejected/refused actions,
+so this is only an outcome result, not a sound execution trace. Reconciliation
+showed an intermediate callee incorrectly sent to `return`, followed by an
+invented record after the type rejection. Recovery generation now includes that
+failure: a prechecked incompatible destination is rejected by the real runtime,
+then the correct local call is the supervised target. The invalid call appears
+only in history. Saga outputs failed without rejected actions, showing that
+well-typed tool use alone does not establish correct program execution.

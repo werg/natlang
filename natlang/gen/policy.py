@@ -18,6 +18,8 @@ from ..render import INLINE, PREVIEW_ITEMS
 from ..surface import ToolSurface, is_previewed
 from ..tool_agent import TOOLS_PROMPT
 from ..types import format_type
+from ..types import parse_type, TypeSyntaxError
+from ..diag import Reject
 
 
 def native_text(calls) -> str:
@@ -31,6 +33,25 @@ class ReferenceAgent:
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)
         self.recovery_rate, self.recovered = recovery_rate, False
+
+    def recovery_action(self, session, calls):
+        """Choose a provably rejected destination or a side-effect-free code error."""
+        for name, args in calls:
+            if (name == 'call' and args.get('to', '').startswith('let/') and session.lam.ret is MISSING
+                    and not any(k in args for k in ('over', 'init', 'until', 'max'))):
+                fn = session._function(args['function'])
+                try:
+                    # The same pre-placement check the runtime uses. No call is run here.
+                    session._check_fit(parse_type(fn.type_text), session.resolve('return')[1])
+                except Reject as error:
+                    if any(d.code == 'type-does-not-fit-slot' for d in error.diags):
+                        return 'call', {k: v for k, v in dict(args, to='return').items() if k != 'done'}, 'rejected'
+                except TypeSyntaxError:
+                    pass  # Named types available only inside this callee: do not inject.
+        if any(n == 'run_code' for n, _ in calls):
+            bad = self.recovery_rng.choice(['locals.__missing_value.length', "JSON.parse('{')"])
+            return 'run_code', {'code': bad}, 'error'
+        return None
 
     # -- what a good interpreter does for each kind of plan
     def turns(self, session):
@@ -91,17 +112,17 @@ class ReferenceAgent:
             except StopIteration:
                 break
             tools = s.tools(session)
-            if not self.recovered and any(n == "run_code" for n, _ in calls) and self.recovery_rng.random() < self.recovery_rate:
+            recovery = self.recovery_action(session, calls) if not self.recovered and self.recovery_rate else None
+            if recovery and self.recovery_rng.random() < self.recovery_rate:
                 # A failed model action is history, never a supervised target. It has no
                 # effects or tree mutation; the next target is the verified correction.
-                bad = self.recovery_rng.choice(["locals.__missing_value.length", "JSON.parse('{')"])
-                args = {"code": bad}
-                assert gbnf.accepts(call_grammar(tools), native_text([("run_code", args)]))
-                result = s.apply(session, "run_code", args)
-                assert result.kind == "error", result.text
+                name, args, expected_kind = recovery
+                assert gbnf.accepts(call_grammar(tools), native_text([(name, args)]))
+                result = s.apply(session, name, args)
+                assert result.kind == expected_kind, result.text
                 call_id = f"recovery_{len(messages)}"
                 messages += [{"role": "assistant", "content": "", "tool_calls": [{"id": call_id,
-                              "type": "function", "function": {"name": "run_code", "arguments": json.dumps(args)}}]},
+                              "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}]},
                              {"role": "tool", "tool_call_id": call_id, "content": result.text}]
                 self.recovered = True
             self._emit(session, messages, tools, calls=calls)
