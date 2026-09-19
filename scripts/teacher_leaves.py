@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
-from generate import run_program                                             # noqa: E402
+from generate import MIXES, make_program, run_program                                             # noqa: E402
 from natlang.checks import make_judge, run_checks                            # noqa: E402
 from natlang.codebase import load_function                                   # noqa: E402
 from natlang.decoder import LlamaServerDecoder                               # noqa: E402
@@ -47,15 +47,18 @@ CHECKS = {
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--families", nargs="*", default=["cb_shopkeeper", "cb_webserver"])
+    ap.add_argument("--mix", default=None, help="a mix of scripts/generate.py, instead of --families")
     ap.add_argument("--n", type=int, default=12)
     ap.add_argument("--seed", type=int, default=31)
     ap.add_argument("--server", default="http://127.0.0.1:8081")
     ap.add_argument("--thinking", type=int, default=256)
     ap.add_argument("--limit", type=int, default=10**9, help="stop after this many leaves")
     a = ap.parse_args()
-    rng = random.Random(a.seed)
-    for i in range(a.n):                                # collect the leaves these programs need
-        run_program(C.CODEBASES[a.families[i % len(a.families)]](rng), check_grammar=False)
+    families = MIXES[a.mix] if a.mix else a.families
+    for i in range(a.n):                                # collect the leaves these programs need: the same programs
+        fam, prog = make_program(a.seed, i, families)   # as `generate.py --seed S` makes, by construction
+        if fam in C.CODEBASES:
+            run_program(prog, check_grammar=False)
     todo, seen = [], set()
     for fn, args in C.MISSES:
         k = C.ref_key(fn, args)
