@@ -238,24 +238,23 @@ def mark_style(rng) -> str:
     return forced if forced in MARK_STYLES else rng.choice(MARK_STYLES)
 
 
-def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, expected: Any, types: list,
-            fn_name: str, note: str) -> Program:
-    dialect = c.rng.choice("ab")
-    header = f"function {fn_name}(" + ", ".join(sig_args) + f") -> {returns}"
-    if dialect == "a":
-        text = header + "\n\n" + "\n".join("  " + l for l in c.lines_a)
-    else:
-        out, k = [], 0                                       # only top-level steps are numbered
-        for l in c.lines_b:
-            if l.startswith(" "):
-                out.append("   " + l.strip())
-            else:
-                k += 1
-                out.append(f"{k}. {l}")
-        text = header + "\n\n" + "\n".join(out)
-    calls = list(c.calls)
+def render_body(c: "Ctx", header: str) -> str:
+    """The function body in one of the dialects: Python-like, or numbered steps in English."""
+    if c.rng.choice("ab") == "a":
+        return header + "\n\n" + "\n".join("  " + l for l in c.lines_a)
+    out, k = [], 0                                           # only top-level steps are numbered
+    for l in c.lines_b:
+        if l.startswith(" "):
+            out.append("   " + l.strip())
+        else:
+            k += 1
+            out.append(f"{k}. {l}")
+    return header + "\n\n" + "\n".join(out)
 
-    meta = list(c.line_meta)
+
+def build_script(meta: list, calls: list, style: str):
+    """The reference interpreter of one pseudocode function: its steps in order, lines marked in the given style.
+    meta[i] = (index of the first step of said line i, line did not apply)."""
     # line numbers: 1 is the header, 2 is blank, the said lines start at 3. A line is finished once the steps
     # that belong to it are done, i.e. when the next line's first step is about to start.
     finished_at = [meta[i + 1][0] if i + 1 < len(meta) else len(calls) for i in range(len(meta))]
@@ -280,7 +279,6 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
         marked.update(n for n, _ in ready)
         return out
 
-    style = mark_style(c.rng)
     owner = {}                                   # step index -> the line it belongs to, when it is that line's last step
     for i in range(len(meta)):
         if finished_at[i] > meta[i][0]:
@@ -310,6 +308,15 @@ def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, exp
         rest = marks_ready(len(calls), marked)
         if rest:
             yield rest
+    return script
+
+
+def _finish(c: Ctx, family: str, sig_args: dict, returns: str, inputs: dict, expected: Any, types: list,
+            fn_name: str, note: str) -> Program:
+    text = render_body(c, f"function {fn_name}(" + ", ".join(sig_args) + f") -> {returns}")
+    calls = list(c.calls)
+
+    script = build_script(list(c.line_meta), calls, mark_style(c.rng))
     c.plans[fn_name] = Plan("script", script=script, note=note)
     root = {"$lambda": {"type": "Lambda<{ " + ", ".join(f"{n}: {t}" for n, t in sig_args.items()) + f" }}, {returns}>",
                         "types": {t: TYPES[t] for t in types}, "instructions": text, "codebase": c.fns,
@@ -819,3 +826,138 @@ def composed(rng: random.Random) -> Program:
 
 SHAPES["composed"] = composed
 from . import domains as _domains  # noqa: E402,F401  (registers the declarative domains)
+
+
+# ------------------------------------------------------------------------------------------ more shapes, any domain
+def _domain(rng, need_flag=True):
+    names = [d for d, (_, leaves) in DOMAINS.items() if LEAF_KIND[leaves[0]] == "labels" and (not need_flag or len(leaves) > 1)]
+    d = rng.choice(names)
+    make, leaves = DOMAINS[d]
+    return d, make, leaves[0], [l for l in leaves[1:] if LEAF_KIND[l] == "flags"]
+
+
+def _nested(c: Ctx, name: str, args: dict, returns: str, desc: str, build) -> None:
+    """A pseudocode function with its own code base, written with the same machinery as a root: `build(sub)` says
+    its lines and appends its steps; the plan for `name` becomes a script (chosen per instance by `build`)."""
+    def script(lam):
+        sub = Ctx(c.rng, c.hidden, names=c.names, plans=c.plans)
+        build(sub, lam.in_)
+        yield from build_script(list(sub.line_meta), list(sub.calls), mark_style(c.rng))(lam)
+    probe = Ctx(random.Random(0), c.hidden, names=c.names, plans=c.plans)       # once, for the text and the code base
+    build(probe, None)
+    c.fns[name] = _fn_doc(name, args, returns, desc, render_body(probe, f"function {name}(" + ", ".join(args) + f") -> {returns}"),
+                          codebase=probe.fns)
+    c.plans[name] = Plan("script", script=script, note="Carried out the function.")
+
+
+def per_item_condition(rng: random.Random) -> Program:
+    """for each item: a function that labels it and, only for one label, asks a second question."""
+    d, make, label_leaf, flag_leaves = _domain(rng)
+    items = _distinct(rng, make, rng.randint(3, 7))
+    c = Ctx(rng, {i["text"]: i for i in items})
+    flag_leaf = rng.choice(flag_leaves)
+    values = sorted({i[label_leaf] for i in items}) if label_leaf in items[0] else sorted({i["category"] for i in items})
+    key = label_leaf if label_leaf in items[0] else "category"
+    fkey = flag_leaf if flag_leaf in items[0] else {"is_urgent": "urgent", "is_angry": "angry"}[flag_leaf]
+    target = rng.choice(values)
+    ltype = LEAVES[label_leaf][2]
+    rub = label_leaf in LEAF_RUBRIC
+    fn = rng.choice(["assess", "look_at", "check_one"])
+    dialect_seed = rng.random()
+
+    def build(sub: Ctx, args):
+        sub.rng = random.Random(dialect_seed)                      # the same text for every instance
+        f_label, f_flag = sub.use_leaf(label_leaf), sub.use_leaf(flag_leaf)
+        sub.say(f"label = {f_label}(item" + (", rubric)" if rub else ")"), f"Call {f_label} on the item: that is `label`.")
+        sub.calls.append(("call", {"function": f_label, "to": "return/label", "inputs": {LEAVES[label_leaf][1] and next(iter(LEAVES[label_leaf][1])): "args/item",
+                                                                                            **({"rubric": "args/rubric"} if rub else {})}}))
+        hit = args is None or c.hidden[args["item"]][key] == target
+        sub.say(f'if label is "{target}":', f'If the label is "{target}":')
+        sub.indent += 1
+        sub.say(f"flag = {f_flag}(item)", f"Call {f_flag} on the item: that is `flag`.", skipped=not hit)
+        if hit:
+            sub.calls.append(("call", {"function": f_flag, "to": "return/flag", "inputs": {next(iter(LEAVES[flag_leaf][1])): "args/item"}}))
+        sub.indent -= 1
+        sub.say("else:", "Otherwise:")
+        sub.indent += 1
+        sub.say("flag = false", "`flag` is false.", skipped=hit)
+        if not hit:
+            sub.calls.append(("write", {"path": "return/flag", "type": "Bool", "value": False}))
+        sub.indent -= 1
+        sub.say("return { label, flag }", "Return label and flag.")
+
+    TYPES.setdefault("Finding_" + ltype, f"{{ label: {ltype}, flag: Bool }}")
+    _nested(c, fn, {"item": "Text", **({"rubric": "Text"} if rub else {})}, "Finding_" + ltype, "Label one item and, where it matters, ask a second question.", build)
+    arg = DOMAIN_ARG[d]
+    c.say(f"findings = for each x in {arg}: {fn}(x" + (", rubric)" if rub else ")"), f"For every item of {arg}, call {fn}; keep the results as findings.")
+    c.calls.append(("call", {"function": fn, "to": "let/findings", "over": f"args/{arg}", **({"inputs": {"rubric": "args/rubric"}} if rub else {})}))
+    c.env["findings"] = [{"label": i[key], "flag": i[key] == target and i[fkey]} for i in items]
+    n = glue(c, "n", "Num", "locals.findings.filter(f => f.flag).length", sum(1 for f in c.env["findings"] if f["flag"]),
+             "return the number of findings whose flag is true          # exact: use code",
+             "With code, count the findings whose flag is true. Return that number.", to="return")
+    sig = {arg: "Text[]", **({"rubric": "Text"} if rub else {})}
+    inputs = {arg: [i["text"] for i in items], **({"rubric": LEAF_RUBRIC[label_leaf]} if rub else {})}
+    return _finish(c, "per_item_condition", sig, "Num", inputs, n, LEAF_TYPES.get(label_leaf, []) + ["Finding_" + ltype],
+                   rng.choice(DOMAIN_NAMES[d]), "Assessed every item with the nested function, then counted with code.")
+
+
+def fold_with_steps(rng: random.Random) -> Program:
+    """A count carried through a list by a step that is itself pseudocode: ask, then add one or keep."""
+    d, make, _, flag_leaves = _domain(rng)
+    items = _distinct(rng, make, rng.randint(3, 6))
+    c = Ctx(rng, {i["text"]: i for i in items})
+    flag_leaf = rng.choice(flag_leaves)
+    fkey = flag_leaf if flag_leaf in items[0] else {"is_urgent": "urgent", "is_angry": "angry"}[flag_leaf]
+    step = rng.choice(["count_one", "tally_item", "bump_if"])
+    dialect_seed = rng.random()
+
+    def build(sub: Ctx, args):
+        sub.rng = random.Random(dialect_seed)
+        f_flag = sub.use_leaf(flag_leaf)
+        sub.say(f"hit = {f_flag}(item)", f"Call {f_flag} on the item: that is `hit`.")
+        sub.calls.append(("call", {"function": f_flag, "to": "let/hit", "inputs": {next(iter(LEAVES[flag_leaf][1])): "args/item"}}))
+        hit = args is None or c.hidden[args["item"]][fkey]
+        sub.say("if hit: return acc + 1          # exact: use code", "If hit is true, return acc plus one (with code).", skipped=not hit)
+        if hit:
+            sub.calls.append(("glue", "args.acc + 1", "return", "Num"))
+        sub.say("else: return acc", "Otherwise return acc unchanged.", skipped=hit)
+        if not hit:
+            sub.calls.append(("write", {"path": "return", "type": "Num", "source": "args/acc"}))
+
+    _nested(c, step, {"acc": "Num", "item": "Text"}, "Num", "Add one to the count when the item qualifies.", build)
+    arg = DOMAIN_ARG[d]
+    c.say(f"return the count carried through {arg}, starting at 0: {step}(acc, item)",
+          f"Carry a count through {arg}, starting at 0, with {step}. Return it.")
+    c.calls.append(("call", {"function": step, "to": "return", "over": f"args/{arg}", "init": 0}))
+    n = sum(1 for i in items if i[fkey])
+    return _finish(c, "fold_with_steps", {arg: "Text[]"}, "Num", {arg: [i["text"] for i in items]}, n, [],
+                   rng.choice(DOMAIN_NAMES[d]), "Carried the count through the list with the step function.")
+
+
+def tiny(rng: random.Random) -> Program:
+    """One or two lines: the simplest programs there are."""
+    d, make, label_leaf, flag_leaves = _domain(rng, need_flag=False)
+    items = _distinct(rng, make, rng.randint(1, 5))
+    c = Ctx(rng, {i["text"]: i for i in items})
+    leaf = rng.choice([label_leaf] + flag_leaves)
+    key = leaf if leaf in items[0] else {"classify": "category", "is_urgent": "urgent", "is_angry": "angry"}[leaf]
+    rub = leaf in LEAF_RUBRIC
+    fn = c.use_leaf(leaf)
+    param = next(iter(LEAVES[leaf][1]))
+    rtype = LEAVES[leaf][2]
+    arg = DOMAIN_ARG[d]
+    if rng.random() < 0.5:                                        # one item in, one answer out
+        one = param
+        c.say(f"return {fn}({one}" + (", rubric)" if rub else ")"), f"Call {fn} on {one} and return the result.")
+        c.calls.append(("call", {"function": fn, "to": "return", "inputs": {param: f"args/{one}", **({"rubric": "args/rubric"} if rub else {})}}))
+        sig, inputs, expected, returns = {one: "Text"}, {one: items[0]["text"]}, items[0][key], rtype
+    else:
+        c.say(f"return for each x in {arg}: {fn}(x" + (", rubric)" if rub else ")"), f"Call {fn} for every item of {arg} and return the results.")
+        c.calls.append(("call", {"function": fn, "to": "return", "over": f"args/{arg}", **({"inputs": {"rubric": "args/rubric"}} if rub else {})}))
+        sig, inputs, expected, returns = {arg: "Text[]"}, {arg: [i["text"] for i in items]}, [i[key] for i in items], f"({rtype})[]"
+    if rub:
+        sig["rubric"], inputs["rubric"] = "Text", LEAF_RUBRIC[leaf]
+    return _finish(c, "tiny", sig, returns, inputs, expected, LEAF_TYPES.get(leaf, []), rng.choice(DOMAIN_NAMES[d]), "Called the function.")
+
+
+SHAPES.update({"per_item_condition": per_item_condition, "fold_with_steps": fold_with_steps, "tiny": tiny})
