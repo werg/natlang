@@ -211,7 +211,7 @@ docker stop natlang-llama; scripts/serve.sh natlang-350M-vN-Q8_0.gguf &
 - Results so far (unseen programs, seed 777, v5 harness): untuned 29% exact next
   turn / 43% right tool; after 15 minutes of LoRA (2,656 pairs) **75% / 88%**;
   `call` turns exact 100 / 60 / 40% (shapes / composed / code bases). Conformance
-  (21 programs): untuned 2 correct and never calls; tuned 6 correct + 3 judge-ungraded,
+  (21 programs): untuned 2 correct and never calls; tuned 5 correct, 13 incorrect, 3 judge-ungraded,
   0.1 to 6 s per program (Bonsai: 25 to 640 s, 19/20 on the older suite).
 - Failure modes seen in the tuned model's traces (program 23): buggy glue code for
   unseen phrasings; losing its place after a surprising result; imitating its own
@@ -268,3 +268,31 @@ at times: not ours, do not kill), `nvidia-smi`, `docker ps`. The watchdog log is
   its code base (swap-out).
 - `scripts/serve_web.py` is a real listening web server over `codebases/webserver`;
   with Bonsai it served correct pages at 4 to 6 minutes per request.
+
+
+## Review fixes (2026-09-19)
+
+The owner asked to fix the seven review findings and continue the iterative
+training workflow. The model remains the interpreter; no deterministic
+orchestration was added and evaluation is not a prerequisite for more training.
+
+- Training reserves whole programs for held-out loss, writes `split.json`, and
+  verifies corpus/split hashes on resume. Older checkpoints can still be exported
+  with `--merge-only`; start a new output directory to train with the new split.
+- `eval_turns.py` scans the whole corpus (including gzip/shards), creates/reuses
+  a manifest of exact sample IDs and hashes, and reports actions apart from replies.
+  Use the same manifest for paired comparisons and a new one for a changed corpus.
+- `baseline.py` writes machine-readable results and computed verdict totals.
+  The saved historical v5 log contains five correct, thirteen incorrect, three
+  unjudged programs; it is not a result for the modified runtime.
+- Conformance grading checks `expect.emitted` and `effect_checks`; program 14 now
+  requires its actual emitted records as well as its return value.
+- Model requests, tokens, elapsed time and all tool calls are bounded. Work
+  actions remain capped at 40; marks spend the separate 128-call budget.
+- Attached `done` ranges are fully validated before writes/calls. Failed operations
+  are shown to the model, never silently retried or refunded.
+- Effectful JS runs in a killable worker with a host capability bridge. Host hooks
+  must manage cancellation/idempotency if they can outlive a timeout.
+- TypeScript annotations work with Node >=22.13; plain JS needs only QuickJS.
+  Static snippet type checking remains unimplemented and is no longer claimed.
+  Grouping/counting/indexing helpers now support all string keys.
