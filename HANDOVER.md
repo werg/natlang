@@ -70,7 +70,9 @@ Teacher + student fit together; **teacher + training do not** (stop the teacher 
 Bonsai quirks already absorbed: its server cannot emit a tool literally named `call`
 (use `--alias call=call_function` / `tool_aliases`); it delivers records as JSON text
 and sometimes wraps values as `{"value": X}`; judge calls must disable thinking with
-`chat_template_kwargs: {enable_thinking: false}`. Speed: ~23 tok/s, 6 to 8 s per turn,
+`chat_template_kwargs: {enable_thinking: false}` (fine for simple yes/no checks on an answer; for judging whether two
+lines are *equivalent* it said "no" to plainly equal lines, and a 160-token thinking budget fixed that: calibrate a
+judge on known pairs before trusting it). Speed: ~23 tok/s, 6 to 8 s per turn,
 4 to 10 minutes per code-base program.
 
 When this file was written: Bonsai and its watchdog are **up**; the student server on
@@ -154,7 +156,8 @@ Teacher-side generation (needs Bonsai on 8081):
 - `scripts/paraphrase_steps.py` fills `data/phrases.json`, the phrase bank of step
   templates (keeps a variant only if placeholders are identical, it is one line, and
   the judge says it asks for exactly the same step). **Running in the background when
-  this was written** (`runs/paraphrase-steps.log`). Only nine step kinds are keyed so
+  this was written** (`runs/paraphrase-steps.log`; first variants kept look right, e.g.
+  `{out} = [{fn}(x) for x in {over}]`). Only nine step kinds are keyed so
   far (`each, each_with, select, flags_eq, flags_neq, count_true, group_count,
   return_one, return_record`); the other `say()` sites in `synth.py` should get
   `key=`/`fields=` too. Inspect the kept variants by eye before a large run.
