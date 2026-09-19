@@ -420,6 +420,14 @@ STD.update({
     "covers": ({"state": "Budget"}, "Bool", "Do the amounts within the limit add up to the target?",
                "return args.state.amounts.filter(a => a <= args.state.limit).reduce((s, a) => s + a, 0) >= args.state.target"),
 })
+STD.update({
+    "tally": ({"acc": "Dict<Num>", "item": "Text"}, "Dict<Num>", "Count one more occurrence of a value.",
+              "return { ...args.acc, [args.item]: (args.acc[args.item] || 0) + 1 }"),
+    "count_if": ({"acc": "Num", "item": "Bool"}, "Num", "Add one to the count when the flag is true.",
+                 "return args.acc + (args.item ? 1 : 0)"),
+    "halve": ({"state": "Num"}, "Num", "Half of a number, rounded up.", "return Math.ceil(args.state / 2)"),
+    "is_small": ({"state": "Num"}, "Bool", "Is the number at most 3?", "return args.state <= 3"),
+})
 TYPES["Budget"] = "{ limit: Num, amounts: Num[], target: Num }"
 
 
@@ -574,7 +582,23 @@ class Composer:
         v = self.rng.choice(unused or cands)
         self.use(v)
         self.applied.add(("agg", v.name))
-        if v.kind == "flags":
+        if v.kind == "flags" and self.rng.random() < 0.3:          # the same count, carried through the list
+            self.c.use_std("count_if")
+            field = self.fresh([f"n_{v.name}", f"{v.name}_count", "count"])
+            self.c.say(f"{field} = carry a count through {v.name}, starting at 0: count_if(acc, item)",
+                       f"Carry a count through {v.name}, starting at 0, with count_if: {field}.")
+            self.c.calls.append(("call", {"function": "count_if", "to": f"return/{field}", "over": v.path, "init": 0}))
+            self.fields[field] = ("Num", sum(v.value))
+            if self.rng.random() < 0.5 and sum(v.value) > 3:
+                self.repeat_on(field, sum(v.value))
+        elif v.kind in ("labels", "topics") and self.rng.random() < 0.4:
+            self.c.use_std("tally")
+            field = self.fresh([f"by_{v.name}", "counts", "tally_of"])
+            self.c.say(f"{field} = carry a tally through {v.name}, starting at {{}}: tally(acc, item)",
+                       f"Carry a tally through {v.name}, starting from the empty record, with tally: {field}.")
+            self.c.calls.append(("call", {"function": "tally", "to": f"return/{field}", "over": v.path, "init": {}}))
+            self.fields[field] = ("Dict<Num>", {k: v.value.count(k) for k in dict.fromkeys(v.value)})
+        elif v.kind == "flags":
             if self.rng.random() < 0.6:
                 field = self.fresh([f"n_{v.name}", f"{v.name}_count", "count"])
                 value = call_std(self.c, f"return/{field}", "count_true", {"flags": v.path}, sum(v.value),
@@ -594,6 +618,18 @@ class Composer:
         else:
             self.claims_aggregate(v)
         return True
+
+    def repeat_on(self, source_field: str, n: int):
+        """A repeat-until on a number the program has: halve it until it is small."""
+        self.c.use_std("halve"), self.c.use_std("is_small")
+        field = self.fresh(["shifts_needed", "batch_size", "rounds_left"])
+        value = n
+        while value > 3:
+            value = -(-value // 2)
+        self.c.say(f"{field} = repeat at most 8 times, until is_small(state): state = halve(state), starting from {source_field}",
+                   f"Starting from {source_field}, repeat halve until is_small says true, at most 8 times: {field}.")
+        self.c.calls.append(("call", {"function": "halve", "to": f"return/{field}", "init": f"return/{source_field}", "until": "is_small", "max": 8}))
+        self.fields[field] = ("Num", value)
 
     def claims_aggregate(self, v: Var):
         if self.rng.random() < 0.5:                         # a fold with a crisp step
