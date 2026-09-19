@@ -121,9 +121,12 @@ class ToolAgent:
                 turn = self.dec.chat(messages, available_tools, temperature=temperature,
                                      seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=allowance)
                 turns += 1
+                session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                    phase="generated", turn=turns, calls=turn.calls, text=turn.text)
                 teacher_turn = None
                 if self.teacher_turns is not None:
                     teacher_turn = {"function": session.lam.fn_name,
+                                    "call_id": getattr(invocation, "call_id", None),
                                     "messages_before": list(messages),
                                     "tools_offered": offered_tools,
                                     "response": turn.raw_response,
@@ -190,6 +193,8 @@ class ToolAgent:
                             withdrawals += 1
                             withdrawn = True
                             proposal["withdrawn"] = True
+                            session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                                phase="withdrawn", turn=turns, calls=turn.calls)
                             # No reviewer reasoning or replacement value enters the main history.
                             messages = [*messages, {"role": "user", "content":
                                 "The pending batch was withdrawn before execution. No action in it happened. "
@@ -201,6 +206,8 @@ class ToolAgent:
                     if withdrawn:
                         continue
                     proposal["released"] = True
+                    session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                        phase="released", turn=turns, calls=turn.calls)
                 first = None
                 if turn.calls:
                     name, args = turn.calls[0]

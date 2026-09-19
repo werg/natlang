@@ -90,7 +90,7 @@ def main():
         else:
             completion = s["target"]["content"] + a.end_token
         source_groups = s.get("source_groups") or []
-        grouped = s.get("family") == "lambda_scenario" or s.get("kind") == "review"
+        grouped = s.get("family") in ("lambda_scenario", "teacher_program") or s.get("kind") == "review"
         return {"id": s["id"], "program_id": source_groups[0] if grouped and source_groups else program_id(s),
                 "source_groups": source_groups, "family": s.get("family", s.get("kind")),
                 "skill": s["skill"], "renderer": a.template_id,
