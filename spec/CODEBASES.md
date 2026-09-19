@@ -36,5 +36,5 @@ and its `uses`. More verbose than inheriting the caller's functions, much
 simpler to reason about, and it survives git, archives and Windows, which OS
 symlinks do not.
 
-Not yet implemented: serializing `codebase` on swap-out
+Not yet implemented
 at run time; `types.ts` beyond simple aliases.

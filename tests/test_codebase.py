@@ -143,3 +143,15 @@ def test_recursion_is_refused_at_load(tmp_path):
     with pytest.raises(Reject) as e:
         load_function(tmp_path / "f.nl")
     assert "recursion" in str(e.value) and "f -> g -> f" in str(e.value)
+
+
+def test_a_lambda_with_locals_and_a_code_base_survives_swap_out():
+    from natlang.values import dump_state, load_program
+    s = _session()
+    s.rt.agent_factory = lambda lam: Scripted(lam, [])
+    assert s.apply("call", {"function": "is_urgent", "to": "let/flags", "over": "args/tickets"}).kind == "done"
+    back = load_program(dump_state(s.lam))
+    assert back.let == {"flags": [False, False, True]} and set(back.codebase) == set(s.lam.codebase)
+    assert set(back.codebase["summarize"].codebase) == {"shorten", "is_short"}
+    s2 = Session(Runtime(lambda lam: Scripted(lam, [])), back, TypeEnv())        # and the run continues from there
+    assert s2.apply("call", {"function": "count_true", "to": "return/urgent", "inputs": {"flags": "let/flags"}}).kind == "done"

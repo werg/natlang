@@ -676,8 +676,6 @@ every call is valid and a run takes well under a second.
 
 - Callees run sequentially; no batching. Copies are deep copies; the tree is
   in memory.
-- `codebase` is not serialized on swap-out
-  time; `types.ts` supports simple aliases only.
 - `run_code` and crisp code are not statically checked; the QuickJS binding
   cannot call into Python while a time limit is set, so effectful code runs
   without the time limit (a subprocess worker should replace this).

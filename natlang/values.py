@@ -155,7 +155,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
 # --------------------------------------------------------------------------- pending nodes
 
 _LAMBDA_KEYS = {"type", "types", "effects", "instructions", "code", "args", "return", "status", "note",
-                "effects_journal", "codebase", "let", "function"}
+                "effects_journal", "codebase", "let", "let_types", "function"}
 
 
 def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: str,
@@ -228,6 +228,10 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
             for fn in node.codebase.values():
                 check(fn)
         node.fn_name = str(body.get("function") or "")
+        for k, text in (body.get("let_types") or {}).items():          # a swapped-out lambda gets its locals back
+            node.let_types[str(k)] = parse_type(text)
+            if k in (body.get("let") or {}):
+                node.let[str(k)] = coerce(body["let"][k], node.let_types[str(k)], inner, yaml=yaml, path=f"{path}/let/{k}")
         return node
 
     parts = {MapNode: ("over", "fn"), FoldNode: ("over", "init", "step"),
@@ -357,6 +361,21 @@ def unbound_parts(node: Pending, env: TypeEnv, path: str):
 # --------------------------------------------------------------------------- serialization
 
 
+def dump_state(x: Any) -> Any:
+    """Like `dump`, and complete: code bases and local types included, so that `load_program(dump_state(x))` can
+    continue the run (swap-out, SPEC 11). `dump` leaves code bases out: they are immutable and would be repeated in
+    every trace and provenance record."""
+    global _WITH_CODEBASE
+    _WITH_CODEBASE = True
+    try:
+        return dump(x)
+    finally:
+        _WITH_CODEBASE = False
+
+
+_WITH_CODEBASE = False
+
+
 def dump(x: Any) -> Any:
     """Plain YAML-able form of a value or pending node (SPEC 11)."""
     if x is MISSING:
@@ -388,6 +407,11 @@ def dump(x: Any) -> Any:
             body["function"] = x.fn_name
         if x.let:
             body["let"] = {k: dump(v) for k, v in x.let.items()}
+        if _WITH_CODEBASE:
+            if x.let_types:
+                body["let_types"] = {k: format_type(t) for k, t in x.let_types.items()}
+            if x.codebase:
+                body["codebase"] = {n: f.to_inline() for n, f in x.codebase.items()}
     elif isinstance(x, MapNode):
         for part in ("over", "fn"):
             if getattr(x, part) is not MISSING:

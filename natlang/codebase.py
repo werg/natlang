@@ -50,6 +50,17 @@ class FunctionDef:
     def required(self) -> list:
         return [n for n in self.args if not n.endswith("?")]
 
+    def to_inline(self) -> dict:
+        """The inline form (`codebase:` of a YAML program), complete with the nested code base."""
+        doc = {"description": self.description, "args": dict(self.args), "returns": self.returns, self.kind: self.body}
+        if self.types:
+            doc["types"] = dict(self.types)
+        if self.effects:
+            doc["effects"] = list(self.effects)
+        if self.codebase:
+            doc["codebase"] = {n: f.to_inline() for n, f in self.codebase.items()}
+        return doc
+
     def to_lambda_doc(self) -> dict:
         """The `$lambda` body of a fresh instance."""
         doc = {"type": self.type_text, self.kind: self.body}
