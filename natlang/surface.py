@@ -117,7 +117,9 @@ class ToolSurface:
         retryable = [s for s in existing if not is_pending(s.value) and not s.ref.deny
                      and isinstance(session.rt.origins.get(s.ref.slot_key()) if session.rt else None, Lambda)]
         already_read = getattr(session, "reads_done", set())
-        readable = [s for s in existing if not is_body(s) and s.path not in already_read]
+        # named values before the elements of lists: with long lists the budget of paths must not be spent on items
+        named_first = lambda xs: sorted(xs, key=lambda x: (x.path.rsplit("/", 1)[-1].isdigit(), x.path.count("/")))
+        readable = named_first([s for s in existing if not is_body(s) and s.path not in already_read])
 
         schemas, seen = [], set()
         for s in writable:
@@ -149,7 +151,7 @@ class ToolSurface:
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
         NEW_LOCAL = {"type": "string", "x-natlang": "new-local",
                      "description": "let/<name>: a new local, created by this call"}
-        plain = [sl for sl in existing if not is_body(sl) and not is_pending(sl.value)]
+        plain = named_first([sl for sl in existing if not is_body(sl) and not is_pending(sl.value)])
         def fitting(type_text, env_types):
             """Paths of existing values that fit a parameter of this type."""
             from .types import fits, parse_type
@@ -193,7 +195,8 @@ class ToolSurface:
                     call_alts.append({**base, "over": {"enum": list_paths}, "init": {}, "inputs": inputs_schema,
                                       "x-optional": ["inputs"]})
             if checks and names:                                           # repeated until a check holds
-                call_alts.append({**base, "init": {"enum": [sl.path for sl in plain][:MAX_PATHS]},
+                starts = list(dict.fromkeys(p_ for sch in in_props.values() for p_ in sch["enum"]))   # fits some parameter
+                call_alts.append({**base, "init": {"enum": starts or [sl.path for sl in plain][:MAX_PATHS]},
                                   "until": {"enum": checks}, "max": {"type": "integer"},
                                   "inputs": inputs_schema, "x-optional": ["inputs"]})
 

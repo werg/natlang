@@ -19,7 +19,7 @@ from .diag import reject
 MAX_FUNCTIONS = 12                     # listing budget per code base
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _FRONT_TS = re.compile(r"\A\s*/\*---\n(.*?)\n---\*/\n?(.*)\Z", re.S)
-_KEYS = {"description", "args", "returns", "types", "uses", "effects", "recursive", "max_depth"}
+_KEYS = {"description", "args", "returns", "types", "uses", "effects"}
 
 
 @dataclass(eq=False)
@@ -32,8 +32,6 @@ class FunctionDef:
     types: dict = field(default_factory=dict)      # name -> type text; own and inherited (lexical)
     description: str = ""
     effects: list = field(default_factory=list)
-    recursive: bool = False
-    max_depth: int = 0
     codebase: dict = field(default_factory=dict)   # name -> FunctionDef
     source: str = ""                   # where it was defined, for messages
 
@@ -76,7 +74,6 @@ def _make(name: str, meta: dict, body: str, kind: str, inherited: dict, source: 
                        returns=str(meta["returns"]),
                        types={**inherited, **{str(k): str(v) for k, v in (meta.get("types") or {}).items()}},
                        description=str(meta.get("description") or ""), effects=list(meta.get("effects") or []),
-                       recursive=bool(meta.get("recursive")), max_depth=int(meta.get("max_depth") or 0),
                        source=source)
 
 
@@ -143,18 +140,16 @@ def from_inline(entries: dict, inherited: dict, source: str, base: Optional[Path
 
 # -- load-time checks --------------------------------------------------------------------------------------
 def check(root: FunctionDef) -> None:
-    """Listing budget, and recursion only where it is declared (CODEBASES 3.3)."""
+    """Listing budget, and no recursion: a function can never reach itself. Repetition is `call` with
+    over / init / until, whose bounds the harness controls."""
     seen, stack = set(), []
 
     def visit(fn):
         if id(fn) in [id(s) for s in stack]:
             cycle = stack[[id(s) for s in stack].index(id(fn)):]
-            for f in cycle:
-                if not (f.recursive and f.max_depth > 0):
-                    raise reject(f.source, "undeclared-recursion",
-                                 "`recursive: true` and `max_depth` on every function of a cycle",
-                                 " -> ".join(x.name for x in cycle + [fn]))
-            return
+            raise reject(fn.source, "recursion", "a code base in which no function can reach itself "
+                                                 "(repeat with `until`, or go over a list, instead)",
+                         " -> ".join(x.name for x in cycle + [fn]))
         if id(fn) in seen:
             return
         seen.add(id(fn))

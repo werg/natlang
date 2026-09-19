@@ -15,8 +15,8 @@ classify, extract, rewrite) are the leaves of such programs.
 **No anonymous lambdas.** Every sub-task is an instance of a function of the
 acting lambda's code base. Under constrained decoding the function names,
 parameter names and type-fitting input paths are enums: the model chooses, it
-does not spell, and it never authors instructions, its weakest skill. It also
-keeps recursion where the author put it.
+does not spell, and it never authors instructions, its weakest skill. And
+because a code base without cycles is all there is to call, there is no recursion.
 
 **One action to call.** `call(function, to, inputs, ...)` places and runs. A
 placed-but-unrun instance, a separate `run`, continuations with parameters to
@@ -36,5 +36,5 @@ and its `uses`. More verbose than inheriting the caller's functions, much
 simpler to reason about, and it survives git, archives and Windows, which OS
 symlinks do not.
 
-Not yet implemented: serializing `codebase` on swap-out; enforcing `max_depth`
+Not yet implemented: serializing `codebase` on swap-out
 at run time; `types.ts` beyond simple aliases.

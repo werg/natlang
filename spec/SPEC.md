@@ -92,7 +92,7 @@ Name     := an identifier declared in a `types` block
   numeric ranges (`1 | 2 | 3`). Enum narrowing (§2.1) applies to both.
 - **Named types** are declared in a function's `types` frontmatter (or a
   folder's `types.ts`), are visible in that function and inherited by its code
-  base, and may be recursive:
+  base, and may be recursive (a type may refer to itself; functions may not):
   `types: { Unit: '{ name: Text, reports: Unit[] }' }`.
 - There is no `Any` and no type inference.
 - v0.2 is **structural only**: no refinements, no postconditions.
@@ -215,7 +215,6 @@ std/
 | `description` | one line: what a caller sees in its listing |
 | `uses` | name -> relative path of a function defined elsewhere (a link) |
 | `effects` | capabilities (§9.5) |
-| `recursive`, `max_depth` | required when the function can reach itself |
 
 **Scope is lexical.** The code base of a function is the functions in its
 companion folder plus its `uses`. Nothing else: not its siblings, not its
@@ -228,11 +227,11 @@ functions.
 lambda that points at the same definition; no body is duplicated, and no tool
 can change a definition (§5.3 is how behaviour is varied).
 
-**Recursion only where declared.** A function can reach itself only if the
-author linked a cycle. The loader rejects a code base unless every function on
-a cycle declares `recursive: true` and a `max_depth` (`undeclared-recursion`).
-Everything else iterates through `call ... over` and its relatives. The
-run-time guards of §6.3 remain.
+**No recursion.** No function can reach itself, directly or through other
+functions: the loader rejects a code base that contains a cycle (`recursion`).
+All repetition goes through `call` with `over`, `over` + `init`, or `init` +
+`until` + `max`, whose bounds the harness controls. The run-time guards of
+§6.3 remain.
 
 **Inline form.** In the YAML program format a `$lambda` may carry
 `codebase:`, name -> function definition (the frontmatter keys plus
@@ -488,15 +487,14 @@ The caller keeps its context while blocked in `call`.
 
 ### 6.3 Budgets
 
-**Recursion is declared (§3.4) and bounded.** Because the instructions of a
-function copy can be edited, three run-time rules stand behind the load-time
-check:
+**There is no recursion (§3.4).** Because the instructions of a function copy
+can be edited, run-time rules stand behind the load-time check: a function
+that is already running above a call is not started again (`recursion`), and:
 
 1. *No identical child.* A lambda is not started if its instructions, args,
    and type are identical to those of a lambda already being reduced above
    it; it quiesces with a note. (The same idea as cycle detection in
-   `Iterate`. Recursion over tree-shaped data passes, because the args differ
-   at every level.)
+   `Iterate`.)
 2. *Bounded nesting.* At most 6 pending nodes may nest inside one another
    below the acting lambda; a write that would exceed this is rejected
    (`too-deep`).
@@ -550,7 +548,7 @@ Diagnostic codes (v0.2):
 | `bad-call` | reject | a required parameter is unbound, or `over` / `until` / `max` do not suit the signature |
 | `anonymous-lambda` | reject | a `write` whose type is a pending node |
 | `too-many-locals` | reject | more than 16 locals |
-| `undeclared-recursion`, `codebase-too-large` | reject (at load) | a cycle without `recursive` + `max_depth`; more than 12 functions |
+| `recursion`, `codebase-too-large` | reject (at load) | a function can reach itself; more than 12 functions |
 | `unbound-param`, `unbound-part` | blocks-commit | starting a partial instance |
 | `commit-holes` | blocks-commit | completing with holes in `return` |
 | `commit-pending` | blocks-commit | completing with pending nodes in `return` |
@@ -621,12 +619,12 @@ function that applies the choice refuses anything illegal. For numbers: a
 small range is a numeric enum; a large range is discretized into named
 options ("min_raise", "half_pot", "all_in") by crisp code.
 
-### 7.6 Recursion over tree-shaped data
+### 7.6 Tree-shaped data
 
-Recursion is for data that is a tree, never for iteration. The author links
-the function to itself (`uses`), declares `recursive: true` and `max_depth`,
-and writes the pseudocode: `for each child in node.children: f(child)`. The
-interpreter just calls.
+There is no recursion. Data that is a tree is flattened by a crisp function
+into a list (with depth or parent recorded per item), and the program goes
+over that list; results that depend on children are carried by a fold from
+the leaves upward, or by repeat-until over a worklist.
 
 ### 7.7 Data is not code
 
@@ -846,7 +844,7 @@ the most recent 1,000 step records by default.
 | intro, 3.4 | Programs are pseudocode code bases; the author states structure, the interpreter carries it out; **no anonymous lambdas** |
 | 3.1 | The lambda holds every zone of state: type, body, `args`, `let`, `return`, `codebase` |
 | 3.2 | Typed locals created by the first write; private; at most 16 |
-| 3.4 | `.nl` / `.ts` files with frontmatter, companion folders, lexical scope, `uses` links, immutable and shared by reference; recursion only where declared |
+| 3.4 | `.nl` / `.ts` files with frontmatter, companion folders, lexical scope, `uses` links, immutable and shared by reference; no recursion |
 | 5 | Six tools: `read`, `write`, `edit`, `run_code`, `call`, `report_blocker`; instructions and data in different channels; the reply ends the episode and is never the result |
 | 5.3 | Changing a function = copy into a local, edit, call the copy |
 | 5.5 | `call` places and runs in one action; calling again resumes; Map / Fold / Iterate are reached only through `call` |

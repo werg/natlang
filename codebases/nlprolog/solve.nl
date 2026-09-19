@@ -1,32 +1,28 @@
 ---
-description: Can the goal be derived from the knowledge base? Backward chaining over prose facts and rules.
+description: Can the goal be derived from a knowledge base of prose facts and rules? Forward chaining to a fixed point.
 args:
   goal: Text
   kb: Text[]
 returns: Answer
 types:
-  Answer: '{ verdict: "yes" | "unknown", proof: Text[] }'
-recursive: true
-max_depth: 4
+  Answer: '{ verdict: "yes" | "unknown", derived: Text[] }'
+  State: '{ known: Text[], derived: Text[], grew: Bool }'
 uses:
-  any_true: ../std/any_true
-  first_selected: ../std/first_selected
   select_by_flags: ../std/select_by_flags
-  first_yes: ./solve/first_yes
+  any_true: ../std/any_true
 ---
 function solve(goal, kb) -> Answer
 
-  # 1. a fact that says so directly
-  stated = for each s in kb: states(s, goal)
-  if any_true(stated):
-      return { verdict: "yes", proof: [ first_selected(kb, stated) ] }
+  rule_flags = for each s in kb: is_rule(s)
+  fact_flags = for each f in rule_flags: not f                 # exact: use code
+  rules = select_by_flags(kb, rule_flags)
+  facts = select_by_flags(kb, fact_flags)
 
-  # 2. rules whose conclusion would give the goal
-  concludes = for each s in kb: is_rule_for(s, goal)
-  rules = select_by_flags(kb, concludes)
-  if rules is empty:
-      return { verdict: "unknown", proof: [] }          # open world: not derivable is not the same as false
+  start = { known: facts, derived: [], grew: true }
+  final = repeat at most 6 times, until settled(state):        # nothing new was derived in the last round
+      state = derive(state, rules)
 
-  # 3. try every such rule; each one needs all of its conditions
-  attempts = for each r in rules: try_rule(r, goal, kb)
-  return first_yes(attempts)                              # the first attempt whose verdict is "yes", else unknown
+  hits = for each k in final.known: same_claim(k, goal)
+  if any_true(hits): verdict = "yes"
+  else: verdict = "unknown"                                    # open world: not derivable is not the same as false
+  return { verdict, derived: final.derived }

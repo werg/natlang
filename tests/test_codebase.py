@@ -137,10 +137,9 @@ def test_call_again_resumes_what_did_not_finish():
     assert len(runs) == n + 1                                              # only the failed item ran again
 
 
-def test_undeclared_recursion_is_refused_at_load(tmp_path):
-    (tmp_path / "f.nl").write_text("---\nargs: {x: Num}\nreturns: Num\nuses: {f: ./f}\n---\nCall f again.\n")
+def test_recursion_is_refused_at_load(tmp_path):
+    (tmp_path / "f.nl").write_text("---\nargs: {x: Num}\nreturns: Num\nuses: {g: ./g}\n---\nCall g.\n")
+    (tmp_path / "g.nl").write_text("---\nargs: {x: Num}\nreturns: Num\nuses: {f: ./f}\n---\nCall f.\n")
     with pytest.raises(Reject) as e:
         load_function(tmp_path / "f.nl")
-    assert "undeclared-recursion" in str(e.value)
-    (tmp_path / "g.nl").write_text("---\nargs: {x: Num}\nreturns: Num\nuses: {g: ./g}\nrecursive: true\nmax_depth: 4\n---\nCall g.\n")
-    assert "g" in load_function(tmp_path / "g.nl").codebase
+    assert "recursion" in str(e.value) and "f -> g -> f" in str(e.value)

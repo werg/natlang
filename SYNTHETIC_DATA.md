@@ -530,9 +530,8 @@ work found on sub-1B forward chaining.
    fire given these facts? if so, what follows?" over the rules and merges
    with crisp code;
    (b) **FaiRR-style** split into select-rule, select-facts, infer;
-   (c) **Backward, goal-directed**: a function declared `recursive` on
-   subgoals, the natural showcase for declared recursion and far cheaper in
-   calls.
+   (c) **Goal-directed**: repeat-until over an agenda of open sub-goals kept
+   in the state (there is no recursion), cheaper in calls than (a).
 4. Closed- and open-world variants (Unknown label); distractor rules and
    facts; conflicting rules with precedence (links to Y4).
 
@@ -928,7 +927,7 @@ output tokens of procedure (https://arxiv.org/abs/2501.05414). The MicroPy
 result (0.) shows 60× length generalization is achievable with erasure.
 
 **Design.**
-- Sweeps: steps ∈ {10, 30, 100, 300, 1000}; recursion depth ∈ {2, 4, 8, 16};
+- Sweeps: steps ∈ {10, 30, 100, 300, 1000}; call nesting depth ∈ {2, 3, 4, 6};
   list width up to 10³–10⁴ with exact work in crisp functions; nested structures
   (org charts, bills of materials, threaded discussions) from Y1 worlds.
 - **Per-statement complexity capped at 1–2 operations**, which is an

@@ -520,8 +520,8 @@ afterthought. Include from the first SFT round.
 constraints (length, required terms, format, reading level) and generated
 checkers as crisp check functions, for `repeat until` loops (family I).
 
-**Y14. Long-horizon stress sets.** Code bases with 100+ calls, declared
-recursion over tree-shaped data (org charts, bills of materials, threaded
+**Y14. Long-horizon stress sets.** Code bases with 100+ calls, tree-shaped
+data flattened and folded (org charts, bills of materials, threaded
 discussions), calls over thousands of items. Exact gold from Y1/Y2 machinery. Primarily
 eval, some training.
 

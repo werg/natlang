@@ -64,15 +64,16 @@ trained recovery case.
 ### 2.2 Functions, instances, and code bases
 
 A **function** is a file: `name.nl` holds YAML frontmatter (`args`, `returns`,
-`types`, `description`, `uses`, `effects`, `recursive`/`max_depth`) and a body
+`types`, `description`, `uses`, `effects`) and a body
 of pseudocode, or for a leaf a plain task description; `name.ts` is a **crisp
 function** whose body is TypeScript. A function's private functions live in a
 companion folder of the same name (`somefun.nl` + `somefun/`). Scope is
 **lexical**: a function can call the functions of its companion folder and its
 `uses` links, nothing else. Code bases are **immutable** and shared by
-reference. A function can reach itself only through a cycle the author linked
-and declared (`recursive: true`, `max_depth`); everything else iterates
-through `call`.
+reference. **There is no recursion**: no function can reach itself, directly
+or through others; the loader refuses a code base that contains a cycle. All
+repetition goes through `call` (over a list, carried along a list, or repeated
+until a check holds), whose bounds the harness controls.
 
 A **lambda** is an instance of a function, and it holds every zone of state an
 episode can touch:
@@ -431,11 +432,11 @@ runs (§5.4), and are the demonstrations of the thesis. The first six:
 | code base | shape it forces |
 |---|---|
 | **shopkeeper** | a long-lived fold over an open list of events; state in the accumulator; legal actions passed as inputs and checked by a crisp function |
-| **legal-move checking** | exact rules in crisp functions next to fuzzy reading of a position described in prose; some declared recursion |
+| **legal-move checking** | exact rules in crisp functions next to fuzzy reading of a position described in prose |
 | **moderation with escalation** | conditionals, blockers that propagate, a second opinion by copy-edit-call |
 | **semantic highlighter for natlang** | input is a natlang code base itself: a call over files, then over lines/spans; every span gets a semantic role (signature, call, local, control flow, exact step, prose step, type); crisp functions assemble a format that tools can use (HTML with classes, or LSP semantic-token arrays). Data-is-not-code under maximum pressure: the input *is* instructions |
 | **web server** | every HTTP request is an event handled by natlang: routing, reading state, deciding, and generating the page; effects (`http`, `store`) behind capabilities; a host adapter turns the open-list fold into a real listening server. Complete means: routing, static and generated pages, forms, sessions, errors, logging |
-| **natural-language Prolog** | a knowledge base of facts and rules in prose; a query is resolved by backward chaining: `candidates` (which rules or facts could answer this goal), `unify` (does this fact answer the goal, with what bindings), recursion over sub-goals with a declared depth bound, a fold that collects solutions, cycle and depth limits giving "unknown" rather than a guess |
+| **natural-language Prolog** | a knowledge base of facts and rules in prose; forward chaining to a fixed point with repeat-until: one round applies every rule to what is known (a leaf per rule), a crisp merge says whether anything was new, the loop stops when a round adds nothing; then the goal is compared with what is known. Open world: "unknown", never a guess. Implemented: `codebases/nlprolog/` |
 
 Each lives on disk as `name.nl` + `name/`, has inputs with known answers where
 the domain allows it, and becomes a conformance program.
@@ -483,7 +484,7 @@ suite, static checker.
 bases, `call`, locals, tool surface, native constrained decoding, GPU serving
 of the student and the teacher, grading. Remaining: rewrite conformance
 programs 03–22 as code-base programs; serialize `codebase` on swap-out;
-enforce `max_depth`; batching; SQLite store.
+batching; SQLite store.
 
 **Phase 2, baselines.** Untuned 350M and the teacher on the code-base
 conformance programs; the one-shot-versus-interpreted sweep over input size.
@@ -532,7 +533,8 @@ frontier model on quality, latency, and cost.
 - `Map`, `Fold`, `Iterate` as node kinds; no tail calls; `Iterate` has a
   mandatory bound and crisp cycle detection; reactive systems are a fold over
   an open list; legal actions by construction.
-- Recursion is declared and bounded; three run-time guards stand behind it.
+- No recursion: a code base with a cycle is refused at load; run-time guards
+  stand behind that (an edited copy could otherwise reintroduce one).
 - Types in TypeScript syntax; structural typing only in v0.2 (postconditions
   and refinements deferred); write-time typing is the primary reliability
   mechanism.
@@ -626,7 +628,7 @@ every call is valid and a run takes well under a second.
 
 - Callees run sequentially; no batching. Copies are deep copies; the tree is
   in memory.
-- `codebase` is not serialized on swap-out; `max_depth` is not enforced at run
+- `codebase` is not serialized on swap-out
   time; `types.ts` supports simple aliases only.
 - `run_code` and crisp code are not statically checked; the QuickJS binding
   cannot call into Python while a time limit is set, so effectful code runs

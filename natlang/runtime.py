@@ -184,11 +184,8 @@ class Runtime:
         if key in self._stack:
             return self._quiesce(node, ref, "identical to a lambda already being reduced above it: "
                                             "delegating the same task to a child cannot make progress")
-        if node.fn_name:                       # declared recursion is bounded by its own max_depth
-            nested = self._fn_stack.count(node.fn_name)
-            if nested and nested >= max(node.fn_max_depth, 0):
-                return self._quiesce(node, ref, f"max_depth: {node.fn_name} is already {nested} deep"
-                                     + ("" if node.fn_max_depth else " and is not declared recursive"))
+        if node.fn_name and node.fn_name in self._fn_stack:     # the loader refuses cycles; an edited copy could
+            return self._quiesce(node, ref, f"recursion: {node.fn_name} is already running above this call")
         self._depth += 1
         self._stack.append(key)
         self._fn_stack.append(node.fn_name)
@@ -760,7 +757,7 @@ class Session:
                 ((getattr(node, "fn", None), fn), (getattr(node, "step", None), fn),
                  (getattr(node, "check", None), cb.get(str(until)))):
             if isinstance(lam, Lambda) and f is not None:
-                lam.codebase, lam.fn_name, lam.fn_max_depth = f.codebase, f.name, f.max_depth if f.recursive else 0
+                lam.codebase, lam.fn_name = f.codebase, f.name
         return result
 
     def _op_call(self, args):
