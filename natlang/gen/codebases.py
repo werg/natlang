@@ -22,15 +22,50 @@ def call(fn, dest, /, **inputs):
     return [("call", {"function": fn, "to": dest, "inputs": inputs})]
 
 
+REF_FILE = ROOT / "data" / "leaf_references.jsonl"
+REFERENCES: dict = {}               # key(function, args) -> teacher-written output that passed its checks
+MISSES: list = []                   # (function, args) of generative leaves that still have only template gold
+
+
+def ref_key(fn: str, args) -> str:
+    import hashlib, json
+    return fn + ":" + hashlib.sha1(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def load_references():
+    import json
+    REFERENCES.clear()
+    if REF_FILE.exists():
+        for line in REF_FILE.read_text().splitlines():
+            r = json.loads(line)
+            REFERENCES[r["key"]] = r["value"]
+
+
+load_references()
+
+
 def leaf(gold, template=False, blocker=None):
-    """A leaf: write the gold value, or report a blocker when `blocker(args)` gives a text."""
+    """A leaf: write the gold value, or report a blocker when `blocker(args)` gives a text. A generative leaf
+    (`template=True`) uses a teacher-written reference when one exists; otherwise its template stand-in, and the
+    turn is marked so that it stays out of the corpus."""
     def script(lam):
+        from ..values import dump
         missing = blocker(lam.in_) if blocker else None
         if missing:
             yield [("report_blocker", {"missing": missing})]
-        else:
-            yield [("write", {"path": "return", "type": format_type(lam.type.returns), "value": gold(lam.in_)})]
-    return Plan("script", script=script, template=template, note="Done.")
+            return
+        value = gold(lam.in_)
+        if template:
+            args = {k: dump(v) for k, v in lam.in_.items()}
+            k = ref_key(lam.fn_name, args)
+            plan.template = k not in REFERENCES
+            if plan.template:
+                MISSES.append((lam.fn_name, args))
+            else:
+                value = REFERENCES[k]
+        yield [("write", {"path": "return", "type": format_type(lam.type.returns), "value": value})]
+    plan = Plan("script", script=script, template=template, note="Done.")
+    return plan
 
 
 # ------------------------------------------------------------------------------------------ legal_move
