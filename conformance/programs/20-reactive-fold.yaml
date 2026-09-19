@@ -46,10 +46,6 @@ lint:
   must: [decide_and_apply decides, emits, and returns the new state together, crisply]
   must_not: [the step reading or writing anything outside its own node]
 reference:
-  known_issue: >
-    A root-level Fold driven by an open/streaming list (`streams: { over: [...] }`) has no supported
-    loading path: `natlang.runtime.OpenList` exists but nothing in `natlang/host.py` or `natlang/values.py`
-    ever constructs one from YAML (there is no code anywhere, old or new, that reads a `streams:` key), so
-    there is no way to run this program without adding new host-loading logic, which would mean patching
-    the harness rather than authoring a program. The step function itself (`decide_and_apply`) is written
-    in the new crisp/codebase style so the intent is preserved and ready once such loading exists.
+  handle_message:
+    calls:
+      - { tool: call, args: { function: decide_and_apply, to: return, inputs: { acc: args/acc, text: args/item/text } } }

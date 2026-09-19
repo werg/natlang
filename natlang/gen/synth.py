@@ -351,3 +351,286 @@ def nested_assessment(rng: random.Random) -> Program:
 
 
 SHAPES = {f.__name__: f for f in (ticket_report, review_digest, expense_audit, nested_assessment)}
+
+
+# ------------------------------------------------------------------------------------------ composition
+# Instead of fixed shapes: sample a program move by move. A Var is something the program has computed; a move
+# is applicable when the variables it needs exist with the right kind and alignment. Every move renders itself,
+# updates the twin, and appends the reference calls, exactly like the fixed shapes above.
+@dataclass
+class Var:
+    name: str
+    path: str
+    kind: str                  # texts | flags | labels | topics | claims | reports
+    value: Any
+    domain: str = ""           # tickets | reviews | expenses   (for texts)
+    base: str = ""             # name of the texts variable this one is aligned with, item by item
+    note: str = ""             # what the flags mean, for names and prose
+
+
+DOMAINS = {"tickets": (_ticket, ["classify", "is_urgent", "is_angry"]),
+           "reviews": (_review, ["is_positive", "topic_of"]),
+           "expenses": (_expense, ["read_claim"])}
+LEAF_KIND = {"classify": "labels", "is_urgent": "flags", "is_angry": "flags", "is_positive": "flags",
+             "topic_of": "topics", "read_claim": "claims"}
+LEAF_LOCAL = {"classify": ["labels", "categories", "kinds"], "is_urgent": ["urgent", "hot", "urgent_flags"],
+              "is_angry": ["angry", "upset"], "is_positive": ["positive", "happy"], "topic_of": ["topics", "subjects"],
+              "read_claim": ["claims", "expenses"]}
+STD.update({
+    "add_amount": ({"acc": "Num", "item": "Claim"}, "Num", "Add one claim's amount to a running total.",
+                   "return Math.round((args.acc + args.item.amount) * 100) / 100"),
+    "raise_limit": ({"state": "Budget"}, "Budget", "Raise the limit by 25.",
+                    "return { ...args.state, limit: args.state.limit + 25 }"),
+    "covers": ({"state": "Budget"}, "Bool", "Do the amounts within the limit add up to the target?",
+               "return args.state.amounts.filter(a => a <= args.state.limit).reduce((s, a) => s + a, 0) >= args.state.target"),
+})
+TYPES["Budget"] = "{ limit: Num, amounts: Num[], target: Num }"
+
+
+class Composer:
+    def __init__(self, rng: random.Random):
+        self.rng = rng
+        self.domain = rng.choice(list(DOMAINS))
+        make, self.leaves = DOMAINS[self.domain]
+        items = _distinct(rng, make, rng.randint(4, 10))
+        self.c = Ctx(rng, {i["text"]: i for i in items})
+        self.arg = {"tickets": "tickets", "reviews": "reviews", "expenses": "notes"}[self.domain]
+        self.vars = {self.arg: Var(self.arg, f"args/{self.arg}", "texts", [i["text"] for i in items], self.domain, self.arg)}
+        self.c.env[self.arg] = self.vars[self.arg].value
+        self.fields: dict = {}          # return field -> (type text, value)
+        self.types: set = set()
+        self.applied: set = set()
+        self.used: set = set()
+
+    # -- helpers
+    def fresh(self, options):
+        for n in self.rng.sample(options, len(options)):
+            if n not in self.vars and n not in self.fields:
+                return n
+        return f"{options[0]}_{len(self.vars)}"
+
+    def add(self, v: Var):
+        self.vars[v.name] = v
+        self.c.env[v.name] = v.value
+        return v
+
+    def use(self, *vs):
+        self.used.update(v.name for v in vs)
+
+    def of_kind(self, *kinds):
+        return [v for v in self.vars.values() if v.kind in kinds]
+
+    # -- moves: each returns True when it did something
+    def m_leaf(self):
+        cands = [(t, l) for t in self.of_kind("texts") if t.value for l in self.leaves if (t.name, l) not in self.applied]
+        if not cands:
+            return False
+        t, leaf = self.rng.choice(cands)
+        self.applied.add((t.name, leaf))
+        name = self.fresh(LEAF_LOCAL[leaf])
+        extra = {"rubric": "args/rubric"} if leaf == "classify" else None
+        value = map_leaf(self.c, name, leaf, t.path, t.value, extra)
+        self.types.update({"classify": ["Label"], "topic_of": ["Topic"], "read_claim": ["Claim"]}.get(leaf, []))
+        self.add(Var(name, f"let/{name}", LEAF_KIND[leaf], value, base=t.name, note=leaf))
+        return True
+
+    def m_flags_from(self):
+        cands = [v for v in self.of_kind("labels", "topics", "claims") if ("flags", v.name) not in self.applied]
+        if not cands:
+            return False
+        v = self.rng.choice(cands)
+        self.use(v)
+        self.applied.add(("flags", v.name))
+        if v.kind == "claims":
+            limit = self.rng.choice([40, 60, 100, 150])
+            which = self.rng.choice(["over", "no_receipt", "either"])
+            js_, py, words = {
+                "over": (f"k.amount > {limit}", lambda k: k["amount"] > limit, f"k.amount > {limit}"),
+                "no_receipt": ("!k.receipt", lambda k: not k["receipt"], "k has no receipt"),
+                "either": (f"!k.receipt || k.amount > {limit}", lambda k: (not k["receipt"]) or k["amount"] > limit,
+                           f"k has no receipt or k.amount > {limit}")}[which]
+            name = self.fresh(["flagged", "problem", "suspicious"])
+            glue(self.c, name, "Bool[]", f"locals.{v.name}.map(k => {js_})", [py(k) for k in v.value],
+                 f"{name} = for each k in {v.name}: {words}          # exact: use code",
+                 f"With code, flag every item of {v.name} where {words}; call the flags {name}.")
+        else:
+            label = self.rng.choice(sorted(set(v.value)) or ["billing"])
+            name = self.fresh([f"is_{label}", f"{label}_flags"])
+            glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l === {json.dumps(label)})", [l == label for l in v.value],
+                 f'{name} = for each l in {v.name}: l == "{label}"          # exact: use code',
+                 f'With code, turn {v.name} into flags that are true where the value is "{label}"; call them {name}.')
+        self.add(Var(name, f"let/{name}", "flags", self.c.env[name], base=v.base, note=name))
+        return True
+
+    def m_combine(self):
+        fl = self.of_kind("flags")
+        pairs = [(a, b) for a in fl for b in fl if a.name < b.name and a.base == b.base and ("and", a.name, b.name) not in self.applied]
+        if not pairs:
+            return False
+        a, b = self.rng.choice(pairs)
+        self.use(a, b)
+        self.applied.add(("and", a.name, b.name))
+        op, word, py = self.rng.choice([("&&", "and", lambda x, y: x and y), ("||", "or", lambda x, y: x or y)])
+        name = self.fresh(["both", "combined", "either_flag"] if op == "&&" else ["either_flag", "combined", "any_flag"])
+        glue(self.c, name, "Bool[]", f"locals.{a.name}.map((x, i) => x {op} locals.{b.name}[i])",
+             [py(x, y) for x, y in zip(a.value, b.value)],
+             f"{name} = position by position: {a.name} {word} {b.name}          # exact: use code",
+             f"With code, combine {a.name} and {b.name} position by position with '{word}'; call the result {name}.")
+        self.add(Var(name, f"let/{name}", "flags", self.c.env[name], base=a.base))
+        return True
+
+    def m_select_block(self):
+        """Filter a list, then (only if something is left) judge what is left and aggregate: an if/else."""
+        cands = [f for f in self.of_kind("flags") if f.base == self.arg and ("select", f.name) not in self.applied]
+        if not cands:
+            return False
+        f = self.rng.choice(cands)
+        rest = [l for l in self.leaves if LEAF_KIND[l] in ("flags", "labels", "topics") and l != f.note]
+        if not rest:
+            return False
+        self.applied.add(("select", f.name))
+        self.use(f)
+        base = self.vars[f.base]
+        name = self.fresh(["chosen", "selected", "subset", "shortlist"])
+        sel = select(self.c, name, base.path, base.value, f.name)
+        leaf = self.rng.choice(rest)
+        field = self.fresh({"flags": ["matching", "hits"], "labels": ["breakdown", "by_kind"], "topics": ["by_topic", "topic_counts"]}[LEAF_KIND[leaf]])
+        inner = self.fresh(LEAF_LOCAL[leaf])
+        self.c.say(f"if {name} is empty:", f"If {name} is empty:")
+        self.c.indent += 1
+        empty_value = 0 if LEAF_KIND[leaf] == "flags" else {}
+        self.c.say(f"{field} = {json.dumps(empty_value)}", f"{field} is {json.dumps(empty_value)}.")
+        self.c.indent -= 1
+        self.c.say("else:", "Otherwise:")
+        self.c.indent += 1
+        if sel:
+            extra = {"rubric": "args/rubric"} if leaf == "classify" else None
+            values = map_leaf(self.c, inner, leaf, f"let/{name}", sel, extra)
+            std = "count_true" if LEAF_KIND[leaf] == "flags" else "group_count"
+            result = sum(values) if std == "count_true" else {k: values.count(k) for k in dict.fromkeys(values)}
+            call_std(self.c, f"return/{field}", std, {("flags" if std == "count_true" else "values"): f"let/{inner}"}, result,
+                     f"{field} = {std}({inner})", f"Apply {std} to {inner}: that is {field}.")
+        else:                                   # render the branch that is not taken, but do not carry it out
+            fn = self.c.use_leaf(leaf)
+            std = self.c.use_std("count_true" if LEAF_KIND[leaf] == "flags" else "group_count")
+            self.c.say(f"{inner} = for each x in {name}: {fn}(x" + (", rubric)" if leaf == "classify" else ")"),
+                       f"For every item of {name}, call {fn}; keep the results as {inner}.")
+            self.c.say(f"{field} = {std}({inner})", f"Apply {std} to {inner}: that is {field}.")
+            result = empty_value
+            self.c.calls.append(("write", {"path": f"return/{field}", "type": "Num" if result == 0 else "Dict<Num>", "value": result}))
+        self.c.indent -= 1
+        self.types.update({"classify": ["Label"], "topic_of": ["Topic"]}.get(leaf, []))
+        self.fields[field] = ("Num" if LEAF_KIND[leaf] == "flags" else "Dict<Num>", result)
+        return True
+
+    def m_aggregate(self):
+        cands = [v for v in self.of_kind("flags", "labels", "topics", "claims") if ("agg", v.name) not in self.applied]
+        if not cands:
+            return False
+        unused = [v for v in cands if v.name not in self.used]
+        v = self.rng.choice(unused or cands)
+        self.use(v)
+        self.applied.add(("agg", v.name))
+        if v.kind == "flags":
+            if self.rng.random() < 0.6:
+                field = self.fresh([f"n_{v.name}", f"{v.name}_count", "count"])
+                value = call_std(self.c, f"return/{field}", "count_true", {"flags": v.path}, sum(v.value),
+                                 f"{field} = count_true({v.name})", f"Count the true flags of {v.name} with count_true: {field}.")
+            else:
+                field = self.fresh([f"share_{v.name}", "share"])
+                value = glue(self.c, field, "Num", f"Math.round(locals.{v.name}.filter(Boolean).length / locals.{v.name}.length * 100) / 100",
+                             round(sum(v.value) / len(v.value), 2), f"{field} = share of true in {v.name}, rounded to 2 decimals     # exact",
+                             f"With code, compute the share of true flags in {v.name}, rounded to two decimals: {field}.", to=f"return/{field}")
+            self.fields[field] = ("Num", value)
+        elif v.kind in ("labels", "topics"):
+            field = self.fresh([f"by_{v.name}", "counts", "tally"])
+            value = call_std(self.c, f"return/{field}", "group_count", {"values": v.path},
+                             {k: v.value.count(k) for k in dict.fromkeys(v.value)},
+                             f"{field} = group_count({v.name})", f"Count how often each value of {v.name} occurs with group_count: {field}.")
+            self.fields[field] = ("Dict<Num>", value)
+        else:
+            self.claims_aggregate(v)
+        return True
+
+    def claims_aggregate(self, v: Var):
+        if self.rng.random() < 0.5:                         # a fold with a crisp step
+            self.c.use_std("add_amount")
+            field = self.fresh(["total", "sum_claimed"])
+            total = 0
+            for k in v.value:
+                total = round(total + k["amount"], 2)
+            from .. import js
+            ran = 0
+            for k in v.value:
+                ran = js.run(STD["add_amount"][3], {"args": {"acc": ran, "item": k}}, None, body=True, path="gen")
+            self.c.say(f"{field} = carry a total through {v.name}, starting at 0: add_amount(acc, item)",
+                       f"Carry a running total through {v.name}, starting at 0, with add_amount: {field}.")
+            self.c.calls.append(("call", {"function": "add_amount", "to": f"return/{field}", "over": v.path, "init": 0}))
+            self.fields[field] = ("Num", ran)
+        else:                                               # repeat until a check holds
+            self.c.use_std("raise_limit"), self.c.use_std("covers")
+            self.types.add("Budget")
+            amounts = [k["amount"] for k in v.value]
+            target = round(sum(sorted(amounts)[: max(1, len(amounts) // 2)]), 2)
+            start = {"limit": 0, "amounts": amounts, "target": target}
+            from .. import js                                # the oracle for exact work is the code itself
+            state = start
+            for _ in range(12):
+                state = js.run(STD["raise_limit"][3], {"args": {"state": state}}, None, body=True, path="gen")
+                if js.run(STD["covers"][3], {"args": {"state": state}}, None, body=True, path="gen"):
+                    break
+            limit = state["limit"]
+            name = self.fresh(["budget", "plan"])
+            glue(self.c, name, "Budget", f"({{ limit: 0, amounts: locals.{v.name}.map(k => k.amount), target: {target} }})", start,
+                 f"{name} = {{ limit: 0, amounts: the amounts of {v.name}, target: {target} }}          # exact: use code",
+                 f"With code, build {name}: limit 0, the amounts of {v.name}, target {target}.")
+            final = self.fresh(["enough", "settled_budget"])
+            self.c.say(f"{final} = repeat at most 12 times, until covers(state): state = raise_limit(state), starting from {name}",
+                       f"Starting from {name}, repeat raise_limit until covers says true, at most 12 times: {final}.")
+            self.c.calls.append(("call", {"function": "raise_limit", "to": f"let/{final}", "init": f"let/{name}", "until": "covers", "max": 12}))
+            self.c.env[final] = {**start, "limit": limit}
+            field = self.fresh(["limit_needed", "limit"])
+            glue(self.c, field, "Num", f"locals.{final}.limit", limit, f"{field} = {final}.limit", f"{field} is the limit of {final}.",
+                 to=f"return/{field}")
+            self.fields[field] = ("Num", limit)
+
+    def build(self) -> Program:
+        rng = self.rng
+        self.m_leaf()
+        for _ in range(rng.randint(2, 6)):
+            moves = [self.m_leaf, self.m_flags_from, self.m_flags_from, self.m_combine, self.m_select_block, self.m_aggregate]
+            rng.shuffle(moves)
+            next((m for m in moves if m()), None)
+        dangling = lambda: [v for v in self.of_kind("flags", "labels", "topics", "claims") if v.name not in self.used]
+        while not self.fields or dangling():                # nothing is computed for nothing
+            if not self.m_aggregate():
+                break
+        c = self.c
+        if len(self.fields) == 1 and rng.random() < 0.5:        # a single result: return it directly
+            (field, (ty, value)), = self.fields.items()
+            c.calls = [(s[0], {**s[1], "to": "return"}) if s[0] == "call" and s[1].get("to") == f"return/{field}" else
+                       ("glue", s[1], "return", s[3]) if s[0] == "glue" and s[2] == f"return/{field}" else
+                       (s[0], {**s[1], "path": "return"}) if s[0] == "write" and s[1].get("path") == f"return/{field}" else s
+                       for s in c.calls]
+            c.say(f"return {field}", f"Return {field}.")
+            returns, expected = ty, value
+        else:
+            c.say("return { " + ", ".join(self.fields) + " }", "Return the record: " + ", ".join(self.fields) + ".")
+            returns = "{ " + ", ".join(f"{n}: {t}" for n, (t, _) in self.fields.items()) + " }"
+            expected = {n: v for n, (_, v) in self.fields.items()}
+        sig = {self.arg: "Text[]"}
+        inputs = {self.arg: self.vars[self.arg].value}
+        if any(s[0] == "call" and "rubric" in (s[1].get("inputs") or {}) for s in c.calls) or "rubric" in "\n".join(c.lines_a):
+            sig["rubric"], inputs["rubric"] = "Text", T_RUBRIC
+        name = rng.choice({"tickets": ["ticket_stats", "inbox_overview", "support_digest"],
+                           "reviews": ["review_stats", "feedback_overview"],
+                           "expenses": ["claims_overview", "expense_stats"]}[self.domain])
+        return _finish(c, "composed", sig, returns, inputs, expected, sorted(self.types), name,
+                       "Carried out the program step by step.")
+
+
+def composed(rng: random.Random) -> Program:
+    return Composer(rng).build()
+
+
+SHAPES["composed"] = composed

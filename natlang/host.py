@@ -35,7 +35,10 @@ def instantiate(fn) -> Lambda:
     return root
 
 
-def load(program_file: Path, inputs: dict) -> Pending:
+def load(program_file: Path, inputs: dict, streams: dict | None = None) -> Pending:
+    """Load a program and bind its inputs. `streams` maps a part of a root combinator (`over`) to an iterable
+    of events: the part becomes an open list that the run pulls from until the source ends or yields "$close"
+    (SPEC 4.4). A YAML program may carry its own `streams:` for tests."""
     program_file = Path(program_file)
     if program_file.suffix in (".nl", ".ts"):            # a code base on disk: main.nl + main/
         from .codebase import load_function
@@ -43,6 +46,14 @@ def load(program_file: Path, inputs: dict) -> Pending:
     else:
         root = load_program(yaml.safe_load(program_file.read_text()).get("program")
                             or yaml.safe_load(program_file.read_text()))
+    doc_streams = {}
+    if program_file.suffix not in (".nl", ".ts"):
+        doc_streams = (yaml.safe_load(program_file.read_text()) or {}).get("streams") or {}
+    for part, source in {**doc_streams, **(streams or {})}.items():
+        from .runtime import OpenList
+        if not hasattr(root, part) or isinstance(root, Lambda):
+            raise ValueError(f"a stream needs a root Map or Fold with a part `{part}`")
+        setattr(root, part, OpenList(source))
     if isinstance(root, Lambda):
         env = root.env(TypeEnv())
         for name, src in inputs.items():

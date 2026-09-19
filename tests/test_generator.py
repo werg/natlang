@@ -45,3 +45,19 @@ def test_synthesized_programs_run_and_match_their_twin(shape):
         assert episodes >= 4 and any(s["skill"] == "call" for s in samples)
         assert samples[0]["messages"][1]["content"].startswith("function ")
         assert "Functions you can call:" in samples[0]["messages"][1]["content"]
+
+
+def test_composed_programs_are_varied_and_verified():
+    """Programs sampled move by move: each one runs through the harness, matches its twin, and nothing in it is
+    computed for nothing. Different seeds give different structures."""
+    from natlang.gen.synth import composed
+    rng, texts, kinds = random.Random(21), set(), set()
+    for _ in range(25):
+        prog = composed(rng)
+        samples, _ = run_program(prog)
+        texts.add(samples[0]["messages"][1]["content"].split("Functions you can call")[0])
+        for s in samples:
+            if s["skill"] == "call":
+                a = s["target"]["tool_calls"][0]["function"]["arguments"]
+                kinds.add("repeat" if '"until"' in a else "fold" if '"init"' in a else "each" if '"over"' in a else "plain")
+    assert len(texts) == 25 and {"each", "plain"} <= kinds
