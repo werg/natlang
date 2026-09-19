@@ -519,6 +519,14 @@ STD.update({
 TYPES["Budget"] = "{ limit: Num, amounts: Num[], target: Num }"
 
 
+LEAF_TYPES = {"classify": ["Label"], "topic_of": ["Topic"], "read_claim": ["Claim"]}     # named types a leaf brings along
+LEAF_RUBRIC = {"classify": T_RUBRIC}                                                      # leaves that take a rubric input
+DOMAIN_ARG = {"tickets": "tickets", "reviews": "reviews", "expenses": "notes"}
+DOMAIN_NAMES = {"tickets": ["ticket_stats", "inbox_overview", "support_digest"], "reviews": ["review_stats", "feedback_overview"],
+                "expenses": ["claims_overview", "expense_stats"]}
+LEAF_KIND["topic_of"] = "labels"                                                          # one kind for every enum-valued leaf
+
+
 class Composer:
     def __init__(self, rng: random.Random):
         self.rng = rng
@@ -528,7 +536,7 @@ class Composer:
         if self.domain == "tickets" and rng.random() < 0.12:        # one ticket that no rubric label covers
             items[rng.randrange(len(items))] = _odd_ticket(rng)
         self.c = Ctx(rng, {i["text"]: i for i in items})
-        self.arg = {"tickets": "tickets", "reviews": "reviews", "expenses": "notes"}[self.domain]
+        self.arg = DOMAIN_ARG[self.domain]
         self.vars = {self.arg: Var(self.arg, f"args/{self.arg}", "texts", [i["text"] for i in items], self.domain, self.arg)}
         self.c.env[self.arg] = self.vars[self.arg].value
         self.fields: dict = {}          # return field -> (type text, value)
@@ -567,9 +575,9 @@ class Composer:
         t, leaf = self.rng.choice(cands)
         self.applied.add((t.name, leaf))
         name = self.fresh(LEAF_LOCAL[leaf])
-        extra = {"rubric": "args/rubric"} if leaf == "classify" else None
+        extra = {"rubric": "args/rubric"} if leaf in LEAF_RUBRIC else None
         value = map_leaf(self.c, name, leaf, t.path, t.value, extra)
-        self.types.update({"classify": ["Label"], "topic_of": ["Topic"], "read_claim": ["Claim"]}.get(leaf, []))
+        self.types.update(LEAF_TYPES.get(leaf, []))
         self.add(Var(name, f"let/{name}", LEAF_KIND[leaf], value, base=t.name, note=leaf))
         return True
 
@@ -643,7 +651,7 @@ class Composer:
         name = self.fresh(["chosen", "selected", "subset", "shortlist"])
         sel = select(self.c, name, base.path, base.value, f.name)
         leaf = self.rng.choice(rest)
-        field = self.fresh({"flags": ["matching", "hits"], "labels": ["breakdown", "by_kind"], "topics": ["by_topic", "topic_counts"]}[LEAF_KIND[leaf]])
+        field = self.fresh({"flags": ["matching", "hits"], "labels": ["breakdown", "by_kind", "by_topic"]}[LEAF_KIND[leaf]])
         inner = self.fresh(LEAF_LOCAL[leaf])
         self.c.say(f"if {name} is empty:", f"If {name} is empty:")
         self.c.indent += 1
@@ -655,7 +663,7 @@ class Composer:
         self.c.say("else:", "Otherwise:")
         self.c.indent += 1
         if sel:
-            extra = {"rubric": "args/rubric"} if leaf == "classify" else None
+            extra = {"rubric": "args/rubric"} if leaf in LEAF_RUBRIC else None
             values = map_leaf(self.c, inner, leaf, f"let/{name}", sel, extra)
             std = "count_true" if LEAF_KIND[leaf] == "flags" else "group_count"
             result = sum(values) if std == "count_true" else {k: values.count(k) for k in dict.fromkeys(values)}
@@ -664,12 +672,12 @@ class Composer:
         else:                                   # render the branch that is not taken, but do not carry it out
             fn = self.c.use_leaf(leaf)
             std = self.c.use_std("count_true" if LEAF_KIND[leaf] == "flags" else "group_count")
-            self.c.say(f"{inner} = for each x in {name}: {fn}(x" + (", rubric)" if leaf == "classify" else ")"),
+            self.c.say(f"{inner} = for each x in {name}: {fn}(x" + (", rubric)" if leaf in LEAF_RUBRIC else ")"),
                        f"For every item of {name}, call {fn}; keep the results as {inner}.", skipped=True)
             self.c.say(f"{field} = {std}({inner})", f"Apply {std} to {inner}: that is {field}.", skipped=True)
             result = empty_value
         self.c.indent -= 1
-        self.types.update({"classify": ["Label"], "topic_of": ["Topic"]}.get(leaf, []))
+        self.types.update(LEAF_TYPES.get(leaf, []))
         self.fields[field] = ("Num" if LEAF_KIND[leaf] == "flags" else "Dict<Num>", result)
         return True
 
@@ -799,10 +807,8 @@ class Composer:
         sig = {self.arg: "Text[]"}
         inputs = {self.arg: self.vars[self.arg].value}
         if any(s[0] == "call" and "rubric" in (s[1].get("inputs") or {}) for s in c.calls) or "rubric" in "\n".join(c.lines_a):
-            sig["rubric"], inputs["rubric"] = "Text", T_RUBRIC
-        name = rng.choice({"tickets": ["ticket_stats", "inbox_overview", "support_digest"],
-                           "reviews": ["review_stats", "feedback_overview"],
-                           "expenses": ["claims_overview", "expense_stats"]}[self.domain])
+            sig["rubric"], inputs["rubric"] = "Text", next(r for l, r in LEAF_RUBRIC.items() if l in self.leaves)
+        name = rng.choice(DOMAIN_NAMES[self.domain])
         return _finish(c, "composed", sig, returns, inputs, expected, sorted(self.types), name,
                        "Carried out the program step by step.")
 
@@ -812,3 +818,4 @@ def composed(rng: random.Random) -> Program:
 
 
 SHAPES["composed"] = composed
+from . import domains as _domains  # noqa: E402,F401  (registers the declarative domains)
