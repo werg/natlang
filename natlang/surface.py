@@ -32,7 +32,7 @@ from .types import (DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Prim, Rec
                     format_type, PENDING_TYPES)
 from .values import problems
 
-MAX_PATHS = 24
+MAX_PATHS = 48
 NOTHING_HIDDEN = "(nothing is hidden: every value is already shown in full)"
 
 
@@ -118,7 +118,10 @@ class ToolSurface:
                      and isinstance(session.rt.origins.get(s.ref.slot_key()) if session.rt else None, Lambda)]
         already_read = getattr(session, "reads_done", set())
         # named values before the elements of lists: with long lists the budget of paths must not be spent on items
-        named_first = lambda xs: sorted(xs, key=lambda x: (x.path.rsplit("/", 1)[-1].isdigit(), x.path.count("/")))
+        # and what the interpreter made itself (locals, then the result) before the inputs it was given
+        zone = lambda p_: 0 if p_.startswith("let/") else 1 if p_.startswith("return") else 2
+        named_first = lambda xs: sorted(xs, key=lambda x: (any(seg.isdigit() for seg in x.path.split("/")),
+                                                           x.path.count("/") > 2, zone(x.path), x.path.count("/")))
         readable = named_first([s for s in existing if not is_body(s) and s.path not in already_read])
 
         schemas, seen = [], set()

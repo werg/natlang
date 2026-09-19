@@ -35,6 +35,22 @@ def instantiate(fn) -> Lambda:
     return root
 
 
+def load_fold(step_file: Path, init, source) -> Pending:
+    """A long-lived program: a root Fold whose step is a code-base function `f(acc, item) -> State` and whose
+    list is open, fed by `source` (an iterable of events; "$close" or exhaustion ends the run)."""
+    from .codebase import load_function
+    from .runtime import OpenList
+    fn = load_function(step_file)
+    args = {n.rstrip("?"): t for n, t in fn.args.items()}
+    if set(args) != {"acc", "item"} or args["acc"].strip() != fn.returns.strip():
+        raise ValueError(f"a fold step is f(acc: S, item: A) -> S; got {fn.signature}")
+    root = load_program({"$fold": {"type": f"Fold<{args['item']}, {args['acc']}>", "types": dict(fn.types), "init": init,
+                                   "step": {"$lambda": {**fn.to_lambda_doc(), "function": fn.name}}}})
+    root.step.codebase = fn.codebase
+    root.over = OpenList(source)
+    return root
+
+
 def load(program_file: Path, inputs: dict, streams: dict | None = None) -> Pending:
     """Load a program and bind its inputs. `streams` maps a part of a root combinator (`over`) to an iterable
     of events: the part becomes an open list that the run pulls from until the source ends or yields "$close"

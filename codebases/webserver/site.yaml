@@ -1,0 +1,14 @@
+# The initial state of the demo site (the `init` of the fold).
+name: The Lantern Guestbook
+about: A tiny site served entirely by a natlang program. Every page is written for the request that asked for it.
+routes:
+  - { path: "/", methods: [GET], kind: page, purpose: "Home page: welcome visitors, say what the site is, show the most recent guestbook entries, link to /sign and /about." }
+  - { path: "/about", methods: [GET], kind: page, purpose: "About page: explain that a small language model interprets a pseudocode program for every request. Link to /." }
+  - { path: "/sign", methods: [GET], kind: page, purpose: "A page with an HTML form (method POST, action /submit) with fields 'author' and 'message' to sign the guestbook. Link to /." }
+  - { path: "/submit", methods: [POST], kind: form, purpose: "Guestbook submission." }
+  - { path: "/style.css", methods: [GET], kind: static, purpose: "stylesheet", asset: style.css }
+assets:
+  style.css: "body{font:16px/1.5 system-ui;max-width:40em;margin:2em auto;padding:0 1em}header{border-bottom:1px solid #ccc}nav a{margin-right:.5em}"
+entries: []
+sessions: {}
+log: []
