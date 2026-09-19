@@ -22,6 +22,81 @@ def call(fn, dest, /, **inputs):
     return [("call", {"function": fn, "to": dest, "inputs": inputs})]
 
 
+def with_marks(script):
+    """Wrap a hand-written reference script so that it marks lines (grouped with the next action). The line an action
+    belongs to is the first open line that names the called function; open lines before it are closed as done, or as
+    skipped when they name a function that was never called or are a `return` that was not taken. A script may yield
+    [("taken", "<fragment>")] to say that the line containing the fragment was carried out."""
+    import re
+
+    def wrapped(lam):
+        from ..render import program_lines
+        from ..surface import MARKS_DEFAULT
+        if not MARKS_DEFAULT or not lam.codebase:
+            yield from script(lam)
+            return
+        lines = [(n, t) for n, t, markable in program_lines(lam.original_body or lam.body) if markable]
+        refs = {n: [g for g in lam.codebase if re.search(rf"\b{re.escape(g)}\(", t.split("#")[0])] for n, t in lines}
+        marked, called, taken = set(), set(), set()
+
+        def status(n, t):
+            if n in taken:
+                return "done"
+            if refs[n]:
+                return "done" if all(g in called for g in refs[n]) else "skipped"
+            return "skipped" if t.strip().startswith("return") else "done"
+
+        returned = []
+
+        def close(upto):
+            ready = []
+            for n, t in lines:
+                if n >= upto or n in marked:
+                    continue
+                st = "skipped" if returned else status(n, t)      # nothing after a return that was taken applies
+                if st == "done" and t.strip().startswith("return"):
+                    returned.append(n)
+                ready.append((n, st))
+            out, i = [], 0
+            while i < len(ready):
+                j = i
+                while j + 1 < len(ready) and ready[j + 1][1] == ready[i][1]:
+                    j += 1
+                out.append(("mark_done", {"start": ready[i][0], **({"end": ready[j][0]} if j > i else {}),
+                                          **({"skipped": True} if ready[i][1] == "skipped" else {})}))
+                i = j + 1
+            marked.update(n for n, _ in ready)
+            return out
+
+        gen, sent = script(lam), None
+        while True:
+            try:
+                turn = gen.send(sent)
+            except StopIteration:
+                break
+            if turn and turn[0][0] == "taken":
+                taken.update(n for n, t in lines if turn[0][1] in t)
+                sent = None
+                continue
+            target = None
+            for name, args in ((t[0], t[1]) for t in turn if t[0] == "call"):
+                short = str(args["function"]).split("/")[-1]
+                target = next((n for n, t in lines if n not in marked and re.search(rf"\b{re.escape(short)}\(", t.split("#")[0])), target)
+            marks = close(target) if target else []
+            if marks and turn[0][0] == "glue":
+                yield marks
+                marks = []
+            sent = yield marks + turn
+            for t in turn:
+                if t[0] == "call" and getattr(sent, "kind", "") == "done":
+                    called.add(str(t[1]["function"]))
+        if getattr(sent, "kind", "") not in ("blocked", "quiesced"):
+            rest = close(10**9)
+            if rest:
+                yield rest
+    return wrapped
+
+
 REF_FILE = ROOT / "data" / "leaf_references.jsonl"
 REFERENCES: dict = {}               # key(function, args) -> teacher-written output that passed its checks
 MISSES: list = []                   # (function, args) of generative leaves that still have only template gold
@@ -122,7 +197,7 @@ def legal_move(rng: random.Random) -> Program:
             return
         yield call("judge_move", "return", cells="let/cells", target="let/target", player="args/player")
 
-    plans = {"check_move": Plan("script", script=root, note="Read the position, checked it exactly, judged the move."),
+    plans = {"check_move": Plan("script", script=with_marks(root), note="Read the position, checked it exactly, judged the move."),
              "read_position": leaf(lambda a: cells),
              "read_move": leaf(lambda a: target + 1, blocker=lambda a: "The move does not name exactly one cell." if unclear else None)}
 
@@ -180,12 +255,14 @@ def moderation(rng: random.Random) -> Program:
                     [("write", {"path": "return/rules", "type": "Text[]", **({"source": rules_path} if rules_path else {"value": []})})],
                     [("write", {"path": "return/note", "type": "Text", "value": note})]]
         if r.value == 0:
+            yield [("taken", 'action: "allow"')]
             for t in ret("allow", None, "No rule applies."):
                 yield t
             return
         yield [("call", {"function": "severity_of", "to": "let/severities", "over": "let/hits", "inputs": {"post": "args/post"}})]
         r = yield [("run_code", {"code": "locals.severities.includes('high')"})]
         if not r.value:
+            yield [("taken", 'action: "warn"')]
             for t in ret("warn", "let/hits", "Minor: the author is reminded of the rules."):
                 yield t
             return
@@ -194,6 +271,7 @@ def moderation(rng: random.Random) -> Program:
         yield [("call", {"function": "let/strict", "to": "let/confirmed_flags", "over": "let/hits", "inputs": {"post": "args/post"}})]
         yield call("select_by_flags", "let/confirmed", items="let/hits", flags="let/confirmed_flags")
         r = yield [("run_code", {"code": "locals.confirmed.length"})]
+        yield [("taken", 'action: "escalate"' if r.value == 0 else 'action: "remove"')]
         if r.value == 0:
             turns = ret("escalate", "let/hits", "A serious rule may apply, but it is not clear-cut. A human should look.")
         else:
@@ -207,7 +285,7 @@ def moderation(rng: random.Random) -> Program:
 
     sev = RULES[next(iter(truth))][0] if truth else None
     action = "allow" if not truth else "warn" if sev == "low" else "remove" if kind == "clear" else "escalate"
-    plans = {"moderate": Plan("script", script=root, note="Checked every rule; acted on the outcome."),
+    plans = {"moderate": Plan("script", script=with_marks(root), note="Checked every rule; acted on the outcome."),
              "violates": Plan("script", script=violates, note="Judged the rule."),
              "severity_of": leaf(lambda a: RULES[a["rule"]][0])}
     return Program("cb_moderation", {}, {}, lambda v: v["action"] == action, plans,
@@ -264,8 +342,8 @@ def nlprolog(rng: random.Random) -> Program:
         yield [("call", {"function": "conclusions", "to": "let/found", "over": "args/rules", "inputs": {"known": "args/state/known"}})]
         yield call("merge", "return", state="args/state", found="let/found")
 
-    plans = {"solve": Plan("script", script=root, note="Derived what follows, then compared the goal with it."),
-             "derive": Plan("script", script=derive, note="One round: applied every rule, merged."),
+    plans = {"solve": Plan("script", script=with_marks(root), note="Derived what follows, then compared the goal with it."),
+             "derive": Plan("script", script=with_marks(derive), note="One round: applied every rule, merged."),
              "is_rule": leaf(lambda a: a["statement"] in rules), "same_claim": leaf(lambda a: a["known"] == a["goal"]),
              "conclusions": leaf(conclusions)}
     return Program("cb_nlprolog", {}, {}, lambda v: v["verdict"] == verdict and set(v["derived"]) == known - set(facts), plans,
@@ -325,7 +403,7 @@ def shopkeeper(rng: random.Random) -> Program:
         yield call("emit_reply", "let/sent", to="args/item/from", line="let/line", action="let/action")
         yield call("apply_action", "return", acc="args/acc", action="let/action", customer="args/item/from")
 
-    plans = {"serve": Plan("script", script=root, note="Understood the customer, acted within the legal actions, replied."),
+    plans = {"serve": Plan("script", script=with_marks(root), note="Understood the customer, acted within the legal actions, replied."),
              "read_intent": leaf(lambda a: intents[a["text"]]), "choose_action": leaf(choose),
              "say": leaf(lambda a: SAY[a["action"]["code"]].format(**a["action"]), template=True)}
     total = sum(shop["stock"].values())
@@ -389,7 +467,7 @@ def webserver(rng: random.Random) -> Program:
         yield call("log_request", "return", site=site_path, req="let/req", session="let/session", response="let/response")
 
     page = lambda a: f"<h2>{a['site_name']}</h2><p>{a['about']}</p>" + "".join(f"<p>{e['author']}: {e['message']}</p>" for e in a["entries"])
-    plans = {"handle": Plan("script", script=root, note="Parsed, routed, took the one branch that applies, responded, logged."),
+    plans = {"handle": Plan("script", script=with_marks(root), note="Parsed, routed, took the one branch that applies, responded, logged."),
              "review_submission": leaf(review), "page_content": leaf(page, template=True),
              "submission_page": leaf(lambda a: f"<p>{a['review']['reason']}</p><p><a href=\"/\">home</a></p>", template=True)}
     return Program("cb_webserver", {}, {}, lambda v: [sent[r["id"]]["status"] for r in reqs] == expect_status and len(v["log"]) == len(reqs),
@@ -450,8 +528,8 @@ def highlighter(rng: random.Random) -> Program:
         yield [("write", {"path": "return/roles", "type": "Role[]", "source": "let/roles"})]
         yield [("write", {"path": "return/path", "type": "Text", "source": "args/file/path"})]
 
-    plans = {"highlight": Plan("script", script=root, note="Highlighted every file."),
-             "highlight_file": Plan("script", script=one, note="Split exactly, judged every line, rendered exactly."),
+    plans = {"highlight": Plan("script", script=with_marks(root), note="Highlighted every file."),
+             "highlight_file": Plan("script", script=with_marks(one), note="Split exactly, judged every line, rendered exactly."),
              "line_role": leaf(lambda a: _role(a["line"], a["functions"]))}
     return Program("cb_highlighter", {}, {}, lambda v: all(h["roles"][0] == "signature" and "nl-fn" in h["html"] for h in v), plans,
                    loader=lambda: load(CB / "highlighter" / "highlight.nl", {"files": files}))
