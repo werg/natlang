@@ -1,0 +1,38 @@
+# P05 — Natlang type inference and checking
+
+Status: proposed implementation. [Shared capabilities](README.md).
+
+## Natlang prerequisites
+
+Use C0 semantic functions and the current C7 structural type language. C3 must expose checked source definitions and exact type-fit operations through the eval environment. C4 can later supply observed execution evidence. No inferred type is automatically installed into runtime state, and this project does not require a second type system or full TypeScript checker.
+
+## Programme and typed boundary
+
+`infer.nl(sourceSnapshot, context) -> Suggestion[]` and `check.nl(sourceSnapshot, scope) -> Diagnostic[]` call `identify_calls.nl`, `infer_bindings.nl`, `propose_signature.nl`, `explore_path.nl` and `explain_conflict.nl`. Keep functions focused on one local definition and bounded context.
+
+Use ordinary records for source spans, signatures, candidate bindings, obligations, alternatives and diagnostics. A suggestion records evidence and unresolved choices. A diagnostic records whether it is an exact incompatibility in a proposed call, a witnessed runtime failure, or a semantic hypothesis. None is represented as proof about every possible natural-language execution.
+
+## Crisp environment
+
+Expose illustrative `sources.definition(id)`, `sources.findCallers(id)`, `types.parse(text)` and `types.fits(a,b)` helpers. These wrap the existing loader/type machinery; they do not contain semantic inference. Search can scan the source snapshot directly before an index is justified.
+
+Native parsed type/source objects can remain in the environment. Return stable textual/structural descriptions for the model. If a programme mentions another evaluator's native type, analyse its declared boundary contract; do not silently import that engine's entire type system into natlang.
+
+## Reduction and stream shape
+
+Finite Map analyses independent definitions; a bounded refinement pass incorporates caller evidence. Use explicit worklists or existing combinators because current codebase recursion is prohibited. The programme should stop with uncertainty rather than inflate its analysis into an unsupported complete proof.
+
+An IDE integration later consumes an edit stream through Fold. Source revision accompanies every request and diagnostic; a stale analysis can remain historical evidence but cannot apply a patch to new text without revalidation. No live mutation of running source is necessary.
+
+## Delivery and checks
+
+1. Expose read-only exact APIs and analyse existing example codebases.
+2. Remove signatures in copies and ask for candidate reconstruction. Gate: proposed types parse and stated exact obligations check.
+3. Introduce binding/optional-field/return/effect mistakes. Gate: independently labelled diagnostics report evidence and avoid false certainty.
+4. Integrate source-revision checking and optional trace evidence in P06.
+
+Include ambiguous prose, unions, missing versus empty inputs, recursive data, rare branches and wrong callee names. Measure diagnostic precision/recall and useful abstention on held-out programmes.
+
+## Trace and teacher
+
+Trace which definitions/spans were read, which hypothetical calls were proposed and how exact checks answered. Captured runtime examples supplement rather than define the allowed type. Teacher training targets include alternative signatures and uncertainty; a type signature that happens to fit one trace is not automatically admitted as the correct general answer. This application can run over an in-memory source graph with no filesystem, stream service or host-type extension.

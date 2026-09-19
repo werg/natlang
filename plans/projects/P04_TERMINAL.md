@@ -1,0 +1,38 @@
+# P04 — Semantic terminal
+
+Status: proposed implementation. [Shared capabilities](README.md).
+
+## Natlang prerequisites
+
+C0 supplies lexical recipes and semantic control flow. C1 supplies a retained host environment and explicit engines; C5 delivers user/process events to a Fold. C4 records operational evidence. C3 is only needed when the terminal later runs newly loaded natlang programmes. Neither a global shell tool nor in-episode interrupts are prerequisites.
+
+## Programme and typed boundary
+
+`step.nl(acc: Session, item: TerminalEvent) -> Session` delegates to `interpret.nl`, `choose_recipe.nl`, `execute_recipe.nl`, `explain.nl` and `recover.nl`. Link P01/P03 libraries into the appropriate companion functions rather than exposing every recipe in one menu. Begin with fixed imports; installed recipes become available in a subsequent invocation/revision.
+
+`Session` contains current directory identity, environment summary, active request/revision, native-job IDs and outstanding results. Events distinguish user requests, process output summaries, completion and cancellation. Full logs and native subprocess objects remain outside the tree. Do not put a live shell object into serialised session state.
+
+## Crisp environment
+
+A session-scoped JS environment supplies filesystem/process/Git helpers. The `ts` engine can construct exact argument arrays and operate on native jobs directly. Add `bash` only for recipes that actually need shell semantics; required engine selection must not silently execute shell text as another language.
+
+The host explicitly chooses shared or isolated execution. Shared access is allowed and carries that environment's authority; it must not be described as the QuickJS sandbox. Shell state persistence is deliberate: process working directory/environment and terminal session summaries must agree. A child command changing its own directory does not automatically change the enclosing session.
+
+## Reduction and stream shape
+
+One Fold owns each session. A long task can launch a job in a short step and consume later completion events. A new user request is another event; it can cancel/supersede work through an explicit session transition. It does not mutate an already-running lambda's instructions. Associate commands and late outputs with request IDs.
+
+Small blocking commands can remain ordinary calls. Stream progress is coalesced by the host where appropriate; command completion and user requests are never silently discarded. Expose bounded output ranges through eval search/read helpers.
+
+## Delivery and checks
+
+1. Execute a fixed recipe in a fixture workspace with exact command/result checks.
+2. Compose a build diagnosis with P03, then a media request with P01. Gate: intermediate data passes through typed function boundaries correctly.
+3. Add retained session and background stream behavior. Gate: stale output is attributed correctly; cancellation does not imply rolled-back changes.
+4. Add optional Bash and programme loading separately, with engine/authority preflight.
+
+Test quoting/metacharacters, missing executables, wrong directory, partial pipelines, large output and preserved unrelated Git changes.
+
+## Trace and teacher
+
+Record selected recipe, engine, relevant environment revision, commands, output observations and actual effects where capturable. Shared state limits replay unless a reset fixture is available. Train delegation to the right library, interpretation of failures, and continuing the user's task across completion events. A remote process proxy can later implement the same library interface; it is not mandatory for the local terminal.
