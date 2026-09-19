@@ -31,7 +31,7 @@ def import_path(path: Path, t, env: TypeEnv) -> Any:
 def instantiate(fn) -> Lambda:
     """A fresh root lambda for a function of a code base (natlang/codebase.py)."""
     root = load_program({"$lambda": {**fn.to_lambda_doc(), "function": fn.name}})
-    root.codebase = fn.codebase
+    root.codebase, root.fn_max_depth = fn.codebase, fn.max_depth if fn.recursive else 0
     return root
 
 

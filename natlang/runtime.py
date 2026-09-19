@@ -84,6 +84,7 @@ class Runtime:
         self.agent_factory = agent_factory
         self.max_episodes, self.max_depth = max_episodes, max_depth   # run-level budgets (SPEC 6.3)
         self._depth = 0
+        self._fn_stack: list = []   # names of the code-base functions currently being reduced
         self._stack: list = []   # hashes of (body, args) of the lambdas currently being reduced
         self.emitted: list = []
         self.capabilities = {"out.emit": lambda args: self.emitted.append(args[0] if args else None)}
@@ -183,13 +184,20 @@ class Runtime:
         if key in self._stack:
             return self._quiesce(node, ref, "identical to a lambda already being reduced above it: "
                                             "delegating the same task to a child cannot make progress")
+        if node.fn_name:                       # declared recursion is bounded by its own max_depth
+            nested = self._fn_stack.count(node.fn_name)
+            if nested and nested >= max(node.fn_max_depth, 0):
+                return self._quiesce(node, ref, f"max_depth: {node.fn_name} is already {nested} deep"
+                                     + ("" if node.fn_max_depth else " and is not declared recursive"))
         self._depth += 1
         self._stack.append(key)
+        self._fn_stack.append(node.fn_name)
         try:
             return self._episode(node, ref)
         finally:
             self._depth -= 1
             self._stack.pop()
+            self._fn_stack.pop()
 
     def _episode(self, node: Lambda, ref: Ref) -> Outcome:
         cold = node.status == QUIESCED
@@ -752,7 +760,7 @@ class Session:
                 ((getattr(node, "fn", None), fn), (getattr(node, "step", None), fn),
                  (getattr(node, "check", None), cb.get(str(until)))):
             if isinstance(lam, Lambda) and f is not None:
-                lam.codebase, lam.fn_name = f.codebase, f.name
+                lam.codebase, lam.fn_name, lam.fn_max_depth = f.codebase, f.name, f.max_depth if f.recursive else 0
         return result
 
     def _op_call(self, args):
