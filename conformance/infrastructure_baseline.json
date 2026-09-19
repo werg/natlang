@@ -1,0 +1,49 @@
+{
+  "version": "infrastructure-baseline/1",
+  "source_revision": "541da57",
+  "compatibility_profile": {
+    "tool_surface": "tools-v2",
+    "model_turn": "ChatTurn via ToolAgent",
+    "crisp_engine": "quickjs-isolated",
+    "model_seed": 0,
+    "review_seed": 0,
+    "episode_limits": {"turns": 64, "tokens": 4000, "seconds": 900},
+    "run_limits": {"episodes": 256, "depth": 8}
+  },
+  "fixtures": [
+    {"file": "03-scalar-substitution.yaml", "outcome": "done", "value": "over budget by 110.5", "effects": []},
+    {"file": "05-continuation-outside-in.yaml", "outcome": "done", "effects": []},
+    {"file": "06-map-with-rubric.yaml", "outcome": "done", "effects": []},
+    {"file": "09-fold-crisp-step.yaml", "outcome": "done", "value": 146.5, "effects": []},
+    {"file": "10-iterate-crisp-check.yaml", "outcome": "done", "effects": []},
+    {"file": "14-eval-side-effect.yaml", "outcome": "done", "value": 2, "effects": [{"id": "a1"}, {"id": "a3"}]},
+    {"file": "15-cold-restart.yaml", "outcome": "done", "effects": []},
+    {"file": "16-quiesce-with-note.yaml", "outcome": "quiesced", "effects": []},
+    {"file": "17-reopen-refine.yaml", "outcome": "done", "effects": []}
+  ],
+  "action_contracts": {
+    "typed_write_and_rejection": "tests/test_surface.py::test_write_is_typed_and_hints_on_failure",
+    "missing_vs_empty": "tests/test_surface.py::test_absent_optional_input_is_visible_and_distinct_from_empty_text",
+    "completion_marks": "tests/test_surface.py::test_mark_done",
+    "failure_after_effect": "tests/test_failure_references.py",
+    "canonical_actions": "tests/test_canonical_traces.py"
+  },
+  "known_drift": [
+    {
+      "id": "scripted-turn-usage",
+      "tests": ["test_reply_ends_the_episode_and_is_never_the_result", "test_reply_without_a_result_is_nudged_then_quiesces", "test_several_calls_in_one_turn"],
+      "current_behavior": "A ChatTurn without completion_tokens consumes its entire requested allowance, so a second scripted turn cannot complete.",
+      "decision": "Preserve the current behavior in the compatibility profile; fix the scripted-driver fixture or introduce an explicit new accounting policy separately."
+    },
+    {
+      "id": "open-list-close-token",
+      "current_behavior": "The literal data string $close terminates an OpenList.",
+      "decision": "Preserve for legacy iterable loading; the new stream source contract must use a distinct close result."
+    },
+    {
+      "id": "missing-to-null-in-js",
+      "current_behavior": "The QuickJS input view converts MISSING to JavaScript null.",
+      "decision": "Retain only in the legacy adapter/profile; new exact conversion rejects ambiguous missing values."
+    }
+  ]
+}
