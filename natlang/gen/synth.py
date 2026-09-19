@@ -494,22 +494,32 @@ class Composer:
         self.applied.add(("flags", v.name))
         if v.kind == "claims":
             limit = self.rng.choice([40, 60, 100, 150])
-            which = self.rng.choice(["over", "no_receipt", "either"])
+            which = self.rng.choice(["over", "no_receipt", "either", "small", "category"])
+            cat = self.rng.choice(list(E_CAT))
             js_, py, words = {
+                "small": (f"k.amount <= {limit} && k.receipt", lambda k: k["amount"] <= limit and k["receipt"],
+                          f"k.amount is at most {limit} and k has a receipt"),
+                "category": (f"k.category === {json.dumps(cat)}", lambda k: k["category"] == cat, f'k.category is "{cat}"'),
                 "over": (f"k.amount > {limit}", lambda k: k["amount"] > limit, f"k.amount > {limit}"),
                 "no_receipt": ("!k.receipt", lambda k: not k["receipt"], "k has no receipt"),
                 "either": (f"!k.receipt || k.amount > {limit}", lambda k: (not k["receipt"]) or k["amount"] > limit,
                            f"k has no receipt or k.amount > {limit}")}[which]
-            name = self.fresh(["flagged", "problem", "suspicious"])
+            name = self.fresh({"small": ["fine", "simple"], "category": [f"is_{cat}"]}.get(which, ["flagged", "problem", "suspicious"]))
             glue(self.c, name, "Bool[]", f"locals.{v.name}.map(k => {js_})", [py(k) for k in v.value],
                  f"{name} = for each k in {v.name}: {words}          # exact: use code",
                  f"With code, flag every item of {v.name} where {words}; call the flags {name}.")
         else:
             label = self.rng.choice(sorted(set(v.value)) or ["billing"])
-            name = self.fresh([f"is_{label}", f"{label}_flags"])
-            glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l === {json.dumps(label)})", [l == label for l in v.value],
-                 f'{name} = for each l in {v.name}: l == "{label}"          # exact: use code',
-                 f'With code, turn {v.name} into flags that are true where the value is "{label}"; call them {name}.')
+            if self.rng.random() < 0.35:                   # "is not": a different operator, not a negated comparison
+                name = self.fresh([f"not_{label}", f"other_than_{label}"])
+                glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l !== {json.dumps(label)})", [l != label for l in v.value],
+                     f'{name} = for each l in {v.name}: l is not "{label}"          # exact: use code',
+                     f'With code, turn {v.name} into flags that are true where the value is not "{label}"; call them {name}.')
+            else:
+                name = self.fresh([f"is_{label}", f"{label}_flags"])
+                glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l === {json.dumps(label)})", [l == label for l in v.value],
+                     f'{name} = for each l in {v.name}: l == "{label}"          # exact: use code',
+                     f'With code, turn {v.name} into flags that are true where the value is "{label}"; call them {name}.')
         self.add(Var(name, f"let/{name}", "flags", self.c.env[name], base=v.base, note=name))
         return True
 

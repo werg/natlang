@@ -465,9 +465,34 @@ class Session:
             result = Result("error", f"error: {e}")
         except (KeyError, TypeError, AttributeError) as e:
             result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
+        if name in ("write", "call", "edit") and result.kind in ("ok", "done", "quiesced"):
+            result.text = result.text.rstrip() + "\n" + self._progress()      # where the program stands, at no extra turn
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
                               "kind": result.kind, "result": result.text})
         return result
+
+    def _progress(self) -> str:
+        """One or two lines after every change: which locals exist, and what `return` still lacks. A long program is
+        followed by comparing this with its text; the harness keeps the memory, the model keeps no count."""
+        def size(v):
+            if is_pending(v):
+                return "not finished"
+            if isinstance(v, list):
+                return f"{len(v)} items"
+            if isinstance(v, str):
+                return f"{len(v.split())} words"
+            return json.dumps(v, ensure_ascii=False, default=str)[:40] if not isinstance(v, dict) else "record"
+        lam = self.lam
+        locals_ = ", ".join(f"{n} ({size(lam.let[n])})" for n in lam.let_types if n in lam.let) or "none"
+        rt = self.env.resolve(lam.type.returns)
+        if lam.ret is MISSING:
+            ret = "not written yet"
+        elif isinstance(rt, Record) and isinstance(lam.ret, dict):
+            missing = [n for n, _, opt in rt.fields if not opt and lam.ret.get(n, MISSING) is MISSING]
+            ret = "complete" if not missing else "has " + (", ".join(k for k in lam.ret) or "nothing") + "; still missing " + ", ".join(missing)
+        else:
+            ret = "not finished" if is_pending(lam.ret) else "written"
+        return f"locals: {locals_}\nreturn: {ret}"
 
     def _op_read(self, args):
         path = args["path"]
