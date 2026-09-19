@@ -102,6 +102,6 @@ def test_guarded_training_marks_both_paths_in_all_styles(monkeypatch):
             run_program(prog)
             early = prog.expected < 0
             paths.add(early)
-            assert captured[-1] == {1: 'done', 3: 'done', 4: 'done' if early else 'skipped',
+            assert captured[-1] == {3: 'done', 4: 'done' if early else 'skipped',
                                     5: 'skipped' if early else 'done', 6: 'skipped' if early else 'done'}
     assert paths == {True, False}

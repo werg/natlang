@@ -96,7 +96,7 @@ class ToolAgent:
                         low_value = (self.careful_threshold is not None and confidence is not None and
                                      confidence["geometric_mean"] < self.careful_threshold)
                         structural = self.review_scope == "actions" and (
-                            name in ("call", "mark_done", "done", "edit") or "done" in args or "source" in args)
+                            name in ("call", "mark_done", "edit") or "done" in args or "source" in args)
                         if not (low_value or structural):
                             continue
                         if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
@@ -159,8 +159,11 @@ class ToolAgent:
                                                                  "A done range marks EVERY line between its endpoints; do not include untaken work. "
                                                                  "Carry out any applicable unfinished work before marking it."}]
                         continue
+                    if open_:
+                        return "validation failed: unfinished lines: " + ", ".join(map(str, open_))
                     if session.finish():
                         session.lam.note = turn.text
+                        messages.append({"role": "assistant", "content": turn.text})
                         return None
                     if self.validation_feedback == "caller":
                         return "validation failed: " + s.missing(session)

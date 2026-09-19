@@ -92,11 +92,11 @@ class ToolSurface:
         return self.marks and bool(session.lam.codebase)
 
     def pending(self, session) -> list:
-        """Lines still open, once marking has begun; [] otherwise (a leaf is never asked to mark)."""
+        """Lines still open once marking has begun; [] for unmarked legacy programs and leaves."""
         from .render import pending_lines
         lam = session.lam
         return pending_lines(lam.original_body or lam.body, lam.marks) if self.marking(session) and lam.marks else []
-    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker", "report_error", "done")   # `call` only when there are functions
+    TOOLS = ("read", "write", "edit", "run_code", "call", "report_blocker", "report_error")   # `call` only when there are functions
 
     def slots(self, session):
         return enumerate_slots(session.lam, session.outer_env)
@@ -310,19 +310,24 @@ class ToolSurface:
             write_params["anyOf"].append({"properties": {"type": {
                 "enum": [f"Function<{n}>" for n in lam.codebase]}}, "required": ["type"]})
         if self.marking(session):
-            from .render import pending_lines
+            from .render import pending_lines, program_lines
             open_ = pending_lines(lam.original_body or lam.body, lam.marks)
             if open_:
+                # Legacy reference plans sometimes include a function declaration in
+                # a mark range. It has a line number but no work to discharge.
+                markable_numbers = sorted(set(open_) | {n for n, text, markable in
+                                                      program_lines(lam.original_body or lam.body)
+                                                      if not markable and text.strip().startswith("function ")})
                 yes = {"const": True}
                 tools.append(
                     tool("mark_done", "Mark lines of your program as finished. `start` alone for one line, `start` and `end` "
                                       "for an inclusive range (EVERY line between the endpoints). Add skipped=true when the lines did not apply, such as the branch of an "
                                       "`if` that was not taken. Mark a line only after everything it asks for is finished.",
                          {"start": {"type": "integer"}, "end": {"type": "integer"}, "skipped": {"type": "boolean"}}, ["start"],
-                         alternatives=[{"start": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]},
-                                       {"start": {"enum": open_}, "end": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]}]))
+                         alternatives=[{"start": {"enum": markable_numbers}, "skipped": yes, "x-optional": ["skipped"]},
+                                       {"start": {"enum": markable_numbers}, "end": {"enum": markable_numbers}, "skipped": yes, "x-optional": ["skipped"]}]))
                 if self.done_arg:                       # en passant: the same mark as an argument of the action that finishes the line
-                    line = {"anyOf": [{"enum": open_}, {"type": "array", "items": {"enum": open_}, "minItems": 1, "maxItems": 2}]}
+                    line = {"anyOf": [{"enum": markable_numbers}, {"type": "array", "items": {"enum": markable_numbers}, "minItems": 1, "maxItems": 2}]}
                     for t in tools:
                         if t["function"]["name"] in ("write", "call"):
                             t["function"]["parameters"]["properties"]["done"] = {
@@ -341,9 +346,6 @@ class ToolSurface:
                               "error. This ends the task without a result. Do not change the requirements to succeed. "
                               "Use report_blocker for missing information instead.",
                               {"message": {"type": "string"}}, ["message"]))
-        tools.append(tool("done", "Finish successfully after the required result is written and all numbered lines "
-                          "are closed. This validates the return value and ends the task. Use report_error only for "
-                          "a real failure, never to announce successful completion.", {}, []))
         return tools
 
     # -- what the model is shown ----------------------------------------------------
@@ -447,8 +449,6 @@ class ToolSurface:
 
     # -- tool call -> harness operation -----------------------------------------
     def apply(self, session, name: str, args: dict):
-        if name == "done":
-            args = {**(args or {}), "require_closed": self.marking(session)}
         result = session.apply(name, args or {})
         if self.state_view and result.kind in ("ok", "done", "quiesced"):
             result.text = result.text.rstrip() + "\n\n" + self.execution_state(session)

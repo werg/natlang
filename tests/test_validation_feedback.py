@@ -73,7 +73,7 @@ def test_child_failure_reaches_caller_without_replaying_prior_effects():
     child = Scripted([action('run_code', code='fx.out.emit(1); 1'),
                       action('write', path='return', type='Text', value='bad')])
     parent = Scripted([action('call', function='worker', to='let/result'),
-                       action('write', path='return', type='Num', value=-1), reply()])
+                       action('write', path='return', type='Num', value=-1, done=1), reply()])
     rt = Runtime(lambda lam: ToolAgent(parent if lam is root else child, validation_feedback='caller'))
     out, value = rt.run_root(root)
     assert out.kind == 'done' and value == -1 and rt.emitted == [1]
@@ -91,7 +91,7 @@ def test_explicit_error_reaches_caller_and_stops_remaining_actions(policy):
                      ChatTurn([('report_error', {'message': 'Required text conflicts with Num return.'}),
                                ('run_code', {'code': 'fx.out.emit(2); 2'})], completion_tokens=5)])
     parent = Scripted([action('call', function='worker', to='let/result'),
-                       action('write', path='return', type='Num', value=-1), reply()])
+                       action('write', path='return', type='Num', value=-1, done=1), reply()])
     rt = Runtime(lambda lam: ToolAgent(parent if lam is root else child, validation_feedback=policy))
     out, value = rt.run_root(root)
     assert out.kind == 'done' and value == -1 and rt.emitted == [1]

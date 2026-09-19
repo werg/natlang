@@ -48,5 +48,5 @@ an absent local has not been computed. A rejected proposal does not by itself
 mean the task is impossible. Report an error only when the instructions cannot
 be satisfied, and a blocker only when required information is missing.
 
-When the result is ready and all numbered lines are closed, use done to finish
-successfully, or reply briefly. Error and blocker reports are only for failures.
+When the result is ready and all numbered lines are closed, reply briefly to
+finish successfully. Error and blocker reports are only for failures.

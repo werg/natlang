@@ -67,7 +67,7 @@ def test_schema_of_types():
 def test_tool_list_is_constant_and_schemas_narrow():
     doc, s = _session("02-leaf-extraction.yaml")
     names = [t["function"]["name"] for t in S.tools(s)]
-    assert names == ["read", "write", "edit", "run_code", "report_blocker", "report_error", "done"]      # `call` appears with a code base
+    assert names == ["read", "write", "edit", "run_code", "report_blocker", "report_error"]      # `call` appears with a code base
     alts = S.tools(s)[1]["function"]["parameters"]["x-natlang-alternatives"]
     paths = [a["path"].get("const") for a in alts]
     assert "return" in paths and "args/note" not in paths

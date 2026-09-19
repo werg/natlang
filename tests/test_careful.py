@@ -177,7 +177,6 @@ def test_fresh_proposal_after_withdrawal_can_succeed():
 
 @pytest.mark.parametrize('call', [('call', {'function':'size_of', 'to':'return/size'}),
                                   ('mark_done', {'start':1}),
-                                  ('done', {}),
                                   ('write', {'path':'return','type':'Num','source':'let/size'})])
 def test_structural_review_needs_no_value_logprobs(call):
     root = root_program()

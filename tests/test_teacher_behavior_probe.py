@@ -89,7 +89,7 @@ def test_fold_accepts_equivalent_quoted_literal_initializer():
     assert assess(case,out,val,[event('call',call,'done')],[])['pass']
 
 
-def test_done_validates_return_and_open_lines_and_stops_later_effects():
+def test_reply_validates_return_and_open_lines():
     from natlang.decoder import ChatTurn
     from natlang.runtime import Runtime, Session
     from natlang.surface import ToolSurface
@@ -100,18 +100,48 @@ def test_done_validates_return_and_open_lines_and_stops_later_effects():
     case=next(c for c in support_cases(881,0) if c['name']=='binding_repair')
     session=Session(Runtime(None),load_program(case['root']),TypeEnv())
     surface=ToolSurface(marks=True)
-    assert surface.apply(session,'done',{}).kind=='refused'
+    assert 'done' not in [tool['function']['name'] for tool in surface.tools(session)]
     for name,args in case['steps']:
         assert surface.apply(session,name,args).kind in ('done','ok')
-    assert surface.apply(session,'done',{}).kind=='completed'
+    assert surface.pending(session) == []
+    assert session.finish()
     class Scripted:
         def chat(self,*args,**kwargs):
-            return ChatTurn([('write',{'path':'return','type':'Num','value':7}),('done',{}),
-                             ('run_code',{'code':'fx.out.emit(99)'})],completion_tokens=1)
+            return ChatTurn(text='Finished.',completion_tokens=1)
     root=load_program({'$lambda':{'type':'Lambda<{}, Num>','instructions':'Return 7.','effects':['out.emit']}})
     rt=Runtime(lambda lam:ToolAgent(Scripted()))
     out,value=rt.run_root(root)
-    assert out.kind=='done' and value==7 and rt.emitted==[]
+    assert out.kind=='quiesced' and 'return' in out.detail and rt.emitted==[]
+
+
+def test_blank_lines_do_not_block_natural_completion():
+    from natlang.decoder import ChatTurn
+    from natlang.runtime import Runtime
+    from natlang.tool_agent import ToolAgent
+    from natlang.values import load_program
+
+    class Scripted:
+        def __init__(self, mark):
+            self.turns = iter([ChatTurn([('write', {'path': 'return', 'type': 'Num', 'value': 7,
+                                                       **({'done': 1} if mark else {})})], completion_tokens=1),
+                               ChatTurn(text='Finished.', completion_tokens=1),
+                               ChatTurn(text='Finished.', completion_tokens=1),
+                               ChatTurn(text='Finished.', completion_tokens=1)])
+
+        def chat(self, *_args, **_kwargs):
+            return next(self.turns)
+
+    def root(mark_second_line=False):
+        return load_program({'$lambda': {'type': 'Lambda<{}, Num>',
+            'instructions': 'Return 7.\n\n   \n# comment' + ('\nSay that you finished.' if mark_second_line else ''),
+            'codebase': {'unused': {'args': {}, 'returns': 'Num', 'instructions': 'Return 1.'}}}})
+
+    transcript = []
+    out, value = Runtime(lambda lam: ToolAgent(Scripted(True), transcript=transcript)).run_root(root())
+    assert out.kind == 'done' and value == 7
+    assert transcript[-1] == {'role': 'assistant', 'content': 'Finished.'}
+    out, _ = Runtime(lambda lam: ToolAgent(Scripted(True))).run_root(root(True))
+    assert out.kind == 'quiesced' and 'unfinished lines: 5' in out.detail
 
 
 def test_faithful_wrong_type_write_can_fail_without_fudging_but_wrong_value_cannot():

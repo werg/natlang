@@ -42,8 +42,7 @@ def native_text(calls) -> str:
 
 class ReferenceAgent:
     def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
-                 recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT, terminal_tool: bool = False):
-        self.terminal_tool = terminal_tool
+                 recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT):
         self.system_prompt = system_prompt
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)
@@ -157,14 +156,10 @@ class ReferenceAgent:
                 return results[-1].text
             if results[-1].kind == "quiesced" and self.plan.kind != "script":
                 raise AssertionError(f"a reference call did not finish: {calls} -> {results[-1].text}")
-        if self.terminal_tool:
-            self._emit(session, messages, s.tools(session), calls=[("done", {})])
-            result = s.apply(session, "done", {})
-            if result.kind != "completed":
-                raise AssertionError("reference completion failed: " + result.text)
-            return None
-        if session.lam.ret is MISSING or not session.finish():
-            raise AssertionError("reference policy ended without a valid `return`")
+        open_lines = s.pending(session)
+        if session.lam.ret is MISSING or open_lines or not session.finish():
+            raise AssertionError(f"reference policy ended without a valid return and closed lines: {open_lines}; "
+                                 f"body={session.lam.body!r}; marks={session.lam.marks!r}")
         self._emit(session, messages, s.tools(session), reply=self.plan.note or "Done.")
         return None
 

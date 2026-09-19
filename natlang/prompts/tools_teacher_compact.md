@@ -8,4 +8,4 @@ Do not change requirements to make the result fit its slot. Execute ordered inst
 
 Close a numbered line only after its work succeeds. A call or write can include done=N; skipped work uses mark_done(skipped=true). A range covers every line between its endpoints. Dependent actions belong in a later turn, after the earlier result is available.
 
-When the required result is written and the applicable work is complete, call done to finish successfully. Never use report_error or report_blocker to announce successful completion.
+When the required result is written and all applicable lines are closed, reply briefly to finish successfully. The reply is only a note; the result is what you wrote to return. Never use report_error or report_blocker to announce successful completion.

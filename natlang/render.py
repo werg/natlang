@@ -118,11 +118,11 @@ BOX = {"done": "[x]", "skipped": "[-]", None: "[ ]"}
 
 def program_lines(body: str) -> list:
     """[(number, text, markable)] for the lines of a function body. Numbering only: nothing is parsed. Blank lines
-    and lines that are only a comment have a number and no box."""
+    comment-only lines, and function declarations have a number and no box."""
     out = []
     for i, line in enumerate(body.strip("\n").split("\n"), 1):
         t = line.strip()
-        out.append((i, line.rstrip(), bool(t) and not t.startswith("#")))
+        out.append((i, line.rstrip(), bool(t) and not t.startswith("#") and not t.startswith("function ")))
     return out
 
 

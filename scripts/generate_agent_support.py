@@ -113,8 +113,7 @@ def generate_group(seed, group, *, state_view=False, include_reviews=True):
     for c in support_cases(seed, group):
         samples = []
         rt = Runtime(lambda lam: ReferenceAgent(Plan('calls', steps=c['steps']), samples, surface=ToolSurface(state_view=state_view),
-                                                   system_prompt=(ROOT / "natlang/prompts/tools_small_support.md").read_text(),
-                                                   terminal_tool=group % 2 == 0))
+                                                   system_prompt=(ROOT / "natlang/prompts/tools_small_support.md").read_text()))
         out, value = rt.run_root(load_program(c['root']))
         assert rt.emitted == c['effects']
         if c['failure']:

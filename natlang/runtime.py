@@ -866,20 +866,6 @@ class Session:
         self._place_call(path, str(args.get("function") or ""), v)
         return self._do_reduce(Action("reduce", paths=[path]))
 
-    def _op_done(self, args):
-        if args.get("require_closed"):
-            from .render import pending_lines
-            open_lines = pending_lines(self.lam.original_body or self.lam.body, self.lam.marks)
-            if open_lines:
-                raise Refuse(Diagnostic("instructions", "unfinished-lines", BLOCKS,
-                                        "close completed or skipped lines before done", str(open_lines)))
-        if self.lam.ret is MISSING:
-            raise Refuse(Diagnostic("return", "commit-holes", BLOCKS, format_type(self.lam.type.returns)))
-        self._commit_check()
-        self.lam.body = ""
-        self.completed = True
-        return Result("completed", "completed", value=self.lam.ret)
-
     def _op_define(self, args):
         try:
             stated = parse_type(args["type"])
@@ -1193,8 +1179,8 @@ def _slice(value, p: Path, ref: Ref):
 
 
 _HINTS = {
-    "commit-holes": "Fill what is still missing with write, then call done.",
-    "commit-pending": "A sub-task has not produced its result yet: call run on it, then done.",
+    "commit-holes": "Fill what is still missing with write, then finish your turn.",
+    "commit-pending": "A sub-task has not produced its result yet: call run on it, then finish your turn.",
     "not-writable": "args are read-only. Write into return, or into the args of a sub-task you defined.",
     "frozen": "That sub-task is running; its args cannot change now.",
     "type-mismatch": "Pass the value itself with the type shown as expected, not wrapped in another object: for Bool `true`, for Num `42.5`, for Text a string, for a record an object with exactly its fields.",

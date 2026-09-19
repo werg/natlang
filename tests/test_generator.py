@@ -43,7 +43,7 @@ def test_synthesized_programs_run_and_match_their_twin(shape):
         prog = SHAPES[shape](rng)
         samples, episodes = run_program(prog)
         assert episodes >= 4 and any("call" in s["skill"].split("+") for s in samples)
-        assert samples[0]["messages"][1]["content"].startswith(" 1 [ ] function ") or samples[0]["messages"][1]["content"].startswith("1 [ ] function ")
+        assert samples[0]["messages"][1]["content"].lstrip().startswith("1     function ")
         assert any(s["skill"].startswith("mark") for s in samples)
         assert "Functions you can call:" in samples[0]["messages"][1]["content"]
 

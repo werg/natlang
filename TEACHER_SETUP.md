@@ -15,9 +15,9 @@ are quarantined under `runs/`; they never append training references.
   whether a proposal fits its destination. Invalid proposals remain possible.
 - Keep compact state, caller validation feedback, and no self-review or local
   repair loop. Expanded state and review prompts remain student experiments.
-- `done` explicitly signals successful completion. It checks return validity
-  and closed numbered lines, and stops later calls in the proposed batch.
-  `report_error` and `report_blocker` remain failure signals.
+- A normal assistant reply signals successful completion. The harness checks
+  return validity and closed numbered lines at that boundary. `report_error`
+  and `report_blocker` remain failure signals.
 - Existing values can be copied with `write(source=...)`. The runtime preserves
   types, permits one incidental JSON quoting layer when necessary, and never
   unwraps a `{ "value": ... }` object. Fold/iterate literal initializers follow
@@ -117,3 +117,24 @@ IR key inventory. Source drift can make a seed replay produce different keys.
 Preserve rejected attempts and judge results in the audit, and sample accepted
 outputs by function. The eight-case pilot establishes the collector path on
 those inputs, not the acceptance rate or quality of all remaining leaves.
+
+## Reply-only completion probe
+
+The terminal `done` tool has been removed from the model-facing surface and
+reference policy. `done=N` on `write` and `call` still closes a numbered line.
+The harness now checks open marked lines when the assistant ends with a normal
+reply, and it records that reply in the transcript. Blank lines, comments, and
+function declarations are not markable instructions.
+
+The four-case dry run `runs/teacher-leaves-reply-only-s73-first4.jsonl` used
+the revised teacher prompt and passed 4/4 collector checks (three `say`, one
+`page_content`), admitting zero references. No terminal `done` call appeared.
+The run preceded the transcript recording fix, so its audit does not include
+the final prose turn. This is a small smoke test, not a full teacher behavior
+regression or evidence about student quality.
+
+For legacy student trajectories, run `scripts/normalize_terminal_done.py SRC DST`
+before `scripts/export_sft.py`. The normalizer removes the obsolete tool from
+each turn, changes a standalone terminal target to a final reply, and retains
+`done=N` line marks. It refuses mixed batches rather than guessing how to
+split a turn. The source corpus is left intact.
