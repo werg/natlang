@@ -889,7 +889,7 @@ Branch `phase-1-harness`. Package `natlang/`:
 | `render.py` | rendering policy `render/0.1` |
 | `agents.py` | stub, oracle, and replay agents for tests |
 
-Tests (33): the 6 harness conformance scripts; a replay of the 8 canonical
+Tests (53): the 6 harness conformance scripts; a replay of the 8 canonical
 traces end to end with small Python oracles standing in for the model; the
 generated grammars accepting every canonical action at its state and refusing
 ill-typed ones; the model agent's two-phase loop with a scripted decoder.
@@ -931,11 +931,228 @@ probabilities, cheap resampling, and prefix-cache reuse.
   signalled under a grammar (`<|tool_call_end|>` versus the end-of-turn token);
   the exact LFM2.5 chat template for tool results.
 
+**Verified on a running server** (2026-09-19; llama.cpp 0.4.1 from Homebrew,
+CPU build; `LFM2.5-350M-Q8_0.gguf` from the official LiquidAI GGUF repo):
+
+- The model's chat template is plain ChatML with roles passed through and
+  `<|im_end|>` as end of turn; `ChatTemplate` matches it.
+- **`n_probs` with `post_sampling_probs=false` reports probabilities before
+  the grammar mask** (model wanted "Paris" at 0.987 while the grammar forced
+  "Berlin"). The mask-bind rate is measurable over HTTP.
+- A grammar-complete action ends by itself (stop type `eos`).
+- Prefix cache: continuing on the same slot reuses nearly everything
+  (1,214 of 1,219 tokens); a sibling that branches mid-prefix reuses part
+  (702 of 1,218); another slot reuses nothing. Consequence: keep an episode on
+  one slot; for `Map` siblings either pin them to one slot in sequence or
+  accept re-prefill.
+- CPU speed: ~360 tok/s prefill, ~116 tok/s decode. A GPU build is the obvious
+  next improvement (the laptop has an 8 GB RTX 4060).
+
+**First baseline with the untuned model** (4 conformance programs):
+
+- An untuned 350M model **parrots prompt text**: if the prompt names the
+  give-up action (`stuck`, earlier `close`), it emits it at ~0.95 on a task it
+  can do; with that word absent it writes the correct `set return : Bool`.
+  Hence two prompts: `interpreter.md` for a teacher, `interpreter_small.md`
+  (short, worked examples, never names `stuck`) for an untuned small model.
+- The first runs spent most turns on out-of-range `read instructions[a..b]`
+  and empty container bodies, all rejected by validation. Those were **grammar
+  gaps**, now closed: `read` is offered only where the rendering hides
+  something and never for the lambda's own instructions; ranges are limited
+  to positions that exist; container bodies must be non-empty. Result:
+  **rejections went from dozens per program to zero**, and a run dropped from
+  minutes to seconds.
+- Program 01 (one judgment) now completes correctly, first action
+  `set return : Bool` / `true`. Programs 02, 03, 06 do not: the untuned model
+  does not know the protocol. That is the expected starting point for
+  fine-tuning, and the per-skill baseline the plan asks for.
+
+**Decisions of 2026-09-19 (second session)**
+
+- **Template-agnostic by default.** The prompt is rendered by the loaded
+  model's own chat template (`/apply-template`), an action is plain text in the
+  assistant turn, and results return as user turns so roles strictly
+  alternate. Teachers need no special casing. Per-model adaptations are
+  opt-in `Wrapper`s for the models we fine-tune (`lfm`: the native tool-call
+  token; `reasoning`: think freely up to `</think>`, then the constrained
+  action). This also fixed a bug: hand-built prompts carried two
+  beginning-of-text tokens.
+- **GPU serving through Docker.** llama.cpp's prebuilt CUDA binaries need
+  glibc 2.38 and this machine has 2.35; the system CUDA toolkit (11.5)
+  predates the GPU. The official `server-cuda` image needs neither.
+  `scripts/serve.sh`. Measured on the RTX 4060: ~26,000 tok/s prefill
+  (CPU: 360), 224 tok/s single-stream decode, under 1 GB of VRAM.
+- **Scope of this machine: prove out the whole system.** Teachers and real
+  training run on a larger GPU elsewhere.
+- **A memory-constrained training mode is a goal**, so that people can
+  fine-tune on their own machines: LoRA/QLoRA, 8-bit optimizer states,
+  gradient checkpointing, short sequences (episodes are short by design),
+  and a documented configuration that fits in 8 GB.
+- **Recursion is bounded, not forbidden** (SPEC §6.3): no identical child;
+  at most 6 nested pending nodes; run budgets. `reopen` applies only to values
+  a natural-language lambda produced. All three came out of a runaway observed
+  with the untuned model (171 reopens and 153 reduces in one run), which also
+  intermittently overflowed Python's recursion limit.
+
+**Wrapper comparison, untuned model, six programs**: both wrappers solve none
+beyond the single judgment; `lfm` solved it and `generic` did not in this
+sample. Too little data to conclude anything; the comparison that matters is
+after fine-tuning.
+
 Also built: `model_agent.py` (two-phase constrained decoding, discard-and-
 resample of rejected actions without showing them to the model, `close`),
 `prompts/interpreter.md` (the interpreter's instructions, for a teacher or an
 untuned model), `host.py` and `python -m natlang run` (type-directed import,
 export, trace output).
+
+**Tool surface refactor (2026-09-19, third session).** The model-facing surface
+is now native tool calls, in one swappable module (`natlang/surface.py`,
+surface `tools-v1`): a fixed list of eleven familiarly named tools (`write`,
+`done`, `define`, `run`, `run_code`, `edit`, `copy`, `read`, `retry`, `delete`,
+`give_up`) whose argument schemas are regenerated from the tree and types each
+turn; `define` wires a sub-task's inputs in the same call (`args_from`,
+`over_from`) and is all-or-nothing; `edit` is classic substitution (`old` must
+occur exactly once); `done` finishes and is refused with a hint while anything
+is missing; failures carry a one-line hint; results come back with a refreshed
+state; state rendering follows the anti-parroting rules (no value-like
+placeholders, filled values apart from what is still to fill). There is no
+`answer` tool: a one-shot leaf is `[write(...), done()]` in one turn, which is
+the model's native multi-call habit, so incremental work and sub-tasks stay on
+the same path. `natlang/tool_agent.py` drives it; a prose turn is kept and
+followed by a nudge. The internal operations and the text trace notation of
+the conformance suite are unchanged; the tool names map onto them.
+
+**What the untuned 350M taught us (measured, small samples)**
+
+| Finding | Evidence |
+|---------|----------|
+| Its native strength is a complete typed answer in one shot | whole record as schema-constrained JSON: 8/8 exact, `"0077"` kept a string; Bool via a tool: 8/8 |
+| Field-by-field filling is weak | 0–2 of 8 in every rendering tried |
+| It parrots nearby text | wrote "(empty)", a recently shown number, "the customer name", the give-up word, and its own call as plain text |
+| History must be in the model's **native** call format | with a neutral text rendering it replied `[read(...)]` as prose; LFM2.5's template also silently drops `tool_calls` from history, so the call has to be written into the assistant content |
+| After a tool result it tends to report in prose | ~2 of 3 turns; the trained call → result → answer pattern |
+| **Tool-set size dominates** | with `write` + `done` only: correct `write return true` every time; with eleven tools: picks `read` every time, regardless of order |
+| **llama.cpp does not enforce argument schemas for LFM's native format** | it accepted `path` values outside the enum and wrongly typed fields; earlier conforming outputs were the model cooperating (it sees the schema in its prompt) |
+| Free-form `edit(old, new)` on a task document is not a natural strength | no-op edits, or replaced the wrong text: 0/6 useful |
+
+**The natural agent loop (surface `tools-v2`, same day).** The earlier surfaces
+presented an artificial task: a state dump as the user message, inputs pasted
+inline so that reading looked like a mistake, a result that had to go into a
+slot by a special call, and completion by `done`. Much of what looked like
+model weakness was that framing. `tools-v2` follows the loop these models are
+trained on:
+
+- The user message is the lambda's **instructions as a request**, followed by a
+  workspace listing (small values inline, long ones to be read).
+- Six tools, always the same: `read`, `write`, `edit`, `run_code`, `define`,
+  `run`. Reading first is normal and `read` returns the whole value.
+- **The reply ends the episode.** The result is whatever was written to
+  `return`; **the reply is never parsed as a result** (decided), it is kept as
+  the note. A reply with `return` missing gets one line saying what is missing,
+  twice at most, then the lambda quiesces with the reply as its note. There is
+  no `done` and no `give_up`: both are what a reply already is.
+- History is sent as standard `tool_calls` messages.
+
+**The GGUF's chat template was the broken part, not llama.cpp.** The template
+embedded in LiquidAI's GGUF is a reduced one that ignores `tool_calls` and has
+no tool-call tokens; the official `chat_template.jinja` in the model repo
+renders `<|tool_call_start|>[read(path='args/note')]<|tool_call_end|>`.
+`scripts/serve.sh` now serves with the official template
+(`models/templates/`). With it, standard history works and no per-model
+wrapper is needed.
+
+**Still true with the right template: llama.cpp does not enforce argument
+schemas for this model's format** (asked to violate an enum and an integer
+type, it did so 10 of 10 times and the server accepted it).
+
+**Untuned 350M under `tools-v2`, seven programs**: two correct (the judgment in
+one action; the program that must stop, with a sensible note), extraction
+right in every required field but with an invented empty optional field,
+whole trajectories of the form read → write → reply in well under a second.
+The Map and crisp-lambda programs are not solved: `define` is beyond the
+untuned model.
+
+**Native constrained decoding (built, `natlang/native.py`).** The prompt is
+rendered by the model's own template (`/apply-template`, with tools); the
+completion runs under a grammar built from the turn's tool schemas, over the
+model's native call text:
+
+    root ::= "<|tool_call_start|>[" call (", " call)* "]"  |  reply
+
+The model still chooses between calling and replying. A call cannot name a
+path that does not exist, put a wrongly typed value into a slot, invent or
+omit a field, read a range that is not there, or leave an optional text field
+empty. Tools may carry `x-natlang-alternatives`, argument sets that belong
+together (a path **and the value type of that path**; a path and its valid
+range), which JSON Schema cannot express at the top level. `None` in an
+optional field means "does not apply" and is read as absent. Verified on the
+server: the tool-call token can be named inside a grammar; a grammar-complete
+call ends by itself; special tokens are invisible in `content` but present in
+the returned token ids; the first-token distribution gives **P(the model
+starts a call)** before the grammar, logged per turn.
+
+*Bug found on the way:* the range arguments were called `from`/`to`; `from` is
+a Python keyword, so the model's valid native call failed to parse, was filed
+as prose, entered the history in a non-native form, and was then imitated.
+Argument names are now checked against Python keywords, and an unparseable
+call counts as a rejected call, never as a reply.
+
+**Untuned 350M, `tools-v2` + native decoding, seven programs:** every call
+valid (0 rejections), runs take 0.2–0.4 s. Judgment correct. Extraction right
+in all required fields but it invents a value for the optional `phone` even
+when `None` is offered (8 of 8): a competence gap, left to fine-tuning. The
+arithmetic program guesses instead of using `run_code`; the Map program writes
+a well-typed but short list by hand after a failed `define`. Mean P(call) at
+the start of a turn is ~0.35: on question-shaped tasks the untuned model
+prefers to answer in prose, is told what `return` still needs, and then
+usually writes.
+
+**Typed `write`, no `define`; data only through the tool channel (same day).**
+
+- Five tools: `read`, `write`, `edit`, `run_code`, `run`. `define` is gone:
+  **`write(path, type, value)`** is typed, and a sub-task type gives the
+  semantics `define` had. Model-facing sub-task types: `Task<T>`
+  (instructions), `Code<T>` (TypeScript), `Map<A, B>`, `Fold<A, S>`,
+  `Iterate<S>`. Every one is derivable: `T`/`B`/`S` from the slot, `A` from
+  the list chosen in `over`, a task's parameter types from the `inputs` wired
+  into it (`Task<T>` stands for `Lambda<{derived}, T>`). Under constrained
+  decoding each (path, type, value shape) is one grammar alternative with the
+  type as a constant, so **the type tokens are forced and appear in the
+  transcript as if the model had chosen them**; a wrong type, or `over`
+  pointing at something that is not a list, cannot be written. This relaxes
+  "the agent chooses the type at creation" exactly where the type is
+  determined; narrowing a result type remains a later, explicit option.
+- **Instructions and data travel in different channels.** The user message is
+  the instructions and nothing else. The harness performs the first step on
+  the agent's behalf, `read(path="args")`, and the workspace arrives as a tool
+  result; nudges carry no data either. Before this, the opening user message
+  quoted the beginning of each input, so an injected "ignore your
+  instructions" sat a few lines under the real instructions: the earlier
+  injection result tested that rendering, not the model.
+- Worked examples are back in the small prompt, in the native call format.
+  They raise the rate at which the model starts a call (0.40 → 0.52 in one
+  comparison) and are copied literally, which is now harmless for types.
+
+Untuned 350M, seven programs, after these changes: judgment and the
+must-stop program correct; no rejected calls; new failure shape: the cheapest
+well-typed value (`write return Label[] = []`) ends a list task at once. Not
+patched: an empty list is sometimes the right answer, and this is what
+fine-tuning is for.
+
+**Consequences**
+- Write-time typing cannot be delegated to the server for this model. The
+  harness must constrain the **native call text itself** (raw completion under
+  our own grammar, emitting `[write(path="return", value=True)]`); the JSON
+  schemas of `surface.py` are the source, the GBNF machinery of `grammar.py`
+  the target. For teachers whose formats llama.cpp does constrain, the server
+  path stays.
+- The consistent tool surface should be **small**. Candidates to fold away:
+  `read` (into `run_code`, which can inspect anything), `copy` (into
+  `args_from`/`over_from`), `delete` and `retry` (rare). To be decided by a
+  sweep over a few fixed tool sets, not by filtering per turn.
+- A lambda-as-document surface driven by `edit` would need the same
+  constraints (`old` limited to placeholder lines) to work at this size; it
+  is a candidate for the sweep, not a shortcut.
 
 **Known limitations of the current code**
 - Not yet run against a real model. Large lists get an index pattern in the

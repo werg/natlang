@@ -29,9 +29,13 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e '.[js
 python3 tools/check_conformance.py    # static checks on the suite
 ```
 
-Running a program with a model (needs a llama.cpp `llama-server` serving a
-GGUF of the model on port 8080):
+Running a program with a model (needs Docker with the NVIDIA runtime):
 
 ```
+mkdir -p models && curl -L -o models/LFM2.5-350M-Q8_0.gguf \
+  https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q8_0.gguf
+scripts/serve.sh &                      # llama.cpp CUDA server on 127.0.0.1:8080; stop: docker stop natlang-llama
+.venv/bin/python scripts/baseline.py 01 02 06      # tool surface + native constrained decoding (defaults)
+.venv/bin/python scripts/baseline.py --decode server 01   # the server's own tool calling, unconstrained
 .venv/bin/python -m natlang run conformance/programs/06-map-with-rubric.yaml --trace trace.jsonl
 ```

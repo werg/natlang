@@ -15,6 +15,7 @@ from typing import Optional
 from .nodes import MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda, MapNode, is_pending
 from .paths import META, parse_path
 from .refs import Ref, resolve
+from .render import INLINE, PREVIEW_ITEMS
 from .types import (BOOL, NULL, NUM, TEXT, DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Prim,
                     Record, TypeEnv, UnionT, format_type, parse_type, PENDING_TYPES)
 
@@ -159,17 +160,61 @@ def header_grammar(session) -> str:
                 outs.append(f'{lit(s.path + "/")} digits')
         return outs
 
-    rng = b.add("range", '"[" digits ".." digits "]"')
-    meta = b.add("meta", '"@" ' + alt([lit(m) for m in META]))
+    def span(n: int, first: int) -> str:
+        """`[a..b]` over positions that exist: first..first+n-1."""
+        if n <= 0:
+            return ""
+        last = first + n - 1
+        if n <= 12:
+            pairs = [lit(f"[{a}..{z}]") for a in range(first, last + 1) for z in range(a, last + 1)]
+            return alt(pairs)
+        if n <= 300:
+            pos = b.fresh("pos", " | ".join(lit(str(i)) for i in range(first, last + 1)))
+            return f'"[" {pos} ".." {pos} "]"'
+        return '"[" digits ".." digits "]"'
 
-    read_paths = with_index_patterns(existing)
-    b.add("rpath", alt(read_paths))
-    actions = [f'"read " rpath ( {rng} | {meta} )?']
+    def ranged(s, optional=True) -> str:
+        v = s.value
+        r = span(len(v.splitlines()), 1) if isinstance(v, str) else span(len(v), 0) if isinstance(v, list) else ""
+        if not r:
+            return lit(s.path)
+        return f'{lit(s.path)} ( {r} ){"?" if optional else ""}'
+
+    own_body = lambda s: s.ref.holder is lam and s.ref.attr == "body"
+
+    def hidden(s) -> bool:
+        """Does the opening observation show less than the whole value?"""
+        v = s.value
+        if own_body(s):
+            return False
+        if is_pending(v):
+            return True
+        if isinstance(v, str):
+            return len(v.rstrip("\n")) > INLINE or "\n" in v.rstrip("\n")
+        if isinstance(v, list):
+            return len(v) > PREVIEW_ITEMS
+        return s.path.count("/") >= 3 and isinstance(v, (dict, list))
+
+    reads = [ranged(s) for s in existing if hidden(s)]
+    for s in existing:
+        if isinstance(s.value, list) and len(s.value) > MAX_ENUM_PATHS:
+            reads.append(f'{lit(s.path + "/")} digits')
+    metas = [lit("return@problems")] if lam.ret is not MISSING else []   # nothing to report on an empty draft
+    metas += [lit(s.path + "@note") for s in existing if is_pending(s.value) and s.value.status == QUIESCED]
+    metas += [lit(s.path + "@origin") for s in existing if not is_pending(s.value) and s.ref.holder is None
+              and session.rt is not None and s.ref.slot_key() in session.rt.origins]
+    if lam.journal:
+        metas.append(lit("return@effects"))
+    actions = [f'"read " {alt(reads + metas)}'] if reads + metas else []
+
+    b.add("spath", alt([ranged(s) for s in existing] +
+                       [f'{lit(s.path + "/")} digits' for s in existing
+                        if isinstance(s.value, list) and len(s.value) > MAX_ENUM_PATHS]))
 
     texts = [s for s in existing if isinstance(s.value, str) and _resolved(s) == TEXT and not s.ref.deny]
     if texts:
-        b.add("tpath", alt([lit(s.path) for s in texts]))
-        actions.append(f'"edit " tpath {rng}?')
+        b.add("tpath", alt([ranged(s) for s in texts]))
+        actions.append('"edit " tpath')
 
     set_alts = []
     for s in writable:
@@ -194,7 +239,7 @@ def header_grammar(session) -> str:
         dsts = [lit(s.path) for s in dst]
         dsts += [lit(s.path + "/+") for s in dst if isinstance(_resolved(s), ListT)]
         b.add("dpath", alt(dsts))
-        actions.append(f'"copy " rpath {rng}? " to " dpath')
+        actions.append('"copy " spath " to " dpath')
 
     reducible = [s for s in existing if is_pending(s.value) and s.value.status in (UNREDUCED, QUIESCED)
                  and not s.ref.deny]
@@ -202,14 +247,18 @@ def header_grammar(session) -> str:
         b.add("ppath", alt([lit(s.path) for s in reducible]))
         actions.append('"reduce " ppath ( " " ppath )*')
 
-    reopenable = [s for s in existing if not is_pending(s.value) and not s.ref.deny
-                  and s.ref.holder is None or (s.ref.holder is lam and s.ref.attr == "ret"
-                                               and s.value is not MISSING and not is_pending(s.value))]
+    def produced_by_child(s) -> bool:
+        if session.rt is None or is_pending(s.value) or s.ref.deny:
+            return False
+        origin = session.rt.origins.get(s.ref.slot_key())
+        return isinstance(origin, Lambda) and not origin.is_crisp
+
+    reopenable = [s for s in existing if produced_by_child(s)]
     if reopenable:
         b.add("opath", alt([lit(s.path) for s in reopenable]))
         actions.append('"reopen " opath')
 
-    actions += ['"eval"', '"close"']
+    actions += ['"eval"', '"stuck"']
     return b.text(alt(actions) + ' "\\n"')
 
 
@@ -252,7 +301,7 @@ def body_grammar(session, action) -> Optional[str]:
     if tool in ("read", "unset", "copy", "reduce"):
         return None
     b = Builder(_names_in_scope(session.env))
-    if tool in ("eval", "edit", "reopen", "close"):
+    if tool in ("eval", "edit", "reopen", "stuck"):
         return b.text("lines")
     stated = parse_type(action.type_text)
     p = parse_path(action.path)
@@ -320,10 +369,16 @@ def _block(b: Builder, t, env, ind: str, nested: int) -> str:
         rt = next((env.resolve(m) for m in rt.members if isinstance(env.resolve(m), (Record, ListT, DictT))), rt)
     if isinstance(rt, Record):
         fields = [_field(b, n, ft, env, ind, nested) for n, ft, _ in rt.fields]
-        return b.fresh("brec", " ".join(f"( {f} )?" for f in fields) if fields else '""')
+        if not fields:
+            return '""'
+        chain = [None] * len(fields)          # any in-order, non-empty subset of the fields
+        for i in reversed(range(len(fields))):
+            rest = alt([chain[j] for j in range(i + 1, len(fields))]) if i + 1 < len(fields) else ""
+            chain[i] = b.fresh("bf", f"{fields[i]}" + (f" ( {rest} )?" if rest else ""))
+        return b.fresh("brec", alt(chain))
     if isinstance(rt, ListT):
         item = _flow(b, rt.elem, env)
-        return b.fresh("blist", f'( {lit(ind + "- ")} {item} "\\n" )*')
+        return b.fresh("blist", f'"[]\\n" | ( {lit(ind + "- ")} {item} "\\n" )+')
     if isinstance(rt, DictT):
         item = _flow(b, rt.elem, env)
         return b.fresh("bdict", f'( {lit(ind)} ident ": " {item} "\\n" )*')

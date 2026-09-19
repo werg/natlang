@@ -174,10 +174,17 @@ unreduced --reduce--> running --+--> done      (node is replaced by its value)
 
 ### 3.3 Reopen
 
-`reopen <path>` (§5.7) turns a value back into a lambda of the same type. If
-the value has a lambda origin, that lambda is restored; otherwise a
-`Lambda<{}, T>` is wrapped around it. The previous value becomes the draft
-`return`. New instructions may be supplied. Provenance links the attempts.
+`reopen <path>` (§5.7) turns a value back into the lambda that produced it:
+the origin lambda is restored from provenance, the previous value becomes the
+draft `return`, and new instructions may be supplied. Provenance links the
+attempts.
+
+**Only a value produced by a natural-language lambda can be reopened.** A
+value the agent wrote itself can simply be set again; reopening it would only
+hand the agent's own task to a child. (Observed with an untuned model: it
+reopened its own result with a stray code fence as the instructions, reduced
+it, and the child did the same.) Post-processing that needs a new task is a
+continuation built outside-in, not a reopen.
 
 ---
 
@@ -258,6 +265,20 @@ inside `step`. Open lists are bound only at the I/O boundary (§10).
 ---
 
 ## 5. Actions
+
+> **Model-facing surface (2026-09-19).** What follows in this section is the
+> harness's internal operations and the **trace notation** used by the
+> conformance suite. The model does not see it. The model works through native
+> tool calls, surface `tools-v2` in `natlang/surface.py`: the instructions as
+> the user's request, the workspace delivered as a tool result (data never
+> shares a channel with instructions); five fixed tools (`read`, typed
+> `write`, `edit`, `run_code`, `run`; a sub-task is a `write` with a sub-task
+> type such as `Task<T>` or `Map<A, B>`, all types derived and forced) whose argument schemas are
+> derived from the tree and types each turn; the episode ends when the model
+> replies; the result is what was written to `return`, never the reply. Tool
+> names map onto the operations below (`write` → set, `run` → reduce,
+> `run_code` → eval, substitution `edit` → edit). This section will be
+> rewritten around the tool surface once the surface has settled.
 
 An agent turn is either one action or a closing message.
 
@@ -388,10 +409,10 @@ An episode (§6) ends when:
 
 1. the agent empties `instructions` and the commit check passes: the harness
    ends the episode at once; or
-2. the agent closes: header `close`, with the closing message as the body.
-   The message is stored as the node's note and the node is `quiesced`.
-   (Under constrained decoding every turn is an action, so closing is one
-   too. It is not one of the eight tools: it changes nothing in the tree.) Or
+2. the agent says it is stuck: header `stuck`, with the closing message as the
+   body. The message is stored as the node's note and the node is `quiesced`.
+   (Under constrained decoding every turn is an action, so this is one too.
+   It is not one of the eight tools: it changes nothing in the tree.) Or
 3. a budget is exhausted, or the process crashes.
 
 ### 5.10 Decoding constraints
@@ -408,7 +429,7 @@ Every action is decoded under a grammar derived from the current tree:
 | set body | the grammar of `Draft<TYPE>` |
 | copy `DST` | writable slots that the type of `SRC` fits |
 | reduce `PATH` | pending nodes with status `unreduced` or `quiesced` and no unbound required part |
-| reopen `PATH` | writable value nodes |
+| reopen `PATH` | writable values that a natural-language lambda produced |
 
 Writable means: inside scope, not harness-owned, not the lambda's own `args`,
 not the `args` of a triggered child.
@@ -438,7 +459,24 @@ The parent keeps its context while blocked in `reduce`.
 
 ### 6.3 Budgets
 
-Per episode: 24 actions and 4,000 generated tokens. Per action: 600 generated
+**Recursion is bounded, not forbidden.** A lambda may construct and reduce
+lambdas; that is how subroutines work, so recursion cannot be ruled out
+statically. Three rules keep it harmless:
+
+1. *No identical child.* A lambda is not started if its instructions, args,
+   and type are identical to those of a lambda already being reduced above
+   it; it quiesces with a note. (The same idea as cycle detection in
+   `Iterate`. Recursion over tree-shaped data passes, because the args differ
+   at every level.)
+2. *Bounded nesting.* At most 6 pending nodes may nest inside one another
+   below the acting lambda; a write that would exceed this is rejected
+   (`too-deep`).
+3. *Run budgets.*
+
+Per run: at most 256 episodes, nested at most 8 deep; beyond either, a
+triggered lambda quiesces with a run-budget note instead of starting. (Found
+necessary in practice: an untuned model that reopens and reduces its own
+result otherwise recurses without bound.) Per episode: 24 actions and 4,000 generated tokens. Per action: 600 generated
 tokens; longer output is discarded and resampled. Values are defaults and
 configurable per run.
 
@@ -477,6 +515,8 @@ Diagnostic codes (v0.1):
 | `type-does-not-fit-slot` | reject | the stated or source type does not fit the slot |
 | `unknown-field` | reject | the record type has no such field |
 | `reserved-key` | reject | a `$`-prefixed key used as data |
+| `no-origin` | reject | `reopen` on a value no natural-language lambda produced |
+| `too-deep` | reject | pending nodes would nest more than 6 deep |
 | `eval-cannot-write` | reject | `eval` attempted to modify the tree |
 | `effect-undeclared` | reject | capability not in the lambda's `effects` |
 | `effect-wider-than-parent` | reject | a child declares a capability its parent lacks |
@@ -794,7 +834,7 @@ the most recent 1,000 step records by default.
 | 4.1 | A hand-written Map slot is typed by the enclosing slot, not by `B` |
 | 6.5 | The diagnostic code list |
 | 2 | Numeric literal types; no range refinement (§7.6 gives the pattern) |
-| 5.9 | Closing is written as a `close` header plus a note, so that it can be decoded under the same grammar as actions |
+| 5.9 | Quiescing is written as a `stuck` header plus a note, so that it can be decoded under the same grammar as actions |
 | 5.3 | Types written as YAML values are always single-quoted |
 | 9.5, 10 | Capabilities are host-registered with typed signatures; state size, lifetime, and shutdown are host concerns |
 | 10 | No library namespace; host-side import and export, type-directed |

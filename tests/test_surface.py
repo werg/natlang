@@ -1,0 +1,139 @@
+"""The native tool-call surface: schemas from types, a fixed tool list, operations, hints."""
+import yaml
+
+from natlang.agents import OracleAgent
+from natlang.decoder import ChatTurn
+from natlang.runtime import Runtime, Session
+from natlang.surface import ToolSurface, schema_of
+from natlang.tool_agent import ToolAgent
+from natlang.types import TypeEnv, parse_type
+
+from test_canonical_traces import PROGRAMS, oracle
+from test_grammar import _root
+
+S = ToolSurface()
+
+
+def _session(name, rt=None):
+    doc = yaml.safe_load((PROGRAMS / name).read_text())
+    return doc, Session(rt or Runtime(None), _root(doc), TypeEnv())
+
+
+def test_schema_of_types():
+    env = TypeEnv({"Label": parse_type('"a" | "b"')})
+    sch = schema_of(parse_type("{ id: Num, label: Label, tags: Text[], note?: Text }"), env)
+    assert sch["required"] == ["id", "label", "tags"] and sch["additionalProperties"] is False
+    assert sch["properties"]["label"] == {"enum": ["a", "b"]}
+    assert sch["properties"]["tags"] == {"type": "array", "items": {"type": "string"}}
+
+
+def test_tool_list_is_constant_and_schemas_narrow():
+    doc, s = _session("02-leaf-extraction.yaml")
+    names = [t["function"]["name"] for t in S.tools(s)]
+    assert names == ["read", "write", "edit", "run_code", "run"]
+    write = S.tools(s)[1]["function"]["parameters"]["properties"]
+    assert "return" in write["path"]["enum"] and "args/note" not in write["path"]["enum"]
+    assert "Task<{ customer: Text, order_id: Text, amount: Num, phone?: Text }>" in write["type"]["enum"]
+    s.apply("write", {"path": "return", "type": "x", "value": {"customer": "Dana", "order_id": "0077", "amount": 42.5}})
+    assert [t["function"]["name"] for t in S.tools(s)] == names          # same tools after the state changed
+
+
+def test_write_is_typed_and_hints_on_failure():
+    doc, s = _session("02-leaf-extraction.yaml")
+    bad = s.apply("write", {"path": "return/amount", "value": "lots"})
+    assert bad.kind == "rejected" and "hint:" in bad.text
+    assert s.apply("write", {"path": "args/note", "value": "x"}).codes == ["not-writable"]
+    assert not s.finish()                                                # nothing written yet
+    ok = s.apply("write", {"path": "return", "value": {"customer": "Dana Whitfield", "order_id": "0077", "amount": 42.5}})
+    assert ok.kind == "ok" and s.lam.ret["order_id"] == "0077"
+    assert s.finish()
+
+
+def test_instructions_and_data_travel_in_different_channels():
+    doc, s = _session("21-data-is-not-code.yaml")
+    request = S.render_request(s)
+    assert request.startswith("Label each ticket") and "Write the result to `return` (Label[])" in request
+    assert "SYSTEM NOTICE" not in request and "dark mode" not in request     # no data in the user message
+    name, args, text = S.opening_read(s)
+    assert (name, args) == ("read", {"path": "args"}) and "dark mode" in text   # data arrives as a tool result
+    assert "SYSTEM NOTICE" not in S.missing(s)                                  # nor in a nudge
+    assert "(empty)" not in text and "·" not in text                           # no value-like placeholders
+
+
+def test_edit_is_classic_substitution():
+    doc, s = _session("03-scalar-substitution.yaml")
+    r = s.apply("edit", {"path": "instructions", "old": "the total", "new": "510.5"})
+    assert r.kind == "ok" and "If 510.5 is above" in s.lam.body
+    assert s.apply("edit", {"path": "instructions", "old": "not there", "new": "x"}).codes == ["old-not-found"]
+    assert s.apply("edit", {"path": "instructions", "old": "args/", "new": "x"}).codes == ["old-not-unique"]
+    r = s.apply("edit", {"path": "instructions", "old": "1. Add up `args/amounts`.\n", "new": ""})
+    assert r.kind == "ok" and s.lam.body.startswith("2.")
+
+
+def test_a_map_written_with_inputs_wired_in_one_call():
+    doc = yaml.safe_load((PROGRAMS / "06-map-with-rubric.yaml").read_text())
+    root = _root(doc)
+    rt = Runtime(lambda lam: OracleAgent(oracle, lam))
+    s = Session(rt, root, TypeEnv())
+    r = s.apply("write", {"path": "return", "type": "Map<Text, Label>",
+                          "value": {"over": "args/tickets", "inputs": {"rubric": "args/rubric"},
+                                    "instructions": "Label the ticket in `args/item` according to `args/rubric`."}})
+    assert r.kind == "ok", r.text
+    assert s.apply("run", {"paths": ["return"]}).kind == "done"
+    assert s.finish() and s.lam.ret == doc["expect"]["value"]
+
+
+def test_a_sub_task_write_is_all_or_nothing():
+    doc, s = _session("06-map-with-rubric.yaml")
+    r = s.apply("write", {"path": "return", "type": "Map<Text, Label>",          # `over` is a Text, not a list
+                          "value": {"over": "args/rubric", "instructions": "x"}})
+    assert r.kind == "rejected" and not s.lam.ret
+
+
+def test_code_and_fold_sub_tasks():
+    doc, s = _session("09-fold-crisp-step.yaml")
+    r = s.apply("write", {"path": "return", "type": "Code<Num>", "value": {
+        "code": "return sum(args.lines, l => l.qty * l.unit_price)", "inputs": {"lines": "args/lines"}}})
+    assert r.kind == "ok", r.text
+    assert s.apply("run", {"paths": ["return"]}).kind == "done" and s.lam.ret == doc["expect"]["value"]
+
+
+class ScriptedChat:
+    def __init__(self, turns):
+        self.turns, self.seen = list(turns), []
+
+    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700):
+        self.seen.append(list(messages))
+        return self.turns.pop(0)
+
+
+def test_reply_ends_the_episode_and_is_never_the_result():
+    doc = yaml.safe_load((PROGRAMS / "01-leaf-judgment.yaml").read_text())
+    root = _root(doc)
+    dec = ScriptedChat([ChatTurn([("read", {"path": "args/message"})]),
+                        ChatTurn([("write", {"path": "return", "type": "Bool", "value": True})]),
+                        ChatTurn([], "It is a complaint, so I wrote true.")])
+    out, value = Runtime(lambda lam: ToolAgent(dec)).run_root(root)
+    assert out.kind == "done" and value is True
+    first = dec.seen[0]                                                   # the harness read the workspace first
+    assert [m["role"] for m in first] == ["system", "user", "assistant", "tool"]
+    assert "package arrived" not in first[1]["content"] and "package arrived" in first[3]["content"]
+    assert dec.seen[2][4]["tool_calls"][0]["function"]["name"] == "read"  # standard tool_calls history
+
+
+def test_reply_without_a_result_is_nudged_then_quiesces():
+    doc = yaml.safe_load((PROGRAMS / "01-leaf-judgment.yaml").read_text())
+    dec = ScriptedChat([ChatTurn([], "true"), ChatTurn([], "The answer is true."), ChatTurn([], "true!")])
+    out, _ = Runtime(lambda lam: ToolAgent(dec)).run_root(_root(doc))
+    assert out.kind == "quiesced" and "true" in out.detail                # the reply is a note, not a result
+    assert "`return` has not been written yet" in dec.seen[1][-1]["content"]
+
+
+def test_several_calls_in_one_turn():
+    doc = yaml.safe_load((PROGRAMS / "02-leaf-extraction.yaml").read_text())
+    dec = ScriptedChat([ChatTurn([("read", {"path": "args/note"}),
+                                  ("write", {"path": "return", "type": "record",
+                                            "value": {"customer": "Dana Whitfield", "order_id": "0077", "amount": 42.5}})]),
+                        ChatTurn([], "Done.")])
+    out, value = Runtime(lambda lam: ToolAgent(dec)).run_root(_root(doc))
+    assert out.kind == "done" and value == doc["expect"]["value"]

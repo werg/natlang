@@ -4,6 +4,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -22,6 +24,8 @@ from .types import (TEXT, LambdaT, ListT, TypeEnv, TypeSyntaxError, PENDING_TYPE
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 
 MAX_ACTIONS = 24
+MAX_NESTING = 6          # pending nodes nested inside one another, below the acting lambda
+sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
 
 
@@ -74,8 +78,12 @@ class Outcome:
 
 
 class Runtime:
-    def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None):
+    def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
+                 max_episodes: int = 256, max_depth: int = 8):
         self.agent_factory = agent_factory
+        self.max_episodes, self.max_depth = max_episodes, max_depth   # run-level budgets (SPEC 6.3)
+        self._depth = 0
+        self._stack: list = []   # hashes of (body, args) of the lambdas currently being reduced
         self.emitted: list = []
         self.capabilities = {"out.emit": lambda args: self.emitted.append(args[0] if args else None)}
         self.capabilities.update(capabilities or {})
@@ -166,6 +174,23 @@ class Runtime:
 
     # -- natural-language lambda
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
+        if self._depth >= self.max_depth:
+            return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
+        if self.episodes_started >= self.max_episodes:
+            return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
+        key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
+        if key in self._stack:
+            return self._quiesce(node, ref, "identical to a lambda already being reduced above it: "
+                                            "delegating the same task to a child cannot make progress")
+        self._depth += 1
+        self._stack.append(key)
+        try:
+            return self._episode(node, ref)
+        finally:
+            self._depth -= 1
+            self._stack.pop()
+
+    def _episode(self, node: Lambda, ref: Ref) -> Outcome:
         cold = node.status == QUIESCED
         node.status, node.note = RUNNING, ""
         node.attempts += 1
@@ -302,6 +327,30 @@ def _hash(x) -> str:
     return hashlib.sha256(json.dumps(dump(x), sort_keys=True, default=str).encode()).hexdigest()
 
 
+def _split2(inner: str):
+    """Split `A, B` at the top-level comma."""
+    depth = 0
+    for i, ch in enumerate(inner):
+        depth += ch in "<{([" ; depth -= ch in ">})]"
+        if ch == "," and depth == 0:
+            return inner[:i].strip(), inner[i + 1:].strip()
+    raise reject("type", "type-mismatch", "two type arguments")
+
+
+def _nesting(x) -> int:
+    """How many pending nodes are nested inside one another at the deepest point of `x`."""
+    if isinstance(x, Lambda):
+        return 1 + max([_nesting(v) for v in x.in_.values()] + [_nesting(x.ret)], default=0)
+    if is_pending(x):
+        parts = [getattr(x, p, None) for p in ("over", "fn", "init", "step", "check", "current", "slots")]
+        return 1 + max((_nesting(p) for p in parts), default=0)
+    if isinstance(x, dict):
+        return max((_nesting(v) for v in x.values()), default=0)
+    if isinstance(x, list):
+        return max((_nesting(v) for v in x), default=0)
+    return 0
+
+
 def _one_line(value) -> str:
     if isinstance(value, list):
         return f"{len(value)} items"
@@ -369,6 +418,199 @@ class Session:
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
                               "kind": result.kind, "result": result.text})
         return result
+
+    # ------------------------------------------------------------------ tool surface (natlang/surface.py)
+    def apply(self, name: str, args: dict) -> Result:
+        """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
+        if self.completed:
+            return Result("error", "the task has already finished")
+        if self.actions >= MAX_ACTIONS:
+            return Result("budget", "action budget exhausted")
+        self.actions += 1
+        self.lam.steps += 1
+        op = getattr(self, "_op_" + name, None)
+        try:
+            if op is None:
+                raise reject(name, "bad-action", "a known tool")
+            result = op(args)
+        except Reject as e:
+            result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
+        except Refuse as e:
+            result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
+        except js.JsError as e:
+            result = Result("error", f"error: {e}")
+        except (KeyError, TypeError, AttributeError) as e:
+            result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
+        self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
+                              "kind": result.kind, "result": result.text})
+        return result
+
+    def _op_read(self, args):
+        path = args["path"]
+        args = {**args, **{k: args[a] for a, k in (("start", "from"), ("end", "to")) if a in args}}
+        if "from" not in args and "to" not in args:          # a read shows the whole value, not a preview
+            p, ref = self.resolve(path)
+            v = ref.get()
+            if not p.meta and not is_pending(v) and v is not MISSING:
+                text = v if isinstance(v, str) else json.dumps(dump(v), ensure_ascii=False, indent=1)
+                if len(text) <= 6000:
+                    self.reads_done = getattr(self, "reads_done", set()) | {path}
+                    return Result("ok", text, value=v)
+                raise reject(path, "too-large", "a range: pass `from` and `to`", f"{len(text)} characters")
+        if "from" in args or "to" in args:
+            path += f"[{int(args.get('from', args.get('to')))}..{int(args.get('to', args.get('from')))}]"
+        p, ref = self.resolve(path)
+        if p.rng and not p.meta:                              # a range is read in full too, never previewed
+            part, _ = _slice(ref.get(), p, ref)
+            if isinstance(part, list):
+                lo = p.rng[0]
+                text = "\n".join(f"{lo + i}: {x if isinstance(x, str) else json.dumps(dump(x), ensure_ascii=False)}"
+                                 for i, x in enumerate(part))
+            else:
+                text = part
+            if len(text) > 6000:
+                raise reject(path, "too-large", "a smaller range", f"{len(text)} characters")
+            return Result("ok", text, value=part)
+        r = self._do_read(Action("read", path=path))
+        self.reads_done = getattr(self, "reads_done", set()) | {args["path"]}
+        return r
+
+    def _op_write(self, args):
+        """write(path, type, value). A sub-task type (Task, Code, Map, Fold, Iterate) puts a pending
+        node at the path; the harness derives every type the model did not have to choose."""
+        ty = str(args.get("type") or "")
+        m = re.match(r"^(Task|Code|Map|Fold|Iterate)<(.*)>$", ty.strip(), re.S)
+        if not m:
+            return self._set_value(args["path"], None, args["value"], yaml=False)
+        kind, inner, v = m.group(1), m.group(2), args.get("value")
+        if not isinstance(v, dict):
+            raise reject(args["path"], "type-mismatch", f"an object describing the {kind}")
+        inputs = v.get("inputs") or {}
+        params = []
+        for name, src in inputs.items():                      # parameter types come from their sources
+            _, sref = self.resolve(str(src))
+            if sref.type is None or sref.get() is MISSING:
+                raise reject(str(src), "no-such-path", "an existing value to pass as input")
+            params.append(f"{name}: {format_type(sref.type)}")
+
+        def lam_type(fixed: list, result: str) -> str:
+            fields = fixed + params
+            return "Lambda<" + ("{ " + ", ".join(fields) + " }" if fields else "{}") + f", {result}>"
+
+        body_key = "code" if kind == "Code" or (v.get("code") and not v.get("instructions")) else "instructions"
+        spec = {body_key: v.get(body_key), "args_from": inputs}
+        if spec[body_key] is None:
+            raise reject(args["path"], "type-mismatch", f"`{body_key}` for the {kind}")
+        d = {"path": args["path"]}
+        if kind in ("Task", "Code"):
+            d.update(type=lam_type([], inner), **spec)
+        elif kind == "Map":
+            a, b = _split2(inner)
+            d.update(type=f"Map<{a}, {b}>", over_from=v.get("over"), fn={"type": lam_type([f"item: {a}"], b), **spec})
+        elif kind == "Fold":
+            a, st = _split2(inner)
+            d.update(type=f"Fold<{a}, {st}>", over_from=v.get("over"), init=v.get("init"),
+                     step={"type": lam_type([f"acc: {st}", f"item: {a}"], st), **spec})
+        else:
+            st = inner
+            until = v.get("until") or "Is the work finished?"
+            d.update(type=f"Iterate<{st}>", init=v.get("init"), max=v.get("max") or 5,
+                     step={"type": lam_type([f"state: {st}"], st), **spec},
+                     check={"type": f"Lambda<{{ recent: ({st})[], iteration: Num }}, LoopVerdict>",
+                            "instructions": "Look at the most recent states in `args/recent`. " + until +
+                                            " Give your reason, then the verdict: done, continue, or degenerate "
+                                            "if the states are not making progress."})
+        return self._op_define(d)
+
+    def _op_edit(self, args):
+        p, ref = self.resolve(args["path"])
+        self._writable(ref)
+        text, old, new = ref.get(), args["old"], args.get("new", "")
+        if not isinstance(text, str):
+            raise reject(ref.path, "type-mismatch", "a text")
+        n = text.count(old) if old else 0
+        if n != 1:
+            raise reject(ref.path, "old-not-unique" if n else "old-not-found",
+                         "`old` copied exactly from the text, occurring once", f"{n} occurrences")
+        updated = text.replace(old, new, 1)
+        if new == "":                                  # deleting a whole line should not leave it blank
+            updated = "".join(l for l in updated.splitlines(keepends=True) if l.strip() or not old.strip())
+        return self._write_text(ref, updated)
+
+    def _op_copy(self, args):
+        return self._do_copy(Action("copy", path=args["from"], dst=args["to"]))
+
+    def _op_delete(self, args):
+        return self._do_unset(Action("unset", path=args["path"]))
+
+    def _op_run(self, args):
+        paths = args["paths"] if isinstance(args["paths"], list) else [args["paths"]]
+        return self._do_reduce(Action("reduce", paths=paths))
+
+    def _op_retry(self, args):
+        return self._do_reopen(Action("reopen", path=args["path"], body=args.get("feedback", "")))
+
+    def _op_run_code(self, args):
+        return self._do_eval(Action("eval", body=args["code"]))
+
+    def finish(self) -> bool:
+        """The agent replied instead of calling a tool. Complete the lambda if `return` is valid."""
+        if self.completed:
+            return True
+        if self.lam.ret is MISSING:
+            return False
+        try:
+            self._commit_check()
+        except Refuse:
+            return False
+        self.lam.body = ""
+        self.completed = True
+        return True
+
+    def _op_done(self, args):
+        if self.lam.ret is MISSING:
+            raise Refuse(Diagnostic("return", "commit-holes", BLOCKS, format_type(self.lam.type.returns)))
+        self._commit_check()
+        self.lam.body = ""
+        self.completed = True
+        return Result("completed", "completed", value=self.lam.ret)
+
+    def _op_define(self, args):
+        try:
+            stated = parse_type(args["type"])
+        except TypeSyntaxError as e:
+            raise reject(args.get("path", ""), "type-mismatch", "a type such as Lambda<{ item: Text }, Bool>", str(e))
+        path = args["path"]
+        copies = []
+
+        def sub(spec, where):
+            body = {k: spec[k] for k in ("type", "instructions", "code", "args", "types", "effects") if spec.get(k) is not None}
+            copies.extend((src, f"{where}/args/{n}") for n, src in (spec.get("args_from") or {}).items())
+            return {"$lambda": body}
+
+        kind = type(stated).__name__
+        keys = {"LambdaT": ("instructions", "code", "args", "types", "effects"),
+                "MapT": ("types",), "FoldT": ("init", "types"), "IterateT": ("init", "max", "types")}.get(kind)
+        if keys is None:
+            raise reject(path, "type-mismatch", "a Lambda, Map, Fold or Iterate type", args["type"])
+        body = {k: args[k] for k in keys if args.get(k) is not None}
+        for part in {"MapT": ("fn",), "FoldT": ("step",), "IterateT": ("step", "check")}.get(kind, ()):
+            if args.get(part):
+                body[part] = sub(args[part], f"{path}/{part}")
+        copies.extend((src, f"{path}/args/{n}") for n, src in (args.get("args_from") or {}).items())
+        if args.get("over_from"):
+            copies.append((args["over_from"], f"{path}/over"))
+
+        _, ref = self.resolve(path, create=True)
+        before = ref.get()
+        result = self._set_value(path, stated, body, yaml=False)
+        try:
+            for src, dst in copies:
+                self._do_copy(Action("copy", path=src, dst=dst))
+        except (Reject, Refuse):
+            ref.set(before) if before is not MISSING else ref.delete()   # a define is all or nothing
+            raise
+        return Result("ok", "ok   " + self._summary())
 
     def resolve(self, text: str, *, create=False) -> tuple:
         p = parse_path(text)
@@ -451,29 +693,37 @@ class Session:
             stated = parse_type(a.type_text)
         except TypeSyntaxError as e:
             raise reject(a.path, "type-mismatch", "a type", str(e))
-        p, ref = self.resolve(a.path, create=True)
+        body = a.body[:-1] if a.body.endswith("\n") else a.body
+        return self._set_value(a.path, stated, body, yaml=True)
+
+    def _set_value(self, path_text: str, stated, raw, *, yaml: bool) -> Result:
+        """Create or replace the node at a path. `stated` None means: the slot's declared type."""
+        p, ref = self.resolve(path_text, create=True)
         self._writable(ref)
         if p.rng or p.meta:
-            raise reject(a.path, "not-writable")
+            raise reject(path_text, "not-writable")
+        if stated is None:
+            if ref.type is None:
+                raise reject(path_text, "not-writable")
+            stated = ref.type
         try:
             ref.env.check_names(stated)
         except TypeSyntaxError as e:
-            raise reject(a.path, "type-mismatch", "declared type names", str(e))
+            raise reject(path_text, "type-mismatch", "declared type names", str(e))
         self._check_fit(stated, ref)
         rs = ref.env.resolve(stated)
-        body = a.body[:-1] if a.body.endswith("\n") else a.body
         if isinstance(rs, PENDING_TYPES):
-            raw = _load_yaml(body, ref.path)
-            value = build_pending(_WRAPPER_FOR[type(rs)], raw or {}, ref.env, yaml=True, path=ref.path,
+            body = _load_yaml(raw, ref.path) if yaml else raw
+            value = build_pending(_WRAPPER_FOR[type(rs)], body or {}, ref.env, yaml=yaml, path=ref.path,
                                   header_type=rs)
-        elif rs == TEXT:
-            value = body
+        elif yaml and rs == TEXT:
+            value = raw
         else:
-            value = coerce(_load_yaml(body, ref.path), stated, ref.env, yaml=True, path=ref.path)
+            value = coerce(_load_yaml(raw, ref.path) if yaml else raw, stated, ref.env, yaml=yaml, path=ref.path)
         self._check_effects(value, ref.path)
         if ref.holder is self.lam and ref.attr == "body":
             return self._write_text(ref, value + ("\n" if value and not value.endswith("\n") else ""))
-        ref.set(value)
+        self._set_checked(ref, value)
         self._collapse()
         return Result("ok", "ok   " + self._summary())
 
@@ -547,9 +797,20 @@ class Session:
         self._check_effects(value, dst.path)
         if dst.holder is self.lam and dst.attr == "body":
             return self._write_text(dst, value)
-        dst.set(value)
+        self._set_checked(dst, value)
         self._collapse()
         return Result("ok", "ok   " + self._summary())
+
+    def _set_checked(self, ref: Ref, value):
+        """Write, then undo if pending nodes now nest too deeply (SPEC 6.3)."""
+        old = ref.get()
+        ref.set(value)
+        if _nesting(self.lam) - 1 > MAX_NESTING:
+            if old is MISSING:
+                ref.delete()
+            else:
+                ref.set(old)
+            raise reject(ref.path, "too-deep", f"at most {MAX_NESTING} pending nodes nested below a lambda")
 
     # -- reduce / reopen
     def _do_reduce(self, a: Action) -> Result:
@@ -572,16 +833,14 @@ class Session:
             raise reject(a.path, "no-such-path", "a value")
         origin = self.rt.origins.get(ref.slot_key())
         text = a.body.strip("\n")
-        if isinstance(origin, Lambda) and not origin.is_crisp:
-            lam = copy.deepcopy(origin)
-            lam.body = (text or origin.original_body or "").rstrip("\n") + "\n"
-        else:
-            if not text:
-                raise reject(a.path, "type-mismatch", "instructions for a value with no lambda origin")
-            from .types import Record
-            lam = Lambda(type=LambdaT(Record(()), ref.type), kind="instructions", body=text + "\n")
+        if not isinstance(origin, Lambda) or origin.is_crisp:
+            # A value the agent wrote itself can simply be set again. Reopening it would only
+            # delegate the agent's own task to a child (observed as a runaway loop).
+            raise reject(a.path, "no-origin", "a value that a natural-language lambda produced")
+        lam = copy.deepcopy(origin)
+        lam.body = (text or origin.original_body or "").rstrip("\n") + "\n"
         lam.ret, lam.status, lam.note = copy.deepcopy(value), UNREDUCED, ""
-        ref.set(lam)
+        self._set_checked(ref, lam)
         return Result("ok", f"ok   {ref.path}: {pending_line(lam)}, draft return prefilled")
 
     # -- eval
@@ -622,6 +881,33 @@ def _slice(value, p: Path, ref: Ref):
             raise reject(p.text, "bad-range", f"items 0..{len(value) - 1}")
         return value[lo: hi + 1], ref.type
     raise reject(p.text, "bad-range", "Text or a list")
+
+
+_HINTS = {
+    "commit-holes": "Fill what is still missing with write, then call done.",
+    "commit-pending": "A sub-task has not produced its result yet: call run on it, then done.",
+    "not-writable": "args are read-only. Write into return, or into the args of a sub-task you defined.",
+    "frozen": "That sub-task is running; its args cannot change now.",
+    "type-mismatch": "The value must have the type shown as expected.",
+    "type-does-not-fit-slot": "That slot needs the type shown as expected.",
+    "unknown-field": "Use one of the fields listed as expected.",
+    "unbound-param": "Give the sub-task its inputs first: copy a value into the path shown, or define it with args_from.",
+    "unbound-part": "The sub-task is missing the part shown: for a Map or Fold, pass the list with over_from or copy it to .../over.",
+    "no-such-path": "Use a path that appears in the state.",
+    "old-not-found": "Copy `old` exactly from the text, including punctuation.",
+    "old-not-unique": "Make `old` longer so that it occurs only once.",
+    "no-origin": "Only a result that a sub-task produced can be retried. Write the value again instead.",
+    "too-deep": "Sub-tasks are nested too deeply. Do this step directly.",
+    "too-large": "Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.",
+    "stuck-dependency": "An input of this sub-task could not be produced: read its note, fix it, run it again.",
+}
+
+
+def _hint(diags) -> str:
+    for d in diags:
+        if d.code in _HINTS:
+            return "\nhint: " + _HINTS[d.code]
+    return ""
 
 
 class _StrictLoader(yaml.BaseLoader):

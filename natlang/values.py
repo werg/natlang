@@ -7,7 +7,7 @@ from typing import Any
 from .diag import BLOCKS, HOLE, Diagnostic, Reject, reject
 from .nodes import (MISSING, WRAPPERS, WRAPPER_OF, FoldNode, IterateNode, Lambda, MapNode,
                     Pending, is_pending)
-from .types import (BOOL, NUM, TEXT, DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Name,
+from .types import (BOOL, NULL, NUM, TEXT, DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Name,
                     Prim, Record, TypeEnv, TypeSyntaxError, UnionT, fits, format_type, parse_type,
                     LOOP_VERDICT)
 
@@ -110,6 +110,8 @@ def coerce(raw: Any, t, env: TypeEnv, *, yaml: bool, path: str) -> Any:
             ft = rt.get(k)
             if ft is None:
                 raise reject(f"{path}/{k}", "unknown-field", format_type(rt))
+            if v is None and ft[1] and not fits(NULL, ft[0], env):
+                continue        # null in an optional field means "absent" (how models say "does not apply")
             out[k] = coerce(v, ft[0], env, yaml=yaml, path=f"{path}/{k}")
         # keep declared field order
         return {n: out[n] for n in rt.names if n in out}
