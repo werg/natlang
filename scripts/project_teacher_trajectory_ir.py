@@ -42,10 +42,17 @@ def project(row, *, tool_map, accepted_only=False, drop_reasoning=False,
         turn["reviews"] = [{**review, "call_index": indexes[review["call_index"]]}
                            for review in turn["reviews"] if review["call_index"] in indexes]
     if empty_success_reply and selected["outcome"]["status"] == "done":
-        for turn in reversed(selected["trajectory"]):
-            if not turn["assistant"]["calls"]:
-                turn["assistant"]["content"] = ""
-                break
+        if selected["trajectory"] and selected["trajectory"][-1]["assistant"]["calls"]:
+            selected["trajectory"].append({"index": len(selected["trajectory"]),
+                                            "function": selected["task"]["function"],
+                                            "context": [], "tools_offered": None,
+                                            "assistant": {"content": "", "reasoning": None,
+                                                          "calls": []},
+                                            "reviews": [], "executions": [],
+                                            "raw_response_sha256": None,
+                                            "synthesized_end_turn": True})
+        elif selected["trajectory"]:
+            selected["trajectory"][-1]["assistant"]["content"] = ""
     selected["projection"] = {"tool_map": tool_map, "accepted_only": accepted_only,
                               "drop_reasoning": drop_reasoning,
                               "empty_success_reply": empty_success_reply}
@@ -64,6 +71,9 @@ def main():
     args = parser.parse_args()
     if args.dst.exists():
         parser.error(f"refusing overwrite: {args.dst}")
+    staged = args.dst.with_suffix(args.dst.suffix + ".building")
+    if staged.exists():
+        parser.error(f"refusing overwrite: {staged}")
     tool_map = json.loads(args.tool_map.read_text()) if args.tool_map else {}
     if not isinstance(tool_map, dict) or any(not isinstance(k, str) or
                                              (v is not None and not isinstance(v, str))
@@ -71,7 +81,7 @@ def main():
         parser.error("--tool-map must be a JSON object from tool names to names or null")
     args.dst.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with args.src.open() as source, args.dst.open("x") as target:
+    with args.src.open() as source, staged.open("x") as target:
         for line in source:
             if not line.strip():
                 continue
@@ -82,6 +92,7 @@ def main():
             if row is not None:
                 target.write(json.dumps(row, ensure_ascii=False) + "\n")
                 count += 1
+    staged.replace(args.dst)
     print(f"{count} projected teacher trajectories -> {args.dst}")
 
 

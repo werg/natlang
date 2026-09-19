@@ -47,6 +47,8 @@ class ReplayDecoder:
 def materialize(row, *, system_prompt: str):
     if row["version"] != VERSION:
         raise ValueError("unsupported teacher trajectory version")
+    if row["task"]["kind"] != "generative_leaf":
+        raise ValueError("this materializer accepts leaf trajectories only")
     if not row["outcome"]["accepted"] or row["outcome"]["status"] != "done":
         raise ValueError("teacher trajectory was not accepted as a completed leaf")
     program = row["task"].get("leaf_program")
@@ -94,11 +96,14 @@ def main():
     args = parser.parse_args()
     if args.dst.exists():
         parser.error(f"refusing overwrite: {args.dst}")
+    staged = args.dst.with_suffix(args.dst.suffix + ".building")
+    if staged.exists():
+        parser.error(f"refusing overwrite: {staged}")
     tool_map = json.loads(args.tool_map.read_text()) if args.tool_map else {"end_turn": None}
     system_prompt = args.system_file.read_text()
     args.dst.parent.mkdir(parents=True, exist_ok=True)
     trajectories = turns = 0
-    with args.src.open() as source, args.dst.open("x") as target:
+    with args.src.open() as source, staged.open("x") as target:
         for line in source:
             if not line.strip():
                 continue
@@ -111,6 +116,7 @@ def main():
                 target.write(json.dumps(sample, ensure_ascii=False) + "\n")
             trajectories += 1
             turns += len(samples)
+    staged.replace(args.dst)
     print(f"{trajectories} replayed teacher trajectories, {turns} turns -> {args.dst}")
 
 

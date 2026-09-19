@@ -18,6 +18,7 @@ from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import load_program, dump
 from scripts.generate_agent_support import support_cases
+from scripts.teacher_probe_trajectory_ir import convert_probe
 
 
 CALL_FIELDS = ('function','to','inputs','over','init','until','max')
@@ -163,8 +164,13 @@ def main():
     ap.add_argument('--system-file', type=Path, default=ROOT/'natlang/prompts/tools_small.md')
     ap.add_argument('--cases', nargs='+', help='optional subset of case names')
     ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--trajectory-out', type=Path,
+                    help='template-independent teacher trajectory IR (defaults beside --out)')
     a = ap.parse_args()
     if a.out.exists(): ap.error('refusing overwrite')
+    trajectory_path = a.trajectory_out or a.out.with_suffix('.trajectory.ir.jsonl')
+    if trajectory_path.resolve() == a.out.resolve() or trajectory_path.exists():
+        ap.error('trajectory IR needs a separate fresh output path')
     if a.rescore:
         doc = rescore(json.loads(a.rescore.read_text()))
         a.out.parent.mkdir(parents=True,exist_ok=True)
@@ -202,6 +208,13 @@ def main():
                  'audit_version':3,'summary':summary(rows),'rows':rows}
             a.out.parent.mkdir(parents=True,exist_ok=True)
             tmp=a.out.with_suffix('.tmp');tmp.write_text(json.dumps(doc,indent=2)+'\n');tmp.replace(a.out)
+            trajectory_path.parent.mkdir(parents=True, exist_ok=True)
+            trajectory_tmp = trajectory_path.with_suffix(trajectory_path.suffix + '.tmp')
+            with trajectory_tmp.open('w') as stream:
+                for number, saved in enumerate(rows, 1):
+                    stream.write(json.dumps(convert_probe(doc, saved, path=a.out, index=number),
+                                            ensure_ascii=False) + '\n')
+            trajectory_tmp.replace(trajectory_path)
             print(f'{len(rows)} {case["name"]}: pass={row["pass"]} {out.kind} {out.detail[:100]}',flush=True)
 
 if __name__=='__main__': main()

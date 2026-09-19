@@ -99,6 +99,8 @@ def main():
     ap.add_argument("--seed", type=int, default=31)
     ap.add_argument("--server", default="http://127.0.0.1:8081")
     ap.add_argument("--thinking", type=int, default=256)
+    ap.add_argument("--turn-tokens", type=int, default=1600,
+                    help="maximum generated tokens for one teacher turn; HTML leaves exceed 700")
     ap.add_argument("--limit", type=int, default=10**9, help="stop after this many leaves")
     ap.add_argument("--temperature", type=float, default=0)
     ap.add_argument("--reasoning-effort", choices=("low", "medium", "xhigh"), default="low")
@@ -108,6 +110,8 @@ def main():
     ap.add_argument("--trajectory-out", type=Path,
                     help="linked teacher trajectory IR (defaults beside audit in --ir mode)")
     a = ap.parse_args()
+    if a.turn_tokens < 1:
+        ap.error("--turn-tokens must be positive")
     audit_path = a.audit_out or ROOT / "runs" / f"teacher-leaves-audit-{time.time_ns()}.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     if audit_path.exists():
@@ -158,7 +162,8 @@ def main():
             leaf_program = dump_state(root)
             out, value = Runtime(lambda lam: ToolAgent(dec, temperature=a.temperature, system_prompt=prompt,
                                  validation_feedback="caller", log=log, transcript=transcript,
-                                 teacher_turns=teacher_turns), max_episodes=4).run_root(root)
+                                 teacher_turns=teacher_turns, turn_tokens=a.turn_tokens),
+                                 max_episodes=4).run_root(root)
             text = dump(value) if out.kind == "done" else None
             results = run_checks(CHECKS[fn](args), text, judge) if text else []
             ok = bool(text) and all(r is True for _, r in results)
@@ -180,7 +185,8 @@ def main():
                      "checks":results,"log":log,"transcript":transcript,
                      "teacher_turns":teacher_turns,"system_prompt":prompt,
                      "model_metadata":model_metadata,"temperature":a.temperature,
-                     "thinking":a.thinking,"reasoning_effort":a.reasoning_effort,
+                     "thinking":a.thinking,"turn_tokens":a.turn_tokens,
+                     "reasoning_effort":a.reasoning_effort,
                      "json_text_values":True}
         with audit_path.open("a") as f:
             f.write(json.dumps(audit_row, ensure_ascii=False) + "\n")

@@ -3,6 +3,7 @@ from pathlib import Path
 from natlang.gen.codebases import ref_key
 from scripts.materialize_teacher_trajectory_ir import materialize
 from scripts.project_teacher_trajectory_ir import project
+from scripts.teacher_probe_trajectory_ir import convert_probe
 from scripts.teacher_trajectory_ir import convert
 
 
@@ -48,6 +49,7 @@ def test_legacy_audit_keeps_done_and_marks_missing_reasoning():
     assert row["trajectory"][0]["assistant"]["calls"][0]["tool"] == "end_turn"
     assert row["trajectory"][0]["executions"][0]["text"] == "completed"
     assert row["legacy_action_log"] == audit["log"]
+    assert row["legacy_action_sequence"][0]["call"]["tool"] == "end_turn"
     assert "reasoning_not_recorded" in row["capture_limits"]
     view = project(row, tool_map={"end_turn": None}, accepted_only=True,
                    empty_success_reply=True)
@@ -72,9 +74,32 @@ def test_legacy_harness_opening_is_context_not_teacher_choice():
     assert row["trajectory"][0]["assistant"]["content"] == "Finished."
 
 
+def test_unlinked_audit_can_be_preserved_with_explicit_flag():
+    args = {"purpose": "unseen"}
+    key = ref_key("page_content", args)
+    audit = {"key": key, "function": "page_content", "args": args, "transcript": []}
+    row = convert(audit, audit_path=Path("old.jsonl"), line_number=1,
+                  links={}, program_ir_hash="abc", allow_unlinked=True)
+    assert row["task"]["source_program_ids"] == []
+    assert "unlinked_program" in row["capture_limits"]
+
+
+def test_projection_restores_missing_legacy_final_turn_without_changing_source():
+    row = {"version": "natlang.teacher_trajectory/1", "task": {"function": "say"},
+           "outcome": {"accepted": True, "status": "done"},
+           "trajectory": [{"assistant": {"content": "", "reasoning": None,
+                                          "calls": [{"tool": "write", "arguments": {"value": "ok"}}]},
+                           "reviews": [], "executions": []}]}
+    view = project(row, tool_map={}, empty_success_reply=True)
+    assert len(view["trajectory"]) == 2
+    assert view["trajectory"][1]["synthesized_end_turn"] is True
+    assert view["trajectory"][1]["assistant"]["calls"] == []
+    assert len(row["trajectory"]) == 1
+
+
 def test_accepted_teacher_choices_replay_into_structured_turns():
     row = {"version": "natlang.teacher_trajectory/1", "id": "teacher-leaf:test",
-           "task": {"leaf_program": {"$lambda": {"type": "Lambda<{}, Num>",
+           "task": {"kind": "generative_leaf", "leaf_program": {"$lambda": {"type": "Lambda<{}, Num>",
                      "instructions": "Return 7.", "args": {}}},
                     "source_program_ids": ["program-1"], "reference_key": "test"},
            "provenance": {"model": "teacher"},
@@ -91,3 +116,17 @@ def test_accepted_teacher_choices_replay_into_structured_turns():
     assert samples[0]["target"]["tool_calls"][0]["function"]["name"] == "write"
     assert samples[1]["target"]["content"] == ""
     assert samples[0]["teacher_reasoning"] == "write the requested number"
+
+
+def test_behavior_probe_choices_convert_without_leaf_reference_key():
+    doc = {"model": "teacher", "system_prompt": "execute"}
+    row = {"case": "fold_calls", "group": 0,
+           "program": {"$lambda": {"type": "Lambda<{}, Num>", "instructions": "Return 7."}},
+           "status": "done", "pass": True, "value": 7,
+           "teacher_turns": [{"function": "root", "messages_before": [],
+                              "response": {"choices": [{"message": {"content": "Finished.",
+                                                            "reasoning_content": "The value is ready."}}]},
+                              "calls": [], "executions": [], "reviews": []}]}
+    ir = convert_probe(doc, row, path=Path("probe.json"), index=1)
+    assert ir["task"]["kind"] == "behavior_probe"
+    assert ir["trajectory"][0]["assistant"]["reasoning"] == "The value is ready."

@@ -27,11 +27,29 @@ Existing audits can be converted without rerunning the teacher:
   runs/teacher-leaves-ir-backfill-s73-first8.trajectory-fresh.ir.jsonl
 ```
 
+Behavior probes use the same trajectory IR without pretending to be leaf
+references. Their known expected value, failure contract, required-call check,
+and effects verdict stay attached to each trajectory. New probe runs write this
+IR beside the JSON audit automatically; old probes can be converted:
+
+```bash
+.venv/bin/python scripts/teacher_probe_trajectory_ir.py \
+  runs/teacher-behavior-reply-only-s886.json \
+  runs/teacher-behavior-reply-only-s886.trajectory-fresh.ir.jsonl
+```
+
 Old audits contain the visible transcript and action log but did not capture
 the server's reasoning field or every rejected turn's context. Conversion
-marks those losses explicitly. New collection records both. If the server
+marks those losses explicitly and keeps the complete ordered action log in
+structured form, including calls absent from the old transcript. New collection
+records both. If the server
 does not expose reasoning, it cannot be recovered; the audit still preserves
 every returned field and the model's visible explanations.
+Some old reply-only audits also missed the final assistant turn. The IR marks
+that gap, and the projection may synthesize an empty final turn only when the
+recorded outcome was successful. Audits with keys outside the supplied frozen
+IR can be preserved with `--allow-unlinked`; they remain visibly unlinked and
+cannot enter replay training without an executable leaf program.
 
 Make a disposable selection or migration from the IR, leaving the source
 untouched. A tool map is a JSON object from canonical names to new names;
@@ -71,6 +89,8 @@ later training view.
 
 The eight previously admitted seed-73 leaves replayed to 16 student turns
 after the obsolete terminal `done` calls were migrated to empty final turns.
+The four reply-only dry-run leaves also replayed to eight turns after their
+missing final turns were explicitly reconstructed from successful outcomes.
 Those legacy records have no captured reasoning; future audits retain whatever
 reasoning field the server exposes. Self-review decisions are retained in the
 source IR but are not yet rendered as student review targets by this leaf

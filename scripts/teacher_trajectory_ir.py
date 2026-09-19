@@ -161,7 +161,7 @@ def legacy_turns(audit):
     for message in transcript:
         if message.get("role") == "assistant":
             calls = raw_calls(message)
-            turn = {"index": len(turns), "function": audit["function"],
+            turn = {"index": len(turns), "function": audit.get("function", "root"),
                     "context": [], "tools_offered": None,
                     "assistant": {"content": message.get("content", ""),
                                                    "reasoning": None, "calls": calls},
@@ -181,23 +181,43 @@ def legacy_turns(audit):
     return turns, opening
 
 
+def legacy_action_sequence(audit):
+    actions = []
+    for index, event in enumerate(audit.get("log") or []):
+        name, _, encoded = event.get("action", "").partition(" ")
+        try:
+            args = json.loads(encoded) if encoded else {}
+        except ValueError:
+            args = {"__unparsed__": encoded}
+        actions.append({"index": index, "call": normalize_call(name, args),
+                        "result_kind": event.get("kind"),
+                        "attempt": event.get("attempt")})
+    return actions
+
+
 def convert(audit, *, audit_path: Path, line_number: int, links: dict, program_ir_hash: str,
-            leaf_program_by_key=None):
+            leaf_program_by_key=None, allow_unlinked=False):
     key = ref_key(audit["function"], audit["args"])
     if audit["key"] != key:
         raise ValueError(f"{audit_path}:{line_number}: reference key mismatch")
-    if key not in links:
+    if key not in links and not allow_unlinked:
         raise ValueError(f"{audit_path}:{line_number}: key is absent from program IR: {key}")
     modern = "teacher_turns" in audit
     trajectory, opening = (new_turns(audit), []) if modern else legacy_turns(audit)
     metadata = audit.get("model_metadata") or {}
     models = metadata.get("data") or []
+    limits = ([] if modern else ["raw_server_response_unavailable", "reasoning_not_recorded",
+                                 "rejected_action_turns_may_be_absent"])
+    if not modern and audit.get("status") == "done" and trajectory and trajectory[-1]["assistant"]["calls"]:
+        limits.append("terminal_turn_missing")
+    if key not in links:
+        limits.append("unlinked_program")
     return {"version": VERSION,
             "id": "teacher-leaf:" + digest([key, str(audit_path), line_number])[:20],
             "task": {"kind": "generative_leaf", "reference_key": key,
                      "function": audit["function"], "arguments": audit["args"],
                      "leaf_program": audit.get("leaf_program") or (leaf_program_by_key or {}).get(key),
-                     "source_program_ids": links[key]},
+                     "source_program_ids": links.get(key, [])},
             "provenance": {"audit_file": str(audit_path), "audit_line": line_number,
                            "audit_row_sha256": digest(audit),
                            "program_ir_sha256": program_ir_hash,
@@ -213,9 +233,8 @@ def convert(audit, *, audit_path: Path, line_number: int, links: dict, program_i
             "trajectory": trajectory,
             "harness_opening_context": opening,
             "legacy_action_log": audit.get("log") if not modern else None,
-            "capture_limits": ([] if modern else ["raw_server_response_unavailable",
-                                                "reasoning_not_recorded",
-                                                "rejected_action_turns_may_be_absent"])}
+            "legacy_action_sequence": legacy_action_sequence(audit) if not modern else None,
+            "capture_limits": limits}
 
 
 def main():
@@ -223,24 +242,30 @@ def main():
     parser.add_argument("audit", type=Path)
     parser.add_argument("program_ir", type=Path)
     parser.add_argument("out", type=Path)
+    parser.add_argument("--allow-unlinked", action="store_true",
+                        help="preserve audits whose leaf keys are absent from this frozen program IR")
     args = parser.parse_args()
     if args.out.exists():
         parser.error(f"refusing overwrite: {args.out}")
+    staged = args.out.with_suffix(args.out.suffix + ".building")
+    if staged.exists():
+        parser.error(f"refusing overwrite: {staged}")
     links = program_links(args.program_ir)
     programs = leaf_programs(args.program_ir)
     program_ir_hash = hashlib.sha256(args.program_ir.read_bytes()).hexdigest()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with args.audit.open() as source, args.out.open("x") as target:
+    with args.audit.open() as source, staged.open("x") as target:
         for line_number, line in enumerate(source, 1):
             if not line.strip():
                 continue
             row = convert(json.loads(line), audit_path=args.audit, line_number=line_number,
                           links=links, program_ir_hash=program_ir_hash,
-                          leaf_program_by_key=programs)
+                          leaf_program_by_key=programs, allow_unlinked=args.allow_unlinked)
             target.write(json.dumps(row, ensure_ascii=False) + "\n")
             count += 1
-    print(f"{count} linked teacher trajectories -> {args.out}")
+    staged.replace(args.out)
+    print(f"{count} converted teacher trajectories -> {args.out}")
 
 
 if __name__ == "__main__":

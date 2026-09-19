@@ -23,6 +23,7 @@ class ToolAgent:
     def __init__(self, decoder: Decoder, *, surface: Optional[ToolSurface] = None, temperature: float = 0.2,
                  system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
                  max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
+                 turn_tokens: int = 700,
                  validation_feedback: str = "caller", careful_threshold: Optional[float] = None,
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
@@ -50,6 +51,9 @@ class ToolAgent:
         self.temperature, self.system = temperature, system_prompt
         self.log = log if log is not None else []
         self.max_turns, self.max_tokens, self.max_seconds = max_turns, max_tokens, max_seconds
+        if turn_tokens < 1:
+            raise ValueError("turn_tokens must be positive")
+        self.turn_tokens = turn_tokens
         self.transcript = transcript          # if given, receives the final message list (for debugging)
         self.teacher_turns = teacher_turns    # exact model replies and their pre-action context, for audit/distillation
 
@@ -76,7 +80,7 @@ class ToolAgent:
             while True:
                 if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
                     return "episode turn, token, or wall-clock budget exhausted"
-                allowance = min(700, self.max_tokens - tokens)
+                allowance = min(self.turn_tokens, self.max_tokens - tokens)
                 available_tools = s.tools(session)
                 offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
                 turn = self.dec.chat(messages, available_tools, temperature=self.temperature,
@@ -115,7 +119,7 @@ class ToolAgent:
                             continue
                         if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
                             return "careful review budget exhausted before applying proposal"
-                        allowance = min(700, self.max_tokens - tokens)
+                        allowance = min(self.turn_tokens, self.max_tokens - tokens)
                         name, args = turn.calls[index]
                         fork = review_messages(messages, turn.calls, index, self.review_prompt)
                         answer = getattr(self.dec, "review", self.dec.chat)(fork, review_tools(self.review_order), temperature=0, seed=0, max_tokens=allowance)
