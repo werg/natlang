@@ -8,6 +8,9 @@ its `uses`, nothing else.
 from __future__ import annotations
 
 import re
+import copy
+import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -147,6 +150,55 @@ def from_inline(entries: dict, inherited: dict, source: str, base: Optional[Path
         fn.codebase = from_inline(doc.get("codebase"), fn.types, fn.source, base)
         out[str(name)] = fn
     return out
+
+
+@dataclass(frozen=True)
+class CheckedGraph:
+    """A checked snapshot of supplied definitions, independent of file access."""
+
+    root: FunctionDef
+    definitions: dict[str, FunctionDef]
+    revision: str
+
+    def get(self, name: str) -> FunctionDef:
+        try:
+            return self.definitions[name]
+        except KeyError:
+            raise reject(name, "no-such-path", "a function in the checked source graph") from None
+
+
+def from_definitions(entries: dict[str, dict], root: str) -> CheckedGraph:
+    """Link a flat, already supplied source graph. `uses` names other entries.
+
+    The input is copied before validation, so edits to a notebook cell or a
+    caller's dictionary cannot alter a definition held by an active run.
+    """
+    supplied = copy.deepcopy(entries)
+    if root not in supplied:
+        raise reject(root, "no-such-path", "a root definition")
+    definitions = {}
+    links = {}
+    for name, doc in supplied.items():
+        if not isinstance(doc, dict):
+            raise reject(name, "type-mismatch", "a function definition")
+        kind = "code" if "code" in doc else "instructions"
+        meta = {k: v for k, v in doc.items() if k not in ("code", "instructions", "codebase")}
+        uses = meta.pop("uses", {}) or {}
+        if not isinstance(uses, dict):
+            raise reject(f"memory:{name}/uses", "type-mismatch", "a mapping of aliases to supplied definitions")
+        fn = _make(str(name), meta, str(doc.get(kind) or ""), kind, {}, f"memory:{name}")
+        definitions[str(name)] = fn
+        links[str(name)] = uses
+    for name, fn in definitions.items():
+        for alias, target in links[name].items():
+            if target not in definitions:
+                raise reject(f"memory:{name}/uses/{alias}", "no-such-path", "a supplied definition", target)
+            fn.codebase[str(alias)] = definitions[target]
+    for fn in definitions.values():
+        check(fn)
+    digest = hashlib.sha256(json.dumps(supplied, sort_keys=True, separators=(",", ":"),
+                                      ensure_ascii=False).encode()).hexdigest()
+    return CheckedGraph(definitions[root], definitions, digest)
 
 
 # -- load-time checks --------------------------------------------------------------------------------------

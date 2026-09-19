@@ -35,6 +35,20 @@ def instantiate(fn) -> Lambda:
     return root
 
 
+def load_definitions(entries: dict, root_name: str, inputs: dict | None = None):
+    """Load supplied definitions and bind typed values, without probing paths."""
+    from .codebase import from_definitions
+    graph = from_definitions(entries, root_name)
+    root = instantiate(graph.root)
+    env = root.env(TypeEnv())
+    for name, value in (inputs or {}).items():
+        field = root.type.params.get(name)
+        if field is None:
+            raise ValueError(f"{name} is not a parameter of the program")
+        root.in_[name] = coerce(value, field[0], env, yaml=False, path=f"args/{name}")
+    return graph, root
+
+
 def load_fold(step_file: Path, init, source) -> Pending:
     """A long-lived program: a root Fold whose step is a code-base function `f(acc, item) -> State` and whose
     list is open, fed by `source` (an iterable of events; "$close" or exhaustion ends the run)."""
