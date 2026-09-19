@@ -629,6 +629,17 @@ investigation and reference-label corrections are recorded in TRAINING.md.
 Keep mixed marking styles until model runs support choosing one; the initial
 Bonsai style probe had instruction violations and is not a clean comparison.
 
+**Active run (2026-09-19):** `runs/lora-v7-arch-pilot`, 300 optimizer steps,
+8,192-token cap, 41,965 training turns and 313 held-out turns from 12 whole
+programs. Inputs are recorded in `data/sft-v7-pilot.manifest.json`. The full
+20,000-program `data/ref-v7-arch-r2` generation continues independently on two
+CPU workers. Bonsai and its watchdog are stopped for training; v5 remains on
+8080. On successful training completion, conversion and a separate v7 preview
+on 8082 are queued, followed by marking, application and conformance probes
+(`runs/student-v7-*`). The v5 conformance run uses the same current prompt and
+harness (`runs/student-v5-current-conformance.*`). Judge-dependent checks remain
+ungraded while Bonsai is stopped. These are running jobs, not completed results.
+
 ### 10.3 Findings worth keeping
 
 *Serving and formats*
