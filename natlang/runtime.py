@@ -108,7 +108,7 @@ class Runtime:
                  trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
                  engine_selection: bool = False, map_workers: int = 1,
                  parallel_model_safe: bool = False, _budget: Optional[EpisodeBudget] = None,
-                 _parent_path: Optional[str] = None):
+                 _parent_path: Optional[str] = None, _call_prefix: str = ""):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
         self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
@@ -120,6 +120,7 @@ class Runtime:
         self.map_workers, self.parallel_model_safe = map_workers, parallel_model_safe
         self._budget = _budget or EpisodeBudget(self.max_episodes)
         self._parent_path = _parent_path
+        self._call_prefix = _call_prefix
         self.trace_sink = trace_sink
         self.trace_path = trace_path
         self.deadline = None
@@ -306,7 +307,8 @@ class Runtime:
         node.status, node.note = RUNNING, ""
         node.attempts += 1
         parent = self.invocations[-1].path if self.invocations else self._parent_path
-        invocation = Invocation(self.options.run_id, ref.path, node.attempts, parent)
+        logical_path = f"{self._call_prefix}/{ref.path}".rstrip("/") if self._call_prefix else ref.path
+        invocation = Invocation(self.options.run_id, logical_path, node.attempts, parent)
         if node.original_body is None:
             node.original_body = node.body
         if not self._budget.reserve():
@@ -378,7 +380,7 @@ class Runtime:
             child = Runtime(self.agent_factory, capabilities={}, options=self.options,
                             executors=self.executors, engine_selection=self.engine_selection,
                             trace_sink=self.trace_sink, _budget=self._budget,
-                            _parent_path=ref.path, map_workers=1)
+                            _parent_path=ref.path, _call_prefix=self._call_prefix, map_workers=1)
             child.deadline = self.deadline
             child._depth = self._depth
             child._stack = list(self._stack)

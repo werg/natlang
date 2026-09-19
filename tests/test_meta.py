@@ -45,3 +45,23 @@ def test_child_run_cannot_reset_parent_episode_budget():
                              parent_call_id="$root@1")
     assert child.outcome == "quiesced" and parent._budget.used == 1
     assert child.trace[0]["parent_call_id"] == "$root@1"
+
+
+def test_child_logical_identity_includes_parent_call_for_seed_isolation():
+    workspace = SourceWorkspace({"cell": {"args": {}, "returns": "Num",
+                                       "instructions": "Return one."}}, "cell")
+    class Agent:
+        def run(self, session):
+            session.apply("write", {"path": "return", "value": 1})
+            session.finish()
+    options = RunOptions(max_episodes=5)
+    parent = Runtime(None, options=options)
+    first = workspace.invoke("cell", {}, agent_factory=lambda lam: Agent(), options=options,
+                             parent_runtime=parent, parent_call_id="parent-a@1")
+    second = workspace.invoke("cell", {}, agent_factory=lambda lam: Agent(), options=options,
+                              parent_runtime=parent, parent_call_id="parent-b@1")
+    one = next(e for e in first.trace if e["kind"] == "invocation" and e["phase"] == "start")
+    two = next(e for e in second.trace if e["kind"] == "invocation" and e["phase"] == "start")
+    assert one["call_id"] == "parent-a@1/child@1"
+    assert two["call_id"] == "parent-b@1/child@1"
+    assert parent.episodes_started == 2

@@ -48,8 +48,9 @@ class SourceWorkspace:
 
     def invoke(self, name: str, inputs: dict, *, agent_factory, options: RunOptions,
                executors: dict | None = None, capabilities: dict | None = None,
-               parent_call_id: str | None = None, max_episodes: int = 32,
+               parent_call_id: str | None = None, max_episodes: int | None = None,
                parent_runtime: Runtime | None = None) -> ChildResult:
+        max_episodes = min(32, options.max_episodes) if max_episodes is None else max_episodes
         if max_episodes < 1 or max_episodes > options.max_episodes:
             raise ValueError("child episode budget must be positive and bounded by parent")
         graph, root = load_definitions(self.definitions, name, inputs)
@@ -62,7 +63,8 @@ class SourceWorkspace:
         runtime = Runtime(agent_factory, options=child_options, executors=executors,
                           capabilities=capabilities, trace_sink=recorder,
                           _budget=parent_runtime._budget if parent_runtime else None,
-                          _parent_path=parent_call_id)
+                          _parent_path=parent_call_id,
+                          _call_prefix=f"{parent_call_id}/child" if parent_call_id else "")
         out, value = runtime.run_root(root)
         if parent_runtime is not None:
             parent_runtime.episodes_started = parent_runtime._budget.used
