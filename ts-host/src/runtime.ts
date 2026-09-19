@@ -11,16 +11,22 @@ const DEFAULT_ROOT = existsSync(join(SOURCE_ROOT, 'natlang', 'ts_host_bridge.py'
 
 export type Source =
   | { kind: 'program'; program: Record<string, unknown> }
-  | { kind: 'definitions'; entries: Record<string, Record<string, unknown>>; root: string };
+  | { kind: 'definitions'; entries: Record<string, Record<string, unknown>>; root: string }
+  | { kind: 'file'; path: string };
+export type RunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backend'; root?: number;
+  version?: string }; model?: { temperature?: number; max_turns?: number; max_tokens?: number;
+  max_seconds?: number; turn_tokens?: number }; world_seed?: number;
+  max_episodes?: number; max_depth?: number; run_id?: string };
 export type ModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
   seed: number | null; max_tokens: number };
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; value_confidence?: (number | null)[];
   raw_response?: Record<string, unknown> };
 export type RunRequest = { source: Source; inputs?: Record<string, unknown>;
-  options?: Record<string, unknown>; mapWorkers?: number; tracePath?: string;
+  options?: RunOptions; mapWorkers?: number; tracePath?: string;
   typescript?: boolean; modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
   streams?: Record<string, AsyncIterable<unknown>>;
+  capabilities?: Record<string, (args: unknown[]) => Promise<unknown> | unknown>;
   signal?: AbortSignal; timeoutMs?: number };
 export type RunResult = { outcome: { kind: string; path: string; detail: string };
   value: unknown; emitted: unknown[]; trace: Record<string, unknown>[] | null; run_id: string };
@@ -55,6 +61,7 @@ export class NatlangHost {
       inputs: request.inputs ?? {}, options: request.options ?? {},
       map_workers: request.mapWorkers ?? 1, trace_path: request.tracePath,
       stream_parts: Object.keys(streams),
+      capabilities: Object.keys(request.capabilities ?? {}),
       typescript: request.typescript ?? true };
     return new Promise<RunResult>((resolveRun, rejectRun) => {
       let settled = false;
@@ -125,6 +132,12 @@ export class NatlangHost {
               if (!iterator) throw new Error(`unknown stream part ${part}`);
               const step = await iterator.next();
               value = step.done ? { kind: 'closed' } : { kind: 'item', value: step.value };
+            } else if (message.kind === 'capability') {
+              const name = message.name as string;
+              const capability = request.capabilities?.[name];
+              if (!capability) throw new Error(`unknown capability ${name}`);
+              if (!Array.isArray(message.args)) throw new TypeError('capability arguments must be a list');
+              value = await capability(message.args);
             } else throw new Error(`unknown bridge request ${message.kind}`);
             child.stdin.write(JSON.stringify({ protocol: PROTOCOL, kind: 'reply', id: message.id,
               value: portable(value) }) + '\n');

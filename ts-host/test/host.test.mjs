@@ -3,9 +3,15 @@ import { test } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DesktopBindings, NatlangHost, TypeScriptEnvironment, portable } from '../dist/index.js';
 
 const lambda = (type, code, engine = 'typescript-host') => ({ $lambda: { type, engine, code } });
+test('host and isolated engines use the same crisp standard library source', () => {
+  const canonical = fileURLToPath(new URL('../../natlang/prelude.js', import.meta.url));
+  const copied = fileURLToPath(new URL('../prelude.js', import.meta.url));
+  assert.equal(readFileSync(copied, 'utf8'), readFileSync(canonical, 'utf8'));
+});
 const run = async (program, environment = new TypeScriptEnvironment()) => {
   const host = new NatlangHost({ environment });
   try { return await host.run({ source: { kind: 'program', program } }); }
@@ -55,6 +61,18 @@ test('checked definitions, input binding and trace work from TypeScript', async 
     assert.equal(result.value, 10);
     assert.equal(result.trace[0].kind, 'manifest');
     assert.match(readFileSync(tracePath, 'utf8'), /typescript-host/);
+  } finally { host.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('file source uses the existing Python loader', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'natlang-ts-source-'));
+  const path = join(dir, 'program.json');
+  writeFileSync(path, JSON.stringify(lambda('Lambda<{}, Num>', 'return 12;')));
+  const host = new NatlangHost();
+  try {
+    const result = await host.run({ source: { kind: 'file', path } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, 12);
   } finally { host.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -118,6 +136,20 @@ test('declared fx capabilities remain available through isolated QuickJS', async
   assert.equal(result.outcome.kind, 'done');
   assert.equal(result.value, 5);
   assert.deepEqual(result.emitted, [{ kind: 'seen' }]);
+});
+
+test('application capabilities bridge back into the declared effect journal', async () => {
+  const seen = [];
+  const host = new NatlangHost();
+  try {
+    const result = await host.run({ source: { kind: 'program', program: {
+      $lambda: { type: 'Lambda<{}, Num>', engine: 'quickjs-isolated',
+        effects: ['counter.add'], code: 'return fx.counter.add(3);' },
+    } }, capabilities: { 'counter.add': ([n]) => { seen.push(n); return n + 2; } } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, 5);
+    assert.deepEqual(seen, [3]);
+  } finally { host.close(); }
 });
 
 test('eventful Fold consumes an async TypeScript stream in order', async () => {

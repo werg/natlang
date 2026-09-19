@@ -14,7 +14,7 @@ from pathlib import Path
 from . import js
 from .decoder import ChatTurn
 from .execution import CrispRequest, ExecutionError, QuickJSExecutor
-from .host import load_definitions
+from .host import load, load_definitions
 from .invocation import ModelSettings, RunOptions, SeedPolicy
 from .runtime import Runtime
 from .streams import Poll, StreamBuffer
@@ -124,6 +124,8 @@ def _root(start, channel):
         raise ValueError("source must be a record")
     if source.get("kind") == "definitions":
         _, root = load_definitions(source["entries"], source["root"], start.get("inputs") or {})
+    elif source.get("kind") == "file":
+        root = load(Path(source["path"]), start.get("inputs") or {})
     elif source.get("kind") == "program":
         root = load_program(source["program"])
         for name, value in (start.get("inputs") or {}).items():
@@ -165,7 +167,12 @@ def main():
         if start.get("typescript", True):
             engines["typescript-host"] = RemoteTypeScriptExecutor(channel)
         trace_path = Path(start["trace_path"]) if start.get("trace_path") else None
-        runtime = Runtime(agent_factory, executors=engines, engine_selection=True,
+        names = start.get("capabilities") or []
+        if not isinstance(names, list) or any(not isinstance(name, str) or "." not in name for name in names):
+            raise ValueError("capabilities must be dotted names")
+        capabilities = {name: (lambda args, n=name: channel.request("capability", name=n, args=args))
+                        for name in names}
+        runtime = Runtime(agent_factory, capabilities=capabilities, executors=engines, engine_selection=True,
                           options=options, trace_path=trace_path,
                           map_workers=start.get("map_workers", 1))
         outcome, value = runtime.run_root(root)

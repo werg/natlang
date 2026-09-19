@@ -43,7 +43,9 @@ try {
 }
 ```
 
-For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` as the source. `options` accepts the Python `RunOptions` fields, including seed/model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but this host's shared engine is marked unsafe for parallel native access and the runtime serializes those calls.
+For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. File sources use the existing Python loader, including `.nl`, `.ts`, YAML and JSON programs. `options` accepts the Python `RunOptions` fields, including seed/model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but this host's shared engine is marked unsafe for parallel native access and the runtime serializes those calls.
+
+`capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls in the isolated QuickJS engine. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
 
 ## Eval environment and authority
 

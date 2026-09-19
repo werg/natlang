@@ -23,3 +23,7 @@ Use the Python natlang runtime as the semantic authority. A typed TypeScript pac
 - Node and Python failures, malformed protocol data, timeouts and client disposal produce bounded errors. No unsolicited retries of effects.
 - Cross-boundary values reject undefined, cycles, big integers, binary and native objects. Pending values are only descriptive input snapshots.
 - Build, type-check, package and end-to-end tests run without the live model server. The live paired model and student pilots remain separately tracked in the implementation status.
+
+## Delivery
+
+The Python bridge and `ts-host` package implement this architecture. The Node integration suite exercises the complete interpreter through the bridge, including generated TypeScript syntax, model tool turns, checked in-memory and file sources, trace capture, declared application capabilities, async Fold input, direct native object reuse in Map, and desktop file/process calls. The host keeps the existing Python semantics as its authority; it is not an independent TypeScript interpreter port. See [the package README](../ts-host/README.md) for installation, examples, and runtime limits.
