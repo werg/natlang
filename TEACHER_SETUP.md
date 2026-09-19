@@ -118,6 +118,20 @@ Preserve rejected attempts and judge results in the audit, and sample accepted
 outputs by function. The eight-case pilot establishes the collector path on
 those inputs, not the acceptance rate or quality of all remaining leaves.
 
+The collector can now read the exact missing cases from the frozen IR, without
+replaying generator seeds:
+
+```bash
+.venv/bin/python scripts/teacher_leaves.py \
+  --ir data/external_pilot/synthetic-all-current.ir.jsonl \
+  --limit 16 --audit-out runs/teacher-leaves-ir-batch.jsonl
+```
+
+The current bank leaves 396 distinct keys in that snapshot (259 `say`, 136
+`page_content`, one `submission_page`). Repeated runs skip admitted keys; use a
+fresh audit path for each run. A rebuilt IR is still required to replace frozen
+template gold with accepted references.
+
 ## End-of-turn completion
 
 The terminal `done` tool has been removed from the model-facing surface and

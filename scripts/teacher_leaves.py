@@ -3,8 +3,9 @@
 harness; the output is kept only if it passes the leaf's checks (crisp constraints plus a judge question). Accepted
 outputs go to data/leaf_references.jsonl, keyed by function and arguments; the generators use them on the next run.
 
-  scripts/teacher_leaves.py --families cb_shopkeeper cb_webserver --n 12 --seed 31 --server http://127.0.0.1:8081
-Use the same --seed and families as the corpus run whose leaves should be covered.
+  scripts/teacher_leaves.py --ir data/external_pilot/synthetic-all-current.ir.jsonl --limit 12
+  scripts/teacher_leaves.py --families cb_shopkeeper cb_webserver --n 12 --seed 31
+Use --ir for a frozen corpus; seed replay is only for a newly generated corpus.
 """
 import argparse, json, random, sys, time
 import urllib.request
@@ -45,8 +46,34 @@ CHECKS = {
 }
 
 
+def missing_from_ir(path: Path):
+    """Collect the exact, distinct template cases in a frozen semantic corpus."""
+    todo, seen = [], set()
+    with path.open() as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            oracles = record["semantics"].get("leaf_oracles", {})
+            if not isinstance(oracles, dict):
+                continue
+            for fn, oracle in oracles.items():
+                if fn not in WHERE:
+                    continue
+                for case in oracle.get("cases", []):
+                    if not case.get("template"):
+                        continue
+                    args = case["input"]
+                    key = C.ref_key(fn, args)
+                    if key not in seen and key not in C.REFERENCES:
+                        seen.add(key)
+                        todo.append((key, fn, args))
+    return todo
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--ir", type=Path, help="collect exact missing template cases from a frozen program IR")
     ap.add_argument("--families", nargs="*", default=["cb_shopkeeper", "cb_webserver"])
     ap.add_argument("--mix", default=None, help="a mix of scripts/generate.py, instead of --families")
     ap.add_argument("--n", type=int, default=12)
@@ -67,16 +94,19 @@ def main():
     prompt = a.system_file.read_text()
     with urllib.request.urlopen(a.server.rstrip('/') + '/v1/models', timeout=30) as response:
         model_metadata = json.load(response)
-    families = MIXES[a.mix] if a.mix else a.families
-    for i in range(a.n):                                # collect the leaves these programs need: the same programs
-        fam, prog = make_program(a.seed, i, families)   # as `generate.py --seed S` makes, by construction
-        if fam in ("cb_shopkeeper", "cb_webserver"):
-            run_program(prog, check_grammar=False)
-    todo, seen = [], set()
-    for fn, args in C.MISSES:
-        k = C.ref_key(fn, args)
-        if k not in seen and k not in C.REFERENCES:
-            seen.add(k); todo.append((k, fn, args))
+    if a.ir:
+        todo = missing_from_ir(a.ir)
+    else:
+        families = MIXES[a.mix] if a.mix else a.families
+        for i in range(a.n):                                # collect the leaves these programs need: the same programs
+            fam, prog = make_program(a.seed, i, families)   # as `generate.py --seed S` makes, by construction
+            if fam in ("cb_shopkeeper", "cb_webserver"):
+                run_program(prog, check_grammar=False)
+        todo, seen = [], set()
+        for fn, args in C.MISSES:
+            k = C.ref_key(fn, args)
+            if k not in seen and k not in C.REFERENCES:
+                seen.add(k); todo.append((k, fn, args))
     print(f"{len(todo)} generative leaves without a reference", flush=True)
     dec = LlamaServerDecoder(a.server, timeout=900, chat_extra={"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20,
                                          "chat_template_kwargs": {"reasoning_effort": a.reasoning_effort}},
