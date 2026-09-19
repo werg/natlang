@@ -28,9 +28,17 @@ def main():
                                      data=json.dumps({"messages": messages, "tools": _strip_private(tools)}).encode())
         return json.loads(urllib.request.urlopen(req, timeout=120).read())["prompt"]
 
+    import gzip
+
+    def lines():                                   # a .jsonl file, a .jsonl.gz file, or a directory of shards
+        files = sorted(a.src.glob("part-*.jsonl.gz")) if a.src.is_dir() else [a.src]
+        for path in files:
+            with (gzip.open(path, "rt") if path.suffix == ".gz" else path.open()) as f:
+                yield from f
+
     n = 0
-    with a.src.open() as f, a.dst.open("w") as out:
-        for i, line in enumerate(f):
+    with a.dst.open("w") as out:
+        for i, line in enumerate(lines()):
             if i % a.every or n >= a.limit:
                 continue
             s = json.loads(line)

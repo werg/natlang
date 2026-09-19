@@ -127,6 +127,18 @@ def _fn_doc(name, args, returns, desc, body, kind="instructions", codebase=None)
     return d
 
 
+# ------------------------------------------------------------------------------------------ phrasing
+# How a step reads, per kind of step: {key: [{"a": Python-like template, "b": English template}, ...]}. The first
+# entry of each key is hand-written (below, at the call sites); data/phrases.json adds teacher-written variants that
+# kept every placeholder and were judged to ask for exactly the same step (scripts/paraphrase_steps.py).
+import json as _json
+from pathlib import Path as _Path
+
+_PHRASE_FILE = _Path(__file__).resolve().parents[2] / "data" / "phrases.json"
+PHRASES: dict = _json.loads(_PHRASE_FILE.read_text()) if _PHRASE_FILE.exists() else {}
+BASE_PHRASES: dict = {}                 # key -> {"a", "b", "fields"}: what the call sites say, recorded for the teacher
+
+
 # ------------------------------------------------------------------------------------------ steps
 @dataclass
 class Ctx:
@@ -163,7 +175,13 @@ class Ctx:
         self.fns[name] = _fn_doc(name, args, returns, desc, code, kind="code")
         return name
 
-    def say(self, a: str, b: str, skipped: bool = False):
+    def say(self, a: str, b: str, skipped: bool = False, key: str = "", fields: Optional[dict] = None):
+        """One line of the program in both dialects. With `key` and `fields`, a and b are templates ({name}
+        placeholders) and a teacher-written variant of the same step may be used instead."""
+        if key:
+            BASE_PHRASES.setdefault(key, {"a": a, "b": b, "fields": sorted(fields or {})})
+            v = self.rng.choice([{"a": a, "b": b}] + list(PHRASES.get(key, [])))
+            a, b = v["a"].format(**(fields or {})), v["b"].format(**(fields or {}))
         pad = "    " * self.indent
         self.lines_a.append(pad + a)
         self.lines_b.append(pad + b)
@@ -180,9 +198,12 @@ def map_leaf(c: Ctx, out: str, canon: str, over: str, items: list, extra: Option
     oracle = LEAVES[canon][4]
     extra = extra or {}
     args_a = ", ".join(["x"] + [_ref(p) for p in extra.values()])
-    c.say(f"{out} = for each x in {_ref(over)}: {fn}({args_a})",
-          f"For every item of {_ref(over)}, call {fn}" + (f" (with {', '.join(_ref(p) for p in extra.values())})" if extra else "")
-          + f"; keep the results as {out}.")
+    if extra:
+        c.say("{out} = for each x in {over}: {fn}(x, {extra})", "For every item of {over}, call {fn} (with {extra}); keep the results as {out}.",
+              key="each_with", fields={"out": out, "over": _ref(over), "fn": fn, "extra": ", ".join(_ref(p) for p in extra.values())})
+    else:
+        c.say("{out} = for each x in {over}: {fn}(x)", "For every item of {over}, call {fn}; keep the results as {out}.",
+              key="each", fields={"out": out, "over": _ref(over), "fn": fn})
     step = {"function": fn, "to": f"let/{out}", "over": over}
     if extra:
         step["inputs"] = dict(extra)
@@ -193,12 +214,13 @@ def map_leaf(c: Ctx, out: str, canon: str, over: str, items: list, extra: Option
     return c.env[out]
 
 
-def glue(c: Ctx, out: str, ty: str, code: str, value: Any, a: str, b: str, to: Optional[str] = None):
+def glue(c: Ctx, out: str, ty: str, code: str, value: Any, a: str, b: str, to: Optional[str] = None,
+         key: str = "", fields: Optional[dict] = None):
     """Exact work that no function covers: run_code, then keep the result."""
     from .. import js                                  # the oracle for exact work is the code itself
     ran = js.run(code, {"let": {k: v for k, v in c.env.items()}, "args": {}}, None, body=False, path="gen")
     assert ran == value or (isinstance(value, float) and abs(ran - value) < 0.011), (code, ran, value)
-    c.say(a, b)
+    c.say(a, b, key=key, fields=fields)
     c.calls.append(("glue", code, to or f"let/{out}", ty))
     c.env[out] = ran
     return ran
@@ -206,8 +228,8 @@ def glue(c: Ctx, out: str, ty: str, code: str, value: Any, a: str, b: str, to: O
 
 def select(c: Ctx, out: str, items_path: str, items: list, flags_name: str) -> list:
     fn = c.use_std("select_by_flags")
-    c.say(f"{out} = {fn}({_ref(items_path)}, {flags_name})",
-          f"Keep the items of {_ref(items_path)} whose flag in {flags_name} is true ({fn}); call them {out}.")
+    c.say("{out} = {fn}({items}, {flags})", "Keep the items of {items} whose flag in {flags} is true ({fn}); call them {out}.",
+          key="select", fields={"out": out, "fn": fn, "items": _ref(items_path), "flags": flags_name})
     c.calls.append(("call", {"function": fn, "to": f"let/{out}", "inputs": {"items": items_path, "flags": f"let/{flags_name}"}}))
     c.env[out] = [t for t, f in zip(items, c.env[flags_name]) if f]
     return c.env[out]
@@ -617,13 +639,15 @@ class Composer:
             if self.rng.random() < 0.35:                   # "is not": a different operator, not a negated comparison
                 name = self.fresh([f"not_{label}", f"other_than_{label}"])
                 glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l !== {json.dumps(label)})", [l != label for l in v.value],
-                     f'{name} = for each l in {v.name}: l is not "{label}"          # exact: use code',
-                     f'With code, turn {v.name} into flags that are true where the value is not "{label}"; call them {name}.')
+                     '{name} = for each l in {labels}: l is not "{label}"          # exact: use code',
+                     'With code, turn {labels} into flags that are true where the value is not "{label}"; call them {name}.',
+                     key="flags_neq", fields={"name": name, "labels": v.name, "label": label})
             else:
                 name = self.fresh([f"is_{label}", f"{label}_flags"])
                 glue(self.c, name, "Bool[]", f"locals.{v.name}.map(l => l === {json.dumps(label)})", [l == label for l in v.value],
-                     f'{name} = for each l in {v.name}: l == "{label}"          # exact: use code',
-                     f'With code, turn {v.name} into flags that are true where the value is "{label}"; call them {name}.')
+                     '{name} = for each l in {labels}: l == "{label}"          # exact: use code',
+                     'With code, turn {labels} into flags that are true where the value is "{label}"; call them {name}.',
+                     key="flags_eq", fields={"name": name, "labels": v.name, "label": label})
         self.add(Var(name, f"let/{name}", "flags", self.c.env[name], base=v.base, note=name))
         return True
 
@@ -716,8 +740,11 @@ class Composer:
         elif v.kind == "flags":
             if self.rng.random() < 0.6:
                 field = self.fresh([f"n_{v.name}", f"{v.name}_count", "count"])
-                value = call_std(self.c, f"return/{field}", "count_true", {"flags": v.path}, sum(v.value),
-                                 f"{field} = count_true({v.name})", f"Count the true flags of {v.name} with count_true: {field}.")
+                self.c.use_std("count_true")
+                self.c.say("{field} = count_true({flags})", "Count the true flags of {flags} with count_true: {field}.",
+                           key="count_true", fields={"field": field, "flags": v.name})
+                self.c.calls.append(("call", {"function": "count_true", "to": f"return/{field}", "inputs": {"flags": v.path}}))
+                value = sum(v.value)
             else:
                 field = self.fresh([f"share_{v.name}", "share"])
                 value = glue(self.c, field, "Num", f"Math.round(locals.{v.name}.filter(Boolean).length / locals.{v.name}.length * 100) / 100",
@@ -726,9 +753,11 @@ class Composer:
             self.fields[field] = ("Num", value)
         elif v.kind in ("labels", "topics"):
             field = self.fresh([f"by_{v.name}", "counts", "tally"])
-            value = call_std(self.c, f"return/{field}", "group_count", {"values": v.path},
-                             {k: v.value.count(k) for k in dict.fromkeys(v.value)},
-                             f"{field} = group_count({v.name})", f"Count how often each value of {v.name} occurs with group_count: {field}.")
+            self.c.use_std("group_count")
+            self.c.say("{field} = group_count({values})", "Count how often each value of {values} occurs with group_count: {field}.",
+                       key="group_count", fields={"field": field, "values": v.name})
+            self.c.calls.append(("call", {"function": "group_count", "to": f"return/{field}", "inputs": {"values": v.path}}))
+            value = {k: v.value.count(k) for k in dict.fromkeys(v.value)}
             self.fields[field] = ("Dict<Num>", value)
         else:
             self.claims_aggregate(v)
@@ -828,10 +857,11 @@ class Composer:
                        ("glue", s[1], "return", s[3]) if s[0] == "glue" and s[2] == f"return/{field}" else
                        (s[0], {**s[1], "path": "return"}) if s[0] == "write" and s[1].get("path") == f"return/{field}" else s
                        for s in c.calls]
-            c.say(f"return {field}", f"Return {field}.")
+            c.say("return {field}", "Return {field}.", key="return_one", fields={"field": field})
             returns, expected = ty, value
         else:
-            c.say("return { " + ", ".join(self.fields) + " }", "Return the record: " + ", ".join(self.fields) + ".", skipped=self.emptied)
+            c.say("return {{ {fields} }}", "Return the record: {fields}.", skipped=self.emptied,
+                  key="return_record", fields={"fields": ", ".join(self.fields)})
             returns = "{ " + ", ".join(f"{n}: {t}" for n, (t, _) in self.fields.items()) + " }"
             expected = {n: v for n, (_, v) in self.fields.items()}
         sig = {self.arg: "Text[]"}
