@@ -16,9 +16,9 @@ def test_process_completion_arrives_after_user_event_with_stable_identity():
         source = JobEventSource(engine)
         source.watch(job_id)
         source.put_user("change-1")
-        root = load_program({"$fold": {"type": "Fold<{ kind: Text, id: Text }, Text[]>",
+        root = load_program({"$fold": {"type": "Fold<{ kind: Text, id: Text, summary?: Text }, Text[]>",
             "init": [], "step": {"$lambda": {
-                "type": "Lambda<{ acc: Text[], item: { kind: Text, id: Text } }, Text[]>",
+                "type": "Lambda<{ acc: Text[], item: { kind: Text, id: Text, summary?: Text } }, Text[]>",
                 "code": "return [...args.acc, args.item.kind + ':' + args.item.id];"}}}})
         root.over = StreamBuffer(source)
         runtime = Runtime(None)

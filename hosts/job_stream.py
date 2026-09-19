@@ -31,7 +31,9 @@ class JobEventSource:
             result = self.engine.run(CrispRequest(f"host.poll({json.dumps(job_id)})", {}, False,
                                                   "job-stream"), lambda *_: None)
             if result["status"] != "running":
-                self.jobs[job_id] = result
                 del self.jobs[job_id]
-                return Poll("item", {"kind": "job_complete", "id": job_id})
+                self.engine.run(CrispRequest(f"host.release({json.dumps(job_id)})", {}, False,
+                                              "job-stream"), lambda *_: None)
+                return Poll("item", {"kind": "job_complete", "id": job_id,
+                                     "summary": (result.get("stdout") or result.get("error") or "")[:500]})
         return Poll("closed") if self.closing and not self.jobs else Poll("empty")

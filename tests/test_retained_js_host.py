@@ -22,6 +22,11 @@ def test_retained_buffer_and_process_survive_between_evals(tmp_path):
         second = session.apply("run_code", {"engine": engine.name,
             "code": f"host.buffer({first.value!r}).length"})
         assert second.kind == "ok" and second.value == 7
+        released = session.apply("run_code", {"engine": engine.name,
+            "code": f"host.release({first.value!r})"})
+        assert released.kind == "ok" and released.value is True
+        assert session.apply("run_code", {"engine": engine.name,
+            "code": f"host.buffer({first.value!r}).length"}).kind == "error"
         job = session.apply("run_code", {"engine": engine.name,
             "code": "host.start(['node','-e','setTimeout(() => process.stdout.write(\"built\"), 20)'])"})
         assert job.kind == "ok" and job.value.startswith("job-")
@@ -32,7 +37,8 @@ def test_retained_buffer_and_process_survive_between_evals(tmp_path):
                 break
             time.sleep(0.01)
         assert result.value["status"] == "finished" and result.value["stdout"] == "built"
-        assert [e["operation"] for e in engine.drain_events()] == ["file.readBytes", "process.start"]
+        assert [e["operation"] for e in engine.drain_events()] == [
+            "file.readBytes", "buffer.release", "process.start"]
     assert engine.process.poll() is not None
 
 

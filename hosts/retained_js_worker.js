@@ -6,6 +6,8 @@ const vm = require('node:vm');
 
 const jobs = new Map();
 const buffers = new Map();
+const MAX_JOBS = 32, MAX_BUFFERS = 32, MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+let retainedBufferBytes = 0;
 let nextId = 1;
 let events = [];
 const id = (prefix) => `${prefix}-${nextId++}`;
@@ -14,14 +16,19 @@ const record = (operation, detail) => events.push({ operation, ...detail });
 
 const host = Object.freeze({
   readText(path) {
+    if (fs.statSync(path).size > MAX_BUFFER_BYTES) throw new Error('file exceeds retained host limit');
     const value = fs.readFileSync(path, 'utf8');
     record('file.readText', { path, bytes: Buffer.byteLength(value) });
     return value;
   },
   readBytes(path) {
+    const size = fs.statSync(path).size;
+    if (buffers.size >= MAX_BUFFERS || retainedBufferBytes + size > MAX_BUFFER_BYTES)
+      throw new Error('retained buffer limit exceeded');
     const key = id('buffer');
     const value = fs.readFileSync(path);
     buffers.set(key, value);
+    retainedBufferBytes += value.length;
     record('file.readBytes', { path, id: key, bytes: value.length });
     return key;
   },
@@ -45,6 +52,7 @@ const host = Object.freeze({
   start(argv, options = {}) {
     if (!Array.isArray(argv) || !argv.length || !argv.every(x => typeof x === 'string'))
       throw new Error('start requires a nonempty string argv');
+    if (jobs.size >= MAX_JOBS) throw new Error('retained job limit exceeded');
     const key = id('job');
     const child = cp.spawn(argv[0], argv.slice(1), { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
     const job = { child, status: 'running', exitCode: null, signal: null, stdout: '', stderr: '' };
@@ -53,6 +61,11 @@ const host = Object.freeze({
     child.stderr.on('data', chunk => job.stderr = bounded(job.stderr + chunk));
     child.on('error', error => { job.status = 'failed'; job.error = error.message; });
     child.on('exit', (code, signal) => { job.status = 'finished'; job.exitCode = code; job.signal = signal; });
+    const timeout = setTimeout(() => {
+      if (job.status === 'running') { job.child.kill(); record('process.timeout', { id: key }); }
+    }, Math.min(Math.max(options.timeoutMs ?? 60000, 1), 600000));
+    timeout.unref();
+    child.on('exit', () => clearTimeout(timeout));
     record('process.start', { argv, id: key });
     return key;
   },
@@ -68,6 +81,18 @@ const host = Object.freeze({
     const requested = job.status === 'running' && job.child.kill();
     record('process.cancel', { id: key, requested });
     return { id: key, requested, status: job.status };
+  },
+  release(key) {
+    if (buffers.has(key)) {
+      retainedBufferBytes -= buffers.get(key).length;
+      buffers.delete(key); record('buffer.release', { id: key }); return true;
+    }
+    const job = jobs.get(key);
+    if (!job) throw new Error(`unknown or disposed resource ${key}`);
+    if (job.status === 'running') throw new Error('cancel or wait for the job before release');
+    jobs.delete(key);
+    record('job.release', { id: key });
+    return true;
   },
 });
 
@@ -114,7 +139,7 @@ lines.on('line', line => {
     const request = JSON.parse(line);
     if (request.kind === 'dispose') {
       for (const job of jobs.values()) if (job.status === 'running') job.child.kill();
-      jobs.clear(); buffers.clear();
+      jobs.clear(); buffers.clear(); retainedBufferBytes = 0;
       process.stdout.write(JSON.stringify({ kind: 'disposed' }) + '\n');
       process.exit(0);
     }
