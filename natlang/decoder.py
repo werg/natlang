@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
@@ -20,6 +21,7 @@ class Generation:
     text: str
     probs: list = field(default_factory=list)  # per token: [(token_text, prob), ...] before the grammar
     stopped: str = ""
+    completion_tokens: Optional[int] = None
 
 
 @dataclass
@@ -27,6 +29,7 @@ class ChatTurn:
     calls: list = field(default_factory=list)       # [(tool name, arguments dict)]
     text: str = ""
     raw_calls: list = field(default_factory=list)   # the API's tool_calls, for the history
+    completion_tokens: Optional[int] = None
 
 
 class Decoder(Protocol):
@@ -47,6 +50,7 @@ class LlamaServerDecoder:
     def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120,
                  chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None):
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
+        self.deadline = None
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
         self.tool_aliases = tool_aliases or {}
@@ -54,13 +58,21 @@ class LlamaServerDecoder:
         self.chat_extra = chat_extra or {}
         self.usage = {"turns": 0, "completion_tokens": 0, "seconds": 0.0}
 
+    def request_timeout(self):
+        if self.deadline is None:
+            return self.timeout
+        left = self.deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("episode wall-clock budget exhausted")
+        return min(self.timeout, left)
+
     def format(self, messages: list) -> str:
         """Render messages with the loaded model's own chat template, ending at the
         start of an assistant turn. The server adds the beginning-of-text token itself."""
         req = urllib.request.Request(self.base_url + "/apply-template",
                                      data=json.dumps({"messages": messages}).encode(),
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             return json.loads(resp.read())["prompt"]
 
     def chat(self, messages: list, tools: list, *, temperature: float, seed: Optional[int] = None,
@@ -82,16 +94,18 @@ class LlamaServerDecoder:
         if seed is not None:
             payload["seed"] = seed
         payload.update(self.chat_extra)
+        payload["max_tokens"] = min(payload.get("max_tokens", max_tokens), max_tokens)
         req = urllib.request.Request(self.base_url + "/v1/chat/completions", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         import time
         t0 = time.time()
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             out = json.loads(resp.read())
         msg = out["choices"][0]["message"]
         self.usage["turns"] += 1
         self.usage["seconds"] += time.time() - t0
-        self.usage["completion_tokens"] += (out.get("usage") or {}).get("completion_tokens", 0)
+        tokens = (out.get("usage") or {}).get("completion_tokens", max_tokens)
+        self.usage["completion_tokens"] += tokens
         calls = []
         back = {v: k for k, v in self.tool_aliases.items()}
         for c in msg.get("tool_calls") or []:
@@ -103,7 +117,7 @@ class LlamaServerDecoder:
             except json.JSONDecodeError:
                 args = {"__unparsed__": fn.get("arguments")}
             calls.append((fn.get("name", ""), args if isinstance(args, dict) else {"value": args}))
-        return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [])
+        return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [], tokens)
 
     def generate(self, prompt, *, grammar, max_tokens, temperature, seed, stop, n_probs=0) -> Generation:
         payload = {"prompt": prompt, "n_predict": max_tokens, "temperature": temperature, "stop": stop,
@@ -116,14 +130,19 @@ class LlamaServerDecoder:
             payload["id_slot"] = self.slot
         req = urllib.request.Request(self.base_url + "/completion", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        started = time.monotonic()
+        with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             out = json.loads(resp.read())
+        tokens = out.get("tokens_predicted", max_tokens)
+        self.usage["turns"] += 1
+        self.usage["completion_tokens"] += tokens
+        self.usage["seconds"] += time.monotonic() - started
         probs = []
         for t in out.get("completion_probabilities") or []:
             cands = t.get("top_logprobs") or t.get("top_probs") or []
             probs.append([(c.get("token", ""), c["prob"] if "prob" in c else math.exp(c.get("logprob", -99.0)))
                           for c in cands])
-        return Generation(out.get("content", ""), probs, out.get("stopping_word", ""))
+        return Generation(out.get("content", ""), probs, out.get("stopping_word", ""), tokens)
 
 
 @dataclass(frozen=True)

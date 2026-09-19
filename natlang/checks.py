@@ -40,19 +40,26 @@ def run_checks(checks: list, subject, judge=None) -> list:
     return out
 
 
-def grade(expect: dict, kind: str, value, note: str = "", judge=None):
-    """-> (verdict, details); verdict in 'yes' | 'no' | '?' ('?': a judge check could not be evaluated)."""
+def grade(expect: dict, kind: str, value, note: str = "", judge=None, *, emitted=None):
+    """Grade all stated requirements, including exact outputs and observable effects.
+
+    Missing effect observations are ungraded, never an implicit pass.
+    """
     results = []
-    if "status" in expect:
-        if kind != expect["status"]:
-            return "no", [f"status {kind}, expected {expect['status']}"]
-        results = run_checks(expect.get("note_checks"), note, judge)
-    elif kind != "done":
-        return "no", [f"status {kind}, expected done"]
-    elif "value" in expect:
-        return ("yes", []) if value == expect["value"] else ("no", ["value differs"])
-    else:
-        results = run_checks(expect.get("checks"), value, judge)
+    wanted_status = expect.get("status", "done")
+    if kind != wanted_status:
+        return "no", [f"status {kind}, expected {wanted_status}"]
+    if "value" in expect:
+        results.append(({"code": "value differs"}, value == expect["value"]))
+    results += run_checks(expect.get("checks"), value, judge)
+    results += run_checks(expect.get("note_checks"), note, judge)
+    if "emitted" in expect or "effect_checks" in expect:
+        if emitted is None:
+            results.append(({"question": "effect observations unavailable"}, None))
+        else:
+            if "emitted" in expect:
+                results.append(({"code": "emitted records differ"}, emitted == expect["emitted"]))
+            results += run_checks(expect.get("effect_checks"), emitted, judge)
     failed = [c.get("code") or c.get("question") for c, ok in results if ok is False]
     unknown = [c.get("question") for c, ok in results if ok is None]
     return ("no" if failed else "?" if unknown else "yes"), failed + [f"unjudged: {u}" for u in unknown]

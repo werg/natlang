@@ -177,14 +177,12 @@ feeds: runtime error containment (§6), trace filtering, per-skill metrics,
 DAgger labelling, RL reward at commit, and debugging. "Validate any
 intermediate or final state" is this function applied to any snapshot.
 
-**Code.** Because `run_code` and crisp functions are TypeScript, the harness generates a `.d.ts`
-for the current scope from the declared types, and snippets are
-type-checked *statically* before they run, using a warm, persistent checker
-process. Snippets are a few lines against a small declaration file, so the
-budget is small; measure in Phase 1, and fall back to runtime validation at
-the tree boundary (which always happens anyway) if latency is a problem.
-Static errors are real TypeScript diagnostics, which is what the type-repair
-drills train on.
+**Code.** `run_code` and crisp functions accept JavaScript and erasable TypeScript
+annotations. Node.js strips annotations before QuickJS execution; stripping does
+not check types. Inputs, stored values and crisp returns are validated at the tree
+boundary. Generating scope declarations and running a static checker remain
+future work (stage D below); current diagnostics are parser/runtime errors and
+structural validation failures.
 
 ## 6. Decision: go deep on write-time typing
 
@@ -231,12 +229,9 @@ wrong kind of value.
 ### 6.2 The layers that remain, in order
 
 1. **Unrepresentable**: type- and tree-directed decoding (§6.1).
-2. **Resample on reject**: whatever still fails validation (a contradiction
-   the grammar cannot see, an over-long call, an effect violation)
-   is discarded and resampled up to k times before the model sees anything.
-   This is a loop around the sampler, and the only piece of the "statistical"
-   family kept in v1.
-3. **Reject with message** when resampling is exhausted.
+2. **Validate before mutation**, including any attached line marks.
+3. **Reject with message**: the model sees failures and chooses a correction.
+   There is no silent retry or budget refund; failed code may have performed effects.
 4. **Diagnostics as state** (§7).
 5. **Commit gate** (§4).
 6. **Quiesce upward**: repeated commit failure leaves the lambda `quiesced`,
@@ -259,7 +254,7 @@ speculative execution of both branches.
 
 | Stage | Contents |
 |-------|----------|
-| A | Type parser; structural validator; static tool-call grammar; resample-on-reject; preservation check in CI |
+| A | Type parser; structural validator; static tool-call grammar; rejection feedback; preservation check in CI |
 | B | Tree-derived path grammars; type-directed values for `write`; signature-derived `call` alternatives; grammar cache |
 | C | `Draft<T>`, commit gates, hole rendering, `@problems` |
 | D | `.d.ts` generation per scope; warm TypeScript checker for `run_code` and crisp functions |

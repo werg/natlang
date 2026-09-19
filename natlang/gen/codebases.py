@@ -26,7 +26,8 @@ def with_marks(script):
     """Wrap a hand-written reference script so that it marks lines (grouped with the next action). The line an action
     belongs to is the first open line that names the called function; open lines before it are closed as done, or as
     skipped when they name a function that was never called or are a `return` that was not taken. A script may yield
-    [("taken", "<fragment>")] to say that the line containing the fragment was carried out."""
+    [("taken", "<fragment>")] or [("skipped", "<fragment>")] to identify a branch explicitly.
+    These annotations belong only to reference generation, never model execution."""
     import re
 
     def wrapped(lam):
@@ -37,13 +38,16 @@ def with_marks(script):
             return
         lines = [(n, t) for n, t, markable in program_lines(lam.original_body or lam.body) if markable]
         refs = {n: [g for g in lam.codebase if re.search(rf"\b{re.escape(g)}\(", t.split("#")[0])] for n, t in lines}
-        marked, called, taken = set(), set(), set()
+        marked, taken, skipped = set(), set(), set()
+        called = {n: set() for n, _ in lines}
 
         def status(n, t):
+            if n in skipped:
+                return "skipped"
             if n in taken:
                 return "done"
             if refs[n]:
-                return "done" if all(g in called for g in refs[n]) else "skipped"
+                return "done" if all(g in called[n] for g in refs[n]) else "skipped"
             return "skipped" if t.strip().startswith("return") else "done"
 
         returned = []
@@ -74,22 +78,30 @@ def with_marks(script):
                 turn = gen.send(sent)
             except StopIteration:
                 break
-            if turn and turn[0][0] == "taken":
-                taken.update(n for n, t in lines if turn[0][1] in t)
+            if turn and turn[0][0] in ("taken", "skipped"):
+                matching = {n for n, t in lines if turn[0][1] in t}
+                assert matching, f"reference annotation matches no line: {turn[0]}"
+                (taken if turn[0][0] == "taken" else skipped).update(matching)
                 sent = None
                 continue
-            target = None
+            targets = []
             for name, args in ((t[0], t[1]) for t in turn if t[0] == "call"):
-                short = str(args["function"]).split("/")[-1]
-                target = next((n for n, t in lines if n not in marked and re.search(rf"\b{re.escape(short)}\(", t.split("#")[0])), target)
+                for fn in [args['function']] + ([args['until']] if args.get('until') else []):
+                    short = str(fn).split("/")[-1]
+                    target = next((n for n, t in lines if n not in marked and n not in skipped
+                                   and short not in called[n]
+                                   and re.search(rf"\b{re.escape(short)}\(", t.split("#")[0])), None)
+                    if target is not None:
+                        targets.append((target, short))
+            target = min((n for n, _ in targets), default=None)
             marks = close(target) if target else []
             if marks and turn[0][0] == "glue":
                 yield marks
                 marks = []
             sent = yield marks + turn
-            for t in turn:
-                if t[0] == "call" and getattr(sent, "kind", "") == "done":
-                    called.add(str(t[1]["function"]))
+            if getattr(sent, "kind", "") == "done":
+                for n, short in targets:
+                    called[n].add(short)
         if getattr(sent, "kind", "") not in ("blocked", "quiesced"):
             rest = close(10**9)
             if rest:
@@ -335,6 +347,8 @@ def nlprolog(rng: random.Random) -> Program:
         yield [("call", {"function": "same_claim", "to": "let/hits", "over": "let/final/known", "inputs": {"goal": "args/goal"}})]
         yield call("any_true", "let/found", flags="let/hits")
         r = yield [("read", {"path": "let/found"})]
+        yield [("taken" if not r.value else "skipped", 'else: verdict = "unknown"')]
+        yield [("taken", 'return { verdict, derived: final.derived }')]
         yield [("write", {"path": "return/verdict", "type": '"yes" | "unknown"', "value": "yes" if r.value else "unknown"})]
         yield [("write", {"path": "return/derived", "type": "Text[]", "source": "let/final/derived"})]
 
@@ -452,10 +466,12 @@ def webserver(rng: random.Random) -> Program:
         if kind == "static":
             yield call("static_response", "let/response", acc="args/acc", route="let/route")
         elif kind == "page":
+            yield [("skipped", 'wrap_page(site, route, content, session)')]
             yield call("page_content", "let/content", purpose="let/route/purpose", site_name="args/acc/name", about="args/acc/about",
                        entries="args/acc/entries", session="let/session")
             yield call("wrap_page", "let/response", acc="args/acc", route="let/route", content="let/content", session="let/session")
         elif kind == "form":
+            yield [("skipped", 'wrap_page(acc, route, content, session)')]
             yield call("review_submission", "let/review", purpose="let/route/purpose", form="let/req/form")
             yield call("apply_submission", "let/site", acc="args/acc", review="let/review")
             site_path = "let/site"
@@ -520,6 +536,7 @@ def highlighter(rng: random.Random) -> Program:
     def one(lam):
         yield call("split_source", "let/parts", file="args/file")
         r = yield [("read", {"path": "let/parts/is_code"})]
+        yield [("taken" if r.value else "skipped", 'roles = []')]
         if r.value:
             yield [("write", {"path": "let/roles", "type": "Role[]", "value": []})]
         else:
@@ -527,6 +544,7 @@ def highlighter(rng: random.Random) -> Program:
         yield call("render_html", "return/html", file="args/file", parts="let/parts", roles="let/roles")
         yield [("write", {"path": "return/roles", "type": "Role[]", "source": "let/roles"})]
         yield [("write", {"path": "return/path", "type": "Text", "source": "args/file/path"})]
+        yield [("taken", 'return { path: file.path, roles, html }')]
 
     plans = {"highlight": Plan("script", script=with_marks(root), note="Highlighted every file."),
              "highlight_file": Plan("script", script=with_marks(one), note="Split exactly, judged every line, rendered exactly."),
@@ -589,3 +607,7 @@ def mail_rules(rng: random.Random) -> Program:
 
 
 CODEBASES["cb_mail_rules"] = mail_rules
+
+# Independent application generators; importing here keeps existing CLI family discovery intact.
+from .architectures import ARCHITECTURES
+CODEBASES.update(ARCHITECTURES)

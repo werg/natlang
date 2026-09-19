@@ -35,8 +35,8 @@ CHECKS = {
                           + "). Does the line fit that action without promising or handing over any goods?")}],
     "page_content": lambda a: [NO_MARKUP_ATTACK, {"kind": "crisp", "code": "wordCount(value) >= 15 && wordCount(value) <= 320"},
                                {"kind": "judge", "answer": True, "question": f"Is this HTML fragment a fitting page for this purpose: {a['purpose']}"}]
-                              + [{"kind": "crisp", "code": f"value.includes({json.dumps(e['message'][:20])})"} for e in a["entries"][-1:]
-                                 if "recent" in a["purpose"] or "entries" in a["purpose"]],
+                              + ([{"kind": "crisp", "code": f"value.includes({json.dumps(e['message'][:20])})"} for e in a["entries"][-1:]
+                                 ] if "recent" in a["purpose"] or "entries" in a["purpose"] else []),
     "submission_page": lambda a: [NO_MARKUP_ATTACK, {"kind": "crisp", "code": "value.includes('href=\"/\"') && wordCount(value) <= 120"},
                                   {"kind": "judge", "answer": True, "question":
                                       "Does this message tell the visitor that their submission was " +
@@ -57,7 +57,7 @@ def main():
     families = MIXES[a.mix] if a.mix else a.families
     for i in range(a.n):                                # collect the leaves these programs need: the same programs
         fam, prog = make_program(a.seed, i, families)   # as `generate.py --seed S` makes, by construction
-        if fam in C.CODEBASES:
+        if fam in ("cb_shopkeeper", "cb_webserver"):
             run_program(prog, check_grammar=False)
     todo, seen = [], set()
     for fn, args in C.MISSES:

@@ -201,7 +201,7 @@ class NativeCallDecoder(LlamaServerDecoder):
         import urllib.request
         req = urllib.request.Request(self.base_url + "/apply-template", data=body,
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             return json.loads(resp.read())["prompt"]
 
     def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700, allow_reply: Optional[bool] = None):
@@ -225,9 +225,9 @@ class NativeCallDecoder(LlamaServerDecoder):
                 self.stats["calls"] += len(calls)
                 raw = [{"id": f"c{self.stats['turns']}_{i}", "type": "function",
                         "function": {"name": n, "arguments": json.dumps(a)}} for i, (n, a) in enumerate(calls)]
-                return ChatTurn(calls, "", raw)
+                return ChatTurn(calls, "", raw, gen.completion_tokens)
         self.stats["replies"] += 1
-        return ChatTurn([], text, [])
+        return ChatTurn([], text, [], gen.completion_tokens)
 
 
 def _strip_private(tools):

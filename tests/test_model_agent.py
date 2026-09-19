@@ -118,7 +118,7 @@ def test_two_phase_decoding_runs_a_program():
     assert "<user>\nRESULT\nok" in dec.calls[2][0]  # results return as user turns
 
 
-def test_rejected_sample_is_discarded_and_resampled():
+def test_rejected_sample_is_shown_as_feedback():
     doc = _map_doc()
     good = [a for a, _ in parse_trace(MAP_TRACE)]
     # a grammar-valid but ill-typed copy: Text into a Text[] slot. Validation rejects it.
@@ -127,8 +127,8 @@ def test_rejected_sample_is_discarded_and_resampled():
     kinds = [(l["action"].splitlines()[0], l["kind"], l["attempt"]) for l in log]
     assert ("copy args/rubric to return/over", "rejected", 0) in kinds
     assert out.kind == "done" and value == doc["expect"]["value"]
-    # the rejected action never entered the context shown to the model
-    assert all("copy args/rubric to return/over" not in c[0] for c in dec.calls)
+    # the next action sees the rejection and can correct it
+    assert any("copy args/rubric to return/over" in c[0] and "rejected" in c[0] for c in dec.calls)
 
 
 def test_stuck_quiesces_with_the_note():

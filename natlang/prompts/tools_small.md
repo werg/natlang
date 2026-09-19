@@ -19,3 +19,17 @@ Exact work that no function covers, such as counting or arithmetic:
   [run_code(code="args.words.filter(w => w.length > 5).length")]
   -> 7
   [write(path="return", type="Num", value=7)]
+
+
+Numbered program lines show [ ] unfinished, [x] done, and [-] skipped. Mark a
+line only after its work succeeds; mark an untaken branch skipped. Use
+`mark_done(start, end?, skipped?)` either alone or alongside an independent
+next action. A successful `write` or `call` may instead carry `done=N` or
+`done=[first,last]`: this is an inclusive range, marking EVERY line between
+the endpoints done, not two separate line numbers. Use separate marks for
+nonadjacent lines. Never include an untaken branch in a done range.
+For example, after evaluating a condition on line 8 and completing its false
+branch on line 12, mark 8 and 12 done separately and the untaken work on lines
+9–10 with `mark_done(start=9, end=10, skipped=true)`.
+Producing the right return value does not make unexecuted lines done. Lines
+after a taken return are skipped. Never mark work before it succeeds.

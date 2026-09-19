@@ -145,5 +145,5 @@ def test_reference_reaches_a_passing_verdict(path):
     kind = out.kind
     note = out.detail if kind == "quiesced" else ""
     graded_value = dump(value) if kind == "done" else None
-    verdict, details = grade(doc["expect"], kind, graded_value, note, judge=None)
+    verdict, details = grade(doc["expect"], kind, graded_value, note, judge=None, emitted=rt.emitted)
     assert verdict in ("yes", "?"), f"{path.name}: verdict {verdict}: {details}"

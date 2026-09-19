@@ -15,12 +15,14 @@ from natlang.gen.synth import SHAPES
 from natlang.gen.codebases import CODEBASES
 FAMILIES = {**FAMILIES, **SHAPES, **CODEBASES}
 from natlang.runtime import Runtime
+from natlang.corpus import digest, file_digest
 from natlang.types import TypeEnv
 from natlang.values import coerce, dump, load_program
 
 
-def run_program(prog, check_grammar=True):
+def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
     samples = []
+    recovery_rng = random.Random(recovery_seed)
 
     def factory(lam):
         plan = prog.plans.get(lam.fn_name) if lam.fn_name else None         # a function of the code base
@@ -28,7 +30,7 @@ def run_program(prog, check_grammar=True):
         if plan is None:
             plan = next((p for k, p in prog.plans.items() if k.strip() == lam.body.strip()), None)
         assert plan is not None, f"no plan for: {lam.body!r}"
-        return ReferenceAgent(plan, samples, check_grammar=check_grammar)
+        return ReferenceAgent(plan, samples, check_grammar=check_grammar, recovery_rng=recovery_rng, recovery_rate=recovery_rate)
 
     if prog.loader is not None:
         root = prog.loader()
@@ -60,6 +62,11 @@ MIXES = {
 }
 
 
+# Preserve v7's input sequence for existing teacher references; the architectural
+# mix is a separately named experiment, not a silent change to v7.
+MIXES["v7_arch"] = {**MIXES["v7"], "cb_reconciliation": 3, "cb_dependency_plan": 3, "cb_order_saga": 3}
+
+
 def make_program(seed: int, i: int, families):
     """Program number i of a run: a function of (seed, i) only, so that runs can be sharded, parallel, resumed, and
     revisited (scripts/teacher_leaves.py) without generating everything before it. `families` is a list (round robin)
@@ -73,12 +80,12 @@ def make_program(seed: int, i: int, families):
 
 
 def _shard(job):
-    seed, first, last, families, keep_template, keep_alternatives = job
+    seed, first, last, families, keep_template, keep_alternatives, recovery_rate = job
     from natlang.native import _strip_private
     lines, stats, episodes = [], Counter(), 0
     for i in range(first, last):
         fam, prog = make_program(seed, i, families)
-        samples, eps = run_program(prog)
+        samples, eps = run_program(prog, recovery_seed=f"{seed}:{i}:recovery", recovery_rate=recovery_rate)
         episodes += eps
         for j, s in enumerate(samples):
             if s.get("template") and not keep_template:
@@ -103,12 +110,34 @@ def main():
     ap.add_argument("--keep-alternatives", action="store_true", help="keep the grammar alternatives (needed by eval_turns.py)")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     ap.add_argument("--shard", type=int, default=250, help="programs per shard")
+    ap.add_argument("--recovery-rate", type=float, default=0, help="chance to add verified error/correction history before exact work")
     a = ap.parse_args()
+    if not 0 <= a.recovery_rate <= 1:
+        ap.error("--recovery-rate must be between 0 and 1")
     families = MIXES[a.mix] if a.mix else (a.families or list(FAMILIES))
     sharded = a.out.suffix not in (".jsonl", ".gz")
     (a.out if sharded else a.out.parent).mkdir(parents=True, exist_ok=True)
+    root_dir = Path(__file__).resolve().parent.parent
+    tracked_sources = sorted(p for folder in ("natlang", "codebases", "examples")
+                             for p in (root_dir / folder).rglob("*")
+                             if p.is_file() and p.suffix in (".py", ".js", ".nl", ".ts", ".md"))
+    identity = {"version": "generation/2", "seed": a.seed, "n": a.n, "families": families,
+                "shard": a.shard, "recovery_rate": a.recovery_rate,
+                "marks": os.environ.get("NATLANG_MARKS", "1"), "mark_style": os.environ.get("NATLANG_MARK_STYLE", "mixed"),
+                "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
+                "template_leaves": a.keep_template_leaves, "alternatives": a.keep_alternatives,
+                "sources": digest([(str(p.relative_to(root_dir)), file_digest(p)) for p in tracked_sources]),
+                "phrase_bank": file_digest(root_dir / "data/phrases.json"),
+                "leaf_references": file_digest(root_dir / "data/leaf_references.jsonl") if (root_dir / "data/leaf_references.jsonl").exists() else None}
+    manifest_path = a.out / "manifest.json" if sharded else a.out.with_suffix(a.out.suffix + ".manifest.json")
+    if sharded and manifest_path.exists():
+        if json.loads(manifest_path.read_text()) != identity:
+            ap.error("generation settings, sources or teacher data changed; use a new output directory")
+    elif sharded and any(a.out.glob("part-*.jsonl.gz")):
+        ap.error("existing shards have no manifest; use a new output directory")
+    manifest_path.write_text(json.dumps(identity, indent=2) + "\n")
     name = lambda first: a.out / f"part-{first:07d}.jsonl.gz"
-    jobs = [(a.seed, first, min(first + a.shard, a.n), families, a.keep_template_leaves, a.keep_alternatives)
+    jobs = [(a.seed, first, min(first + a.shard, a.n), families, a.keep_template_leaves, a.keep_alternatives, a.recovery_rate)
             for first in range(0, a.n, a.shard) if not (sharded and name(first).exists())]
     stats, episodes, total = Counter(), 0, 0
     single = None if sharded else (gzip.open(a.out, "wt") if a.out.suffix == ".gz" else a.out.open("w"))

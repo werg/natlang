@@ -676,3 +676,67 @@ laptop-CPU numbers for the on-device story.
 - Liquid AI, "LFM2.5-350M: No Size Left Behind": https://www.liquid.ai/blog/lfm2-5-350m-no-size-left-behind
 - distil labs, "Fine-Tuning Liquid's LFM2.5: Accurate Tool Calling at 350M Parameters": https://www.distillabs.ai/blog/fine-tuning-liquids-lfm25-accurate-tool-calling-at-350m-parameters/
 - Unsloth LFM2.5 fine-tuning guide: https://unsloth.ai/docs/models/tutorials/lfm2.5
+
+
+## Architectural application pass (2026-09-19)
+
+Implemented and registered as explicit generator families: `cb_reconciliation`,
+`cb_dependency_plan`, and `cb_order_saga` (entry points and edge cases in README).
+These add multi-collection joins, deduplication before aggregation, a bounded DAG
+algorithm, semantic choices constrained by exact readiness, event replay,
+compensation, and recovery from an uncertain effect acknowledgement. They use
+latent inputs and independent Python state/effect oracles. The reference scripts
+exist only to generate and validate training trajectories; model execution uses
+the ordinary interpreter.
+
+The saga immediately exposed loss of `__proto__` dictionary entries at the JS
+scope boundary; the boundary now parses serialized JSON instead of evaluating it
+as an object literal. Null-prototype aggregation objects alone had not fixed this.
+Effect retries depend on a host-supplied idempotency key, illustrated by dispatch;
+the effect journal alone does not provide exactly-once external delivery.
+
+Next application candidates after these families have model traces:
+
+- A dependency-aware document build: invalidate changed sources and their derived
+  artifacts, recompute only reachable stale nodes, then publish a consistent set.
+- A bounded investigation: select the next diagnostic probe from permitted probes,
+  update hypotheses and remaining budget, stop on evidence or exhaustion.
+- A resource scheduler: join jobs, hosts and quotas, make a semantic priority
+  judgment, and use crisp checks for capacity, conflicts and starvation limits.
+- A paged audit: traverse multiple collections with resumable cursors, deduplicate
+  cross-page records, and preserve evidence references for each finding.
+
+Do not add these all at once: the implemented families now supply concrete traces
+for testing the existing runtime before expanding the next corpus.
+
+### Marking investigation (2026-09-19)
+
+The initial Bonsai probe returned the right value in 6/6 episodes but had correct
+marks on the scored executable lines in only 2/6. These are two inputs under
+three style prompts, not six independent programs. Four traces marked an untaken
+return done. Runtime replay confirms the validator: `done=[4,7]` is an inclusive
+range, and two other traces explicitly used `mark_done(start=1,end=7)`. Both
+grouped-style runs also used the forbidden `done` argument. Per-line accuracy
+obscured the episode failure rate; the probe now separates output, marks and
+style, retains transcripts, and includes all-false inputs and early returns.
+
+Prompts and tool descriptions now explain inclusive ranges and separate marks
+for nonadjacent lines. This is an intervention to measure, not a demonstrated
+fix to Bonsai. The existing v5 student with the clarified prompt got 4/5 outputs
+and 0/5 complete marking checks right in the expanded mixed-style probe; on an
+early return it incorrectly called the fallback. Model progress marks should
+therefore not yet be treated as reliable recovery evidence.
+
+An independent reference-policy audit found training-label errors: completion
+was tracked by function name, crediting unexecuted occurrences of the same
+callee; constructed returns could be labelled skipped; an Iterate's stop check
+could be labelled skipped. References now track call occurrences, credit the
+stop check after successful completion, and annotate the affected branches and
+returns. Regression tests cover real web routing and constructed returns.
+This corpus bug does not explain Bonsai's errors: Bonsai was not trained here.
+
+`guarded_call` adds randomized early-return examples in both dialects and all
+three marking styles. Generate it as a supplement to `v7_arch`, preserving that
+mix's seed sequence and teacher-reference keys. Its expected values and line
+marks are checked independently. Keep the model responsible for choosing and
+marking steps; no pseudocode parser or deterministic execution cursor was added.

@@ -20,7 +20,7 @@ import argparse, json, math, os, random, shutil, signal, time, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from natlang.corpus import split_programs, file_digest, digest
+from natlang.corpus import split_programs, file_digest, digest, index_pairs
 
 import torch
 from peft import LoraConfig, PeftModel, get_peft_model
@@ -54,7 +54,7 @@ def main():
         raise SystemExit(f"no checkpoint in {ckpt}")
 
     if not a.merge_only:
-        pairs = [json.loads(l) for l in a.data.open()]
+        pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model, "accum": a.accum}
@@ -93,7 +93,11 @@ def main():
         return
 
 
+    data_stream = a.data.open("rb")
+
     def encode(p):                       # the pairs are already rendered by the chat template: no special tokens added
+        data_stream.seek(p["offset"])
+        p = json.loads(data_stream.readline())
         x = tok(p["prompt"], add_special_tokens=False)["input_ids"]
         y = tok(p["completion"], add_special_tokens=False)["input_ids"]
         if len(x) + len(y) > a.max_len:

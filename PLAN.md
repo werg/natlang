@@ -224,8 +224,8 @@ state.** Everything durable is in the tree (locals, `return`, the effect
 journal), so a context can be dropped at any moment and a fresh episode can
 continue from the tree alone. Cold restart is a core trained skill. Episodes
 stay short because functions stay small, which limits the known degradation
-from long contexts and from a model seeing its own earlier errors; rejected
-calls that were silently resampled are not added to the context.
+from long contexts. Rejected calls and runtime errors are shown as feedback;
+the interpreter chooses its correction and every attempt spends budget.
 
 The rendering policy (SPEC §8, `render/0.2`) is part of the language: fix it,
 version it, do not tune it per experiment. Its rules came from measurements:
@@ -238,8 +238,7 @@ parts of `return` are listed apart from what is missing, nudges carry no data.
 A yes/no or categorical decision is a write to a node whose type is finite.
 Decisions that matter are their own leaf functions with a finite `returns`.
 The primary reliability mechanism is the type system applied at write time
-(`TYPES.md` §6); what still fails validation is discarded and resampled before
-the model sees it. The distribution over members for finite-typed writes is
+(`TYPES.md` §6); failures are shown to the model with a correction hint. The distribution over members for finite-typed writes is
 logged to provenance at no cost. **Deferred**, pending evidence from those
 logs: voting, confidence thresholds, calibration, escalation to a larger
 model, speculative execution.
@@ -614,14 +613,21 @@ held-out loss 2.68 → 0.033.
 | next turn exactly right | 29% | **75%** |
 | right tool | 43% | **88%** |
 | `call` turns exactly right (shapes / composed / code bases) | 0 / 0 / 0% | 100 / 60 / 40% |
-| conformance suite (21 programs; judge checks ungraded) | 2 correct; never calls | 6 correct + 3 ungraded; calls the named functions |
+| conformance suite (21 programs; judge checks ungraded) | 2 correct; never calls | 5 correct, 13 incorrect, 3 ungraded; calls the named functions |
 | time per program | ~1 s | 0.1 to 6 s (Bonsai 27B: 25 to 640 s) |
 
 What the tuned model still gets wrong on the conformance suite: leaf
 judgments themselves (program 06 is structurally perfect, one `call` over the
 list, and wrong on the labels); folds and repeats (rare in the corpus: 53 and
-75 of 1,800 calls); blockers; long programs (23: 19 rejected calls). These are
-corpus-mix and training-length issues, not harness ones.
+75 of 1,800 calls); blockers; long programs (23: 19 rejected calls). Corpus mix and training length are plausible contributors; the next training
+iterations must measure which fixes improve complete programs.
+
+Current next iteration: `v7_arch` adds reconciliation, dependency planning and
+order-saga applications, reviewed phrase variants, and recoverable error history.
+A separate `guarded_call` supplement exercises early returns. The marking
+investigation and reference-label corrections are recorded in TRAINING.md.
+Keep mixed marking styles until model runs support choosing one; the initial
+Bonsai style probe had instruction violations and is not a clean comparison.
 
 ### 10.3 Findings worth keeping
 
@@ -681,9 +687,9 @@ every call is valid and a run takes well under a second.
 
 - Callees run sequentially; no batching. Copies are deep copies; the tree is
   in memory.
-- `run_code` and crisp code are not statically checked; the QuickJS binding
-  cannot call into Python while a time limit is set, so effectful code runs
-  without the time limit (a subprocess worker should replace this).
+- Erasable TypeScript syntax is stripped using Node.js, but snippets are not
+  statically type-checked. Effectful QuickJS runs in a killable worker; a trusted
+  host callback that times out may still complete, requiring host idempotency.
 - Conformance programs 03–22 predate code bases and are graded on outcome
   only.
 

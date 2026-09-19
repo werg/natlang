@@ -3,10 +3,17 @@ from __future__ import annotations
 
 import json
 import re
+import functools
+import subprocess
+import sys
+import time
+import selectors
+import threading
+import queue
 from pathlib import Path
 from typing import Any, Callable
 
-from .diag import reject
+from .diag import reject, Reject, Diagnostic
 from .nodes import MISSING, is_pending
 from .types import format_type
 
@@ -36,16 +43,111 @@ def to_js(x: Any) -> Any:
     return x
 
 
+@functools.lru_cache(maxsize=2048)
+def prepare(code: str) -> str:
+    """Compile-check JS without executing it; strip erasable TS only when needed.
+
+    Node is a parser here, never the executor of user code. QuickJS remains the sandbox.
+    """
+    if quickjs is None:
+        raise JsError("quickjs is not installed: `uv pip install quickjs-ng`")
+    ctx = quickjs.Context()
+    ctx.set_memory_limit(MEMORY_LIMIT)
+    ctx.set_time_limit(TIME_LIMIT_S)
+    try:
+        ctx.eval("new Function(" + json.dumps(code) + ")")
+        return code
+    except quickjs.JSException:
+        pass
+    parser = (
+        "const fs = require('node:fs'); const {stripTypeScriptTypes} = require('node:module');"
+        "try { const src = fs.readFileSync(0, 'utf8');"
+        "const out = stripTypeScriptTypes('function __snippet(){\\n'+src+'\\n}', {mode:'strip'});"
+        "process.stdout.write(out.slice(out.indexOf('{')+1, out.lastIndexOf('}')));"
+        "} catch(e) { process.stderr.write(e.message); process.exit(1); }"
+    )
+    try:
+        result = subprocess.run(["node", "--no-warnings", "-e", parser], input=code, text=True,
+                                capture_output=True, timeout=5)
+    except FileNotFoundError as e:
+        raise JsError("TypeScript annotations require Node.js >=22.13; plain JavaScript needs only QuickJS") from e
+    except subprocess.TimeoutExpired as e:
+        raise JsError("TypeScript parsing timed out") from e
+    if result.returncode:
+        raise JsError("TypeScript syntax: " + result.stderr.strip()[:1000])
+    return result.stdout
+
+
+def _effect_worker(code, scope, fx, *, body, path):
+    """A killable JS process; capabilities execute in the host, retaining its state.
+
+    Host hooks are trusted Python. A timed-out hook may still complete, so its
+    outcome is uncertain and must not be silently retried. Hosts must provide
+    cancellation/idempotency for external operations that need those guarantees.
+    """
+    process = subprocess.Popen([sys.executable, "-u", "-m", "natlang.js_worker"],
+                               cwd=Path(__file__).resolve().parent.parent,
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                               text=True)
+    deadline = time.monotonic() + TIME_LIMIT_S
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    try:
+        process.stdin.write(json.dumps({"code": code, "scope": scope, "body": body, "path": path}) + "\n")
+        process.stdin.flush()
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0 or not selector.select(left):
+                raise JsError("effectful code wall-clock limit exceeded")
+            line = process.stdout.readline()
+            if not line:
+                raise JsError("JavaScript worker exited without a result")
+            msg = json.loads(line)
+            if msg["kind"] == "result":
+                return msg["value"]
+            if msg["kind"] == "reject":
+                raise Reject(*(Diagnostic(**d) for d in msg["diags"]))
+            if msg["kind"] == "error":
+                raise JsError(msg["message"])
+            if msg["kind"] != "effect":
+                raise JsError("invalid JavaScript worker message")
+            replies = queue.Queue(maxsize=1)
+
+            def invoke(request=msg, sink=replies):
+                try:
+                    sink.put({"value": fx(request["cap"], request["fn"], request["args"])})
+                except EffectError as e:
+                    sink.put({"__error": e.code})
+                except Exception as e:
+                    sink.put({"__error": "effect-error", "message": str(e)})
+
+            threading.Thread(target=invoke, daemon=True).start()
+            try:
+                reply = replies.get(timeout=max(0, deadline - time.monotonic()))
+            except queue.Empty as e:
+                raise JsError("host effect timed out; it may still complete, do not retry automatically") from e
+            process.stdin.write(json.dumps(reply) + "\n")
+            process.stdin.flush()
+    finally:
+        selector.close()
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        process.stdin.close()
+        process.stdout.close()
+
+
 def run(code: str, scope: dict, fx: Callable[[str, str, list], Any], *, body: bool, path: str,
         effectful: bool = False) -> Any:
-    """Run `code` as an expression script (eval) or a function body (crisp lambda).
+    code = prepare(code)
+    if effectful:
+        return _effect_worker(code, scope, fx, body=body, path=path)
+    return _execute(code, scope, fx, body=body, path=path)
 
-    Limitation: the QuickJS binding cannot call into Python while a time limit
-    is set. Pure code therefore runs with the time limit and no bridge (any
-    `fx` call is `effect-undeclared`); code in a lambda that declares effects
-    runs with the bridge and without the time limit. A subprocess worker with
-    a wall-clock kill should replace this.
-    """
+
+def _execute(code: str, scope: dict, fx: Callable[[str, str, list], Any], *, body: bool, path: str,
+             effectful: bool = False) -> Any:
+    """Execute in-process for pure code, or inside the killable worker for effectful code."""
     if quickjs is None:
         raise JsError("quickjs is not installed: `uv pip install quickjs-ng`")
     ctx = quickjs.Context()
@@ -63,7 +165,7 @@ def run(code: str, scope: dict, fx: Callable[[str, str, list], Any], *, body: bo
         ctx.set_time_limit(TIME_LIMIT_S)
         ctx.eval('globalThis.__fx = () => JSON.stringify({ __error: "effect-undeclared" });')
     ctx.eval(_PRELUDE)
-    ctx.eval("globalThis.self = __deepFreeze(" + json.dumps(scope) + "); globalThis.args = self.args; globalThis.locals = self.let || {};")
+    ctx.eval("globalThis.self = __deepFreeze(JSON.parse(" + json.dumps(json.dumps(scope)) + ")); globalThis.args = self.args; globalThis.locals = self.let || {};")
     runner = ctx.eval("__runBody" if body else "__runExpr")
     try:
         out = runner(code)

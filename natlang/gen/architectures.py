@@ -1,0 +1,205 @@
+"""Algorithmic and architectural examples with independent state/effect oracles."""
+from pathlib import Path
+
+from ..host import load, load_fold
+from ..types import format_type
+from .programs import Plan, Program
+
+CB = Path(__file__).resolve().parents[2] / 'codebases'
+
+
+def call(fn, to, **inputs):
+    return [('call', {'function': fn, 'to': to, 'inputs': inputs})]
+
+
+def mark(start, end=None, skipped=False):
+    return [('mark_done', {'start': start, 'end': end or start, **({'skipped': True} if skipped else {})})]
+
+
+def leaf(answer):
+    def script(lam):
+        yield [('write', {'path': 'return', 'type': format_type(lam.type.returns), 'value': answer(lam.in_)})]
+    return Plan('script', script=script)
+
+
+MESSAGES = [
+    ('All customers are unable to pay right now.', 'urgent'),
+    ('We have an active security breach.', 'urgent'),
+    ('The service is down for everyone.', 'urgent'),
+    ('Yesterday\'s outage was resolved; everything works now.', 'normal'),
+    ('Could a future outage affect scheduled payments?', 'normal'),
+    ('Please send a copy of last month\'s invoice.', 'normal'),
+]
+
+
+def reconciliation(rng):
+    customers = [{'id': key, 'tier': rng.choice(['priority', 'standard'])}
+                 for key in ['constructor', '__proto__', 'acme'][:rng.randint(0, 3)]]
+    truth, events = {}, []
+    for i in range(rng.randint(0, 14)):
+        text, label = rng.choice(MESSAGES)
+        truth[text] = label
+        events.append({'id': f'e{i}', 'customer': rng.choice(['constructor', '__proto__', 'acme', 'unknown']),
+                       'message': text, 'cents': rng.randint(-200, 400)})
+        if rng.random() < .3:
+            # Conflicting redeliveries must not change the first event's amounts or classification.
+            events.append({**events[-1], 'cents': 9999, 'message': 'We have an active security breach.'})
+    totals, urgent, unmatched, seen = {}, [], [], set()
+    ids = {c['id'] for c in customers}
+    for e in events:
+        if e['id'] in seen:
+            continue
+        seen.add(e['id'])
+        if e['customer'] not in ids:
+            unmatched.append(e['id'])
+        else:
+            totals[e['customer']] = totals.get(e['customer'], 0) + e['cents']
+            if truth[e['message']] == 'urgent':
+                urgent.append(e['id'])
+    expected = dict(totals=totals, urgent=urgent, unmatched=unmatched, duplicates=len(events)-len(seen))
+
+    def root(lam):
+        yield call('join_events', 'let/joined', customers='args/customers', events='args/events')
+        yield mark(2)
+        yield [('call', {'function': 'assess', 'to': 'let/labels', 'over': 'let/joined/rows'})]
+        yield mark(3)
+        yield call('summarize', 'return', joined='let/joined', labels='let/labels')
+        yield mark(4)
+    plans = {'reconcile': Plan('script', script=root), 'assess': leaf(lambda a: truth[a['row']['message']])}
+    return Program('cb_reconciliation', {}, {}, expected, plans,
+                   loader=lambda: load(CB/'reconciliation/reconcile.nl', {'customers': customers, 'events': events}))
+
+
+DESCRIPTIONS = [('Patch the active security vulnerability.', 0),
+                ('Improve the customer-facing checkout page.', 1),
+                ('Clean up internal build logs.', 2)]
+
+
+def dependency_plan(rng):
+    tasks, priorities = [], {}
+    for i in range(rng.randint(0, 8)):
+        text, priority = rng.choice(DESCRIPTIONS)
+        key = ['constructor', '__proto__'][i] if i < 2 else f't{i}'
+        priorities[key] = priority
+        tasks.append({'id': key, 'needs': [t['id'] for t in tasks if rng.random() < .3], 'description': text})
+    if tasks and rng.random() < .35:
+        tasks[0]['needs'] = [tasks[-1]['id']]  # cycle or self-cycle
+    if tasks and rng.random() < .2:
+        tasks[-1]['needs'].append('missing-dependency')
+    order = []
+    while len(order) < len(tasks):
+        ready = [t for t in tasks if t['id'] not in order and all(n in order for n in t['needs'])]
+        if not ready:
+            break
+        order.append(min(ready, key=lambda t: (priorities[t['id']], t['id']))['id'])
+    expected = {'tasks': tasks, 'order': order, 'blocked': [t['id'] for t in tasks if t['id'] not in order], 'finished': True}
+
+    def root(lam):
+        yield call('prepare', 'let/initial', tasks='args/tasks')
+        r = yield [('read', {'path': 'let/initial/finished'})]
+        yield mark(2, 3)
+        if r.value:
+            yield [('write', {'path': 'return', 'type': 'State', 'source': 'let/initial'})]
+            yield mark(4)
+            yield mark(5, 6, skipped=True)
+        else:
+            yield mark(4, skipped=True)
+            yield [('call', {'function': 'step', 'to': 'return', 'init': 'let/initial', 'until': 'finished', 'max': 16})]
+            yield mark(5, 6)
+
+    def step(lam):
+        r = yield call('ready_tasks', 'let/ready', state='args/state')
+        yield mark(2, 3)
+        if not r.value:
+            yield call('stall', 'return', state='args/state')
+            yield mark(4)
+            yield mark(5, 7, skipped=True)
+        else:
+            yield mark(4, skipped=True)
+            yield call('choose', 'let/chosen', ready='let/ready')
+            yield mark(5, 6)
+            yield call('advance', 'return', state='args/state', chosen='let/chosen')
+            yield mark(7)
+    plans = {'plan': Plan('script', script=root), 'step': Plan('script', script=step),
+             'choose': leaf(lambda a: min(a['ready'], key=lambda t: (priorities[t['id']], t['id']))['id'])}
+    return Program('cb_dependency_plan', {}, {}, expected, plans,
+                   loader=lambda: load(CB/'dependency_plan/plan.nl', {'tasks': tasks}))
+
+
+EVENT_TEXT = {'start': 'I would like to place this new order.', 'paid': 'Payment has succeeded.',
+              'failed': 'The shipment failed; it could not be delivered.', 'sent': 'Shipping is complete.',
+              'cancel': 'Please cancel my order.'}
+
+
+def order_saga(rng):
+    events = []
+    for order in ['constructor', '__proto__'][:rng.randint(1, 2)]:
+        sequence = ['start', 'paid', rng.choice(['failed', 'cancel', 'sent'])]
+        if rng.random() < .3:
+            sequence.insert(0, 'paid')  # out-of-order confirmation is ignored
+        for kind in sequence:
+            event = {'id': f'e{len(events)}', 'order': order, 'text': EVENT_TEXT[kind]}
+            events.append(event)
+            if rng.random() < .5:
+                events.append(dict(event))
+    seen, orders, commands = [], {}, []
+    kinds = {v: k for k, v in EVENT_TEXT.items()}
+    for e in events:
+        if e['id'] in seen:
+            continue
+        seen.append(e['id'])
+        old, kind, operations = orders.get(e['order']), kinds[e['text']], []
+        if old is None and kind == 'start':
+            orders[e['order']], operations = 'reserved', ['reserve']
+        elif old == 'reserved' and kind == 'paid':
+            orders[e['order']], operations = 'paid', ['ship']
+        elif old == 'paid' and kind == 'sent':
+            orders[e['order']] = 'done'
+        elif old in ('reserved', 'paid') and kind in ('cancel', 'failed'):
+            orders[e['order']], operations = 'cancelled', ['refund', 'release'] if old == 'paid' else ['release']
+        commands += [dict(key=e['id']+':'+str(i), order=e['order'], operation=op) for i, op in enumerate(operations)]
+    expected = {'seen': seen, 'orders': orders, 'outbox': []}
+    delivered, delivered_keys, failed = [], set(), set()
+    fail_key = rng.choice(commands)['key'] if commands and rng.random() < .7 else None
+
+    def send(args):
+        command = args[0]
+        if command['key'] not in delivered_keys:
+            delivered_keys.add(command['key'])
+            delivered.append(command)
+        if command['key'] == fail_key and fail_key not in failed:
+            failed.add(fail_key)
+            raise RuntimeError('delivery succeeded but its acknowledgement was lost')
+        return None
+
+    def step(lam):
+        r = yield call('seen', 'let/duplicate', acc='args/acc', item='args/item')
+        yield mark(2, 3)
+        if r.value:
+            yield [('write', {'path': 'return', 'type': 'State', 'source': 'args/acc'})]
+            yield mark(4)
+            yield mark(5, 11, skipped=True)
+            return
+        yield mark(4, skipped=True)
+        yield call('read_event', 'let/kind', text='args/item/text')
+        yield mark(5, 6)
+        yield call('transition', 'let/next', acc='args/acc', item='args/item', kind='let/kind')
+        yield mark(7)
+        r = yield call('dispatch', 'let/sent', commands='let/next/outbox')
+        if r.kind == 'quiesced':
+            r = yield [('call', {'function': 'dispatch', 'to': 'let/sent'})]
+            assert r.kind == 'done'
+            yield mark(9)
+        else:
+            yield mark(9, skipped=True)
+        yield mark(8)
+        yield mark(10, skipped=True)
+        yield call('clear_outbox', 'return', state='let/next')
+        yield mark(11)
+    plans = {'step': Plan('script', script=step), 'read_event': leaf(lambda a: kinds[a['text']])}
+    return Program('cb_order_saga', {}, {}, lambda v: v == expected and delivered == commands, plans,
+                   loader=lambda: load_fold(CB/'order_saga/step.nl', {'seen': [], 'orders': {}, 'outbox': []}, list(events)),
+                   capabilities={'queue.send': send})
+
+
+ARCHITECTURES = {'cb_reconciliation': reconciliation, 'cb_dependency_plan': dependency_plan, 'cb_order_saga': order_saga}

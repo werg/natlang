@@ -295,7 +295,7 @@ class ToolSurface:
                 yes = {"const": True}
                 tools.append(
                     tool("mark_done", "Mark lines of your program as finished. `start` alone for one line, `start` and `end` "
-                                      "for a range. Add skipped=true when the lines did not apply, such as the branch of an "
+                                      "for an inclusive range (EVERY line between the endpoints). Add skipped=true when the lines did not apply, such as the branch of an "
                                       "`if` that was not taken. Mark a line only after everything it asks for is finished.",
                          {"start": {"type": "integer"}, "end": {"type": "integer"}, "skipped": {"type": "boolean"}}, ["start"],
                          alternatives=[{"start": {"enum": open_}, "skipped": yes, "x-optional": ["skipped"]},
@@ -305,7 +305,7 @@ class ToolSurface:
                     for t in tools:
                         if t["function"]["name"] in ("write", "call"):
                             t["function"]["parameters"]["properties"]["done"] = {
-                                **line, "description": "line (or [first, last]) of your program that this action finishes; marked if it succeeds"}
+                                **line, "description": "line or inclusive [first, last] range that this action finishes; EVERY line in the range is marked done on success. Never include an untaken branch."}
                             for alt in t["function"]["parameters"].get("x-natlang-alternatives") or []:
                                 alt["done"] = line
                                 alt["x-optional"] = list(alt.get("x-optional") or []) + ["done"]

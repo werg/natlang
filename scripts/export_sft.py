@@ -40,7 +40,9 @@ def main():
     n = 0
     with a.dst.open("w") as out:
         for i, line in enumerate(lines()):
-            if i % a.every or n >= a.limit:
+            if n >= a.limit:
+                break
+            if i % a.every:
                 continue
             s = json.loads(line)
             prompt = render(s["messages"], s["tools"])

@@ -70,5 +70,31 @@
    "a": "return ({field})",
    "b": "Please return {field}."
   }
+ ],
+ "select": [
+  {
+   "a": "{out} = {fn}({items}, {flags})",
+   "b": "Select the items of {items} for which the flag in {flags} is true ({fn}) and call them {out}."
+  },
+  {
+   "a": "{out} = {fn}({items}, {flags})",
+   "b": "Please keep the items of {items} whose flag in {flags} is true ({fn}) and call them {out}."
+  }
+ ],
+ "flags_neq": [
+  {
+   "a": "{name} = for each l in {labels}: l is not \"{label}\"          # exact: use code",
+   "b": "Please use code to convert {labels} into flags that are true where the value is not \"{label}\" and name them {name}."
+  },
+  {
+   "a": "{name} = for each l in {labels}: l is not \"{label}\"          # exact: use code",
+   "b": "In code, create {name} by turning {labels} into flags that are true where the value is not \"{label}\"."
+  }
+ ],
+ "count_true": [
+  {
+   "a": "{field} = count_true({flags})",
+   "b": "Call count_true on {flags} and store the number in {field}."
+  }
  ]
 }

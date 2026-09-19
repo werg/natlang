@@ -6,6 +6,7 @@ the episode. The result is what was written to `return`; the reply is kept as a 
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -13,16 +14,18 @@ from .decoder import Decoder
 from .surface import ToolSurface
 
 TOOLS_PROMPT = (Path(__file__).parent / "prompts" / "tools_small.md").read_text()
-RESAMPLES, MAX_NUDGES = 2, 2
+MAX_NUDGES = 2
 FAILED = ("rejected", "refused", "error", "budget")
 
 
 class ToolAgent:
     def __init__(self, decoder: Decoder, *, surface: Optional[ToolSurface] = None, temperature: float = 0.2,
-                 system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None):
+                 system_prompt: str = TOOLS_PROMPT, log: Optional[list] = None, transcript: Optional[list] = None,
+                 max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900):
         self.dec, self.surface = decoder, surface or ToolSurface()
         self.temperature, self.system = temperature, system_prompt
         self.log = log if log is not None else []
+        self.max_turns, self.max_tokens, self.max_seconds = max_turns, max_tokens, max_seconds
         self.transcript = transcript          # if given, receives the final message list (for debugging)
 
     def run(self, session) -> Optional[str]:
@@ -35,22 +38,35 @@ class ToolAgent:
             call = {"id": "call_0", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
             messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
                          {"role": "tool", "tool_call_id": "call_0", "content": text}]
-        nudges = 0
+        nudges = turns = tokens = 0
+        previous_deadline = getattr(self.dec, "deadline", None)
+        deadline = time.monotonic() + self.max_seconds
+        if previous_deadline is not None:
+            deadline = min(deadline, previous_deadline)
+        previous_runtime_deadline = session.rt.deadline
+        if previous_runtime_deadline is not None:
+            deadline = min(deadline, previous_runtime_deadline)
+        self.dec.deadline = session.rt.deadline = deadline
         try:
             while True:
-                turn = first = None
-                for attempt in range(RESAMPLES + 1):
-                    turn = self.dec.chat(messages, s.tools(session),
-                                         temperature=self.temperature if attempt == 0 else 0.7, seed=attempt)
-                    if not turn.calls:
-                        break
+                if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
+                    return "episode turn, token, or wall-clock budget exhausted"
+                allowance = min(700, self.max_tokens - tokens)
+                turn = self.dec.chat(messages, s.tools(session), temperature=self.temperature,
+                                     seed=0, max_tokens=allowance)
+                turns += 1
+                # A backend without usage is charged its entire requested allowance.
+                used = getattr(turn, "completion_tokens", None)
+                tokens += allowance if used is None else max(1, used)
+                if time.monotonic() >= deadline or tokens > self.max_tokens:
+                    return "episode token or wall-clock budget exhausted"
+                first = None
+                if turn.calls:
                     name, args = turn.calls[0]
                     first = s.apply(session, name, args)
-                    self.log.append({"action": f"{name} {json.dumps(args)}", "kind": first.kind, "attempt": attempt})
-                    if first.kind in ("rejected", "error") and attempt < RESAMPLES:
-                        session.actions -= 1      # a discarded sample does not spend the budget
-                        continue                  # and is never shown to the model
-                    break
+                    self.log.append({"action": f"{name} {json.dumps(args)}", "kind": first.kind, "attempt": 0})
+                    # Even a failed operation may have performed effects. Feed its result back;
+                    # never silently replay it or refund the work/turn budget.
 
                 if not turn.calls:                # the reply: the normal end of an agent episode
                     open_ = s.pending(session) if hasattr(s, "pending") else []
@@ -58,7 +74,9 @@ class ToolAgent:
                         nudges += 1
                         messages += [{"role": "assistant", "content": turn.text or "(no reply)"},
                                      {"role": "user", "content": "Lines still marked [ ]: " + ", ".join(map(str, open_)) +
-                                                                 ". Finish them, or mark them done or skipped."}]
+                                                                 ". Mark completed work done and untaken work skipped (skipped=true). "
+                                                                 "A done range marks EVERY line between its endpoints; do not include untaken work. "
+                                                                 "Carry out any applicable unfinished work before marking it."}]
                         continue
                     if session.finish():
                         session.lam.note = turn.text
@@ -74,6 +92,8 @@ class ToolAgent:
                 for name, args in turn.calls[1:]:     # several calls in one turn is the model's native habit
                     if results[-1].kind in FAILED or results[-1].kind == "blocked":
                         break
+                    if time.monotonic() >= deadline:
+                        return "episode wall-clock budget exhausted"
                     r = s.apply(session, name, args)
                     self.log.append({"action": f"{name} {json.dumps(args)}", "kind": r.kind, "attempt": 0})
                     results.append(r)
@@ -86,7 +106,11 @@ class ToolAgent:
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})
                 for c, r in zip(raw, results):
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
+        except TimeoutError:
+            return "episode wall-clock budget exhausted"
         finally:
+            self.dec.deadline = previous_deadline
+            session.rt.deadline = previous_runtime_deadline
             if self.transcript is not None:
                 self.transcript[:] = messages
 

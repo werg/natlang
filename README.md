@@ -99,3 +99,38 @@ scripts/serve_bonsai.sh 8081 &          # stop: docker stop natlang-bonsai;  scr
 .venv/bin/python scripts/paraphrase.py --server http://127.0.0.1:8081     # paraphrases, kept only after a round trip
 .venv/bin/python scripts/teacher_leaves.py --server http://127.0.0.1:8081  # references for leaves that generate text, kept only if checks pass
 ```
+
+
+Training now holds out complete programs and saves the split in `runs/<run>/split.json`.
+Checkpoints verify the corpus and split before resuming. Checkpoints made before
+this change can still be exported with `--merge-only`; use a new run directory
+for training with the program split.
+
+For paired model comparisons, reuse `eval_turns.py --manifest PATH` (the default
+is beside the corpus). The manifest fixes sample IDs and content hashes across
+models. Results separate work actions from replies and are written as JSON to
+`runs/`, or `--out PATH`. `baseline.py` also writes JSON with computed totals and
+actual emitted records. Pass `--model-label NAME` to identify a checkpoint.
+
+Crisp code runs in QuickJS. Plain JavaScript needs no Node installation; erasable
+TypeScript annotations additionally need Node >=22.13 for
+[`stripTypeScriptTypes`](https://nodejs.org/download/release/v22.13.1/docs/api/module.html).
+This strips annotations without static type checking; values remain checked at
+the tree boundary. Effectful code has a killable worker and a wall-clock limit.
+Host capabilities retain their state in Python; a timed-out host operation can
+still complete, so external effects need host cancellation or idempotency.
+
+
+Three application families exercise larger algorithmic and architectural patterns:
+
+| Entry point | Pattern | Generated edge cases |
+|---|---|---|
+| `codebases/reconciliation/reconcile.nl` | Deduplicate events, join customers, map semantic triage, aggregate exact cents | Empty inputs, unknown customers, conflicting redeliveries, negative amounts, reserved dictionary keys |
+| `codebases/dependency_plan/plan.nl` | Bounded topological planning with semantic priority and exact readiness checks | Cycles, missing dependencies, disconnected tasks, empty graphs, deterministic ties |
+| `codebases/order_saga/step.nl` | Event fold with an outbox, compensation, duplicate suppression and resumable dispatch | Repeated/out-of-order events, payment then cancellation, lost acknowledgements, idempotent effects |
+
+Generate verified trajectories with `scripts/generate.py --families
+cb_reconciliation cb_dependency_plan cb_order_saga`. These families are available
+explicitly; the existing v7 mixture remains stable until the application pass is
+reviewed. The oracles compare final state and, for the saga, the exact delivered
+command sequence. The model remains responsible for interpreting each `.nl` body.

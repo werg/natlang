@@ -65,3 +65,19 @@ def split_programs(pairs, holdout=200, seed=0):
                 "held_programs": sorted(held_keys), "train_programs": sorted(set(keys) - held_keys),
                 "held_turns": len(held), "train_turns": len(train)}
     return held, train, manifest
+
+
+def index_pairs(path):
+    """Index SFT rows without retaining every rendered conversation in RAM."""
+    rows = []
+    with Path(path).open('rb') as f:
+        while True:
+            offset = f.tell()
+            line = f.readline()
+            if not line:
+                break
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            rows.append({'id': row['id'], 'program_id': program_id(row), 'offset': offset})
+    return rows

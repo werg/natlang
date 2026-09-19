@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -24,6 +25,7 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 
 MAX_ACTIONS = 40
+MAX_TOOL_CALLS = 128
 MAX_NESTING = 6
 MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
@@ -83,6 +85,7 @@ class Runtime:
                  max_episodes: int = 256, max_depth: int = 8):
         self.agent_factory = agent_factory
         self.max_episodes, self.max_depth = max_episodes, max_depth   # run-level budgets (SPEC 6.3)
+        self.deadline = None
         self._depth = 0
         self._fn_stack: list = []   # names of the code-base functions currently being reduced
         self._stack: list = []   # hashes of (body, args) of the lambdas currently being reduced
@@ -107,6 +110,8 @@ class Runtime:
         node = ref.get()
         if not is_pending(node):
             raise reject(ref.path, "no-such-path", "a pending node")
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            return self._quiesce(node, ref, "run wall-clock budget exhausted")
         if node.status == RUNNING:
             raise reject(ref.path, "frozen", "a node that is not running")
         inner = node.env(ref.env)
@@ -225,6 +230,8 @@ class Runtime:
         elem = rt.elem if isinstance(rt, ListT) else node.type.b
         stuck = []
         for i, slot in enumerate(node.slots):
+            if self.deadline is not None and time.monotonic() >= self.deadline:
+                return self._quiesce(node, ref, "run wall-clock budget exhausted")
             if not is_pending(slot):
                 continue
             sref = Ref(type=elem, env=inner, path=f"{ref.path}/{i}", container=node.slots, key=i)
@@ -393,6 +400,7 @@ class Session:
         self.cold = cold
         self.completed = False
         self.actions = 0
+        self.tool_calls = 0
 
     # -- observations
     def observation(self) -> str:
@@ -448,11 +456,13 @@ class Session:
         """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
         if self.completed:
             return Result("error", "the task has already finished")
-        if self.actions >= MAX_ACTIONS:
-            return Result("budget", "action budget exhausted")
+        if self.actions >= MAX_ACTIONS or self.tool_calls >= MAX_TOOL_CALLS:
+            return Result("budget", "action or tool-call budget exhausted")
+        self.tool_calls += 1
         if name != "mark_done":                 # bookkeeping does not spend the budget of work
             self.actions += 1
             self.lam.steps += 1
+        args = dict(args) if isinstance(args, dict) else args
         op = getattr(self, "_op_" + name, None)
         try:
             if op is None:
@@ -462,6 +472,7 @@ class Session:
                 rng_ = done if isinstance(done, list) else [done]
                 if not (1 <= len(rng_) <= 2) or not all(isinstance(v, int) and not isinstance(v, bool) for v in rng_):
                     raise reject("done", "bad-range", "a line number, or [first, last]")
+                self._validate_mark({"start": rng_[0], "end": rng_[-1]})
             result = op(args)
             if done is not None and result.kind in ("ok", "done"):
                 marked = self._op_mark_done({"start": rng_[0], "end": rng_[-1]})
@@ -639,15 +650,20 @@ class Session:
         self.completed = True
         return True
 
-    def _op_mark_done(self, args):
-        """mark_done(start, end?, skipped?): lines of the (immutable) instructions are finished, or did not apply."""
-        from .render import listing, program_lines
+    def _validate_mark(self, args):
+        from .render import program_lines
         lines = program_lines(self.lam.original_body or self.lam.body)
         start = args.get("start")
         end = args.get("end", start)
         status = "skipped" if args.get("skipped") is True else "done"
         if not all(isinstance(v, int) and not isinstance(v, bool) for v in (start, end)) or not (1 <= start <= end <= len(lines)):
             raise reject("start", "bad-range", f"line numbers between 1 and {len(lines)}, start <= end", f"{start}..{end}")
+        return lines, start, end, status
+
+    def _op_mark_done(self, args):
+        """Mark only after the complete range has been validated."""
+        from .render import listing
+        lines, start, end, status = self._validate_mark(args)
         for n, _, markable in lines[start - 1:end]:
             if markable:
                 self.lam.marks[n] = status

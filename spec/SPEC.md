@@ -464,9 +464,9 @@ What it cannot do:
 Tools carry `x-natlang-alternatives`: argument sets that belong together,
 which JSON Schema cannot express at the top level. `None` in an optional field
 means "does not apply" and is read as absent. An argument name must not be a
-Python keyword. A call that still fails validation is discarded and resampled
-before the model is shown a rejection; a shown rejection carries a one-line
-hint. For engines that parse tool calls themselves, a decoder may rename tools
+Python keyword. A call that fails validation returns a rejection with a one-line
+hint to the model. Failures are never silently retried: an operation can have
+performed effects before failing. Every attempt spends its budget. For engines that parse tool calls themselves, a decoder may rename tools
 per model (`call` -> `call_function` for a server whose call format reserves
 the word).
 
@@ -506,9 +506,15 @@ that is already running above a call is not started again (`recursion`), and:
 3. *Run budgets.*
 
 Per run: at most 256 episodes, nested at most 8 deep; beyond either, a
-called function quiesces with a run-budget note instead of starting. Per episode: 24 actions and 4,000 generated tokens. Per action: 600 generated
-tokens; longer output is discarded and resampled. Values are defaults and
-configurable per run.
+called function quiesces with a run-budget note instead of starting. Per episode:
+40 work actions, 128 tool calls including bookkeeping, 64 model requests, 4,000
+generated tokens, and 900 seconds elapsed time. `mark_done` does not spend a work
+action but spends a tool call and its model request. Native requests receive at
+most 700 generated tokens and never more than the episode's remaining allowance.
+Backends without token usage are charged the requested allowance. Failures are
+shown to the model and count toward the limits. The native agent's model-request,
+token and elapsed-time defaults are configurable through `ToolAgent`.
+Nested native episodes inherit the caller's deadline.
 
 ### 6.4 Commit points
 
@@ -718,10 +724,21 @@ Target: an opening exchange of at most 1,500 tokens.
 
 ### 9.1 Environment
 
-QuickJS; TypeScript accepted, types stripped before execution; time limit
-2 s and memory limit 64 MB per call (defaults). The harness generates a
-declaration file for the current scope from the declared types; snippets are
-statically checked against it before they run.
+QuickJS executes JavaScript and the erasable TypeScript subset. Type annotations
+are stripped with Node.js `module.stripTypeScriptTypes` (Node >=22.13 required
+only for TypeScript syntax); enums and other syntax requiring code generation
+are rejected. Stripping is not static type checking: the current runtime checks
+values at the typed tree boundary and crisp function returns, not arbitrary
+intermediate JavaScript expressions. The scope declarations below describe the
+API; no declaration file or static checker is currently generated.
+
+Pure execution has a 2-second QuickJS time limit. Effectful execution runs in a
+killable worker with a 2-second wall-clock deadline, including host-effect waits.
+Both use a 64 MB QuickJS heap limit. TypeScript parsing has a separate 5-second
+limit and cached results. Capabilities run in the trusted Python host so their
+state is preserved. A host callback that times out can still complete; its
+outcome is uncertain, and hosts must supply cancellation or idempotency for
+external effects. The interpreter never automatically retries failed effects.
 
 ### 9.2 run_code scope
 
@@ -735,9 +752,9 @@ declare const self: {
 };
 ```
 
-Pending nodes appear as opaque `Pending<T>` handles; using one as a value is
-a type error. Lists larger than the inline threshold are lazy proxies
-supporting indexing, `length`, iteration, and `slice`. The value of the final
+Pending nodes appear as descriptive `$pending` objects, not usable results.
+The runtime copies scope values into QuickJS; lists are ordinary arrays. A result
+must pass tree validation before it can be stored. The value of the final
 expression is the tool result.
 
 ### 9.3 Crisp function body
@@ -882,7 +899,7 @@ the most recent 1,000 step records by default.
 | 2 | TypeScript type syntax; `Dict<T>`; numeric literal types, no range refinement; literals widen to their base type |
 | 2.1 | Lists and dicts are covariant |
 | 5.8 | Constrained decoding over the model's native call text; grammar alternatives tie path, type and value |
-| 6.3 | Budgets: 24 actions, 4,000 tokens per episode; 256 episodes, 8 deep per run; 6 nested pending nodes |
+| 6.3 | Budgets: 40 work actions, 128 tool calls, 64 model requests, 4,000 tokens, 900 s per episode; 256 episodes, 8 deep per run; 6 nested pending nodes |
 | 6.5 | The diagnostic code list |
 | 8 | `render/0.2`: short texts whole (400 characters, 8 lines), lists preview 3, no value-like placeholders |
 | 9 | The bound-parameter part is **`args`**; `run_code` sees `args` and `locals` and cannot write |

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run conformance programs against the served model and summarize. Usage: baseline.py [--wrapper W] [IDS...]"""
-import re, argparse, json, sys, time
+import re, argparse, json, sys, time, os
+from collections import Counter
 from pathlib import Path
 import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -11,6 +12,7 @@ from natlang.tool_agent import ToolAgent
 from natlang.native import NativeCallDecoder
 from natlang.runtime import Runtime
 from natlang.values import dump
+from natlang.corpus import file_digest
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--surface", default="tools", choices=("tools", "text"))
@@ -28,6 +30,8 @@ ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
 ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model that answers judge checks; 'none' to skip")
 ap.add_argument("--alias", action="append", default=[], help="tool renames for this model's server, e.g. call=call_function")
+ap.add_argument("--out", type=Path, help="machine-readable results; defaults to runs/baseline-<timestamp>.json")
+ap.add_argument("--model-label", default="unspecified")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 root = Path(__file__).resolve().parent.parent
@@ -42,6 +46,7 @@ judge = None if a.judge_server == "none" else make_judge(
     LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
 prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
 print(f"surface={a.surface} decode={a.decode}")
+records = []
 for f in files:
     doc = yaml.safe_load(f.read_text())
     if ("program" not in doc and "program_file" not in doc) or "streams" in doc:
@@ -73,7 +78,7 @@ for f in files:
             traceback.print_exc()
     try:
         verdict, why = grade(doc["expect"], kind, dump(value) if kind == "done" else None,
-                             note=getattr(out, "detail", "") or "", judge=judge)
+                             note=getattr(out, "detail", "") or "", judge=judge, emitted=rt.emitted)
     except OSError as e:
         verdict, why = "?", [f"judge unavailable: {e}"]
     correct = verdict == "yes"
@@ -86,6 +91,20 @@ for f in files:
     print(f"{f.stem:<32} {kind:<10} correct={verdict:<3} actions={len(log):<3} "
           f"rejected={rejected:<3} episodes={rt.episodes_started:<3} {time.time()-t:5.1f}s  structure={','.join(shapes) or '-':<12} first: {first}"
           + ("".join(f"\n      failed: {w}" for w in why)))
+    records.append({"program": f.stem, "program_sha256": file_digest(f), "status": kind,
+                    "verdict": verdict, "details": why, "value": dump(value) if kind == "done" else None,
+                    "emitted": rt.emitted, "actions": len(log), "rejected": rejected,
+                    "episodes": rt.episodes_started, "seconds": time.time() - t})
+counts = dict(Counter(r["verdict"] for r in records))
+print(f"\nprograms={len(records)} correct={counts.get('yes', 0)} incorrect={counts.get('no', 0)} "
+      f"unjudged={counts.get('?', 0)}")
+result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
+result_path.parent.mkdir(parents=True, exist_ok=True)
+result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": a.surface,
+                                  "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
+                                  "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
+                                  "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")
+print(f"results: {result_path}")
 if a.decode == "native" and dec.stats["p_call_first"]:
     pc = dec.stats["p_call_first"]
     print(f"\nturns={dec.stats['turns']} tool-call turns={dec.stats['turns']-dec.stats['replies']} replies={dec.stats['replies']} "

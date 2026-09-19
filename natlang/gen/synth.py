@@ -218,6 +218,13 @@ def glue(c: Ctx, out: str, ty: str, code: str, value: Any, a: str, b: str, to: O
          key: str = "", fields: Optional[dict] = None):
     """Exact work that no function covers: run_code, then keep the result."""
     from .. import js                                  # the oracle for exact work is the code itself
+    # Vary exact expression syntax, always verifying equivalence against the twin.
+    import hashlib
+    style = int(hashlib.sha256(code.encode()).hexdigest()[:2], 16) % 3
+    if style == 1:
+        code = f"(() => {{ const result = ({code}); return result; }})()"
+    elif style == 2:
+        code = f"(function() {{ return ({code}); }})()"
     ran = js.run(code, {"let": {k: v for k, v in c.env.items()}, "args": {}}, None, body=False, path="gen")
     assert ran == value or (isinstance(value, float) and abs(ran - value) < 0.011), (code, ran, value)
     c.say(a, b, key=key, fields=fields)
@@ -257,7 +264,8 @@ def mark_style(rng) -> str:
     forces one style (for experiments); otherwise programs are spread over all three."""
     import os
     forced = os.environ.get("NATLANG_MARK_STYLE")
-    return forced if forced in MARK_STYLES else rng.choice(MARK_STYLES)
+    sampled = rng.choice(MARK_STYLES)  # forcing a style must not change the sampled program
+    return forced if forced in MARK_STYLES else sampled
 
 
 def render_body(c: "Ctx", header: str) -> str:
@@ -632,8 +640,9 @@ class Composer:
                            f"k has no receipt or k.amount > {limit}")}[which]
             name = self.fresh({"small": ["fine", "simple"], "category": [f"is_{cat}"]}.get(which, ["flagged", "problem", "suspicious"]))
             glue(self.c, name, "Bool[]", f"locals.{v.name}.map(k => {js_})", [py(k) for k in v.value],
-                 f"{name} = for each k in {v.name}: {words}          # exact: use code",
-                 f"With code, flag every item of {v.name} where {words}; call the flags {name}.")
+                 "{name} = for each k in {values}: {predicate}          # exact: use code",
+                 "With code, flag every item of {values} where {predicate}; call the flags {name}.",
+                 key="flags_predicate", fields={"name": name, "values": v.name, "predicate": words})
         else:
             label = self.rng.choice(sorted(set(v.value)) or ["billing"])
             if self.rng.random() < 0.35:                   # "is not": a different operator, not a negated comparison
@@ -663,8 +672,9 @@ class Composer:
         name = self.fresh(["both", "combined", "either_flag"] if op == "&&" else ["either_flag", "combined", "any_flag"])
         glue(self.c, name, "Bool[]", f"locals.{a.name}.map((x, i) => x {op} locals.{b.name}[i])",
              [py(x, y) for x, y in zip(a.value, b.value)],
-             f"{name} = position by position: {a.name} {word} {b.name}          # exact: use code",
-             f"With code, combine {a.name} and {b.name} position by position with '{word}'; call the result {name}.")
+             "{name} = position by position: {left} {operator} {right}          # exact: use code",
+             "With code, combine {left} and {right} position by position with '{operator}'; call the result {name}.",
+             key="combine_flags", fields={"name": name, "left": a.name, "right": b.name, "operator": word})
         self.add(Var(name, f"let/{name}", "flags", self.c.env[name], base=a.base))
         return True
 
@@ -685,14 +695,16 @@ class Composer:
         leaf = self.rng.choice(rest)
         field = self.fresh({"flags": ["matching", "hits"], "labels": ["breakdown", "by_kind", "by_topic"]}[LEAF_KIND[leaf]])
         inner = self.fresh(LEAF_LOCAL[leaf])
-        self.c.say(f"if {name} is empty:", f"If {name} is empty:")
+        self.c.say("if {items} is empty:", "If {items} is empty:",
+                   key="if_empty", fields={"items": name})
         self.c.indent += 1
         empty_value = 0 if LEAF_KIND[leaf] == "flags" else {}
-        self.c.say(f"{field} = {json.dumps(empty_value)}", f"{field} is {json.dumps(empty_value)}.", skipped=bool(sel))
+        self.c.say("{field} = {value}", "Set {field} to {value}.", skipped=bool(sel),
+                   key="assign_literal", fields={"field": field, "value": json.dumps(empty_value)})
         if not sel:
             self.c.calls.append(("write", {"path": f"return/{field}", "type": "Num" if empty_value == 0 else "Dict<Num>", "value": empty_value}))
         self.c.indent -= 1
-        self.c.say("else:", "Otherwise:")
+        self.c.say("else:", "Otherwise:", key="else", fields={})
         self.c.indent += 1
         if sel:
             extra = {"rubric": "args/rubric"} if leaf in LEAF_RUBRIC else None
@@ -724,8 +736,9 @@ class Composer:
         if v.kind == "flags" and self.rng.random() < 0.3:          # the same count, carried through the list
             self.c.use_std("count_if")
             field = self.fresh([f"n_{v.name}", f"{v.name}_count", "count"])
-            self.c.say(f"{field} = carry a count through {v.name}, starting at 0: count_if(acc, item)",
-                       f"Carry a count through {v.name}, starting at 0, with count_if: {field}.")
+            self.c.say("{field} = carry a count through {values}, starting at 0: count_if(acc, item)",
+                       "Carry a count through {values}, starting at 0, with count_if: {field}.",
+                       key="fold_count", fields={"field": field, "values": v.name})
             self.c.calls.append(("call", {"function": "count_if", "to": f"return/{field}", "over": v.path, "init": 0}))
             self.fields[field] = ("Num", sum(v.value))
             if self.rng.random() < 0.5 and sum(v.value) > 3:
@@ -733,8 +746,9 @@ class Composer:
         elif v.kind in ("labels", "topics") and self.rng.random() < 0.4:
             self.c.use_std("tally")
             field = self.fresh([f"by_{v.name}", "counts", "tally_of"])
-            self.c.say(f"{field} = carry a tally through {v.name}, starting at {{}}: tally(acc, item)",
-                       f"Carry a tally through {v.name}, starting from the empty record, with tally: {field}.")
+            self.c.say("{field} = carry a tally through {values}, starting at {{}}: tally(acc, item)",
+                       "Carry a tally through {values}, starting from the empty record, with tally: {field}.",
+                       key="fold_tally", fields={"field": field, "values": v.name})
             self.c.calls.append(("call", {"function": "tally", "to": f"return/{field}", "over": v.path, "init": {}}))
             self.fields[field] = ("Dict<Num>", {k: v.value.count(k) for k in dict.fromkeys(v.value)})
         elif v.kind == "flags":
@@ -748,8 +762,9 @@ class Composer:
             else:
                 field = self.fresh([f"share_{v.name}", "share"])
                 value = glue(self.c, field, "Num", f"Math.round(locals.{v.name}.filter(Boolean).length / locals.{v.name}.length * 100) / 100",
-                             round(sum(v.value) / len(v.value), 2), f"{field} = share of true in {v.name}, rounded to 2 decimals     # exact",
-                             f"With code, compute the share of true flags in {v.name}, rounded to two decimals: {field}.", to=f"return/{field}")
+                             round(sum(v.value) / len(v.value), 2), "{field} = share of true in {flags}, rounded to 2 decimals     # exact",
+                             "With code, compute the share of true flags in {flags}, rounded to two decimals: {field}.", to=f"return/{field}",
+                             key="share_true", fields={"field": field, "flags": v.name})
             self.fields[field] = ("Num", value)
         elif v.kind in ("labels", "topics"):
             field = self.fresh([f"by_{v.name}", "counts", "tally"])
@@ -770,8 +785,9 @@ class Composer:
         value = n
         while value > 3:
             value = -(-value // 2)
-        self.c.say(f"{field} = repeat at most 8 times, until is_small(state): state = halve(state), starting from {source_field}",
-                   f"Starting from {source_field}, repeat halve until is_small says true, at most 8 times: {field}.")
+        self.c.say("{field} = repeat at most 8 times, until is_small(state): state = halve(state), starting from {source}",
+                   "Starting from {source}, repeat halve until is_small says true, at most 8 times: {field}.",
+                   key="repeat_halve", fields={"field": field, "source": source_field})
         self.c.calls.append(("call", {"function": "halve", "to": f"return/{field}", "init": f"return/{source_field}", "until": "is_small", "max": 8}))
         self.fields[field] = ("Num", value)
 
@@ -786,8 +802,9 @@ class Composer:
             ran = 0
             for k in v.value:
                 ran = js.run(STD["add_amount"][3], {"args": {"acc": ran, "item": k}}, None, body=True, path="gen")
-            self.c.say(f"{field} = carry a total through {v.name}, starting at 0: add_amount(acc, item)",
-                       f"Carry a running total through {v.name}, starting at 0, with add_amount: {field}.")
+            self.c.say("{field} = carry a total through {values}, starting at 0: add_amount(acc, item)",
+                       "Carry a running total through {values}, starting at 0, with add_amount: {field}.",
+                       key="fold_amount", fields={"field": field, "values": v.name})
             self.c.calls.append(("call", {"function": "add_amount", "to": f"return/{field}", "over": v.path, "init": 0}))
             self.fields[field] = ("Num", ran)
         else:                                               # repeat until a check holds
@@ -805,16 +822,18 @@ class Composer:
             limit = state["limit"]
             name = self.fresh(["budget", "plan"])
             glue(self.c, name, "Budget", f"({{ limit: 0, amounts: locals.{v.name}.map(k => k.amount), target: {target} }})", start,
-                 f"{name} = {{ limit: 0, amounts: the amounts of {v.name}, target: {target} }}          # exact: use code",
-                 f"With code, build {name}: limit 0, the amounts of {v.name}, target {target}.")
+                 "{name} = {{ limit: 0, amounts: the amounts of {values}, target: {target} }}          # exact: use code",
+                 "With code, build {name}: limit 0, the amounts of {values}, target {target}.",
+                 key="build_budget", fields={"name": name, "values": v.name, "target": target})
             final = self.fresh(["enough", "settled_budget"])
-            self.c.say(f"{final} = repeat at most 12 times, until covers(state): state = raise_limit(state), starting from {name}",
-                       f"Starting from {name}, repeat raise_limit until covers says true, at most 12 times: {final}.")
+            self.c.say("{field} = repeat at most 12 times, until covers(state): state = raise_limit(state), starting from {source}",
+                       "Starting from {source}, repeat raise_limit until covers says true, at most 12 times: {field}.",
+                       key="repeat_budget", fields={"field": final, "source": name})
             self.c.calls.append(("call", {"function": "raise_limit", "to": f"let/{final}", "init": f"let/{name}", "until": "covers", "max": 12}))
             self.c.env[final] = {**start, "limit": limit}
             field = self.fresh(["limit_needed", "limit"])
-            glue(self.c, field, "Num", f"locals.{final}.limit", limit, f"{field} = {final}.limit", f"{field} is the limit of {final}.",
-                 to=f"return/{field}")
+            glue(self.c, field, "Num", f"locals.{final}.limit", limit, "{field} = {source}.limit", "{field} is the limit of {source}.",
+                 to=f"return/{field}", key="budget_limit", fields={"field": field, "source": final})
             self.fields[field] = ("Num", limit)
 
     def guard_empty(self, empty: bool):
@@ -1014,3 +1033,35 @@ def tiny(rng: random.Random) -> Program:
 
 
 SHAPES.update({"per_item_condition": per_item_condition, "fold_with_steps": fold_with_steps, "tiny": tiny})
+
+
+def guarded_call(rng: random.Random) -> Program:
+    """An early return must prevent a later call; values/names differ from the marking probe."""
+    c = Ctx(rng, {})
+    enabled, invert = rng.choice([False, True]), rng.choice([False, True])
+    early = not enabled if invert else enabled
+    sentinel = rng.randint(-30, -1)
+    values = [rng.randint(1, 20) for _ in range(rng.randint(0, 6))]
+    fn = rng.choice(['total_values', 'sum_items', 'aggregate'])
+    local = rng.choice(['total', 'amount', 'result'])
+    c.fns[fn] = _fn_doc(fn, {'values': 'Num[]'}, 'Num', 'Add the numbers exactly.',
+                        'return args.values.reduce((a, b) => a + b, 0)', kind='code')
+    c.say('if not enabled:' if invert else 'if enabled:',
+          'If enabled is false:' if invert else 'If enabled is true:')
+    c.indent = 1
+    c.say(f'return {sentinel}', f'Return {sentinel} immediately.', skipped=not early)
+    if early:
+        c.calls.append(('write', {'path': 'return', 'type': 'Num', 'value': sentinel}))
+    c.indent = 0
+    c.say(f'{local} = {fn}(values)', f'Call {fn} on values and save the result as {local}.', skipped=early)
+    if not early:
+        c.calls.append(('call', {'function': fn, 'to': f'let/{local}', 'inputs': {'values': 'args/values'}}))
+    c.say(f'return {local}', f'Return {local}.', skipped=early)
+    if not early:
+        c.calls.append(('write', {'path': 'return', 'type': 'Num', 'source': f'let/{local}'}))
+    return _finish(c, 'guarded_call', {'enabled': 'Bool', 'values': 'Num[]'}, 'Num',
+                   {'enabled': enabled, 'values': values}, sentinel if early else sum(values), [],
+                   rng.choice(['guarded_total', 'maybe_total', 'compute_if_needed']), 'Followed the guard and returned.')
+
+
+SHAPES['guarded_call'] = guarded_call

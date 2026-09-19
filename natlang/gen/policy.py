@@ -8,6 +8,7 @@ data is decodable under the same constraints used at inference.
 from __future__ import annotations
 
 import json
+import random
 from typing import Optional
 
 from .. import gbnf
@@ -25,8 +26,11 @@ def native_text(calls) -> str:
 
 
 class ReferenceAgent:
-    def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True):
+    def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
+                 recovery_rng=None, recovery_rate: float = 0):
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
+        self.recovery_rng = recovery_rng or random.Random(0)
+        self.recovery_rate, self.recovered = recovery_rate, False
 
     # -- what a good interpreter does for each kind of plan
     def turns(self, session):
@@ -87,6 +91,19 @@ class ReferenceAgent:
             except StopIteration:
                 break
             tools = s.tools(session)
+            if not self.recovered and any(n == "run_code" for n, _ in calls) and self.recovery_rng.random() < self.recovery_rate:
+                # A failed model action is history, never a supervised target. It has no
+                # effects or tree mutation; the next target is the verified correction.
+                bad = self.recovery_rng.choice(["locals.__missing_value.length", "JSON.parse('{')"])
+                args = {"code": bad}
+                assert gbnf.accepts(call_grammar(tools), native_text([("run_code", args)]))
+                result = s.apply(session, "run_code", args)
+                assert result.kind == "error", result.text
+                call_id = f"recovery_{len(messages)}"
+                messages += [{"role": "assistant", "content": "", "tool_calls": [{"id": call_id,
+                              "type": "function", "function": {"name": "run_code", "arguments": json.dumps(args)}}]},
+                             {"role": "tool", "tool_call_id": call_id, "content": result.text}]
+                self.recovered = True
             self._emit(session, messages, tools, calls=calls)
             raw, results = [], []
             for i, (name, args) in enumerate(calls):
@@ -117,5 +134,5 @@ class ReferenceAgent:
         if self.check and not gbnf.accepts(call_grammar(tools), native):
             raise AssertionError(f"the turn's grammar refuses the reference turn:\n{native}")
         self.sink.append({"messages": [dict(m) for m in messages], "tools": tools, "target": target,
-                          "native_target": native, "kind": self.plan.kind, "template": bool(self.plan.template),
+                          "native_target": native, "kind": self.plan.kind, "recovery": self.recovered, "template": bool(self.plan.template),
                           "skill": "reply" if calls is None else "+".join(n for n, _ in calls)})
