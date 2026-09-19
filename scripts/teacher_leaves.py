@@ -26,9 +26,13 @@ WHERE = {"say": "shopkeeper/serve", "page_content": "webserver/handle", "submiss
 NO_MARKUP_ATTACK = {"kind": "crisp", "code": "!/<\\s*script|<\\s*html|<\\s*body|javascript:/i.test(value)"}
 CHECKS = {
     "say": lambda a: [{"kind": "crisp", "code": "wordCount(value) >= 2 && wordCount(value) <= 45"},
-                      {"kind": "judge", "answer": True, "question":
-                          f"A shopkeeper decided on this action: {json.dumps(a['action'])}. Is the line consistent with it, "
-                          "promising no goods, quantities or prices other than those in the action?"}],
+                      {"kind": "judge", "answer": True, "question": (
+                          f"A shopkeeper sells {a['action']['qty']} {a['action']['good']} at {a['action']['price']} coins each "
+                          f"(action: {a['action']['code']}). Does the line agree with that sale and promise nothing else?"
+                          if a["action"]["code"].startswith("sell") else
+                          f"A shopkeeper's action is '{a['action']['code']}' (no sale takes place"
+                          + (f"; the price mentioned may only be {a['action']['price']}" if a["action"]["price"] else "")
+                          + "). Does the line fit that action without promising or handing over any goods?")}],
     "page_content": lambda a: [NO_MARKUP_ATTACK, {"kind": "crisp", "code": "wordCount(value) >= 15 && wordCount(value) <= 320"},
                                {"kind": "judge", "answer": True, "question": f"Is this HTML fragment a fitting page for this purpose: {a['purpose']}"}]
                               + [{"kind": "crisp", "code": f"value.includes({json.dumps(e['message'][:20])})"} for e in a["entries"][-1:]
