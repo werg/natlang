@@ -95,12 +95,15 @@ def main():
 
     data_stream = a.data.open("rb")
 
-    def encode(p):                       # the pairs are already rendered by the chat template: no special tokens added
+    def encode(p, phase="train"):        # already rendered by the chat template: no special tokens added
         data_stream.seek(p["offset"])
         p = json.loads(data_stream.readline())
         x = tok(p["prompt"], add_special_tokens=False)["input_ids"]
         y = tok(p["completion"], add_special_tokens=False)["input_ids"]
         if len(x) + len(y) > a.max_len:
+            counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})
+            family = p.get("family", "unknown")
+            counts[family] = counts.get(family, 0) + 1
             return None
         return torch.tensor([x + y]).cuda(), torch.tensor([[-100] * len(x) + y]).cuda()
 
@@ -109,7 +112,7 @@ def main():
         model.eval()
         tot = n = 0
         for p in held[:100]:
-            e = encode(p)
+            e = encode(p, phase="heldout")
             if e:
                 tot += model(input_ids=e[0], labels=e[1]).loss.item(); n += 1
         model.train()
@@ -174,7 +177,8 @@ def main():
         if state["step"] % 10 == 0 or state["step"] == a.steps:
             state["log"].append([state["step"], round(running, 4)])
             print(f"step {state['step']:4d}  loss {running:.4f}  lr {sched.get_last_lr()[0]:.2e}  "
-                  f"mem {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB  {time.time() - t0:.0f}s", flush=True)
+                  f"mem {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB  {time.time() - t0:.0f}s "
+                  f"overlength={state.get('overlength_encounters', {})}", flush=True)
         if state["step"] % a.save_every == 0:
             save_checkpoint()
     save_checkpoint()

@@ -750,3 +750,26 @@ failure: a prechecked incompatible destination is rejected by the real runtime,
 then the correct local call is the supervised target. The invalid call appears
 only in history. Saga outputs failed without rejected actions, showing that
 well-typed tool use alone does not establish correct program execution.
+
+With the clarified prompt, Bonsai's expanded mixed-style run got 5/5 values and
+4/5 marking checks right. The remaining failure bypassed an untaken early return
+correctly, then marked it done in a broad range. No completion nudge was present
+in that failure's transcript. This is still a model marking error; prompt
+clarification has not established reliable progress state. The expanded run's
+style differs from the original three-style probe, so it is not a controlled
+estimate of improvement.
+
+Length sampling exposed another training blind spot: with the old 3,072-token
+limit, 9/12 sampled dependency-planning turns and 12/12 sampled web-server turns
+would be skipped. This small sample is diagnostic, not a corpus-wide estimate.
+The next pilot will try an 8,192-token cap with GPU memory observed, and training
+now logs overlength encounters by family separately for training and held-out
+loss. A fixed subset of completed verified shards plus all 600 guarded-call
+programs supplies the pilot while the full 20,000-program batch continues.
+
+The first large batch stopped at a recovery-injection assertion: a resumed
+dispatch has no input bindings, so the grammar forbids moving it to a new
+destination. Recovery generation now filters such impossible errors before
+injection. The actual failing seed (71, program 1992) is a regression test; a
+fresh `ref-v7-arch-r2` manifest records the corrected generator. Earlier completed
+shards remain valid and the pilot records exactly which ones it uses.

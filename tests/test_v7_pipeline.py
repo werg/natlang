@@ -3,7 +3,7 @@ import random
 
 from natlang.corpus import index_pairs, split_programs
 from natlang.gen import synth as S
-from scripts.generate import run_program
+from scripts.generate import run_program, make_program, MIXES
 from scripts.paraphrase_steps import valid_variant
 from scripts.teacher_leaves import CHECKS
 from natlang.gen.architectures import reconciliation
@@ -39,6 +39,14 @@ def test_wrong_call_destination_is_history_followed_by_a_correct_local_call():
     assert any(m['role'] == 'tool' and 'type-does-not-fit-slot' in m['content'] for m in first['messages'])
     bad = [m for m in first['messages'] if m.get('tool_calls')][-1]['tool_calls'][0]['function']
     assert json.loads(bad['arguments'])['to'] == 'return'
+
+
+def test_recovery_does_not_inject_a_call_forbidden_by_the_current_grammar():
+    # This saga resumes dispatch without rebinding inputs. Moving that resume to
+    # return is forbidden by the grammar, so it must not become error history.
+    family, prog = make_program(71, 1992, MIXES['v7_arch'])
+    assert family == 'cb_order_saga'
+    run_program(prog, recovery_seed='71:1992:recovery', recovery_rate=.15)
 
 
 def test_phrase_filter_preserves_placeholders_and_rejects_listing_markers():

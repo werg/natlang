@@ -113,11 +113,11 @@ class ReferenceAgent:
                 break
             tools = s.tools(session)
             recovery = self.recovery_action(session, calls) if not self.recovered and self.recovery_rate else None
-            if recovery and self.recovery_rng.random() < self.recovery_rate:
+            if (recovery and self.recovery_rng.random() < self.recovery_rate
+                    and gbnf.accepts(call_grammar(tools), native_text([(recovery[0], recovery[1])]))):
                 # A failed model action is history, never a supervised target. It has no
                 # effects or tree mutation; the next target is the verified correction.
                 name, args, expected_kind = recovery
-                assert gbnf.accepts(call_grammar(tools), native_text([(name, args)]))
                 result = s.apply(session, name, args)
                 assert result.kind == expected_kind, result.text
                 call_id = f"recovery_{len(messages)}"
