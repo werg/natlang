@@ -482,9 +482,8 @@ suite, static checker.
 
 **Phase 1, harness.** Done on the development machine: tree, types, code
 bases, `call`, locals, tool surface, native constrained decoding, GPU serving
-of the student and the teacher, grading. Remaining: rewrite conformance
-programs 03–22 as code-base programs; serialize `codebase` on swap-out;
-batching; SQLite store.
+of the student and the teacher, grading, the conformance suite as code-base programs, complete swap-out.
+Remaining: batching; SQLite store.
 
 **Phase 2, baselines.** Untuned 350M and the teacher on the code-base
 conformance programs; the one-shot-versus-interpreted sweep over input size.
