@@ -189,13 +189,14 @@ def main():
             if a.cases and case['name'] not in a.cases:
                 continue
             dec = LlamaServerDecoder(a.server, timeout=240, chat_extra={'thinking_budget_tokens':a.thinking,'top_p':.95,'top_k':20,'chat_template_kwargs':{'reasoning_effort':a.reasoning_effort}},tool_aliases={'call':'call_function'},json_text_values=a.json_text_values)
-            log, transcript = [], []
+            log, transcript, teacher_turns = [], [], []
             rt = Runtime(lambda lam: ToolAgent(dec,system_prompt=prompt,temperature=a.temperature,log=log,transcript=transcript,
-                validation_feedback='caller',max_turns=16,max_tokens=4000,max_seconds=240))
+                teacher_turns=teacher_turns,validation_feedback='caller',max_turns=16,max_tokens=4000,max_seconds=240))
             out,value=rt.run_root(load_program(case['root']))
             row={'case':case['name'],'group':group,'program':case['root'],'expected':case['expected'],'expected_failure':case['failure'],
                  'status':out.kind,'detail':out.detail,'value':dump(value) if out.kind=='done' else None,
-                 **assess(case,out,value,log,rt.emitted),'emitted':rt.emitted,'log':log,'transcript':transcript,'usage':dec.usage}
+                 **assess(case,out,value,log,rt.emitted),'emitted':rt.emitted,'log':log,'transcript':transcript,
+                 'teacher_turns':teacher_turns,'usage':dec.usage}
             rows.append(row)
             doc={'model':model_metadata['data'][0]['id'],'model_metadata':model_metadata,'args':{k:str(v) for k,v in vars(a).items()},'system_prompt':prompt,**source_hashes,
                  'audit_version':3,'summary':summary(rows),'rows':rows}

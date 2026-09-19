@@ -12,6 +12,7 @@ import json
 import math
 import time
 import urllib.request
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
@@ -28,6 +29,7 @@ class Generation:
 @dataclass
 class ChatTurn:
     value_confidence: list = field(default_factory=list, kw_only=True)  # one optional score per proposed call
+    raw_response: Optional[dict] = field(default=None, kw_only=True)  # complete server reply, including any reasoning field
     calls: list = field(default_factory=list)       # [(tool name, arguments dict)]
     text: str = ""
     raw_calls: list = field(default_factory=list)   # the API's tool_calls, for the history
@@ -115,6 +117,7 @@ class LlamaServerDecoder:
         t0 = time.time()
         with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             out = json.loads(resp.read())
+        raw_response = deepcopy(out)
         msg = out["choices"][0]["message"]
         self.usage["turns"] += 1
         self.usage["seconds"] += time.time() - t0
@@ -131,7 +134,8 @@ class LlamaServerDecoder:
             except json.JSONDecodeError:
                 args = {"__unparsed__": fn.get("arguments")}
             calls.append((fn.get("name", ""), args if isinstance(args, dict) else {"value": args}))
-        return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [], tokens)
+        return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [], tokens,
+                        raw_response=raw_response)
 
     def generate(self, prompt, *, grammar, max_tokens, temperature, seed, stop, n_probs=0) -> Generation:
         payload = {"prompt": prompt, "n_predict": max_tokens, "temperature": temperature, "stop": stop,

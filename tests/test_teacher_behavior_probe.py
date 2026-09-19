@@ -123,7 +123,8 @@ def test_blank_lines_do_not_block_natural_completion():
     class Scripted:
         def __init__(self, mark):
             self.turns = iter([ChatTurn([('write', {'path': 'return', 'type': 'Num', 'value': 7,
-                                                       **({'done': 1} if mark else {})})], completion_tokens=1),
+                                                       **({'done': 1} if mark else {})})], completion_tokens=1,
+                                        raw_response={'choices': [{'message': {'reasoning_content': 'write seven'}}]}),
                                ChatTurn(text='Finished.', completion_tokens=1),
                                ChatTurn(text='Finished.', completion_tokens=1),
                                ChatTurn(text='Finished.', completion_tokens=1)])
@@ -136,10 +137,14 @@ def test_blank_lines_do_not_block_natural_completion():
             'instructions': 'Return 7.\n\n   \n# comment' + ('\nSay that you finished.' if mark_second_line else ''),
             'codebase': {'unused': {'args': {}, 'returns': 'Num', 'instructions': 'Return 1.'}}}})
 
-    transcript = []
-    out, value = Runtime(lambda lam: ToolAgent(Scripted(True), transcript=transcript)).run_root(root())
+    transcript, teacher_turns = [], []
+    out, value = Runtime(lambda lam: ToolAgent(Scripted(True), transcript=transcript,
+                                               teacher_turns=teacher_turns)).run_root(root())
     assert out.kind == 'done' and value == 7
     assert transcript[-1] == {'role': 'assistant', 'content': 'Finished.'}
+    assert teacher_turns[0]['response']['choices'][0]['message']['reasoning_content'] == 'write seven'
+    assert teacher_turns[0]['executions'][0]['kind'] == 'ok'
+    assert teacher_turns[1]['text'] == 'Finished.'
     out, _ = Runtime(lambda lam: ToolAgent(Scripted(True))).run_root(root(True))
     assert out.kind == 'quiesced' and 'unfinished lines: 5' in out.detail
 

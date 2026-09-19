@@ -5,6 +5,7 @@ the episode. The result is what was written to `return`; the reply is kept as a 
 """
 from __future__ import annotations
 
+import copy
 import json
 import time
 from pathlib import Path
@@ -25,7 +26,7 @@ class ToolAgent:
                  validation_feedback: str = "caller", careful_threshold: Optional[float] = None,
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
-                 review_prompt: str = "baseline"):
+                 review_prompt: str = "baseline", teacher_turns: Optional[list] = None):
         if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
             raise ValueError("unknown review prompt")
         self.review_prompt = review_prompt
@@ -50,6 +51,7 @@ class ToolAgent:
         self.log = log if log is not None else []
         self.max_turns, self.max_tokens, self.max_seconds = max_turns, max_tokens, max_seconds
         self.transcript = transcript          # if given, receives the final message list (for debugging)
+        self.teacher_turns = teacher_turns    # exact model replies and their pre-action context, for audit/distillation
 
     def run(self, session) -> Optional[str]:
         s = self.surface
@@ -75,9 +77,21 @@ class ToolAgent:
                 if turns >= self.max_turns or tokens >= self.max_tokens or time.monotonic() >= deadline:
                     return "episode turn, token, or wall-clock budget exhausted"
                 allowance = min(700, self.max_tokens - tokens)
-                turn = self.dec.chat(messages, s.tools(session), temperature=self.temperature,
+                available_tools = s.tools(session)
+                offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
+                turn = self.dec.chat(messages, available_tools, temperature=self.temperature,
                                      seed=0, max_tokens=allowance)
                 turns += 1
+                teacher_turn = None
+                if self.teacher_turns is not None:
+                    teacher_turn = {"function": session.lam.fn_name,
+                                    "messages_before": list(messages),
+                                    "tools_offered": offered_tools,
+                                    "response": turn.raw_response,
+                                    "calls": turn.calls, "text": turn.text,
+                                    "value_confidence": turn.value_confidence,
+                                    "reviews": [], "executions": []}
+                    self.teacher_turns.append(teacher_turn)
                 # A backend without usage is charged its entire requested allowance.
                 used = getattr(turn, "completion_tokens", None)
                 tokens += allowance if used is None else max(1, used)
@@ -122,6 +136,11 @@ class ToolAgent:
                         if decision not in ("approve", "withdraw", "error", "blocker") or not isinstance(verdict.get("reason"), str):
                             return "careful review invalid verdict; proposal not applied"
                         review["decision"] = decision
+                        if teacher_turn is not None:
+                            teacher_turn["reviews"].append({"call_index": index,
+                                                            "response": answer.raw_response,
+                                                            "decision": decision,
+                                                            "reason": verdict["reason"]})
                         self.log.append({"action": "review_write " + json.dumps(verdict),
                                          "kind": "ok" if decision == "approve" else "blocked", "attempt": 0})
                         if decision == "withdraw" and self.withdrawal_policy == "retry" and withdrawals < 1:
@@ -144,6 +163,10 @@ class ToolAgent:
                     name, args = turn.calls[0]
                     first = s.apply(session, name, args)
                     self.log.append({"action": f"{name} {json.dumps(args)}", "kind": first.kind, "attempt": 0})
+                    if teacher_turn is not None:
+                        teacher_turn["executions"].append({"call_index": 0, "name": name,
+                                                            "args": args, "kind": first.kind,
+                                                            "text": first.text})
                     # Even a failed operation may have performed effects. Feed its result back;
                     # never silently replay it or refund the work/turn budget.
 
@@ -182,6 +205,10 @@ class ToolAgent:
                         return "episode wall-clock budget exhausted"
                     r = s.apply(session, name, args)
                     self.log.append({"action": f"{name} {json.dumps(args)}", "kind": r.kind, "attempt": 0})
+                    if teacher_turn is not None:
+                        teacher_turn["executions"].append({"call_index": len(results), "name": name,
+                                                            "args": args, "kind": r.kind,
+                                                            "text": r.text})
                     results.append(r)
                 if results[-1].kind == "budget":
                     return "budget exhausted"

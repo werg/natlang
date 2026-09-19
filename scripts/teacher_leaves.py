@@ -7,13 +7,14 @@ outputs go to data/leaf_references.jsonl, keyed by function and arguments; the g
   scripts/teacher_leaves.py --families cb_shopkeeper cb_webserver --n 12 --seed 31
 Use --ir for a frozen corpus; seed replay is only for a newly generated corpus.
 """
-import argparse, json, random, sys, time
+import argparse, hashlib, json, random, sys, time, traceback
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
 from generate import MIXES, make_program, run_program                                             # noqa: E402
+from teacher_trajectory_ir import convert as trajectory_ir, program_links       # noqa: E402
 from natlang.checks import make_judge, run_checks                            # noqa: E402
 from natlang.codebase import load_function                                   # noqa: E402
 from natlang.decoder import LlamaServerDecoder                               # noqa: E402
@@ -22,7 +23,7 @@ from natlang.host import instantiate                                         # n
 from natlang.runtime import Runtime                                          # noqa: E402
 from natlang.tool_agent import ToolAgent                                     # noqa: E402
 from natlang.types import TypeEnv                                            # noqa: E402
-from natlang.values import coerce, dump                                      # noqa: E402
+from natlang.values import coerce, dump, dump_state                          # noqa: E402
 
 WHERE = {"say": "shopkeeper/serve", "page_content": "webserver/handle", "submission_page": "webserver/handle"}   # the parent
 NO_MARKUP_ATTACK = {"kind": "crisp", "code": "!/<\\s*script|<\\s*html|<\\s*body|javascript:/i.test(value)"}
@@ -47,8 +48,9 @@ CHECKS = {
 
 
 def missing_from_ir(path: Path):
-    """Collect the exact, distinct template cases in a frozen semantic corpus."""
+    """Collect missing cases, prioritizing keys that complete programs."""
     todo, seen = [], set()
+    program_missing = []
     with path.open() as stream:
         for line in stream:
             if not line.strip():
@@ -57,6 +59,7 @@ def missing_from_ir(path: Path):
             oracles = record["semantics"].get("leaf_oracles", {})
             if not isinstance(oracles, dict):
                 continue
+            missing = set()
             for fn, oracle in oracles.items():
                 if fn not in WHERE:
                     continue
@@ -65,10 +68,26 @@ def missing_from_ir(path: Path):
                         continue
                     args = case["input"]
                     key = C.ref_key(fn, args)
+                    if key not in C.REFERENCES:
+                        missing.add(key)
                     if key not in seen and key not in C.REFERENCES:
                         seen.add(key)
                         todo.append((key, fn, args))
-    return todo
+            if missing:
+                program_missing.append(missing)
+
+    sole = {key: sum(missing == {key} for missing in program_missing) for key, _, _ in todo}
+    affected = {key: sum(key in missing for missing in program_missing) for key, _, _ in todo}
+    # A key that is the last gap in a program gets first chance; ties favor keys
+    # shared by more programs, then the stable hash order for reproducibility.
+    return sorted(todo, key=lambda item: (-sole[item[0]], -affected[item[0]], item[0]))
+
+
+def _leaf_audit_status(out, error):
+    """Return auditable status/detail even when a leaf attempt raised."""
+    if error is not None:
+        return "exception", error
+    return (out.kind, out.detail) if out is not None else ("exception", None)
 
 
 def main():
@@ -86,11 +105,20 @@ def main():
     ap.add_argument("--system-file", type=Path, default=ROOT / "natlang/prompts/tools_teacher_compact.md")
     ap.add_argument("--dry-run", action="store_true", help="audit results without appending references")
     ap.add_argument("--audit-out", type=Path, help="all accepted and rejected attempts, with checks and traces")
+    ap.add_argument("--trajectory-out", type=Path,
+                    help="linked teacher trajectory IR (defaults beside audit in --ir mode)")
     a = ap.parse_args()
     audit_path = a.audit_out or ROOT / "runs" / f"teacher-leaves-audit-{time.time_ns()}.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     if audit_path.exists():
         ap.error(f"refusing overwrite: {audit_path}")
+    trajectory_path = a.trajectory_out or (audit_path.with_suffix(".trajectory.ir.jsonl") if a.ir else None)
+    if trajectory_path and not a.ir:
+        ap.error("--trajectory-out requires --ir to link trajectories to frozen programs")
+    if trajectory_path and trajectory_path.exists():
+        ap.error(f"refusing overwrite: {trajectory_path}")
+    links = program_links(a.ir) if a.ir else None
+    ir_hash = hashlib.sha256(a.ir.read_bytes()).hexdigest() if a.ir else None
     prompt = a.system_file.read_text()
     with urllib.request.urlopen(a.server.rstrip('/') + '/v1/models', timeout=30) as response:
         model_metadata = json.load(response)
@@ -114,33 +142,67 @@ def main():
     judge = make_judge(LlamaServerDecoder(a.server, timeout=300, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
     C.REF_FILE.parent.mkdir(parents=True, exist_ok=True)
     kept = 0
-    for k, fn, args in todo[: a.limit]:
+    for attempt_number, (k, fn, args) in enumerate(todo[: a.limit], 1):
         t0 = time.time()
-        definition = load_function(ROOT / "codebases" / (WHERE[fn] + ".nl")).codebase[fn]    # with the types it inherits
-        root = instantiate(definition)
-        env = root.env(TypeEnv())
-        for name, value in args.items():
-            root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
-        log, transcript = [], []
-        out, value = Runtime(lambda lam: ToolAgent(dec, temperature=a.temperature, system_prompt=prompt,
-                             validation_feedback="caller", log=log, transcript=transcript), max_episodes=4).run_root(root)
-        text = dump(value) if out.kind == "done" else None
-        results = run_checks(CHECKS[fn](args), text, judge) if text else []
-        ok = bool(text) and all(r is True for _, r in results)
-        if ok:
-            kept += 1
-            if not a.dry_run:
-                with C.REF_FILE.open("a") as f:
-                    f.write(json.dumps({"key": k, "function": fn, "args": args, "value": text}, ensure_ascii=False) + "\n")
+        log, transcript, teacher_turns = [], [], []
+        leaf_program, text, results, out, error = None, None, [], None, None
+        ok = False
+        try:
+            definition = load_function(ROOT / "codebases" / (WHERE[fn] + ".nl")).codebase[fn]    # with the types it inherits
+            root = instantiate(definition)
+            env = root.env(TypeEnv())
+            for name, value in args.items():
+                root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
+            leaf_program = dump_state(root)
+            out, value = Runtime(lambda lam: ToolAgent(dec, temperature=a.temperature, system_prompt=prompt,
+                                 validation_feedback="caller", log=log, transcript=transcript,
+                                 teacher_turns=teacher_turns), max_episodes=4).run_root(root)
+            text = dump(value) if out.kind == "done" else None
+            results = run_checks(CHECKS[fn](args), text, judge) if text else []
+            ok = bool(text) and all(r is True for _, r in results)
+            if ok:
+                if not a.dry_run:
+                    with C.REF_FILE.open("a") as f:
+                        f.write(json.dumps({"key": k, "function": fn, "args": args, "value": text}, ensure_ascii=False) + "\n")
+                kept += 1
+        except Exception as exc:
+            # A decoder, judge, harness, or serialization failure must not lose the
+            # remaining frozen keys.  Keep the traceback in the audit for replay.
+            error = {"type": type(exc).__name__, "message": str(exc),
+                     "traceback": traceback.format_exc()}
+            ok = False
+        status, detail = _leaf_audit_status(out, error)
+        audit_row = {"key":k,"function":fn,"args":args,"leaf_program":leaf_program,
+                     "value":text,"accepted":ok,"admitted":ok and not a.dry_run,
+                     "status":status,"detail":detail,"error":error,
+                     "checks":results,"log":log,"transcript":transcript,
+                     "teacher_turns":teacher_turns,"system_prompt":prompt,
+                     "model_metadata":model_metadata,"temperature":a.temperature,
+                     "thinking":a.thinking,"reasoning_effort":a.reasoning_effort,
+                     "json_text_values":True}
         with audit_path.open("a") as f:
-            f.write(json.dumps({"key":k,"function":fn,"args":args,"value":text,"accepted":ok,
-                               "admitted":ok and not a.dry_run,"status":out.kind,"detail":out.detail,
-                               "checks":results,"log":log,"transcript":transcript,"system_prompt":prompt,
-                               "model_metadata":model_metadata,"temperature":a.temperature,
-                               "thinking":a.thinking,"reasoning_effort":a.reasoning_effort,
-                               "json_text_values":True},ensure_ascii=False) + "\n")
+            f.write(json.dumps(audit_row, ensure_ascii=False) + "\n")
+        if trajectory_path:
+            try:
+                trajectory = trajectory_ir(audit_row, audit_path=audit_path,
+                                           line_number=attempt_number, links=links,
+                                           program_ir_hash=ir_hash)
+                trajectory_path.parent.mkdir(parents=True, exist_ok=True)
+                with trajectory_path.open("a") as f:
+                    f.write(json.dumps(trajectory, ensure_ascii=False) + "\n")
+            except Exception as exc:
+                # The immutable audit can be converted again offline; a malformed
+                # trajectory must not stop the remaining reference collection.
+                errors_path = trajectory_path.with_suffix(trajectory_path.suffix + ".errors.jsonl")
+                with errors_path.open("a") as f:
+                    f.write(json.dumps({"audit_line": attempt_number, "key": k,
+                                        "error": {"type": type(exc).__name__,
+                                                  "message": str(exc),
+                                                  "traceback": traceback.format_exc()}},
+                                       ensure_ascii=False) + "\n")
         failed = [c.get("code") or c.get("question", "")[:60] for c, r in results if r is not True]
-        print(f"[{fn}] {'KEEP' if ok else 'drop'} {time.time() - t0:4.0f}s  {(text or out.kind)[:90]!r}  {failed if failed else ''}", flush=True)
+        shown = text or (out.kind if out is not None else f"exception: {error['type']}")
+        print(f"[{fn}] {'KEEP' if ok else 'drop'} {time.time() - t0:4.0f}s  {shown[:90]!r}  {failed if failed else ''}", flush=True)
     print(f"passed {kept} of {min(len(todo), a.limit)}; admitted {0 if a.dry_run else kept}; usage {dec.usage}; audit {audit_path}")
 
 
