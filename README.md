@@ -62,6 +62,8 @@ scripts/serve.sh &                                                          # th
 docker build -t natlang-train -f docker/train.Dockerfile docker
 docker run --rm --gpus all -v "$PWD:/work" -e HF_HOME=/work/models/hf natlang-train \
     python scripts/train_lora.py data/sft.jsonl runs/lora --steps 300         # LoRA, bf16, checkpointing: about 3 GB
+# stoppable and resumable: `docker stop -t 120 natlang-train` writes a checkpoint; the same command continues;
+# `--merge-only` exports runs/lora/merged from the latest checkpoint; `--fresh` starts over
 scripts/to_gguf.sh runs/lora/merged models/natlang-350M-Q8_0.gguf
 docker stop natlang-llama; scripts/serve.sh natlang-350M-Q8_0.gguf &
 .venv/bin/python scripts/eval_turns.py data/ref.jsonl                       # next-turn accuracy per kind of turn
