@@ -24,8 +24,8 @@ The existing interpreter tool inventory remains unchanged except for the version
 
 ## Verification and empirical gates
 
-- The full Python suite passed with **312 passed, 1 skipped** after the collector, probe and packaging additions. The later child-call identity adjustment passed its targeted tests; the final full run is the release check.
-- `uv build --out-dir /tmp/natlang-infrastructure-dist-final` succeeded. The wheel contains `hosts/retained_js_worker.js`, `hosts/recovery.py`, `web/natlang_lite.mjs`, `web/inspector.html`, and the core runtime. The retained JS host requires Node.js; the build added no new Python dependencies.
+- The final full Python suite passed with **313 passed, 1 skipped** after the child-call identity and bounded host-observation changes.
+- `uv build --out-dir /tmp/natlang-infrastructure-release-final` succeeded. The wheel contains `hosts/retained_js_worker.js`, `hosts/recovery.py`, `web/natlang_lite.mjs`, `web/inspector.html`, and the core runtime. The retained JS host requires Node.js; the build added no new Python dependencies.
 - The paired real-model surface probe is implemented in `scripts/probe_engine_surface.py`. Its recorded-driver test passes. It has not been run against the local Bonsai server because the prior teacher backfill is actively using its single model slot. Model reproducibility and student success are measured properties of a selected backend, not consequences of the seed API alone.
 - The browser embedding supports the declared portable fixture subset. It does not claim general language compatibility, local inference, shell execution, or arbitrary native-state checkpointing.
 - Whole-program teacher collection and materialization round trip nested Map and correct blocker fixtures. Large teacher shards and template-rendered student pilots should be collected only after the paired live-model probe and the desired student surface are selected.
