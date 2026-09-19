@@ -8,6 +8,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path as FilePath
 from typing import Any, Callable, Optional
 
 import yaml
@@ -15,6 +16,7 @@ import yaml
 from . import js
 from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
+from .trace import TraceRecorder
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
 from .nodes import (DONE, MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
@@ -25,6 +27,7 @@ from .render import opening, pending_line, render, scalar
 from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
                     format_type, is_pending_type, parse_type, FoldT, IterateT, MapT)
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
+from .values import dump_state
 
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
@@ -85,10 +88,13 @@ class Outcome:
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
                  max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
-                 executor=None):
+                 executor=None, trace_sink: Optional[TraceRecorder] = None,
+                 trace_path: Optional[FilePath] = None):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
         self.executor = executor or QuickJSExecutor()
+        self.trace_sink = trace_sink
+        self.trace_path = trace_path
         self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
         self.deadline = None
         self._depth = 0
@@ -107,9 +113,31 @@ class Runtime:
     def run_root(self, root: Pending, env: Optional[TypeEnv] = None):
         """Reduce a root pending node. Returns (outcome, value-or-node)."""
         holder = _Box(root)
+        self._root_holder = holder
+        if self.trace_path is not None:
+            initial = dump_state(root)
+            digest = hashlib.sha256(json.dumps(initial, sort_keys=True, default=str).encode()).hexdigest()
+            self.trace_sink = TraceRecorder({"run_id": self.options.run_id, "source_sha256": digest,
+                                             "seed_policy": vars(self.options.seed),
+                                             "engine": getattr(self.executor, "name", type(self.executor).__name__),
+                                             "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
+        self._observe("state", phase="initial", value=dump_state(root))
         ref = Ref(type=None, env=env or TypeEnv(), path="", holder=holder, attr="value")
-        out = self.trigger(ref, acting_effects=None)
-        return out, holder.value
+        try:
+            out = self.trigger(ref, acting_effects=None)
+            self._observe("state", phase="final", value=dump_state(holder.value), outcome=out.kind)
+            return out, holder.value
+        finally:
+            if self.trace_path is not None:
+                self.trace_sink.close()
+
+    def _observe(self, kind: str, **data):
+        if self.trace_sink is not None:
+            self.trace_sink.emit(kind, **data)
+
+    def _observe_state(self, phase: str):
+        if self.trace_sink is not None and hasattr(self, "_root_holder"):
+            self._observe("state", phase=phase, value=dump_state(self._root_holder.value))
 
     # ------------------------------------------------------------------ trigger
     def trigger(self, ref: Ref, acting_effects) -> Outcome:
@@ -156,10 +184,12 @@ class Runtime:
         node.status = DONE
         ref.set(value)
         self.origins[ref.slot_key()] = node
+        self._observe("node", path=ref.path, transition="done", node_type=type(node).__name__)
         return Outcome(ref.path, "done", _one_line(value), value)
 
     def _quiesce(self, node: Pending, ref: Ref, note: str) -> Outcome:
         node.status, node.note = QUIESCED, note
+        self._observe("node", path=ref.path, transition="quiesced", node_type=type(node).__name__, detail=note)
         return Outcome(ref.path, "quiesced", note)
 
     # -- crisp lambda
@@ -168,14 +198,20 @@ class Runtime:
         if node.original_body is None:
             node.original_body = node.body
         scope = {"args": node.in_, "return": node.ret}
+        self._observe("eval", phase="start", path=ref.path, mode="body",
+                      engine=getattr(self.executor, "name", type(self.executor).__name__),
+                      code=node.body, effectful=bool(node.effects))
         try:
             raw = portable(self.executor.run(CrispRequest(node.body, scope, True, ref.path,
                                                           bool(node.effects)), self._fx(node)))
             value = coerce(raw, node.type.returns, inner, yaml=False, path=ref.path)
         except ExecutionError as e:
+            self._observe("eval", phase="failed", path=ref.path, error=str(e))
             return self._quiesce(node, ref, f"code error: {e}")
         except Reject as e:
+            self._observe("eval", phase="rejected", path=ref.path, error=str(e))
             return self._quiesce(node, ref, f"rejected: {e}")
+        self._observe("eval", phase="completed", path=ref.path, value=dump(value))
         if is_pending(value):
             node.status = DONE
             ref.set(value)
@@ -218,11 +254,14 @@ class Runtime:
         self.episodes_started += 1
         session = Session(self, node, ref.env, cold=cold)
         session.invocation = invocation
+        self._observe("invocation", phase="start", call_id=invocation.call_id,
+                      path=invocation.path, attempt=invocation.attempt, parent_path=parent)
         self.invocations.append(invocation)
         try:
             note = self.agent_factory(node).run(session)
         finally:
             self.invocations.pop()
+            self._observe("invocation", phase="end", call_id=invocation.call_id)
         if session.completed:
             return self._swap_out(node, ref, node.ret)
         return self._quiesce(node, ref, note or "budget exhausted")
@@ -332,12 +371,16 @@ class Runtime:
             entry = {"seq": len(lam.journal) + 1, "capability": name, "function": fn,
                      "args_preview": json.dumps(args)[:80], "status": "pending"}
             lam.journal.append(entry)
+            self._observe("effect", phase="requested", call_id=self.invocations[-1].call_id if self.invocations else None,
+                          capability=name, sequence=entry["seq"], args=args)
             try:
                 out = self.capabilities[name](args)
                 entry["status"] = "ok"
+                self._observe("effect", phase="completed", capability=name, sequence=entry["seq"], result=out)
                 return out
             except Exception:
                 entry["status"] = "error"
+                self._observe("effect", phase="failed", capability=name, sequence=entry["seq"])
                 raise
 
         return call
@@ -462,6 +505,9 @@ class Session:
             result = Result("error", f"error: {e}")
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
                               "kind": result.kind, "result": result.text})
+        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                         surface="text", action=text, outcome=result.kind, diagnostics=result.codes)
+        self.rt._observe_state("after-action")
         return result
 
     # ------------------------------------------------------------------ tool surface (natlang/surface.py)
@@ -476,6 +522,7 @@ class Session:
             self.actions += 1
             self.lam.steps += 1
         args = dict(args) if isinstance(args, dict) else args
+        submitted = copy.deepcopy(args)
         op = getattr(self, "_op_" + name, None)
         try:
             if op is None:
@@ -502,6 +549,10 @@ class Session:
             result.text = result.text.rstrip() + "\n" + self._progress()      # where the program stands, at no extra turn
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
                               "kind": result.kind, "result": result.text})
+        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                         surface="tools-v2", name=name, arguments=submitted,
+                         outcome=result.kind, diagnostics=result.codes)
+        self.rt._observe_state("after-action")
         return result
 
     def _progress(self) -> str:
@@ -1154,8 +1205,16 @@ class Session:
     def _do_eval(self, a: Action) -> Result:
         scope = {"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
                  "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}}
-        out = portable(self.rt.executor.run(CrispRequest(a.body, scope, False, "eval",
-                                                        bool(self.lam.effects)), self.rt._fx(self.lam)))
+        self.rt._observe("eval", phase="start", path="eval", mode="expression",
+                         engine=getattr(self.rt.executor, "name", type(self.rt.executor).__name__),
+                         code=a.body, effectful=bool(self.lam.effects))
+        try:
+            out = portable(self.rt.executor.run(CrispRequest(a.body, scope, False, "eval",
+                                                            bool(self.lam.effects)), self.rt._fx(self.lam)))
+        except (ExecutionError, Reject) as exc:
+            self.rt._observe("eval", phase="failed", path="eval", error=str(exc))
+            raise
+        self.rt._observe("eval", phase="completed", path="eval", value=out)
         text = json.dumps(out, ensure_ascii=False)
         return Result("ok", text if len(text) <= 400 else text[:400] + f" … ({len(text)} chars)", value=out)
 
