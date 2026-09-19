@@ -233,7 +233,8 @@ class ToolSurface:
                           "To change how a function works, copy it first: type `Function<name>` with path "
                           "`let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.",
                  {"path": {"type": "string", "description": "`return`, a part of it, or let/<name>"},
-                  "type": {"type": "string", "description": "the type of what is written"},
+                  "type": {"type": "string", "description": "the type of what is written, e.g. Bool[], Text[], Num, Text, "
+                                                          "{ name: Text, count: Num }, or a type name of this task"},
                   "value": any_value,
                   "source": {"type": "string", "description": "instead of `value`: the path of an existing value to copy"}},
                  ["path", "type"], alternatives=write_alts),

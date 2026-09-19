@@ -627,7 +627,8 @@ class Session:
         try:
             t = parse_type(type_text)
         except TypeSyntaxError as e:
-            raise reject(path, "type-mismatch", "a type for the new local", str(e))
+            raise reject(path, "type-mismatch", "a type for the new local, written like Bool[], Text[], Num, Text, "
+                                                "{ name: Text, count: Num }, or a type name of this task", type_text)
         added = []
         for n, text in (extra_types or {}).items():       # named types the callee brings along
             if n not in self.lam.types and not _known(self.env, n):
@@ -641,7 +642,8 @@ class Session:
             for n in added:
                 self.lam.types.pop(n, None); self.lam.types_src.pop(n, None)
             self.env = self.lam.env(self.outer_env)
-            raise reject(path, "type-mismatch", "a type whose names are declared", str(e))
+            raise reject(path, "type-mismatch", "a type written like Bool[], Text[], Num, Text, { name: Text, count: Num }, "
+                                                "or a type name of this task", type_text)
         name = segs[1]
         self.lam.let_types[name] = t
 
