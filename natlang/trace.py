@@ -85,3 +85,13 @@ class TraceReader:
                 "native_effects_replayable": False,
                 "effect_count": len(self.of_kind("effect")),
                 "mode": "recorded-observations-only"}
+
+    def replay_observations(self) -> dict:
+        """Read captured decisions and state; never call model, eval or host effects."""
+        states = self.of_kind("state")
+        if not states or states[0].get("phase") != "initial" or states[-1].get("phase") != "final":
+            raise ValueError("trace lacks complete initial/final observations")
+        return {"initial": states[0]["value"], "final": states[-1]["value"],
+                "outcome": states[-1].get("outcome"),
+                "actions": self.of_kind("action"), "effects": self.of_kind("effect"),
+                "coverage": self.coverage()}

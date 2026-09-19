@@ -14,6 +14,8 @@ from natlang.native import _strip_private
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import dump, load_program
+from natlang.trace import TraceRecorder, TraceReader
+from natlang.scenario import ScenarioContract, admit
 from scripts.project_teacher_trajectory_ir import project
 from scripts.teacher_trajectory_ir import VERSION, digest
 
@@ -51,15 +53,21 @@ def materialize(row, *, system_prompt: str):
         raise ValueError("this materializer accepts leaf trajectories only")
     if not row["outcome"]["accepted"] or row["outcome"]["status"] != "done":
         raise ValueError("teacher trajectory was not accepted as a completed leaf")
+    if not row["task"].get("source_program_ids") or "unlinked_program" in row.get("capture_limits", []):
+        raise ValueError("teacher trajectory is not linked to a frozen program")
     program = row["task"].get("leaf_program")
     if program is None:
         raise ValueError("teacher trajectory lacks a frozen leaf program")
     decoder = ReplayDecoder(row["trajectory"])
     log = []
     root = load_program(program)
+    recorder = TraceRecorder({"run_id": row["id"], "source_sha256": digest(program),
+                              "teacher_trajectory_sha256": digest(row),
+                              "tool_schema": "tools-v2", "engine_bindings": ["quickjs-isolated"],
+                              "capture": "recorded-teacher-replay"})
     outcome, value = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
                                                   validation_feedback="caller", log=log),
-                             max_episodes=4).run_root(root)
+                             max_episodes=4, trace_sink=recorder).run_root(root)
     if outcome.kind != "done" or dump(value) != row["outcome"]["value"]:
         raise ValueError(f"replay changed outcome: {outcome.kind}: {outcome.detail}")
     if decoder.cursor != len(decoder.turns):
@@ -70,6 +78,7 @@ def materialize(row, *, system_prompt: str):
                 if execution.get("kind") is not None]
     if expected and actual != expected:
         raise ValueError(f"replay changed tool outcomes: {actual!r} != {expected!r}")
+    admission = admit(TraceReader(recorder.events), ScenarioContract("done", row["outcome"]["value"]))
     provenance = {"teacher_trajectory_id": row["id"],
                   "teacher_trajectory_digest": digest(row),
                   "source_program_ids": row["task"]["source_program_ids"],
@@ -80,7 +89,7 @@ def materialize(row, *, system_prompt: str):
                   "source": "teacher-leaf"}
     return [{"id": f"{row['id']}:{index}", "program_id": row["id"],
              "family": "teacher_leaf", "ir_version": VERSION,
-             "provisional_gold": False, **provenance, **sample}
+             "provisional_gold": False, "trace_admission": admission, **provenance, **sample}
             for index, sample in enumerate(decoder.samples)]
 
 

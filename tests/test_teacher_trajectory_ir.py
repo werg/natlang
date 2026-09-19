@@ -116,6 +116,7 @@ def test_accepted_teacher_choices_replay_into_structured_turns():
     assert samples[0]["target"]["tool_calls"][0]["function"]["name"] == "write"
     assert samples[1]["target"]["content"] == ""
     assert samples[0]["teacher_reasoning"] == "write the requested number"
+    assert samples[0]["trace_admission"]["admitted"] is True
 
 
 def test_behavior_probe_choices_convert_without_leaf_reference_key():
