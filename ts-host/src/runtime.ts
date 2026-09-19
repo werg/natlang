@@ -1,11 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EvalFailure, TypeScriptEnvironment, portable, type EvalRequest } from './environment.js';
 
 const PROTOCOL = 'natlang-ts-host/1';
-const DEFAULT_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const SOURCE_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const DEFAULT_ROOT = existsSync(join(SOURCE_ROOT, 'natlang', 'ts_host_bridge.py')) ? SOURCE_ROOT : process.cwd();
 
 export type Source =
   | { kind: 'program'; program: Record<string, unknown> }

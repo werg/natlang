@@ -1,6 +1,7 @@
 """The optional text renderer must preserve the server's template identity."""
 import json
 import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -52,7 +53,7 @@ def test_template_export_records_identity_and_rejects_changed_resume(tmp_path):
         src.write_text(json.dumps(row) + "\n" +
                        json.dumps({**row, "id": "provisional", "provisional_gold": True}) + "\n")
         repo = Path(__file__).resolve().parents[1]
-        base = [str(repo / ".venv/bin/python"), str(repo / "scripts/export_sft.py"),
+        base = [sys.executable, str(repo / "scripts/export_sft.py"),
                 str(src), str(dst), "--server", f"http://127.0.0.1:{server.server_port}"]
         result = subprocess.run(base + ["--template-id", "fixture-v1"], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
