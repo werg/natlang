@@ -30,7 +30,7 @@ def test_schema_of_types():
 def test_tool_list_is_constant_and_schemas_narrow():
     doc, s = _session("02-leaf-extraction.yaml")
     names = [t["function"]["name"] for t in S.tools(s)]
-    assert names == ["read", "write", "edit", "run_code", "run"]
+    assert names == ["read", "write", "edit", "run_code", "run", "report_blocker"]
     write = S.tools(s)[1]["function"]["parameters"]["properties"]
     assert "return" in write["path"]["enum"] and "args/note" not in write["path"]["enum"]
     assert "Task<{ customer: Text, order_id: Text, amount: Num, phone?: Text }>" in write["type"]["enum"]

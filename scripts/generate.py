@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.gen.policy import ReferenceAgent
-from natlang.gen.programs import FAMILIES
+from natlang.gen.programs import BLOCKED, FAMILIES
 from natlang.runtime import Runtime
 from natlang.types import TypeEnv
 from natlang.values import coerce, dump, load_program
@@ -32,6 +32,9 @@ def run_program(prog, check_grammar=True):
         root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
     rt = Runtime(factory)
     out, value = rt.run_root(root)
+    if prog.expected == BLOCKED:                 # undetermined on purpose: the right outcome is a blocker note
+        assert out.kind == "quiesced" and out.detail.startswith("blocked: "), (out.kind, out.detail)
+        return samples, rt.episodes_started
     assert out.kind == "done", out.detail
     assert dump(value) == prog.expected, (dump(value), prog.expected)
     return samples, rt.episodes_started

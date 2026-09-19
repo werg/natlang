@@ -33,6 +33,10 @@ RUBRIC = ("billing: anything about charges, invoices, refunds, or payment method
           "spam: unsolicited advertising or messages unrelated to our product.\n")
 
 
+UNCOVERED = {"billing": "charges, refunds or payments", "technical": "the product not working",
+             "spam": "unsolicited advertising"}
+
+
 def _fill(rng, template):
     return template.format(month=rng.choice(MONTHS), product=rng.choice(PRODUCTS), amount=rng.randint(3, 40))
 
@@ -52,19 +56,32 @@ def review(rng) -> dict:
     return {"text": _fill(rng, rng.choice(POSITIVE if pos else NEGATIVE)), "positive": pos}
 
 
-def note(rng) -> dict:
+def note(rng, drop=None) -> dict:
+    """A call note and its hidden record. `drop` names a required field the note leaves out: then no record
+    can be extracted, and `missing` says why."""
     name, order = rng.choice(NAMES), f"{rng.randint(1, 9999):04d}"
     amount = round(rng.uniform(5, 300), 2)
     phone = f"555-{rng.randint(1000, 9999)}" if rng.random() < 0.4 else None
-    forms = ["Spoke to {n} about order no. {o} - owed {a:.2f} back.", "{n} called regarding order {o}; refund due: {a:.2f}.",
-             "Refund of {a:.2f} approved for {n} (order {o})."]
-    text = rng.choice(forms).format(n=name, o=order, a=amount)
+    forms = {None: ["Spoke to {n} about order no. {o} - owed {a:.2f} back.",
+                    "{n} called regarding order {o}; refund due: {a:.2f}.",
+                    "Refund of {a:.2f} approved for {n} (order {o})."],
+             "order_id": ["Spoke to {n} about a recent order - owed {a:.2f} back.",
+                          "{n} called; refund due: {a:.2f}. Could not find the order number.",
+                          "Refund of {a:.2f} approved for {n}."],
+             "amount": ["Spoke to {n} about order no. {o} - a refund is owed.",
+                        "{n} called regarding order {o}; refund due, amount to be confirmed.",
+                        "Refund approved for {n} (order {o})."]}
+    text = rng.choice(forms[drop]).format(n=name, o=order, a=amount)
     if phone:
         text += f" Reach them on {phone}."
     rec = {"customer": name, "order_id": order, "amount": amount}
     if phone:
         rec["phone"] = phone
-    return {"text": text, "record": rec}
+    missing = {None: "", "order_id": rng.choice(["The note does not give an order id, which the record requires.",
+                                                 "`args/note` has no order id; `order_id` cannot be filled in."]),
+               "amount": rng.choice(["The note does not say how much the refund is, and `amount` is required.",
+                                     "`args/note` gives no refund amount; `amount` cannot be filled in."])}[drop]
+    return {"text": text, "record": rec, "missing": missing}
 
 
 def distinct(rng, make, n):

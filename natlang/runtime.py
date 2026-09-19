@@ -58,7 +58,7 @@ class OpenList(list):
 
 @dataclass
 class Result:
-    kind: str  # ok | rejected | refused | completed | done | quiesced | replaced | error | budget
+    kind: str  # ok | rejected | refused | completed | done | quiesced | replaced | error | budget | blocked
     text: str = ""
     diags: list = field(default_factory=list)
     outcomes: list = field(default_factory=list)
@@ -591,6 +591,14 @@ class Session:
         self.lam.body = ""
         self.completed = True
         return True
+
+    def _op_report_blocker(self, args):
+        """The inputs do not determine the result. Ends the episode; the lambda quiesces with the note."""
+        missing = str(args.get("missing") or "").strip()
+        if len(missing) < 8:
+            raise reject("missing", "bad-action", "a sentence saying what is missing")
+        self.blocker = missing
+        return Result("blocked", "blocked: " + missing)
 
     def _op_done(self, args):
         if self.lam.ret is MISSING:

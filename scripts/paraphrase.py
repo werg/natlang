@@ -48,6 +48,8 @@ def teacher_solves(dec, family, base, para, rng, log):
     rt = Runtime(lambda lam: ToolAgent(dec, temperature=0.6, log=log), max_episodes=24)
     out, value = rt.run_root(root)
     got = dump(value) if out.kind == "done" else None
+    if prog.expected == P.BLOCKED:
+        return out.kind == "quiesced", out.kind, got, prog.expected
     ok = got == prog.expected or (isinstance(got, float) and abs(got - prog.expected) < 0.011)
     return ok, out.kind, got, prog.expected
 

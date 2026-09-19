@@ -76,7 +76,7 @@ def _enum_or_string(values: list, description: str) -> dict:
 
 class ToolSurface:
     name = "tools-v2"
-    TOOLS = ("read", "write", "edit", "run_code", "run")
+    TOOLS = ("read", "write", "edit", "run_code", "run", "report_blocker")
 
     def slots(self, session):
         return enumerate_slots(session.lam, session.outer_env)
@@ -219,6 +219,10 @@ class ToolSurface:
             tool("run", "Run sub-tasks you defined and wait for their results.",
                  {"paths": {"type": "array", "minItems": 1,
                             "items": _enum_or_string([s.path for s in pending], "a sub-task")}}, ["paths"]),
+            tool("report_blocker", "The task cannot be done as asked: the inputs do not determine the result, or a rule "
+                                   "does not cover the case. Say exactly what is missing. This ends the task without "
+                                   "a result; do not guess instead.",
+                 {"missing": {"type": "string"}}, ["missing"]),
         ]
 
     # -- what the model is shown ----------------------------------------------------
@@ -296,7 +300,25 @@ class ToolSurface:
         return session.apply(name, args or {})
 
 
+FULL_TEXT, FULL_LINES = 400, 8     # a text up to this size is shown whole: a cut-off rubric reads like a complete one
+
+
+def is_previewed(v) -> bool:
+    """True when the workspace listing shows only part of `v`, so that it has to be read."""
+    if isinstance(v, str):
+        t = v.rstrip()
+        return len(t) > FULL_TEXT or len(t.splitlines()) > FULL_LINES
+    return isinstance(v, list) and len(v) > PREVIEW_ITEMS
+
+
 def _preview(v) -> str:
+    if isinstance(v, str):
+        t = v.rstrip()
+        if not is_previewed(v):
+            return json.dumps(t, ensure_ascii=False) if "\n" not in t else \
+                "\n" + "\n".join("      | " + l for l in t.splitlines())
+        return (json.dumps(t.splitlines()[0][:INLINE], ensure_ascii=False) +
+                f" … CUT OFF: only the beginning of {len(t.splitlines())} lines, {len(t)} characters. Read it before using it.")
     if is_pending(v):
         return f"[{pending_line(v)}]"
     if isinstance(v, list):

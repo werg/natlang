@@ -65,13 +65,15 @@ class ToolAgent:
 
                 results = [first]
                 for name, args in turn.calls[1:]:     # several calls in one turn is the model's native habit
-                    if results[-1].kind in FAILED:
+                    if results[-1].kind in FAILED or results[-1].kind == "blocked":
                         break
                     r = s.apply(session, name, args)
                     self.log.append({"action": f"{name} {json.dumps(args)}", "kind": r.kind, "attempt": 0})
                     results.append(r)
                 if results[-1].kind == "budget":
                     return "budget exhausted"
+                if results[-1].kind == "blocked":         # ends the episode; the lambda quiesces with this note
+                    return results[-1].text
                 raw = [c if c.get("id") else {**c, "id": f"call_{len(messages)}_{i}"}
                        for i, c in enumerate(turn.raw_calls or _raw(turn.calls))][: len(results)]
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})

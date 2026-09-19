@@ -14,7 +14,7 @@ from .. import gbnf
 from ..native import CALL_OPEN, call_grammar
 from ..nodes import MISSING
 from ..render import INLINE, PREVIEW_ITEMS
-from ..surface import ToolSurface
+from ..surface import ToolSurface, is_previewed
 from ..tool_agent import TOOLS_PROMPT
 from ..types import format_type
 
@@ -32,10 +32,12 @@ class ReferenceAgent:
     def turns(self, session):
         lam, p = session.lam, self.plan
         rtype = format_type(lam.type.returns)
-        hidden = [f"args/{n}" for n, v in lam.in_.items()
-                  if (isinstance(v, str) and (len(v.rstrip()) > INLINE or "\n" in v.rstrip()))
-                  or (isinstance(v, list) and len(v) > PREVIEW_ITEMS)]
-        if p.kind == "leaf":
+        hidden = [f"args/{n}" for n, v in lam.in_.items() if is_previewed(v)]
+        if p.kind == "blocked":                              # the inputs do not determine the result
+            if hidden:
+                yield [("read", {"path": h}) for h in hidden]
+            yield [("report_blocker", {"missing": p.note})]
+        elif p.kind == "leaf":
             if hidden:                                       # read what the listing only previews
                 yield [("read", {"path": h}) for h in hidden]
             yield [("write", {"path": "return", "type": rtype, "value": p.gold(lam.in_)})]
@@ -89,6 +91,8 @@ class ReferenceAgent:
             for c, r in zip(raw, results):
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
             sent = results[-1].value
+            if results[-1].kind == "blocked":
+                return results[-1].text
         if session.lam.ret is MISSING or not session.finish():
             raise AssertionError("reference policy ended without a valid `return`")
         self._emit(session, messages, s.tools(session), reply=self.plan.note or "Done.")

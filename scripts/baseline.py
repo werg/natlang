@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run conformance programs against the served model and summarize. Usage: baseline.py [--wrapper W] [IDS...]"""
-import argparse, json, sys, time
+import re, argparse, json, sys, time
 from pathlib import Path
 import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -25,6 +25,8 @@ ap.add_argument("--timeout", type=float, default=600)
 ap.add_argument("--wrapper", default="generic", choices=tuple(WRAPPERS))
 ap.add_argument("--prompt", default="small", choices=("small", "full"))
 ap.add_argument("--temperature", type=float, default=0.2)
+ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
+ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model that answers judge checks; 'none' to skip")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 root = Path(__file__).resolve().parent.parent
@@ -33,6 +35,9 @@ files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.id
 extra = {} if a.thinking is None else {"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20}
 dec = (NativeCallDecoder(a.server, timeout=a.timeout) if a.decode == "native"
        else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra))
+from natlang.checks import grade, make_judge
+judge = None if a.judge_server == "none" else make_judge(
+    LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
 prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
 print(f"surface={a.surface} decode={a.decode}")
 for f in files:
@@ -48,7 +53,8 @@ for f in files:
     if a.verbose:
         print(f"  > {f.stem}", flush=True)
     if a.surface == "tools":
-        make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log)
+        make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
+                                     **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     else:
         make = lambda lam: ModelAgent(dec, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
                                       system_prompt=prompt, log=log)
@@ -59,13 +65,19 @@ for f in files:
         kind = out.kind
     except Exception as e:
         kind, value = f"crash: {type(e).__name__}: {e}"[:60], None
-    exp = doc["expect"]
-    correct = ("value" in exp and kind == "done" and dump(value) == exp["value"]) or \
-              ("status" in exp and kind == exp["status"])
+    try:
+        verdict, why = grade(doc["expect"], kind, dump(value) if kind == "done" else None,
+                             note=getattr(out, "detail", "") or "", judge=judge)
+    except OSError as e:
+        verdict, why = "?", [f"judge unavailable: {e}"]
+    correct = verdict == "yes"
+    shapes = sorted({m.group(1) for l in log if l["kind"] == "ok"
+                     for m in [re.search(r'"type": "(Task|Code|Map|Fold|Iterate)<', l["action"])] if m})
     rejected = sum(1 for l in log if l["kind"] in ("rejected", "error"))
     first = log[0]["action"].splitlines()[0][:60] if log else ""
-    print(f"{f.stem:<32} {kind:<10} correct={'yes' if correct else 'no ':<3} actions={len(log):<3} "
-          f"rejected={rejected:<3} episodes={rt.episodes_started:<3} {time.time()-t:5.1f}s  first: {first}")
+    print(f"{f.stem:<32} {kind:<10} correct={verdict:<3} actions={len(log):<3} "
+          f"rejected={rejected:<3} episodes={rt.episodes_started:<3} {time.time()-t:5.1f}s  structure={','.join(shapes) or '-':<12} first: {first}"
+          + ("".join(f"\n      failed: {w}" for w in why)))
 if a.decode == "native" and dec.stats["p_call_first"]:
     pc = dec.stats["p_call_first"]
     print(f"\nturns={dec.stats['turns']} tool-call turns={dec.stats['turns']-dec.stats['replies']} replies={dec.stats['replies']} "

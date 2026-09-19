@@ -14,7 +14,7 @@ RECORD = "{ customer: Text, order_id: Text, amount: Num, phone?: Text }"
 
 @dataclass
 class Plan:
-    kind: str                      # leaf | crisp | map | map_then_code
+    kind: str                      # leaf | crisp | map | map_then_code | blocked (note = what is missing)
     gold: Callable = None          # leaf: args -> value
     code: str = ""                 # crisp / map_then_code: TypeScript
     over: str = ""                 # map: path of the list
@@ -33,6 +33,9 @@ class Program:
     expected: Any
     plans: dict                    # instructions text -> Plan
 
+
+BLOCKED = "<blocked>"              # Program.expected when the inputs do not determine the result
+P_BLOCKED = 0.12                   # share of classify/extract instances that are undetermined
 
 import json as _json
 from pathlib import Path as _Path
@@ -66,21 +69,30 @@ def classify(rng, text=None) -> Program:
     text = _pick(rng, ["Label the ticket in `args/ticket` according to `args/rubric`.",
                        "Using the rubric in `args/rubric`, say which category `args/ticket` belongs to.",
                        "Which label from `args/rubric` fits `args/ticket`?"], family="classify", text=text)
+    rubric, expected = world.RUBRIC, item["category"]
+    plan = Plan("leaf", gold=lambda a, v=item["category"]: v, note="Labelled the ticket.")
+    if rng.random() < P_BLOCKED:                # the rubric has no rule for this ticket's category
+        rubric = "".join(l + "\n" for l in world.RUBRIC.splitlines() if not l.startswith(item["category"] + ":"))
+        what = world.UNCOVERED[item["category"]]
+        expected, plan = BLOCKED, Plan("blocked", note=rng.choice([
+            f"The rubric has no category for {what}; this ticket is about that.",
+            f"`args/rubric` does not cover {what}, which is what the ticket is about.",
+            f"None of the labels in the rubric fits: the ticket concerns {what}, and the rubric has no rule for it."]))
     return Program("classify", {"$lambda": {"type": "Lambda<{ ticket: Text, rubric: Text }, Label>",
                                             "types": {"Label": LABEL}, "instructions": text}},
-                   {"ticket": item["text"], "rubric": world.RUBRIC}, item["category"],
-                   {text: Plan("leaf", gold=lambda a, v=item["category"]: v, note="Labelled the ticket.")})
+                   {"ticket": item["text"], "rubric": rubric}, expected, {text: plan})
 
 
 def extract(rng, text=None) -> Program:
-    item = world.note(rng)
+    item = world.note(rng, drop=rng.choice(["order_id", "amount"]) if rng.random() < P_BLOCKED else None)
     text = _pick(rng, ["Extract the customer name, the order id, and the refund amount from `args/note`.\n"
                        "Include the phone number only if one is given.",
                        "From `args/note`, pull out who the customer is, the order id, and how much is owed. "
                        "Add the phone number only when the note has one."], family="extract", text=text)
     return Program("extract", {"$lambda": {"type": f"Lambda<{{ note: Text }}, {RECORD}>", "instructions": text}},
-                   {"note": item["text"]}, item["record"],
-                   {text: Plan("leaf", gold=lambda a, v=item["record"]: v, note="Extracted the record.")})
+                   {"note": item["text"]}, BLOCKED if item["missing"] else item["record"],
+                   {text: Plan("blocked", note=item["missing"]) if item["missing"] else
+                          Plan("leaf", gold=lambda a, v=item["record"]: v, note="Extracted the record.")})
 
 
 CRISP = [
