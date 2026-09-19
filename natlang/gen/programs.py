@@ -24,6 +24,8 @@ class Plan:
     inputs: dict = field(default_factory=dict)
     note: str = ""
     steps: list = field(default_factory=list)   # calls: [(tool, args)], one per turn
+    script: Callable = None        # script: a generator function(lam) yielding turns, receiving each turn's last Result
+    template: bool = False         # the gold of this generative leaf is a template stand-in, not yet a teacher-written reference
 
 
 @dataclass
@@ -33,6 +35,8 @@ class Program:
     inputs: dict
     expected: Any
     plans: dict                    # instructions text -> Plan
+    loader: Callable = None        # () -> root node, for code bases on disk (then `root` and `inputs` are unused)
+    capabilities: dict = field(default_factory=dict)
 
 
 BLOCKED = "<blocked>"              # Program.expected when the inputs do not determine the result

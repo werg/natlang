@@ -61,3 +61,14 @@ def test_composed_programs_are_varied_and_verified():
                 a = s["target"]["tool_calls"][0]["function"]["arguments"]
                 kinds.add("repeat" if '"until"' in a else "fold" if '"init"' in a else "each" if '"over"' in a else "plain")
     assert len(texts) == 25 and {"each", "plain"} <= kinds
+
+
+@pytest.mark.parametrize("name", ["cb_legal_move", "cb_moderation", "cb_nlprolog", "cb_shopkeeper", "cb_webserver", "cb_highlighter"])
+def test_hand_written_code_bases_yield_verified_trajectories(name):
+    """Inputs from a latent world, a reference script per pseudocode function: every turn is accepted by the
+    harness and by its grammar, and the outcome is what the world says it must be."""
+    from natlang.gen.codebases import CODEBASES
+    rng = random.Random(5)
+    for _ in range(4):
+        samples, episodes = run_program(CODEBASES[name](rng))
+        assert samples and episodes >= 2

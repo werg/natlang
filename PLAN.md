@@ -558,17 +558,44 @@ frontier model on quality, latency, and cost.
 ### 10.2 Status (2026-09-19)
 
 Package `natlang/`: `types.py`, `values.py`, `nodes.py`, `refs.py`,
-`paths.py` (tree and types); `codebase.py` (loader); `runtime.py` (sessions,
-`call`, combinators, guards); `surface.py`, `tool_agent.py`, `native.py`,
-`decoder.py` (model-facing side); `js.py` + `prelude.js` (sandbox);
-`checks.py` (grading); `gen/` (latent worlds, program families, synthesizer,
-reference policy); `host.py`, `__main__.py`. `examples/triage/` is a worked
-code base and conformance program 23. Tests cover the harness scripts, the
-surface, the grammars, code bases and calls, and the generators.
+`paths.py` (tree and types); `codebase.py` (loader; refuses cycles);
+`runtime.py` (sessions, `call`, combinators, guards); `surface.py`,
+`tool_agent.py`, `native.py`, `decoder.py` (model-facing side); `js.py` +
+`prelude.js` (sandbox); `checks.py` (grading); `host.py` (`load`, `load_fold`
+for long-lived programs over an open list), `__main__.py`.
 
-Data generated on this machine so far (before the code-base rework of the
-corpus): 2,000 programs → ~12,000 verified turns in about a minute on the CPU;
-61 teacher-verified paraphrases over 16 base texts in about 1.5 h on the GPU.
+**Code bases** (`codebases/`, each with a scripted end-to-end test in
+`tests/`): `nlprolog` (forward chaining by repeat-until), `highlighter`
+(natlang reading natlang; HTML out), `webserver` (a fold over HTTP requests;
+`scripts/serve_web.py` is the listening host adapter), `moderation` (early
+returns; second opinion by copy-edit-call), `shopkeeper` (fold; legal actions
+by construction), `legal_move` (exact rules, fuzzy reading, a blocker that
+travels up); plus `examples/triage`.
+
+**Corpus generation** (`natlang/gen/`, `scripts/generate.py`), all verified
+turn by turn (harness accepts, the turn's grammar accepts, outcome matches):
+- leaf families (`programs.py`): judge, classify, extract, crisp_scalar, with
+  undetermined instances that end in a blocker;
+- fixed shapes and the **compositional synthesizer** (`synth.py`): programs
+  sampled move by move under kind and alignment constraints, two dialects,
+  4 to 23 steps, nothing computed for nothing; exact steps use the executed
+  code as oracle;
+- the **hand-written code bases** (`codebases.py`): an input generator over a
+  latent world and a reference script per pseudocode function. Leaves that
+  generate text have template gold for now and are left out of the corpus
+  until the teacher writes their references.
+- As the model sees a sample: tools at most ~1.3k tokens, messages at most
+  ~2.5k.
+
+**Conformance**: 23 programs, all code-base style, each with a replayable
+`reference:`; graded by `natlang/checks.py`.
+
+**Measured with real models** (program 23, the triage code base): Bonsai 27B
+follows every structural step (11 episodes, 638 s, 4 rejected calls corrected);
+the untuned 350M writes one made-up record in one action and never calls. The
+web server served real HTTP requests with Bonsai interpreting every step:
+correct pages, a form submission persisted across requests, a 404; 4 to 6
+minutes per request, which is the gap the tuned small model has to close.
 
 ### 10.3 Findings worth keeping
 
