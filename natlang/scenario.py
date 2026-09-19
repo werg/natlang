@@ -26,20 +26,26 @@ def admit(reader: TraceReader, contract: ScenarioContract) -> dict:
     observed_effects = tuple((e["capability"], e.get("args")) for e in requested)
     if contract.effects is not None and observed_effects != contract.effects:
         raise ValueError("ordered effect sequence does not match the contract")
+    if contract.effects is not None:
+        completed = {(e.get("call_id"), e["capability"], e["sequence"])
+                     for e in replay["effects"] if e["phase"] == "completed"}
+        if any((e.get("call_id"), e["capability"], e["sequence"]) not in completed
+               for e in requested):
+            raise ValueError("required effect was requested but did not complete")
     for rule in contract.constrained_calls:
         for event in replay["actions"]:
             if event.get("name") == "call" and event.get("arguments", {}).get("function") == rule["function"]:
                 arguments = event["arguments"]
                 if arguments.get("to") != rule["to"] or arguments.get("inputs", {}) != rule["inputs"]:
                     raise ValueError("required call destination or inputs changed")
-    applied = [e for e in replay["actions"] if e["outcome"] in ("ok", "done", "completed", "blocked")]
+    executed = replay["actions"]  # proposals are separate records; rejected actions were still attempted
     cursor = 0
     for required in contract.required_actions:
-        while cursor < len(applied) and (applied[cursor].get("name") != required.get("name") or
-                                         any(applied[cursor].get("arguments", {}).get(k) != v
+        while cursor < len(executed) and (executed[cursor].get("name") != required.get("name") or
+                                         any(executed[cursor].get("arguments", {}).get(k) != v
                                              for k, v in required.get("arguments", {}).items())):
             cursor += 1
-        if cursor == len(applied):
+        if cursor == len(executed):
             raise ValueError(f"required ordered action absent: {required}")
         cursor += 1
     return {"admitted": True, "trace_version": reader.manifest["version"],

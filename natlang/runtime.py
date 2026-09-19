@@ -522,16 +522,19 @@ class Runtime:
             entry = {"seq": len(lam.journal) + 1, "capability": name, "function": fn,
                      "args_preview": json.dumps(args)[:80], "status": "pending"}
             lam.journal.append(entry)
-            self._observe("effect", phase="requested", call_id=self.invocations[-1].call_id if self.invocations else None,
+            call_id = self.invocations[-1].call_id if self.invocations else None
+            self._observe("effect", phase="requested", call_id=call_id,
                           capability=name, sequence=entry["seq"], args=args)
             try:
                 out = self.capabilities[name](args)
                 entry["status"] = "ok"
-                self._observe("effect", phase="completed", capability=name, sequence=entry["seq"], result=out)
+                self._observe("effect", phase="completed", call_id=call_id,
+                              capability=name, sequence=entry["seq"], result=out)
                 return out
             except Exception:
                 entry["status"] = "error"
-                self._observe("effect", phase="failed", capability=name, sequence=entry["seq"])
+                self._observe("effect", phase="failed", call_id=call_id,
+                              capability=name, sequence=entry["seq"])
                 raise
 
         return call
