@@ -160,7 +160,7 @@ class ReferenceAgent:
         if session.lam.ret is MISSING or open_lines or not session.finish():
             raise AssertionError(f"reference policy ended without a valid return and closed lines: {open_lines}; "
                                  f"body={session.lam.body!r}; marks={session.lam.marks!r}")
-        self._emit(session, messages, s.tools(session), reply=self.plan.note or "Done.")
+        self._emit(session, messages, s.tools(session), reply="")
         return None
 
     def _emit(self, session, messages, tools, calls=None, reply=None):

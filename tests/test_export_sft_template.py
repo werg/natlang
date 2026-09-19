@@ -83,6 +83,13 @@ def test_template_export_records_identity_and_rejects_changed_resume(tmp_path):
         pairs = [json.loads(line) for line in grouped_dst.read_text().splitlines()]
         assert [p["program_id"] for p in pairs] == ["scenario:support:113:0"] * 2
         assert pairs[1]["family"] == "review"
+        reply_src, reply_dst = tmp_path / "reply.jsonl", tmp_path / "reply-sft.jsonl"
+        reply_src.write_text(json.dumps({**row, "id": "reply", "skill": "reply", "tools": [],
+                                         "target": {"role": "assistant", "content": "Done."}}) + "\n")
+        exported = subprocess.run([base[0], base[1], str(reply_src), str(reply_dst),
+                                   *base[4:]], capture_output=True, text=True)
+        assert exported.returncode == 0, exported.stderr
+        assert json.loads(reply_dst.read_text())["completion"] == "<|im_end|>"
     finally:
         server.shutdown()
         thread.join()

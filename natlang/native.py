@@ -30,7 +30,7 @@ pyint ::= "-"? [0-9]+
 pynum ::= "-"? [0-9]+ ( "." [0-9]+ )?
 pybool ::= "True" | "False" | "true" | "false"
 pyany ::= pystr | pynum | pybool | "None" | "null" | "[" ( pyany ( ", " pyany )* )? "]" | "{" ( pystr ": " pyany ( ", " pystr ": " pyany )* )? "}"
-reply ::= [^<\[] ( [^\x00] )*
+reply ::= ( [^<\[] ( [^\x00] )* )?
 '''
 
 

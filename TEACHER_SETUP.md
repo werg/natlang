@@ -118,7 +118,7 @@ Preserve rejected attempts and judge results in the audit, and sample accepted
 outputs by function. The eight-case pilot establishes the collector path on
 those inputs, not the acceptance rate or quality of all remaining leaves.
 
-## Reply-only completion probe
+## End-of-turn completion
 
 The terminal `done` tool has been removed from the model-facing surface and
 reference policy. `done=N` on `write` and `call` still closes a numbered line.
@@ -139,8 +139,14 @@ The run preceded the transcript recording fix, so its audit does not include
 the final prose turn. This is a small smoke test, not a full teacher behavior
 regression or evidence about student quality.
 
+Teacher prose remains in collection audits as a diagnostic note. Student
+reference trajectories now target an empty final assistant message: the
+end-of-turn token alone signals successful completion after the runtime checks.
+The native grammar accepts this empty turn; SFT export renders it as only the
+assistant end token. Error and blocker reports retain their diagnostic text.
+
 For legacy student trajectories, run `scripts/normalize_terminal_done.py SRC DST`
 before `scripts/export_sft.py`. The normalizer removes the obsolete tool from
-each turn, changes a standalone terminal target to a final reply, and retains
+each turn, changes a standalone terminal target to an empty final turn, and retains
 `done=N` line marks. It refuses mixed batches rather than guessing how to
 split a turn. The source corpus is left intact.

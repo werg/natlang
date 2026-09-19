@@ -18,6 +18,8 @@ def test_family_generates_valid_trajectories(family):
     for _ in range(3):
         samples, episodes = run_program(FAMILIES[family](rng))     # asserts value == expected, grammar accepts
         assert samples and samples[-1]["skill"] == "reply" or any(s["skill"] == "reply" for s in samples)
+        assert all(s["target"]["content"] == s["native_target"] == ""
+                   for s in samples if s["skill"] == "reply")
         for s in samples:
             assert s["messages"][0]["role"] == "system" and s["messages"][1]["role"] == "user"
             user = s["messages"][1]["content"]

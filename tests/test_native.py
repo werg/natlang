@@ -52,7 +52,9 @@ def test_several_calls_and_replies():
     s, g = _g("01-leaf-judgment.yaml")
     assert ok(g, '[read(path="args/message"), write(path="return", type="Bool", value=True)]')
     assert gbnf.accepts(g, "It is a complaint, so I wrote true.")
+    assert gbnf.accepts(g, "")
     assert not gbnf.accepts(call_grammar(S.tools(s), allow_reply=False), "It is a complaint.")
+    assert not gbnf.accepts(call_grammar(S.tools(s), allow_reply=False), "")
 
 
 def test_parse_calls_and_argument_names():

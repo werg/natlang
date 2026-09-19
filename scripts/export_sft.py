@@ -43,7 +43,7 @@ def main():
     renderer = {"version": "llama.cpp-apply-template/2", "template_id": a.template_id,
                 "template_sha256": template_hash, "end_token": a.end_token,
                 "server": a.server, "include_template": a.include_template,
-                "terminal_tool_policy": "reply-only-v1"}
+                "terminal_tool_policy": "empty-success-turn-v2"}
     manifest_path = a.dst.with_suffix(a.dst.suffix + ".manifest.json")
 
     def render(messages, tools):

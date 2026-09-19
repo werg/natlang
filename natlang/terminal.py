@@ -4,16 +4,28 @@ from __future__ import annotations
 
 _OLD_SUPPORT_END = ("When the result is ready and all numbered lines are closed, use done to finish\n"
                     "successfully, or reply briefly. Error and blocker reports are only for failures.")
-_NEW_SUPPORT_END = ("When the result is ready and all numbered lines are closed, reply briefly to\n"
-                    "finish successfully. Error and blocker reports are only for failures.")
+_PREVIOUS_SUPPORT_END = ("When the result is ready and all numbered lines are closed, reply briefly to\n"
+                         "finish successfully. Error and blocker reports are only for failures.")
+_NEW_SUPPORT_END = ("When the result is ready and all numbered lines are closed, end your turn with\n"
+                    "no text. Error and blocker reports are only for failures.")
 _OLD_TEACHER_END = ("When the required result is written and the applicable work is complete, call done to finish "
                     "successfully. Never use report_error or report_blocker to announce successful completion.")
-_NEW_TEACHER_END = ("When the required result is written and all applicable lines are closed, reply briefly to finish "
-                    "successfully. Never use report_error or report_blocker to announce successful completion.")
+_PREVIOUS_TEACHER_END = ("When the required result is written and all applicable lines are closed, reply briefly to "
+                         "finish successfully. The reply is only a note; the result is what you wrote to return. "
+                         "Never use report_error or report_blocker to announce successful completion.")
+_NEW_TEACHER_END = ("When the required result is written and all applicable lines are closed, end your turn without "
+                    "text. The result is what you wrote to return. Never use report_error or report_blocker to "
+                    "announce successful completion.")
+_OLD_SMALL_INTRO = ("Carry out the task step by step with the tools, then reply briefly to say what you did. "
+                    "Your reply is only a note: the result is whatever you wrote to `return`.")
+_NEW_SMALL_INTRO = ("Carry out the task step by step with the tools, then end your turn without text. "
+                    "The result is whatever you wrote to `return`.")
+_OLD_DELEGATE_END = ("When `return` holds the finished result, reply briefly; the reply is only a note.")
+_NEW_DELEGATE_END = ("When `return` holds the finished result, end your turn without text.")
 
 
 def reply_only_sample(sample: dict) -> dict:
-    """Remove the obsolete terminal tool, converting its sole target to a reply.
+    """Normalize a successful turn to an empty end-of-turn target.
 
     This operates on an SFT row at export time; source traces stay immutable.
     `done=N` arguments and `mark_done` calls are line marks and are preserved.
@@ -25,10 +37,14 @@ def reply_only_sample(sample: dict) -> dict:
             raise ValueError("terminal done in history cannot be migrated as one SFT turn")
         if message["role"] == "system":
             content = message.get("content", "")
+            content = content.replace(_OLD_SMALL_INTRO, _NEW_SMALL_INTRO)
+            content = content.replace(_OLD_DELEGATE_END, _NEW_DELEGATE_END)
             content = content.replace(_OLD_SUPPORT_END, _NEW_SUPPORT_END)
+            content = content.replace(_PREVIOUS_SUPPORT_END, _NEW_SUPPORT_END)
             content = content.replace(_OLD_TEACHER_END, _NEW_TEACHER_END)
-            if "use done to finish" in content or "call done to finish" in content:
-                raise ValueError("unrecognized terminal done instruction in system prompt")
+            content = content.replace(_PREVIOUS_TEACHER_END, _NEW_TEACHER_END)
+            if any(phrase in content for phrase in ("use done to finish", "call done to finish", "reply briefly")):
+                raise ValueError("unrecognized success-reply instruction in system prompt")
             message = {**message, "content": content}
         messages.append(message)
     target = sample["target"]
@@ -37,6 +53,10 @@ def reply_only_sample(sample: dict) -> dict:
     if terminal:
         if len(calls) != 1:
             raise ValueError("mixed terminal done batch cannot be migrated as one SFT turn")
-        target = {"role": "assistant", "content": "Done."}
+        target = {"role": "assistant", "content": ""}
+    reply = bool(terminal) or (sample["skill"] == "reply" and not calls)
+    if reply:
+        target = {**target, "content": ""}
     return {**sample, "messages": messages, "tools": tools, "target": target,
-            "skill": "reply" if terminal else sample["skill"]}
+            "native_target": "" if reply else sample.get("native_target"),
+            "skill": "reply" if reply else sample["skill"]}

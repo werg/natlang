@@ -14,7 +14,7 @@ def test_legacy_terminal_target_becomes_reply_without_losing_line_marks():
                {"function": {"name": "done", "arguments": "{}"}}]}}
     converted = reply_only_sample(row)
     assert converted["skill"] == "reply"
-    assert converted["target"] == {"role": "assistant", "content": "Done."}
+    assert converted["target"] == {"role": "assistant", "content": ""}
     assert [tool["function"]["name"] for tool in converted["tools"]] == ["write"]
     assert "use done to finish" not in converted["messages"][0]["content"]
     assert row["target"]["tool_calls"][0]["function"]["name"] == "done"
@@ -25,6 +25,11 @@ def test_legacy_terminal_target_becomes_reply_without_losing_line_marks():
     converted = reply_only_sample(row)
     assert converted["target"] == row["target"]
     assert '"done":1' in converted["target"]["tool_calls"][0]["function"]["arguments"]
+
+    row["skill"] = "reply"
+    row["target"] = {"role": "assistant", "content": "I completed the task."}
+    converted = reply_only_sample(row)
+    assert converted["target"] == {"role": "assistant", "content": ""}
 
 
 def test_mixed_terminal_batch_is_not_silently_changed():
@@ -45,3 +50,4 @@ def test_streaming_normalizer_writes_reply_only_rows(tmp_path):
     assert convert_file(src, dst) == (1, 1)
     row = json.loads(dst.read_text())
     assert row['skill'] == 'reply' and row['tools'] == []
+    assert row['target']['content'] == ''
