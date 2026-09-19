@@ -200,8 +200,14 @@ class ToolSurface:
         value_alts = [{"path": {"const": s.path}, "type": {"const": format_type(s.ref.type)},
                        "value": schema_of(s.ref.type, s.ref.env)} for s in writable]
         value_alts.append({"path": NEW_LOCAL, "type": {"type": "string"}, "value": {}})
+        source_alts = []
+        for s_ in writable:                                # copy an existing value that fits, instead of re-emitting it
+            srcs = [p_ for p_ in fitting(format_type(s_.ref.type), {}) if p_ != s_.path and not p_.startswith(s_.path + "/")]
+            if srcs:
+                source_alts.append({"path": {"const": s_.path}, "type": {"const": format_type(s_.ref.type)},
+                                    "source": {"enum": srcs}})
         copy_alts = [{"path": NEW_LOCAL, "type": {"const": f"Function<{n}>"}} for n in lam.codebase]
-        write_alts = value_alts + copy_alts
+        write_alts = value_alts + source_alts + copy_alts
         shapes, seen_shapes = [], set()
         for a_ in value_alts:
             k_ = json.dumps(a_["value"], sort_keys=True, default=str)
@@ -219,12 +225,15 @@ class ToolSurface:
                   "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
                  alternatives=read_alts + [{"path": {"const": f"codebase/{n}"}} for n in lam.codebase]),
             tool("write", "Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name "
-                          "creates the local; `type` says what it holds). The value must be complete. "
+                          "creates the local; `type` says what it holds). The value must be complete; to reuse a value that "
+                          "already exists, give `source` (its path) instead of `value`. "
                           "To change how a function works, copy it first: type `Function<name>` with path "
                           "`let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.",
                  {"path": {"type": "string", "description": "`return`, a part of it, or let/<name>"},
                   "type": {"type": "string", "description": "the type of what is written"},
-                  "value": any_value}, ["path", "type"], alternatives=write_alts),
+                  "value": any_value,
+                  "source": {"type": "string", "description": "instead of `value`: the path of an existing value to copy"}},
+                 ["path", "type"], alternatives=write_alts),
             tool("edit", "Replace text: `old` must occur exactly once in the text at `path`. "
                          "Use it to delete finished steps from `instructions` (new = \"\"), to substitute a "
                          "result into them, or to adapt a copied function.",

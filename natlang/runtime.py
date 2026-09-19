@@ -507,6 +507,18 @@ class Session:
         """write(path, type, value). A sub-task type (Task, Code, Map, Fold, Iterate) puts a pending
         node at the path; the harness derives every type the model did not have to choose."""
         ty = str(args.get("type") or "")
+        if args.get("source") is not None and args.get("value") is None:      # copy, so that data is not re-emitted
+            path = str(args.get("path") or "")
+            _, sref = self.resolve(str(args["source"]))
+            if sref.get() is MISSING or sref.type is None:
+                raise reject(str(args["source"]), "no-such-path", "an existing value")
+            undo = self._local_type(path, format_type(sref.type), {}) if path.startswith("let/") else None
+            try:
+                return self._do_copy(Action("copy", path=str(args["source"]), dst=path))
+            except (Reject, Refuse):
+                if undo:
+                    undo()
+                raise
         m = re.match(r"^Function<\s*([A-Za-z_]\w*)\s*>$", ty.strip())
         if m:
             return self._copy_function(str(args.get("path") or ""), m.group(1))

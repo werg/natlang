@@ -11,6 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.gen.policy import ReferenceAgent
 from natlang.gen.programs import BLOCKED, FAMILIES
+from natlang.gen.synth import SHAPES
+FAMILIES = {**FAMILIES, **SHAPES}
 from natlang.runtime import Runtime
 from natlang.types import TypeEnv
 from natlang.values import coerce, dump, load_program

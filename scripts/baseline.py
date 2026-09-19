@@ -67,7 +67,10 @@ for f in files:
         out, value = rt.run_root(load(src, doc.get("inputs") or {}))
         kind = out.kind
     except Exception as e:
-        kind, value = f"crash: {type(e).__name__}: {e}"[:60], None
+        import traceback
+        out, kind, value = None, f"crash: {type(e).__name__}: {e}"[:60], None
+        if a.verbose:
+            traceback.print_exc()
     try:
         verdict, why = grade(doc["expect"], kind, dump(value) if kind == "done" else None,
                              note=getattr(out, "detail", "") or "", judge=judge)

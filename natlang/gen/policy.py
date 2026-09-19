@@ -47,8 +47,13 @@ class ReferenceAgent:
         # A turn's grammar is built from the state BEFORE the turn, so a call that depends on what an
         # earlier call created goes into the next turn.
         elif p.kind == "calls":
-            for name, args in p.steps:
-                yield [(name, args)]
+            for step in (p.steps(lam.in_) if callable(p.steps) else p.steps):
+                if step[0] == "glue":                        # exact work no function covers: compute, then keep it
+                    _, code, path, ty = step
+                    result = yield [("run_code", {"code": code})]
+                    yield [("write", {"path": path, "type": ty, "value": result})]
+                else:
+                    yield [(step[0], step[1])]
         else:
             raise ValueError(p.kind)
 

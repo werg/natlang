@@ -31,3 +31,17 @@ def test_dependent_calls_are_in_separate_turns():
     root_task = samples[0]["messages"][1]["content"]           # the root episode comes first, whatever its wording
     root_turns = [s["skill"] for s in samples if s["messages"][1]["content"] == root_task]
     assert root_turns == ["call", "call", "reply"]        # the second call reads the local the first one made
+
+
+@pytest.mark.parametrize("shape", ["ticket_report", "review_digest", "expense_audit", "nested_assessment"])
+def test_synthesized_programs_run_and_match_their_twin(shape):
+    """Pseudocode programs with code bases: every reference call is accepted by the harness and by the turn's
+    grammar, and the result equals what the Python twin computed from the hidden world."""
+    from natlang.gen.synth import SHAPES
+    rng = random.Random(7)
+    for _ in range(6):
+        prog = SHAPES[shape](rng)
+        samples, episodes = run_program(prog)
+        assert episodes >= 4 and any(s["skill"] == "call" for s in samples)
+        assert samples[0]["messages"][1]["content"].startswith("function ")
+        assert "Functions you can call:" in samples[0]["messages"][1]["content"]
