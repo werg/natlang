@@ -1,7 +1,7 @@
 # Code bases, calls and locals: design rationale
 
 The normative text is in `SPEC.md`: §3 (lambda parts, locals, code bases),
-§4 (combinators), §5 (the six tools, `call`), §7 (how an interpreter works).
+§4 (combinators), §5 (the seven tools, `call`), §7 (how an interpreter works).
 A worked example is `examples/triage/`; the tests are `tests/test_codebase.py`.
 This note records why the design is what it is.
 

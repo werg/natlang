@@ -333,7 +333,7 @@ listing of its functions. **Data never shares a channel with instructions**:
 the harness performs the first step on the interpreter's behalf,
 `read(path="args")`, and the workspace arrives as a tool result (§8).
 
-Six tools, always the same; `call` is present only when the lambda has
+Seven tools, always the same; `call` and `mark_done` are present only when the lambda has
 functions. Their argument schemas are regenerated from the tree and the types
 every turn.
 
@@ -875,7 +875,7 @@ the most recent 1,000 step records by default.
 | 3.1 | The lambda holds every zone of state: type, body, `args`, `let`, `return`, `codebase` |
 | 3.2 | Typed locals created by the first write; private; at most 16 |
 | 3.4 | `.nl` / `.ts` files with frontmatter, companion folders, lexical scope, `uses` links, immutable and shared by reference; no recursion |
-| 5 | Six tools: `read`, `write`, `edit`, `run_code`, `call`, `report_blocker`; instructions and data in different channels; the reply ends the episode and is never the result |
+| 5 | Seven tools: `read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`; instructions and data in different channels; the reply ends the episode and is never the result |
 | 5.3 | Changing a function = copy into a local, edit, call the copy |
 | 5.5 | `call` places and runs in one action; calling again resumes; Map / Fold / Iterate are reached only through `call` |
 | 4.1, 4.3 | Combinators bind the author's parameter names; Iterate's check is a Bool function of the code base |
