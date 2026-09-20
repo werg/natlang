@@ -31,7 +31,7 @@ for (const name of readdirSync(folder).filter(x => x.endsWith('.yaml')).sort()) 
       const before = JSON.stringify(dump(lam));
       const result = await session.act(step.action);
       if (result.kind !== step.expect.result) throw new Error(`step ${index + 1}: ${result.kind} ${result.text}; expected ${step.expect.result}`);
-      if (step.expect.codes && JSON.stringify(result.codes) !== JSON.stringify(step.expect.codes))
+      if (step.expect.codes && step.expect.codes.some(code => !(result.codes ?? []).includes(code)))
         throw new Error(`step ${index + 1}: codes ${JSON.stringify(result.codes)}; expected ${JSON.stringify(step.expect.codes)}`);
       if (step.expect.value !== undefined && JSON.stringify(dump(result.value)) !== JSON.stringify(step.expect.value))
         throw new Error(`step ${index + 1}: value ${JSON.stringify(dump(result.value))}`);

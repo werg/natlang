@@ -618,7 +618,8 @@ export class NativeSession {
         const raw = this.env.resolve(parsed).kind === 'prim' && formatType(parsed) === 'Text' ? joined : YAML.parse(joined);
         const wrapper = ['lambda', 'map', 'fold', 'iterate'].includes(parsed.kind) ? `$${parsed.kind}` : '';
         this.textSet = true;
-        try { result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw }); }
+        try { result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw });
+          if (result.kind === 'ok') result = { ...result, text: result.text.split('\n')[0]! }; }
         finally { this.textSet = false; }
       } else if (copy) result = this.apply('copy', { from: copy[1], to: copy[2] });
       else if (command.startsWith('reduce ')) result = await this.applyAsync('run', { paths: command.slice(7).trim().split(/\s+/) });
@@ -664,7 +665,7 @@ export class NativeSession {
           const diagnostics = [...issues.holes.map(item => ({ path: item.path, code: 'commit-holes',
             expected: item.expected })), ...issues.pending.map(item => ({ path: item, code: 'commit-pending' }))];
           const text = `refused\n${diagnostics.map(item => `${item.path}: ${item.code}${'expected' in item && item.expected ? `, expected ${item.expected}` : ''}`).join('\n')}`;
-          return { kind: 'refused', text, codes: [...new Set(diagnostics.map(item => item.code))] };
+          return { kind: 'refused', text, codes: diagnostics.map(item => item.code) };
         }
         ref.set(''); this.completed = true;
         return { kind: 'completed', text: 'completed', value: this.lam.return };
