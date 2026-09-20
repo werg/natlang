@@ -23,18 +23,18 @@ and replay with checkpoints disabled. Audit traces retain full history, while SF
 examples after a checkpoint contain only the new segment.
 
 Data generation and application evaluation were paused on 2026-09-20 while this
-change is checked. Existing raw data and journals remain available. The
+change was checked, then teacher collection resumed at the user's direction.
+Existing raw data and journals remain available. The
 older synthetic SFT files still contain full conversation prefixes; the new
 continuation bundle below replaces them for a continuation-focused training
 run. Do not splice rendered SFT text without reconstructing runtime state.
-Bonsai may be used for targeted probes while collectors remain paused.
 
 Local checks: 371 tests passed, one skipped. A Bonsai probe
 completed a partial-record task after a fresh checkpoint prompt with four
 messages. A one-turn boundary initially caused unnecessary repeated actions
 after a complete return; completion detection and transient-result handling
 were added before the successful rerun. A full teacher corpus comparison and
-training throughput measurement remain to be done before restarting collection.
+training throughput measurement remain open while collection proceeds.
 
 ## Small paired Bonsai probe
 
@@ -121,6 +121,14 @@ choices, reasoning, tool calls, and checkpoints to
 collector writes review and trajectory IR to
 `runs/teacher-leaves-s74-pages-20260920*`. These are append-only collection
 outputs; accepted trajectories must still pass replay before SFT export.
+An early snapshot of the first ten page-content attempts had nine accepted
+trajectories. Their 23 replayed turns rendered with the LFM2.5-350M template
+and were combined with the reviewed teacher bundle in
+`data/teacher-available-20260920.sft.jsonl` (966 pairs). This is a fixed
+snapshot; later collector rows require a new replay and bundle.
+After the page-content pass, a queued `say` pass collects the remaining
+shopkeeper dialogue cases in `runs/teacher-leaves-s74-say-20260920*` for manual
+semantic review; it does not auto-admit them to the reference bank.
 
 The original seed-74 frozen IR is a historical snapshot. Its shopkeeper
 effect contracts are stale for five programs (IDs 3787, 8767, 8803, 8811,
@@ -133,6 +141,11 @@ the IR schema audit, and the five old shopkeeper failures pass individual
 runtime verification. Its initial 179 provisional programs remain excluded
 from SFT until leaf references are admitted. Full continuation replay verified
 all 10,000 programs, yielding 279,335 turns: 271,832 eligible and 7,503
-provisional. SFT rendering uses this new revision; a separate watcher refreshes
-it after the page-content collector finishes. The teacher replay bridge has
-no episode cap; the finite recorded trajectory itself bounds replay.
+provisional. All 271,832 eligible turns rendered to
+`data/synthetic-s74-refrozen-continuation.sft.jsonl`. The manifest count and
+unique ID count agree; 270,688 prompts (99.58%) have at most 12 conversation
+items, and the maximum is 14. Its LFM2.5-350M template hash is
+`70278c3c69a31e89c2383bb2c4cb5f22ec8456069bcd194d553c30a00dbe1b05`.
+A separate watcher refreshes the IR after the page-content collector finishes.
+The teacher replay bridge has no episode cap; the finite recorded trajectory
+itself bounds replay.
