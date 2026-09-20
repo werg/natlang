@@ -37,6 +37,15 @@ def test_style_violation_is_separate_from_correct_marks():
     assert summarize([dict(row, correct=True)])['style_compliant_episodes'] == 0
 
 
+def test_last_mark_feedback_tells_agent_when_result_is_complete():
+    root = load_program({'$lambda': {'type': 'Lambda<{}, Bool>',
+                                     'instructions': 'return true'}})
+    session = Session(Runtime(None), root, TypeEnv())
+    assert session.apply('write', {'path': 'return', 'type': 'Bool', 'value': True}).kind == 'ok'
+    result = session.apply('mark_done', {'start': 1})
+    assert 'Reply normally to finish' in result.text
+
+
 def test_extended_cases_cover_false_items_and_early_return():
     examples = {name: (doc, value, marks) for name, doc, value, marks in cases(True)}
     assert examples['all_false'][1] == 0

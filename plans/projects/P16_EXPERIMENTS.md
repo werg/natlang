@@ -13,6 +13,11 @@ source sets and uses short descriptions. With a 32,768-token launch context,
 the complete typed report replay passed its exact metrics and output assertions.
 The peak prompt was 14,949 tokens and the largest tool menu about 40 KB; reducing
 that repeated schema cost is the next teacher-harness efficiency task.
+The cost comes from re-sending expanded `write` and `call` alternatives after
+each workspace change. Measure schema bytes and prompt tokens per turn, then
+compare lossless grouping and a backend-only staged constrained decoder. Keep
+the natlang action set and exact destination/type checks unchanged. Do not
+replace schema cost with an arbitrary run-length cap.
 
 ## Natlang prerequisites
 

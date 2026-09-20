@@ -871,12 +871,18 @@ class Session:
 
     def _op_mark_done(self, args):
         """Mark only after the complete range has been validated."""
-        from .render import listing
+        from .render import listing, pending_lines
         lines, start, end, status = self._validate_mark(args)
         for n, _, markable in lines[start - 1:end]:
             if markable:
                 self.lam.marks[n] = status
-        return Result("ok", "ok\n" + listing(self.lam.original_body or self.lam.body, self.lam.marks, compact=True, window=3))
+        text = "ok\n" + listing(self.lam.original_body or self.lam.body,
+                                self.lam.marks, compact=True, window=3)
+        if not pending_lines(self.lam.original_body or self.lam.body, self.lam.marks):
+            holes, pending = problems(self.lam.ret, self.lam.type.returns, self.env, "return")
+            if not holes and not pending:
+                text += "\nAll numbered work is closed and return is complete. Reply normally to finish."
+        return Result("ok", text)
 
     def _op_report_blocker(self, args):
         """The inputs do not determine the result. Ends the episode; the lambda quiesces with the note."""
