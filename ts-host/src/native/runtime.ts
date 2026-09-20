@@ -47,10 +47,13 @@ export class NativeRuntime {
   private root?: { value: Value };
   private stream?: NativeStream;
   private streamCurrent: Value | undefined;
+  private readonly signal?: AbortSignal;
+  private readonly deadline?: number;
 
   constructor(options: { environment?: TypeScriptEnvironment; host?: object; agent?: NativeAgent;
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
     maxDepth?: number; runId?: string; stream?: NativeStream;
+    signal?: AbortSignal; timeoutMs?: number;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
     this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
       runId: options.runId ?? 'native-run' };
@@ -64,11 +67,23 @@ export class NativeRuntime {
     this.environment = options.environment ?? new TypeScriptEnvironment({ mode: 'fresh', host: options.host });
     this.releaseEffect = this.environment.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
     this.stream = options.stream;
+    this.signal = options.signal;
+    if (options.timeoutMs !== undefined) {
+      if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1) throw new RangeError('timeoutMs must be positive');
+      this.deadline = Date.now() + options.timeoutMs;
+    }
   }
 
   close(): void { this.releaseEffect(); }
 
+  checkInterruption(): void {
+    if (this.signal?.aborted) throw new Error('natlang run aborted; external effects may have occurred');
+    if (this.deadline !== undefined && Date.now() >= this.deadline)
+      throw new Error('natlang run timed out; external effects may have occurred');
+  }
+
   evalFor(node: LambdaNode, code: string, body: boolean, path: string, scope: Record<string, unknown>) {
+    this.checkInterruption();
     const previous = this.acting;
     this.acting = node;
     try {
@@ -80,6 +95,7 @@ export class NativeRuntime {
 
   private acting?: LambdaNode;
   private effect(cap: string, fn: string, args: unknown[]): unknown {
+    this.checkInterruption();
     const name = `${cap}.${fn}`, node = this.acting;
     if (!node || !node.effects.includes(name)) throw new Error('effect-undeclared');
     const entry = { seq: node.journal.length + 1, capability: name, function: fn, args_preview: q(args).slice(0, 80), status: 'pending' };
@@ -100,6 +116,7 @@ export class NativeRuntime {
   }
 
   async runRoot(root: Pending | Record<string, unknown>): Promise<{ outcome: NativeOutcome; value: Value; events: HostEvent[]; emitted: unknown[] }> {
+    this.checkInterruption();
     const source = isPending(root) ? root : loadProgram(root);
     if (!this.root) this.root = { value: source };
     else this.root.value = source;
@@ -129,6 +146,7 @@ export class NativeRuntime {
   }
 
   async trigger(ref: Ref): Promise<NativeOutcome> {
+    this.checkInterruption();
     const node = ref.get();
     if (!pending(node)) throw new Reject([{ path: ref.path, code: 'no-such-path', expected: 'a pending node' }]);
     if (node.status === 'running') throw new Reject([{ path: ref.path, code: 'frozen' }]);
@@ -197,6 +215,7 @@ export class NativeRuntime {
     const session = new NativeSession(this, node, ref.env, ref.path);
     try {
       const note = await this.agent(session);
+      this.checkInterruption();
       if (session.completed) return this.done(ref, node, node.return);
       return this.quiesce(ref, node, String(note || 'budget exhausted'));
     } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId }); this.stack.pop(); this.depth--; }
@@ -348,6 +367,7 @@ export class NativeSession {
     return result;
   }
   apply(name: string, args: Record<string, unknown>): NativeResult {
+    this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (this.actions >= 40 || this.toolCalls >= 128)
       return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
@@ -531,6 +551,7 @@ export class NativeSession {
   }
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
+    this.runtime.checkInterruption();
     if (name === 'run') {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });

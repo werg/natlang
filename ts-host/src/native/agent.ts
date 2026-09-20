@@ -80,6 +80,7 @@ export class NativeToolAgent {
           session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
           deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turn),
         max_tokens: allowance });
+      session.runtime.checkInterruption();
       tokens += response.completion_tokens ?? allowance;
       if (tokens > maxTokens) return 'episode token budget exhausted';
       if (!response.calls?.length) {

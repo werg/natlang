@@ -38,3 +38,14 @@ test('retained native eval sees the same application object across runs', async 
   assert.equal(state.count, 2);
   host.close(); environment.close();
 });
+
+test('native cancellation prevents model actions after an interrupted turn', async () => {
+  const host = new NativeNatlangHost();
+  const abort = new AbortController();
+  const source = { kind: 'program', program: { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return 1.' } } };
+  await assert.rejects(host.run({ source, signal: abort.signal, modelTurn: () => {
+    abort.abort();
+    return { calls: [['write', { path: 'return', type: 'Num', value: 1 }]], completion_tokens: 1 };
+  } }), /aborted/);
+  host.close();
+});
