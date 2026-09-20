@@ -1,6 +1,20 @@
 # P18 — Semantic document compiler and publisher
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local implementation in `codebases/publisher/` and `applications/publisher.mjs`.
+[Shared capabilities](README.md).
+
+The natlang entry point reads pinned source passages, plans an outline, composes
+the document tree, checks it, and asks the host to prepare the result. The
+host verifies literal citation quotes against current source spans, exact
+table shapes, asset IDs and safe image URLs. It renders Markdown and HTML from
+one portable tree. A versioned pair of files is published by one atomic local
+symlink switch; an external release is not implied.
+
+Integration tests execute the natlang function and verify both artifacts,
+escaping, a table, and the publication pointer. Negative tests reject a
+fabricated quote, stale revision, missing asset, unsafe URL and path escape.
+Semantic claim entailment, visual review, printable output and remote release
+are open product gates. Citation checking proves provenance, not truth.
 
 ## Natlang prerequisites
 
