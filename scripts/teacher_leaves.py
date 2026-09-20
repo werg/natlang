@@ -27,15 +27,37 @@ from natlang.values import coerce, dump, dump_state                          # n
 
 WHERE = {"say": "shopkeeper/serve", "page_content": "webserver/handle", "submission_page": "webserver/handle"}   # the parent
 NO_MARKUP_ATTACK = {"kind": "crisp", "code": "!/<\\s*script|<\\s*html|<\\s*body|javascript:/i.test(value)"}
+
+
+def say_checks(args):
+    action = args["action"]
+    code, good, qty, price = (action[k] for k in ("code", "good", "qty", "price"))
+    if code.startswith("sell"):
+        question = (f"A sale of {qty} {good} at {price} coins each has happened. "
+                    f"The total price is {qty * price} coins. Is the line consistent with that "
+                    "completed sale? Accept natural wording and harmless personality. Reject a "
+                    "different item, quantity, price, or a claim that the sale has not happened.")
+    elif code == "quote":
+        question = (f"The action is only a price quote for {good} at {price} coins, with no sale. "
+                    f"Is the line consistent with that? Conversational shorthand such as "
+                    f"'{good} is {price}' is a valid quote. Reject a different price or a claim "
+                    "that goods have been handed over.")
+    elif code == "counter_offer":
+        question = (f"The action is a counter-offer for {qty} {good} at {price} coins each; "
+                    "no sale has occurred. Is the line consistent with that offer? Accept natural "
+                    "wording; reject a different price or a claim that goods were handed over.")
+    elif code == "out_of_stock":
+        question = (f"The action is out_of_stock for {good}; no sale occurs. Is the line "
+                    "consistent with that unavailability, without claiming to hand over goods?")
+    else:
+        question = ("The action is ordinary chat; no sale occurs. Is the line consistent with "
+                    "small talk, without claiming that goods were sold or handed over?")
+    return [{"kind": "crisp", "code": "wordCount(value) >= 2 && wordCount(value) <= 45"},
+            {"kind": "judge", "answer": True, "question": question}]
+
+
 CHECKS = {
-    "say": lambda a: [{"kind": "crisp", "code": "wordCount(value) >= 2 && wordCount(value) <= 45"},
-                      {"kind": "judge", "answer": True, "question": (
-                          f"A shopkeeper sells {a['action']['qty']} {a['action']['good']} at {a['action']['price']} coins each "
-                          f"(action: {a['action']['code']}). Does the line agree with that sale and promise nothing else?"
-                          if a["action"]["code"].startswith("sell") else
-                          f"A shopkeeper's action is '{a['action']['code']}' (no sale takes place"
-                          + (f"; the price mentioned may only be {a['action']['price']}" if a["action"]["price"] else "")
-                          + "). Does the line fit that action without promising or handing over any goods?")}],
+    "say": say_checks,
     "page_content": lambda a: [NO_MARKUP_ATTACK, {"kind": "crisp", "code": "wordCount(value) >= 15 && wordCount(value) <= 320"},
                                {"kind": "judge", "answer": True, "question": f"Is this HTML fragment a fitting page for this purpose: {a['purpose']}"}]
                               + ([{"kind": "crisp", "code": f"value.includes({json.dumps(e['message'][:20])})"} for e in a["entries"][-1:]
@@ -90,6 +112,19 @@ def _leaf_audit_status(out, error):
     return (out.kind, out.detail) if out is not None else ("exception", None)
 
 
+def retry_keys(path: Path, status: str = "all") -> set[str]:
+    """Select rejected keys from an immutable audit for a focused retry."""
+    keys = set()
+    with path.open() as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not row["accepted"] and (status == "all" or row["status"] == status):
+                keys.add(row["key"])
+    return keys
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ir", type=Path, help="collect exact missing template cases from a frozen program IR")
@@ -101,6 +136,11 @@ def main():
     ap.add_argument("--thinking", type=int, default=256)
     ap.add_argument("--turn-tokens", type=int,
                     help="optional maximum generated tokens for one teacher turn")
+    ap.add_argument("--max-seconds", type=float, default=300,
+                    help="wall-clock limit per teacher leaf (default: 300 seconds)")
+    ap.add_argument("--retry-audit", type=Path,
+                    help="retry only rejected keys from this audit")
+    ap.add_argument("--retry-status", choices=("all", "quiesced", "done", "exception"), default="all")
     ap.add_argument("--limit", type=int, default=10**9, help="stop after this many leaves")
     ap.add_argument("--temperature", type=float, default=0)
     ap.add_argument("--reasoning-effort", choices=("low", "medium", "xhigh"), default="low")
@@ -112,6 +152,10 @@ def main():
     a = ap.parse_args()
     if a.turn_tokens is not None and a.turn_tokens < 1:
         ap.error("--turn-tokens must be positive")
+    if a.max_seconds <= 0:
+        ap.error("--max-seconds must be positive")
+    if a.retry_status != "all" and not a.retry_audit:
+        ap.error("--retry-status requires --retry-audit")
     audit_path = a.audit_out or ROOT / "runs" / f"teacher-leaves-audit-{time.time_ns()}.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     if audit_path.exists():
@@ -141,6 +185,9 @@ def main():
             k = C.ref_key(fn, args)
             if k not in seen and k not in C.REFERENCES:
                 seen.add(k); todo.append((k, fn, args))
+    if a.retry_audit:
+        wanted = retry_keys(a.retry_audit, a.retry_status)
+        todo = [item for item in todo if item[0] in wanted]
     print(f"{len(todo)} generative leaves without a reference", flush=True)
     dec = LlamaServerDecoder(a.server, timeout=900, chat_extra={"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20,
                                          "chat_template_kwargs": {"reasoning_effort": a.reasoning_effort}},
@@ -162,7 +209,8 @@ def main():
             leaf_program = dump_state(root)
             out, value = Runtime(lambda lam: ToolAgent(dec, temperature=a.temperature, system_prompt=prompt,
                                  validation_feedback="caller", log=log, transcript=transcript,
-                                 teacher_turns=teacher_turns, turn_tokens=a.turn_tokens),
+                                 teacher_turns=teacher_turns, turn_tokens=a.turn_tokens,
+                                 max_seconds=a.max_seconds),
                                  max_episodes=4).run_root(root)
             text = dump(value) if out.kind == "done" else None
             results = run_checks(CHECKS[fn](args), text, judge) if text else []
@@ -186,6 +234,7 @@ def main():
                      "teacher_turns":teacher_turns,"system_prompt":prompt,
                      "model_metadata":model_metadata,"temperature":a.temperature,
                      "thinking":a.thinking,"turn_tokens":a.turn_tokens,
+                     "max_seconds":a.max_seconds,
                      "reasoning_effort":a.reasoning_effort,
                      "json_text_values":True}
         with audit_path.open("a") as f:

@@ -125,6 +125,17 @@ def test_default_has_no_separate_per_turn_token_cap():
     assert dec.calls[0]['max_tokens'] == 1000
 
 
+def test_default_tool_agent_has_no_turn_token_or_wall_clock_budget():
+    dec = RepeatingDecoder(tokens=1)
+    dec.deadline = None
+    agent = ToolAgent(dec)
+    assert agent.max_turns is None and agent.max_tokens is None and agent.max_seconds is None
+    assert agent.turn_tokens is None
+    assert 'budget' in ToolAgent(dec, max_turns=1).run(session())
+    assert dec.calls[0]['max_tokens'] is None
+    assert dec.deadline is None
+
+
 def test_failed_effect_is_observed_not_silently_replayed():
     s = session()
     s.lam.effects = ['out.emit']
@@ -210,3 +221,15 @@ def test_server_decoder_cannot_override_remaining_token_allowance(monkeypatch):
     dec = LlamaServerDecoder(chat_extra={'max_tokens': 999})
     result = dec.chat([], [], temperature=0, max_tokens=3)
     assert result.completion_tokens == 2 and dec.usage['completion_tokens'] == 2
+
+
+def test_server_decoder_omits_default_response_token_cap(monkeypatch):
+    import io
+    import urllib.request
+    from natlang.decoder import LlamaServerDecoder
+    def urlopen(req, timeout):
+        assert 'max_tokens' not in json.loads(req.data)
+        return io.BytesIO(json.dumps({'choices': [{'message': {'content': 'ok'}}],
+                                     'usage': {'completion_tokens': 2}}).encode())
+    monkeypatch.setattr(urllib.request, 'urlopen', urlopen)
+    assert LlamaServerDecoder().chat([], [], temperature=0).text == 'ok'

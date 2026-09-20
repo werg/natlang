@@ -25,13 +25,11 @@ class ModelAgent:
     def run(self, session) -> Optional[str]:
         messages = [{"role": "system", "content": self.system},
                     {"role": "user", "content": session.observation()}]
-        self.tokens = self.turns = 0
         previous_deadline = getattr(self.dec, "deadline", None)
-        deadline = time.monotonic() + 900
         previous_runtime_deadline = session.rt.deadline
-        if previous_runtime_deadline is not None:
-            deadline = min(deadline, previous_runtime_deadline)
-        self.dec.deadline = min(deadline, previous_deadline) if previous_deadline is not None else deadline
+        self.dec.deadline = (min(previous_deadline, previous_runtime_deadline)
+                             if previous_deadline is not None and previous_runtime_deadline is not None
+                             else previous_deadline if previous_deadline is not None else previous_runtime_deadline)
         session.rt.deadline = self.dec.deadline
         try:
             while True:
@@ -53,16 +51,9 @@ class ModelAgent:
             session.rt.deadline = previous_runtime_deadline
 
     def _generate(self, *args, max_tokens, **kwargs):
-        if self.turns >= 64 or self.tokens >= 4000 or time.monotonic() >= self.dec.deadline:
-            raise TimeoutError("episode budget exhausted")
-        allowance = min(max_tokens, 4000 - self.tokens)
-        result = self.dec.generate(*args, max_tokens=allowance, **kwargs)
-        self.turns += 1
-        used = getattr(result, "completion_tokens", None)
-        self.tokens += allowance if used is None else max(1, used)
-        if self.tokens > 4000 or time.monotonic() >= self.dec.deadline:
-            raise TimeoutError("episode budget exhausted")
-        return result
+        if self.dec.deadline is not None and time.monotonic() >= self.dec.deadline:
+            raise TimeoutError("episode deadline exhausted")
+        return self.dec.generate(*args, max_tokens=max_tokens, **kwargs)
 
     def _decode_action(self, session, messages: list, seed: int) -> str:
         prefix = self.dec.format(messages)
