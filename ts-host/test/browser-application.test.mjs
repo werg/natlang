@@ -92,3 +92,29 @@ test('DOM renderer uses text nodes, emits typed events and rejects executable ma
       kind: 'command', from: 'missing' } }), /unknown input/);
   } finally { renderer.close(); globalThis.document = prior; }
 });
+
+test('durable commit precedes view generation and refresh never replays a reducer', async () => {
+  const { BrowserNatlangApplication } = await api();
+  let reductions=0, views=0, failedView=false;const commits=[];
+  const client={run:async request=>{
+    if(request.source.root==='reduce.ts'){reductions++;return {value:{count:request.inputs.state.count+1},outcome:{kind:'done'},trace:[],run_id:'reduce'};}
+    views++;if(failedView)throw new Error('presentation unavailable');
+    return {value:{tag:'p',text:String(request.inputs.state.count)},outcome:{kind:'done'},trace:[],run_id:'view'};
+  }};
+  const app=new BrowserNatlangApplication({client,source:{files,reducer:'reduce.ts',view:'view.ts'},initialState:{count:4},initialRevision:7,onCommit:async record=>commits.push(record)});
+  await app.start();failedView=true;
+  await assert.rejects(app.dispatch({id:'durable',kind:'increment'}),/presentation unavailable/);
+  assert.equal(commits[0].revision,8);assert.equal(commits[0].state.count,5);assert.equal(app.state.count,5);
+  failedView=false;await app.refresh();assert.equal(reductions,1);assert.equal(views,3);assert.equal(app.view.text,'5');await app.close();
+});
+
+test('initial view failure keeps valid state available for refresh and later events',async()=>{
+ const {BrowserNatlangApplication}=await api();let fail=true;
+ const client={run:async request=>{
+  if(request.source.root==='view.ts'&&fail)throw new Error('bad initial presentation');
+  return {value:request.source.root==='view.ts'?{tag:'p',text:'ready'}:{count:request.inputs.state.count+1},outcome:{kind:'done'},trace:[],run_id:'test'};
+ }};
+ const app=new BrowserNatlangApplication({client,source:{files,reducer:'reduce.ts',view:'view.ts'},initialState:{count:0}});
+ await assert.rejects(app.start(),/bad initial/);fail=false;await app.refresh();
+ assert.equal((await app.dispatch({id:'after-failure',kind:'increment'})).state.count,1);await app.close();
+});

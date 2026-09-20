@@ -49,3 +49,10 @@ The next evaluation pass should freeze model identity, source revision,
 engine/environment bindings, root seed, scenario inputs and exact checks for
 each family. Preserve traces and unsuccessful trajectories. Semantic judgments
 need reviewed rubrics; mechanical checks alone admit no training sample.
+
+## Interactive frontends
+
+The [frontend delivery ledger](FRONTEND_STATUS.md) records the new 22-app
+Natlang Studio, its shared browser/companion infrastructure, tests and remaining
+product gates. This adds working interactive workflows to every project family;
+it does not supersede the semantic evaluation and production gates above.

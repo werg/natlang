@@ -84,3 +84,18 @@ projection. A Chromium end-to-end smoke is available through
 paths disabled. Live GGUF interpretation and GPU inference were not exercised
 in that smoke. An earlier browser attempt coincided with an AMD display-driver
 failure on this workstation; the kernel log did not establish causation.
+
+## Application studio
+
+The [studio](studio/README.md) now contains 22 application interfaces covering
+P01–P20. An interaction can make many natlang-directed operation calls; the host
+executes individual mechanics rather than owning the workflow. In particular,
+notebook dependency traversal and case-collection iteration live in natlang.
+See the [frontend delivery ledger](../plans/projects/FRONTEND_STATUS.md) for
+verified integrations and outstanding product gates.
+
+The shared application API now accepts `initialRevision` and an awaited
+`onCommit` observer. A completed reduction is durably recorded before view
+computation. `refresh()` retries only the view, and `cancel()` aborts the active
+run. The studio supplies IndexedDB journals and worker-owned child execution
+as application libraries; they are not new language-runtime requirements.

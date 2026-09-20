@@ -9,8 +9,12 @@ export type BrowserAppTransition<S, V> = { event: BrowserAppEvent | null;
 export type BrowserAppFailure = { event: BrowserAppEvent | null;
   stage: 'reduce' | 'view'; revision: number; detail: string;
   run: BrowserClientRun | null };
+export type BrowserAppCommit<S> = { event: BrowserAppEvent; revision: number; state: S; reducerRun: BrowserClientRun };
 export type BrowserAppOptions<S, V> = { client: Pick<BrowserNatlangClient, 'run'>;
   source: BrowserAppSource; initialState: S;
+  initialRevision?: number;
+  /** Persist a completed reduction before publishing it or computing its view. */
+  onCommit?: (commit: BrowserAppCommit<S>) => void | Promise<void>;
   /** Each completed event step is equivalent to one Fold reduction. */
   onTransition?: (transition: BrowserAppTransition<S, V>) => void;
   onFailure?: (failure: BrowserAppFailure) => void;
@@ -46,6 +50,9 @@ export class BrowserNatlangApplication<S, V> {
       throw new Error('application reducer and view source must be present');
     if (options.seedRoot !== undefined && !Number.isSafeInteger(options.seedRoot))
       throw new Error('seedRoot must be a safe integer');
+    if (options.initialRevision !== undefined && (!Number.isSafeInteger(options.initialRevision) || options.initialRevision < 0))
+      throw new Error('initialRevision must be a nonnegative safe integer');
+    this.revisionValue = options.initialRevision ?? 0;
     this.options = options;
     this.client = options.client;
     this.source = { ...options.source, files: { ...options.source.files } };
@@ -109,8 +116,9 @@ export class BrowserNatlangApplication<S, V> {
     return this.enqueue(async () => {
       if (this.started) throw new Error('application already started');
       this.started = true;
-      try { return await this.render(null, null); }
-      catch (error) { this.started = false; throw error; }
+      // A failed presentation does not invalidate the initial state or lifecycle.
+      // The caller can refresh the view or dispatch an event after correcting it.
+      return this.render(null, null);
     });
   }
 
@@ -126,12 +134,26 @@ export class BrowserNatlangApplication<S, V> {
       catch (error) { return this.fail(event, 'reduce', null, String(error)); }
       if (reducerRun.outcome.kind !== 'done')
         return this.fail(event, 'reduce', reducerRun, reducerRun.outcome.detail);
-      this.stateValue = structuredClone(reducerRun.value as S);
+      const state = structuredClone(reducerRun.value as S);
+      try { await this.options.onCommit?.({ event, revision: this.revisionValue + 1,
+        state: structuredClone(state), reducerRun }); }
+      catch (error) { return this.fail(event, 'reduce', reducerRun, `commit failed: ${String(error)}`); }
+      this.stateValue = state;
       this.revisionValue++;
       this.seen.add(event.id);
       return this.render(event, reducerRun);
     });
   }
+
+  /** Retry presentation without re-executing a committed event or host effects. */
+  refresh(): Promise<BrowserAppTransition<S, V>> {
+    return this.enqueue(async () => {
+      if (!this.started) throw new Error('application has not started');
+      return this.render(null, null);
+    });
+  }
+
+  cancel(): void { this.active?.abort(); }
 
   async consume(events: AsyncIterable<BrowserAppEvent>): Promise<void> {
     for await (const event of events) await this.dispatch(event);
