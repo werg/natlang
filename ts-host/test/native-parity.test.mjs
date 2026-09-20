@@ -106,3 +106,28 @@ test('native checked-call and completion-mark alternatives agree with Python sur
     assert.deepEqual(actual[name]?.['x-natlang-alternatives'], expected[name]?.['x-natlang-alternatives'], name);
   }
 });
+
+test('native checked-call rejection codes agree with Python for malformed bindings', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ item: Num, word: Text, flags: Bool[] }, Num>',
+    instructions: 'Use double.', args: { item: 4, word: 'hello', flags: [true] },
+    codebase: { double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' } } } };
+  const calls = [
+    ['call', { function: 'missing', to: 'let/result' }],
+    ['call', { function: 'double', to: 'let/result', inputs: {} }],
+    ['call', { function: 'double', to: 'let/result', inputs: { unknown: 'args/item' } }],
+    ['call', { function: 'double', to: 'let/result', inputs: { item: 'args/word' } }],
+    ['call', { function: 'double', to: 'let/result', over: 'args/word' }],
+    ['call', { function: 'double', to: 'let/result', over: 'args/flags' }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([{'kind':r.kind,'codes':r.codes} for n,a in calls for r in [s.apply(n,a)]]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const actual = [];
+  for (const [name, args] of calls) {
+    const result = await session.applyAsync(name, args);
+    actual.push({ kind: result.kind, codes: result.codes ?? [] });
+  }
+  assert.deepEqual(actual, expected);
+});

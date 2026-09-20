@@ -818,15 +818,35 @@ export class NativeSession {
       const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
       const inputPaths = (args.inputs ?? {}) as Record<string, string>;
       const values: Record<string, unknown> = { ...args.values as Record<string, unknown> ?? {} };
-      for (const [name, path] of Object.entries(inputPaths)) values[name] = cloneValue(this.resolve(path).get());
+      const named = Object.fromEntries(Object.entries(definition.types as Record<string, string> ?? {})
+        .map(([name, text]) => [name, parseType(text)]));
+      const callEnv = this.env.child(named);
+      const declared = Object.fromEntries(Object.entries(signature).map(([name, text]) =>
+        [name.replace(/\?$/, ''), parseType(text)]));
+      for (const name of [...Object.keys(inputPaths), ...Object.keys(values)])
+        if (!(name in declared)) throw new Reject([{ path: `inputs/${name}`, code: 'unknown-field' }]);
+      for (const [name, path] of Object.entries(inputPaths)) {
+        const source = this.resolve(path), expected = declared[name]!;
+        if (!source.type || !fitsType(source.type, expected, callEnv))
+          throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: formatType(expected) }]);
+        values[name] = cloneValue(source.get());
+      }
       const required = Object.keys(signature).filter(name => !name.endsWith('?')).map(name => name.replace(/\?$/, ''));
-      const over = args.over === undefined ? undefined : this.resolve(String(args.over)).get();
+      const overRef = args.over === undefined ? undefined : this.resolve(String(args.over));
+      const over = overRef?.get();
       const init = args.init === undefined ? undefined : typeof args.init === 'string' ?
         (() => { try { return this.resolve(args.init as string).get(); } catch { return args.init; } })() : args.init;
       const later = over === undefined ? args.until === undefined ? [] : [required.find(n => !(n in values))] :
         init === undefined ? [required.find(n => !(n in values))] : ['acc', 'item'];
       if (required.some(name => !(name in values) && !later.includes(name)))
         throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
+      if (overRef && (overRef.env.resolve(overRef.type!).kind !== 'list' || !Array.isArray(over)))
+        throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: 'a list' }]);
+      if (overRef && overRef.type) {
+        const itemType = signature[init === undefined ? later[0]! : 'item'];
+        if (itemType && !fitsType(overRef.type, parseType(`${itemType}[]`), callEnv))
+          throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: `${itemType}[]` }]);
+      }
       const leaf = { type: typeText, [kind]: definition[kind],
         engine: definition.engine ?? 'typescript-host', args: values, types: definition.types ?? {},
         effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName };
