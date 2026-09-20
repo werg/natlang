@@ -2,7 +2,7 @@
 """Turn the reference corpus into supervised pairs of text, rendered by the model's own chat template exactly as at
 inference (the llama.cpp server's /apply-template with the official template and the turn's tools).
 
-  scripts/export_sft.py data/ref-v5.jsonl data/sft-v5.jsonl --server http://127.0.0.1:8080 [--limit N] [--every K]
+  scripts/export_sft.py data/external_pilot/direct-core-v2-traces.jsonl.gz data/direct-core-v2.sft.jsonl --server http://127.0.0.1:8080 [--limit N] [--every K]
 Each output line: {"id", "family", "skill", "prompt", "completion"}; train on the completion only.
 """
 import argparse, hashlib, json, sys, time, urllib.error, urllib.request

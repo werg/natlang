@@ -154,15 +154,15 @@ itself bounds replay.
 
 ## Collection status (2026-09-21)
 
-Five superseded rendered synthetic SFT snapshots were losslessly archived on
-2026-09-21 to make room for the corrected seed-73 and seed-74 rebuilds. Append
-`.zst` to the historical `.sft.jsonl` paths in this document to locate them.
-`scripts/archive_rendered_sft.py` checked each archive's decompressed SHA-256
-against the original before removing the plain file. Together these five
-files went from 14.18 GB to 137 MB. The IR, manifests, reference reviews, and
-teacher trajectories remain in their original paths. None of the archived
-SFT snapshots should be used for the next training run: they contain old sale
-references and were superseded by the current continuation and curation work.
+The five superseded rendered synthetic SFT snapshots were removed on
+2026-09-21 after the archive audit; the temporary compressed copies were also
+removed. Older v1–v6 reference outputs, v5–v8 student SFT exports, pre-IR
+external traces and SFT renders, quarantined s112 support data, obsolete
+agent-behavior outputs, and historical pilot model runs and exports were
+removed in the same cleanup. Paths to these historical outputs elsewhere in
+this document are provenance, not available training inputs. The current IR,
+manifests, original external datasets, reference reviews, and active teacher
+trajectories remain available for the corrected rebuild.
 
 The page-content pass completed 110 attempts: 100 accepted and admitted,
 eight quiesced, and two raised exceptions. Its reference-bank refresh verified
