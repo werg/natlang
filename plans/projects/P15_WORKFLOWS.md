@@ -1,6 +1,20 @@
 # P15 — Stateful API workflow composer
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: durable local fixture in `codebases/api_workflow/` and
+`applications/workflow_service.mjs`. [Shared capabilities](README.md).
+
+`step.nl` is a natlang Fold step: it reloads the durable order, chooses the
+next operation or reconciliation action, and asks the host to apply it. The
+host enforces phase and revision checks, persists intent before a remote
+effect, and keeps a separate idempotent receipt store. Lost acknowledgements
+remain pending across restart. Reconciliation finds the receipt without
+repeating a charge. Exact tests exercise the natlang Fold, restart, stale
+replay, definite shipping failure, and failed refund.
+
+This is a single-writer fixture, not a service integration. Concurrent process
+locking, real provider idempotency/lookup contracts, and authentication remain
+gates. The fixture leaves an unresolved obligation if no receipt exists;
+absence alone is not proof that no effect occurred.
 
 ## Natlang prerequisites
 
