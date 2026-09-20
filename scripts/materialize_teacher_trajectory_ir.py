@@ -90,7 +90,6 @@ def materialize(row, *, system_prompt: str):
                                                   validation_feedback="caller", log=log,
                                                   segment_turns=segment_turns,
                                                   segment_messages=segment_messages),
-                             max_episodes=2000 if lowered is not None else 4,
                              capabilities=lowered.capabilities if lowered is not None else None,
                              trace_sink=recorder).run_root(root)
     if outcome.kind != row["outcome"]["status"] or (

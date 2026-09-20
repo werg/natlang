@@ -114,5 +114,25 @@ two-turn settings recorded. Replay preserved the result, materialized the note
 as a target, and reopened the next sample from four messages containing the
 note and current workspace. Rendered with the same student template, this
 trajectory is included in `data/teacher-reviewed-with-continuation.sft.jsonl`
-(943 pairs total). Bulk teacher generation remains paused pending a broader
-checkpoint-success comparison.
+(943 pairs total). Bulk teacher generation was subsequently resumed on
+2026-09-20. The balanced whole-program collector writes complete teacher
+choices, reasoning, tool calls, and checkpoints to
+`runs/teacher-program-balanced-s909-pass1.ir.jsonl`; the page-content leaf
+collector writes review and trajectory IR to
+`runs/teacher-leaves-s74-pages-20260920*`. These are append-only collection
+outputs; accepted trajectories must still pass replay before SFT export.
+
+The original seed-74 frozen IR is a historical snapshot. Its shopkeeper
+effect contracts are stale for five programs (IDs 3787, 8767, 8803, 8811,
+8824): replay emits the correct sequence but the saved contract contains too
+few effects. Rebuilding from the pinned generator manifest with current sources
+produced `data/external_pilot/synthetic-s74-refrozen-20260920.ir.jsonl`.
+Its manifest explicitly records source and reference-bank drift, so this is a
+new corpus revision rather than a historical match. All 10,000 records pass
+the IR schema audit, and the five old shopkeeper failures pass individual
+runtime verification. Its initial 179 provisional programs remain excluded
+from SFT until leaf references are admitted. Full continuation replay verified
+all 10,000 programs, yielding 279,335 turns: 271,832 eligible and 7,503
+provisional. SFT rendering uses this new revision; a separate watcher refreshes
+it after the page-content collector finishes. The teacher replay bridge has
+no episode cap; the finite recorded trajectory itself bounds replay.
