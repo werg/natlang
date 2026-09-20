@@ -146,6 +146,8 @@ provisional. All 271,832 eligible turns rendered to
 unique ID count agree; 270,688 prompts (99.58%) have at most 12 conversation
 items, and the maximum is 14. Its LFM2.5-350M template hash is
 `70278c3c69a31e89c2383bb2c4cb5f22ec8456069bcd194d553c30a00dbe1b05`.
-A separate watcher refreshes the IR after the page-content collector finishes.
+A separate watcher refreshes the IR, verifies all programs, and renders a new
+SFT bundle after the page-content collector finishes. It checks the pair count
+and the pinned student template hash before publishing the rendered bundle.
 The teacher replay bridge has no episode cap; the finite recorded trajectory
 itself bounds replay.

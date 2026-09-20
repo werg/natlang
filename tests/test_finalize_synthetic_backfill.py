@@ -47,3 +47,24 @@ def test_retry_missing_omits_per_turn_cap(tmp_path, monkeypatch):
     assert len(commands) == 1
     assert "--turn-tokens" not in commands[0]
     assert commands[0][-2:] == ["--audit-out", str(audit_path)]
+
+
+def test_render_sft_checks_count_and_template_before_publishing(tmp_path, monkeypatch):
+    result = {"ir": str(tmp_path / "snapshot.ir.jsonl"),
+              "shards": str(tmp_path / "shards"),
+              "trace_counts": {"eligible_turns": 2}}
+
+    def render(command):
+        stage = tmp_path / "snapshot.sft.jsonl.building"
+        assert command[2:4] == [str(tmp_path / "shards"), str(stage)]
+        stage.write_text('{"id":"a"}\n{"id":"b"}\n')
+        stage.with_suffix(stage.suffix + ".manifest.json").write_text(json.dumps({
+            "pairs": 2, "renderer": {"template_sha256": "expected"}}))
+
+    monkeypatch.setattr(finalize, "run", render)
+    finalized = finalize.render_sft(result, "http://localhost:8080", "student",
+                                    "expected", 4)
+    assert finalized["sft_pairs"] == 2
+    assert (tmp_path / "snapshot.sft.jsonl").exists()
+    assert (tmp_path / "snapshot.sft.jsonl.manifest.json").exists()
+    assert json.loads((tmp_path / "snapshot.summary.json").read_text())["sft_pairs"] == 2

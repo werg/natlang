@@ -141,6 +141,37 @@ def finalize(src: Path, references: Path, prefix: Path, workers: int,
     return result
 
 
+def render_sft(result: dict, server: str, template_id: str,
+               template_sha256: str, workers: int) -> dict:
+    """Render eligible turns from the refreshed snapshot with a pinned template."""
+    ir = Path(result["ir"])
+    if not ir.name.endswith(".ir.jsonl"):
+        raise ValueError(f"unexpected refreshed IR name: {ir}")
+    sft = ir.with_name(ir.name.removesuffix(".ir.jsonl") + ".sft.jsonl")
+    stage = Path(str(sft) + ".building")
+    stage_manifest = stage.with_suffix(stage.suffix + ".manifest.json")
+    manifest = sft.with_suffix(sft.suffix + ".manifest.json")
+    if any(path.exists() for path in (sft, stage, stage_manifest, manifest)):
+        raise FileExistsError(f"SFT destination already exists: {sft}")
+    run([sys.executable, str(ROOT / "scripts/export_sft.py"), result["shards"], str(stage),
+         "--server", server, "--template-id", template_id, "--workers", str(workers)])
+    rendered = json.loads(stage_manifest.read_text())
+    expected = result["trace_counts"]["eligible_turns"]
+    if rendered["pairs"] != expected:
+        raise ValueError(f"SFT has {rendered['pairs']} pairs, expected {expected}")
+    actual_hash = rendered["renderer"]["template_sha256"]
+    if actual_hash != template_sha256:
+        raise ValueError(f"SFT template hash {actual_hash} differs from {template_sha256}")
+    stage.replace(sft)
+    stage_manifest.replace(manifest)
+    result.update({"sft": str(sft), "sft_pairs": expected,
+                   "sft_template_sha256": actual_hash})
+    ir.with_name(ir.name.removesuffix(".ir.jsonl") + ".summary.json").write_text(
+        json.dumps(result, indent=2) + "\n")
+    print(f"rendered {expected} SFT pairs -> {sft}", flush=True)
+    return result
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--teacher-pid", type=int, required=True)
@@ -157,9 +188,16 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--shard-size", type=int, default=100)
     ap.add_argument("--poll-seconds", type=int, default=30)
+    ap.add_argument("--sft-template-id", help="render a checked SFT bundle after refreshing")
+    ap.add_argument("--sft-template-sha256", help="required template hash when rendering SFT")
+    ap.add_argument("--sft-server", default="http://127.0.0.1:8080")
+    ap.add_argument("--sft-workers", type=int, default=16)
     args = ap.parse_args()
-    if min(args.expected_attempts, args.workers, args.shard_size, args.poll_seconds) < 1:
-        ap.error("expected-attempts, workers, shard-size and poll-seconds must be positive")
+    if min(args.expected_attempts, args.workers, args.shard_size, args.poll_seconds,
+           args.sft_workers) < 1:
+        ap.error("expected-attempts, workers, shard-size, poll-seconds and sft-workers must be positive")
+    if bool(args.sft_template_id) != bool(args.sft_template_sha256):
+        ap.error("--sft-template-id and --sft-template-sha256 must be supplied together")
     wait_for_pass(args.teacher_pid, args.teacher_start_tick, args.teacher_audit,
                   args.expected_attempts, args.poll_seconds)
     audits = [args.teacher_audit]
@@ -167,8 +205,11 @@ def main() -> None:
         retry_missing_without_turn_cap(args.src, args.references, args.retry_audit)
         if args.retry_audit.exists():
             audits.append(args.retry_audit)
-    finalize(args.src, args.references, args.out_prefix, args.workers,
-             args.shard_size, teacher_audits=audits)
+    result = finalize(args.src, args.references, args.out_prefix, args.workers,
+                      args.shard_size, teacher_audits=audits)
+    if args.sft_template_id:
+        render_sft(result, args.sft_server, args.sft_template_id,
+                   args.sft_template_sha256, args.sft_workers)
 
 
 if __name__ == "__main__":
