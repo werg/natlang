@@ -124,6 +124,16 @@ test('native disk source loader reproduces Python triage program state', { skip:
   assert.deepEqual(dumpState(loadFunctionFile(path)), JSON.parse(py.stdout));
 });
 
+test('native checked definitions preserve Python isolated uses scopes', { skip: !python }, () => {
+  const entries = { main: { args: { input: 'Alias' }, returns: 'Num',
+    instructions: 'Use helper.', types: { Alias: 'Num' }, uses: { helper: 'helper' } },
+  helper: { args: { value: 'Num' }, returns: 'Num', code: 'return args.value + 1;' } };
+  const script = `import json,sys\nfrom natlang.host import load_definitions\nfrom natlang.values import dump_state\n_,root=load_definitions(json.load(sys.stdin),'main')\nprint(json.dumps(dump_state(root)))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(entries), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  assert.deepEqual(dumpState(checkedDefinitions(entries, 'main').instantiate()), JSON.parse(py.stdout));
+});
+
 test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{ number: Num, text?: Text }, { count: Num, label: Text }>',
     instructions: 'Copy the number and label it.', args: { number: 3 },

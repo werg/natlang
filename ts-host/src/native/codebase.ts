@@ -44,10 +44,15 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
   function inline(name: string): Record<string, unknown> {
     const def = supplied[name]!;
     const kind = def.code !== undefined ? 'code' : 'instructions';
-    return { args: def.args ?? {}, returns: def.returns, [kind]: def[kind],
+    const source = String(def[kind] ?? '').replace(/^\n+|\n+$/g, '') + '\n';
+    const children = Object.fromEntries(Object.entries(def.uses ?? {})
+      .map(([alias, target]) => [alias, inline(target)]));
+    return { description: def.description ?? '', args: def.args ?? {}, returns: def.returns,
+      [kind]: source,
+      ...(def.types && Object.keys(def.types).length ? { types: def.types } : {}),
+      ...(def.effects?.length ? { effects: def.effects } : {}),
       ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
-      types: def.types ?? {}, effects: def.effects ?? [], description: def.description ?? '',
-      codebase: Object.fromEntries(Object.entries(def.uses ?? {}).map(([alias, target]) => [alias, inline(target)])) };
+      ...(Object.keys(children).length ? { codebase: children } : {}) };
   }
   const stable = canonical(supplied);
   const revision = hexDigest(stable);
@@ -59,8 +64,9 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
     const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${def.returns}>`, [kind]: def[kind],
       ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
       args: inputs, types: def.types ?? {}, effects: def.effects ?? [],
-      codebase: doc.codebase, function: root } });
+      function: root } });
     if (node.nodeKind !== 'lambda') throw new Error('internal graph root error');
+    node.codebase = (doc.codebase ?? {}) as Record<string, unknown>;
     return node;
   } };
 }
