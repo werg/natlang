@@ -1,6 +1,6 @@
 # P16 — Simulation and experiment laboratory
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: finite laboratory implemented in [codebases/experiment_lab](../../codebases/experiment_lab/README.md) and [applications/experiment_lab.py](../../applications/experiment_lab.py). [Shared capabilities](README.md). Natlang selects bounded cases and interprets exact results; the host runs isolated trials, pins seeds/source revisions, records traces and an append-only journal, and verifies report metrics. The first backend compares whole-history and incremental semantic document merges. Live-model and semantic-review pilots, other simulation backends, and streaming progress remain open.
 
 ## Natlang prerequisites
 
