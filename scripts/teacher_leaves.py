@@ -146,6 +146,10 @@ def main():
     ap.add_argument("--retry-audit", type=Path,
                     help="retry only rejected keys from this audit")
     ap.add_argument("--retry-status", choices=("all", "quiesced", "done", "exception"), default="all")
+    ap.add_argument("--functions", nargs="+", choices=tuple(WHERE),
+                    help="collect only these generative leaf functions from a frozen corpus")
+    ap.add_argument("--exclude-audit", type=Path, action="append", default=[],
+                    help="skip keys already attempted in an earlier audit; may repeat")
     ap.add_argument("--limit", type=int, default=10**9, help="stop after this many leaves")
     ap.add_argument("--temperature", type=float, default=0)
     ap.add_argument("--reasoning-effort", choices=("low", "medium", "xhigh"), default="low")
@@ -195,6 +199,15 @@ def main():
     if a.retry_audit:
         wanted = retry_keys(a.retry_audit, a.retry_status)
         todo = [item for item in todo if item[0] in wanted]
+    if a.functions:
+        wanted_functions = set(a.functions)
+        todo = [item for item in todo if item[1] in wanted_functions]
+    if a.exclude_audit:
+        attempted = set()
+        for path in a.exclude_audit:
+            with path.open() as source:
+                attempted.update(json.loads(line)["key"] for line in source if line.strip())
+        todo = [item for item in todo if item[0] not in attempted]
     print(f"{len(todo)} generative leaves without a reference", flush=True)
     dec = LlamaServerDecoder(a.server, chat_extra={"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20,
                                          "chat_template_kwargs": {"reasoning_effort": a.reasoning_effort}},
