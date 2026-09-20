@@ -1,9 +1,9 @@
 # P03 — Build tool with bounded self-repair
 
-Status: first serial execution slice implemented in
+Status: serial execution and exact built-in cache slice implemented in
 [`codebases/build_workbench`](../../codebases/build_workbench/README.md),
 [`applications/build_workbench.mjs`](../../applications/build_workbench.mjs), and
-the TypeScript host integration test. Cache correctness, repair, teacher quality
+the TypeScript host integration test. General process caching, repair, teacher quality
 and background execution remain open. [Shared capabilities](README.md).
 
 ## Natlang prerequisites
@@ -35,10 +35,12 @@ ready tasks within the goal's dependency closure. The host rejects stale output,
 changed input and invalid paths, records hashes and process status, and labels
 an interrupted command's effects unknown. The trace now includes native host
 observations even when an eval throws after mutation. This is a trusted command
-environment, so caching would currently be unsound: the adapter cannot observe
-undeclared reads or all external writes. Enforcing a complete read set, pinning
-toolchain/environment identity, and checking cached output content are the next
-infrastructure and application gates before enabling reuse. A failed build that
+environment, so caching arbitrary commands would be unsound: the adapter
+cannot observe undeclared reads or all external writes. An exact built-in
+profile now caches copy, concat and uppercase using declared input bytes,
+versioned operation identity and verified stored output content; tests cover
+hit, changed input and corrupt cache. Enforcing a complete read set and pinning
+toolchain/environment identity remain gates for general subprocess reuse. A failed build that
 created output requires reconciliation before retry.
 
 1. Build a tiny project serially and compare outputs with a clean reference build.

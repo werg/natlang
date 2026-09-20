@@ -117,3 +117,35 @@ test('input mutation and preexisting outputs are rejected as verified builds', a
     assert.match(second.result.value.detail, /output already exists/);
   } finally { rmSync(second.folder, { recursive: true, force: true }); }
 });
+
+test('exact built-in cache reuses outputs, invalidates changed inputs, and rejects corrupt entries', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-build-cache-test-'));
+  const cacheDir = join(root, 'cache');
+  const task = { id: 'copy', needs: [], description: 'copy bytes', argv: ['@builtin', 'copy'],
+    inputs: ['input.txt'], outputs: ['output.txt'] };
+  const execute = async (name, value) => {
+    const folder = join(root, name); mkdirSync(folder);
+    writeFileSync(join(folder, 'input.txt'), value);
+    const workspace = await new BuildWorkspace(folder, { cacheDir }).open();
+    const result = await workspace.execute(task);
+    return { result, events: workspace.drainEvents(), folder };
+  };
+  try {
+    const first = await execute('first', 'hello');
+    assert.equal(first.result.status, 'ok');
+    assert.equal(first.result.detail, 'built-in copy');
+    const key = first.events.find(e => e.operation === 'build.cache').key;
+    const second = await execute('second', 'hello');
+    assert.equal(second.result.detail, 'cache hit');
+    assert.equal(readFileSync(join(second.folder, 'output.txt'), 'utf8'), 'hello');
+    const changed = await execute('changed', 'goodbye');
+    assert.equal(changed.result.detail, 'built-in copy');
+    assert.notEqual(changed.result.output_sha256, first.result.output_sha256);
+    writeFileSync(join(cacheDir, key, 'output.bin'), 'corrupt');
+    const repaired = await execute('repaired', 'hello');
+    assert.equal(repaired.result.status, 'ok');
+    assert.equal(repaired.result.detail, 'built-in copy');
+    assert.ok(repaired.events.some(e => e.operation === 'build.cache' && e.status === 'invalid'));
+    assert.equal(readFileSync(join(repaired.folder, 'output.txt'), 'utf8'), 'hello');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
