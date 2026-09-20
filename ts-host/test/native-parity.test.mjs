@@ -240,3 +240,34 @@ test('native trace preserves declared effect order before a failed eval', { skip
     'typescript-host');
   assert.deepEqual(runtime.trace.reconstruct(), runtime.trace.finalState());
 });
+
+test('native completion-mark output matches Python compact listing', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>',
+    instructions: '1. Do this.\n2. Do that.\n3. Skip this.\n4. Finish.' } };
+  const calls = [
+    ['mark_done', { start: 1, end: 2 }],
+    ['mark_done', { start: 3, skipped: true }],
+    ['mark_done', { start: 7 }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([s.apply(n,a).text for n,a in calls]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(calls.map(([name, args]) => session.apply(name, args).text), expected);
+});
+
+test('native successful writes and edits include Python progress text', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Write one.' } };
+  const calls = [
+    ['write', { path: 'let/draft', type: 'Text', value: 'one word' }],
+    ['edit', { path: 'let/draft', old: 'one', new: 'two' }],
+    ['write', { path: 'return', type: 'Num', value: 1 }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([s.apply(n,a).text for n,a in calls]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(calls.map(([name, args]) => session.apply(name, args).text), expected);
+});

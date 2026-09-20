@@ -40,6 +40,34 @@ function rejected(error: Reject): NativeResult {
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
+function programListing(body: string, marks: Record<number, string>, window = 3): string {
+  const lines = body.replace(/^\n+|\n+$/g, '').split('\n');
+  const width = String(lines.length).length, output: string[] = [], closed: number[] = [];
+  const flush = () => {
+    if (!closed.length) return;
+    const kinds = new Set(closed.map(number => marks[number]).filter(Boolean));
+    const box = kinds.size === 1 && kinds.has('done') ? '[x]' :
+      kinds.size === 1 && kinds.has('skipped') ? '[-]' : '[x/-]';
+    const first = closed[0]!, last = closed.at(-1)!;
+    output.push(`${String(first === last ? first : `${first}-${last}`).padStart(width)} ${box}`);
+    closed.length = 0;
+  };
+  for (const [index, raw] of lines.entries()) {
+    const number = index + 1, text = raw.trimEnd(), trimmed = text.trim();
+    const markable = !!trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('function ');
+    if (Object.hasOwn(marks, number) || (!markable && closed.length)) { closed.push(number); continue; }
+    flush();
+    const box = markable ? marks[number] === 'done' ? '[x]' : marks[number] === 'skipped' ? '[-]' : '[ ]' : '   ';
+    output.push(`${String(number).padStart(width)} ${box} ${text}`.trimEnd());
+  }
+  flush();
+  if (window) {
+    const open = output.flatMap((line, index) => line.slice(0, width + 5).includes('[ ]') ? [index] : []);
+    if (open.length > window) return [...output.slice(0, open[window]),
+      `${' '.repeat(width)} … ${open.length - window} more lines to do`].join('\n');
+  }
+  return output.join('\n');
+}
 function jsView(value: Value): unknown {
   if (value === MISSING) return null;
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
@@ -475,12 +503,46 @@ export class NativeSession {
     if (p.holes.length || p.pending.length) return false;
     this.completed = true; this.lam.body = ''; return true;
   }
+  private summary(): string {
+    if (this.lam.type.kind !== 'lambda') return 'problems: 0 blocking · 0 holes';
+    if (this.lam.return === MISSING) return 'problems: 0 blocking · 0 holes';
+    const issues = problems(this.lam.return, this.lam.type.returns, this.env, 'return');
+    return `problems: 0 blocking · ${issues.holes.length} holes`;
+  }
+  private progress(): string {
+    const size = (value: Value): string => {
+      if (value === MISSING) return 'not finished';
+      if (pending(value)) return 'not finished';
+      if (Array.isArray(value)) return `${value.length} items`;
+      if (typeof value === 'string') return `${value.trim().split(/\s+/).filter(Boolean).length} words`;
+      if (value && typeof value === 'object') return 'record';
+      return JSON.stringify(value).slice(0, 40);
+    };
+    const locals = Object.keys(this.lam.letTypes).filter(name => Object.hasOwn(this.lam.let, name))
+      .map(name => `${name} (${size(this.lam.let[name]!)})`).join(', ') || 'none';
+    let result = 'written';
+    if (this.lam.return === MISSING) result = 'not written yet';
+    else if (this.lam.type.kind === 'lambda') {
+      const type = this.env.resolve(this.lam.type.returns);
+      if (type.kind === 'record' && this.lam.return && typeof this.lam.return === 'object' &&
+          !Array.isArray(this.lam.return) && !pending(this.lam.return)) {
+        const value = this.lam.return as Record<string, Value>;
+        const missing = type.fields.filter(field => !field.optional && !Object.hasOwn(value, field.name))
+          .map(field => field.name);
+        result = missing.length ? `has ${Object.keys(value).join(', ') || 'nothing'}; still missing ${missing.join(', ')}` : 'complete';
+      } else if (pending(this.lam.return)) result = 'not finished';
+    }
+    return `locals: ${locals}\nreturn: ${result}`;
+  }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
+    if (['write', 'edit'].includes(name) && result.kind === 'ok') result.text = `ok   ${this.summary()}`;
     if ((name === 'write' || name === 'call') && args.done !== undefined && ['ok', 'done'].includes(result.kind)) {
       const mark = this.doneRange(args.done);
       const marked = this.applyNow('mark_done', mark);
-      result.text = result.text.trimEnd() + '\n' + marked.text;
+      result.text = result.text.trimEnd() + '\n' + marked.text.slice(marked.text.indexOf('\n') + 1);
     }
+    if (['write', 'edit', 'call'].includes(name) && ['ok', 'done', 'quiesced'].includes(result.kind))
+      result.text = result.text.trimEnd() + '\n' + this.progress();
     this.runtime.trace.emit('action', { surface: 'tools-v3', name, arguments: args,
       outcome: result.kind, codes: result.codes ?? [] });
     return result;
@@ -488,12 +550,17 @@ export class NativeSession {
   private doneRange(raw: unknown): { start: number; end: number } {
     const values = Array.isArray(raw) ? raw : [raw];
     if (values.length < 1 || values.length > 2 || values.some(value => !Number.isInteger(value)))
-      throw new Reject([{ path: 'done', code: 'bad-range' }]);
+      throw new Reject([{ path: 'done', code: 'bad-range', expected: 'a line number, or [first, last]' }]);
     const start = Number(values[0]), end = Number(values.at(-1));
-    const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-    if (start < 1 || end < start || end > lines.length)
-      throw new Reject([{ path: 'done', code: 'bad-range', expected: `line numbers between 1 and ${lines.length}` }]);
+    this.validateMark(start, end);
     return { start, end };
+  }
+  private validateMark(start: unknown, end: unknown): void {
+    const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
+    if (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 ||
+        Number(end) < Number(start) || Number(end) > lines.length)
+      throw new Reject([{ path: 'start', code: 'bad-range',
+        expected: `line numbers between 1 and ${lines.length}, start <= end`, got: `${start}..${end}` }]);
   }
   /** Legacy one-header text action surface used by the conformance harness. */
   async act(source: string): Promise<NativeResult> {
@@ -542,7 +609,7 @@ export class NativeSession {
       return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
     if (name !== 'mark_done') this.actions++;
-    this.lam.steps++;
+    if (name !== 'mark_done') this.lam.steps++;
     if (name === 'write' && args.done !== undefined) try { this.doneRange(args.done); }
     catch (error) { if (error instanceof Reject) return this.record(name, args, rejected(error)); throw error; }
     return this.record(name, args, this.applyNow(name, args));
@@ -555,14 +622,15 @@ export class NativeSession {
         return { kind: 'blocked', text: message };
       }
       if (name === 'mark_done') {
-        const { start, end } = this.doneRange([args.start, args.end ?? args.start]);
+        const start = args.start, end = args.end ?? args.start;
+        this.validateMark(start, end);
         const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-        for (let i = start; i <= end; i++) {
+        for (let i = Number(start); i <= Number(end); i++) {
           const text = lines[i - 1]!.trim();
           if (text && !text.startsWith('#') && !text.startsWith('function '))
             this.lam.marks[i] = args.skipped === true ? 'skipped' : 'done';
         }
-        return { kind: 'ok', text: `ok\n${start}..${end} marked` };
+        return { kind: 'ok', text: `ok\n${programListing(this.lam.originalBody ?? this.lam.body, this.lam.marks)}` };
       }
       if (name === 'write') {
         const path = String(args.path ?? '');
