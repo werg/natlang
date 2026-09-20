@@ -142,7 +142,8 @@ export class NativeRuntime {
         }
       }
     }
-    const unbound = unboundParts(node, ref.env, ref.path);
+    const unbound = unboundParts(node, ref.env, ref.path).filter(d =>
+      !(this.stream && !ref.path && node.nodeKind === 'fold' && d.path === '/over'));
     if (unbound.length) return this.quiesce(ref, node, `unbound: ${unbound.map(d => d.path).join(', ')}`);
     switch (node.nodeKind) {
       case 'lambda': return node.kind === 'code' ? this.crisp(ref, node, env) : this.episode(ref, node);
@@ -313,6 +314,24 @@ export class NativeSession {
       if (name === 'write') {
         const path = String(args.path ?? '');
         if (path.startsWith('args/')) throw new Reject([{ path, code: 'not-writable' }]);
+        const functionCopy = /^Function<([A-Za-z_][A-Za-z0-9_]*)>$/.exec(String(args.type ?? ''));
+        if (functionCopy) {
+          const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
+          const def = this.lam.codebase[functionCopy[1]!] as Record<string, unknown> | undefined;
+          if (!local || !def) throw new Reject([{ path, code: !local ? 'not-writable' : 'no-such-function' }]);
+          const params = Object.entries(def.args as Record<string, string> ?? {}).map(([key, type]) => `${key}: ${type}`).join(', ');
+          const type = parseType(`Lambda<{ ${params} }, ${String(def.returns)}>`);
+          const kind = Object.hasOwn(def, 'code') ? 'code' : 'instructions';
+          const copied = buildPending({ $lambda: { type: formatType(type), [kind]: def[kind],
+            engine: def.engine, types: def.types ?? {}, effects: def.effects ?? [],
+            codebase: def.codebase ?? {}, function: functionCopy[1] } }, this.env);
+          if (copied.nodeKind !== 'lambda') throw new Error('internal function copy error');
+          this.checkEffects(copied, path);
+          this.lam.letTypes[local] = type;
+          this.lam.let[local] = copied;
+          this.lam.fnCopies[local] = def;
+          return { kind: 'ok', text: `ok   ${path} is a copy of ${functionCopy[1]}` };
+        }
         const stated = parseType(String(args.type ?? ''));
         const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
         const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
@@ -434,14 +453,35 @@ export class NativeSession {
     if (name !== 'call') return this.apply(name, args);
     try {
       const label = String(args.function ?? '');
-      const definition = this.lam.codebase[label] as Record<string, unknown> | undefined;
+      const copyName = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(label)?.[1];
+      const template = copyName ? this.lam.let[copyName] : undefined;
+      const original = copyName ? this.lam.fnCopies[copyName] as Record<string, unknown> | undefined : undefined;
+      const definition = copyName && template !== undefined && pending(template) && template.nodeKind === 'lambda' && original ?
+        { ...original, [template.kind]: template.body, codebase: template.codebase } :
+        this.lam.codebase[label] as Record<string, unknown> | undefined;
       if (!definition) throw new Reject([{ path: 'function', code: 'no-such-function', got: label }]);
+      const functionName = copyName && template !== undefined && pending(template) && template.nodeKind === 'lambda' ?
+        template.functionName : label;
+      const path = String(args.to ?? '');
+      if (['inputs', 'values', 'over', 'init', 'until', 'max'].every(key => args[key] === undefined)) {
+        try {
+          const existingRef = this.resolve(path);
+          const existing = existingRef.get();
+          if (pending(existing) && ['unreduced', 'quiesced'].includes(existing.status) &&
+              (existing.nodeKind === 'lambda' ? existing.functionName :
+                existing.nodeKind === 'map' && pending(existing.fn) && existing.fn.nodeKind === 'lambda' ? existing.fn.functionName : '') ===
+                functionName) {
+            const outcome = await this.runtime.trigger(existingRef);
+            return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
+          }
+        } catch (error) { if (!(error instanceof Reject)) throw error; }
+      }
       const signature = definition.args as Record<string, string> ?? {};
       const params = Object.entries(signature).map(([name, type]) => `${name.replace(/\?$/, '')}${name.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
       const typeText = `Lambda<{ ${params} }, ${String(definition.returns)}>`;
       const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
       const inputPaths = (args.inputs ?? {}) as Record<string, string>;
-      const values: Record<string, unknown> = {};
+      const values: Record<string, unknown> = { ...args.values as Record<string, unknown> ?? {} };
       for (const [name, path] of Object.entries(inputPaths)) values[name] = cloneValue(this.resolve(path).get());
       const required = Object.keys(signature).filter(name => !name.endsWith('?')).map(name => name.replace(/\?$/, ''));
       const over = args.over === undefined ? undefined : this.resolve(String(args.over)).get();
@@ -453,7 +493,7 @@ export class NativeSession {
         throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
       const leaf = { type: typeText, [kind]: definition[kind],
         engine: definition.engine ?? 'typescript-host', args: values, types: definition.types ?? {},
-        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: label };
+        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName };
       let raw: Record<string, unknown> = { $lambda: leaf };
       let destination = String(definition.returns);
       if (args.until !== undefined) {
@@ -482,7 +522,6 @@ export class NativeSession {
         destination = `${definition.returns}[]`;
       }
       const child = buildPending(raw, this.env);
-      const path = String(args.to ?? '');
       if (path.startsWith('let/')) {
         const local = path.slice(4);
         if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(destination);
@@ -491,11 +530,7 @@ export class NativeSession {
       if (ref.deny) throw new Reject([{ path, code: ref.deny }]);
       if (!ref.type || !fitsType(child.type, ref.type, this.env))
         throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: ref.type ? formatType(ref.type) : '' }]);
-      const existing = ref.get();
-      const resume = pending(existing) && ['unreduced', 'quiesced'].includes(existing.status) &&
-        existing.nodeKind === 'lambda' && existing.functionName === label &&
-        ['inputs', 'values', 'over', 'init', 'until', 'max'].every(key => args[key] === undefined);
-      if (!resume) { this.checkEffects(child, path); ref.set(child); }
+      this.checkEffects(child, path); ref.set(child);
       const outcome = await this.runtime.trigger(ref);
       return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
     } catch (error) {

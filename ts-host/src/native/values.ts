@@ -31,7 +31,8 @@ const reject = (path: string, code: string, expected?: string, got?: string): ne
   throw new Reject([{ path, code, expected, got }]);
 };
 const plain = (value: unknown): value is Record<string, unknown> => value !== null &&
-  typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+  typeof value === 'object' && !Array.isArray(value) &&
+  (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 export const isPending = (value: unknown): value is Pending => plain(value) &&
   ['lambda', 'map', 'fold', 'iterate'].includes(String(value.nodeKind));
 
