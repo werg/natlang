@@ -103,6 +103,19 @@ def test_file_source_view_masks_target_signature():
     assert s.target["revision"] and s.snapshot_sha256
 
 
+def test_optional_parameter_marker_is_preserved_in_inference():
+    graph = from_definitions({"optional": {"args": {"prefix?": "Text", "value": "Text"},
+                                           "returns": "Text", "instructions": "Combine inputs."}},
+                             "optional")
+    s = TypeStudio.from_graph(graph, "optional")
+    assert s.target["parameters"] == ["prefix?", "value"]
+    correct = {"args": {"prefix?": "Text", "value": "Text"}, "returns": "Text", "effects": [],
+               "reason": "Optional prefix.", "alternatives": []}
+    assert s.check_candidate(s.target, s.context, correct)["obligations_ok"]
+    wrong = {**correct, "args": {"prefix": "Text", "value": "Text"}}
+    assert not s.check_candidate(s.target, s.context, wrong)["obligations_ok"]
+
+
 def test_grouped_type_fixtures_have_independent_exact_outcomes():
     cases = [json.loads(line) for line in Path(
         "codebases/type_studio/scenarios/cases.jsonl").read_text().splitlines()]

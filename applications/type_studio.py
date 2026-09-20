@@ -41,7 +41,7 @@ class TypeStudio:
                    required_effects: list[str] | None = None) -> "TypeStudio":
         fn = graph.get(target_name)
         target = {"name": fn.name, "body": fn.body,
-                  "parameters": [name.rstrip("?") for name in fn.args], "revision": graph.revision}
+                  "parameters": list(fn.args), "revision": graph.revision}
         context = {"named_types": dict(fn.types),
                    "signatures": [{"name": other.name, "args": dict(other.args), "returns": other.returns}
                                   for other in graph.definitions.values() if other.name != fn.name],
@@ -111,7 +111,8 @@ class TypeStudio:
                 evidence_type = self._type(obligation["type"], env)
                 if obligation["kind"] == "argument":
                     parameter = obligation["parameter"]
-                    okay = parameter in args and fits(evidence_type, args[parameter], env)
+                    proposed = args.get(parameter) or args.get(parameter + "?")
+                    okay = proposed is not None and fits(evidence_type, proposed, env)
                     description = f"caller value does not fit parameter {parameter}"
                 elif obligation["kind"] == "return":
                     okay = fits(returns, evidence_type, env)

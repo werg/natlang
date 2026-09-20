@@ -108,7 +108,7 @@ class Explorer:
         except Exception as exc:
             status, state = "execution-error", None
             detail = f"{type(exc).__name__}: {exc}"
-            trace = {"sha256": digest(detail), "path": None, "events": None}
+            trace = {"sha256": "", "path": None, "events": None}
         try:
             violations = graph_violations(tasks, state) if status == "done" else []
         except (KeyError, TypeError, ValueError) as exc:
