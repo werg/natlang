@@ -80,7 +80,9 @@ def inspect_trace(path: Path) -> dict:
 def inspect_run(*, journal: Path | None = None, trace_dir: Path | None = None) -> dict:
     if journal is None and trace_dir is None:
         raise ValueError("supply a journal or trace directory")
-    result = {"journal": inspect_journal(journal) if journal is not None else None,
+    result = {"journal": (inspect_journal(journal) if Path(journal).exists()
+                           else {"path": str(journal), "status": "not_started"})
+              if journal is not None else None,
               "traces": []}
     if trace_dir is not None:
         result["traces"] = [inspect_trace(path) for path in sorted(Path(trace_dir).rglob("*.jsonl"))]
