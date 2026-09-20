@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Natlang task board</title>
+<link rel="stylesheet" href="./style.css">
+<header class="shell">
+  <div><strong>Natlang task board</strong><small>Browser-local model · natlang reducer and view plan</small></div>
+  <div class="model-controls">
+    <select id="model" aria-label="Local model"></select>
+    <button id="load">Load model and start</button>
+  </div>
+</header>
+<div id="status" role="status">Load a model to start the natlang application.</div>
+<div class="workspace">
+  <div id="app" aria-live="polite"></div>
+  <aside>
+    <h2>Execution</h2>
+    <p>Each control emits a typed event. Natlang reduces it, then plans the next view. Crisp code validates task IDs and builds safe DOM data.</p>
+    <div id="detail">No events yet.</div>
+  </aside>
+</div>
+<script type="module" src="./app.mjs"></script>
+</html>

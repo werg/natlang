@@ -1,5 +1,8 @@
 # Reusing natlang in browser applications
 
+For natlang-driven event reducers and view plans, see
+[Frontend applications](FRONTEND_APPLICATIONS.md).
+
 `BrowserNatlangClient` is the application-level browser API. It owns one local GGUF model, loads its tool-call template, probes and selects WebGPU, optionally retries loading on CPU, runs native natlang programs, captures per-run model metrics, and closes resources. The lower-level `BrowserLocalModel` and `BrowserNatlangHost` remain available when an application needs custom inference or runtime wiring. Neither API uses the Python interpreter or a remote inference service.
 
 ## Build and serve assets

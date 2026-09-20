@@ -40,11 +40,14 @@ export class BrowserNatlangClient {
   private readonly hostObject?: object;
   private readonly mode?: 'fresh' | 'retained';
   private readonly environment?: TypeScriptEnvironment;
+  private readonly ownsEnvironment: boolean;
 
   constructor(options: BrowserClientOptions = {}) {
     this.hostObject = options.host;
     this.mode = options.mode;
-    this.environment = options.environment;
+    this.ownsEnvironment = !options.environment && options.mode === 'retained';
+    this.environment = options.environment ?? (this.ownsEnvironment ?
+      new TypeScriptEnvironment({ host: options.host, mode: 'retained' }) : undefined);
     this.factory = options.modelFactory ?? (schemaMode => new BrowserLocalModel({ schemaMode,
       wasmUrl: options.wasmUrl, compatWasmUrl: options.compatWasmUrl,
       compatWorkerUrl: options.compatWorkerUrl,
@@ -139,6 +142,7 @@ export class BrowserNatlangClient {
     if (this.closed) return;
     this.ensureIdle();
     await this.current?.close(); this.current = null; this.statusValue = null;
+    if (this.ownsEnvironment) this.environment?.close();
     this.closed = true;
   }
 }

@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
+const application = process.argv.includes('--application');
 const cpu = process.argv.includes('--cpu');
 const gpu = process.argv.includes('--gpu');
 const headed = process.argv.includes('--headed');
@@ -21,6 +22,7 @@ const contextTokens = Number(process.argv.find(arg => arg.startsWith('--context=
   ?? (suite || taskId ? 4096 : 2048));
 const output = process.argv.find(arg => arg.startsWith('--output='))?.slice('--output='.length);
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.wasm': 'application/wasm', '.json': 'application/json' };
 const server = createServer(async (request, response) => {
   try {
@@ -52,7 +54,8 @@ const browser = await chromium.launch({ headless: !headed,
   args: gpu ? ['--no-sandbox', ...(headed ? [] : ['--headless=new', '--disable-vulkan-surface']),
     '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan',
     '--enable-dawn-features=vulkan_enable_f16_on_nvidia'] :
-    ['--no-sandbox', '--enable-unsafe-swiftshader'] });
+    ['--no-sandbox', '--disable-gpu', '--disable-gpu-compositing',
+      '--disable-features=Vulkan,WebGPU', '--use-gl=swiftshader'] });
 try {
   const page = await browser.newPage();
   const errors = [];
@@ -67,6 +70,21 @@ try {
   await page.getByText('PASS browser interpreter').waitFor({ timeout: 30000 });
   console.log('PASS actual Chromium browser interpreter smoke');
   if (errors.length) throw new Error(errors.join('\n'));
+  if (application) {
+  await page.goto(`${url}/ts-host/examples/browser-board/?fixture`);
+  try { await page.getByText('Revision 0 ready').waitFor({ timeout: 30000 }); }
+  catch (error) { console.error('Browser board status:', await page.locator('#status').textContent(), errors);
+    throw error; }
+  await page.getByPlaceholder('Add a task, or describe a change').fill('Buy milk');
+  await page.getByRole('button', { name: 'Apply command' }).click();
+  await page.getByText('Revision 1 ready').waitFor({ timeout: 30000 });
+  await page.locator('#app').getByText('Buy milk', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Complete' }).click();
+  await page.getByText('Revision 2 ready').waitFor({ timeout: 30000 });
+  await page.locator('#app').getByText('Buy milk (done)', { exact: true }).waitFor();
+  console.log('PASS browser natlang application and DOM event smoke');
+  if (errors.length) throw new Error(errors.join('\n'));
+  }
   if (liveModel) {
     await page.goto(`${url}/ts-host/examples/browser-local/`);
     if (quant) await page.locator('#model').selectOption({ label:

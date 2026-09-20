@@ -1,6 +1,7 @@
 import { BrowserLocalModel, BrowserNatlangHost, BrowserNatlangClient,
+  BrowserNatlangApplication, BrowserDomRenderer,
   NativeSourceWorkspace, loadFunctionFiles,
-  type BrowserRunRequest } from '../dist/browser/index.js';
+  type BrowserRunRequest, type UiNode } from '../dist/browser/index.js';
 
 const request: BrowserRunRequest = {
   source: { kind: 'program', program: { $lambda: { type: 'Lambda<{}, Num>', code: 'return 1;' } } },
@@ -21,6 +22,15 @@ void client.loadModel({ kind: 'url', url: '/models/natlang.gguf',
   templateUrl: '/models/template.jinja' }, { contextTokens: 4096 });
 void client.run(request);
 void client.close();
+
+const view: UiNode = { tag: 'button', text: 'Go', action: { kind: 'go' } };
+const application = new BrowserNatlangApplication({ client,
+  source: { files: { 'reduce.ts': '', 'view.ts': '' }, reducer: 'reduce.ts', view: 'view.ts' },
+  initialState: { count: 0 }, onTransition: transition => { void transition.view; } });
+void application.dispatch({ id: 'one', kind: 'go' });
+void application.close();
+void BrowserDomRenderer;
+void view;
 
 const files = { 'main.nl': '---\nreturns: Num\n---\nReturn one.' };
 void loadFunctionFiles('main.nl', files);

@@ -73,3 +73,19 @@ test('browser client shares an application host with crisp eval', async () => {
     assert.equal(result.model, null);
   } finally { await client.close(); }
 });
+
+test('retained browser client keeps one eval environment across application runs', async () => {
+  const { BrowserNatlangClient } = await api();
+  const client = new BrowserNatlangClient({ mode: 'retained' });
+  const environment = client.environment;
+  assert.equal(environment.mode, 'retained');
+  const request = { source: { kind: 'program', program: { $lambda: {
+    type: 'Lambda<{}, Num>', engine: 'typescript-host',
+    code: 'if (typeof invocationCount === "undefined") var invocationCount = 0; return ++invocationCount;',
+  } } } };
+  try {
+    assert.equal((await client.run(request)).value, 1);
+    assert.equal((await client.run(request)).value, 1);
+    assert.equal(client.environment, environment);
+  } finally { await client.close(); }
+});
