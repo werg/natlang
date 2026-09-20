@@ -51,6 +51,8 @@ For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temper
 
 `capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls in the isolated QuickJS engine. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
 
+The native host runs Map slots serially by default. For independent pure work, pass `mapWorkers` and `parallelMapSafe: true`; parallel execution requires a fresh eval environment with no shared host object. Nested `NativeSourceWorkspace` invocations share the parent episode budget when the workspace is exposed directly on that host object.
+
 The native host accepts declared capability callbacks that return values or promises. Authored crisp functions can `await` asynchronous application methods exposed through `host` and declared `fx` calls. `run_code` accepts an awaited expression. `NativeSourceWorkspace` provides versioned source description, type checking, and isolated child invocation through the shared host route.
 
 ## Eval environment and authority

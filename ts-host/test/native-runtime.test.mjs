@@ -290,3 +290,21 @@ test('native run_code can await a declared asynchronous capability', async () =>
     effects: ['counter.add'] } });
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 7);
 });
+
+test('bounded independent Map work overlaps while preserving slot order and shared budget', async () => {
+  let active = 0, peak = 0;
+  const runtime = new NativeRuntime({ mapWorkers: 2, parallelModelSafe: true, maxEpisodes: 4,
+    agent: async session => {
+      active++; peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 8));
+      session.apply('write', { path: 'return', value: session.lam.args.item * 2 });
+      session.finish(); active--;
+    } });
+  const result = await runtime.runRoot({ $map: { type: 'Map<Num, Num>', over: [1, 2, 3, 4],
+    fn: { $lambda: { type: 'Lambda<{ item: Num }, Num>', instructions: 'Double item.' } } } });
+  assert.equal(result.outcome.kind, 'done');
+  assert.deepEqual(result.value, [2, 4, 6, 8]);
+  assert.equal(runtime.episodesStarted, 4);
+  assert.equal(peak, 2);
+  assert.equal(runtime.trace.events.filter(event => event.kind === 'map_slot').length, 4);
+});

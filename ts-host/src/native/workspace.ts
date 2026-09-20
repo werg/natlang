@@ -16,6 +16,7 @@ export class NativeSourceWorkspace {
   readonly root: string;
   readonly revision: string;
   private active = 0;
+  private parentRuntime?: NativeRuntime;
 
   constructor(definitions: Record<string, NativeDefinition>, root: string) {
     this.definitions = structuredClone(definitions);
@@ -42,6 +43,12 @@ export class NativeSourceWorkspace {
     return { actual: formatType(a), expected: formatType(b), fits: fitsType(a, b, new TypeEnv()) };
   }
 
+  bindParent(runtime: NativeRuntime): () => void {
+    const previous = this.parentRuntime;
+    this.parentRuntime = runtime;
+    return () => { if (this.parentRuntime === runtime) this.parentRuntime = previous; };
+  }
+
   async invoke(name: string, inputs: Record<string, unknown> = {}, options: {
     modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
     review?: NativeReviewOptions;
@@ -49,10 +56,12 @@ export class NativeSourceWorkspace {
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
     capabilities?: Record<string, (args: unknown[]) => unknown>;
     environment?: TypeScriptEnvironment;
+    parentRuntime?: NativeRuntime;
     signal?: AbortSignal; timeoutMs?: number;
   } = {}): Promise<NativeChildResult> {
     if (this.active >= 8) throw new RangeError('nested source invocation depth exceeded');
-    const maxEpisodes = options.maxEpisodes ?? 32;
+    const parent = options.parentRuntime ?? this.parentRuntime;
+    const maxEpisodes = options.maxEpisodes ?? Math.min(32, parent?.options.maxEpisodes ?? 32);
     if (!Number.isInteger(maxEpisodes) || maxEpisodes < 1 || maxEpisodes > 32)
       throw new RangeError('child episode budget must be between 1 and 32');
     const graph = checkedDefinitions(this.definitions, name);
@@ -60,12 +69,14 @@ export class NativeSourceWorkspace {
     const environment = options.environment ?? new TypeScriptEnvironment();
     const runtime = new NativeRuntime({ environment, agent: agent ? session => agent.run(session) : undefined,
       capabilities: options.capabilities, maxEpisodes, maxDepth: options.maxDepth,
-      seedPolicy: options.seedPolicy, sourceRevision: graph.revision, parentCallId: options.parentCallId,
+      sharedEpisodeBudget: parent?.episodeBudget,
+      seedPolicy: options.seedPolicy ?? parent?.seedPolicy, sourceRevision: graph.revision,
+      parentCallId: options.parentCallId ?? parent?.currentCallId,
       runId: randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs });
     this.active++;
     try {
       const result = await runtime.runRoot(graph.instantiate(inputs));
-      return { source_revision: graph.revision, parent_call_id: options.parentCallId ?? null,
+      return { source_revision: graph.revision, parent_call_id: options.parentCallId ?? parent?.currentCallId ?? null,
         outcome: result.outcome.kind, value: result.outcome.kind === 'done' ? dump(result.value) : null,
         trace: runtime.trace.events as Record<string, unknown>[] };
     } finally {

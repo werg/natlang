@@ -8,10 +8,11 @@ import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions } from './codebase.js';
 import { NativeRuntime, type NativeStream } from './runtime.js';
 import { loadFunctionFile } from './source.js';
+import { NativeSourceWorkspace } from './workspace.js';
 import { TypeEnv, type Type } from './types.js';
 import { buildPending, coerce, dump, isPending, type Pending } from './values.js';
 
-export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions };
+export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions; parallelMapSafe?: boolean };
 
 /** Python-free host. Its interpreter remains opt-in while differential parity is expanded. */
 export class NativeNatlangHost {
@@ -34,6 +35,7 @@ export class NativeNatlangHost {
     if (request.typescript === false) throw new Error('native host requires the TypeScript eval engine');
     this.running = true;
     let runtime: NativeRuntime | undefined;
+    const unbind: (() => void)[] = [];
     try {
       let root: Pending;
       let fileStreams: Record<string, unknown> = {};
@@ -76,9 +78,12 @@ export class NativeNatlangHost {
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,
         maxEpisodes: request.options?.max_episodes, maxDepth: request.options?.max_depth,
+        mapWorkers: request.mapWorkers, parallelModelSafe: request.parallelMapSafe,
         runId: request.options?.run_id ?? randomUUID(), signal: request.signal, timeoutMs: request.timeoutMs,
         seedPolicy: request.options?.seed?.mode ? {
-          mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
+        mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
+      for (const value of Object.values(this.environment.host))
+        if (value instanceof NativeSourceWorkspace) unbind.push(value.bindParent(runtime));
       let timer: ReturnType<typeof setTimeout> | undefined;
       let abortListener: (() => void) | undefined;
       const interruption = new Promise<never>((_, reject) => {
@@ -104,6 +109,7 @@ export class NativeNatlangHost {
         trace: request.tracePath ? runtime.trace.events as Record<string, unknown>[] : null,
         run_id: runtime.options.runId };
     } finally {
+      for (const release of unbind.reverse()) release();
       runtime?.close();
       this.running = false;
     }

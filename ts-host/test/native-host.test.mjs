@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NativeNatlangHost, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
+import { NativeNatlangHost, NativeRuntime, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
 
 test('public native host runs a program without starting Python', async () => {
   const host = new NativeNatlangHost();
@@ -133,4 +133,18 @@ test('native declared effects await asynchronous application callbacks before co
     assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 5);
     assert.equal(settled, true);
   } finally { host.close(); }
+});
+
+test('nested source invocations share the parent episode budget', async () => {
+  const workspace = new NativeSourceWorkspace({ leaf: { returns: 'Num', instructions: 'Return one.' } }, 'leaf');
+  const parent = new NativeRuntime({ maxEpisodes: 1 });
+  const modelTurn = request => request.messages.some(message => message.role === 'tool' &&
+    String(message.content).includes('ok')) ? { calls: [], text: 'done', completion_tokens: 1 } :
+    { calls: [['write', { path: 'return', value: 1 }]], completion_tokens: 1 };
+  const first = await workspace.invoke('leaf', {}, { parentRuntime: parent, modelTurn });
+  assert.equal(first.outcome, 'done'); assert.equal(first.value, 1);
+  assert.equal(parent.episodesStarted, 1);
+  const second = await workspace.invoke('leaf', {}, { parentRuntime: parent, modelTurn });
+  assert.equal(second.outcome, 'quiesced'); assert.equal(parent.episodesStarted, 1);
+  parent.close();
 });

@@ -35,15 +35,18 @@ export class NativeRuntime {
   readonly trace: NativeTraceRecorder;
   readonly emitted: unknown[] = [];
   readonly origins = new Map<string, LambdaNode>();
-  readonly options: { maxEpisodes: number; maxDepth: number; runId: string };
+  readonly options: { maxEpisodes: number; maxDepth: number; runId: string; mapWorkers: number; parallelModelSafe: boolean };
   readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
   readonly environment: TypeScriptEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
+  readonly episodeBudget: { limit: number; used: number };
   private releaseEffect: () => void;
   private stack: string[] = [];
   private depth = 0;
-  episodesStarted = 0;
+  private localEpisodesStarted = 0;
+  get episodesStarted(): number { return this.episodeBudget.used; }
+  currentCallId?: string;
   private root?: { value: Value };
   private stream?: NativeStream;
   private streamCurrent: Value | undefined;
@@ -56,9 +59,15 @@ export class NativeRuntime {
     maxDepth?: number; runId?: string; stream?: NativeStream;
     signal?: AbortSignal; timeoutMs?: number;
     sourceRevision?: string; parentCallId?: string;
+    sharedEpisodeBudget?: { limit: number; used: number };
+    mapWorkers?: number; parallelModelSafe?: boolean;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
     this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
-      runId: options.runId ?? 'native-run' };
+      runId: options.runId ?? 'native-run', mapWorkers: options.mapWorkers ?? 1,
+      parallelModelSafe: options.parallelModelSafe ?? false };
+    if (!Number.isInteger(this.options.mapWorkers) || this.options.mapWorkers < 1)
+      throw new RangeError('mapWorkers must be positive');
+    this.episodeBudget = options.sharedEpisodeBudget ?? { limit: this.options.maxEpisodes, used: 0 };
     this.seedPolicy = options.seedPolicy ?? { mode: 'compatibility' };
     if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
       throw new TypeError('derived seed policy requires an integer root');
@@ -102,14 +111,16 @@ export class NativeRuntime {
   async evalForAsync(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>, body = true) {
     this.checkInterruption();
     const previous = this.acting;
+    const previousCallId = this.currentCallId;
     this.acting = node;
+    this.currentCallId = `${path || '$root'}@${node.attempts || 1}`;
     try {
       const result = await this.environment.executeAsync({ code, body, path,
         effectful: node.effects.length > 0, scope });
       this.checkInterruption();
       this.events.push(...result.events);
       return result;
-    } finally { this.acting = previous; }
+    } finally { this.acting = previous; this.currentCallId = previousCallId; }
   }
 
   private acting?: LambdaNode;
@@ -257,14 +268,17 @@ export class NativeRuntime {
 
   private async episode(ref: Ref, node: LambdaNode): Promise<NativeOutcome> {
     if (this.depth >= this.options.maxDepth) return this.quiesce(ref, node, `run budget: episodes nested deeper than ${this.options.maxDepth}`);
-    if (this.episodesStarted >= this.options.maxEpisodes) return this.quiesce(ref, node, `run budget: more than ${this.options.maxEpisodes} episodes`);
+    if (this.localEpisodesStarted >= this.options.maxEpisodes || this.episodeBudget.used >= this.episodeBudget.limit)
+      return this.quiesce(ref, node, `run budget: more than ${this.options.maxEpisodes} episodes`);
     const key = hash({ body: node.body, args: dump(node.args as Value), type: formatType(node.type) });
     if (this.stack.includes(key)) return this.quiesce(ref, node, 'identical to a lambda already being reduced above it');
     if (!this.agent) return this.quiesce(ref, node, 'no native model or agent driver supplied');
     node.status = 'running'; node.note = ''; node.attempts++;
     node.originalBody ??= node.body;
-    this.episodesStarted++; this.depth++; this.stack.push(key);
+    this.localEpisodesStarted++; this.episodeBudget.used++; this.depth++; this.stack.push(key);
     const callId = `${ref.path || '$root'}@${node.attempts}`;
+    const previousCallId = this.currentCallId;
+    this.currentCallId = callId;
     this.trace.emit('invocation', { phase: 'start', call_id: callId, path: ref.path, attempt: node.attempts });
     const session = new NativeSession(this, node, ref.env, ref.path);
     try {
@@ -272,7 +286,8 @@ export class NativeRuntime {
       this.checkInterruption();
       if (session.completed) return this.done(ref, node, node.return);
       return this.quiesce(ref, node, String(note || 'budget exhausted'));
-    } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId }); this.stack.pop(); this.depth--; }
+    } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId });
+      this.stack.pop(); this.depth--; this.currentCallId = previousCallId; }
   }
 
   private async map(ref: Ref, node: Extract<Pending, { nodeKind: 'map' }>, env: TypeEnv): Promise<NativeOutcome> {
@@ -286,6 +301,7 @@ export class NativeRuntime {
       return step;
     });
     node.status = 'running';
+    if (this.canParallelMap(node)) return this.parallelMap(ref, node, env);
     const stuck: NativeOutcome[] = [];
     for (let i = 0; i < node.slots.length; i++) {
       if (!pending(node.slots[i]!)) continue;
@@ -293,6 +309,62 @@ export class NativeRuntime {
       const out = await this.trigger(child);
       if (out.kind !== 'done') stuck.push(out);
     }
+    if (!stuck.length) return this.done(ref, node, node.slots);
+    return this.quiesce(ref, node, `${node.slots.length - stuck.length} of ${node.slots.length} reduced\n${stuck.map(o => `${o.path}: ${o.kind} "${o.detail}"`).join('\n')}`);
+  }
+
+  private canParallelMap(node: Extract<Pending, { nodeKind: 'map' }>): boolean {
+    if (this.options.mapWorkers <= 1 || !this.options.parallelModelSafe || this.environment.mode !== 'fresh' ||
+        Object.keys(this.environment.host).length || !pending(node.fn) || node.fn.nodeKind !== 'lambda') return false;
+    const pure = (definition: unknown): boolean => {
+      if (!definition || typeof definition !== 'object') return true;
+      const fn = definition as Record<string, unknown>;
+      if (Array.isArray(fn.effects) && fn.effects.length) return false;
+      return Object.values(fn.codebase as Record<string, unknown> ?? {}).every(pure);
+    };
+    return !node.fn.effects.length && Object.values(node.fn.codebase).every(pure);
+  }
+
+  private async parallelMap(ref: Ref, node: Extract<Pending, { nodeKind: 'map' }>, env: TypeEnv): Promise<NativeOutcome> {
+    if (!node.slots || node.type.kind !== 'map') throw new Error('Map slots unavailable');
+    const mapType = node.type;
+    const indices = node.slots.flatMap((value, index) => pending(value) ? [index] : []);
+    const results = new Map<number, { outcome: NativeOutcome; events: { kind: string; [key: string]: unknown }[];
+      origins: Map<string, LambdaNode> }>();
+    const abort = new AbortController();
+    const signal = this.signal ? AbortSignal.any([this.signal, abort.signal]) : abort.signal;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < indices.length) {
+        this.checkInterruption();
+        const index = indices[cursor++]!;
+        const child = new NativeRuntime({ environment: new TypeScriptEnvironment({ mode: 'fresh' }),
+          agent: this.agent, maxEpisodes: this.options.maxEpisodes, maxDepth: this.options.maxDepth,
+          seedPolicy: this.seedPolicy, sharedEpisodeBudget: this.episodeBudget,
+          runId: this.options.runId, capabilities: {}, signal,
+          timeoutMs: this.deadline === undefined ? undefined : Math.max(1, this.deadline - Date.now()) });
+        child.depth = this.depth; child.stack = [...this.stack];
+        try {
+          const slot = itemRef(node.slots!, index, mapType.b, env, `${ref.path}/${index}`);
+          const outcome = await child.trigger(slot);
+          results.set(index, { outcome, events: child.trace.events.filter(event => event.kind !== 'manifest'),
+            origins: child.origins });
+        } catch (error) { abort.abort(); throw error; }
+        finally { child.close(); child.environment.close(); }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(indices.length, this.options.mapWorkers) }, () => worker()));
+    for (const index of indices) {
+      const result = results.get(index)!;
+      for (const event of result.events) {
+        const { kind, version: _version, seq: _seq, ...data } = event;
+        this.trace.emit(kind, data);
+      }
+      for (const [path, origin] of result.origins) this.origins.set(path, origin);
+      this.trace.emit('map_slot', { path: `${ref.path}/${index}`, slot: index,
+        outcome: result.outcome.kind, value: dump(node.slots[index]!) });
+    }
+    const stuck = indices.map(index => results.get(index)!.outcome).filter(outcome => outcome.kind !== 'done');
     if (!stuck.length) return this.done(ref, node, node.slots);
     return this.quiesce(ref, node, `${node.slots.length - stuck.length} of ${node.slots.length} reduced\n${stuck.map(o => `${o.path}: ${o.kind} "${o.detail}"`).join('\n')}`);
   }
