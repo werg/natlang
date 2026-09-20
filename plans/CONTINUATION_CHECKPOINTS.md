@@ -1,13 +1,14 @@
 # Conversation continuation checkpoints
 
-Long model invocations are divided into short conversation segments. After six
-work turns, when the task remains incomplete and the latest result is durable,
+Long model invocations are divided into short conversation segments. After 12
+conversation messages or six work turns, when the task remains incomplete and the latest result is durable,
 the model receives a no-tools request for a working note. The note is saved on
 the lambda. The next request is built from the original instructions, current
 line marks, workspace, recent effects, and note. No earlier chat messages are
 copied into the next segment. A checkpoint does not end or quiesce the lambda.
 
-The boundary waits after `read` and `run_code`, because their results may be
+The threshold counts conversation items, not tokens. A single multi-call turn
+can exceed it; it is a rollover point rather than a hard cap. The boundary waits after `read` and `run_code`, because their results may be
 needed by the next action without having been written into the workspace. It
 also waits after a rejected action or a nudge. When the return and marks are
 complete, the agent can finish normally without a checkpoint. The six-turn
@@ -16,8 +17,9 @@ setting is a rollover point, not a task budget or failure condition.
 Synthetic reference turns restart from workspace state on the same boundary.
 They do not fabricate note targets. Teacher captures retain checkpoint turns,
 including model reasoning and the exact pre-checkpoint conversation. The
-teacher trajectory IR and replay bridge recognize those turns; older trajectories
-replay with checkpoints disabled. Audit traces retain full history, while SFT
+teacher trajectory IR records `note: {text, author: "teacher"}` and the message
+threshold on each checkpoint. Older trajectories have no model-authored notes
+and replay with checkpoints disabled. Audit traces retain full history, while SFT
 examples after a checkpoint contain only the new segment.
 
 Data generation and application evaluation were paused on 2026-09-20 while this
@@ -68,8 +70,39 @@ capture/replay test covers this path. The TS host port passes 38 native parity
 tests against Python, including continuation, note persistence, and effect
 journal visibility.
 
-The TypeScript host and browser host now use the same six-turn rollover, persist
+The TypeScript host and browser host now use the same message/turn rollover, persist
 `continuation_note` in lambda values, expose `args@effects`, and include
 the note and recent effects in the fresh workspace opening. Paired fixtures
 exercise checkpointing, value round trips, and tool-surface parity across both
 runtimes.
+
+## Existing training data decision (2026-09-20)
+
+Keep accepted teacher trajectories and replay them without inserting synthetic
+checkpoints. A replay reset would either invent a note target or change the
+teacher's observed context. Recollect targeted examples later if the teacher
+fails with the new checkpoint protocol; do not bulk regenerate the reviewed
+teacher corpus. In the rendered 921-row reviewed bundle, 917 prompts have at
+most 12 preceding conversation items. The four longer prompts come from two
+trajectories: three turns in one leaf's read/read/reply tail (14, 16, 18 items)
+and one program reply (14 items). The read outputs are transient and cannot be
+discarded at a safe boundary. This is a small, explicit exception to the
+predominantly short-history policy.
+
+The older 280,472-row synthetic bundle has 42,669 prompts above 12 items
+(15.2%, maximum 57). Regenerate it from the frozen 10,000-program IR with the
+message-count rollover before the next training run; keep the old bundle only
+as a reproducible baseline. Reference-agent restarts are state-derived and have
+no teacher note. Do not splice rendered prompts or impose a token cutoff.
+
+A 100-program replay pilot produced 2,664 turns, of which 2,653 have at most
+12 context items; the maximum is 14. All programs verified. The new SFT
+exporter records `context_items` directly from structured messages, so the
+next rendered bundle can be audited without depending on template delimiters.
+
+The full frozen 10,000-program replay verified all programs and yielded the
+same 280,472 targets. Its structured prompts have 279,385 (99.61%) with at
+most 12 context items, 1,087 with 13 or 14, and none above 14. The message
+threshold is soft because a single durable action can add multiple feedback
+items before the next safe boundary. The local LFM2.5-350M rendering pilot
+matched the prior template hash exactly.

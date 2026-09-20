@@ -74,6 +74,7 @@ export class NativeNatlangHost {
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
         segmentTurns: request.options?.model?.segment_turns,
+        segmentMessages: request.options?.model?.segment_messages,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
         review: request.review }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,

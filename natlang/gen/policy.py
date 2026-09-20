@@ -43,12 +43,13 @@ def native_text(calls) -> str:
 class ReferenceAgent:
     def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
                  recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT,
-                 segment_turns: Optional[int] = 6):
+                 segment_turns: Optional[int] = 6, segment_messages: Optional[int] = 12):
         self.system_prompt = system_prompt
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)
         self.recovery_rate, self.recovered = recovery_rate, False
         self.segment_turns = segment_turns
+        self.segment_messages = segment_messages
 
     def _opening_messages(self, session):
         messages = [{"role": "system", "content": self.system_prompt},
@@ -159,7 +160,8 @@ class ReferenceAgent:
             for c, r in zip(raw, results):
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
             segment_turns += 1
-            if (self.segment_turns is not None and segment_turns >= self.segment_turns
+            if (((self.segment_turns is not None and segment_turns >= self.segment_turns) or
+                 (self.segment_messages is not None and len(messages) >= self.segment_messages))
                     and calls[-1][0] in ("write", "call", "edit", "mark_done")
                     and (s.missing(session) or s.pending(session))):
                 messages = self._opening_messages(session)

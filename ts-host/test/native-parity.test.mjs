@@ -121,6 +121,32 @@ print(json.dumps({'kind':out.kind,'value':dump(value),'checkpoint_tools':len(dri
   assert.ok(runtime.trace.events.some(event => event.kind === 'checkpoint'));
 });
 
+test('message count can trigger continuation before the turn count', async () => {
+  let requestNumber = 0;
+  const sizes = [];
+  const agent = new NativeToolAgent(request => {
+    requestNumber++;
+    sizes.push(request.messages.length);
+    if (requestNumber === 1 || requestNumber === 2)
+      return { calls: [['write', { path: `return/${requestNumber === 1 ? 'a' : 'b'}`, type: 'Num', value: requestNumber }]],
+        completion_tokens: 1 };
+    if (requestNumber === 3) {
+      assert.deepEqual(request.tools, []);
+      return { text: 'Write the result next.', completion_tokens: 1 };
+    }
+    if (requestNumber === 4)
+      return { calls: [['write', { path: 'return/c', type: 'Num', value: 3 }]], completion_tokens: 1 };
+    return { calls: [], completion_tokens: 1 };
+  }, { segmentTurns: null, segmentMessages: 6 });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, { a: Num, b: Num, c: Num }>',
+    instructions: 'Write a, b and c.' } });
+  assert.equal(result.outcome.kind, 'done', JSON.stringify({ sizes, outcome: result.outcome }));
+  assert.deepEqual(result.value, { a: 1, b: 2, c: 3 });
+  assert.equal(sizes[3], 4);
+  assert.equal(runtime.trace.events.filter(event => event.kind === 'checkpoint').length, 1);
+});
+
 test('continuation notes and effect journals round-trip in both runtimes', { skip: !python }, () => {
   const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Continue.',
     continuation_note: 'Need the final count.', effects_journal: [

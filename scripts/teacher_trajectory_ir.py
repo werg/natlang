@@ -134,6 +134,9 @@ def new_turns(audit):
         result.append({"index": index, "function": source.get("function"),
                        "phase": source.get("phase", "action"),
                        "segment_turns": source.get("segment_turns"),
+                       "segment_messages": source.get("segment_messages"),
+                       "note": ({"text": source.get("text", ""), "author": "teacher"}
+                                if source.get("phase") == "checkpoint" else None),
                        "context": source.get("messages_before") or [],
                        "tools_offered": source.get("tools_offered"),
                        "assistant": {"content": message.get("content") if response is not None else source.get("text", ""),
@@ -164,6 +167,8 @@ def legacy_turns(audit):
         if message.get("role") == "assistant":
             calls = raw_calls(message)
             turn = {"index": len(turns), "function": audit.get("function", "root"),
+                    "phase": "action", "segment_turns": None, "segment_messages": None,
+                    "note": None,
                     "context": [], "tools_offered": None,
                     "assistant": {"content": message.get("content", ""),
                                                    "reasoning": None, "calls": calls},

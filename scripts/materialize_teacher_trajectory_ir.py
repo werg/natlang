@@ -72,6 +72,13 @@ def materialize(row, *, system_prompt: str):
     if len(checkpoint_limits) > 1:
         raise ValueError("teacher trajectory has inconsistent checkpoint settings")
     segment_turns = next(iter(checkpoint_limits)) if checkpoint_limits else None
+    checkpoint_message_limits = {turn.get("segment_messages") for turn in row["trajectory"]
+                                 if turn.get("phase") == "checkpoint"}
+    if len(checkpoint_message_limits) > 1:
+        raise ValueError("teacher trajectory has inconsistent message checkpoint settings")
+    # Legacy trajectories have no checkpoints. Replay their recorded choices without
+    # inventing a model-written note or inserting a new model request.
+    segment_messages = next(iter(checkpoint_message_limits)) if checkpoint_message_limits else None
     log = []
     lowered = lower(program) if task_kind == "whole_program" else None
     root = whole_root(lowered) if lowered is not None else load_program(program)
@@ -81,7 +88,8 @@ def materialize(row, *, system_prompt: str):
                               "capture": "recorded-teacher-replay"})
     outcome, value = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
                                                   validation_feedback="caller", log=log,
-                                                  segment_turns=segment_turns),
+                                                  segment_turns=segment_turns,
+                                                  segment_messages=segment_messages),
                              max_episodes=2000 if lowered is not None else 4,
                              capabilities=lowered.capabilities if lowered is not None else None,
                              trace_sink=recorder).run_root(root)

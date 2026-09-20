@@ -103,6 +103,7 @@ def main():
         return {"id": s["id"], "program_id": source_groups[0] if grouped and source_groups else program_id(s),
                 "source_groups": source_groups, "family": s.get("family", s.get("kind")),
                 "skill": s["skill"], "renderer": a.template_id,
+                "context_items": len(s["messages"]),
                 "teacher_trajectory_id": s.get("teacher_trajectory_id"),
                 "teacher_trajectory_digest": s.get("teacher_trajectory_digest"),
                 "training_admission": s.get("training_admission"),

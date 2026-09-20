@@ -135,10 +135,13 @@ export class NativeToolAgent {
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
       validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
-      segmentTurns?: number | null } = {}) {
+      segmentTurns?: number | null; segmentMessages?: number | null } = {}) {
     if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
         (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
       throw new RangeError('segmentTurns must be positive or null');
+    if (options.segmentMessages !== undefined && options.segmentMessages !== null &&
+        (!Number.isInteger(options.segmentMessages) || options.segmentMessages < 5))
+      throw new RangeError('segmentMessages must be at least 5 or null');
   }
 
   private reviewTools(): unknown[] {
@@ -445,7 +448,9 @@ export class NativeToolAgent {
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
       const rollover = this.options.segmentTurns === undefined ? 6 : this.options.segmentTurns;
-      if (rollover !== null && segmentTurns >= rollover && checkpointReady &&
+      const itemLimit = this.options.segmentMessages === undefined ? 12 : this.options.segmentMessages;
+      if (((rollover !== null && segmentTurns >= rollover) ||
+           (itemLimit !== null && messages.length >= itemLimit)) && checkpointReady &&
           (this.missing(session) || this.openMarks(session).length)) {
         const budget = allowance();
         const checkpointLimit = budget === null ? 512 : Math.min(512, budget);

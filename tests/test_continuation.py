@@ -59,6 +59,40 @@ def test_checkpoint_reopens_without_old_messages_and_persists_note():
     assert reply_only_sample(replay.samples[2])["target"]["content"] == "The final value still needs writing."
 
 
+def test_message_count_triggers_teacher_note_and_ir_records_its_author():
+    class Scripted:
+        def __init__(self):
+            self.n = 0
+
+        def chat(self, messages, tools, **_kwargs):
+            self.n += 1
+            if self.n == 1:
+                return ChatTurn(calls=[("write", {"path": "let/a", "type": "Num", "value": 1})],
+                                raw_response={"choices": [{"message": {"content": ""}}]})
+            if self.n == 2:
+                return ChatTurn(calls=[("write", {"path": "let/b", "type": "Num", "value": 2})],
+                                raw_response={"choices": [{"message": {"content": ""}}]})
+            if self.n == 3:
+                assert tools == []
+                return ChatTurn(text="Write the final value.",
+                                raw_response={"choices": [{"message": {"content": "Write the final value."}}]})
+            if self.n == 4:
+                assert len(messages) == 4
+                return ChatTurn(calls=[("write", {"path": "return", "type": "Num", "value": 3})],
+                                raw_response={"choices": [{"message": {"content": ""}}]})
+            return ChatTurn(text="", raw_response={"choices": [{"message": {"content": ""}}]})
+
+    root = load_program({"$lambda": {"type": "Lambda<{}, Num>", "instructions": "Return one."}})
+    captured = []
+    outcome, value = Runtime(lambda lam: ToolAgent(Scripted(), teacher_turns=captured,
+                                                   segment_turns=None, segment_messages=6)).run_root(root)
+    assert (outcome.kind, value) == ("done", 3)
+    turns = new_turns({"teacher_turns": captured})
+    assert turns[2]["note"] == {"text": "Write the final value.", "author": "teacher"}
+    assert turns[2]["segment_messages"] == 6
+    assert turns[0]["note"] is None
+
+
 def test_rejection_stays_in_context_until_a_successful_action():
     class RetryDecoder:
         def __init__(self):
@@ -150,6 +184,7 @@ def test_whole_program_capture_replays_checkpoint_as_training_turn():
     assert row["outcome"]["accepted"]
     assert [turn["phase"] for turn in row["trajectory"]] == ["action", "checkpoint", "action", "action"]
     assert row["trajectory"][1]["segment_turns"] == 1
+    assert row["trajectory"][1]["note"] == {"text": "Fill b next.", "author": "teacher"}
     samples = materialize(row, system_prompt=TOOLS_PROMPT)
     assert [sample["skill"] for sample in samples] == ["write", "checkpoint", "write", "reply"]
     assert len(samples[2]["messages"]) == 4

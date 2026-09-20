@@ -36,7 +36,8 @@ class ToolAgent:
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
                  review_prompt: str = "baseline", teacher_turns: Optional[list] = None,
-                 segment_turns: Optional[int] = 6):
+                 segment_turns: Optional[int] = 6,
+                 segment_messages: Optional[int] = 12):
         if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
             raise ValueError("unknown review prompt")
         self.review_prompt = review_prompt
@@ -68,6 +69,9 @@ class ToolAgent:
         if segment_turns is not None and segment_turns < 1:
             raise ValueError("segment_turns must be positive or None")
         self.segment_turns = segment_turns
+        if segment_messages is not None and segment_messages < 5:
+            raise ValueError("segment_messages must be at least 5 or None")
+        self.segment_messages = segment_messages
 
     def _opening_messages(self, session, surface, system):
         messages = [{"role": "system", "content": system},
@@ -140,7 +144,8 @@ class ToolAgent:
             while True:
                 if exhausted():
                     return "episode turn, token, or wall-clock budget exhausted"
-                if (self.segment_turns is not None and segment_turns >= self.segment_turns
+                if (((self.segment_turns is not None and segment_turns >= self.segment_turns) or
+                     (self.segment_messages is not None and len(messages) >= self.segment_messages))
                         and checkpoint_ready and (s.missing(session) or s.pending(session))):
                     checkpoint_messages = [*messages, {"role": "user", "content": CHECKPOINT_REQUEST}]
                     checkpoint_limit = min(512, allowance()) if allowance() is not None else 512
@@ -166,6 +171,7 @@ class ToolAgent:
                     session.lam.continuation_note = note
                     if self.teacher_turns is not None:
                         self.teacher_turns.append({"phase": "checkpoint", "segment_turns": self.segment_turns,
+                                                   "segment_messages": self.segment_messages,
                                                    "function": session.lam.fn_name,
                                                    "call_id": getattr(getattr(session, "invocation", None), "call_id", None),
                                                    "messages_before": copy.deepcopy(checkpoint_messages),
