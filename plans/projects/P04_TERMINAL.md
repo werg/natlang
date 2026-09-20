@@ -1,6 +1,10 @@
 # P04 — Semantic terminal
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: finite stream session implemented in
+[`codebases/semantic_terminal`](../../codebases/semantic_terminal/README.md)
+and [`applications/semantic_terminal.mjs`](../../applications/semantic_terminal.mjs).
+Real build and media recipes pass an async Fold integration test. Live-model
+behavior, Git/Bash recipes and durable sessions remain open. [Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -25,6 +29,15 @@ One Fold owns each session. A long task can launch a job in a short step and con
 Small blocking commands can remain ordinary calls. Stream progress is coalesced by the host where appropriate; command completion and user requests are never silently discarded. Expose bounded output ranges through eval search/read helpers.
 
 ## Delivery and checks
+
+The implemented stream path admits request and completion events, starts
+session-owned recipe jobs without blocking the model step, and checks actual
+host completion identity before updating session status. A cancel event records
+the request and waits for the real result. Requests during an active job are
+declined explicitly until resubmitted. The first integration composes P03 and
+P01 through typed natlang selection, uses real processes, and checks forged
+completion rejection. This confirms the current Fold boundary suffices for
+sequential jobs; no mid-episode interrupt primitive is required by this case.
 
 1. Execute a fixed recipe in a fixture workspace with exact command/result checks.
 2. Compose a build diagnosis with P03, then a media request with P01. Gate: intermediate data passes through typed function boundaries correctly.
