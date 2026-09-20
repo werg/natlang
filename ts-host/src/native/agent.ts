@@ -3,7 +3,7 @@ import type { Type, TypeEnv } from './types.js';
 import { MISSING, dump, isPending, problems } from './values.js';
 import type { Value } from './values.js';
 import type { NativeResult, NativeSession } from './runtime.js';
-import type { ModelTurn, ModelTurnRequest } from '../runtime.js';
+import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { TOOLS_PROMPT } from './prompt.js';
 

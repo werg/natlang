@@ -153,7 +153,7 @@ test('nested source invocations share the parent episode budget', async () => {
   parent.close();
 });
 
-test('native host matches the application bridge for TypeScript syntax, model eval and desktop bindings', async () => {
+test('native host runs TypeScript syntax, model eval and desktop bindings', async () => {
   const mapped = new NativeNatlangHost();
   try {
     const result = await mapped.run({ source: { kind: 'program', program: { $map: {

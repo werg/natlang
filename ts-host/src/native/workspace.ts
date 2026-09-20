@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { TypeScriptEnvironment } from '../environment.js';
-import type { ModelTurnRequest, ModelTurn } from '../runtime.js';
+import type { ModelTurnRequest, ModelTurn } from '../contracts.js';
 import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions, type NativeDefinition } from './codebase.js';
 import { NativeRuntime } from './runtime.js';

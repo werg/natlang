@@ -1,7 +1,6 @@
 export { TypeScriptEnvironment, portable } from './environment.js';
 export type { EnvironmentMode, EvalRequest, EvalResult, HostEvent } from './environment.js';
-export { NatlangHost as PythonBridgeNatlangHost } from './runtime.js';
-export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './runtime.js';
+export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './contracts.js';
 export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
 export { TypeEnv, TypeSyntaxError, LOOP_VERDICT, parseType, formatType, fitsType, resultType } from './native/types.js';

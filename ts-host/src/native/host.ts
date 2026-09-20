@@ -3,7 +3,7 @@ import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment } from '../environment.js';
-import type { RunRequest, RunResult } from '../runtime.js';
+import type { RunRequest, RunResult } from '../contracts.js';
 import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions } from './codebase.js';
 import { NativeRuntime, type NativeStream } from './runtime.js';
@@ -33,7 +33,6 @@ export class NativeNatlangHost {
     if (request.signal?.aborted) throw new Error('natlang run aborted');
     if (request.mapWorkers !== undefined && (!Number.isInteger(request.mapWorkers) || request.mapWorkers < 1))
       throw new RangeError('mapWorkers must be positive');
-    if (request.typescript === false) throw new Error('native host requires the TypeScript eval engine');
     this.running = true;
     let runtime: NativeRuntime | undefined;
     const unbind: (() => void)[] = [];

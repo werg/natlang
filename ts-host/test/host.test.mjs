@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DesktopBindings, PythonBridgeNatlangHost as NatlangHost, TypeScriptEnvironment, portable } from '../dist/index.js';
+import { DesktopBindings, NatlangHost, TypeScriptEnvironment, portable } from '../dist/index.js';
 
 const lambda = (type, code, engine = 'typescript-host') => ({ $lambda: { type, engine, code } });
 test('host and isolated engines use the same crisp standard library source', () => {
@@ -67,7 +67,7 @@ test('checked definitions, input binding and trace work from TypeScript', async 
   } finally { host.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('file source uses the existing Python loader', async () => {
+test('file source uses the native loader', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'natlang-ts-source-'));
   const path = join(dir, 'program.json');
   writeFileSync(path, JSON.stringify(lambda('Lambda<{}, Num>', 'return 12;')));
@@ -136,21 +136,13 @@ test('an eval may mutate shared state before its result fails validation', async
   } finally { host.close(); }
 });
 
-test('declared fx capabilities remain available through isolated QuickJS', async () => {
-  const result = await run({ $lambda: { type: 'Lambda<{}, Num>', engine: 'quickjs-isolated',
-    effects: ['out.emit'], code: 'fx.out.emit({ kind: "seen" }); return 5;' } });
-  assert.equal(result.outcome.kind, 'done');
-  assert.equal(result.value, 5);
-  assert.deepEqual(result.emitted, [{ kind: 'seen' }]);
-});
-
-test('application capabilities bridge back into the declared effect journal', async () => {
+test('application capabilities enter the declared effect journal', async () => {
   const seen = [];
   const host = new NatlangHost();
   try {
     const result = await host.run({ source: { kind: 'program', program: {
-      $lambda: { type: 'Lambda<{}, Num>', engine: 'quickjs-isolated',
-        effects: ['counter.add'], code: 'return fx.counter.add(3);' },
+      $lambda: { type: 'Lambda<{}, Num>', engine: 'typescript-host',
+        effects: ['counter.add'], code: 'return await fx.counter.add(3);' },
     } }, capabilities: { 'counter.add': ([n]) => { seen.push(n); return n + 2; } } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 5);
