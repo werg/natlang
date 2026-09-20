@@ -94,3 +94,19 @@ test('native checked definitions snapshot and link source calls', async () => {
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 16);
   assert.throws(() => checkedDefinitions({ a: { returns: 'Num', code: 'return 1;', uses: { a: 'a' } } }, 'a'), /recursion/);
 });
+
+test('native source calls lower to Map and Fold combinators', async () => {
+  const actions = [];
+  const runtime = new NativeRuntime({ agent: async session => {
+    actions.push(await session.applyAsync('call', { function: 'double', to: 'let/doubled', over: 'args/items' }));
+    actions.push(await session.applyAsync('call', { function: 'add', to: 'return', over: 'let/doubled', init: 0 }));
+    session.finish();
+  } });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{ items: Num[] }, Num>',
+    instructions: 'Double then add.', args: { items: [1, 2, 3] }, codebase: {
+      double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' },
+      add: { args: { acc: 'Num', item: 'Num' }, returns: 'Num', code: 'return args.acc + args.item;' },
+    } } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 12);
+  assert.deepEqual(actions.map(x => x.kind), ['done', 'done']);
+});

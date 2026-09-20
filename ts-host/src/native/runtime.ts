@@ -302,7 +302,8 @@ export class NativeSession {
         return { kind: 'ok', text: `ok   ${ref.path}` };
       }
       if (name === 'run_code') {
-        const engine = String(args.engine ?? 'typescript-host');
+        if (args.engine === undefined) throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'an explicit available engine' }]);
+        const engine = String(args.engine);
         if (engine !== 'typescript-host') return { kind: 'error', text: `engine ${engine} unavailable` };
         const result = this.runtime.environment.execute({ code: String(args.code ?? ''), body: false, path: 'eval',
           effectful: this.lam.effects.length > 0, scope: { instructions: this.lam.body,
@@ -317,6 +318,18 @@ export class NativeSession {
   }
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
+    if (name === 'run') {
+      try {
+        const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
+        const outcomes = [];
+        for (const path of paths) outcomes.push(await this.runtime.trigger(this.resolve(String(path))));
+        return { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
+          text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined };
+      } catch (error) {
+        if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+      }
+    }
     if (name !== 'call') return this.apply(name, args);
     try {
       const label = String(args.function ?? '');
@@ -330,20 +343,54 @@ export class NativeSession {
       const values: Record<string, unknown> = {};
       for (const [name, path] of Object.entries(inputPaths)) values[name] = cloneValue(this.resolve(path).get());
       const required = Object.keys(signature).filter(name => !name.endsWith('?')).map(name => name.replace(/\?$/, ''));
-      if (required.some(name => !(name in values))) throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
-      const child = buildPending({ $lambda: { type: typeText, [kind]: definition[kind],
+      const over = args.over === undefined ? undefined : this.resolve(String(args.over)).get();
+      const init = args.init === undefined ? undefined : typeof args.init === 'string' ?
+        (() => { try { return this.resolve(args.init as string).get(); } catch { return args.init; } })() : args.init;
+      const later = over === undefined ? args.until === undefined ? [] : [required.find(n => !(n in values))] :
+        init === undefined ? [required.find(n => !(n in values))] : ['acc', 'item'];
+      if (required.some(name => !(name in values) && !later.includes(name)))
+        throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
+      const leaf = { type: typeText, [kind]: definition[kind],
         engine: definition.engine ?? 'typescript-host', args: values, types: definition.types ?? {},
-        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: label } }, this.env);
+        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: label };
+      let raw: Record<string, unknown> = { $lambda: leaf };
+      let destination = String(definition.returns);
+      if (args.until !== undefined) {
+        const stateName = later[0];
+        const check = this.lam.codebase[String(args.until)] as Record<string, unknown> | undefined;
+        if (!stateName || !check) throw new Reject([{ path: 'until', code: 'bad-call' }]);
+        const stateType = signature[stateName]!;
+        const checkArgs = check.args as Record<string, string> ?? {};
+        const checkName = Object.keys(checkArgs)[0];
+        if (!checkName) throw new Reject([{ path: 'until', code: 'bad-call', expected: 'a one-parameter check' }]);
+        const checkKind = Object.hasOwn(check, 'code') ? 'code' : 'instructions';
+        raw = { $iterate: { type: `Iterate<${stateType}>`, init, max: args.max,
+          state_name: stateName, check_name: checkName,
+          step: { $lambda: leaf }, check: { $lambda: { type: `Lambda<{ ${checkName}: ${checkArgs[checkName]} }, ${check.returns}>`,
+            [checkKind]: check[checkKind], engine: check.engine ?? 'typescript-host', function: String(args.until) } } } };
+        destination = stateType;
+      } else if (over !== undefined && init !== undefined) {
+        if (!('acc' in signature) || !('item' in signature)) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);
+        raw = { $fold: { type: `Fold<${signature.item}, ${signature.acc}>`, over, init, step: { $lambda: leaf } } };
+        destination = signature.acc!;
+      } else if (over !== undefined) {
+        const itemName = later[0];
+        if (!itemName) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);
+        raw = { $map: { type: `Map<${signature[itemName]}, ${definition.returns}>`, over,
+          item_name: itemName, fn: { $lambda: leaf } } };
+        destination = `${definition.returns}[]`;
+      }
+      const child = buildPending(raw, this.env);
       const path = String(args.to ?? '');
       if (path.startsWith('let/')) {
         const local = path.slice(4);
-        if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(String(definition.returns));
+        if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(destination);
       }
       const ref = this.resolve(path, true);
       if (!ref.type || !fitsType(child.type, ref.type, this.env))
         throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: ref.type ? formatType(ref.type) : '' }]);
       const existing = ref.get();
-      if (!(pending(existing) && existing.nodeKind === 'lambda' && existing.functionName === label)) ref.set(child);
+      if (!(pending(existing) && (existing.nodeKind !== 'lambda' || existing.functionName === label))) ref.set(child);
       const outcome = await this.runtime.trigger(ref);
       return { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value };
     } catch (error) {
