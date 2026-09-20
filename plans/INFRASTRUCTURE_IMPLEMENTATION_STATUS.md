@@ -21,7 +21,7 @@ Implementation branch: `infrastructure-implementation`. The sequence in [INFRAST
 | 17 | Local Fold checkpoints and external operation receipt reconciliation | `hosts/recovery.py`; `tests/test_recovery.py` |
 | TS host | Complete interpreter hosting from TypeScript, TypeScript crisp eval with direct native sharing, model/capability callbacks, live Fold streams, desktop bindings, and package | `ts-host/src/`, `natlang/ts_host_bridge.py`; `ts-host/test/host.test.mjs` |
 
-The existing interpreter tool inventory remains unchanged except for the versioned `engine` argument on `run_code`. Optional host libraries are installed with the wheel but are not imported by the core. The Node host is trusted code, not a sandbox. Trace manifests identify each engine's environment lifetime and authority. Trace readers reconstruct captured natlang state and never replay live effects or arbitrary native memory.
+The existing interpreter tool inventory remains unchanged except for the versioned `engine` argument on `run_code`. Optional host libraries are installed with the wheel but are not imported by the core. The Node host is trusted code, not a sandbox. Trace manifests identify each engine's environment lifetime and authority. Trace readers reconstruct captured natlang state and never replay live effects or arbitrary native memory. The TypeScript application host uses the Python semantic runtime; it is not a native interpreter port. [The native port plan](NATIVE_TYPESCRIPT_PORT.md) defines the separate parity work.
 
 ## Verification and empirical gates
 
