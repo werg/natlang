@@ -37,3 +37,9 @@ simpler to reason about, and it survives git, archives and Windows, which OS
 symlinks do not.
 
 Not yet implemented: `types.ts` beyond simple aliases.
+
+Folder `types.ts` aliases are terminated by a semicolon at declaration depth,
+not by a semicolon inside a record. Both native hosts accept comma or semicolon
+record field separators, including nested records and trailing separators.
+Quoted semicolons remain literal text. Duplicate or unterminated aliases produce
+loader errors instead of silently truncating a type declaration.

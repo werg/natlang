@@ -85,7 +85,7 @@ TEXT, NUM, BOOL, NULL, BLOB = (Prim(n) for n in ("Text", "Num", "Bool", "Null", 
 _PRIMS = {"Text": TEXT, "Num": NUM, "Bool": BOOL, "Null": NULL, "Blob": BLOB}
 
 _TOKEN = re.compile(
-    r'\s*(?:("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,:?()]))'
+    r'\s*(?:("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,;:?()]))'
 )
 
 
@@ -212,8 +212,8 @@ class _Parser:
                 optional = True
             self.eat(":")
             fields.append((name, self.union(), optional))
-            if self.peek() == ("p", ","):
-                self.eat(",")
+            if self.peek() in (("p", ","), ("p", ";")):
+                self.eat()
         self.eat("}")
         names = [f[0] for f in fields]
         if len(set(names)) != len(names):

@@ -28,3 +28,12 @@ test('native fit mirrors promise, record, union and lambda variance', () => {
   assert.equal(fits('Count', 'Num'), true);
   assert.equal(formatType(resultType(parseType('Map<Num, Bool>'))), 'Bool[]');
 });
+
+test('record types accept TS semicolon separators and nested aliases are not truncated', async () => {
+  const { readTypeAliases } = await import('../dist/native/type-aliases.js');
+  const aliases=readTypeAliases('// type Ignored = Bad;\nexport type A = { nested: { value: Text; }; note?: "a;b"; };\ntype B = A[];');
+  assert.deepEqual(Object.keys(aliases),['A','B']);
+  assert.equal(formatType(parseType(aliases.A)), '{ nested: { value: Text }, note?: "a;b" }');
+  assert.throws(()=>readTypeAliases('type A = { value: Text;'),/unterminated/);
+  assert.throws(()=>readTypeAliases('type A = Text; type A = Num;'),/duplicate/);
+});

@@ -1,3 +1,4 @@
+import { readTypeAliases } from './type-aliases.js';
 import YAML from 'yaml';
 import { Reject, buildPending, type LambdaNode } from './values.js';
 
@@ -61,8 +62,7 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       if (!id.test(functionName)) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'function identifier' }]);
       const folderTypes = files.join(files.dirname(file), 'types.ts');
       const localTypes: Record<string, string> = {};
-      if (files.isFile(folderTypes)) for (const found of files.read(folderTypes).matchAll(/type\s+(\w+)\s*=\s*([^;]+);/g))
-        localTypes[found[1]!] = found[2]!.trim();
+      if (files.isFile(folderTypes)) Object.assign(localTypes, readTypeAliases(files.read(folderTypes)));
       const types = { ...inherited, ...localTypes, ...meta.types as Record<string, string> ?? {} };
       const children: Record<string, FileDefinition> = {};
       const companion = files.join(files.dirname(file), functionName);

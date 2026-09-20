@@ -172,3 +172,19 @@ def test_a_lambda_with_locals_and_a_code_base_survives_swap_out():
     assert set(back.codebase["summarize"].codebase) == {"shorten", "is_short"}
     s2 = Session(Runtime(lambda lam: Scripted(lam, [])), back, TypeEnv())        # and the run continues from there
     assert s2.apply("call", {"function": "count_true", "to": "return/urgent", "inputs": {"flags": "let/flags"}}).kind == "done"
+
+
+def test_record_semicolons_and_nested_type_aliases(tmp_path):
+    from natlang.codebase import read_type_aliases
+    from natlang.types import parse_type, format_type
+    source = '// type Ignored = Bad;\nexport type A = { nested: { value: Text; }; note?: "a;b"; };\ntype B = A[];'
+    aliases = read_type_aliases(source)
+    assert list(aliases) == ['A', 'B']
+    assert format_type(parse_type(aliases['A'])) == '{ nested: { value: Text }, note?: "a;b" }'
+    (tmp_path / 'types.ts').write_text(source)
+    (tmp_path / 'f.nl').write_text('---\nargs:\n  input: A\nreturns: A\n---\nReturn input unchanged.\n')
+    assert load_function(tmp_path / 'f.nl').types == aliases
+    with pytest.raises(ValueError, match='unterminated'):
+        read_type_aliases('type A = { value: Text;')
+    with pytest.raises(ValueError, match='duplicate'):
+        read_type_aliases('type A = Text; type A = Num;')

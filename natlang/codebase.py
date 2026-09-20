@@ -106,11 +106,48 @@ def _find(base: Path) -> Path:
     raise reject(str(base), "no-such-path", "a function file (.nl or .ts)")
 
 
+def read_type_aliases(source: str) -> dict:
+    """Read aliases without mistaking record separators for declaration endings."""
+    clean = re.sub(r'"(?:[^"\\]|\\.)*"|//[^\n]*|/\*[\s\S]*?\*/',
+                   lambda m: " " * len(m[0]) if m[0].startswith("/") else m[0], source)
+    header = re.compile(r"\b(?:export\s+)?type\s+([A-Za-z_]\w*)\s*=\s*")
+    result, cursor = {}, 0
+    while match := header.search(clean, cursor):
+        start = match.end()
+        depth, quoted, escaped = 0, False, False
+        for end in range(start, len(clean)):
+            char = clean[end]
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    quoted = False
+            elif char == '"':
+                quoted = True
+            elif char in "{[(<":
+                depth += 1
+            elif char in "}])>":
+                depth -= 1
+            elif char == ";" and depth == 0:
+                break
+            if depth < 0:
+                raise ValueError(f"unbalanced type alias {match[1]}")
+        else:
+            raise ValueError(f"unterminated type alias {match[1]}")
+        if match[1] in result:
+            raise ValueError(f"duplicate type alias {match[1]}")
+        result[match[1]] = clean[start:end].strip()
+        cursor = end + 1
+    return result
+
+
 def _folder_types(folder: Path) -> dict:
     f = folder / "types.ts"
     if not f.is_file():
         return {}
-    return {m.group(1): m.group(2).strip() for m in re.finditer(r"type\s+(\w+)\s*=\s*([^;]+);", f.read_text())}
+    return read_type_aliases(f.read_text())
 
 
 def load_function(path, *, _inherited: Optional[dict] = None, _cache: Optional[dict] = None) -> FunctionDef:

@@ -14,7 +14,7 @@ export type Type =
 
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
-const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,:?()]))/y;
+const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,;:?()]))/y;
 const PRIMS = new Set(['Text', 'Num', 'Bool', 'Null', 'Blob']);
 const pendingKinds = new Set(['lambda', 'map', 'fold', 'iterate']);
 
@@ -78,7 +78,7 @@ class Parser {
       if (optional) this.eat('?');
       this.eat(':');
       fields.push({ name: name.value, type: this.union(), optional });
-      if (this.peek()?.value === ',') this.eat(',');
+      if (this.peek()?.value === ',' || this.peek()?.value === ';') this.eat();
     }
     this.eat('}');
     if (new Set(fields.map(f => f.name)).size !== fields.length) throw new TypeSyntaxError('duplicate field name');
