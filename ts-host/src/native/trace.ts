@@ -22,6 +22,15 @@ function valueType(value: unknown): string {
   return 'Record';
 }
 
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => [key, canonical(item)]));
+  return value;
+}
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
 export function changes(before: unknown, after: unknown, path: (string | number)[] = []): Record<string, unknown>[] {
   if (before && after && typeof before === 'object' && typeof after === 'object' &&
       !Array.isArray(before) && !Array.isArray(after)) {
@@ -33,7 +42,7 @@ export function changes(before: unknown, after: unknown, path: (string | number)
       return changes(a[key], b[key], [...path, key]);
     });
   }
-  if (JSON.stringify(before) === JSON.stringify(after)) return [];
+  if (sameValue(before, after)) return [];
   return [{ path, before_present: true, after_present: true, before, after, type: valueType(after) }];
 }
 
@@ -81,7 +90,7 @@ export class NativeTraceRecorder {
         else delete target[String(path.at(-1))];
       }
     }
-    if (JSON.stringify(current) !== JSON.stringify(this.finalState())) throw new Error('trace reconstruction mismatch');
+    if (!sameValue(current, this.finalState())) throw new Error('trace reconstruction mismatch');
     return current;
   }
 }

@@ -221,3 +221,20 @@ test('native tool rejection text includes Python diagnostic hints', { skip: !pyt
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
   assert.deepEqual(calls.map(([name, args]) => session.apply(name, args).text), expected);
 });
+
+test('native trace preserves declared effect order before a failed eval', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', effects: ['out.emit'],
+    code: "fx.out.emit({ id: 'first' }); throw new Error('failed');" } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nsink=TraceRecorder({})\nrt=Runtime(None,trace_sink=sink)\nout,value=rt.run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'outcome':out.kind,'emitted':rt.emitted,'effects':[(e['phase'],e['capability']) for e in sink.events if e['kind']=='effect'],'evals':[e['phase'] for e in sink.events if e['kind']=='eval']}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const runtime = new NativeRuntime();
+  const actual = await runtime.runRoot(doc);
+  assert.equal(actual.outcome.kind, expected.outcome);
+  assert.deepEqual(actual.emitted, expected.emitted);
+  assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'effect').map(event =>
+    [event.phase, event.capability]), expected.effects);
+  assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'eval').map(event => event.phase), expected.evals);
+  assert.deepEqual(runtime.trace.reconstruct(), runtime.trace.finalState());
+});
