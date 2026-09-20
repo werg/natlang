@@ -15,6 +15,10 @@ function valueType(value: unknown): string {
   if (typeof value === 'number') return 'Num';
   if (typeof value === 'string') return 'Text';
   if (Array.isArray(value)) return 'List';
+  if (value && typeof value === 'object') for (const [key, body] of Object.entries(value)) {
+    if (key.startsWith('$') && body && typeof body === 'object' && 'type' in body)
+      return String((body as Record<string, unknown>).type);
+  }
   return 'Record';
 }
 
@@ -46,7 +50,24 @@ export class NativeTraceRecorder {
     if (!states.length) throw new Error('trace has no state');
     return states.at(-1)!.value;
   }
+  coverage(): Record<string, unknown> {
+    const states = this.events.filter(event => event.kind === 'state');
+    const incomplete = states.some(event => /"\$stream"|"\$opaque"/.test(JSON.stringify(event.value)));
+    return { state_reconstructable: states.length > 0, live_source_reconstructable: !incomplete,
+      native_effects_replayable: false, effect_count: this.events.filter(event => event.kind === 'effect').length,
+      mode: 'recorded-observations-only' };
+  }
+  replayObservations(): Record<string, unknown> {
+    const states = this.events.filter(event => event.kind === 'state');
+    if (states[0]?.phase !== 'initial' || states.at(-1)?.phase !== 'final')
+      throw new Error('trace lacks complete initial/final observations');
+    return { initial: states[0]!.value, final: states.at(-1)!.value, outcome: states.at(-1)!.outcome,
+      actions: this.events.filter(event => event.kind === 'action'),
+      effects: this.events.filter(event => event.kind === 'effect'), coverage: this.coverage() };
+  }
   reconstruct(): unknown {
+    if (this.events[0]?.kind !== 'manifest' || this.events.some((event, index) =>
+      event.version !== TRACE_VERSION || event.seq !== index)) throw new Error('unsupported or discontinuous trace');
     const first = this.events.find(event => event.kind === 'state' && event.phase === 'initial');
     if (!first) throw new Error('trace has no initial state');
     let current = structuredClone(first.value);

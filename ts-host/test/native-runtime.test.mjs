@@ -5,6 +5,7 @@ import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { readTrace } from '../../web/natlang_lite.mjs';
 import { deriveSeed } from '../dist/native/trace.js';
+import { admitNativeTrace } from '../dist/native/scenario.js';
 import { buildPending, dumpState, MISSING } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { TypeEnv } from '../dist/native/types.js';
@@ -47,6 +48,8 @@ test('native Fold can wait for more input and resume', async () => {
   assert.equal(first.outcome.kind, 'waiting');
   const second = await runtime.runRoot(first.value);
   assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 6);
+  assert.equal(runtime.trace.coverage().live_source_reconstructable, false);
+  assert.equal(runtime.trace.replayObservations().outcome, 'done');
 });
 
 test('native Iterate uses a checked step and Boolean completion condition', async () => {
@@ -249,4 +252,28 @@ test('review withdrawal prevents a proposed write and permits one corrected retr
   assert.equal(reviewed, 1);
   assert.ok(runtime.trace.events.some(event => event.kind === 'proposal' && event.phase === 'withdrawn'));
   assert.equal(runtime.trace.events.filter(event => event.kind === 'action' && event.name === 'write').length, 1);
+});
+
+test('native scenario admission checks exact calls and ordered effects without replay', async () => {
+  const runtime = new NativeRuntime({ agent: async session => {
+    await session.applyAsync('call', { function: 'double', to: 'return', inputs: { item: 'args/item' } });
+    session.finish();
+  } });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{ item: Num }, Num>',
+    instructions: 'Call double.', args: { item: 2 }, codebase: {
+      double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' },
+    } } });
+  assert.equal(result.value, 4);
+  const contract = { outcome: 'done', value: 4, constrainedCalls: [
+    { function: 'double', to: 'return', inputs: { item: 'args/item' } }], requiredActions: [
+    { name: 'call', arguments: { function: 'double', to: 'return' } }] };
+  assert.equal(admitNativeTrace(runtime.trace, contract).admitted, true);
+  assert.throws(() => admitNativeTrace(runtime.trace, { ...contract, constrainedCalls: [
+    { function: 'double', to: 'return/size', inputs: { item: 'args/item' } }] }), /destination or inputs/);
+  const effects = new NativeRuntime();
+  const effected = await effects.runRoot({ $lambda: { type: 'Lambda<{}, Num>', code: 'fx.out.emit({ x: 1 }); return 3;',
+    effects: ['out.emit'] } });
+  assert.equal(effected.value, 3);
+  assert.equal(admitNativeTrace(effects.trace, { outcome: 'done', value: 3,
+    effects: [['out.emit', [{ x: 1 }]]] }).admitted, true);
 });

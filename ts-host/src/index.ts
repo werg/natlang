@@ -15,3 +15,5 @@ export { checkedDefinitions } from './native/codebase.js';
 export { loadFunctionFile } from './native/source.js';
 export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from './native/values.js';
 export { NativeSourceWorkspace } from './native/workspace.js';
+export { admitNativeTrace } from './native/scenario.js';
+export type { NativeScenarioContract } from './native/scenario.js';

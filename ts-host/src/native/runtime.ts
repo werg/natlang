@@ -47,6 +47,7 @@ export class NativeRuntime {
   private root?: { value: Value };
   private stream?: NativeStream;
   private streamCurrent: Value | undefined;
+  private streamPosition = 0;
   private readonly signal?: AbortSignal;
   private readonly deadline?: number;
 
@@ -139,16 +140,26 @@ export class NativeRuntime {
     if (!this.root) this.root = { value: source };
     else this.root.value = source;
     const box = this.root;
-    const before = dumpState(box.value);
+    const before = this.traceView(box.value);
     if (!this.trace.events.some(event => event.kind === 'state')) this.trace.emit('state', { phase: 'initial', value: before });
     const ref: Ref = { path: '', env: new TypeEnv(), get: () => box.value,
       set: value => { box.value = value; }, del: () => { box.value = MISSING; } };
     const outcome = await this.trigger(ref);
-    const after = dumpState(box.value);
+    const after = this.traceView(box.value);
     const delta = changes(before, after);
     if (delta.length) this.trace.emit('reduction', { phase: 'final', changes: delta });
     this.trace.emit('state', { phase: 'final', value: after, outcome: outcome.kind });
     return { outcome, value: box.value, events: this.events, emitted: this.emitted };
+  }
+
+  private traceView(value: Value): unknown {
+    const state = dumpState(value);
+    if (this.stream && pending(value) && value.nodeKind === 'fold' && state && typeof state === 'object') {
+      const body = (state as Record<string, Record<string, unknown>>).$fold;
+      if (body) body.over = { $stream: { position: this.streamPosition,
+        admitted: this.streamCurrent === undefined ? null : 'item', history: 'not-captured' } };
+    }
+    return state;
   }
 
   private done(ref: Ref, node: Pending, value: Value): NativeOutcome {
@@ -289,6 +300,7 @@ export class NativeRuntime {
           if (polled.kind === 'empty') { node.status = 'waiting'; node.note = 'waiting for stream input'; return { path: ref.path, kind: 'waiting', detail: node.note }; }
           if (polled.kind === 'closed') return this.done(ref, node, node.acc);
           if (polled.kind === 'failed') return this.quiesce(ref, node, `stream failed: ${polled.detail}`);
+          this.streamPosition++;
           this.streamCurrent = coerce(polled.value, node.type.a, env, `${ref.path}/over/${node.at}`);
         }
         item = this.streamCurrent;
