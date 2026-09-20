@@ -246,6 +246,12 @@ the original and its input variant together. The variant IR and verified
 shards are `data/external_pilot/synthetic-map-input-variants-s1.ir.jsonl` and
 `data/external_pilot/synthetic-map-input-variants-s1-shards`.
 
+The phase-one LFM-rendered bundle is `data/synthetic-phase1-s73.sft.jsonl`:
+280,472 original turns plus 4,151 input-variant turns, or 284,623 pairs in
+10,000 program groups. The original and variant template hashes match, and
+every variant group is present among the originals. A separate seed-74
+`v7_arch` run is being generated from a pinned checkout to add new programs.
+
 ## End-of-turn completion
 
 ## Teacher trajectories to the next student corpus
@@ -310,6 +316,16 @@ distinct pairs from the reviewed leaf set and these 16 whole programs, 897
 with reasoning. Its manifest pins the two source SFT hashes. Add the incoming
 program batch's admitted SFT pairs to a new combined file with
 `combine_sft.py` before the next fresh training run.
+
+To collect more teacher trajectories from the current frozen corpus,
+`scripts/select_teacher_programs.py` selects a reproducible round-robin batch
+across available families. The seed-909 selection contains 96 distinct
+programs across 24 families and is recorded at
+`data/external_pilot/teacher-selection-balanced-s909.ir.jsonl`, with its
+source hash and chosen IDs in the adjacent manifest. Its IDs do not overlap
+the 16 already admitted whole-program teacher pilots. Run the teacher
+collector over disjoint ranges of this file and retain rejected attempts for
+diagnosis, without adding them to training.
 
 For phased training, export the synthetic shards and their input variants with
 the same LFM template used by the teacher bundle. Train phase 1 on the
