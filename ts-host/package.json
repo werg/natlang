@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
+    "@wllama/wllama": "^3.6.1",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },
@@ -24,11 +25,18 @@
     "esbuild": "^0.28.2"
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./browser": { "types": "./dist/browser/index.d.ts", "default": "./dist/browser/natlang.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "default": "./dist/browser/natlang.js"
+    }
   },
   "files": [
     "dist",
+    "examples/browser-local",
     "prelude.js",
     "README.md"
   ]

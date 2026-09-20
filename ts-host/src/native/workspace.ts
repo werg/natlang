@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { TypeScriptEnvironment } from '../environment.js';
 import type { ModelTurnRequest, ModelTurn } from '../contracts.js';
 import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
@@ -72,7 +71,7 @@ export class NativeSourceWorkspace {
       sharedEpisodeBudget: parent?.episodeBudget,
       seedPolicy: options.seedPolicy ?? parent?.seedPolicy, sourceRevision: graph.revision,
       parentCallId: options.parentCallId ?? parent?.currentCallId,
-      runId: randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs });
+      runId: globalThis.crypto.randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs });
     this.active++;
     try {
       const result = await runtime.runRoot(graph.instantiate(inputs));

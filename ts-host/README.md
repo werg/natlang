@@ -63,19 +63,29 @@ The shared engine is **trusted code**, not a sandbox. It can mutate exposed host
 
 ## Browser host
 
-`@natlang/typescript-host/browser` exports `BrowserNatlangHost`, the same typed reducer and model tool agent bundled with a browser eval environment. Build it with `npm run build:browser`. The entry accepts in-memory `program` and checked `definitions` sources, input values, model callbacks, declared capabilities, and live root Fold streams. It returns the complete trace in memory.
+`@natlang/typescript-host/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights stay in browser storage after the first download. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js` and `dist/browser/wllama.wasm` together. The application must serve the files over HTTP(S), with WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB, the WASM asset about 8 MB, and model weights require additional browser storage and memory.
 
 ```ts
-import { BrowserNatlangHost } from '@natlang/typescript-host/browser';
+import { BrowserNatlangHost, BrowserLocalModel } from '@natlang/typescript-host/browser';
 
 const application = { count: 2 };
-const host = new BrowserNatlangHost({ host: application });
-const result = await host.run({ source: { kind: 'program', program: {
-  $lambda: { type: 'Lambda<{}, Num>', code: 'return host.count + 1;' },
-} } });
-host.close();
+const model = new BrowserLocalModel();
+await model.loadFromHuggingFace({ repo: 'Qwen/Qwen3-0.6B-GGUF', quant: 'Q4_K_M' },
+  { contextTokens: 8192, onProgress: ({ loaded, total }) => console.log(loaded, total) });
+const host = new BrowserNatlangHost({ host: application, model });
+try {
+  const result = await host.run({ source: { kind: 'program', program: {
+    $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return the current count plus one.' },
+  } }, options: { model: { max_turns: 12, turn_tokens: 512 } } });
+  console.log(result.outcome, result.value, result.trace);
+} finally {
+  host.close();
+  await model.close();
+}
 ```
 
-The browser entry has no filesystem source loader, trace file writer, process bindings, or Node VM CPU timeout. File sources must be loaded by the application and supplied as in-memory programs or definitions. Eval uses `Function` and direct `eval`, so the page must allow dynamic code execution; it is trusted application code, not an isolation boundary. The portable natlang state, actions, reductions, and traces use the same implementation as the Node native host.
+`model.loadFromUrl(url)` and `model.loadFiles([file])` also accept a hosted GGUF or a user-selected `File`; pass `wasmUrl` to the constructor when the WASM asset has a different path. You can still supply `modelTurn` per run to use another model backend. The host accepts `program`, checked `definitions`, and `files` sources. For `files`, pass `{ kind: 'files', root: 'tasks/main.nl', files: { 'tasks/main.nl': sourceText, ... } }`; the shared loader resolves companion files, `types.ts`, and `uses`. A [complete local browser example](examples/browser-local/index.html) can be served from `ts-host` after building, for example with `python3 -m http.server 8000` and then opening `/examples/browser-local/`.
+
+Inference quality depends on the chosen model, available memory, and its tool calling support. More capable models need more storage and RAM. Multiple WASM threads require cross origin isolation (COOP and COEP headers); the default one thread works without them. The browser host returns the complete trace in memory; applications can save it with `new Blob([JSON.stringify(result.trace)], { type: 'application/json' })`. Browser capabilities use application callbacks, including DOM or network access when supplied by the application. Eval uses `Function` and direct `eval`, so the page's CSP must permit dynamic code execution. The shared eval environment is trusted application code, not an isolation boundary. Browser code does not expose Node process bindings, a disk trace writer, or a Node VM CPU timeout.
 
 `DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` disposes its owned TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.

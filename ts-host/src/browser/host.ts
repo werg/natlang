@@ -4,6 +4,8 @@ import { NativeToolAgent } from '../native/agent.js';
 import { checkedDefinitions, type NativeDefinition } from '../native/codebase.js';
 import { buildPending, coerce, dump, type Pending } from '../native/values.js';
 import { TypeEnv } from '../native/types.js';
+import type { BrowserLocalModel } from './local-model.js';
+import { loadFunctionFiles } from './source.js';
 
 export type BrowserModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
   seed: number | null; max_tokens: number };
@@ -23,7 +25,8 @@ export type BrowserReviewOptions = { driver?: (request: BrowserModelTurnRequest)
 
 export type BrowserRunRequest = {
   source: { kind: 'program'; program: Record<string, unknown> } |
-    { kind: 'definitions'; entries: Record<string, NativeDefinition>; root: string };
+    { kind: 'definitions'; entries: Record<string, NativeDefinition>; root: string } |
+    { kind: 'files'; root: string; files: Record<string, string> };
   inputs?: Record<string, unknown>;
   streams?: { over?: AsyncIterable<unknown> | Iterable<unknown> };
   modelTurn?: (request: BrowserModelTurnRequest) => Promise<BrowserModelTurn> | BrowserModelTurn;
@@ -37,16 +40,19 @@ export type BrowserRunRequest = {
   timeoutMs?: number;
 };
 
-/** Browser host for in-memory natlang programs, using the same reducer and tool agent as Node. */
+/** Browser host for natlang programs, using the same reducer and tool agent as Node. */
 export class BrowserNatlangHost {
   readonly environment: TypeScriptEnvironment;
+  readonly model?: BrowserLocalModel;
   private running = false;
   private closed = false;
   private readonly ownsEnvironment: boolean;
 
-  constructor(options: { environment?: TypeScriptEnvironment; host?: object; mode?: 'fresh' | 'retained' } = {}) {
+  constructor(options: { environment?: TypeScriptEnvironment; host?: object; mode?: 'fresh' | 'retained';
+    model?: BrowserLocalModel } = {}) {
     this.ownsEnvironment = !options.environment;
     this.environment = options.environment ?? new TypeScriptEnvironment({ host: options.host, mode: options.mode });
+    this.model = options.model;
   }
 
   async run(request: BrowserRunRequest): Promise<{ outcome: { kind: string; path: string; detail: string };
@@ -58,10 +64,14 @@ export class BrowserNatlangHost {
       throw new RangeError('mapWorkers must be positive');
     this.running = true;
     let runtime: NativeRuntime | undefined;
+    const modelAbort = new AbortController();
+    const abortModel = () => modelAbort.abort();
+    request.signal?.addEventListener('abort', abortModel, { once: true });
     try {
       const root: Pending = request.source.kind === 'program' ? buildPending(request.source.program) :
-        checkedDefinitions(request.source.entries, request.source.root).instantiate(request.inputs);
-      if (request.source.kind === 'program' && request.inputs) {
+        request.source.kind === 'files' ? loadFunctionFiles(request.source.root, request.source.files) :
+          checkedDefinitions(request.source.entries, request.source.root).instantiate(request.inputs);
+      if (request.source.kind !== 'definitions' && request.inputs) {
         if (root.nodeKind !== 'lambda' || root.type.kind !== 'lambda') throw new TypeError('inputs require a Lambda program');
         const env = new TypeEnv().child(root.types);
         for (const [name, value] of Object.entries(request.inputs)) {
@@ -79,7 +89,9 @@ export class BrowserNatlangHost {
           { kind: 'closed' } : { kind: 'item', value: step.value }; }
         catch (error) { return { kind: 'failed', detail: error instanceof Error ? error.message : String(error) }; }
       } };
-      const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
+      const modelTurn = request.modelTurn ?? (this.model ?
+        (turn: BrowserModelTurnRequest) => this.model!.turn(turn, modelAbort.signal) : undefined);
+      const agent = modelTurn ? new NativeToolAgent(modelTurn, {
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
@@ -96,10 +108,11 @@ export class BrowserNatlangHost {
       let abortListener: (() => void) | undefined;
       const interruption = new Promise<never>((_, reject) => {
         if (request.timeoutMs !== undefined)
-          timer = setTimeout(() => reject(new Error('natlang run timed out; external effects may have occurred')),
-            request.timeoutMs);
+          timer = setTimeout(() => { abortModel();
+            reject(new Error('natlang run timed out; external effects may have occurred')); }, request.timeoutMs);
         if (request.signal) {
-          abortListener = () => reject(new Error('natlang run aborted; external effects may have occurred'));
+          abortListener = () => { abortModel();
+            reject(new Error('natlang run aborted; external effects may have occurred')); };
           request.signal.addEventListener('abort', abortListener, { once: true });
           if (request.signal.aborted) abortListener();
         }
@@ -113,7 +126,8 @@ export class BrowserNatlangHost {
       return { outcome: { kind: result.outcome.kind, path: result.outcome.path, detail: result.outcome.detail },
         value: dump(result.value), emitted: result.emitted,
         trace: runtime.trace.events as Record<string, unknown>[], run_id: runId };
-    } finally { runtime?.close(); this.running = false; }
+    } finally { abortModel(); request.signal?.removeEventListener('abort', abortModel);
+      runtime?.close(); this.running = false; }
   }
 
   close(): void { this.closed = true; if (this.ownsEnvironment) this.environment.close(); }
