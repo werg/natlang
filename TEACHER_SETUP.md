@@ -174,15 +174,15 @@ were rejected. A failed or truncated teacher pass publishes no snapshot.
 
 The first long frozen-IR pass stopped after 14 of 394 attempts. Its watcher
 correctly refused to publish (`runs/finalize-synthetic-backfill-pass1.log`).
-The resumed pass uses `--turn-tokens 1600`, started with 387 missing keys,
-and writes `runs/teacher-leaves-frozen-s73-extended-20260919.jsonl`. The
+The resumed pass used `--turn-tokens 1600`, started with 387 missing keys,
+and wrote `runs/teacher-leaves-frozen-s73-extended-20260919.jsonl`. The
 original 700-token cap caused six responses to stop at `finish_reason=length`;
-four responses in the resumed audit also hit the 1600-token cap. The active
-watcher (`runs/finalize-synthetic-backfill-uncapped.log`) therefore runs one
-more pass over missing keys with no separate per-turn cap, writing
-`runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.jsonl`, before it
-creates `synthetic-all-after-uncapped-retry-<bank hash>` artifacts. All pass
-audits remain available; admitted references are shared through
+four responses in the resumed audit also hit the 1600-token cap. The watcher
+(`runs/finalize-synthetic-backfill-uncapped.log`) then ran another pass without
+a separate per-turn cap, writing
+`runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.jsonl`. That snapshot
+remained incomplete; the follow-up review below closed its remaining keys.
+All pass audits remain available; admitted references are shared through
 `data/leaf_references.jsonl`.
 
 ### Frozen-leaf rejection review, 20 September 2026
@@ -205,6 +205,17 @@ override. Normal tool and legacy inference have no default episode token,
 turn-count, or wall-clock cutoff. The teacher collector applies its own
 per-leaf wall-clock limit (300 seconds by default), while its response length
 is left to the model and server unless `--turn-tokens` is supplied.
+
+The complete reference bank has SHA-256 prefix `702a03e8`. Applying it to the
+frozen seed-73 IR with `--require-complete` produced
+`data/external_pilot/synthetic-all-complete-702a03e8.ir.jsonl` and its
+manifest: 10,000 eligible programs, 453 refreshed programs, 929 replaced leaf
+cases, and zero provisional programs. `audit_program_ir.py` passed. The
+verified training traces are in
+`data/external_pilot/synthetic-all-complete-702a03e8-shards`: 100 compressed
+shards, 280,472 eligible turns, and 100,647 episodes. All shards passed gzip
+integrity checks. Eight materialization workers caused a two-second effectful
+JavaScript timeout under contention; the successful run used four workers.
 
 ## End-of-turn completion
 
