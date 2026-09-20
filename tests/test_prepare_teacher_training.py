@@ -1,7 +1,8 @@
 import json
+import pytest
 
 from scripts.prepare_teacher_training import read_reviews, select, select_programs
-from scripts.teacher_trajectory_ir import digest
+from scripts.program_ir import digest
 
 
 def test_reviewed_selection_uses_exact_audit_and_bank_value(tmp_path):
@@ -54,3 +55,9 @@ def test_whole_program_selection_requires_trace_admission_and_deduplicates(tmp_p
     selected, stats = select_programs([path])
     assert [x["id"] for x in selected] == ["first"]
     assert stats == {"not_admitted": 1, "duplicate_program": 1}
+    tampered = tmp_path / "tampered.jsonl"
+    bad = row("bad", True)
+    bad["provenance"]["program_ir_sha256"] = "incorrect"
+    tampered.write_text(json.dumps(bad) + "\n")
+    with pytest.raises(ValueError, match="digest mismatch"):
+        select_programs([tampered])

@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.materialize_teacher_trajectory_ir import materialize
+from scripts.program_ir import digest as program_digest
 from scripts.project_teacher_trajectory_ir import project
 from scripts.teacher_trajectory_ir import digest, leaf_programs
 
@@ -118,7 +119,7 @@ def iter_programs(paths, stats):
                     row["outcome"].get("admission") or {}).get("admitted"):
                 stats["not_admitted"] += 1
                 continue
-            if digest(row["task"]["program_ir"]) != row["provenance"]["program_ir_sha256"]:
+            if program_digest(row["task"]["program_ir"]) != row["provenance"]["program_ir_sha256"]:
                 raise ValueError(f"{path}: teacher program IR digest mismatch")
             identity = (row["task"]["program_ir"]["id"],
                         row["provenance"]["program_ir_sha256"])

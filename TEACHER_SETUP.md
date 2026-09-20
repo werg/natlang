@@ -261,6 +261,14 @@ still being generated. Preserve each range's raw trajectory and trace files.
   --server http://127.0.0.1:8080 --template-id LFM2.5-350M --workers 8
 ```
 
+One real smoke run on `data/external_pilot/synthetic-simple-seed73-current.ir.jsonl`
+completed as `73:judge:4` with Bonsai. It passed trace admission, replayed as
+two turns, and exported both turns with captured reasoning to
+`data/teacher-program-bridge-pilot.sft.jsonl`. The source attempt and trace
+are `runs/teacher-program-bridge-pilot.ir.jsonl` and its adjacent trace file.
+This verified the whole-program bridge on one frozen program; each incoming
+batch still needs its own admission and replay check.
+
 The data-migration Bonsai pilot uses
 `codebases/data_migration/scenarios/two_exports.json` with
 `scripts/run_data_migration.py` in preview mode. Early traces showed that
