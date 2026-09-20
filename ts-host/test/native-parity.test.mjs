@@ -114,6 +114,29 @@ test('native complete leaf tool schema equals Python tools-v3', { skip: !python 
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] })).tools(session), expected);
 });
 
+test('native marked request text matches Python program and function listing', { skip: !python }, async () => {
+  const docs = [
+    { $lambda: { type: 'Lambda<{ item: Num }, Num>', instructions: '1. Double the item.\n2. Write the answer.',
+      args: { item: 4 }, codebase: { double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' } } } },
+    { $lambda: { type: 'Lambda<{}, Num>', instructions: Array.from({ length: 11 }, (_, index) => `${index + 1}. Step.`).join('\n'),
+      codebase: { a: { returns: 'Num', description: 'A number.', code: 'return 1;' },
+        longer: { returns: 'Num', description: 'Another number.', code: 'return 2;' } } } },
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\nprint(json.dumps([ToolSurface().render_request(Session(Runtime(None),load_program(doc),TypeEnv())) for doc in json.load(sys.stdin)]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(docs), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const actual = [];
+  for (const doc of docs) {
+    let request;
+    const agent = new NativeToolAgent(turn => { request = turn.messages[1].content;
+      return { calls: [], text: '', completion_tokens: 1 }; });
+    await new NativeRuntime({ agent: session => agent.run(session) }).runRoot(doc);
+    actual.push(request);
+  }
+  assert.deepEqual(actual, expected);
+});
+
 test('native complete checked-call and completion-mark schema equals Python tools-v3', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{ item: Num, items: Num[] }, Num>',
     instructions: '1. Double the item.\n2. Write the answer.', args: { item: 4, items: [2, 3] },
@@ -153,18 +176,16 @@ test('native checked-call rejection codes agree with Python for malformed bindin
   assert.deepEqual(actual, expected);
 });
 
-test('native tool schema exposes only unbound child inputs of pending tasks', { skip: !python }, () => {
+test('native complete pending-child tool schema equals Python tools-v3', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{}, { answer: Text }>', instructions: 'Use the nested task.',
     return: { answer: { $lambda: { type: 'Lambda<{ question: Text }, Text>', instructions: 'Answer the question.' } } } } };
-  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None),load_program(json.load(sys.stdin)),TypeEnv())\ntools={x['function']['name']:x['function']['parameters'] for x in ToolSurface().tools(s)}\nprint(json.dumps({'write':tools['write']['x-natlang-alternatives'],'read':tools['read']['x-natlang-alternatives']}))`;
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None,executors={'typescript-host':object()},engine_selection=True),load_program(json.load(sys.stdin)),TypeEnv())\nprint(json.dumps(ToolSurface().tools(s)))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
   const agent = new NativeToolAgent(() => ({ calls: [] }));
-  const tools = Object.fromEntries(agent.tools(session).map(item => [item.function.name, item.function.parameters]));
-  assert.deepEqual(tools.write['x-natlang-alternatives'], expected.write);
-  assert.deepEqual(tools.read['x-natlang-alternatives'], expected.read);
+  assert.deepEqual(agent.tools(session), expected);
 });
 
 test('native checked functions compose Map, Fold and Iterate like Python', { skip: !python }, async () => {

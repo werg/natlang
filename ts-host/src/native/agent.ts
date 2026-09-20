@@ -180,6 +180,9 @@ export class NativeToolAgent {
       !['lambda', 'map', 'fold', 'iterate'].includes(session.env.resolve(slot.type).kind)).slice(0, 48);
     const definable = all.filter(slot => slot.writable).slice(0, 48);
     const textSlots = all.filter(slot => slot.writable && typeof slot.value === 'string').map(slot => slot.path);
+    for (const slot of all) if (slot.writable && isPending(slot.value) &&
+      slot.value.nodeKind === 'lambda' && slot.value.kind === 'instructions')
+      textSlots.push(`${slot.path}/instructions`);
     if (!Object.keys(lam.codebase).length && lam.kind === 'instructions') textSlots.unshift('instructions');
     const path = { type: 'string' };
     const slotPaths = writable.map(slot => slot.path);
@@ -364,15 +367,19 @@ export class NativeToolAgent {
   async run(session: NativeSession): Promise<string | void> {
     const lam = session.lam;
     const output = lam.type.kind === 'lambda' ? formatType(lam.type.returns) : 'unknown';
-    const functions = Object.entries(lam.codebase).map(([name, raw]) => {
+    const signatures = Object.entries(lam.codebase).map(([name, raw]) => {
       const fn = raw as Record<string, unknown>;
       const args = Object.entries(fn.args as Record<string, string> ?? {}).map(([key, type]) => `${key}: ${type}`).join(', ');
-      return `  ${name}(${args}) -> ${fn.returns}: ${fn.description ?? ''}`;
+      return { signature: `${name}(${args}) -> ${fn.returns}`, description: String(fn.description ?? '') };
     });
+    const width = Math.max(0, ...signatures.map(item => item.signature.length));
+    const functions = signatures.map(item => `  ${item.signature.padEnd(width)}   ${item.description}`.trimEnd());
     const original = lam.originalBody ?? lam.body;
-    const program = functions.length ? original.replace(/^\n+|\n+$/g, '').split('\n').map((line, index) => {
+    const numbered = original.replace(/^\n+|\n+$/g, '').split('\n');
+    const program = functions.length ? numbered.map((line, index) => {
       const text = line.trim(), markable = text && !text.startsWith('#') && !text.startsWith('function ');
-      return `${index + 1} ${markable ? lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`;
+      return `${String(index + 1).padStart(String(numbered.length).length)} ${markable ?
+        lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`.trimEnd();
     }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
     const messages: Record<string, unknown>[] = [
       { role: 'system', content: (this.options.systemPrompt ?? TOOLS_PROMPT) +
