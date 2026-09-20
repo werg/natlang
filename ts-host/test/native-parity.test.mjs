@@ -475,6 +475,27 @@ test('native quiesced root resumes with the same Python trace transitions', { sk
   assert.deepEqual(actual, expected);
 });
 
+test('native live Fold stream matches Python waiting and resumed trace', { skip: !python }, async () => {
+  const doc = { $fold: { type: 'Fold<Num, Num>', init: 0,
+    step: { $lambda: { type: 'Lambda<{ acc: Num, item: Num }, Num>', code: 'return args.acc + args.item;' } } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.streams import QueueSource,StreamBuffer\nsink=TraceRecorder({})\nsource=QueueSource();source.put(2)\nnode=load_program(json.load(sys.stdin));node.over=StreamBuffer(source)\nrt=Runtime(None,trace_sink=sink)\nrt.run_root(node)\nsource.put(3);source.close()\nrt.run_root(node)\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const polls = [{ kind: 'item', value: 2 }, { kind: 'empty' },
+    { kind: 'item', value: 3 }, { kind: 'closed' }];
+  const runtime = new NativeRuntime({ stream: { poll: () => polls.shift() } });
+  const node = buildPending(doc);
+  await runtime.runRoot(node);
+  await runtime.runRoot(node);
+  const actual = runtime.trace.events.slice(1).map(event => {
+    if (event.kind !== 'eval' || event.phase !== 'start') return event;
+    const { declared_engine, ...rest } = event;
+    return { ...rest, engine: declared_engine };
+  });
+  assert.deepEqual(actual, expected);
+});
+
 test('native approved review preserves Python proposal trace and audit decisions', { skip: !python }, async () => {
   const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seventeen.' } };
   const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self): self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index==1: return ChatTurn([('write',{'path':'return','type':'Num','value':17})],completion_tokens=1,value_confidence=[{'geometric_mean':0.1}])\n  if self.index==2: return ChatTurn([('review_write',{'decision':'approve','reason':'The value is correct.'})],completion_tokens=1)\n  return ChatTurn([], 'done',completion_tokens=1)\nsink=TraceRecorder({})\nproposals=[];reviews=[]\nRuntime(lambda lam:ToolAgent(Decoder(),careful_threshold=0.5,proposals=proposals,reviews=reviews),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'events':sink.events[1:],'proposals':[{'released':p['released'],'confidence':p['value_confidence']} for p in proposals], 'reviews':[{'decision':r['decision'],'trigger':r['trigger'],'order':r['order'],'prompt_variant':r['prompt_variant']} for r in reviews]}))`;

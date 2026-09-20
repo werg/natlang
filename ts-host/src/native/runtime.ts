@@ -454,11 +454,23 @@ export class NativeRuntime {
       if (this.stream && !ref.path) {
         if (this.streamCurrent === undefined) {
           const polled = await this.stream.poll();
-          if (polled.kind === 'empty') { node.status = 'waiting'; node.note = 'waiting for stream input'; return { path: ref.path, kind: 'waiting', detail: node.note }; }
-          if (polled.kind === 'closed') return this.done(ref, node, node.acc);
-          if (polled.kind === 'failed') return this.quiesce(ref, node, `stream failed: ${polled.detail}`);
-          this.streamPosition++;
+          if (polled.kind === 'empty') {
+            node.status = 'waiting'; node.note = 'waiting for stream input';
+            this.trace.emit('stream', { path: ref.path, phase: 'waiting', position: this.streamPosition });
+            return { path: ref.path, kind: 'waiting', detail: node.note };
+          }
+          if (polled.kind === 'closed') {
+            this.trace.emit('stream', { path: ref.path, phase: 'closed', position: this.streamPosition });
+            return this.done(ref, node, node.acc);
+          }
+          if (polled.kind === 'failed') {
+            this.trace.emit('stream', { path: ref.path, phase: 'failed', position: this.streamPosition,
+              detail: polled.detail });
+            return this.quiesce(ref, node, `stream failed: ${polled.detail}`);
+          }
           this.streamCurrent = coerce(polled.value, node.type.a, env, `${ref.path}/over/${node.at}`);
+          this.trace.emit('stream', { path: ref.path, phase: 'admitted', position: this.streamPosition,
+            value: dump(this.streamCurrent) });
         }
         item = this.streamCurrent;
       } else {
@@ -475,7 +487,10 @@ export class NativeRuntime {
       const out = await this.trigger(child);
       if (out.kind !== 'done') return this.quiesce(ref, node, `step ${node.at} ${out.kind}: ${out.detail}`);
       node.acc = node.current; node.current = null; node.at++;
-      if (this.stream && !ref.path) this.streamCurrent = undefined;
+      if (this.stream && !ref.path) {
+        this.streamCurrent = undefined; this.streamPosition++;
+        this.trace.emit('stream', { path: ref.path, phase: 'consumed', position: this.streamPosition });
+      }
     }
   }
 
