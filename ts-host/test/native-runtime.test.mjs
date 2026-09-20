@@ -198,8 +198,8 @@ test('native tool schemas narrow to typed slots and expand as workspace values a
   const agent = new NativeToolAgent(() => ({ calls: [] }));
   const tools = agent.tools(session);
   const write = tools.find(item => item.function.name === 'write').function.parameters;
-  assert.ok(write.properties.path.anyOf[0].enum.includes('return/label'));
-  assert.ok(write.properties.path.anyOf[0].enum.includes('return/count'));
+  assert.ok(write['x-natlang-alternatives'].some(alt => alt.path?.const === 'return/label'));
+  assert.ok(write['x-natlang-alternatives'].some(alt => alt.path?.const === 'return/count'));
   const read = tools.find(item => item.function.name === 'read').function.parameters;
   assert.ok(read.properties.path.enum.includes('args/item'));
   assert.ok(!read.properties.path.enum.includes('return/label'));
@@ -370,7 +370,7 @@ test('native en-passant done marks validate before work and follow successful wr
   assert.equal(lam.marks[1], 'done');
   const tools = new NativeToolAgent(() => ({ calls: [] })).tools(session);
   const mark = tools.find(item => item.function.name === 'mark_done');
-  assert.deepEqual(mark.function.parameters.properties.start.enum, [2]);
+  assert.deepEqual(mark.function.parameters['x-natlang-alternatives'][0].start.enum, [2]);
   assert.ok(tools.find(item => item.function.name === 'write').function.parameters.properties.done);
 });
 

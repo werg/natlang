@@ -180,6 +180,7 @@ export class NativeToolAgent {
       !['lambda', 'map', 'fold', 'iterate'].includes(session.env.resolve(slot.type).kind)).slice(0, 48);
     const definable = all.filter(slot => slot.writable).slice(0, 48);
     const textSlots = all.filter(slot => slot.writable && typeof slot.value === 'string').map(slot => slot.path);
+    if (!Object.keys(lam.codebase).length && lam.kind === 'instructions') textSlots.unshift('instructions');
     const path = { type: 'string' };
     const slotPaths = writable.map(slot => slot.path);
     const definitionPaths = definable.map(slot => slot.path);
@@ -220,31 +221,39 @@ export class NativeToolAgent {
       return Object.keys(definition?.args as Record<string, unknown> ?? {});
     }).map(name => name.replace(/\?$/, '')))];
     const unmarked = names.length ? this.unmarkedLines(session) : [];
-    const done = { anyOf: [{ enum: unmarked },
+    const doneLine = { anyOf: [{ enum: unmarked },
       { type: 'array', items: { enum: unmarked }, minItems: 1, maxItems: 2 }] };
+    const done = { ...doneLine,
+      description: 'line or inclusive [first, last] range that this action finishes; EVERY line in the range is marked done on success. Never include an untaken branch.' };
     const writeProperties: Record<string, unknown> = {
-      path: { anyOf: [{ enum: slotPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
-      type: { type: 'string' }, value: writeValue, source: { type: 'string', enum: readable },
+      path: { type: 'string', description: '`return`, a part of it, or let/<name>' },
+      type: { type: 'string', description: 'the type of what is written, e.g. Bool[], Text[], Num, Text, { name: Text, count: Num }, or a type name of this task' },
+      value: writeValue,
+      source: { type: 'string', description: 'instead of `value`: the path of an existing value to copy' },
     };
     if (unmarked.length) writeProperties.done = done;
     const tools = [
-      tool('read', 'Read a value from the workspace. Use a range for long text or lists.', {
-        path: { type: 'string', enum: [...new Set([...readable, ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
+      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function.', {
+        path: { type: 'string', description: 'what to read', enum: [...new Set([...readable, ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
         start: { type: 'integer' }, end: { type: 'integer' } }, ['path']),
-      tool('write', 'Write a complete typed value to return or a local.', writeProperties, ['path', 'type']),
-      tool('edit', 'Replace one exact occurrence in a text value.', {
-        path: { type: 'string', enum: textSlots }, old: { type: 'string' }, new: { type: 'string' } }, ['path', 'old', 'new']),
-      tool('run_code', 'Run exact TypeScript work in the selected engine.', {
+      tool('write', 'Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name creates the local; `type` says what it holds). Supply `value` or `source`; a type alone is not a value. The value must be complete; to reuse a value that already exists, give `source` (its path) instead of `value`. Source copying preserves the value and type; it does not wrap or convert. Use the destination requested by the program; do not append a field name to make incompatible types fit. To change how a function works, copy it first: type `Function<name>` with path `let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.', writeProperties, ['path', 'type']),
+      tool('edit', 'Replace text: `old` must occur exactly once in the text at `path`. Use it to delete finished steps from `instructions` (new = ""), to substitute a result into them, or to adapt a copied function.', {
+        path: { type: 'string', description: 'a text', ...(textSlots.length ? { enum: textSlots } : {}) },
+        old: { type: 'string' }, new: { type: 'string' } }, ['path', 'old', 'new']),
+      tool('run_code', 'Run code for exact work (counting, arithmetic, sorting, string operations). Your inputs are in `args`, your locals in `locals`. The value of the last expression comes back to you. Select an available engine.', {
         code: { type: 'string' }, engine: { enum: ['typescript-host'] } }, ['code', 'engine']),
     ];
     (tools[0]!.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = readAlternatives;
     (tools[1]!.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = writeAlternatives;
     (tools[1]!.function.parameters as Record<string, unknown>).anyOf = [{ required: ['value'] }, { required: ['source'] },
-      ...Object.keys(lam.codebase).map(name => ({ properties: { type: { const: `Function<${name}>` } }, required: ['type'] }))];
+      ...(Object.keys(lam.codebase).length ? [{ properties: { type: {
+        enum: Object.keys(lam.codebase).map(name => `Function<${name}>`) } }, required: ['type'] }] : [])];
     const callProperties: Record<string, unknown> = {
-      function: { enum: names }, to: { anyOf: [{ enum: definitionPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
-      inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string', enum: readable }])), additionalProperties: false }, over: { type: 'string', enum: readable },
-      init: {}, until: { type: 'string' }, max: { type: 'integer' },
+      function: { enum: names }, to: { type: 'string' },
+      inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string' }])), additionalProperties: false },
+      over: { type: 'string' },
+      init: { anyOf: ['string', 'number', 'boolean', 'null', 'object', 'array'].map(type => ({ type })) },
+      until: { type: 'string' }, max: { type: 'integer' },
     };
     if (unmarked.length) callProperties.done = done;
     if (names.length) {
@@ -290,7 +299,7 @@ export class NativeToolAgent {
       for (const name of names) for (const slot of present.filter(slot => isPending(slot.value) &&
         ['unreduced', 'quiesced'].includes(slot.value.status)).slice(0, 4))
         callAlternatives.push({ function: { const: name }, to: { enum: [slot.path] } });
-      const call = tool('call', 'Call a checked function and place its result at to.', callProperties, ['function', 'to']);
+      const call = tool('call', 'Call one of your functions and put its result at `to` (`return`, a part of it, or a local `let/<name>`). `inputs` maps each parameter to the path of its value. With `over`: call it once for every item of that list (the item goes to the one parameter you left out). Do not put the mapped item in inputs. The result is the list of results. With `over` and `init`, omit both item and acc from inputs: carry `acc` through the list. With `init`, `until`, `max`: repeat from the value at `init` until the function `until` says true, at most `max` times. Calling again with only `function` and `to` retries what did not finish.', callProperties, ['function', 'to']);
       (call.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = callAlternatives;
       tools.push(call);
     }
@@ -299,15 +308,15 @@ export class NativeToolAgent {
       const alternatives = (entry?.function.parameters as Record<string, unknown> | undefined)?.['x-natlang-alternatives'];
       if (!Array.isArray(alternatives)) continue;
       for (const alternative of alternatives) {
-        alternative.done = done;
+        alternative.done = doneLine;
         alternative['x-optional'] = [...(alternative['x-optional'] ?? []), 'done'];
       }
     }
     if (unmarked.length) {
       const markable = [...new Set([...unmarked, ...(lam.originalBody ?? lam.body).replace(/^\n+|\n+$/g, '').split('\n')
         .flatMap((line, index) => line.trim().startsWith('function ') ? [index + 1] : [])])].sort((a, b) => a - b);
-      const mark = tool('mark_done', 'Mark completed or untaken lines of the program.', {
-        start: { type: 'integer', enum: markable }, end: { type: 'integer', enum: markable },
+      const mark = tool('mark_done', 'Mark lines of your program as finished. `start` alone for one line, `start` and `end` for an inclusive range (EVERY line between the endpoints). Add skipped=true when the lines did not apply, such as the branch of an `if` that was not taken. Mark a line only after everything it asks for is finished.', {
+        start: { type: 'integer' }, end: { type: 'integer' },
         skipped: { type: 'boolean' } }, ['start']);
       (mark.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = [
         { start: { enum: markable }, skipped: { const: true }, 'x-optional': ['skipped'] },
@@ -315,8 +324,8 @@ export class NativeToolAgent {
       ];
       tools.push(mark);
     }
-    tools.push(tool('report_blocker', 'Explain information missing from the task.', { missing: { type: 'string' } }, ['missing']));
-    tools.push(tool('report_error', 'Explain an unsatisfiable or invalid instruction.', { message: { type: 'string' } }, ['message']));
+    tools.push(tool('report_blocker', 'The task cannot be done as asked: the inputs do not determine the result, or a rule does not cover the case. Say exactly what is missing. This ends the task without a result; do not guess instead.', { missing: { type: 'string' } }, ['missing']));
+    tools.push(tool('report_error', 'The executed instructions cannot be satisfied: a contradiction, invalid operation, or incompatible required result prevents correct completion. Explain the error. This ends the task without a result. Do not change the requirements to succeed. Use report_blocker for missing information instead.', { message: { type: 'string' } }, ['message']));
     return tools;
   }
 

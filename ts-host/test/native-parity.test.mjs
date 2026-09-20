@@ -104,22 +104,28 @@ test('native workspace text and core tool alternatives agree with Python surface
   assert.deepEqual(definitions.write.properties.value, expected.value);
 });
 
-test('native checked-call and completion-mark alternatives agree with Python surface', { skip: !python }, () => {
+test('native complete leaf tool schema equals Python tools-v3', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ x: Num }, Num>', instructions: 'Return x.', args: { x: 3 } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None,executors={'typescript-host':object()},engine_selection=True),load_program(json.load(sys.stdin)),TypeEnv())\nprint(json.dumps(ToolSurface().tools(s)))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(new NativeToolAgent(() => ({ calls: [] })).tools(session), expected);
+});
+
+test('native complete checked-call and completion-mark schema equals Python tools-v3', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{ item: Num, items: Num[] }, Num>',
     instructions: '1. Double the item.\n2. Write the answer.', args: { item: 4, items: [2, 3] },
     codebase: { double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' },
       is_enough: { args: { value: 'Num' }, returns: 'Bool', code: 'return args.value > 10;' } } } };
-  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None),load_program(json.load(sys.stdin)),TypeEnv())\ntools={x['function']['name']:x['function']['parameters'] for x in ToolSurface().tools(s)}\nprint(json.dumps({n:tools[n] for n in ('call','write','mark_done')}))`;
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None,executors={'typescript-host':object()},engine_selection=True),load_program(json.load(sys.stdin)),TypeEnv())\nprint(json.dumps(ToolSurface().tools(s)))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
   const agent = new NativeToolAgent(() => ({ calls: [] }));
-  const actual = Object.fromEntries(agent.tools(session).map(item =>
-    [item.function.name, item.function.parameters]));
-  for (const name of ['call', 'write', 'mark_done']) {
-    assert.deepEqual(actual[name]?.['x-natlang-alternatives'], expected[name]?.['x-natlang-alternatives'], name);
-  }
+  assert.deepEqual(agent.tools(session), expected);
 });
 
 test('native checked-call rejection codes agree with Python for malformed bindings', { skip: !python }, async () => {
