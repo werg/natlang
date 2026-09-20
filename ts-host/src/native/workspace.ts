@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { TypeScriptEnvironment } from '../environment.js';
 import type { ModelTurnRequest, ModelTurn } from '../runtime.js';
-import { NativeToolAgent } from './agent.js';
+import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions, type NativeDefinition } from './codebase.js';
 import { NativeRuntime } from './runtime.js';
 import { fitsType, formatType, parseType, TypeEnv } from './types.js';
@@ -44,6 +44,7 @@ export class NativeSourceWorkspace {
 
   async invoke(name: string, inputs: Record<string, unknown> = {}, options: {
     modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
+    review?: NativeReviewOptions;
     parentCallId?: string; maxEpisodes?: number; maxDepth?: number;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
     capabilities?: Record<string, (args: unknown[]) => unknown>;
@@ -55,7 +56,7 @@ export class NativeSourceWorkspace {
     if (!Number.isInteger(maxEpisodes) || maxEpisodes < 1 || maxEpisodes > 32)
       throw new RangeError('child episode budget must be between 1 and 32');
     const graph = checkedDefinitions(this.definitions, name);
-    const agent = options.modelTurn ? new NativeToolAgent(options.modelTurn) : undefined;
+    const agent = options.modelTurn ? new NativeToolAgent(options.modelTurn, { review: options.review }) : undefined;
     const environment = options.environment ?? new TypeScriptEnvironment();
     const runtime = new NativeRuntime({ environment, agent: agent ? session => agent.run(session) : undefined,
       capabilities: options.capabilities, maxEpisodes, maxDepth: options.maxDepth,

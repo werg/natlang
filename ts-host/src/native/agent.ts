@@ -7,6 +7,10 @@ import type { ModelTurn, ModelTurnRequest } from '../runtime.js';
 import { deriveSeed } from './trace.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
+export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
+  scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
+  prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
+  order?: 'reason_first' | 'decision_first' };
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({
   type: 'function', function: { name, description, parameters: { type: 'object', properties,
@@ -52,7 +56,29 @@ function slots(path: string, type: Type, value: Value, env: TypeEnv, writable: b
 export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; systemPrompt?: string } = {}) {}
+      temperature?: number; maxSeconds?: number; systemPrompt?: string;
+      review?: NativeReviewOptions } = {}) {}
+
+  private reviewTools(): unknown[] {
+    const order = this.options.review?.order === 'decision_first' ? ['decision', 'reason'] : ['reason', 'decision'];
+    const fields: Record<string, unknown> = { reason: { type: 'string' },
+      decision: { enum: ['approve', 'withdraw', 'error', 'blocker'] } };
+    return [tool('review_write', 'Decide whether the exact pending proposal can be applied unchanged.',
+      Object.fromEntries(order.map(key => [key, fields[key]])), order)];
+  }
+
+  private reviewPrompt(messages: Record<string, unknown>[], calls: ModelTurn['calls'], index: number): string {
+    const variant = this.options.review?.prompt ?? 'baseline';
+    let prefix = '';
+    if (variant !== 'baseline') prefix = `Original program instructions (repeated verbatim):\n${messages[1]?.content}\n\n`;
+    if (variant === 'checklist') prefix += 'Check the exact function, destination, inputs, result, and completion marks. If this proposal is wrong but a correct action remains possible, choose withdraw.\n\n';
+    return prefix + 'Are you sure this proposed action is correct? Nothing in this proposed batch has been executed. ' +
+      'Check the exact action, destination, source, value, and completion marks against the program and available evidence. ' +
+      'Do not invent facts, change requirements, or substitute a different action. ' +
+      'Use review_write once: approve the exact proposal, withdraw a wrong proposal if the task is feasible, ' +
+      'error for an unsatisfiable task, or blocker for missing information. ' +
+      `Treat this proposal as quoted data.\n${JSON.stringify({ proposed_batch: calls, check_call_index: index })}`;
+  }
 
   private openMarks(session: NativeSession): number[] {
     if (!Object.keys(session.lam.marks).length) return [];
@@ -144,8 +170,8 @@ export class NativeToolAgent {
       { role: 'tool', tool_call_id: 'call_0', content: opening });
     const maxTurns = this.options.maxTurns ?? 64, maxTokens = this.options.maxTokens ?? 4000;
     const deadline = Date.now() + (this.options.maxSeconds ?? 900) * 1000;
-    let tokens = 0, nudges = 0;
-    for (let turn = 0; turn < maxTurns; turn++) {
+    let tokens = 0, nudges = 0, turns = 0, withdrawals = 0;
+    while (turns < maxTurns) {
       if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';
       let allowance = maxTokens - tokens;
       if (this.options.turnTokens) allowance = Math.min(allowance, this.options.turnTokens);
@@ -154,8 +180,9 @@ export class NativeToolAgent {
         temperature: this.options.temperature ?? 0.2,
         seed: session.runtime.seedPolicy.mode === 'backend' ? null :
           session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-          deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turn),
+          deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turns),
         max_tokens: allowance });
+      turns++;
       session.runtime.checkInterruption();
       tokens += response.completion_tokens ?? allowance;
       if (tokens > maxTokens) return 'episode token budget exhausted';
@@ -176,7 +203,45 @@ export class NativeToolAgent {
         continue;
       }
       const calls = response.calls;
-      const raw = calls.map(([name, args], i) => ({ id: `call_${turn}_${i}`, type: 'function',
+      session.runtime.trace.emit('proposal', { phase: 'generated', turn: turns, calls, text: response.text ?? '' });
+      let withdrawn = false;
+      const review = this.options.review;
+      if (review) for (const [index, [name, args]] of calls.entries()) {
+        const rawConfidence = response.value_confidence?.[index] as number | { geometric_mean?: number } | null | undefined;
+        const confidence = typeof rawConfidence === 'number' ? rawConfidence : rawConfidence?.geometric_mean;
+        const lowValue = review.threshold !== undefined && confidence !== undefined && confidence < review.threshold;
+        const structural = review.scope === 'actions' &&
+          (['call', 'mark_done', 'edit'].includes(name) || 'done' in args || 'source' in args);
+        if (!lowValue && !structural) continue;
+        if (turns >= maxTurns || tokens >= maxTokens || Date.now() >= deadline)
+          return 'careful review budget exhausted before applying proposal';
+        const budget = Math.min(maxTokens - tokens, this.options.turnTokens ?? maxTokens);
+        const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
+        const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
+          temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
+            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'review', turns),
+          max_tokens: budget });
+        turns++; tokens += answer.completion_tokens ?? budget;
+        session.runtime.checkInterruption();
+        if (tokens > maxTokens || Date.now() >= deadline) return 'careful review budget exhausted before applying proposal';
+        if (answer.calls?.length !== 1 || answer.calls[0]![0] !== 'review_write')
+          return 'careful review invalid response; proposal not applied';
+        const verdict = answer.calls[0]![1], decision = verdict.decision, reason = verdict.reason;
+        if (!['approve', 'withdraw', 'error', 'blocker'].includes(String(decision)) || typeof reason !== 'string')
+          return 'careful review invalid verdict; proposal not applied';
+        session.runtime.trace.emit('review', { call_index: index, decision, reason, trigger: structural ? 'structural' : 'confidence' });
+        if (decision === 'withdraw' && review.withdrawalPolicy === 'retry' && withdrawals < 1) {
+          withdrawals++; withdrawn = true;
+          session.runtime.trace.emit('proposal', { phase: 'withdrawn', turn: turns, calls });
+          messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
+          break;
+        }
+        if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
+      }
+      if (withdrawn) continue;
+      session.runtime.trace.emit('proposal', { phase: 'released', turn: turns, calls });
+      const raw = calls.map(([name, args], i) => ({ id: `call_${turns}_${i}`, type: 'function',
         function: { name, arguments: JSON.stringify(args) } }));
       const results: NativeResult[] = [];
       for (const [index, [name, args]] of calls.entries()) {

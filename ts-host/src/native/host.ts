@@ -4,12 +4,14 @@ import { randomUUID } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment } from '../environment.js';
 import type { RunRequest, RunResult } from '../runtime.js';
-import { NativeToolAgent } from './agent.js';
+import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions } from './codebase.js';
 import { NativeRuntime, type NativeStream } from './runtime.js';
 import { loadFunctionFile } from './source.js';
 import { TypeEnv, type Type } from './types.js';
 import { buildPending, coerce, dump, isPending, type Pending } from './values.js';
+
+export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions };
 
 /** Python-free host. Its interpreter remains opt-in while differential parity is expanded. */
 export class NativeNatlangHost {
@@ -23,7 +25,7 @@ export class NativeNatlangHost {
     this.environment = options.environment ?? new TypeScriptEnvironment({ host: options.host, mode: options.mode });
   }
 
-  async run(request: RunRequest): Promise<RunResult> {
+  async run(request: NativeRunRequest): Promise<RunResult> {
     if (this.closed) throw new Error('natlang host is disposed');
     if (this.running) throw new Error('concurrent runs cannot share a native eval environment');
     if (request.signal?.aborted) throw new Error('natlang run aborted');
@@ -69,7 +71,7 @@ export class NativeNatlangHost {
       const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
-        maxSeconds: request.options?.model?.max_seconds }) : undefined;
+        maxSeconds: request.options?.model?.max_seconds, review: request.review }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,

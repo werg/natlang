@@ -17,6 +17,8 @@ NATLANG_PYTHON=/path/to/natlang-python npm test
 
 For Python-free runs, import `NativeNatlangHost` instead. Its runtime is opt-in until the parity gate in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md) is complete.
 
+The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace.
+
 ## Run a program
 
 ```ts

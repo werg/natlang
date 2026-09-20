@@ -228,3 +228,25 @@ test('model write cannot invent an unchecked anonymous task', () => {
   assert.deepEqual(result.codes, ['anonymous-lambda']);
   assert.equal(lam.return, MISSING);
 });
+
+test('review withdrawal prevents a proposed write and permits one corrected retry', async () => {
+  let proposed = 0, reviewed = 0;
+  const agent = new NativeToolAgent(() => {
+    proposed++;
+    if (proposed === 1) return { calls: [['write', { path: 'return', type: 'Num', value: 99 }]],
+      value_confidence: [0.1], completion_tokens: 1 };
+    if (proposed === 2) return { calls: [['write', { path: 'return', type: 'Num', value: 7 }]],
+      value_confidence: [0.9], completion_tokens: 1 };
+    return { calls: [], text: 'done', completion_tokens: 1 };
+  }, { review: { threshold: 0.5, withdrawalPolicy: 'retry', driver: () => {
+    reviewed++;
+    return { calls: [['review_write', { reason: 'The proposed value ignores the instruction.', decision: 'withdraw' }]],
+      completion_tokens: 1 };
+  } } });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven.' } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 7);
+  assert.equal(reviewed, 1);
+  assert.ok(runtime.trace.events.some(event => event.kind === 'proposal' && event.phase === 'withdrawn'));
+  assert.equal(runtime.trace.events.filter(event => event.kind === 'action' && event.name === 'write').length, 1);
+});

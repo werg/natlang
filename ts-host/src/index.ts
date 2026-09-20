@@ -7,6 +7,8 @@ export type { JobState } from './desktop.js';
 export { TypeEnv, TypeSyntaxError, LOOP_VERDICT, parseType, formatType, fitsType, resultType } from './native/types.js';
 export type { Type as NatlangType } from './native/types.js';
 export { NativeNatlangHost } from './native/host.js';
+export type { NativeRunRequest } from './native/host.js';
+export type { NativeReviewOptions } from './native/agent.js';
 export { NativeRuntime, NativeSession } from './native/runtime.js';
 export { NativeToolAgent } from './native/agent.js';
 export { checkedDefinitions } from './native/codebase.js';
