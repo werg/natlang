@@ -250,7 +250,14 @@ The phase-one LFM-rendered bundle is `data/synthetic-phase1-s73.sft.jsonl`:
 280,472 original turns plus 4,151 input-variant turns, or 284,623 pairs in
 10,000 program groups. The original and variant template hashes match, and
 every variant group is present among the originals. A separate seed-74
-`v7_arch` run is being generated from a pinned checkout to add new programs.
+`v7_arch` run from a pinned checkout added 10,000 programs and 315,850
+reference turns in `data/external_pilot/synthetic-s74-reference-shards`.
+Its frozen IR is `data/external_pilot/synthetic-s74-frozen.ir.jsonl`;
+`audit_program_ir.py` passed all 10,000. A provisional-leaf audit found 188
+distinct new teacher keys across 195 programs. The first teacher pass is
+recording attempts at `runs/teacher-leaves-s74-pass1.jsonl`; those attempts
+must be reviewed and admitted before refreshing this IR for a complete
+synthetic SFT export.
 
 ## End-of-turn completion
 
