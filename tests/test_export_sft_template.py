@@ -19,8 +19,10 @@ class TemplateServer(BaseHTTPRequestHandler):
         parts = []
         for message in request["messages"]:
             body = message.get("content", "")
+            if message.get("reasoning_content"):
+                body = "<think>" + message["reasoning_content"] + "</think>" + body
             if message.get("tool_calls"):
-                body = json.dumps(message["tool_calls"])
+                body += json.dumps(message["tool_calls"])
             parts.append(f"<|im_start|>{message['role']}\n{body}<|im_end|>")
         prompt = "".join(parts)
         if request["messages"][-1]["role"] != "assistant":
@@ -90,6 +92,14 @@ def test_template_export_records_identity_and_rejects_changed_resume(tmp_path):
                                    *base[4:]], capture_output=True, text=True)
         assert exported.returncode == 0, exported.stderr
         assert json.loads(reply_dst.read_text())["completion"] == "<|im_end|>"
+        reasoning_src, reasoning_dst = tmp_path / "reasoning.jsonl", tmp_path / "reasoning-sft.jsonl"
+        reasoning_src.write_text(json.dumps({**row, "id": "reasoned",
+                                             "teacher_reasoning": "Check the destination before writing."}) + "\n")
+        reasoned = subprocess.run([base[0], base[1], str(reasoning_src), str(reasoning_dst),
+                                   *base[4:]], capture_output=True, text=True)
+        assert reasoned.returncode == 0, reasoned.stderr
+        assert "<think>Check the destination before writing.</think>" in json.loads(
+            reasoning_dst.read_text())["completion"]
     finally:
         server.shutdown()
         thread.join()

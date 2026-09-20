@@ -162,3 +162,17 @@ def test_same_email_different_name_stays_in_review(tmp_path):
     assert {r["source_key"] for r in preview["patch"]["review"]} == {
         "legacy:customer:c7", "legacy:order:o7"}
     assert len(preview["patch"]["orders"]) == 2
+
+
+def test_valid_batch_identity_decisions_do_not_depend_on_reply_order(tmp_path):
+    class ReversedAnalyst(Analyst):
+        def run(self, session):
+            if self.lam.fn_name == "decide":
+                self.lam.in_["customers"] = list(reversed(self.lam.in_["customers"]))
+            return super().run(session)
+
+    s = MigrationStudio(tmp_path / "target.sqlite", agent_factory=lambda lam: ReversedAnalyst(lam),
+                        model_id="scripted-reversed", root_seed=14)
+    preview = s.preview(exports())
+    assert preview["counts"]["mapped_customers"] == 3
+    assert len(preview["patch"]["customers"]) == 2

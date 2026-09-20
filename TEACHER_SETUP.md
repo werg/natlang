@@ -219,6 +219,62 @@ JavaScript timeout under contention; the successful run used four workers.
 
 ## End-of-turn completion
 
+## Teacher trajectories to the next student corpus
+
+`scripts/prepare_teacher_training.py` selects exact teacher trajectory IR rows
+whose output matches `data/leaf_references.jsonl`. It applies the later
+rejudgments and manual decisions by original audit file and line, with a
+manual rejection overriding an automated approval. It replays each selected
+choice in the current harness before writing structured turns. The source IR
+is immutable. Older audits that lack a leaf definition can recover it from the
+frozen program IR through `--program-ir`; the manifest records that source.
+
+The current reviewed leaf set is `data/teacher-leaf-training-v4.jsonl`:
+402 trajectories and 868 turns. Its manifest lists 35 bank entries with no
+matching captured teacher trajectory. `data/teacher-leaf-sft-v2.jsonl` is the
+corresponding LFM2.5 SFT view, rendered by the live model template on port
+8080. It retains the teacher's action order and includes captured reasoning
+for 844 turns in the training completion. The other 24 turns had no recorded
+reasoning. The source, selection decision, and trajectory digest are carried
+through the SFT rows. Tokenization with the student tokenizer found 40 of 868
+teacher pairs above the trainer's default 3,072-token limit (maximum 6,050).
+Use at least `--max-len 6050` for a run meant to include every teacher turn;
+the next run should use `--max-len 8192`, subject to its GPU memory check.
+
+For an incoming frozen program batch, collect accepted whole-program teacher
+IR with `scripts/collect_scenario_teacher.py`, then pass its JSONL to
+`prepare_teacher_training.py --whole-ir`. Only attempts with successful
+semantic trace admission are selected; replay checks them again. The same
+`export_sft.py` step renders those turns for the next training corpus. Use a
+new destination for each batch and concatenate the resulting SFT JSONL files
+with the base corpus before starting the next fresh training run.
+The collector's `--start` and `--limit` select disjoint ranges of an already
+frozen JSONL file, so completed ranges can run while other program files are
+still being generated. Preserve each range's raw trajectory and trace files.
+
+```bash
+.venv/bin/python scripts/collect_scenario_teacher.py data/new-batch.ir.jsonl runs/new-batch.teacher.ir.jsonl \
+  --model-id Ternary-Bonsai-2-27B-PTQ1_0 --root-seed 907 --start 0 --limit 100
+.venv/bin/python scripts/prepare_teacher_training.py data/new-batch.teacher.turns.jsonl \
+  --whole-ir runs/new-batch.teacher.ir.jsonl
+.venv/bin/python scripts/export_sft.py data/new-batch.teacher.turns.jsonl data/new-batch.teacher.sft.jsonl \
+  --server http://127.0.0.1:8080 --template-id LFM2.5-350M --workers 8
+```
+
+The data-migration Bonsai pilot uses
+`codebases/data_migration/scenarios/two_exports.json` with
+`scripts/run_data_migration.py` in preview mode. Early traces showed that
+Bonsai invented output field names (`source_customer_id`, then `decision`),
+which the type checker rejected. A later attempt treated two same-email source
+customers as separate `new` identities because the instructions only described
+the database snapshot. The codebase now names every output field and explains
+within-batch identity matching; the host validates decisions independent of
+their reply order. `runs/data-migration-bonsai-pilot4.json` completed the
+two-export preview: both mappings were correct, one same-email pair became
+`new` plus `merge`, and the plan contains two customers and three orders with
+no review items. Each pilot has its own SQLite file and trace directory; no
+import was applied.
+
 The terminal `done` tool has been removed from the model-facing surface and
 reference policy. `done=N` on `write` and `call` still closes a numbered line.
 The harness now checks open marked lines when the assistant ends with a normal

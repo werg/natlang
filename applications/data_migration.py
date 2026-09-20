@@ -157,7 +157,9 @@ class MigrationStudio:
         known_email = {x["email"]: x["id"] for x in existing}
         known_names = {x["email"]: x["name"] for x in existing}
         planned_customers, customer_ids, customer_facts, review = [], {}, {}, list(early_review)
-        for decision in decisions:
+        # Validate the model's decisions as a set. A matching new row can appear
+        # later in its reply than a merge row from the same import batch.
+        for decision in sorted(decisions, key=lambda item: item["action"] != "new"):
             row = by_key[decision["source_key"]]
             email = row["email"]
             if row["source_key"] in forced_review or not email or "@" not in email:
