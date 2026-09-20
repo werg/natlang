@@ -403,27 +403,34 @@ export class NativeToolAgent {
     if (lam.type.kind === 'lambda' && lam.type.params.fields.length) messages.push({ role: 'assistant', content: '', tool_calls: [{ id: 'call_0', type: 'function',
       function: { name: 'read', arguments: '{"path":"args"}' } }] },
       { role: 'tool', tool_call_id: 'call_0', content: opening });
-    const maxTurns = this.options.maxTurns ?? 64, maxTokens = this.options.maxTokens ?? 4000;
-    const deadline = Date.now() + (this.options.maxSeconds ?? 900) * 1000;
+    const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
+    const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, nudges = 0, turns = 0, withdrawals = 0;
-    while (turns < maxTurns) {
-      if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';
-      let allowance = maxTokens - tokens;
-      if (this.options.turnTokens) allowance = Math.min(allowance, this.options.turnTokens);
-      if (allowance < 1) return 'episode token budget exhausted';
+    const timedOut = () => deadline !== null && Date.now() >= deadline;
+    const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
+      (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
+    const allowance = (): number | null => {
+      const remaining = maxTokens === undefined ? null : maxTokens - tokens;
+      if (this.options.turnTokens === undefined) return remaining;
+      return remaining === null ? this.options.turnTokens : Math.min(this.options.turnTokens, remaining);
+    };
+    while (true) {
+      if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
+      const limit = allowance();
       const response = await this.driver({ messages, tools: this.tools(session),
         temperature: this.options.temperature ?? 0.2,
         seed: session.runtime.seedPolicy.mode === 'backend' ? null :
           session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
           deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turns),
-        max_tokens: allowance });
+        max_tokens: limit });
       turns++;
       session.runtime.checkInterruption();
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'generated', turn: turns, calls, text: response.text ?? '' });
-      tokens += response.completion_tokens === undefined ? allowance : Math.max(1, response.completion_tokens);
-      if (tokens > maxTokens) return 'episode token budget exhausted';
+      tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
+      if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
+        return 'episode token or wall-clock budget exhausted';
       if (!response.calls?.length) {
         if (this.options.validationFeedback !== 'local' && this.missing(session))
           return `validation failed: ${this.missing(session)}`;
@@ -454,23 +461,24 @@ export class NativeToolAgent {
         const structural = review.scope === 'actions' &&
           (['call', 'mark_done', 'edit'].includes(name) || 'done' in args || 'source' in args);
         if (!lowValue && !structural) continue;
-        if (turns >= maxTurns || tokens >= maxTokens || Date.now() >= deadline)
+        if (exhausted())
           return 'careful review budget exhausted before applying proposal';
-        const budget = Math.min(maxTokens - tokens, this.options.turnTokens ?? maxTokens);
+        const budget = allowance();
         const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
         const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
             deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'review', turns),
           max_tokens: budget });
-        turns++; tokens += answer.completion_tokens === undefined ? budget : Math.max(1, answer.completion_tokens);
+        turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
         const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,
           confidence: rawConfidence ?? null, messages: fork, calls: answer.calls ?? [], text: answer.text ?? '',
           order: review.order ?? 'reason_first', trigger: structural ? 'structural' : 'confidence',
           prompt_variant: review.prompt ?? 'baseline' };
         this.reviews.push(audit);
         session.runtime.checkInterruption();
-        if (tokens > maxTokens || Date.now() >= deadline) return 'careful review budget exhausted before applying proposal';
+        if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
+          return 'careful review budget exhausted before applying proposal';
         if (answer.calls?.length !== 1 || answer.calls[0]![0] !== 'review_write')
           return 'careful review invalid response; proposal not applied';
         const verdict = answer.calls[0]![1], decision = verdict.decision, reason = verdict.reason;
@@ -495,7 +503,7 @@ export class NativeToolAgent {
         function: { name, arguments: JSON.stringify(args) } }));
       const results: NativeResult[] = [];
       for (const [index, [name, args]] of calls.entries()) {
-        if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';
+        if (timedOut()) return 'episode wall-clock budget exhausted';
         const result: NativeResult = await session.applyAsync(name, args);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
@@ -510,6 +518,5 @@ export class NativeToolAgent {
           ['rejected', 'refused'].includes(results.at(-1)?.kind ?? ''))
         return `validation failed: ${results.at(-1)!.text}`;
     }
-    return 'episode turn budget exhausted';
   }
 }

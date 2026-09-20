@@ -94,12 +94,13 @@ export class NativeRuntime {
   readonly trace: NativeTraceRecorder;
   readonly emitted: unknown[] = [];
   readonly origins = new Map<string, LambdaNode>();
-  readonly options: { maxEpisodes: number; maxDepth: number; runId: string; mapWorkers: number; parallelModelSafe: boolean };
+  readonly options: { maxEpisodes?: number; maxDepth?: number; maxActions?: number;
+    maxToolCalls?: number; runId: string; mapWorkers: number; parallelModelSafe: boolean };
   readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
   readonly environment: TypeScriptEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
-  readonly episodeBudget: { limit: number; used: number };
+  readonly episodeBudget: { limit?: number; used: number };
   private releaseEffect: () => void;
   private stack: string[] = [];
   private invocationPaths: string[] = [];
@@ -117,15 +118,22 @@ export class NativeRuntime {
 
   constructor(options: { environment?: TypeScriptEnvironment; host?: object; agent?: NativeAgent;
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
-    maxDepth?: number; runId?: string; stream?: NativeStream;
+    maxDepth?: number; maxActions?: number; maxToolCalls?: number;
+    runId?: string; stream?: NativeStream;
     signal?: AbortSignal; timeoutMs?: number;
     sourceRevision?: string; parentCallId?: string;
-    sharedEpisodeBudget?: { limit: number; used: number };
+    sharedEpisodeBudget?: { limit?: number; used: number };
     mapWorkers?: number; parallelModelSafe?: boolean;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
-    this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
+    this.options = { maxEpisodes: options.maxEpisodes, maxDepth: options.maxDepth,
+      maxActions: options.maxActions, maxToolCalls: options.maxToolCalls,
       runId: options.runId ?? 'native-run', mapWorkers: options.mapWorkers ?? 1,
       parallelModelSafe: options.parallelModelSafe ?? false };
+    for (const [name, value] of Object.entries({ maxEpisodes: this.options.maxEpisodes,
+      maxDepth: this.options.maxDepth, maxActions: this.options.maxActions,
+      maxToolCalls: this.options.maxToolCalls }))
+      if (value !== undefined && (!Number.isInteger(value) || value < 1))
+        throw new RangeError(`${name} must be a positive integer`);
     if (!Number.isInteger(this.options.mapWorkers) || this.options.mapWorkers < 1)
       throw new RangeError('mapWorkers must be positive');
     this.episodeBudget = options.sharedEpisodeBudget ?? { limit: this.options.maxEpisodes, used: 0 };
@@ -338,8 +346,10 @@ export class NativeRuntime {
   }
 
   private async episode(ref: Ref, node: LambdaNode): Promise<NativeOutcome> {
-    if (this.depth >= this.options.maxDepth) return this.quiesce(ref, node, `run budget: episodes nested deeper than ${this.options.maxDepth}`);
-    if (this.localEpisodesStarted >= this.options.maxEpisodes || this.episodeBudget.used >= this.episodeBudget.limit)
+    if (this.options.maxDepth !== undefined && this.depth >= this.options.maxDepth)
+      return this.quiesce(ref, node, `run budget: episodes nested deeper than ${this.options.maxDepth}`);
+    if ((this.options.maxEpisodes !== undefined && this.localEpisodesStarted >= this.options.maxEpisodes) ||
+        (this.episodeBudget.limit !== undefined && this.episodeBudget.used >= this.episodeBudget.limit))
       return this.quiesce(ref, node, `run budget: more than ${this.options.maxEpisodes} episodes`);
     const key = hash({ body: node.body, args: dump(node.args as Value), type: formatType(node.type) });
     if (this.stack.includes(key)) return this.quiesce(ref, node, 'identical to a lambda already being reduced above it');
@@ -415,6 +425,7 @@ export class NativeRuntime {
         const index = indices[cursor++]!;
         const child = new NativeRuntime({ environment: new TypeScriptEnvironment({ mode: 'fresh' }),
           agent: this.agent, maxEpisodes: this.options.maxEpisodes, maxDepth: this.options.maxDepth,
+          maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls,
           seedPolicy: this.seedPolicy, sharedEpisodeBudget: this.episodeBudget,
           runId: this.options.runId, capabilities: {}, signal,
           timeoutMs: this.deadline === undefined ? undefined : Math.max(1, this.deadline - Date.now()) });
@@ -601,10 +612,14 @@ export class NativeSession {
       throw new Reject([{ path: 'start', code: 'bad-range',
         expected: `line numbers between 1 and ${lines.length}, start <= end`, got: `${start}..${end}` }]);
   }
+  private actionLimitReached(): boolean {
+    return (this.runtime.options.maxActions !== undefined && this.actions >= this.runtime.options.maxActions) ||
+      (this.runtime.options.maxToolCalls !== undefined && this.toolCalls >= this.runtime.options.maxToolCalls);
+  }
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    if (this.actions >= 40 || this.toolCalls >= 128)
+    if (this.actionLimitReached())
       return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
     if (name !== 'mark_done') this.actions++;
@@ -841,7 +856,7 @@ export class NativeSession {
     this.runtime.checkInterruption();
     if (name === 'run_code' && /\bawait\b/.test(String(args.code ?? ''))) {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-      if (this.actions >= 40 || this.toolCalls >= 128)
+      if (this.actionLimitReached())
         return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
       try {
@@ -858,7 +873,7 @@ export class NativeSession {
     }
     if (name === 'run') {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-      if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
       try {
         const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
@@ -883,7 +898,7 @@ export class NativeSession {
     }
     if (name !== 'call') return this.apply(name, args);
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+    if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.actions++; this.toolCalls++; this.lam.steps++;
     if (args.done !== undefined) try { this.doneRange(args.done); }
     catch (error) { if (error instanceof Reject) return this.record(name, args, rejected(error)); throw error; }

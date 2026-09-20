@@ -37,6 +37,7 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(result.value, 7);
     assert.equal(requests.length, 2);
     assert.equal(requests[0].seed, 0);
+    assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
     assert.equal(requests[0].tools.find(tool => tool.function.name === 'write').function.parameters['x-natlang-alternatives'], undefined);
     assert.equal(requests[1].messages.at(-1).role, 'tool');

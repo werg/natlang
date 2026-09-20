@@ -29,6 +29,20 @@ test('native default system prompt stays aligned with Python tool agent', { skip
   assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
 });
 
+test('default model turn has no implicit token limit in either runtime', { skip: !python }, async () => {
+  const script = `import json\nfrom natlang.decoder import ChatTurn\nfrom natlang.runtime import Runtime\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.values import load_program\nclass Driver:\n def __init__(self): self.limits=[]\n def chat(self, messages, tools, *, temperature, seed, max_tokens):\n  self.limits.append(max_tokens)\n  return ChatTurn(calls=[], text='done', completion_tokens=1)\ndriver=Driver()\nagent=ToolAgent(driver)\nout,_=Runtime(lambda _: agent).run_root(load_program({'$lambda': {'type':'Lambda<{}, Num>', 'instructions':'Return one.'}}))\nprint(json.dumps({'limits':driver.limits,'kind':out.kind}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const limits = [];
+  const agent = new NativeToolAgent(request => { limits.push(request.max_tokens);
+    return { calls: [], text: 'done', completion_tokens: 1 }; });
+  const outcome = await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: 'Lambda<{}, Num>', instructions: 'Return one.' } });
+  const expected = JSON.parse(py.stdout);
+  assert.deepEqual(limits, expected.limits);
+  assert.equal(outcome.outcome.kind, expected.kind);
+});
+
 test('native reducer matches Python outcomes for finite crisp programs', { skip: !python }, async () => {
   const leaf = (type, code) => ({ $lambda: { type, code } });
   const fixtures = [

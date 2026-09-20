@@ -37,6 +37,39 @@ test('native episodes write through typed actions and reject wrong values', asyn
   assert.equal(actions[1].kind, 'ok');
 });
 
+test('inference and action budgets are absent by default and enforce explicit limits', async () => {
+  const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven.' } };
+  let turns = 0;
+  const allowances = [];
+  const agent = new NativeToolAgent(request => {
+    allowances.push(request.max_tokens);
+    turns++;
+    if (turns <= 130) return { calls: [['read', { path: 'instructions' }]], completion_tokens: 1 };
+    if (turns === 131) return { calls: [['write', { path: 'return', type: 'Num', value: 7 }]],
+      completion_tokens: 1 };
+    return { calls: [], completion_tokens: 1 };
+  });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const result = await runtime.runRoot(program);
+  assert.equal(result.outcome.kind, 'done');
+  assert.equal(result.value, 7);
+  assert.equal(turns, 132);
+  assert(allowances.every(value => value === null));
+  assert.equal(runtime.options.maxEpisodes, undefined);
+  assert.equal(runtime.options.maxDepth, undefined);
+
+  const capped = new NativeSession(new NativeRuntime({ maxActions: 2, maxToolCalls: 3 }),
+    buildPending(program), new TypeEnv());
+  assert.equal(capped.apply('read', { path: 'instructions' }).kind, 'ok');
+  assert.equal(capped.apply('read', { path: 'instructions' }).kind, 'ok');
+  assert.equal(capped.apply('read', { path: 'instructions' }).kind, 'budget');
+  const cappedAgent = new NativeToolAgent(() => ({ calls: [['read', { path: 'instructions' }]],
+    completion_tokens: 1 }), { maxTurns: 2 });
+  const stopped = await new NativeRuntime({ agent: session => cappedAgent.run(session) }).runRoot(program);
+  assert.equal(stopped.outcome.kind, 'quiesced');
+  assert.match(stopped.outcome.detail, /budget exhausted/);
+});
+
 test('native Fold can wait for more input and resume', async () => {
   let poll = 0;
   const source = { poll: () => ++poll === 1 ? { kind: 'item', value: 2 } :

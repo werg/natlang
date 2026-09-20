@@ -12,7 +12,7 @@ type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; ji
   reasoning: boolean; progressCallback?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal };
 type ModelCompletionRequest = { messages: ModelMessage[]; tools: ModelTool[]; tool_choice: 'auto';
-  max_tokens: number; temperature: number; seed?: number; abortSignal?: AbortSignal };
+  max_tokens?: number; temperature: number; seed?: number; abortSignal?: AbortSignal };
 
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
 export type BrowserInferenceEngine = {
@@ -135,7 +135,8 @@ export class BrowserLocalModel {
   readonly turn = async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
     if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
     const response = await this.engine.createChatCompletion({ messages: chatMessages(request.messages),
-      tools: chatTools(request.tools), tool_choice: 'auto', max_tokens: request.max_tokens,
+      tools: chatTools(request.tools), tool_choice: 'auto',
+      ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
       temperature: request.temperature, ...(request.seed === null ? {} : { seed: request.seed }),
       abortSignal: signal });
     return localModelTurn(response);

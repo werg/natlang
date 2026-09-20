@@ -14,7 +14,6 @@ export class NativeSourceWorkspace {
   private readonly definitions: Record<string, NativeDefinition>;
   readonly root: string;
   readonly revision: string;
-  private active = 0;
   private parentRuntime?: NativeRuntime;
 
   constructor(definitions: Record<string, NativeDefinition>, root: string) {
@@ -52,34 +51,36 @@ export class NativeSourceWorkspace {
     modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
     review?: NativeReviewOptions;
     parentCallId?: string; maxEpisodes?: number; maxDepth?: number;
+    maxActions?: number; maxToolCalls?: number;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
     capabilities?: Record<string, (args: unknown[]) => unknown>;
     environment?: TypeScriptEnvironment;
     parentRuntime?: NativeRuntime;
     signal?: AbortSignal; timeoutMs?: number;
   } = {}): Promise<NativeChildResult> {
-    if (this.active >= 8) throw new RangeError('nested source invocation depth exceeded');
     const parent = options.parentRuntime ?? this.parentRuntime;
-    const maxEpisodes = options.maxEpisodes ?? Math.min(32, parent?.options.maxEpisodes ?? 32);
-    if (!Number.isInteger(maxEpisodes) || maxEpisodes < 1 || maxEpisodes > 32)
-      throw new RangeError('child episode budget must be between 1 and 32');
+    const maxEpisodes = options.maxEpisodes ?? parent?.options.maxEpisodes;
+    if (maxEpisodes !== undefined && (!Number.isInteger(maxEpisodes) || maxEpisodes < 1 ||
+        (parent?.options.maxEpisodes !== undefined && maxEpisodes > parent.options.maxEpisodes)))
+      throw new RangeError('child episode budget must be positive and bounded by explicit parent budget');
     const graph = checkedDefinitions(this.definitions, name);
     const agent = options.modelTurn ? new NativeToolAgent(options.modelTurn, { review: options.review }) : undefined;
     const environment = options.environment ?? new TypeScriptEnvironment();
     const runtime = new NativeRuntime({ environment, agent: agent ? session => agent.run(session) : undefined,
-      capabilities: options.capabilities, maxEpisodes, maxDepth: options.maxDepth,
+      capabilities: options.capabilities, maxEpisodes,
+      maxDepth: options.maxDepth ?? parent?.options.maxDepth,
+      maxActions: options.maxActions ?? parent?.options.maxActions,
+      maxToolCalls: options.maxToolCalls ?? parent?.options.maxToolCalls,
       sharedEpisodeBudget: parent?.episodeBudget,
       seedPolicy: options.seedPolicy ?? parent?.seedPolicy, sourceRevision: graph.revision,
       parentCallId: options.parentCallId ?? parent?.currentCallId,
       runId: globalThis.crypto.randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs });
-    this.active++;
     try {
       const result = await runtime.runRoot(graph.instantiate(inputs));
       return { source_revision: graph.revision, parent_call_id: options.parentCallId ?? parent?.currentCallId ?? null,
         outcome: result.outcome.kind, value: result.outcome.kind === 'done' ? dump(result.value) : null,
         trace: runtime.trace.events as Record<string, unknown>[] };
     } finally {
-      this.active--;
       runtime.close();
       if (!options.environment) environment.close();
     }

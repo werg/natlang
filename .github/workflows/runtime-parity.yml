@@ -1,0 +1,47 @@
+name: Runtime parity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Python runtime and test dependencies
+        run: python -m pip install -e '.[dev,js]'
+      - name: Install TypeScript host dependencies
+        working-directory: ts-host
+        run: npm ci
+      - name: Require paired runtime changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            python scripts/check_runtime_parity.py --base "$PR_BASE" --head HEAD
+          else
+            python scripts/check_runtime_parity.py --base "$PUSH_BEFORE" --head "$HEAD_SHA"
+          fi
+      - name: Python runtime tests
+        run: python -m pytest -q
+      - name: TypeScript host, Python differential, and conformance tests
+        working-directory: ts-host
+        env:
+          NATLANG_PYTHON: python
+        run: npm test

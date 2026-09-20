@@ -8,7 +8,7 @@ import type { BrowserLocalModel } from './local-model.js';
 import { loadFunctionFiles } from './source.js';
 
 export type BrowserModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
-  seed: number | null; max_tokens: number };
+  seed: number | null; max_tokens: number | null };
 export type BrowserModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number;
   value_confidence?: (number | { geometric_mean?: number } | null)[];
@@ -16,7 +16,8 @@ export type BrowserModelTurn = { calls?: [string, Record<string, unknown>][]; te
 export type BrowserRunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backend'; root?: number;
   version?: string }; model?: { temperature?: number; max_turns?: number; max_tokens?: number;
   max_seconds?: number; turn_tokens?: number }; world_seed?: number;
-  max_episodes?: number; max_depth?: number; run_id?: string };
+  max_episodes?: number; max_depth?: number; max_actions?: number;
+  max_tool_calls?: number; run_id?: string };
 export type BrowserReviewOptions = { driver?: (request: BrowserModelTurnRequest) =>
     Promise<BrowserModelTurn> | BrowserModelTurn; threshold?: number;
   scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
@@ -100,7 +101,8 @@ export class BrowserNatlangHost {
       runtime = new NativeRuntime({ environment: this.environment as never, stream,
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities, maxEpisodes: request.options?.max_episodes,
-        maxDepth: request.options?.max_depth, mapWorkers: request.mapWorkers,
+        maxDepth: request.options?.max_depth, maxActions: request.options?.max_actions,
+        maxToolCalls: request.options?.max_tool_calls, mapWorkers: request.mapWorkers,
         parallelModelSafe: request.parallelMapSafe, runId, signal: request.signal,
         timeoutMs: request.timeoutMs, seedPolicy: request.options?.seed?.mode ?
           { mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
