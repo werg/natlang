@@ -1,6 +1,10 @@
 # P12 — Log anomaly tracker and investigator
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: finite Fold replay and host evidence index implemented in
+[`codebases/log_investigator`](../../codebases/log_investigator/README.md) and
+[`applications/log_investigator.mjs`](../../applications/log_investigator.mjs).
+Live source buffering, durable receipts and teacher quality remain open.
+[Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -25,6 +29,14 @@ Fold consumes completed windows, evidence results and incident acknowledgements.
 Buffer limits and overload policy belong to the source adapter. Progress can be coalesced; state-changing events need explicit handling. Restart reliability later requires application-owned state/cursor persistence and notification reconciliation, not a new universal runtime failure state.
 
 ## Delivery and checks
+
+The current Fold uses explicit source and gap events. Natlang assesses bounded
+evidence; the host checks exact source rows and a minimum distinct count before
+an alert, and retains idempotent receipts. Event/arrival times are separate,
+late evidence is visible, and uncertain sink delivery stays unknown. Tests
+exercise escalation, benign log text, duplicate suppression, source gaps,
+fabricated evidence and sink errors. This is a finite replay and host boundary
+test, not yet a calibrated incident-detection quality result.
 
 1. Finite log replay with one regression, one benign burst and one missing-data interval. Gate: exact window metrics, independently labelled incident quality.
 2. Query raw evidence and revise an initial wrong hypothesis. Gate: final claims cite actual observations and preserve unknowns.
