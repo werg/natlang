@@ -85,6 +85,25 @@ test('native action diagnostics match Python for rejected copy, edit, and reduce
   assert.deepEqual(actual, expected);
 });
 
+test('native pending loader rejects malformed fields and capabilities at Python paths', { skip: !python }, () => {
+  const docs = [
+    { $lambda: { type: 'Lambda<{}, Num>', code: 'return 1;', surprise: true } },
+    { $lambda: { type: 'Lambda<{}, Num>', code: 'return 1;', effects: 'out.emit' } },
+    { $lambda: { type: 'Lambda<{ x: Num }, Num>', code: 'return args.x;', args: [1] } },
+    { $map: { type: 'Map<Num, Num>', over: [1], fn: { $lambda: {
+      type: 'Lambda<{ item: Num }, Num>', code: 'return args.item;' } }, surprise: true } },
+  ];
+  const script = `import json,sys\nfrom natlang.values import load_program\nfrom natlang.diag import Reject\nfor doc in json.load(sys.stdin):\n try: load_program(doc); print(json.dumps(None))\n except Reject as e: print(json.dumps([[d.path,d.code] for d in e.diags]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(docs), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = py.stdout.trim().split('\n').map(JSON.parse);
+  const actual = docs.map(doc => {
+    try { buildPending(doc); return null; }
+    catch (error) { return error.diagnostics.map(item => [item.path, item.code]); }
+  });
+  assert.deepEqual(actual, expected);
+});
+
 test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{ number: Num, text?: Text }, { count: Num, label: Text }>',
     instructions: 'Copy the number and label it.', args: { number: 3 },

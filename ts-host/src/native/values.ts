@@ -33,7 +33,8 @@ const reject = (path: string, code: string, expected?: string, got?: string): ne
 };
 const plain = (value: unknown): value is Record<string, unknown> => value !== null &&
   typeof value === 'object' && !Array.isArray(value) &&
-  (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  Object.prototype.toString.call(value) === '[object Object]' &&
+  (Object.getPrototypeOf(value) === null || Object.getPrototypeOf(Object.getPrototypeOf(value)) === null);
 function inlineCodebase(entries: unknown, inherited: Record<string, string>): Record<string, unknown> {
   if (!plain(entries)) return {};
   return Object.fromEntries(Object.entries(entries).map(([name, raw]) => {
@@ -193,6 +194,14 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   for (const localType of Object.values(types)) inner.checkNames(localType);
   const expected = key.slice(1);
   if (type.kind !== expected) return reject(path, 'type-mismatch', `a ${expected} type`, formatType(type));
+  const lambdaKeys = new Set(['type', 'types', 'effects', 'engine', 'instructions', 'code', 'args', 'return',
+    'status', 'note', 'effects_journal', 'codebase', 'let', 'let_types', 'function', 'marks']);
+  const nodeKeys = new Set(['type', 'types', 'status', 'note', 'over', 'fn', 'init', 'step', 'check', 'max',
+    'acc', 'at', 'state', 'iteration', 'item_name', 'state_name', 'check_name']);
+  const extra = Object.keys(body).filter(name => !(key === '$lambda' ? lambdaKeys : nodeKeys).has(name) &&
+    !(key === '$map' && name === 'slots')).sort()[0];
+  if (extra) return reject(`${path}/${extra}`, 'unknown-field', key === '$lambda' ? 'a Lambda part' :
+    `a ${key.slice(1)[0]!.toUpperCase()}${key.slice(2)}Node part`);
   const common = { type, types, typesSrc, status: (body.status ?? 'unreduced') as Status,
     note: String(body.note ?? ''), attempts: 0, steps: 0 };
   if (key === '$lambda' && type.kind === 'lambda') {
@@ -200,6 +209,10 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
     if (hasInstructions === hasCode) return reject(path, 'type-mismatch', 'exactly one of instructions / code');
     const text = body[hasInstructions ? 'instructions' : 'code'];
     if (typeof text !== 'string') return reject(path, 'type-mismatch', 'Text body');
+    if (body.effects && !Array.isArray(body.effects))
+      return reject(`${path}/effects`, 'type-mismatch', 'a list of capabilities');
+    if (body.args && !plain(body.args) && !(Array.isArray(body.args) && body.args.length === 0))
+      return reject(`${path}/args`, 'type-mismatch', formatType(type.params));
     const node: LambdaNode = { ...common, nodeKind: 'lambda', kind: hasInstructions ? 'instructions' : 'code',
       engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
       args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
@@ -222,8 +235,10 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   if (key === '$map' && type.kind === 'map') {
     const node: MapNode = { ...common, nodeKind: 'map', itemName: String(body.item_name ?? 'item'), over: MISSING, fn: MISSING };
     for (const part of ['over', 'fn'] as const) if (part in body) node[part] = coerce(body[part], partType(node, part), inner, `${path}/${part}`);
-    if (Array.isArray(body.slots)) node.slots = body.slots.map((item, index) =>
-      coerce(item, type.b, inner, `${path}/slots/${index}`));
+    if (Object.hasOwn(body, 'slots')) {
+      if (!Array.isArray(body.slots)) return reject(`${path}/slots`, 'type-mismatch', 'a list of Map results');
+      node.slots = body.slots.map((item, index) => coerce(item, type.b, inner, `${path}/slots/${index}`));
+    }
     return node;
   }
   if (key === '$fold' && type.kind === 'fold') {

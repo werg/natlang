@@ -3,7 +3,18 @@ import pytest
 from hosts.recovery import RecoveryStore
 from natlang.runtime import Runtime
 from natlang.streams import QueueSource, StreamBuffer
-from natlang.values import load_program
+from natlang.values import dump_state, load_program
+
+
+def test_map_state_snapshot_restores_completed_and_pending_slots():
+    document = {"$map": {"type": "Map<Num, Num>", "over": [1, 3],
+        "fn": {"$lambda": {"type": "Lambda<{ item: Num }, Num>",
+                           "code": "return args.item * 2;"}},
+        "slots": [2, {"$lambda": {"type": "Lambda<{ item: Num }, Num>",
+                                  "code": "return args.item * 2;", "args": {"item": 3}}}]}}
+    restored = load_program(dump_state(load_program(document)))
+    outcome, value = Runtime(None).run_root(restored)
+    assert outcome.kind == "done" and value == [2, 6]
 
 
 class Remote:

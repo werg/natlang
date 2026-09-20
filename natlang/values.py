@@ -240,6 +240,8 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
              IterateNode: ("init", "step", "check", "max")}[cls]
     state_keys = {"acc", "at", "state", "iteration", "item_name", "state_name", "check_name"}
     extra = set(map(str, body)) - set(parts) - {"type", "types", "status", "note"} - state_keys
+    if cls is MapNode:
+        extra -= {"slots"}
     if extra:
         raise reject(f"{path}/{sorted(extra)[0]}", "unknown-field", f"a {cls.__name__} part")
     node = cls(**common)
@@ -250,6 +252,11 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
         if part in body:
             setattr(node, part, coerce(body[part], part_type(node, part), inner, yaml=yaml,
                                        path=f"{path}/{part}"))
+    if isinstance(node, MapNode) and "slots" in body:
+        if not isinstance(body["slots"], list):
+            raise reject(f"{path}/slots", "type-mismatch", "a list of Map results")
+        node.slots = [coerce(slot, t.b, inner, yaml=yaml, path=f"{path}/slots/{i}")
+                      for i, slot in enumerate(body["slots"])]
     if isinstance(node, FoldNode):
         if "acc" in body:
             node.acc = coerce(body["acc"], t.s, inner, yaml=yaml, path=f"{path}/acc")
