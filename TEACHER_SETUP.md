@@ -4,6 +4,12 @@ The teacher is Ternary Bonsai 2 27B PTQ1_0, served by llama-server on port
 8081. The probes record the actual `/v1/models` response, program, prompt,
 tool transcript, runtime outcome, effects, and audit results. Teacher probes
 are quarantined under `runs/`; they never append training references.
+`scripts/serve_bonsai.sh` defaults to a 32,768-token server context; the
+previous 12,288-token launch cap was an operational choice, not a limit of the
+model weights. Every long-run trace records request timing and, for new runs,
+prompt/completion token usage and the offered tool-schema size. Inspect these
+before increasing context again: a large context should support long work, not
+hide repetitive prompts or oversized tool menus.
 
 ## Keep the execution path simple
 
@@ -232,6 +238,16 @@ shards, 280,472 eligible turns, and 100,647 episodes. All shards passed gzip
 integrity checks. Eight materialization workers caused a two-second effectful
 JavaScript timeout under contention; the successful run used four workers.
 
+Input variation from that frozen corpus is built separately with
+`scripts/augment_map_inputs.py`. Seed 1 produced 376 map/map-count variants
+from already labeled tickets; it changes item order and list length, then
+recomputes the exact expected value from each program's frozen leaf oracle.
+All 376 passed reference-runtime replay, yielding 4,151 eligible turns. Each
+variant retains its parent's training `program_id`, so a program split keeps
+the original and its input variant together. The variant IR and verified
+shards are `data/external_pilot/synthetic-map-input-variants-s1.ir.jsonl` and
+`data/external_pilot/synthetic-map-input-variants-s1-shards`.
+
 ## End-of-turn completion
 
 ## Teacher trajectories to the next student corpus
@@ -296,6 +312,17 @@ distinct pairs from the reviewed leaf set and these 16 whole programs, 897
 with reasoning. Its manifest pins the two source SFT hashes. Add the incoming
 program batch's admitted SFT pairs to a new combined file with
 `combine_sft.py` before the next fresh training run.
+
+For phased training, export the synthetic shards and their input variants with
+the same LFM template used by the teacher bundle. Train phase 1 on the
+synthetic SFT in a new run directory, then use `--merge-only` if needed to
+produce that run's `merged` model. Start phase 2 on the reviewed teacher SFT
+with `--model runs/<phase-1>/merged` and a *different* output directory. This
+loads the phase-1 weights and creates a new LoRA adapter for the teacher
+phase; a same-directory resume cannot change corpus identity. Use
+`--max-len 8192` for phase 2 if the GPU memory check permits it. Keep
+program-level holdout groups fixed across phases when comparing losses or
+behavior; an in-phase random holdout alone does not enforce that.
 
 The data-migration Bonsai pilot uses
 `codebases/data_migration/scenarios/two_exports.json` with

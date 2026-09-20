@@ -76,7 +76,8 @@ def materialize_record(record, recovery_rate=0, trace_dir=None):
                    "source_groups", "source_revisions", "license", "gold_sources")}
     lines = []
     for turn, sample in enumerate(samples):
-        lines.append({"id": f"{record['id']}:{turn}", "program_id": record["id"],
+        lines.append({"id": f"{record['id']}:{turn}",
+                      "program_id": record.get("input_variant", {}).get("parent_id", record["id"]),
                       "family": record["kind"], "ir_version": record["version"],
                       "provisional_gold": bool(record["semantics"].get("contains_templates")),
                       "ir_digest": ir_digest,
