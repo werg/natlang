@@ -110,6 +110,10 @@ export class DocumentPublisher {
         return { status: 'rejected', target, revision: '', markdown_sha256: '', html_sha256: '',
           detail: again.detail || 'document changed during rendering' };
       await symlink(relative, temporaryLink, 'dir');
+      const finalCheck = this.check(snapshot);
+      if (!finalCheck.ok || finalCheck.revision !== checked.revision)
+        return { status: 'rejected', target, revision: '', markdown_sha256: '', html_sha256: '',
+          detail: finalCheck.detail || 'document changed before publication' };
       await rename(temporaryLink, join(this.root, target));
       linked = true;
     } finally {

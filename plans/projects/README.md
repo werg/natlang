@@ -1,6 +1,11 @@
 # Individual project implementation plans
 
-Planning status: proposed, not implemented. These plans refine the [product catalogue](../AMBITIOUS_PROJECTS.md) using the settled [execution interface direction](../EXECUTION_INTERFACES.md). They identify natlang capabilities and concrete delivery gates, rather than treating application requirements as new language primitives.
+Planning status: all twenty families have an executable first slice; see the
+[implementation ledger](IMPLEMENTATION_STATUS.md) for tested scope and open
+product gates. These plans refine the [product catalogue](../AMBITIOUS_PROJECTS.md)
+using the settled [execution interface direction](../EXECUTION_INTERFACES.md).
+They identify natlang capabilities and concrete delivery gates, rather than
+treating application requirements as new language primitives.
 
 ## Shared capability vocabulary
 
