@@ -329,6 +329,7 @@ export class NativeSession {
   completed = false;
   actions = 0;
   toolCalls = 0;
+  private textSet = false;
   readonly env: TypeEnv;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
@@ -360,7 +361,9 @@ export class NativeSession {
         const type = set[2]!.trim(), parsed = parseType(type);
         const raw = this.env.resolve(parsed).kind === 'prim' && formatType(parsed) === 'Text' ? joined : YAML.parse(joined);
         const wrapper = ['lambda', 'map', 'fold', 'iterate'].includes(parsed.kind) ? `$${parsed.kind}` : '';
-        result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw });
+        this.textSet = true;
+        try { result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw }); }
+        finally { this.textSet = false; }
       } else if (copy) result = this.apply('copy', { from: copy[1], to: copy[2] });
       else if (command.startsWith('reduce ')) result = await this.applyAsync('run', { paths: command.slice(7).trim().split(/\s+/) });
       else if (command === 'eval') result = this.apply('run_code', { code: joined, engine: 'typescript-host' });
@@ -436,6 +439,11 @@ export class NativeSession {
         const typeText = String(args.type ?? '').trim();
         const stated = typeText ? parseType(typeText) : this.resolve(path, true).type;
         if (!stated) throw new Reject([{ path, code: 'type-mismatch', expected: 'a type for the new local' }]);
+        if (!this.textSet && args.source === undefined &&
+            (['lambda', 'map', 'fold', 'iterate'].includes(stated.kind) ||
+              (args.value && typeof args.value === 'object' && !Array.isArray(args.value) &&
+                Object.keys(args.value as object).some(key => ['$lambda', '$map', '$fold', '$iterate'].includes(key)))))
+          throw new Reject([{ path: 'type', code: 'anonymous-lambda', expected: 'call with a checked function' }]);
         const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
         const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
         if (created) this.lam.letTypes[local!] = stated;

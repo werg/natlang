@@ -218,3 +218,13 @@ test('crisp code may replace itself with an unreduced typed task', async () => {
   assert.equal(result.value.nodeKind, 'lambda');
   assert.equal(result.value.status, 'unreduced');
 });
+
+test('model write cannot invent an unchecked anonymous task', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return one.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = session.apply('write', { path: 'return', type: 'Num', value: {
+    $lambda: { type: 'Lambda<{}, Num>', instructions: 'Guess one.' },
+  } });
+  assert.deepEqual(result.codes, ['anonymous-lambda']);
+  assert.equal(lam.return, MISSING);
+});

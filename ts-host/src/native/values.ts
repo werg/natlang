@@ -166,7 +166,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   if (!key || key === 'invalid') return reject(path, 'type-mismatch', 'a single pending wrapper');
   const body = (raw as Record<string, unknown>)[key];
   if (!plain(body)) return reject(path, 'type-mismatch', `a mapping for ${key}`);
-  const typesSrc = (body.types ?? {}) as Record<string, string>;
+  const typesSrc = structuredClone((body.types ?? {}) as Record<string, string>);
   const types = Object.fromEntries(Object.entries(typesSrc).map(([name, text]) => [name, parseType(text)]));
   const inner = env.child(types);
   if (typeof body.type !== 'string') return reject(path, 'type-mismatch', `${key} with a type`);
@@ -184,9 +184,10 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
     if (typeof text !== 'string') return reject(path, 'type-mismatch', 'Text body');
     const node: LambdaNode = { ...common, nodeKind: 'lambda', kind: hasInstructions ? 'instructions' : 'code',
       engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
-      args: {}, return: MISSING, effects: (body.effects ?? []) as string[], journal: (body.effects_journal ?? []) as unknown[],
-      let: {}, letTypes: {}, codebase: (body.codebase ?? {}) as Record<string, unknown>,
-      functionName: String(body.function ?? ''), marks: (body.marks ?? {}) as Record<number, string>, fnCopies: {} };
+      args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
+      journal: structuredClone((body.effects_journal ?? []) as unknown[]),
+      let: {}, letTypes: {}, codebase: structuredClone((body.codebase ?? {}) as Record<string, unknown>),
+      functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {} };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
       if (!field) return reject(`${path}/args/${name}`, 'unknown-field');
