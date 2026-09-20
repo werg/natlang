@@ -17,6 +17,29 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
 const pending = (value: Value): value is Pending => isPending(value);
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const q = (value: unknown) => JSON.stringify(value);
+const DIAGNOSTIC_HINTS: Record<string, string> = {
+  'commit-holes': 'Fill what is still missing with write, then finish your turn.',
+  'commit-pending': 'A sub-task has not produced its result yet: call run on it, then finish your turn.',
+  'not-writable': 'args are read-only. Write into return, or into the args of a sub-task you defined.',
+  frozen: 'That sub-task is running; its args cannot change now.',
+  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for Bool `true`, for Num `42.5`, for Text a string, for a record an object with exactly its fields.',
+  'type-does-not-fit-slot': 'That slot needs the type shown as expected.',
+  'unknown-field': 'Use one of the fields listed as expected.',
+  'unbound-param': 'Give the sub-task its inputs first: copy a value into the path shown, or define it with args_from.',
+  'unbound-part': 'The sub-task is missing the part shown: for a Map or Fold, pass the list with over_from or copy it to .../over.',
+  'no-such-path': 'Use a path that appears in the state.',
+  'old-not-found': 'Copy `old` exactly from the text, including punctuation.',
+  'old-not-unique': 'Make `old` longer so that it occurs only once.',
+  'no-origin': 'Only a result that a sub-task produced can be retried. Write the value again instead.',
+  'too-deep': 'Sub-tasks are nested too deeply. Do this step directly.',
+  'too-large': 'Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.',
+  'stuck-dependency': 'An input of this sub-task could not be produced: read its note, fix it, run it again.',
+};
+function rejected(error: Reject): NativeResult {
+  const hint = error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
+  return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
+    codes: error.diagnostics.map(diagnostic => diagnostic.code) };
+}
 function jsView(value: Value): unknown {
   if (value === MISSING) return null;
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
@@ -520,8 +543,7 @@ export class NativeSession {
     if (name !== 'mark_done') this.actions++;
     this.lam.steps++;
     if (name === 'write' && args.done !== undefined) try { this.doneRange(args.done); }
-    catch (error) { if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message,
-      codes: error.diagnostics.map(d => d.code) }); throw error; }
+    catch (error) { if (error instanceof Reject) return this.record(name, args, rejected(error)); throw error; }
     return this.record(name, args, this.applyNow(name, args));
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
@@ -638,7 +660,10 @@ export class NativeSession {
         if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
         const value = ref.get(), old = String(args.old ?? ''), replacement = String(args.new ?? '');
         if (typeof value !== 'string') throw new Reject([{ path: ref.path, code: 'type-mismatch', expected: 'a text' }]);
-        if (!old || value.split(old).length !== 2) throw new Reject([{ path: ref.path, code: value.includes(old) ? 'old-not-unique' : 'old-not-found' }]);
+        const occurrences = old ? value.split(old).length - 1 : 0;
+        if (occurrences !== 1) throw new Reject([{ path: ref.path,
+          code: occurrences ? 'old-not-unique' : 'old-not-found',
+          expected: '`old` copied exactly from the text, occurring once', got: `${occurrences} occurrences` }]);
         ref.set(value.replace(old, replacement));
         return { kind: 'ok', text: `ok   ${ref.path}` };
       }
@@ -691,7 +716,7 @@ export class NativeSession {
       }
       throw new Reject([{ path: name, code: 'bad-action' }]);
     } catch (error) {
-      if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
+      if (error instanceof Reject) return rejected(error);
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NATLANG:effect-undeclared')) return { kind: 'rejected', text: message, codes: ['effect-undeclared'] };
       if (name === 'run_code' && /read only|Cannot assign|not extensible/i.test(message))
@@ -750,7 +775,7 @@ export class NativeSession {
             return: jsView(this.lam.return), let: jsView(this.lam.let as Value) }, false);
         return this.record(name, args, { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value });
       } catch (error) {
-        if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+        if (error instanceof Reject) return this.record(name, args, rejected(error));
         return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
       }
     }
@@ -775,7 +800,7 @@ export class NativeSession {
         return this.record(name, args, { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
           text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined });
       } catch (error) {
-        if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+        if (error instanceof Reject) return this.record(name, args, rejected(error));
         return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
       }
     }
@@ -784,8 +809,7 @@ export class NativeSession {
     if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.actions++; this.toolCalls++; this.lam.steps++;
     if (args.done !== undefined) try { this.doneRange(args.done); }
-    catch (error) { if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message,
-      codes: error.diagnostics.map(d => d.code) }); throw error; }
+    catch (error) { if (error instanceof Reject) return this.record(name, args, rejected(error)); throw error; }
     let newLocal: string | undefined;
     try {
       const label = String(args.function ?? '');
@@ -897,7 +921,7 @@ export class NativeSession {
       return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
     } catch (error) {
       if (newLocal && !Object.hasOwn(this.lam.let, newLocal)) delete this.lam.letTypes[newLocal];
-      if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+      if (error instanceof Reject) return this.record(name, args, rejected(error));
       return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
   }

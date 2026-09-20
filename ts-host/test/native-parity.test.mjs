@@ -207,3 +207,17 @@ test('native editable function copies keep the checked source immutable', { skip
   assert.deepEqual(dump(lam.return), expected.value);
   assert.equal(lam.codebase.inc.code, 'return args.value + 1;');
 });
+
+test('native tool rejection text includes Python diagnostic hints', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ x: Text }, Text>', instructions: 'Return x.', args: { x: 'abc' } } };
+  const calls = [
+    ['edit', { path: 'instructions', old: 'missing', new: 'x' }],
+    ['write', { path: 'args/x', type: 'Text', value: 'z' }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([s.apply(n,a).text for n,a in calls]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(calls.map(([name, args]) => session.apply(name, args).text), expected);
+});

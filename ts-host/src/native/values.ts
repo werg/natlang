@@ -24,7 +24,8 @@ export type Diagnostic = { path: string; code: string; expected?: string; got?: 
 
 export class Reject extends Error {
   constructor(readonly diagnostics: Diagnostic[]) {
-    super(diagnostics.map(d => `${d.path}: ${d.code}${d.expected ? ` (expected ${d.expected})` : ''}`).join('; '));
+    super(diagnostics.map(d => [ `${d.path}: ${d.code}`, d.expected ? `expected ${d.expected}` : '',
+      d.got ? `got ${d.got}` : '' ].filter(Boolean).join(', ')).join('; '));
   }
 }
 const reject = (path: string, code: string, expected?: string, got?: string): never => {
