@@ -1,6 +1,10 @@
 # P10 — Natlang notebook with data operations
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local SQL/TypeScript notebook implemented in
+[`codebases/notebook`](../../codebases/notebook/README.md) and
+[`applications/notebook.mjs`](../../applications/notebook.mjs). Edits invalidate
+transitive descendants; live streams, persistent data and teacher quality
+remain open. [Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -23,6 +27,16 @@ Separate pure, declared-input cells from cells intentionally using retained muta
 Start with sequential cell runs in dependency order. The notebook application's Fold handles edits, run requests and completions. Each output is associated with source and input revisions. A result from an older revision remains historical but cannot mark current descendants fresh. Stream progress is optional; finite results retain ordinary cell semantics.
 
 ## Delivery and checks
+
+The first implementation keeps SQLite connections and full cell values in a
+native host. Natlang selects ready cells and interprets compact samples. SQL
+is query-only after fixture import, TypeScript cells get fresh contexts and
+explicit dependency values, and both return the same portable JSON boundary.
+Source edits invalidate descendants; result revisions are checked against the
+run snapshot. Integration tests exercise SQL aggregation, TypeScript mapping,
+NULL versus empty text, read-only SQL and edit invalidation. SQLite is an
+application evaluator binding, not yet a general natlang `run_code` engine;
+the next engine-registry decision should use this consumer as evidence.
 
 1. Load two CSV fixtures, semantically map labels, join/aggregate exactly and explain output.
 2. Introduce explicit TS/SQL engine selection and incompatible-result tests. Gate: same boundary validation and recorded engine identity.
