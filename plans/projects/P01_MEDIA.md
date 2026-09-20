@@ -1,6 +1,10 @@
 # P01 — Semantic media workbench
 
-Status: proposed implementation. [Shared capability definitions and conventions](README.md). Product scope remains in the [catalogue](../AMBITIOUS_PROJECTS.md#p01-semantic-media-workbench).
+Status: CPU-backed batch workbench implemented in
+[`codebases/media_workbench`](../../codebases/media_workbench/README.md) and
+[`applications/media_workbench.mjs`](../../applications/media_workbench.mjs).
+Interactive jobs, bounded revision and live-model quality remain open.
+[Shared capability definitions and conventions](README.md). Product scope remains in the [catalogue](../AMBITIOUS_PROJECTS.md#p01-semantic-media-workbench).
 
 ## Natlang prerequisites
 
@@ -23,6 +27,16 @@ Use one environment per workspace/session. Retain jobs and previews there across
 The batch path is an ordinary call followed by bounded inspect/revise iterations. The interactive path is `Fold<MediaEvent, MediaSession>` over request, progress, completion and cancel events. A start snippet registers a native job and returns promptly; its completion later enters the same stream. Correlate job and request revision so late previews cannot satisfy a newer request. Do not make the model poll progress or accept mid-step instruction mutation.
 
 ## Delivery and checks
+
+The batch implementation probes and hashes input/output media, executes real
+FFmpeg trim/crop/scale/transcode commands, samples a frame for an optional
+visual inspector, and independently checks dimensions, duration, audio and
+receipt identity. A crop without visual evidence stays under review. Real
+FFmpeg integration tests cover trim, crop, corrupt input, impossible geometry
+and the visual callback boundary. Output collisions and interrupted renders
+are explicit rather than silently reused or called successful. The current
+scripted model tests do not establish recipe-selection quality; that needs a
+teacher pilot and separate semantic review before training admission.
 
 1. Probe/trim/crop/transcode a synthetic clip with exact metadata checks. Gate: expected streams/duration/resolution and independently verified output existence.
 2. Add semantic recipe selection and visual inspection, then one bounded revision. Gate: technical checks plus a separate crop/intent rubric.
