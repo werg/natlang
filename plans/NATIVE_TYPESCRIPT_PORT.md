@@ -20,3 +20,7 @@ Implementation order:
 ## Release gate
 
 Do not label the native port complete from a handful of examples. The baseline is `conformance/infrastructure_baseline.json`, existing canonical traces and the full Python surface tests. Include malformed/rejected actions and suspended/resumed runs. A browser build must explicitly state which host APIs it lacks, while preserving interpreter semantics for portable programs. The live-model and student pilot gates in `INFRASTRUCTURE_IMPLEMENTATION.md` remain separate empirical work.
+
+## Current progress
+
+The native structural type grammar and type fit relation now live in `ts-host/src/native/types.ts`, with direct tests for records, unions, named types, promises, and pending type constructors. The semantic interpreter, action surface, reducer, model loop and trace parity are **not yet ported**. The Python bridge remains the production path until the release gate above is met.
