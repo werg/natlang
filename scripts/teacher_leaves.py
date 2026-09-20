@@ -184,6 +184,8 @@ def main():
         ap.error("--max-seconds must be positive")
     if a.retry_status != "all" and not a.retry_audit:
         ap.error("--retry-status requires --retry-audit")
+    if a.reopen_removed_from and not a.ir:
+        ap.error("--reopen-removed-from requires --ir")
     audit_path = a.audit_out or ROOT / "runs" / f"teacher-leaves-audit-{time.time_ns()}.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     if audit_path.exists():
