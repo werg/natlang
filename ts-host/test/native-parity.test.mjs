@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { NativeRuntime } from '../dist/native/runtime.js';
@@ -8,10 +9,22 @@ import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { dump } from '../dist/native/values.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
+import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const python = process.env.NATLANG_PYTHON;
 const SCRIPT = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.values import load_program,dump\nroot=load_program(json.load(sys.stdin))\nout,value=Runtime(None).run_root(root)\nprint(json.dumps({'kind':out.kind,'value':dump(value)},sort_keys=True))`;
+
+test('native default system prompt stays aligned with Python tool agent', { skip: !python }, async () => {
+  const reference = readFileSync(new URL('../../natlang/prompts/tools_small.md', import.meta.url), 'utf8');
+  assert.equal(TOOLS_PROMPT, reference);
+  let seen;
+  const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
+    return { calls: [], text: '', completion_tokens: 1 }; });
+  await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: 'Lambda<{}, Num>', instructions: 'Write one.' } });
+  assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
+});
 
 test('native reducer matches Python outcomes for finite crisp programs', { skip: !python }, async () => {
   const leaf = (type, code) => ({ $lambda: { type, code } });
@@ -146,4 +159,51 @@ test('native tool schema exposes only unbound child inputs of pending tasks', { 
   const tools = Object.fromEntries(agent.tools(session).map(item => [item.function.name, item.function.parameters]));
   assert.deepEqual(tools.write['x-natlang-alternatives'], expected.write);
   assert.deepEqual(tools.read['x-natlang-alternatives'], expected.read);
+});
+
+test('native checked functions compose Map, Fold and Iterate like Python', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ nums: Num[], start: Num }, { mapped: Num[], sum: Num, finish: Num }>',
+    instructions: 'Map, fold, and iterate.', args: { nums: [1, 2, 3], start: 0 }, codebase: {
+      double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' },
+      add: { args: { acc: 'Num', item: 'Num' }, returns: 'Num', code: 'return args.acc + args.item;' },
+      step: { args: { value: 'Num' }, returns: 'Num', code: 'return args.value + 1;' },
+      done: { args: { value: 'Num' }, returns: 'Bool', code: 'return args.value >= 3;' },
+    } } };
+  const calls = [
+    ['call', { function: 'double', to: 'return/mapped', over: 'args/nums' }],
+    ['call', { function: 'add', to: 'return/sum', over: 'args/nums', init: 0 }],
+    ['call', { function: 'step', to: 'return/finish', init: 'args/start', until: 'done', max: 5 }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program,dump\ndoc,calls=json.load(sys.stdin)\nroot=load_program(doc)\ns=Session(Runtime(None),root,TypeEnv())\nresults=[s.apply(n,a) for n,a in calls]\nprint(json.dumps({'kinds':[r.kind for r in results], 'codes':[r.codes for r in results], 'value':dump(root.ret)}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const lam = buildPending(doc), session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const actual = [];
+  for (const [name, args] of calls) actual.push(await session.applyAsync(name, args));
+  assert.deepEqual(actual.map(result => result.kind), expected.kinds);
+  assert.deepEqual(actual.map(result => result.codes ?? []), expected.codes);
+  assert.deepEqual(dump(lam.return), expected.value);
+});
+
+test('native editable function copies keep the checked source immutable', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ value: Num }, Num>', instructions: 'Use a copied function.',
+    args: { value: 3 }, codebase: { inc: { args: { value: 'Num' }, returns: 'Num',
+      code: 'return args.value + 1;' } } } };
+  const calls = [
+    ['write', { path: 'let/twice', type: 'Function<inc>' }],
+    ['edit', { path: 'let/twice/code', old: '+ 1', new: '* 2' }],
+    ['call', { function: 'let/twice', to: 'return', inputs: { value: 'args/value' } }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program,dump\ndoc,calls=json.load(sys.stdin)\nroot=load_program(doc)\ns=Session(Runtime(None),root,TypeEnv())\nresults=[s.apply(n,a) for n,a in calls]\nprint(json.dumps({'kinds':[r.kind for r in results], 'codes':[r.codes for r in results], 'value':dump(root.ret)}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const lam = buildPending(doc), session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const actual = [];
+  for (const [name, args] of calls) actual.push(await session.applyAsync(name, args));
+  assert.deepEqual(actual.map(result => result.kind), expected.kinds);
+  assert.deepEqual(actual.map(result => result.codes ?? []), expected.codes);
+  assert.deepEqual(dump(lam.return), expected.value);
+  assert.equal(lam.codebase.inc.code, 'return args.value + 1;');
 });

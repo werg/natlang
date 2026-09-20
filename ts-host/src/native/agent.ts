@@ -5,6 +5,7 @@ import type { Value } from './values.js';
 import type { NativeResult, NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../runtime.js';
 import { deriveSeed } from './trace.js';
+import { TOOLS_PROMPT } from './prompt.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
@@ -365,7 +366,8 @@ export class NativeToolAgent {
       return `${index + 1} ${markable ? lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`;
     }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
     const messages: Record<string, unknown>[] = [
-      { role: 'system', content: this.options.systemPrompt ?? 'Interpret the program. Use tools to complete return; do not invent missing facts.' },
+      { role: 'system', content: (this.options.systemPrompt ?? TOOLS_PROMPT) +
+        '\nFor run_code, always name an engine offered in its current tool schema.' },
       { role: 'user', content: `${program}\n\nWrite the result to \`return\` (${output}).` +
         (functions.length ? `\n\nFunctions you can call:\n${functions.join('\n')}` : '') },
     ];
