@@ -75,9 +75,12 @@ export class TypeScriptEnvironment {
   private makeEvaluator(): Evaluator {
     const prelude = __NATLANG_PRELUDE__.split('const __deepFreeze')[0];
     const factory = new Function('host', `${prelude}\nlet self, args, locals;\n` +
-      `return function(scope, code, effect) {\nself=scope; args=scope.args; locals=scope.let || {};\n` +
+      `function* evaluate() { let job=yield; while(true) {\n` +
+      `const {scope,code,effect}=job; self=scope; args=scope.args; locals=scope.let || {};\n` +
       `const fx=new Proxy({}, {get:(_,cap)=>new Proxy({}, {get:(_,fn)=>(...raw)=>effect(String(cap),String(fn),raw)})});\n` +
-      `return eval('"use strict";\\n' + code);\n}`) as (host: object) => Evaluator;
+      `job=yield eval(code);\n} }\n` +
+      `const runner=evaluate(); runner.next();\n` +
+      `return function(scope,code,effect) { return runner.next({scope,code,effect}).value; }`) as (host: object) => Evaluator;
     return factory(this.host);
   }
 

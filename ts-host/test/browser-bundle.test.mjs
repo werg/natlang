@@ -28,3 +28,17 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
     assert(natural.trace.some(event => event.kind === 'action'));
   } finally { host.close(); }
 });
+
+test('browser retained eval preserves variables between tool calls', async () => {
+  const nodeProcess = globalThis.process;
+  let api;
+  try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
+  finally { globalThis.process = nodeProcess; }
+  const environment = new api.TypeScriptEnvironment({ mode: 'retained' });
+  try {
+    assert.equal(environment.execute({ code: 'var tally = 2; tally', scope: {}, body: false,
+      path: 'eval', effectful: false }).result, 2);
+    assert.equal(environment.execute({ code: 'tally += 3', scope: {}, body: false,
+      path: 'eval', effectful: false }).result, 5);
+  } finally { environment.close(); }
+});
