@@ -62,3 +62,12 @@ relevant body, parameters and named types, but did not finish within 180 seconds
 The retained trace is diagnostic evidence, not a successful sample. Reduce
 context/turn cost and measure completion before using this programme for bulk
 teacher collection.
+
+There is also a real IDE integration boundary: the current loader requires a
+valid declared signature before it can create a `CheckedGraph`. This first
+application masks that signature in an already checked graph, which supports
+training and analysis of existing codebases but cannot ingest an actually
+unfinished editor buffer. The right next affordance is a read-only draft source
+view that retains the body, parameter names, spans and lexical context without
+installing an unchecked definition in the runtime. Do not weaken runtime
+loading to make draft analysis appear complete.
