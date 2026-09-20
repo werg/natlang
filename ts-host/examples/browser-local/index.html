@@ -2,61 +2,163 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Local natlang interpreter</title>
+<title>natlang browser inference pilot</title>
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
-  label { display: block; margin: 1rem 0; }
-  input, textarea { box-sizing: border-box; display: block; width: 100%; font: inherit; padding: .5rem; }
-  textarea { min-height: 7rem; }
-  button { padding: .5rem 1rem; font: inherit; }
-  pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+  label { display: block; margin: .7rem 0; }
+  input, textarea, select { box-sizing: border-box; width: 100%; font: inherit; padding: .4rem; }
+  textarea { min-height: 5rem; }
+  button { font: inherit; padding: .5rem .8rem; margin: .2rem .2rem .2rem 0; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f4f4f4; padding: .8rem; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; }
 </style>
-<h1>Local natlang interpreter</h1>
-<p>The model and interpreter run in this browser. The initial model download comes from Hugging Face.</p>
-<label>GGUF repository <input id="repo" value="Qwen/Qwen3-0.6B-GGUF"></label>
-<label>Quantization <input id="quant" value="Q4_K_M"></label>
-<label>GPU layers (blank requests all; 0 uses CPU) <input id="gpuLayers" type="number" min="0" placeholder="All"></label>
-<button id="load">Load model</button>
-<p id="status" role="status">Model not loaded</p>
-<label>Task <textarea id="task">Count the letters in “natlang” and return the count.</textarea></label>
-<button id="run" disabled>Run natlang</button>
+<h1>natlang browser inference pilot</h1>
+<p>The model and interpreter run locally. Serve this page from the natlang repository root to use the trained natlang GGUF (about 379 MB).</p>
+<div class="row">
+  <label>Model <select id="model"></select></label>
+  <label>Tool schema <select id="schema"><option value="typed">Typed alternatives</option><option value="broad">Broad tools</option></select></label>
+  <label>GPU layers <input id="gpuLayers" type="number" min="0" placeholder="All available layers"></label>
+  <label>Context tokens <input id="context" type="number" min="512" value="8192"></label>
+</div>
+<label>Or use a local GGUF <input id="file" type="file" accept=".gguf"></label>
+<button id="load">Load model</button><button id="cpu" disabled>Retry with CPU</button>
+<button id="persist">Request persistent storage</button>
+<p id="storage"></p><p id="status" role="status">Checking browser capabilities…</p>
+<pre id="diagnostics"></pre>
+<h2>Run</h2>
+<label>Single-task instructions <textarea id="task">Write the number 7 to return.</textarea></label>
+<button id="run" disabled>Run task</button><button id="suite" disabled>Run three-task pilot</button>
+<button id="cancel" disabled>Cancel</button><button id="download" disabled>Download report</button>
 <pre id="result"></pre>
 <script type="module">
-  import { BrowserLocalModel, BrowserNatlangHost } from '../../dist/browser/natlang.js';
-  const model = new BrowserLocalModel();
-  const host = new BrowserNatlangHost({ model });
+  import { BrowserLocalModel, BrowserNatlangHost, BROWSER_MODEL_CATALOG,
+    checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
-  const status = text => { $('status').textContent = text; };
-  $('load').onclick = async () => {
-    $('load').disabled = true;
-    $('run').disabled = true;
-    try {
-      status(model.supportsWebGPU ? 'WebGPU detected; requesting GPU offload' : 'WebGPU unavailable; using CPU');
-      await model.loadFromHuggingFace({ repo: $('repo').value, quant: $('quant').value }, {
-        contextTokens: 8192,
-        ...($('gpuLayers').value === '' ? {} : { gpuLayers: Number($('gpuLayers').value) }),
-        onProgress: ({ loaded, total }) => status(total ? `Downloading ${Math.round(loaded / total * 100)}%` : 'Downloading model'),
-      });
-      status(model.supportsWebGPU && $('gpuLayers').value !== '0' ?
-        'Model ready; WebGPU offload requested' : 'Model ready; CPU inference');
-      $('run').disabled = false;
-    } catch (error) { status(`Model load failed: ${error.message}`); }
-    finally { $('load').disabled = false; }
+  const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
+  $('model').innerHTML = BROWSER_MODEL_CATALOG.map((item, index) =>
+    `<option value="${index}">${item.label}</option>`).join('');
+  const chosen = () => BROWSER_MODEL_CATALOG[Number($('model').value)];
+  const status = value => { $('status').textContent = value; };
+  let model, host, controller, reports = [];
+  async function inspect() {
+    const spec = chosen(), storage = await checkModelStorage(spec);
+    $('storage').textContent = `${mb(spec.bytes)} download; recommended free ${mb(storage.recommendedFree)}; ` +
+      `available ${storage.available === null ? 'unknown' : mb(storage.available)}; ` +
+      `persistent storage ${storage.persisted === null ? 'unknown' : storage.persisted ? 'on' : 'off'}.`;
+    let adapter = null;
+    try { adapter = await navigator.gpu?.requestAdapter(); } catch { /* diagnostic only */ }
+    $('diagnostics').textContent = JSON.stringify({ secure_context: isSecureContext,
+      cross_origin_isolated: crossOriginIsolated, webgpu_adapter: Boolean(adapter),
+      shader_f16: adapter?.features?.has('shader-f16') ?? null, model: model?.diagnostics ?? null,
+      note: 'Wllama does not expose actual GPU layers; compare GPU and CPU pilot timings.' }, null, 2);
+    return storage;
+  }
+  $('model').onchange = () => { $('context').value = chosen().contextTokens; void inspect(); };
+  $('persist').onclick = async () => {
+    try { status(await navigator.storage.persist() ? 'Persistent storage enabled' : 'Persistence not granted'); }
+    catch (error) { status(`Storage request failed: ${error.message}`); }
+    await inspect();
   };
-  $('run').onclick = async () => {
-    $('run').disabled = true;
-    $('result').textContent = '';
-    status('Running');
+  async function load() {
+    $('load').disabled = true; $('run').disabled = true; $('suite').disabled = true;
     try {
-      const result = await host.run({ source: { kind: 'program', program: {
-        $lambda: { type: 'Lambda<{}, Num>', instructions: $('task').value },
-      } }, options: { model: { max_turns: 12, max_tokens: 8192, turn_tokens: 512 } } });
-      $('result').textContent = JSON.stringify({ outcome: result.outcome, value: result.value,
-        trace: result.trace }, null, 2);
-      status(result.outcome.kind);
-    } catch (error) { status(`Run failed: ${error.message}`); }
-    finally { $('run').disabled = false; }
+      const file = $('file').files[0], storage = await inspect();
+      if (!file && storage.enough === false) throw new Error('Estimated storage is too low for this download');
+      host?.close(); if (model) await model.close();
+      model = new BrowserLocalModel({ schemaMode: $('schema').value });
+      host = new BrowserNatlangHost({ model });
+      const contextTokens = Number($('context').value);
+      if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
+      const gpuLayers = $('gpuLayers').value === '' ? undefined : Number($('gpuLayers').value);
+      const templateUrl = chosen().templateUrl;
+      const templateResponse = await fetch(templateUrl);
+      if (!templateResponse.ok) throw new Error(`Cannot load natlang tool template: ${templateUrl}`);
+      const chatTemplate = await templateResponse.text();
+      const options = { contextTokens, chatTemplate,
+        threads: crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1,
+        ...(gpuLayers === undefined ? {} : { gpuLayers }),
+        onProgress: ({ loaded, total }) => status(total ?
+          `Downloading ${Math.round(loaded / total * 100)}% (${mb(loaded)} / ${mb(total)})` : 'Loading model…') };
+      status(`Loading ${file?.name ?? chosen().label}…`);
+      if (file) await model.loadFiles([file], options);
+      else await model.loadFromUrl(chosen().url, options);
+      $('cpu').disabled = true; $('run').disabled = false; $('suite').disabled = false;
+      await inspect();
+      status(`Model ready in ${(model.lastLoadMs / 1000).toFixed(1)} s; GPU layers requested: ${model.diagnostics.requestedGpuLayers}`);
+    } catch (error) {
+      $('cpu').disabled = $('gpuLayers').value === '0';
+      status(`Load failed: ${error.message}. CPU retry is available if the GPU path failed.`);
+    } finally { $('load').disabled = false; }
+  }
+  $('load').onclick = load;
+  $('cpu').onclick = () => { $('gpuLayers').value = '0'; void load(); };
+  const tasks = [
+    { id: 'leaf', program: { $lambda: { type: 'Lambda<{}, Num>',
+      instructions: 'Write the number 7 to return.' } }, expected: 7 },
+    { id: 'record', program: { $lambda: { type: 'Lambda<{ a: Num, b: Num }, { sum: Num, larger: Num }>',
+      args: { a: 3, b: 5 }, instructions: 'Add a and b; write sum and the larger input to return.' } },
+      expected: { sum: 8, larger: 5 } },
+    { id: 'nested-map', program: { $lambda: { type: 'Lambda<{ items: Num[] }, Num[]>',
+      args: { items: [2, 3] }, instructions: 'Call double over items and write the resulting list to return.',
+      codebase: { double: { args: { item: 'Num' }, returns: 'Num',
+        instructions: 'Write twice item to return.' } } } }, expected: [4, 6] },
+  ];
+  async function execute(task) {
+    const before = model.turnHistory.length, started = performance.now();
+    let outcome, value, trace = [], error = null;
+    try {
+      const result = await host.run({ source: { kind: 'program', program: task.program },
+        signal: controller.signal, timeoutMs: 180000,
+        options: { model: { max_turns: 20, max_tokens: 2048, turn_tokens: 128 } } });
+      ({ outcome, value, trace } = result);
+    } catch (failure) { error = String(failure); }
+    const turns = model.turnHistory.slice(before);
+    return { id: task.id, expected: task.expected, outcome, value, error,
+      correct: !error && outcome?.kind === 'done' && JSON.stringify(value) === JSON.stringify(task.expected),
+      total_ms: Math.round(performance.now() - started),
+      prompt_tokens: turns.reduce((n, turn) => n + (turn.promptTokens ?? 0), 0),
+      cached_tokens: turns.reduce((n, turn) => n + (turn.cachedTokens ?? 0), 0),
+      completion_tokens: turns.reduce((n, turn) => n + (turn.completionTokens ?? 0), 0),
+      schema_bytes: turns.map(turn => turn.toolSchemaBytes),
+      retries: turns.reduce((n, turn) => n + turn.retries, 0),
+      inference_ms: turns.reduce((n, turn) => n + turn.durationMs, 0),
+      actions: trace.filter(event => event.kind === 'action').length,
+      rejected_actions: trace.filter(event => event.kind === 'action' &&
+        ['rejected', 'refused', 'error'].includes(event.outcome)).length, trace };
+  }
+  async function run(selected) {
+    controller = new AbortController();
+    $('run').disabled = true; $('suite').disabled = true; $('cancel').disabled = false;
+    try {
+      const results = [];
+      for (const task of selected) {
+        status(`Running ${task.id}…`);
+        results.push(await execute(task));
+        $('result').textContent = JSON.stringify(results.map(({ trace, ...rest }) => rest), null, 2);
+        if (controller.signal.aborted) break;
+      }
+      reports.push({ schema: 'natlang.browser_pilot/1', at: new Date().toISOString(),
+        user_agent: navigator.userAgent, model: $('file').files[0]?.name ?? chosen().id,
+        schema_mode: model.schemaMode, diagnostics: model.diagnostics, load_ms: model.lastLoadMs,
+        tasks: results.map(({ trace, ...rest }) => rest),
+        traces: results.map(result => ({ id: result.id, events: result.trace })) });
+      $('download').disabled = false;
+      status(`${results.filter(item => item.correct).length}/${results.length} correct. ` +
+        `Reports retained: ${reports.length}. Reload in the other schema mode to compare.`);
+    } finally {
+      controller = null; $('cancel').disabled = true; $('run').disabled = false; $('suite').disabled = false;
+    }
+  }
+  $('run').onclick = () => void run([{ id: 'single', program: { $lambda: { type: 'Lambda<{}, Num>',
+    instructions: $('task').value } }, expected: 7 }]);
+  $('suite').onclick = () => void run(tasks);
+  $('cancel').onclick = () => controller?.abort();
+  $('download').onclick = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ reports }, null, 2)], { type: 'application/json' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'natlang-browser-pilot.json';
+    anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  window.addEventListener('pagehide', () => { host.close(); void model.close(); });
+  window.addEventListener('pagehide', () => { host?.close(); void model?.close(); });
+  void inspect();
 </script>
 </html>

@@ -517,8 +517,13 @@ export class NativeToolAgent {
       proposal.released = true;
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'released', turn: turns, calls });
-      const raw = calls.map(([name, args], i) => ({ id: `call_${turns}_${i}`, type: 'function',
-        function: { name, arguments: JSON.stringify(args) } }));
+      const raw = calls.map(([name, args], i) => {
+        const original = response.raw_calls?.[i] as Record<string, unknown> | undefined;
+        const fn = original?.function as Record<string, unknown> | undefined;
+        return original && fn && typeof fn.name === 'string' && typeof fn.arguments === 'string' ?
+          { ...original, id: typeof original.id === 'string' && original.id ? original.id : `call_${turns}_${i}` } :
+          { id: `call_${turns}_${i}`, type: 'function', function: { name, arguments: JSON.stringify(args) } };
+      });
       const results: NativeResult[] = [];
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';

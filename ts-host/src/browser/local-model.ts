@@ -6,13 +6,16 @@ type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: 
 type ModelTool = { type: 'function'; function: { name: string; description?: string;
   parameters?: Record<string, unknown> } };
 type ModelResponse = { choices: Array<{ finish_reason?: string | null; message: {
-  content?: string | null; tool_calls?: Array<{ type: string; function: { name: string; arguments: string } }> } }>;
-  usage?: { completion_tokens?: number }; [key: string]: unknown };
+  content?: string | null; tool_calls?: Array<{ id?: string; type: string; function: { name: string; arguments: string } }> } }>;
+  usage?: { completion_tokens?: number; prompt_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number } }; [key: string]: unknown };
 type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
-  reasoning: boolean; progressCallback?: (progress: { loaded: number; total: number }) => void;
+  reasoning: boolean; chat_template?: string;
+  progressCallback?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal };
 type ModelCompletionRequest = { messages: ModelMessage[]; tools: ModelTool[]; tool_choice: 'auto';
-  max_tokens?: number; temperature: number; seed?: number; abortSignal?: AbortSignal };
+  max_tokens?: number; temperature: number; seed?: number; abortSignal?: AbortSignal;
+  cache_prompt?: boolean };
 
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
 export type BrowserInferenceEngine = {
@@ -23,6 +26,9 @@ export type BrowserInferenceEngine = {
   loadModelFromUrl(url: string, params: LoadParams): Promise<void>;
   loadModel(files: Blob[], params: LoadParams): Promise<void>;
   createChatCompletion(request: ModelCompletionRequest): Promise<ModelResponse>;
+  getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
+  getModelMetadata?(): Record<string, unknown>;
+  getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
   exit(): Promise<void>;
 };
 
@@ -31,6 +37,8 @@ const Wllama = (wllamaRuntime as unknown as { Wllama: new (paths: { default: str
 
 export type BrowserModelLoadOptions = {
   contextTokens?: number;
+  /** Official model tool-call template, when the GGUF embeds a reduced template. */
+  chatTemplate?: string;
   /** Defaults to all layers. Set 0 for CPU or a smaller number for limited VRAM. */
   gpuLayers?: number;
   threads?: number;
@@ -38,11 +46,19 @@ export type BrowserModelLoadOptions = {
   signal?: AbortSignal;
 };
 
+export type BrowserModelDiagnostics = {
+  loaded: boolean; supportsWebGPU: boolean; requestedGpuLayers: number | null;
+  contextTokens: number | null; modelLayers: number | null;
+  workerCompatibility: boolean | null; workerNoWebGPU: boolean | null;
+  /** Wllama does not expose the actual number of offloaded layers. */
+  actualGpuLayers: null;
+};
+
 function loadParams(options: BrowserModelLoadOptions) {
   if (options.gpuLayers !== undefined && (!Number.isInteger(options.gpuLayers) || options.gpuLayers < 0))
     throw new RangeError('gpuLayers must be a nonnegative integer');
   return { n_ctx: options.contextTokens ?? 4096, n_gpu_layers: options.gpuLayers ?? 99999,
-    n_threads: options.threads, jinja: true, reasoning: false,
+    n_threads: options.threads, jinja: true, reasoning: false, chat_template: options.chatTemplate,
     progressCallback: options.onProgress, signal: options.signal };
 }
 
@@ -61,21 +77,84 @@ function chatMessages(messages: unknown[]): ModelMessage[] {
     const message = raw as Record<string, unknown>;
     if (!['system', 'user', 'assistant', 'tool'].includes(String(message.role)))
       throw new TypeError(`model message ${index} has an invalid role`);
-    return message as ModelMessage;
+    if (message.role !== 'assistant' || !Array.isArray(message.tool_calls))
+      return message as ModelMessage;
+    // The official LFM tool template expects argument mappings in prior assistant calls.
+    // OpenAI-style responses carry JSON strings, so normalize history at the adapter edge.
+    return { ...message, tool_calls: message.tool_calls.map((call: unknown) => {
+      if (!call || typeof call !== 'object') return call;
+      const record = call as Record<string, unknown>;
+      const fn = record.function as Record<string, unknown> | undefined;
+      if (!fn || typeof fn.arguments !== 'string') return call;
+      let args: unknown;
+      try { args = JSON.parse(fn.arguments); }
+      catch { return call; }
+      return { ...record, function: { ...fn, arguments: args } };
+    }) } as ModelMessage;
   });
 }
 
-function chatTools(tools: unknown[]): ModelTool[] {
-  return tools.map((raw, index) => {
-    const tool = publicSchema(raw) as ModelTool;
+export type BrowserSchemaMode = 'typed' | 'broad';
+
+function compactWriteAlternatives(alternatives: Record<string, unknown>[]): Record<string, unknown>[] {
+  const groups = new Map<string, Record<string, unknown>>();
+  for (const alternative of alternatives) {
+    const alt = structuredClone(alternative);
+    const path = alt.path as Record<string, unknown> | undefined;
+    const type = alt.type as Record<string, unknown> | undefined;
+    const kind = Object.hasOwn(alt, 'value') ? 'value' : Object.hasOwn(alt, 'source') ? 'source' : null;
+    const source = alt.source as Record<string, unknown> | undefined;
+    const key = path && type && kind && Object.hasOwn(path, 'const') && Object.hasOwn(type, 'const') &&
+      (kind !== 'source' || Array.isArray(source?.enum)) ?
+      JSON.stringify([kind, type.const, alt[kind], alt.done, alt['x-optional']]) : null;
+    if (key === null || !groups.has(key)) {
+      groups.set(key ?? `unique_${groups.size}`, alt);
+      continue;
+    }
+    const previous = groups.get(key)!;
+    const priorPath = previous.path as Record<string, unknown>;
+    const paths = Array.isArray(priorPath.enum) ? priorPath.enum : [priorPath.const];
+    previous.path = { enum: [...new Set([...paths, path!.const])] };
+  }
+  return [...groups.values()];
+}
+
+/** Compile natlang's typed alternatives for Wllama without changing runtime action names. */
+export function compileBrowserTools(rawTools: unknown[], mode: BrowserSchemaMode = 'typed'):
+  { tools: ModelTool[]; names: Map<string, string> } {
+  const names = new Map<string, string>();
+  const expanded: unknown[] = [];
+  for (const [toolIndex, raw] of rawTools.entries()) {
+    const tool = raw as ModelTool;
     if (tool?.type !== 'function' || typeof tool.function?.name !== 'string')
-      throw new TypeError(`model tool ${index} is invalid`);
-    return tool;
-  });
+      throw new TypeError(`model tool ${toolIndex} is invalid`);
+    const base = tool.function.name;
+    const alternatives = tool.function.parameters?.['x-natlang-alternatives'];
+    if (mode === 'broad' || !['write', 'call'].includes(base) || !Array.isArray(alternatives) || !alternatives.length) {
+      expanded.push(tool);
+      continue;
+    }
+    const variants = base === 'write' ? compactWriteAlternatives(alternatives as Record<string, unknown>[]) :
+      alternatives as Record<string, unknown>[];
+    for (const [index, alt] of variants.entries()) {
+      const name = `${base}_alt_${index}`;
+      names.set(name, base);
+      const optional = new Set(Array.isArray(alt['x-optional']) ? alt['x-optional'] as string[] : []);
+      const properties = Object.fromEntries(Object.entries(alt).filter(([key]) => key !== 'x-optional'));
+      const summary = Object.entries(properties).filter(([, value]) =>
+        value && typeof value === 'object' && Object.hasOwn(value, 'const'))
+        .map(([key, value]) => `${key}=${String((value as Record<string, unknown>).const)}`).join(', ');
+      expanded.push({ ...tool, function: { ...tool.function, name,
+        description: `${base === 'write' ? 'Write or copy' : 'Call'}. ${summary}.`,
+        parameters: { type: 'object', properties,
+          required: Object.keys(properties).filter(key => !optional.has(key)), additionalProperties: false } } });
+    }
+  }
+  return { tools: expanded.map(raw => publicSchema(raw) as ModelTool), names };
 }
 
 /** Adapt one local model response to the host's template-independent model turn. */
-export function localModelTurn(response: ModelResponse): ModelTurn {
+export function localModelTurn(response: ModelResponse, names: Map<string, string> = new Map()): ModelTurn {
   const choice = response.choices[0];
   if (!choice) throw new Error('local model returned no choice');
   if (choice.finish_reason === 'length') throw new Error('local model reached its token limit before finishing the turn');
@@ -87,7 +166,7 @@ export function localModelTurn(response: ModelResponse): ModelTurn {
     catch { throw new Error(`local model tool call ${index} has invalid JSON arguments`); }
     if (!args || typeof args !== 'object' || Array.isArray(args))
       throw new Error(`local model tool call ${index} needs object arguments`);
-    return [call.function.name, args as Record<string, unknown>];
+    return [names.get(call.function.name) ?? call.function.name, args as Record<string, unknown>];
   });
   return { calls, text: choice.message.content ?? '', raw_calls: rawCalls,
     completion_tokens: response.usage?.completion_tokens,
@@ -99,9 +178,19 @@ export class BrowserLocalModel {
   readonly engine: BrowserInferenceEngine;
   private readonly ownsEngine: boolean;
   private closed = false;
+  private requestedGpuLayers: number | null = null;
+  private requestedContextTokens: number | null = null;
+  private turnQueue: Promise<void> = Promise.resolve();
+  readonly schemaMode: BrowserSchemaMode;
+  lastLoadMs: number | null = null;
+  lastTurn: { durationMs: number; promptTokens: number | null; cachedTokens: number | null;
+    completionTokens: number | null; toolSchemaBytes: number; retries: number; tokensPerSecond: number | null } | null = null;
+  readonly turnHistory: NonNullable<BrowserLocalModel['lastTurn']>[] = [];
 
   constructor(options: { wasmUrl?: string; compatWasmUrl?: string; compatWorkerUrl?: string;
-    firefoxGpuCompatibility?: boolean; engine?: BrowserInferenceEngine; allowOffline?: boolean } = {}) {
+    firefoxGpuCompatibility?: boolean; engine?: BrowserInferenceEngine; allowOffline?: boolean;
+    schemaMode?: BrowserSchemaMode } = {}) {
+    this.schemaMode = options.schemaMode ?? 'typed';
     this.ownsEngine = !options.engine;
     this.engine = options.engine ?? new Wllama({ default: options.wasmUrl ??
       new URL('./wllama.wasm', import.meta.url).href },
@@ -116,30 +205,96 @@ export class BrowserLocalModel {
   /** Browser capability, not a promise that a particular model fits in VRAM. */
   get supportsWebGPU(): boolean { return !this.closed && this.engine.isSupportWebGPU(); }
 
+  get diagnostics(): BrowserModelDiagnostics {
+    const info = this.loaded ? this.engine.getLoadedContextInfo?.() : undefined;
+    const worker = this.engine.getWorkerResources?.();
+    return { loaded: this.loaded, supportsWebGPU: this.supportsWebGPU,
+      requestedGpuLayers: this.requestedGpuLayers,
+      contextTokens: info?.n_ctx ?? this.requestedContextTokens, modelLayers: info?.n_layer ?? null,
+      workerCompatibility: worker?.compat ?? null, workerNoWebGPU: worker?.noWebGPU ?? null,
+      actualGpuLayers: null };
+  }
+
+  private async load(options: BrowserModelLoadOptions, action: (params: LoadParams) => Promise<void>): Promise<void> {
+    if (this.closed) throw new Error('local model is closed');
+    const params = loadParams(options);
+    const started = performance.now();
+    await action(params);
+    this.requestedGpuLayers = params.n_gpu_layers ?? null;
+    this.requestedContextTokens = params.n_ctx;
+    this.lastLoadMs = Math.round(performance.now() - started);
+  }
+
   async loadFromHuggingFace(model: { repo: string; file?: string; quant?: string },
     options: BrowserModelLoadOptions = {}): Promise<void> {
-    if (this.closed) throw new Error('local model is closed');
-    await this.engine.loadModelFromHF(model, loadParams(options));
+    await this.load(options, params => this.engine.loadModelFromHF(model, params));
   }
 
   async loadFromUrl(url: string, options: BrowserModelLoadOptions = {}): Promise<void> {
-    if (this.closed) throw new Error('local model is closed');
-    await this.engine.loadModelFromUrl(url, loadParams(options));
+    await this.load(options, params => this.engine.loadModelFromUrl(url, params));
   }
 
   async loadFiles(files: Blob[], options: BrowserModelLoadOptions = {}): Promise<void> {
-    if (this.closed) throw new Error('local model is closed');
-    await this.engine.loadModel(files, loadParams(options));
+    await this.load(options, params => this.engine.loadModel(files, params));
   }
 
   readonly turn = async (request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> => {
     if (!this.loaded) throw new Error('load a local GGUF model before running a natural-language lambda');
-    const response = await this.engine.createChatCompletion({ messages: chatMessages(request.messages),
-      tools: chatTools(request.tools), tool_choice: 'auto',
-      ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
-      temperature: request.temperature, ...(request.seed === null ? {} : { seed: request.seed }),
-      abortSignal: signal });
-    return localModelTurn(response);
+    const previous = this.turnQueue;
+    let release!: () => void;
+    this.turnQueue = new Promise<void>(resolve => { release = resolve; });
+    await previous;
+    try {
+      if (signal?.aborted) throw new Error('local model turn aborted');
+      const compiled = compileBrowserTools(request.tools, this.schemaMode);
+      const schemaBytes = new TextEncoder().encode(JSON.stringify(compiled.tools)).length;
+      const baseMessages = chatMessages(request.messages);
+      let messages = baseMessages;
+      let retries = 0, promptTokens = 0, completionTokens = 0, cachedTokens = 0;
+      let hasPrompt = false, hasCompletion = false, hasCached = false;
+      const started = performance.now();
+      while (true) {
+        let response: ModelResponse;
+        try {
+          response = await this.engine.createChatCompletion({ messages,
+            tools: compiled.tools, tool_choice: 'auto', cache_prompt: true,
+            ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
+            temperature: request.temperature, ...(request.seed === null ? {} : { seed: request.seed }),
+            abortSignal: signal });
+        } catch (error) {
+          if (String(error).includes('kv_cache_full'))
+            throw new Error('model context is full; reduce prompt or tool schemas, or reload with a larger context',
+              { cause: error });
+          throw error;
+        }
+        if (response.usage?.prompt_tokens !== undefined) {
+          promptTokens += response.usage.prompt_tokens; hasPrompt = true;
+        }
+        if (response.usage?.completion_tokens !== undefined) {
+          completionTokens += response.usage.completion_tokens; hasCompletion = true;
+        }
+        if (response.usage?.prompt_tokens_details?.cached_tokens !== undefined) {
+          cachedTokens += response.usage.prompt_tokens_details.cached_tokens; hasCached = true;
+        }
+        try {
+          const turn = localModelTurn(response, compiled.names);
+          const durationMs = Math.round(performance.now() - started);
+          this.lastTurn = { durationMs, promptTokens: hasPrompt ? promptTokens : null,
+            completionTokens: hasCompletion ? completionTokens : null,
+            cachedTokens: hasCached ? cachedTokens : null, toolSchemaBytes: schemaBytes, retries,
+            tokensPerSecond: hasCompletion && durationMs > 0 ?
+              Math.round(completionTokens * 1000 / durationMs * 10) / 10 : null };
+          this.turnHistory.push(this.lastTurn);
+          return { ...turn, prompt_tokens: hasPrompt ? promptTokens : undefined,
+            completion_tokens: hasCompletion ? completionTokens : undefined };
+        } catch (error) {
+          if (retries >= 1 || signal?.aborted || response.choices[0]?.finish_reason === 'length') throw error;
+          retries++;
+          messages = [...baseMessages, { role: 'assistant', content: response.choices[0]?.message.content ?? '' },
+            { role: 'user', content: 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. Do not change the task or invent a new tool.' }];
+        }
+      }
+    } finally { release(); }
   };
 
   async close(): Promise<void> {

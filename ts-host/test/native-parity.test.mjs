@@ -41,6 +41,39 @@ test('native default system prompt stays aligned with Python tool agent', { skip
   assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
 });
 
+test('model tool-call IDs survive feedback history in both runtimes', { skip: !python }, async () => {
+  const script = `import json
+from natlang.decoder import ChatTurn
+from natlang.runtime import Runtime
+from natlang.tool_agent import ToolAgent
+from natlang.values import load_program
+class Driver:
+ def __init__(self): self.history=None; self.turns=0
+ def chat(self,messages,tools,*,temperature,seed,max_tokens):
+  self.turns+=1
+  if self.turns==1:
+   return ChatTurn(calls=[('read',{'path':'instructions'})],raw_calls=[{'id':'browser_42','type':'function','function':{'name':'read','arguments':'{"path":"instructions"}'}}],completion_tokens=1)
+  self.history=messages
+  return ChatTurn(calls=[],completion_tokens=1)
+driver=Driver()
+Runtime(lambda _:ToolAgent(driver)).run_root(load_program({'$lambda':{'type':'Lambda<{}, Num>','instructions':'Read instructions.'}}))
+print(json.dumps([m.get('tool_call_id') for m in driver.history if m['role']=='tool']))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  let history, turns = 0;
+  const agent = new NativeToolAgent(request => {
+    if (++turns === 1) return { calls: [['read', { path: 'instructions' }]],
+      raw_calls: [{ id: 'browser_42', type: 'function',
+        function: { name: 'read', arguments: '{"path":"instructions"}' } }], completion_tokens: 1 };
+    history = request.messages;
+    return { calls: [], completion_tokens: 1 };
+  });
+  await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: 'Lambda<{}, Num>', instructions: 'Read instructions.' } });
+  assert.deepEqual(history.filter(message => message.role === 'tool').map(message => message.tool_call_id),
+    JSON.parse(py.stdout));
+});
+
 test('default model turn has no implicit token limit in either runtime', { skip: !python }, async () => {
   const script = `import json\nfrom natlang.decoder import ChatTurn\nfrom natlang.runtime import Runtime\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.values import load_program\nclass Driver:\n def __init__(self): self.limits=[]\n def chat(self, messages, tools, *, temperature, seed, max_tokens):\n  self.limits.append(max_tokens)\n  return ChatTurn(calls=[], text='done', completion_tokens=1)\ndriver=Driver()\nagent=ToolAgent(driver)\nout,_=Runtime(lambda _: agent).run_root(load_program({'$lambda': {'type':'Lambda<{}, Num>', 'instructions':'Return one.'}}))\nprint(json.dumps({'limits':driver.limits,'kind':out.kind}))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, encoding: 'utf8' });

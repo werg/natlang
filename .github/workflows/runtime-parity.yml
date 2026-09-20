@@ -45,3 +45,9 @@ jobs:
         env:
           NATLANG_PYTHON: python
         run: npm test
+      - name: Install Chromium for actual browser smoke
+        working-directory: ts-host
+        run: npx playwright-core install --with-deps chromium
+      - name: Run actual browser interpreter smoke
+        working-directory: ts-host
+        run: npm run test:browser

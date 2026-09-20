@@ -17,9 +17,13 @@ test('browser local inference drives the native tool loop without a server', asy
     async loadModelFromHF() {}, async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion(request) {
       requests.push(request);
+      const write = request.tools.find(tool => tool.function.name.startsWith('write_alt_') &&
+        (tool.function.parameters.properties.path.const === 'return' ||
+          tool.function.parameters.properties.path.enum?.includes('return')) &&
+        tool.function.parameters.properties.type?.const === 'Num');
       return requests.length === 1 ? { choices: [{ finish_reason: 'tool_calls', message: {
         content: null, tool_calls: [{ id: 'local_1', type: 'function', function: {
-          name: 'write', arguments: '{"path":"return","type":"Num","value":7}',
+          name: write.function.name, arguments: '{"path":"return","type":"Num","value":7}',
         } }],
       } }], usage: { completion_tokens: 9 } } :
         { choices: [{ finish_reason: 'stop', message: { content: 'finished' } }],
@@ -39,9 +43,13 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.equal(requests[0].tools.find(tool => tool.function.name === 'write').function.parameters['x-natlang-alternatives'], undefined);
+    assert.ok(requests[0].tools.some(tool => tool.function.name.startsWith('write_alt_')));
+    assert.equal(requests[0].tools.some(tool => tool.function.parameters['x-natlang-alternatives']), false);
+    assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
-    assert.equal(requests[1].messages.at(-1).tool_call_id, 'call_1_0');
+    assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
+    assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments,
+      { path: 'return', type: 'Num', value: 7 });
   } finally { host.close(); await model.close(); }
 });
 
@@ -59,10 +67,11 @@ test('local model validates calls and exposes local loading options', async () =
     await assert.rejects(() => model.turn({ messages: [], tools: [], temperature: 0, seed: 0,
       max_tokens: 10 }), /load a local GGUF model/);
     await model.loadFromHuggingFace({ repo: 'example/model', quant: 'Q4_K_M' },
-      { contextTokens: 2048, gpuLayers: 0 });
+      { contextTokens: 2048, gpuLayers: 0, chatTemplate: 'official template' });
     assert.equal(params.n_ctx, 2048);
     assert.equal(params.n_gpu_layers, 0);
     assert.equal(params.jinja, true);
+    assert.equal(params.chat_template, 'official template');
     await assert.rejects(() => model.turn({ messages: [{ role: 'user', content: 'x' }], tools: [],
       temperature: 0, seed: null, max_tokens: 10 }), /invalid JSON arguments/);
   } finally { await model.close(); }
@@ -85,4 +94,62 @@ test('local model requests full GPU offload by default', async () => {
     await assert.rejects(() => model.loadFromHuggingFace({ repo: 'example/model' },
       { gpuLayers: -1 }), /gpuLayers must be a nonnegative integer/);
   } finally { await model.close(); }
+});
+
+test('typed browser tools preserve destination and source constraints while compacting equal values', async () => {
+  const { compileBrowserTools } = await browserApi();
+  const tools = [{ type: 'function', function: { name: 'write', parameters: {
+    type: 'object', 'x-natlang-alternatives': [
+      { path: { const: 'return/a' }, type: { const: 'Num' }, value: { type: 'number' } },
+      { path: { const: 'return/b' }, type: { const: 'Num' }, value: { type: 'number' } },
+      { path: { const: 'return/c' }, type: { const: 'Num' }, source: { enum: ['args/a'] } },
+    ], properties: { path: { type: 'string' } }, required: ['path'] } } }];
+  const typed = compileBrowserTools(tools);
+  assert.equal(typed.tools.length, 2);
+  assert.deepEqual(typed.tools[0].function.parameters.properties.path.enum, ['return/a', 'return/b']);
+  assert.deepEqual(typed.tools[1].function.parameters.properties.source.enum, ['args/a']);
+  assert.equal(typed.names.get('write_alt_0'), 'write');
+  assert.equal(typed.tools[0].function.parameters['x-natlang-alternatives'], undefined);
+  const broad = compileBrowserTools(tools, 'broad');
+  assert.equal(broad.tools.length, 1);
+  assert.equal(broad.tools[0].function.name, 'write');
+});
+
+test('browser model records token use and retries one malformed local tool call', async () => {
+  const { BrowserLocalModel } = await browserApi();
+  let attempts = 0;
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => true,
+    async loadModelFromHF() {}, async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
+    async createChatCompletion(request) {
+      attempts++;
+      assert.equal(request.cache_prompt, true);
+      return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'raw_1',
+        type: 'function', function: { name: 'write', arguments: attempts === 1 ? '{bad' : '{"path":"return","value":7}' } }] } }],
+      usage: { prompt_tokens: 20, completion_tokens: 4, prompt_tokens_details: { cached_tokens: attempts === 1 ? 0 : 10 } } };
+    } };
+  const model = new BrowserLocalModel({ engine: fake, schemaMode: 'broad' });
+  try {
+    const turn = await model.turn({ messages: [{ role: 'user', content: 'write seven' }],
+      tools: [{ type: 'function', function: { name: 'write', parameters: { type: 'object' } } }],
+      temperature: 0, seed: null, max_tokens: 50 });
+    assert.equal(attempts, 2);
+    assert.equal(turn.prompt_tokens, 40);
+    assert.equal(turn.completion_tokens, 8);
+    assert.equal(model.lastTurn.cachedTokens, 10);
+    assert.equal(model.lastTurn.retries, 1);
+    assert.equal(turn.raw_calls[0].id, 'raw_1');
+  } finally { await model.close(); }
+});
+
+test('natlang model manifest and storage headroom are explicit', async () => {
+  const { BROWSER_MODEL_CATALOG, checkModelStorage } = await browserApi();
+  const spec = BROWSER_MODEL_CATALOG[0];
+  assert.ok(spec.url.startsWith('/models/natlang-'));
+  assert.ok(spec.url.endsWith(spec.file));
+  assert.ok(spec.templateUrl.endsWith('.jinja'));
+  const status = await checkModelStorage(spec, { async estimate() { return { usage: 100, quota: spec.bytes }; },
+    async persisted() { return false; } });
+  assert.equal(status.enough, false);
+  assert.equal(status.persisted, false);
+  assert.ok(status.recommendedFree > spec.bytes);
 });

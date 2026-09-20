@@ -1,7 +1,10 @@
 export { BrowserNatlangHost } from './host.js';
-export { BrowserLocalModel } from './local-model.js';
+export { BrowserLocalModel, compileBrowserTools } from './local-model.js';
+export { BROWSER_MODEL_CATALOG, checkModelStorage } from './models.js';
 export { loadFunctionFiles } from './source.js';
-export type { BrowserModelLoadOptions, BrowserInferenceEngine } from './local-model.js';
+export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics,
+  BrowserSchemaMode } from './local-model.js';
+export type { BrowserModelManifest, BrowserStorageStatus } from './models.js';
 export type { BrowserRunRequest, BrowserModelTurn, BrowserModelTurnRequest,
   BrowserRunOptions, BrowserReviewOptions } from './host.js';
 export { TypeScriptEnvironment } from './environment.js';

@@ -11,6 +11,7 @@
     "build:browser": "node scripts/build-browser.mjs",
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test:browser": "node scripts/browser-pilot.mjs",
     "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
     "test:conformance": "node scripts/native-conformance.mjs"
   },
@@ -23,7 +24,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.55.0"
   },
   "exports": {
     ".": {
