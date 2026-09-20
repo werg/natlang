@@ -4,7 +4,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
+
+import yaml
 
 from natlang.codebase import CheckedGraph, FunctionDef, load_function
 from natlang.host import load
@@ -16,6 +19,7 @@ from natlang.values import dump
 
 
 ROOT = Path(__file__).resolve().parent.parent
+_DRAFT_FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 
 
 def _digest(value) -> str:
@@ -66,6 +70,35 @@ class TypeStudio:
             raise ValueError(f"unknown function {target_name}")
         revision = _digest({name: fn.to_inline() for name, fn in sorted(found.items())})
         return cls.from_graph(CheckedGraph(root, found, revision), target_name, **evidence)
+
+    @classmethod
+    def from_draft_text(cls, name: str, source: str, *, context_graph: CheckedGraph | None = None,
+                        obligations: list[dict] | None = None, witnesses: list[dict] | None = None,
+                        required_effects: list[str] | None = None) -> "TypeStudio":
+        """Read source data without asking the executable loader to accept an unfinished signature."""
+        match = _DRAFT_FRONT.match(source)
+        if not match:
+            raise ValueError("draft needs frontmatter delimited by --- lines")
+        meta = yaml.safe_load(match.group(1)) or {}
+        if (not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or
+                not isinstance(meta, dict) or not isinstance(meta.get("args", {}), dict) or
+                not isinstance(meta.get("types", {}), dict)):
+            raise ValueError("draft frontmatter needs a mapping of parameter names")
+        parameters = list(meta.get("args") or {})
+        if len(parameters) != len(set(parameters)) or any(
+                not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\??", str(p)) for p in parameters):
+            raise ValueError("invalid draft parameter names")
+        context = {"named_types": dict(meta.get("types") or {}), "signatures": [],
+                   "obligations": obligations or [], "required_effects": required_effects or [],
+                   "witnesses": witnesses or []}
+        if context_graph is not None:
+            context["named_types"] = {**context_graph.root.types, **context["named_types"]}
+            context["signatures"] = [
+                {"name": fn.name, "args": dict(fn.args), "returns": fn.returns}
+                for fn in context_graph.definitions.values() if fn.name != name]
+        target = {"name": name, "body": match.group(2), "parameters": parameters,
+                  "revision": _digest([name, source])}
+        return cls(target, context)
 
     def _unchanged(self, target: dict | None, context: dict) -> None:
         if context != self.context or (target is not None and target != self.target):

@@ -116,6 +116,17 @@ def test_optional_parameter_marker_is_preserved_in_inference():
     assert not s.check_candidate(s.target, s.context, wrong)["obligations_ok"]
 
 
+def test_unsigned_draft_can_be_analysed_without_loading_it_as_programme():
+    draft = "---\nargs:\n  prefix?:\n  value:\n---\nCombine prefix and value.\n"
+    s = TypeStudio.from_draft_text("combine", draft)
+    assert s.target["parameters"] == ["prefix?", "value"]
+    assert s.target["body"].strip() == "Combine prefix and value."
+    assert "returns" not in s.target
+    suggestion = {"args": {"prefix?": "Text", "value": "Text"}, "returns": "Text",
+                  "effects": [], "reason": "Draft body.", "alternatives": []}
+    assert s.check_candidate(s.target, s.context, suggestion)["parseable"]
+
+
 def test_grouped_type_fixtures_have_independent_exact_outcomes():
     cases = [json.loads(line) for line in Path(
         "codebases/type_studio/scenarios/cases.jsonl").read_text().splitlines()]

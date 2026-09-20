@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyse one checked natlang function with a frozen evidence snapshot."""
+"""Analyse one checked or draft natlang function with a frozen evidence snapshot."""
 from __future__ import annotations
 
 import argparse
@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("operation", choices=("infer", "check"))
     parser.add_argument("out", type=Path)
     parser.add_argument("--evidence", type=Path, help="JSON with obligations, witnesses and required_effects")
+    parser.add_argument("--draft", action="store_true", help="source has no complete signature; analyse as read-only text")
     parser.add_argument("--model-id", required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--server", default="http://127.0.0.1:8081")
@@ -31,7 +32,8 @@ def main() -> None:
     allowed = {"obligations", "witnesses", "required_effects"}
     if set(evidence) - allowed:
         parser.error("unknown evidence keys")
-    studio = TypeStudio.from_file(args.source, args.target, **evidence)
+    studio = (TypeStudio.from_draft_text(args.target, args.source.read_text(), **evidence)
+              if args.draft else TypeStudio.from_file(args.source, args.target, **evidence))
     trace = args.out.with_suffix(".trace.jsonl")
     if trace.exists():
         parser.error("trace already exists")
