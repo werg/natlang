@@ -1,6 +1,22 @@
 # P06 — Natlang IDE and training workbench
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local IDE workbench in `codebases/ide/` and
+`applications/ide_workbench.mjs`. [Shared capabilities](README.md).
+
+Natlang interprets text edits into exact revisioned patches and composes the
+editor view. The host retains editable source revisions, checks source graph
+shape and basic crisp syntax, invokes a child programme pinned to a revision,
+stores full traces, and exposes read-only trace cursor events. A scenario
+store freezes inputs/expected values with source identity and re-evaluates
+them exactly. Integration tests exercise natlang edit/run/view, escaped HTML,
+scenario evaluation, stale edits and invalid syntax.
+
+This is a headless IDE backend with generated HTML, not yet an interactive
+browser editor. The trace cursor does not claim replay or fork. Syntax
+screening does not prove natlang semantic correctness, and the scenario
+evaluator is not a training-job manager. Dataset admission, teacher collection,
+fine-tune launch and checkpoint comparison still require explicit product
+work and infrastructure integration.
 
 ## Natlang prerequisites
 
