@@ -1,7 +1,8 @@
 import json
 
 from natlang.gen import codebases as C
-from scripts.teacher_leaves import _leaf_audit_status, may_admit, missing_from_ir, retry_keys
+from scripts.teacher_leaves import (_leaf_audit_status, may_admit, missing_from_ir,
+                                    pruned_reference_keys, retry_keys)
 
 
 def test_missing_from_ir_uses_exact_template_cases_and_deduplicates(tmp_path):
@@ -31,6 +32,26 @@ def test_missing_from_ir_uses_exact_template_cases_and_deduplicates(tmp_path):
             del C.REFERENCES[known_key]
         else:
             C.REFERENCES[known_key] = original
+
+
+def test_reopens_only_removed_concrete_references(tmp_path):
+    args = {"persona": "seller", "heard": "a map", "action": {"code": "sell_list_price"}}
+    key = C.ref_key("say", args)
+    backup = tmp_path / "old.jsonl"
+    backup.write_text(json.dumps({"key": key, "function": "say", "args": args,
+                                  "value": "old response"}) + "\n")
+    path = tmp_path / "programs.ir.jsonl"
+    path.write_text(json.dumps({"semantics": {"leaf_oracles": {"say": {"cases": [
+        {"input": args, "template": False, "output": "old response"}
+    ]}}}}) + "\n")
+    old = C.REFERENCES.pop(key, None)
+    try:
+        assert missing_from_ir(path) == []
+        assert pruned_reference_keys(backup) == {key}
+        assert missing_from_ir(path, pruned_reference_keys(backup)) == [(key, "say", args)]
+    finally:
+        if old is not None:
+            C.REFERENCES[key] = old
 
 
 def test_missing_from_ir_prioritizes_keys_that_finish_programs(tmp_path):

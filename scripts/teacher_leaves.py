@@ -69,8 +69,8 @@ CHECKS = {
 }
 
 
-def missing_from_ir(path: Path):
-    """Collect missing cases, prioritizing keys that complete programs."""
+def missing_from_ir(path: Path, reopen_keys=frozenset()):
+    """Collect missing cases, including pruned references embedded as concrete gold."""
     todo, seen = [], set()
     program_missing = []
     with path.open() as stream:
@@ -86,10 +86,10 @@ def missing_from_ir(path: Path):
                 if fn not in WHERE:
                     continue
                 for case in oracle.get("cases", []):
-                    if not case.get("template"):
-                        continue
                     args = case["input"]
                     key = C.ref_key(fn, args)
+                    if not case.get("template") and key not in reopen_keys:
+                        continue
                     if key not in C.REFERENCES:
                         missing.add(key)
                     if key not in seen and key not in C.REFERENCES:
@@ -103,6 +103,21 @@ def missing_from_ir(path: Path):
     # A key that is the last gap in a program gets first chance; ties favor keys
     # shared by more programs, then the stable hash order for reproducibility.
     return sorted(todo, key=lambda item: (-sole[item[0]], -affected[item[0]], item[0]))
+
+
+def pruned_reference_keys(backup: Path) -> set[str]:
+    """Find former reference keys absent from the currently loaded bank."""
+    old = set()
+    with backup.open() as source:
+        for number, line in enumerate(source, 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            key = C.ref_key(row["function"], row["args"])
+            if row["key"] != key:
+                raise ValueError(f"{backup}:{number}: invalid reference key")
+            old.add(key)
+    return old - C.REFERENCES.keys()
 
 
 def _leaf_audit_status(out, error):
@@ -133,6 +148,8 @@ def may_admit(function: str, dry_run: bool, admit_say: bool) -> bool:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ir", type=Path, help="collect exact missing template cases from a frozen program IR")
+    ap.add_argument("--reopen-removed-from", type=Path,
+                    help="also collect concrete cases whose key was removed from this bank backup")
     ap.add_argument("--families", nargs="*", default=["cb_shopkeeper", "cb_webserver"])
     ap.add_argument("--mix", default=None, help="a mix of scripts/generate.py, instead of --families")
     ap.add_argument("--n", type=int, default=12)
@@ -184,7 +201,10 @@ def main():
     with urllib.request.urlopen(a.server.rstrip('/') + '/v1/models', timeout=30) as response:
         model_metadata = json.load(response)
     if a.ir:
-        todo = missing_from_ir(a.ir)
+        reopened = pruned_reference_keys(a.reopen_removed_from) if a.reopen_removed_from else set()
+        todo = missing_from_ir(a.ir, reopened)
+        if reopened:
+            print(f"reopened {len(reopened)} pruned reference keys", flush=True)
     else:
         families = MIXES[a.mix] if a.mix else a.families
         for i in range(a.n):                                # collect the leaves these programs need: the same programs
