@@ -15,6 +15,8 @@ lint:
   must: [single set of return, instructions emptied]
   must_not: [construct a child, eval]
   max_actions: 3
+reference:
+  '': { answer: true }
 canonical_trace: |
   >>> set return : Bool
       true
