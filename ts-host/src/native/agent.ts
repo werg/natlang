@@ -15,7 +15,17 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; systemPrompt?: string } = {}) {}
+      temperature?: number; maxSeconds?: number; systemPrompt?: string } = {}) {}
+
+  private openMarks(session: NativeSession): number[] {
+    if (!Object.keys(session.lam.marks).length) return [];
+    return (session.lam.originalBody ?? session.lam.body).replace(/^\n+|\n+$/g, '').split('\n')
+      .flatMap((line, index) => {
+        const text = line.trim(), number = index + 1;
+        return text && !text.startsWith('#') && !text.startsWith('function ') &&
+          !Object.hasOwn(session.lam.marks, number) ? [number] : [];
+      });
+  }
 
   tools(session: NativeSession): unknown[] {
     const names = Object.keys(session.lam.codebase);
@@ -31,6 +41,8 @@ export class NativeToolAgent {
     if (names.length) tools.push(tool('call', 'Call a checked function and place its result at to.', {
       function: { enum: names }, to: path, inputs: { type: 'object' }, over: path,
       init: {}, until: { type: 'string' }, max: { type: 'integer' } }, ['function', 'to']));
+    if (names.length) tools.push(tool('mark_done', 'Mark completed or untaken lines of the program.', {
+      start: { type: 'integer' }, end: { type: 'integer' }, skipped: { type: 'boolean' } }, ['start']));
     tools.push(tool('report_blocker', 'Explain information missing from the task.', { missing: { type: 'string' } }, ['missing']));
     tools.push(tool('report_error', 'Explain an unsatisfiable or invalid instruction.', { message: { type: 'string' } }, ['message']));
     return tools;
@@ -55,8 +67,10 @@ export class NativeToolAgent {
       function: { name: 'read', arguments: '{"path":"args"}' } }] },
       { role: 'tool', tool_call_id: 'call_0', content: opening });
     const maxTurns = this.options.maxTurns ?? 64, maxTokens = this.options.maxTokens ?? 4000;
+    const deadline = Date.now() + (this.options.maxSeconds ?? 180) * 1000;
     let tokens = 0;
     for (let turn = 0; turn < maxTurns; turn++) {
+      if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';
       let allowance = maxTokens - tokens;
       if (this.options.turnTokens) allowance = Math.min(allowance, this.options.turnTokens);
       if (allowance < 1) return 'episode token budget exhausted';
@@ -69,6 +83,12 @@ export class NativeToolAgent {
       tokens += response.completion_tokens ?? allowance;
       if (tokens > maxTokens) return 'episode token budget exhausted';
       if (!response.calls?.length) {
+        const marks = this.openMarks(session);
+        if (marks.length) {
+          messages.push({ role: 'assistant', content: response.text ?? '' },
+            { role: 'user', content: `Lines still marked [ ]: ${marks.join(', ')}. Mark completed work done and untaken work skipped (skipped=true).` });
+          continue;
+        }
         if (session.finish()) return;
         const missing = lam.return === MISSING ? `return has not been written (${output})` :
           lam.type.kind === 'lambda' ? problems(lam.return, lam.type.returns, session.env, 'return').holes.map(d => d.path).join(', ') : '';
@@ -79,12 +99,18 @@ export class NativeToolAgent {
       const calls = response.calls;
       const raw = calls.map(([name, args], i) => ({ id: `call_${turn}_${i}`, type: 'function',
         function: { name, arguments: JSON.stringify(args) } }));
-      messages.push({ role: 'assistant', content: response.text ?? '', tool_calls: raw });
+      const results: NativeResult[] = [];
       for (const [index, [name, args]] of calls.entries()) {
+        if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';
         const result: NativeResult = await session.applyAsync(name, args);
-        messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
+        results.push(result);
         if (result.kind === 'blocked') return result.text;
+        if (['rejected', 'refused', 'error', 'budget', 'completed'].includes(result.kind)) break;
       }
+      messages.push({ role: 'assistant', content: response.text ?? '', tool_calls: raw.slice(0, results.length) });
+      for (const [index, result] of results.entries())
+        messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
+      if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
     }
     return 'episode turn budget exhausted';
   }

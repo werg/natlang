@@ -67,6 +67,16 @@ export class NativeRuntime {
 
   close(): void { this.releaseEffect(); }
 
+  evalFor(node: LambdaNode, code: string, body: boolean, path: string, scope: Record<string, unknown>) {
+    const previous = this.acting;
+    this.acting = node;
+    try {
+      const result = this.environment.execute({ code, body, path, effectful: node.effects.length > 0, scope });
+      this.events.push(...result.events);
+      return result;
+    } finally { this.acting = previous; }
+  }
+
   private acting?: LambdaNode;
   private effect(cap: string, fn: string, args: unknown[]): unknown {
     const name = `${cap}.${fn}`, node = this.acting;
@@ -155,14 +165,12 @@ export class NativeRuntime {
 
   private crisp(ref: Ref, node: LambdaNode, env: TypeEnv): NativeOutcome {
     node.status = 'running';
-    this.acting = node;
     this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: node.engine,
       code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
-      const result = this.environment.execute({ code: node.body, body: true, path: ref.path,
-        effectful: node.effects.length > 0, scope: { args: jsView(node.args as Value), return: jsView(node.return) } });
-      this.events.push(...result.events);
+      const result = this.evalFor(node, node.body, true, ref.path,
+        { args: jsView(node.args as Value), return: jsView(node.return) });
       const value = coerce(result.result, node.type.returns, env, ref.path);
       const missing = problems(value, node.type.returns, env, ref.path);
       if (missing.holes.length) return this.quiesce(ref, node, 'returned value is incomplete');
@@ -172,7 +180,6 @@ export class NativeRuntime {
       this.trace.emit('eval', { phase: 'failed', path: ref.path, error: error instanceof Error ? error.message : String(error) });
       return this.quiesce(ref, node, `code error: ${error instanceof Error ? error.message : String(error)}`);
     }
-    finally { this.acting = undefined; }
   }
 
   private async episode(ref: Ref, node: LambdaNode): Promise<NativeOutcome> {
@@ -283,6 +290,8 @@ export class NativeRuntime {
 
 export class NativeSession {
   completed = false;
+  actions = 0;
+  toolCalls = 0;
   readonly env: TypeEnv;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
@@ -301,6 +310,10 @@ export class NativeSession {
   }
   apply(name: string, args: Record<string, unknown>): NativeResult {
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+    if (this.actions >= 40 || this.toolCalls >= 128)
+      return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+    this.toolCalls++;
+    if (name !== 'mark_done') this.actions++;
     this.lam.steps++;
     return this.record(name, args, this.applyNow(name, args));
   }
@@ -310,6 +323,18 @@ export class NativeSession {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
         if (message.length < 8) throw new Reject([{ path: name, code: 'bad-action' }]);
         return { kind: 'blocked', text: message };
+      }
+      if (name === 'mark_done') {
+        const start = args.start, end = args.end ?? start;
+        const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
+        if (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > lines.length)
+          throw new Reject([{ path: 'start', code: 'bad-range', expected: `line numbers between 1 and ${lines.length}` }]);
+        for (let i = Number(start); i <= Number(end); i++) {
+          const text = lines[i - 1]!.trim();
+          if (text && !text.startsWith('#') && !text.startsWith('function '))
+            this.lam.marks[i] = args.skipped === true ? 'skipped' : 'done';
+        }
+        return { kind: 'ok', text: `ok\n${Number(start)}..${Number(end)} marked` };
       }
       if (name === 'write') {
         const path = String(args.path ?? '');
@@ -404,10 +429,9 @@ export class NativeSession {
         if (args.engine === undefined) throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'an explicit available engine' }]);
         const engine = String(args.engine);
         if (engine !== 'typescript-host') return { kind: 'error', text: `engine ${engine} unavailable` };
-        const result = this.runtime.environment.execute({ code: String(args.code ?? ''), body: false, path: 'eval',
-          effectful: this.lam.effects.length > 0, scope: { instructions: this.lam.body,
-            args: jsView(this.lam.args as Value), return: jsView(this.lam.return), let: jsView(this.lam.let as Value) } });
-        this.runtime.events.push(...result.events);
+        const result = this.runtime.evalFor(this.lam, String(args.code ?? ''), false, 'eval',
+          { instructions: this.lam.body,
+            args: jsView(this.lam.args as Value), return: jsView(this.lam.return), let: jsView(this.lam.let as Value) });
         return { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value };
       }
       throw new Reject([{ path: name, code: 'bad-action' }]);
@@ -435,6 +459,9 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     if (name === 'run') {
+      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+      if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      this.actions++; this.toolCalls++; this.lam.steps++;
       try {
         const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
         const outcomes = [];
@@ -451,6 +478,9 @@ export class NativeSession {
       }
     }
     if (name !== 'call') return this.apply(name, args);
+    if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+    if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+    this.actions++; this.toolCalls++; this.lam.steps++;
     try {
       const label = String(args.function ?? '');
       const copyName = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(label)?.[1];
