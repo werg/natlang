@@ -1,6 +1,21 @@
 # P11 — Collaborative executable wiki
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local collaborative wiki slice in `codebases/wiki/` and
+`applications/wiki.mjs`. [Shared capabilities](README.md).
+
+Natlang composes the meaning of concurrent stable-block edits. The host pins
+the merge model/source/seed profile, validates update IDs and coverage, checks
+cell source shape, and retains unresolved alternatives. A page cell runs as a
+child source graph with explicit input and no inherited wiki host authority.
+Its result is pinned to page and source revisions; a late result after a merge
+is marked stale. Tests cover concurrent edits, quickjs and natlang cells,
+profile mismatch, invalid merged code and late results.
+
+This is a local simulation. The user-requested notional CRDT has no crisp
+convergence law. Cross-replica repeatability with a live pinned model,
+transport/reconnection, actual browser inference and UI rendering remain
+unproven. The two-client test uses a scripted model, so it checks the product
+boundary rather than semantic merge quality.
 
 ## Natlang prerequisites
 
