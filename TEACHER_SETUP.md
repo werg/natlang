@@ -185,6 +185,27 @@ creates `synthetic-all-after-uncapped-retry-<bank hash>` artifacts. All pass
 audits remain available; admitted references are shared through
 `data/leaf_references.jsonl`.
 
+### Frozen-leaf rejection review, 20 September 2026
+
+The 387-attempt resumed pass admitted 299 references and rejected 88. An
+uncapped retry recovered 17 of the 18 unfinished cases; the last HTML page
+needed 4,125 generated tokens across two turns and completed after removal of
+the 4,000-token episode budget. The other 70 cases had completed `say` writes.
+Many were rejected by the Bonsai yes/no semantic judge, whose short question
+conflated a customer's rejected offer with the shopkeeper's counter-offer and
+sometimes rejected valid sale dialogue. A revised question also produced false
+positives, so its answer is advisory for dialogue. The follow-up audits and
+manual decisions are in `runs/teacher-leaves-*20260920*.jsonl`.
+
+All 70 `say` keys were filled after manual review and targeted retries. The
+final reference bank has 437 distinct keys, with no duplicates, and the
+original frozen IR has zero missing generative-leaf keys. `teacher_leaves.py`
+now records `say` results for review by default; `--admit-say` is an explicit
+override. Normal tool and legacy inference have no default episode token,
+turn-count, or wall-clock cutoff. The teacher collector applies its own
+per-leaf wall-clock limit (300 seconds by default), while its response length
+is left to the model and server unless `--turn-tokens` is supplied.
+
 ## End-of-turn completion
 
 The terminal `done` tool has been removed from the model-facing surface and

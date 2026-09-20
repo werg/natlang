@@ -125,6 +125,11 @@ def retry_keys(path: Path, status: str = "all") -> set[str]:
     return keys
 
 
+def may_admit(function: str, dry_run: bool, admit_say: bool) -> bool:
+    """Dialogue requires review while the Bonsai semantic judge is unreliable."""
+    return not dry_run and (function != "say" or admit_say)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ir", type=Path, help="collect exact missing template cases from a frozen program IR")
@@ -146,6 +151,8 @@ def main():
     ap.add_argument("--reasoning-effort", choices=("low", "medium", "xhigh"), default="low")
     ap.add_argument("--system-file", type=Path, default=ROOT / "natlang/prompts/tools_teacher_compact.md")
     ap.add_argument("--dry-run", action="store_true", help="audit results without appending references")
+    ap.add_argument("--admit-say", action="store_true",
+                    help="allow automatic admission of dialogue that passes the Bonsai judge")
     ap.add_argument("--audit-out", type=Path, help="all accepted and rejected attempts, with checks and traces")
     ap.add_argument("--trajectory-out", type=Path,
                     help="linked teacher trajectory IR (defaults beside audit in --ir mode)")
@@ -194,7 +201,7 @@ def main():
                              tool_aliases={"call": "call_function"}, json_text_values=True)
     judge = make_judge(LlamaServerDecoder(a.server, timeout=300, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
     C.REF_FILE.parent.mkdir(parents=True, exist_ok=True)
-    kept = 0
+    kept = admitted = 0
     for attempt_number, (k, fn, args) in enumerate(todo[: a.limit], 1):
         t0 = time.time()
         log, transcript, teacher_turns = [], [], []
@@ -216,9 +223,10 @@ def main():
             results = run_checks(CHECKS[fn](args), text, judge) if text else []
             ok = bool(text) and all(r is True for _, r in results)
             if ok:
-                if not a.dry_run:
+                if may_admit(fn, a.dry_run, a.admit_say):
                     with C.REF_FILE.open("a") as f:
                         f.write(json.dumps({"key": k, "function": fn, "args": args, "value": text}, ensure_ascii=False) + "\n")
+                    admitted += 1
                 kept += 1
         except Exception as exc:
             # A decoder, judge, harness, or serialization failure must not lose the
@@ -228,7 +236,7 @@ def main():
             ok = False
         status, detail = _leaf_audit_status(out, error)
         audit_row = {"key":k,"function":fn,"args":args,"leaf_program":leaf_program,
-                     "value":text,"accepted":ok,"admitted":ok and not a.dry_run,
+                     "value":text,"accepted":ok,"admitted":ok and may_admit(fn, a.dry_run, a.admit_say),
                      "status":status,"detail":detail,"error":error,
                      "checks":results,"log":log,"transcript":transcript,
                      "teacher_turns":teacher_turns,"system_prompt":prompt,
@@ -259,8 +267,9 @@ def main():
                                        ensure_ascii=False) + "\n")
         failed = [c.get("code") or c.get("question", "")[:60] for c, r in results if r is not True]
         shown = text or (out.kind if out is not None else f"exception: {error['type']}")
-        print(f"[{fn}] {'KEEP' if ok else 'drop'} {time.time() - t0:4.0f}s  {shown[:90]!r}  {failed if failed else ''}", flush=True)
-    print(f"passed {kept} of {min(len(todo), a.limit)}; admitted {0 if a.dry_run else kept}; usage {dec.usage}; audit {audit_path}")
+        label = "KEEP" if ok and audit_row["admitted"] else "review" if ok else "drop"
+        print(f"[{fn}] {label} {time.time() - t0:4.0f}s  {shown[:90]!r}  {failed if failed else ''}", flush=True)
+    print(f"passed checks {kept} of {min(len(todo), a.limit)}; admitted {admitted}; usage {dec.usage}; audit {audit_path}")
 
 
 if __name__ == "__main__":

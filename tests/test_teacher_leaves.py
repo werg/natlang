@@ -1,7 +1,7 @@
 import json
 
 from natlang.gen import codebases as C
-from scripts.teacher_leaves import _leaf_audit_status, missing_from_ir, retry_keys
+from scripts.teacher_leaves import _leaf_audit_status, may_admit, missing_from_ir, retry_keys
 
 
 def test_missing_from_ir_uses_exact_template_cases_and_deduplicates(tmp_path):
@@ -77,3 +77,10 @@ def test_retry_keys_selects_only_rejected_statuses(tmp_path):
     ]) + "\n")
     assert retry_keys(path) == {"b", "c"}
     assert retry_keys(path, "quiesced") == {"c"}
+
+
+def test_dialogue_requires_review_before_admission():
+    assert not may_admit("say", False, False)
+    assert may_admit("say", False, True)
+    assert may_admit("page_content", False, False)
+    assert not may_admit("page_content", True, True)
