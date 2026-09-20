@@ -72,6 +72,15 @@ try {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
   })).status);
   assert.equal(rejected, 403);
+  await page.locator('#examplesButton').click();
+  await page.locator('#exampleCategory').selectOption('Algorithms');
+  await page.locator('#exampleSearch').fill('route');
+  assert.match(await page.locator('#exampleCount').textContent(), /^1 of \d+ examples$/);
+  await page.locator('.example-card').click();
+  await page.waitForFunction(() => document.querySelector('#projectName').textContent === 'Shortest route');
+  assert.equal(await page.locator('#projectName').textContent(), 'Shortest route');
+  await page.locator('#runButton').click();
+  await page.getByText('Expected value matched').waitFor();
   assert.deepEqual(errors, []);
   console.log('PASS browser playground: edit, validate, run, inspect, admit, persist, and local job API');
 } finally {

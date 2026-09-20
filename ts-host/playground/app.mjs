@@ -3,7 +3,7 @@ import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, checkModelStorage,
   validProjectPath, validatePlaygroundProject, runPlaygroundProject, traceFrame,
   admitPlaygroundRun } from '../dist/browser/natlang.js';
 import { storage } from './storage.mjs';
-import { examples } from './examples.mjs';
+import { examples, exampleCategories } from './examples.mjs';
 
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value).replace(/[&<>"']/g, ch =>
@@ -344,6 +344,25 @@ function renderCases() {
     p.textContent = 'No saved cases yet. Run a program, then use “Save as case” to capture its source and trace.'; $('caseList').append(p); }
 }
 
+function renderExamples() {
+  const term = $('exampleSearch').value.trim().toLowerCase();
+  const category = $('exampleCategory').value;
+  const visible = examples.filter(item => (category === 'All' || item.category === category) &&
+    (!term || [item.name, item.description, item.level, ...item.concepts].join(' ').toLowerCase().includes(term)));
+  $('exampleCount').textContent = `${visible.length} of ${examples.length} examples`;
+  $('exampleList').replaceChildren(...visible.map(template => {
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'example-card';
+    button.innerHTML = `<strong>${escapeHTML(template.name)}</strong><span class="example-meta">${escapeHTML(template.category)} · ${escapeHTML(template.level)} · ${template.modelRequired ? 'Local model required' : 'Runs without a model'} · ${Object.keys(template.files).length} file${Object.keys(template.files).length === 1 ? '' : 's'}</span><span>${escapeHTML(template.description)}</span><span class="example-concepts">${template.concepts.map(escapeHTML).join(' · ')}</span>`;
+    button.onclick = async () => { const next = newPlaygroundProject(template.name, template.root,
+      template.files, template.inputs, template.expected);
+      await storage.put('projects', next); projects.push(next); $('examplesDialog').close(); switchProject(next);
+      message(`Opened ${template.name} from the example library`); };
+    return button;
+  }));
+  if (!visible.length) $('exampleList').textContent = 'No examples match these filters.';
+}
+
 function verifyCase(item) {
   if (!item.trace?.length) throw new Error('No recorded trace; run the scenario first');
   return admitPlaygroundRun({ schema: 'natlang.playground.run/1', trace: item.trace }, {
@@ -657,14 +676,13 @@ function bind() {
   $('modelButton').onclick = async () => { $('modelDialog').showModal(); await refreshModelDiagnostics(); };
   $('modelSelect').onchange = refreshModelDiagnostics;
   $('loadModel').onclick = loadModel;
-  $('examplesButton').onclick = () => $('examplesDialog').showModal();
+  $('examplesButton').onclick = () => { renderExamples(); $('examplesDialog').showModal(); $('exampleSearch').focus(); };
   $('closeExamples').onclick = () => $('examplesDialog').close();
-  $('exampleList').replaceChildren(...examples.map(template => { const button = document.createElement('button');
-    button.className = 'example-card'; button.innerHTML = `<strong>${escapeHTML(template.name)}</strong><span>${escapeHTML(template.root)} · ${Object.keys(template.files).length} file${Object.keys(template.files).length === 1 ? '' : 's'}</span>`;
-    button.onclick = async () => { const next = newPlaygroundProject(template.name, template.root,
-      template.files, template.inputs, template.expected);
-      await storage.put('projects', next); projects.push(next); $('examplesDialog').close(); switchProject(next); };
-    return button; }));
+  $('exampleSearch').oninput = renderExamples;
+  $('exampleCategory').onchange = renderExamples;
+  $('exampleCategory').replaceChildren(...exampleCategories.map(category => new Option(
+    `${category} (${category === 'All' ? examples.length : examples.filter(item => item.category === category).length})`, category)));
+  renderExamples();
 }
 
 async function start() {
