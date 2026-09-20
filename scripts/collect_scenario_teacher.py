@@ -38,6 +38,9 @@ def _turn(source):
     message = ((response.get("choices") or [{}])[0].get("message") or {})
     reasoning = message.get("reasoning_content") or message.get("reasoning") or message.get("thinking")
     return {"function": source.get("function"), "call_id": source.get("call_id"),
+            "phase": source.get("phase", "action"), "segment_turns": source.get("segment_turns"),
+            "context": source.get("messages_before") or [],
+            "tools_offered": source.get("tools_offered"),
             "assistant": {"content": source.get("text") or "", "reasoning": reasoning,
                           "calls": [{"tool": name, "source_tool": name,
                                      "arguments": args, "call_id": None}
@@ -47,7 +50,8 @@ def _turn(source):
 
 
 def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None = None,
-            system_prompt: str = TOOLS_PROMPT, trace_path: Path | None = None) -> tuple[dict, TraceRecorder]:
+            system_prompt: str = TOOLS_PROMPT, trace_path: Path | None = None,
+            segment_turns: int | None = 6) -> tuple[dict, TraceRecorder]:
     validate(record)
     program = lower(record)
     options = options or RunOptions(seed=SeedPolicy("derived", 0))
@@ -58,7 +62,7 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
     captured = []
     rt = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
                                       temperature=0, validation_feedback="caller",
-                                      teacher_turns=captured),
+                                      teacher_turns=captured, segment_turns=segment_turns),
                  options=options, capabilities=program.capabilities, trace_sink=recorder)
     try:
         outcome, value = rt.run_root(_root(program))
@@ -116,11 +120,13 @@ def main():
     parser.add_argument("--root-seed", type=int, required=True)
     parser.add_argument("--start", type=int, default=0, help="first zero-based program row in a frozen batch")
     parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument("--segment-turns", type=int, default=6,
+                        help="conversation work turns before a continuation checkpoint")
     parser.add_argument("--system-file", type=Path,
                         default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_teacher_compact.md")
     args = parser.parse_args()
-    if args.start < 0 or args.limit < 1:
-        parser.error("start must be nonnegative and limit positive")
+    if args.start < 0 or args.limit < 1 or args.segment_turns < 1:
+        parser.error("start must be nonnegative; limit and segment turns positive")
     from natlang.decoder import LlamaServerDecoder
     decoder = LlamaServerDecoder(
         args.server,
@@ -139,6 +145,7 @@ def main():
             options = RunOptions(seed=SeedPolicy("derived", args.root_seed))
             row, _ = collect(record, decoder, model_id=args.model_id, options=options,
                              system_prompt=system_prompt,
+                             segment_turns=args.segment_turns,
                              trace_path=args.out.parent / f"{args.out.stem}-{index}.trace.jsonl")
             target.write(json.dumps(row, ensure_ascii=False) + "\n")
             target.flush()

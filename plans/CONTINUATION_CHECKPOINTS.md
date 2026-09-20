@@ -27,12 +27,46 @@ need a fresh materialization from frozen programs before a continuation-focused
 training run. Do not splice rendered SFT text without reconstructing runtime
 state. Bonsai may be used for targeted probes while collectors remain paused.
 
-Local checks: 369 tests passed, one skipped. A Bonsai probe
+Local checks: 370 tests passed, one skipped. A Bonsai probe
 completed a partial-record task after a fresh checkpoint prompt with four
 messages. A one-turn boundary initially caused unnecessary repeated actions
 after a complete return; completion detection and transient-result handling
 were added before the successful rerun. A full teacher corpus comparison and
 training throughput measurement remain to be done before restarting collection.
+
+## Small paired Bonsai probe
+
+`scripts/compare_continuations.py` runs one case at a time with a 360-second
+probe deadline. Both conditions use the same frozen program, seed, teacher
+prompt, decoder settings, and machine. Each run writes raw turns and a trace
+under `runs/continuation-compare-*`; it does not add training data.
+
+| Case | Rollover | Correct | Requests | Prompt tokens | Completion tokens | Max prompt | Seconds |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| Partial record | off | yes | 5 | 9,509 | 349 | 2,056 | 38.16 |
+| Partial record | 2 | yes | 5 | 9,509 | 349 | 2,056 | 39.37 |
+| Map then count | off | yes | 21 | 41,863 | 2,215 | 2,941 | 269.72 |
+| Map then count | 2 | yes | 22 | 42,577 | 2,562 | 2,868 | 290.72 |
+
+The partial record had no safe boundary: its read and code results were
+transient, and the first durable write completed the task. Map then count had
+one checkpoint in its root invocation. A two-turn rollover was too early to
+save tokens there: it reduced the largest prompt by 73 tokens but added 714
+prompt and 347 completion tokens overall. This comparison does not establish
+throughput gains for longer single-lambda histories. The normal six-turn
+rollover did not fire in these two programs.
+
+The map checkpoint's 256-token note response hit its length limit and ended
+mid-sentence. Raising the note allowance to 512 in Python and TS let the same
+checkpoint prompt finish normally in 323 tokens; the note remains truncated
+to 800 characters before storage.
+
+Whole-program teacher capture now retains the checkpoint phase, setting,
+context, and offered tools, allowing the replay bridge to materialize the
+checkpoint note and the following fresh-context turn. A scripted end-to-end
+capture/replay test covers this path. The TS host port passes 38 native parity
+tests against Python, including continuation, note persistence, and effect
+journal visibility.
 
 The TypeScript host and browser host now use the same six-turn rollover, persist
 `continuation_note` in lambda values, expose `args@effects`, and include

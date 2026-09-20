@@ -143,7 +143,7 @@ class ToolAgent:
                 if (self.segment_turns is not None and segment_turns >= self.segment_turns
                         and checkpoint_ready and (s.missing(session) or s.pending(session))):
                     checkpoint_messages = [*messages, {"role": "user", "content": CHECKPOINT_REQUEST}]
-                    checkpoint_limit = min(256, allowance()) if allowance() is not None else 256
+                    checkpoint_limit = min(512, allowance()) if allowance() is not None else 512
                     invocation = getattr(session, "invocation", None)
                     session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
                                         phase="start", purpose="checkpoint", turn=turns + 1,

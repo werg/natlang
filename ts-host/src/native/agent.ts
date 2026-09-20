@@ -448,7 +448,7 @@ export class NativeToolAgent {
       if (rollover !== null && segmentTurns >= rollover && checkpointReady &&
           (this.missing(session) || this.openMarks(session).length)) {
         const budget = allowance();
-        const checkpointLimit = budget === null ? 256 : Math.min(256, budget);
+        const checkpointLimit = budget === null ? 512 : Math.min(512, budget);
         const checkpointMessages = [...messages, { role: 'user', content: CHECKPOINT_REQUEST }];
         const callId = session.runtime.currentCallId ?? null;
         const started = performance.now();

@@ -4,11 +4,13 @@ from natlang.gen.policy import ReferenceAgent
 from natlang.gen.programs import Plan
 from natlang.runtime import Runtime, Session
 from natlang.surface import ToolSurface
-from natlang.tool_agent import ToolAgent
+from natlang.tool_agent import TOOLS_PROMPT, ToolAgent
 from natlang.types import TypeEnv
 from natlang.terminal import reply_only_sample
 from natlang.values import dump, load_program
 from scripts.materialize_teacher_trajectory_ir import ReplayDecoder
+from scripts.materialize_teacher_trajectory_ir import materialize
+from scripts.collect_scenario_teacher import collect
 from scripts.teacher_trajectory_ir import new_turns
 
 
@@ -122,3 +124,32 @@ def test_transient_code_result_is_kept_until_written():
     assert (outcome.kind, value) == ("done", 3)
     assert len(samples[1]["messages"]) > 2
     assert "3" in samples[1]["messages"][-1]["content"]
+
+
+def test_whole_program_capture_replays_checkpoint_as_training_turn():
+    record = {"version": "natlang.program/1", "id": "checkpoint:record", "kind": "lambda_source",
+              "source": "test", "split": "train", "source_ids": ["checkpoint:record"],
+              "source_groups": ["checkpoint:record"], "license": "project-generated",
+              "semantics": {"operation": "leaf", "inputs": {}, "expected": {"a": 1, "b": 2},
+                            "root": {"$lambda": {"type": "Lambda<{}, { a: Num, b: Num }>",
+                                                 "instructions": "Write 1 to a, then 2 to b."}}}}
+
+    class Scripted:
+        def __init__(self):
+            self.n = 0
+
+        def chat(self, _messages, _tools, **_kwargs):
+            self.n += 1
+            calls = {1: [("write", {"path": "return/a", "type": "Num", "value": 1})],
+                     3: [("write", {"path": "return/b", "type": "Num", "value": 2})]}.get(self.n, [])
+            content = "Fill b next." if self.n == 2 else ""
+            return ChatTurn(calls=calls, text=content, completion_tokens=1,
+                            raw_response={"choices": [{"message": {"content": content}}]})
+
+    row, _ = collect(record, Scripted(), model_id="scripted", segment_turns=1)
+    assert row["outcome"]["accepted"]
+    assert [turn["phase"] for turn in row["trajectory"]] == ["action", "checkpoint", "action", "action"]
+    assert row["trajectory"][1]["segment_turns"] == 1
+    samples = materialize(row, system_prompt=TOOLS_PROMPT)
+    assert [sample["skill"] for sample in samples] == ["write", "checkpoint", "write", "reply"]
+    assert len(samples[2]["messages"]) == 4
