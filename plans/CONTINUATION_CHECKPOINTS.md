@@ -219,5 +219,15 @@ new references are admitted.
 until they are rebuilt. Their actual source IRs embed these questionable sale
 references in 125 and 99 programs, respectively. The page retry and reference
 prune have finished. Dialogue collection and review are still running. Once
-the reference bank settles, rebuild both seeds from their pinned generator
-manifests, verify, and render fresh continuation SFT bundles.
+the reference bank settles, refresh both rebuilt seed IRs, verify, and render
+fresh continuation SFT bundles.
+
+The source-generation stage has begun ahead of final dialogue review. Fresh
+seed-73 and seed-74 IRs are at
+`data/external_pilot/synthetic-s73-pruned-20260921.ir.jsonl` and
+`data/external_pilot/synthetic-s74-pruned-20260921.ir.jsonl`. Each has 10,000
+schema-audited programs and a matching, stable generator source revision.
+Seed 73 has 125 provisional programs and seed 74 has 138. All 144 and 113
+occurrences, respectively, of the 80 pruned sale keys are provisional rather
+than concrete gold. These are base IRs; after teacher review, refresh their
+leaf references, verify the runtime replay, and render training data.
