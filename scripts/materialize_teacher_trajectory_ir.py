@@ -9,11 +9,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from natlang.decoder import ChatTurn
 from natlang.native import _strip_private
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import dump, load_program
+from natlang.trace import TraceRecorder, TraceReader
+from natlang.scenario import ScenarioContract, admit
+from scripts.program_ir import lower
+from scripts.collect_scenario_teacher import _root as whole_root
 from scripts.project_teacher_trajectory_ir import project
 from scripts.teacher_trajectory_ir import VERSION, digest
 
@@ -36,6 +41,7 @@ class ReplayDecoder:
                          "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}}
                         for i, (name, args) in enumerate(calls)]
         self.samples.append({"messages": copy.deepcopy(messages), "tools": _strip_private(copy.deepcopy(tools)),
+                             "call_id": turn.get("call_id"), "function": turn.get("function"),
                              "target": {"role": "assistant", "content": assistant.get("content") or "",
                                         **({"tool_calls": target_calls} if target_calls else {})},
                              "skill": "+".join(name for name, _ in calls) if calls else "reply",
@@ -47,40 +53,67 @@ class ReplayDecoder:
 def materialize(row, *, system_prompt: str):
     if row["version"] != VERSION:
         raise ValueError("unsupported teacher trajectory version")
-    if row["task"]["kind"] != "generative_leaf":
-        raise ValueError("this materializer accepts leaf trajectories only")
-    if not row["outcome"]["accepted"] or row["outcome"]["status"] != "done":
-        raise ValueError("teacher trajectory was not accepted as a completed leaf")
-    program = row["task"].get("leaf_program")
+    task_kind = row["task"]["kind"]
+    if task_kind not in ("generative_leaf", "whole_program"):
+        raise ValueError("unsupported teacher trajectory task")
+    if not row["outcome"]["accepted"]:
+        raise ValueError("teacher trajectory was not accepted")
+    if task_kind == "generative_leaf" and row["outcome"]["status"] != "done":
+        raise ValueError("teacher leaf was not completed")
+    if not row["task"].get("source_program_ids") or "unlinked_program" in row.get("capture_limits", []):
+        raise ValueError("teacher trajectory is not linked to a frozen program")
+    program = row["task"].get("leaf_program") if task_kind == "generative_leaf" else row["task"].get("program_ir")
     if program is None:
-        raise ValueError("teacher trajectory lacks a frozen leaf program")
+        raise ValueError("teacher trajectory lacks a frozen program")
     decoder = ReplayDecoder(row["trajectory"])
     log = []
-    root = load_program(program)
+    lowered = lower(program) if task_kind == "whole_program" else None
+    root = whole_root(lowered) if lowered is not None else load_program(program)
+    recorder = TraceRecorder({"run_id": row["id"], "source_sha256": digest(program),
+                              "teacher_trajectory_sha256": digest(row),
+                              "tool_schema": "tools-v2", "engine_bindings": ["quickjs-isolated"],
+                              "capture": "recorded-teacher-replay"})
     outcome, value = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
                                                   validation_feedback="caller", log=log),
-                             max_episodes=4).run_root(root)
-    if outcome.kind != "done" or dump(value) != row["outcome"]["value"]:
+                             max_episodes=2000 if lowered is not None else 4,
+                             capabilities=lowered.capabilities if lowered is not None else None,
+                             trace_sink=recorder).run_root(root)
+    if outcome.kind != row["outcome"]["status"] or (
+            outcome.kind == "done" and dump(value) != row["outcome"]["value"]):
         raise ValueError(f"replay changed outcome: {outcome.kind}: {outcome.detail}")
     if decoder.cursor != len(decoder.turns):
         raise ValueError("teacher trajectory has unconsumed turns")
-    actual = [(event["action"].split(" ", 1)[0], event["kind"]) for event in log]
-    expected = [(execution["name"], execution["kind"])
-                for turn in row["trajectory"] for execution in turn["executions"]
-                if execution.get("kind") is not None]
-    if expected and actual != expected:
+    if task_kind == "whole_program":
+        actual = [{"name": event.get("name"), "arguments": event.get("arguments"),
+                   "outcome": event.get("outcome")}
+                  for event in TraceReader(recorder.events).of_kind("action")]
+        expected = row["outcome"].get("action_ledger")
+    else:
+        actual = [(event["action"].split(" ", 1)[0], event["kind"]) for event in log]
+        expected = [(execution["name"], execution["kind"])
+                    for turn in row["trajectory"] for execution in turn["executions"]
+                    if execution.get("kind") is not None]
+    if expected is not None and actual != expected:
         raise ValueError(f"replay changed tool outcomes: {actual!r} != {expected!r}")
+    effects = (tuple(("out.emit", [payload]) for payload in lowered.expected_effects)
+               if lowered is not None and lowered.expected_effects is not None else None)
+    admission = admit(TraceReader(recorder.events), ScenarioContract(
+        row["outcome"]["status"], row["outcome"]["value"], effects=effects))
     provenance = {"teacher_trajectory_id": row["id"],
                   "teacher_trajectory_digest": digest(row),
                   "source_program_ids": row["task"]["source_program_ids"],
-                  "reference_key": row["task"]["reference_key"],
+                  "reference_key": row["task"].get("reference_key"),
                   "teacher_model": row["provenance"]["model"],
                   "gold_sources": ["checked-teacher-trajectory"],
-                  "license": "project-generated", "split": "train",
-                  "source": "teacher-leaf"}
-    return [{"id": f"{row['id']}:{index}", "program_id": row["id"],
-             "family": "teacher_leaf", "ir_version": VERSION,
-             "provisional_gold": False, **provenance, **sample}
+                  "license": program.get("license", "project-generated") if task_kind == "whole_program" else "project-generated",
+                  "split": program.get("split", "train") if task_kind == "whole_program" else "train",
+                  "source": "teacher-program" if task_kind == "whole_program" else "teacher-leaf"}
+    if task_kind == "whole_program":
+        provenance["source_groups"] = program.get("source_groups") or [program["id"]]
+    split_id = (provenance["source_groups"][0] if task_kind == "whole_program" else row["id"])
+    return [{"id": f"{row['id']}:{index}", "program_id": split_id,
+             "family": "teacher_program" if task_kind == "whole_program" else "teacher_leaf", "ir_version": VERSION,
+             "provisional_gold": False, "trace_admission": admission, **provenance, **sample}
             for index, sample in enumerate(decoder.samples)]
 
 

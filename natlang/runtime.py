@@ -7,15 +7,22 @@ import json
 import re
 import sys
 import time
+import threading
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
+from pathlib import Path as FilePath
 from typing import Any, Callable, Optional
 
 import yaml
 
 from . import js
+from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
+from .invocation import Invocation, RunOptions
+from .trace import TraceRecorder, _view, changes
+from .streams import StreamBuffer
 from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
-from .nodes import (DONE, MISSING, QUIESCED, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
+from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
                     MapNode, Pending, is_pending)
 from .paths import Path, parse_path
 from .refs import Ref, pending_refs_under, resolve
@@ -23,6 +30,7 @@ from .render import opening, pending_line, render, scalar
 from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
                     format_type, is_pending_type, parse_type, FoldT, IterateT, MapT)
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
+from .values import dump_state
 
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
@@ -80,11 +88,41 @@ class Outcome:
     value: Any = None
 
 
+class EpisodeBudget:
+    def __init__(self, limit: int):
+        self.limit, self.used = limit, 0
+        self.lock = threading.Lock()
+
+    def reserve(self) -> bool:
+        with self.lock:
+            if self.used >= self.limit:
+                return False
+            self.used += 1
+            return True
+
+
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
-                 max_episodes: int = 256, max_depth: int = 8):
+                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
+                 executor=None, trace_sink: Optional[TraceRecorder] = None,
+                 trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
+                 engine_selection: bool = False, map_workers: int = 1,
+                 parallel_model_safe: bool = False, _budget: Optional[EpisodeBudget] = None,
+                 _parent_path: Optional[str] = None, _call_prefix: str = ""):
         self.agent_factory = agent_factory
-        self.max_episodes, self.max_depth = max_episodes, max_depth   # run-level budgets (SPEC 6.3)
+        self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
+        self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
+        self.executor = executor or QuickJSExecutor()
+        self.executors = dict(executors or {getattr(self.executor, "name", "quickjs-isolated"): self.executor})
+        self.engine_selection = engine_selection
+        if map_workers < 1:
+            raise ValueError("map_workers must be positive")
+        self.map_workers, self.parallel_model_safe = map_workers, parallel_model_safe
+        self._budget = _budget or EpisodeBudget(self.max_episodes)
+        self._parent_path = _parent_path
+        self._call_prefix = _call_prefix
+        self.trace_sink = trace_sink
+        self.trace_path = trace_path
         self.deadline = None
         self._depth = 0
         self._fn_stack: list = []   # names of the code-base functions currently being reduced
@@ -96,14 +134,62 @@ class Runtime:
         self.trace: list = []
         self.episodes_started = 0
         self._ids = 0
+        self.invocations: list[Invocation] = []
 
     # ------------------------------------------------------------------ running programs
     def run_root(self, root: Pending, env: Optional[TypeEnv] = None):
         """Reduce a root pending node. Returns (outcome, value-or-node)."""
         holder = _Box(root)
+        self._root_holder = holder
+        if self.trace_path is not None and self.trace_sink is None:
+            initial = _view(dump_state(root))
+            digest = hashlib.sha256(json.dumps(initial, sort_keys=True).encode()).hexdigest()
+            self.trace_sink = TraceRecorder({"run_id": self.options.run_id, "source_sha256": digest,
+                                             "seed_policy": vars(self.options.seed),
+                                             "backend_seed_range": self.options.seed.backend_range,
+                                             "world_seed": self.options.world_seed,
+                                             "model_settings": vars(self.options.model) if self.options.model else None,
+                                             "tool_schema": "tools-v3" if self.engine_selection else "tools-v2",
+                                             "engines": sorted(self.executors),
+                                             "engine_selection": self.engine_selection,
+                                             "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
+        elif self.trace_path is not None:
+            self.trace_sink.reopen()
+        initial_state = _view(dump_state(root))
+        self._trace_last_state = initial_state
+        self._observe("state", phase="initial", value=initial_state)
         ref = Ref(type=None, env=env or TypeEnv(), path="", holder=holder, attr="value")
-        out = self.trigger(ref, acting_effects=None)
-        return out, holder.value
+        try:
+            out = self.trigger(ref, acting_effects=None)
+            self._observe_state("final", outcome=out.kind)
+            return out, holder.value
+        finally:
+            if self.trace_path is not None:
+                self.trace_sink.close()
+
+    def _observe(self, kind: str, **data):
+        if self.trace_sink is not None:
+            self.trace_sink.emit(kind, **data)
+
+    def _observe_state(self, phase: str, outcome: Optional[str] = None):
+        if self.trace_sink is not None and hasattr(self, "_root_holder"):
+            state = _view(dump_state(self._root_holder.value))
+            delta = changes(self._trace_last_state, state)
+            if delta:
+                self._observe("reduction", phase=phase, changes=delta)
+            self._observe("state", phase=phase, value=state, **({"outcome": outcome} if outcome else {}))
+            self._trace_last_state = state
+
+    def _executor(self, engine: str):
+        selected = self.executors.get(engine)
+        if selected is None:
+            raise ExecutionError(f"engine {engine!r} is unavailable; available: {', '.join(sorted(self.executors))}")
+        return selected
+
+    def _drain_executor_events(self, executor):
+        if self.trace_sink is not None and hasattr(executor, "drain_events"):
+            for event in executor.drain_events():
+                self._observe("host", engine=getattr(executor, "name", type(executor).__name__), **event)
 
     # ------------------------------------------------------------------ trigger
     def trigger(self, ref: Ref, acting_effects) -> Outcome:
@@ -150,10 +236,12 @@ class Runtime:
         node.status = DONE
         ref.set(value)
         self.origins[ref.slot_key()] = node
+        self._observe("node", path=ref.path, transition="done", node_type=type(node).__name__)
         return Outcome(ref.path, "done", _one_line(value), value)
 
     def _quiesce(self, node: Pending, ref: Ref, note: str) -> Outcome:
         node.status, node.note = QUIESCED, note
+        self._observe("node", path=ref.path, transition="quiesced", node_type=type(node).__name__, detail=note)
         return Outcome(ref.path, "quiesced", note)
 
     # -- crisp lambda
@@ -161,15 +249,28 @@ class Runtime:
         node.status = RUNNING
         if node.original_body is None:
             node.original_body = node.body
-        scope = {"args": js.to_js(node.in_), "return": js.to_js(node.ret)}
+        scope = {"args": node.in_, "return": node.ret}
         try:
-            raw = js.run(node.body, scope, self._fx(node), body=True, path=ref.path,
-                         effectful=bool(node.effects))
+            executor = self._executor(node.engine)
+        except ExecutionError as e:
+            return self._quiesce(node, ref, f"code error: {e}")
+        self._observe("eval", phase="start", path=ref.path, mode="body",
+                      engine=node.engine,
+                      code=node.body, effectful=bool(node.effects))
+        try:
+            try:
+                raw = portable(executor.run(CrispRequest(node.body, scope, True, ref.path,
+                                                              bool(node.effects)), self._fx(node)))
+            finally:
+                self._drain_executor_events(executor)
             value = coerce(raw, node.type.returns, inner, yaml=False, path=ref.path)
-        except js.JsError as e:
+        except ExecutionError as e:
+            self._observe("eval", phase="failed", path=ref.path, error=str(e))
             return self._quiesce(node, ref, f"code error: {e}")
         except Reject as e:
+            self._observe("eval", phase="rejected", path=ref.path, error=str(e))
             return self._quiesce(node, ref, f"rejected: {e}")
+        self._observe("eval", phase="completed", path=ref.path, value=dump(value))
         if is_pending(value):
             node.status = DONE
             ref.set(value)
@@ -183,7 +284,7 @@ class Runtime:
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
         if self._depth >= self.max_depth:
             return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
-        if self.episodes_started >= self.max_episodes:
+        if self.episodes_started >= self.max_episodes or self._budget.used >= self._budget.limit:
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
         if key in self._stack:
@@ -205,11 +306,24 @@ class Runtime:
         cold = node.status == QUIESCED
         node.status, node.note = RUNNING, ""
         node.attempts += 1
+        parent = self.invocations[-1].path if self.invocations else self._parent_path
+        logical_path = f"{self._call_prefix}/{ref.path}".rstrip("/") if self._call_prefix else ref.path
+        invocation = Invocation(self.options.run_id, logical_path, node.attempts, parent)
         if node.original_body is None:
             node.original_body = node.body
-        self.episodes_started += 1
+        if not self._budget.reserve():
+            return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
+        self.episodes_started = self._budget.used
         session = Session(self, node, ref.env, cold=cold)
-        note = self.agent_factory(node).run(session)
+        session.invocation = invocation
+        self._observe("invocation", phase="start", call_id=invocation.call_id,
+                      path=invocation.path, attempt=invocation.attempt, parent_path=parent)
+        self.invocations.append(invocation)
+        try:
+            note = self.agent_factory(node).run(session)
+        finally:
+            self.invocations.pop()
+            self._observe("invocation", phase="end", call_id=invocation.call_id)
         if session.completed:
             return self._swap_out(node, ref, node.ret)
         return self._quiesce(node, ref, note or "budget exhausted")
@@ -228,6 +342,8 @@ class Runtime:
         node.status = RUNNING
         rt = ref.env.resolve(ref.type) if ref.type is not None else None
         elem = rt.elem if isinstance(rt, ListT) else node.type.b
+        if self._can_parallel_map(node):
+            return self._run_map_parallel(node, ref, inner, elem)
         stuck = []
         for i, slot in enumerate(node.slots):
             if self.deadline is not None and time.monotonic() >= self.deadline:
@@ -245,11 +361,70 @@ class Runtime:
             f"{o.path}: {o.kind} \"{o.detail}\"" for o in stuck)
         return self._quiesce(node, ref, detail)
 
+    def _can_parallel_map(self, node: MapNode) -> bool:
+        if self.map_workers <= 1 or not self.parallel_model_safe or not isinstance(node.over, list):
+            return False
+        if any(not getattr(engine, "parallel_safe", False) for engine in self.executors.values()):
+            return False
+        def pure(fn, seen):
+            if id(fn) in seen:
+                return True
+            seen.add(id(fn))
+            return not fn.effects and all(pure(child, seen) for child in fn.codebase.values())
+        return isinstance(node.fn, Lambda) and pure(node.fn, set())
+
+    def _run_map_parallel(self, node: MapNode, ref: Ref, inner: TypeEnv, elem) -> Outcome:
+        pending = [i for i, slot in enumerate(node.slots) if is_pending(slot)]
+        results = {}
+        def reduce_slot(i):
+            child = Runtime(self.agent_factory, capabilities={}, options=self.options,
+                            executors=self.executors, engine_selection=self.engine_selection,
+                            trace_sink=self.trace_sink, _budget=self._budget,
+                            _parent_path=ref.path, _call_prefix=self._call_prefix, map_workers=1)
+            child.deadline = self.deadline
+            child._depth = self._depth
+            child._stack = list(self._stack)
+            child._fn_stack = list(self._fn_stack)
+            slot_ref = Ref(type=elem, env=inner, path=f"{ref.path}/{i}", container=node.slots, key=i)
+            result = child.trigger(slot_ref, None)
+            return result, child.origins
+
+        with ThreadPoolExecutor(max_workers=self.map_workers) as pool:
+            cursor = iter(pending)
+            active = {}
+            for _ in range(min(self.map_workers, len(pending))):
+                i = next(cursor)
+                active[pool.submit(reduce_slot, i)] = i
+            while active:
+                done, _ = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    i = active.pop(future)
+                    outcome, origins = future.result()
+                    results[i] = outcome
+                    self.origins.update(origins)
+                    self._observe("map_slot", path=f"{ref.path}/{i}", slot=i,
+                                  outcome=outcome.kind, value=dump(node.slots[i]))
+                    try:
+                        following = next(cursor)
+                    except StopIteration:
+                        continue
+                    active[pool.submit(reduce_slot, following)] = following
+        self.episodes_started = self._budget.used
+        stuck = [results[i] for i in sorted(results) if results[i].kind != "done"]
+        if not stuck:
+            return self._swap_out(node, ref, list(node.slots))
+        done = len(node.slots) - len(stuck)
+        detail = f"{done} of {len(node.slots)} reduced\n" + "\n".join(
+            f"{o.path}: {o.kind} \"{o.detail}\"" for o in stuck)
+        return self._quiesce(node, ref, detail)
+
     # -- Fold
     def _run_fold(self, node: FoldNode, ref: Ref, inner: TypeEnv) -> Outcome:
         node.status = RUNNING
         if node.acc is MISSING:
             node.acc, node.at = copy.deepcopy(node.init), 0
+        if isinstance(node.over, StreamBuffer):
+            return self._run_stream_fold(node, ref, inner)
         while True:
             if node.at >= len(node.over):
                 if isinstance(node.over, OpenList) and node.over.pull():
@@ -260,12 +435,42 @@ class Runtime:
                 inst.in_["acc"] = copy.deepcopy(node.acc)
                 inst.in_["item"] = copy.deepcopy(node.over[node.at])
                 node.current = inst
-            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
             out = self.trigger(cref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"step {node.at} {out.kind}: {out.detail}")
             node.acc, node.current, node.at = node.current, None, node.at + 1
         return self._swap_out(node, ref, node.acc)
+
+    def _run_stream_fold(self, node: FoldNode, ref: Ref, inner: TypeEnv) -> Outcome:
+        source = node.over
+        while True:
+            polled = source.peek()
+            if polled.kind == "empty":
+                node.status, node.note = WAITING, "waiting for stream input"
+                self._observe("stream", path=ref.path, phase="waiting", position=source.position)
+                return Outcome(ref.path, "waiting", node.note)
+            if polled.kind == "closed":
+                self._observe("stream", path=ref.path, phase="closed", position=source.position)
+                return self._swap_out(node, ref, node.acc)
+            if polled.kind == "failed":
+                self._observe("stream", path=ref.path, phase="failed", position=source.position,
+                              detail=polled.detail)
+                return self._quiesce(node, ref, "stream failed: " + polled.detail)
+            if node.current is None:
+                self._observe("stream", path=ref.path, phase="admitted", position=source.position,
+                              value=polled.value)
+                inst = _instantiate(node.step)
+                inst.in_["acc"] = copy.deepcopy(node.acc)
+                inst.in_["item"] = copy.deepcopy(polled.value)
+                node.current = inst
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
+            out = self.trigger(cref, None)
+            if out.kind != "done":
+                return self._quiesce(node, ref, f"step {source.position} {out.kind}: {out.detail}")
+            node.acc, node.current, node.at = node.current, None, node.at + 1
+            source.ack()
+            self._observe("stream", path=ref.path, phase="consumed", position=source.position)
 
     # -- Iterate
     def _run_iterate(self, node: IterateNode, ref: Ref, inner: TypeEnv) -> Outcome:
@@ -278,7 +483,7 @@ class Runtime:
                 inst = _instantiate(node.step)
                 inst.in_[node.state_name] = copy.deepcopy(node.state)
                 node.current = inst
-            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/current", holder=node, attr="current")
+            cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.iteration}", holder=node, attr="current")
             out = self.trigger(cref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"step {node.iteration} {out.kind}: {out.detail}")
@@ -295,7 +500,7 @@ class Runtime:
             else:
                 chk.in_["recent"], chk.in_["iteration"] = copy.deepcopy(node.recent), node.iteration
             box = _Box(chk)
-            kref = Ref(type=chk.type.returns, env=inner, path=f"{ref.path}/check", holder=box, attr="value")
+            kref = Ref(type=chk.type.returns, env=inner, path=f"{ref.path}/check/{node.iteration}", holder=box, attr="value")
             out = self.trigger(kref, None)
             if out.kind != "done":
                 return self._quiesce(node, ref, f"check {out.kind}: {out.detail}")
@@ -319,12 +524,19 @@ class Runtime:
             entry = {"seq": len(lam.journal) + 1, "capability": name, "function": fn,
                      "args_preview": json.dumps(args)[:80], "status": "pending"}
             lam.journal.append(entry)
+            call_id = self.invocations[-1].call_id if self.invocations else None
+            self._observe("effect", phase="requested", call_id=call_id,
+                          capability=name, sequence=entry["seq"], args=args)
             try:
                 out = self.capabilities[name](args)
                 entry["status"] = "ok"
+                self._observe("effect", phase="completed", call_id=call_id,
+                              capability=name, sequence=entry["seq"], result=out)
                 return out
             except Exception:
                 entry["status"] = "error"
+                self._observe("effect", phase="failed", call_id=call_id,
+                              capability=name, sequence=entry["seq"])
                 raise
 
         return call
@@ -445,10 +657,13 @@ class Session:
             result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)), e.diags)
         except Refuse as e:
             result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)), e.diags)
-        except js.JsError as e:
+        except (js.JsError, ExecutionError) as e:
             result = Result("error", f"error: {e}")
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
                               "kind": result.kind, "result": result.text})
+        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                         surface="text", action=text, outcome=result.kind, diagnostics=result.codes)
+        self.rt._observe_state("after-action")
         return result
 
     # ------------------------------------------------------------------ tool surface (natlang/surface.py)
@@ -463,6 +678,7 @@ class Session:
             self.actions += 1
             self.lam.steps += 1
         args = dict(args) if isinstance(args, dict) else args
+        submitted = copy.deepcopy(args)
         op = getattr(self, "_op_" + name, None)
         try:
             if op is None:
@@ -481,7 +697,7 @@ class Session:
             result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
         except Refuse as e:
             result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
-        except js.JsError as e:
+        except (js.JsError, ExecutionError) as e:
             result = Result("error", f"error: {e}")
         except (KeyError, TypeError, AttributeError) as e:
             result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
@@ -489,6 +705,10 @@ class Session:
             result.text = result.text.rstrip() + "\n" + self._progress()      # where the program stands, at no extra turn
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
                               "kind": result.kind, "result": result.text})
+        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                         surface="tools-v2", name=name, arguments=submitted,
+                         outcome=result.kind, diagnostics=result.codes)
+        self.rt._observe_state("after-action")
         return result
 
     def _progress(self) -> str:
@@ -636,7 +856,12 @@ class Session:
         return self._do_reopen(Action("reopen", path=args["path"], body=args.get("feedback", "")))
 
     def _op_run_code(self, args):
-        return self._do_eval(Action("eval", body=args["code"]))
+        engine = args.get("engine")
+        if self.rt.engine_selection and engine is None:
+            raise reject("engine", "bad-action", "an explicit available engine")
+        if engine is None:
+            engine = "quickjs-isolated"
+        return self._do_eval(Action("eval", body=args["code"]), engine=engine)
 
     def finish(self) -> bool:
         """The agent replied instead of calling a tool. Complete the lambda if `return` is valid."""
@@ -1138,11 +1363,22 @@ class Session:
         return Result("ok", f"ok   {ref.path}: {pending_line(lam)}, draft return prefilled")
 
     # -- eval
-    def _do_eval(self, a: Action) -> Result:
-        scope = {"instructions": self.lam.body, "args": js.to_js(self.lam.in_), "return": js.to_js(self.lam.ret),
-                 "let": {k: js.to_js(v) for k, v in self.lam.let.items() if not is_pending(v)}}
-        out = js.run(a.body, scope, self.rt._fx(self.lam), body=False, path="eval",
-                     effectful=bool(self.lam.effects))
+    def _do_eval(self, a: Action, engine: str = "quickjs-isolated") -> Result:
+        scope = {"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
+                 "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}}
+        executor = self.rt._executor(engine)
+        self.rt._observe("eval", phase="start", path="eval", mode="expression", engine=engine,
+                         code=a.body, effectful=bool(self.lam.effects))
+        try:
+            try:
+                out = portable(executor.run(CrispRequest(a.body, scope, False, "eval",
+                                                                bool(self.lam.effects)), self.rt._fx(self.lam)))
+            finally:
+                self.rt._drain_executor_events(executor)
+        except (ExecutionError, Reject) as exc:
+            self.rt._observe("eval", phase="failed", path="eval", error=str(exc))
+            raise
+        self.rt._observe("eval", phase="completed", path="eval", value=out)
         text = json.dumps(out, ensure_ascii=False)
         return Result("ok", text if len(text) <= 400 else text[:400] + f" … ({len(text)} chars)", value=out)
 

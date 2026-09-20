@@ -115,7 +115,12 @@ class ScriptedChat:
 
     def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700):
         self.seen.append(list(messages))
-        return self.turns.pop(0)
+        turn = self.turns.pop(0)
+        # The real backend reports usage. A scripted turn without usage is
+        # conservatively charged the entire allowance by ToolAgent.
+        if turn.completion_tokens is None:
+            turn.completion_tokens = 1
+        return turn
 
 
 def test_reply_ends_the_episode_and_is_never_the_result():

@@ -30,7 +30,7 @@ class InjectedFaultReferenceAgent(ReferenceAgent):
         return self.injected_fault
 
 
-def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
+def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0, trace_sink=None):
     samples = []
     recovery_rng = random.Random(recovery_seed)
 
@@ -53,7 +53,7 @@ def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0):
         env = root.env(TypeEnv())
         for name, value in prog.inputs.items():
             root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
-    rt = Runtime(factory, max_episodes=2000, capabilities=prog.capabilities)
+    rt = Runtime(factory, max_episodes=2000, capabilities=prog.capabilities, trace_sink=trace_sink)
     out, value = rt.run_root(root)
     if prog.expected_effects is not None:
         assert rt.emitted == prog.expected_effects, (rt.emitted, prog.expected_effects)

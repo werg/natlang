@@ -8,6 +8,9 @@ its `uses`, nothing else.
 from __future__ import annotations
 
 import re
+import copy
+import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -19,7 +22,7 @@ from .diag import reject
 MAX_FUNCTIONS = 12                     # listing budget per code base
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _FRONT_TS = re.compile(r"\A\s*/\*---\n(.*?)\n---\*/\n?(.*)\Z", re.S)
-_KEYS = {"description", "args", "returns", "types", "uses", "effects"}
+_KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine"}
 
 
 @dataclass(eq=False)
@@ -29,6 +32,7 @@ class FunctionDef:
     body: str
     args: dict                         # name -> type text, in signature order
     returns: str
+    engine: str = "quickjs-isolated"
     types: dict = field(default_factory=dict)      # name -> type text; own and inherited (lexical)
     description: str = ""
     effects: list = field(default_factory=list)
@@ -57,6 +61,8 @@ class FunctionDef:
             doc["types"] = dict(self.types)
         if self.effects:
             doc["effects"] = list(self.effects)
+        if self.kind == "code" and self.engine != "quickjs-isolated":
+            doc["engine"] = self.engine
         if self.codebase:
             doc["codebase"] = {n: f.to_inline() for n, f in self.codebase.items()}
         return doc
@@ -68,6 +74,8 @@ class FunctionDef:
             doc["types"] = dict(self.types)
         if self.effects:
             doc["effects"] = list(self.effects)
+        if self.kind == "code" and self.engine != "quickjs-isolated":
+            doc["engine"] = self.engine
         return doc
 
 
@@ -81,6 +89,7 @@ def _make(name: str, meta: dict, body: str, kind: str, inherited: dict, source: 
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         raise reject(source, "type-mismatch", "a function name that is an identifier", name)
     return FunctionDef(name=name, kind=kind, body=body.strip("\n") + "\n",
+                       engine=str(meta.get("engine") or "quickjs-isolated"),
                        args={str(k): str(v) for k, v in (meta.get("args") or {}).items()},
                        returns=str(meta["returns"]),
                        types={**inherited, **{str(k): str(v) for k, v in (meta.get("types") or {}).items()}},
@@ -149,8 +158,57 @@ def from_inline(entries: dict, inherited: dict, source: str, base: Optional[Path
     return out
 
 
+@dataclass(frozen=True)
+class CheckedGraph:
+    """A checked snapshot of supplied definitions, independent of file access."""
+
+    root: FunctionDef
+    definitions: dict[str, FunctionDef]
+    revision: str
+
+    def get(self, name: str) -> FunctionDef:
+        try:
+            return self.definitions[name]
+        except KeyError:
+            raise reject(name, "no-such-path", "a function in the checked source graph") from None
+
+
+def from_definitions(entries: dict[str, dict], root: str) -> CheckedGraph:
+    """Link a flat, already supplied source graph. `uses` names other entries.
+
+    The input is copied before validation, so edits to a notebook cell or a
+    caller's dictionary cannot alter a definition held by an active run.
+    """
+    supplied = copy.deepcopy(entries)
+    if root not in supplied:
+        raise reject(root, "no-such-path", "a root definition")
+    definitions = {}
+    links = {}
+    for name, doc in supplied.items():
+        if not isinstance(doc, dict):
+            raise reject(name, "type-mismatch", "a function definition")
+        kind = "code" if "code" in doc else "instructions"
+        meta = {k: v for k, v in doc.items() if k not in ("code", "instructions", "codebase")}
+        uses = meta.pop("uses", {}) or {}
+        if not isinstance(uses, dict):
+            raise reject(f"memory:{name}/uses", "type-mismatch", "a mapping of aliases to supplied definitions")
+        fn = _make(str(name), meta, str(doc.get(kind) or ""), kind, {}, f"memory:{name}")
+        definitions[str(name)] = fn
+        links[str(name)] = uses
+    for name, fn in definitions.items():
+        for alias, target in links[name].items():
+            if target not in definitions:
+                raise reject(f"memory:{name}/uses/{alias}", "no-such-path", "a supplied definition", target)
+            fn.codebase[str(alias)] = definitions[target]
+    for fn in definitions.values():
+        check(fn, strict_names=True)
+    digest = hashlib.sha256(json.dumps(supplied, sort_keys=True, separators=(",", ":"),
+                                      ensure_ascii=False).encode()).hexdigest()
+    return CheckedGraph(definitions[root], definitions, digest)
+
+
 # -- load-time checks --------------------------------------------------------------------------------------
-def check(root: FunctionDef) -> None:
+def check(root: FunctionDef, *, strict_names: bool = False) -> None:
     """Listing budget, and no recursion: a function can never reach itself. Repetition is `call` with
     over / init / until, whose bounds the harness controls."""
     seen, stack = set(), []
@@ -164,6 +222,17 @@ def check(root: FunctionDef) -> None:
         if id(fn) in seen:
             return
         seen.add(id(fn))
+        from .types import TypeEnv, TypeSyntaxError, parse_type
+        try:
+            named = {name: parse_type(text) for name, text in fn.types.items()}
+            env = TypeEnv(named)
+            signature = parse_type(fn.type_text)
+            if strict_names:
+                env.check_names(signature)
+                for declared in named.values():
+                    env.check_names(declared)
+        except TypeSyntaxError as exc:
+            raise reject(fn.source, "type-mismatch", "a valid checked function signature", str(exc)) from exc
         if len(fn.codebase) > MAX_FUNCTIONS:
             raise reject(fn.source, "codebase-too-large", f"at most {MAX_FUNCTIONS} functions", str(len(fn.codebase)))
         stack.append(fn)

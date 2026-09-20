@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -60,7 +61,16 @@ class ToolAgent:
 
     def run(self, session) -> Optional[str]:
         s = self.surface
-        messages = [{"role": "system", "content": self.system},
+        settings = session.rt.options.model
+        max_turns = settings.max_turns if settings else self.max_turns
+        max_tokens = settings.max_tokens if settings else self.max_tokens
+        max_seconds = settings.max_seconds if settings else self.max_seconds
+        turn_tokens = settings.turn_tokens if settings else self.turn_tokens
+        temperature = settings.temperature if settings else self.temperature
+        system = self.system
+        if session.rt.engine_selection:
+            system += "\nFor run_code, always name an engine offered in its current tool schema."
+        messages = [{"role": "system", "content": system},
                     {"role": "user", "content": s.render_request(session)}]
         opening = s.opening_read(session)
         if opening:                               # data reaches the model only through the tool channel
@@ -70,26 +80,45 @@ class ToolAgent:
                          {"role": "tool", "tool_call_id": "call_0", "content": text}]
         nudges = turns = tokens = withdrawals = 0
         previous_deadline = getattr(self.dec, "deadline", None)
-        deadline = time.monotonic() + self.max_seconds if self.max_seconds is not None else None
+        deadline = time.monotonic() + max_seconds if max_seconds is not None else None
         if previous_deadline is not None:
             deadline = previous_deadline if deadline is None else min(deadline, previous_deadline)
         previous_runtime_deadline = session.rt.deadline
         if previous_runtime_deadline is not None:
             deadline = previous_runtime_deadline if deadline is None else min(deadline, previous_runtime_deadline)
-        self.dec.deadline = session.rt.deadline = deadline
+        # New backends keep request deadlines in a per-call context. Older test
+        # drivers still support the compatibility mutable attribute.
+        request_scope = getattr(self.dec, "request_scope", None)
+        scope = request_scope(deadline=deadline) if request_scope else nullcontext()
+        if not request_scope:
+            self.dec.deadline = deadline
+        session.rt.deadline = deadline
+        try:
+            with scope:
+                return self._run_turns(session, s, messages, deadline, nudges, turns, tokens, withdrawals,
+                                       max_turns, max_tokens, turn_tokens, temperature)
+        finally:
+            if not request_scope:
+                self.dec.deadline = previous_deadline
+            session.rt.deadline = previous_runtime_deadline
+            if self.transcript is not None:
+                self.transcript[:] = messages
+
+    def _run_turns(self, session, s, messages, deadline, nudges, turns, tokens, withdrawals,
+                   max_turns, max_tokens, turn_tokens, temperature):
         def timed_out() -> bool:
             return deadline is not None and time.monotonic() >= deadline
 
         def exhausted() -> bool:
-            return ((self.max_turns is not None and turns >= self.max_turns) or
-                    (self.max_tokens is not None and tokens >= self.max_tokens) or
+            return ((max_turns is not None and turns >= max_turns) or
+                    (max_tokens is not None and tokens >= max_tokens) or
                     timed_out())
 
         def allowance() -> Optional[int]:
-            remaining = None if self.max_tokens is None else self.max_tokens - tokens
-            if self.turn_tokens is None:
+            remaining = None if max_tokens is None else max_tokens - tokens
+            if turn_tokens is None:
                 return remaining
-            return self.turn_tokens if remaining is None else min(self.turn_tokens, remaining)
+            return turn_tokens if remaining is None else min(turn_tokens, remaining)
 
         try:
             while True:
@@ -98,12 +127,19 @@ class ToolAgent:
                 limit = allowance()
                 available_tools = s.tools(session)
                 offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
-                turn = self.dec.chat(messages, available_tools, temperature=self.temperature,
-                                     seed=0, max_tokens=limit)
+                invocation = getattr(session, "invocation", None)
+                call_path = invocation.path if invocation else ""
+                attempt = invocation.attempt if invocation else 1
+                policy = session.rt.options.seed
+                turn = self.dec.chat(messages, available_tools, temperature=temperature,
+                                     seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=limit)
                 turns += 1
+                session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                    phase="generated", turn=turns, calls=turn.calls, text=turn.text)
                 teacher_turn = None
                 if self.teacher_turns is not None:
                     teacher_turn = {"function": session.lam.fn_name,
+                                    "call_id": getattr(invocation, "call_id", None),
                                     "messages_before": list(messages),
                                     "tools_offered": offered_tools,
                                     "response": turn.raw_response,
@@ -114,7 +150,7 @@ class ToolAgent:
                 # A backend without usage is charged its entire requested allowance.
                 used = getattr(turn, "completion_tokens", None)
                 tokens += (limit or 0) if used is None else max(1, used)
-                if timed_out() or (self.max_tokens is not None and tokens > self.max_tokens):
+                if timed_out() or (max_tokens is not None and tokens > max_tokens):
                     return "episode token or wall-clock budget exhausted"
                 if turn.calls:
                     proposal = {"calls": turn.calls, "value_confidence": turn.value_confidence,
@@ -137,7 +173,9 @@ class ToolAgent:
                         limit = allowance()
                         name, args = turn.calls[index]
                         fork = review_messages(messages, turn.calls, index, self.review_prompt)
-                        answer = getattr(self.dec, "review", self.dec.chat)(fork, review_tools(self.review_order), temperature=0, seed=0, max_tokens=limit)
+                        answer = getattr(self.dec, "review", self.dec.chat)(
+                            fork, review_tools(self.review_order), temperature=0,
+                            seed=policy.seed(call_path, attempt, "review", turns), max_tokens=limit)
                         turns += 1
                         used = getattr(answer, "completion_tokens", None)
                         tokens += (limit or 0) if used is None else max(1, used)
@@ -146,7 +184,7 @@ class ToolAgent:
                                   "text": answer.text, "order": self.review_order,
                                   "trigger": "structural" if structural else "confidence", "prompt_variant": self.review_prompt}
                         self.reviews.append(review)
-                        if timed_out() or (self.max_tokens is not None and tokens > self.max_tokens):
+                        if timed_out() or (max_tokens is not None and tokens > max_tokens):
                             return "careful review budget exhausted before applying proposal"
                         if len(answer.calls) != 1 or answer.calls[0][0] != "review_write":
                             return "careful review invalid response; proposal not applied"
@@ -166,6 +204,8 @@ class ToolAgent:
                             withdrawals += 1
                             withdrawn = True
                             proposal["withdrawn"] = True
+                            session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                                phase="withdrawn", turn=turns, calls=turn.calls)
                             # No reviewer reasoning or replacement value enters the main history.
                             messages = [*messages, {"role": "user", "content":
                                 "The pending batch was withdrawn before execution. No action in it happened. "
@@ -177,6 +217,8 @@ class ToolAgent:
                     if withdrawn:
                         continue
                     proposal["released"] = True
+                    session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
+                                        phase="released", turn=turns, calls=turn.calls)
                 first = None
                 if turn.calls:
                     name, args = turn.calls[0]
@@ -244,11 +286,6 @@ class ToolAgent:
                     return "validation failed: " + results[-1].text
         except TimeoutError:
             return "episode wall-clock budget exhausted"
-        finally:
-            self.dec.deadline = previous_deadline
-            session.rt.deadline = previous_runtime_deadline
-            if self.transcript is not None:
-                self.transcript[:] = messages
 
 
 def _raw(calls):

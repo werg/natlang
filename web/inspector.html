@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>natlang trace and cell inspector</title>
+<style>body{font:16px system-ui;max-width:900px;margin:2rem auto;padding:0 1rem}textarea{width:100%;height:9rem}pre{white-space:pre-wrap;background:#f2f2f2;padding:1rem}button{margin:.5rem 0}</style>
+<h1>natlang portable cell</h1>
+<label>Source graph JSON<textarea id="source">{"cell":{"args":{"n":"Num"},"returns":"Num","code":"return args.n + 1;","engine":"browser-js"}}</textarea></label>
+<label>Inputs JSON<textarea id="inputs">{"n":2}</textarea></label>
+<button id="run">Run cell</button>
+<pre id="result"></pre>
+<h2>Open a reduction trace</h2>
+<input id="trace" type="file" accept=".jsonl,.json">
+<pre id="inspected"></pre>
+<script type="module">
+import { checkedGraph, runGraph, readTrace } from './natlang_lite.mjs';
+document.querySelector('#run').onclick = async () => {
+  try {
+    const graph = checkedGraph(JSON.parse(document.querySelector('#source').value), 'cell');
+    const result = await runGraph(graph, JSON.parse(document.querySelector('#inputs').value));
+    document.querySelector('#result').textContent = JSON.stringify(result, null, 2);
+  } catch (error) { document.querySelector('#result').textContent = error.message; }
+};
+document.querySelector('#trace').onchange = async event => {
+  try {
+    const text = await event.target.files[0].text();
+    const events = text.trim().startsWith('[') ? JSON.parse(text) : text.trim().split('\n').map(JSON.parse);
+    document.querySelector('#inspected').textContent = JSON.stringify(readTrace(events), null, 2);
+  } catch (error) { document.querySelector('#inspected').textContent = error.message; }
+};
+</script>
+</html>

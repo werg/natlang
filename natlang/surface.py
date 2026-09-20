@@ -276,10 +276,13 @@ class ToolSurface:
                          "result into them, or to adapt a copied function.",
                  {"path": _enum_or_string([s.path for s in texts], "a text"),
                   "old": {"type": "string"}, "new": {"type": "string"}}, ["path", "old", "new"]),
-            tool("run_code", "Run TypeScript for exact work (counting, arithmetic, sorting, string operations). "
+            tool("run_code", ("Run code" if session.rt.engine_selection else "Run TypeScript") +
+                             " for exact work (counting, arithmetic, sorting, string operations). "
                              "Your inputs are in `args`, your locals in `locals`. The value of the last expression "
-                             "comes back to you.",
-                 {"code": {"type": "string"}}, ["code"]),
+                             "comes back to you." + (" Select an available engine." if session.rt.engine_selection else ""),
+                 {"code": {"type": "string"}, **({"engine": {"enum": sorted(session.rt.executors)}}
+                                                    if session.rt.engine_selection else {})},
+                 ["code", "engine"] if session.rt.engine_selection else ["code"]),
         ]
         if functions:
             tools.append(

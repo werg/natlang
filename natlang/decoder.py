@@ -12,6 +12,8 @@ import json
 import math
 import time
 import urllib.request
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
@@ -43,6 +45,13 @@ class Decoder(Protocol):
                  seed: Optional[int], stop: list, n_probs: int = 0) -> Generation: ...
 
 
+class TurnDriver(Protocol):
+    """The small backend contract consumed by ToolAgent."""
+
+    def chat(self, messages: list, tools: list, *, temperature: float,
+             seed: Optional[int], max_tokens: int) -> ChatTurn: ...
+
+
 class LlamaServerDecoder:
     """llama.cpp `llama-server`, native /completion endpoint.
 
@@ -55,6 +64,7 @@ class LlamaServerDecoder:
                  chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None, json_text_values: bool = False):
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
         self.deadline = None
+        self._request_deadline = ContextVar(f"decoder-deadline-{id(self)}", default=None)
         self.json_text_values = json_text_values
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
@@ -64,12 +74,23 @@ class LlamaServerDecoder:
         self.usage = {"turns": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def request_timeout(self):
-        if self.deadline is None:
+        deadline = self._request_deadline.get()
+        if deadline is None:
+            deadline = self.deadline
+        if deadline is None:
             return self.timeout
-        left = self.deadline - time.monotonic()
+        left = deadline - time.monotonic()
         if left <= 0:
             raise TimeoutError("episode wall-clock budget exhausted")
         return min(self.timeout, left)
+
+    @contextmanager
+    def request_scope(self, *, deadline):
+        token = self._request_deadline.set(deadline)
+        try:
+            yield
+        finally:
+            self._request_deadline.reset(token)
 
     def format(self, messages: list) -> str:
         """Render messages with the loaded model's own chat template, ending at the

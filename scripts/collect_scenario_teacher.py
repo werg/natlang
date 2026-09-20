@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Collect a whole-program teacher trajectory against frozen program IR."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from natlang.gen.programs import BLOCKED
+from natlang.invocation import RunOptions, SeedPolicy
+from natlang.runtime import Runtime
+from natlang.scenario import ScenarioContract, admit
+from natlang.tool_agent import TOOLS_PROMPT, ToolAgent
+from natlang.trace import TraceReader, TraceRecorder
+from natlang.types import TypeEnv
+from natlang.values import coerce, dump, load_program
+from scripts.program_ir import digest, lower, validate
+
+VERSION = "natlang.teacher_trajectory/1"
+
+
+def _root(program):
+    if program.loader is not None:
+        return program.loader()
+    root = load_program(program.root)
+    env = root.env(TypeEnv())
+    for name, value in program.inputs.items():
+        root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
+    return root
+
+
+def _turn(source):
+    response = source.get("response") or {}
+    message = ((response.get("choices") or [{}])[0].get("message") or {})
+    reasoning = message.get("reasoning_content") or message.get("reasoning") or message.get("thinking")
+    return {"function": source.get("function"), "call_id": source.get("call_id"),
+            "assistant": {"content": source.get("text") or "", "reasoning": reasoning,
+                          "calls": [{"tool": name, "source_tool": name,
+                                     "arguments": args, "call_id": None}
+                                    for name, args in source.get("calls") or []]},
+            "executions": source.get("executions") or [], "reviews": source.get("reviews") or [],
+            "raw_response_sha256": digest(response) if response else None}
+
+
+def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None = None,
+            system_prompt: str = TOOLS_PROMPT, trace_path: Path | None = None) -> tuple[dict, TraceRecorder]:
+    validate(record)
+    program = lower(record)
+    options = options or RunOptions(seed=SeedPolicy("derived", 0))
+    recorder = TraceRecorder({"run_id": options.run_id, "source_sha256": digest(record),
+                              "semantic_version": record["version"], "tool_schema": "tools-v2",
+                              "model": model_id, "seed_policy": vars(options.seed),
+                              "capture": "teacher-whole-program"}, trace_path)
+    captured = []
+    rt = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
+                                      validation_feedback="caller", teacher_turns=captured),
+                 options=options, capabilities=program.capabilities, trace_sink=recorder)
+    try:
+        outcome, value = rt.run_root(_root(program))
+    finally:
+        recorder.close()
+    actual = dump(value) if outcome.kind == "done" else None
+    expected_kind = "quiesced" if program.outcome in ("blocked", "error") or program.expected == BLOCKED else "done"
+    value_ok = (actual == program.expected if not callable(program.expected) else
+                bool(program.expected(actual))) if expected_kind == "done" else True
+    accepted = outcome.kind == expected_kind and value_ok and (
+        program.expected_effects is None or rt.emitted == program.expected_effects)
+    limits = []
+    if any(turn.get("reviews") for turn in captured):
+        limits.append("review_path_requires_separate_replay")
+        accepted = False
+    trajectory = [_turn(turn) for turn in captured]
+    action_ledger = [{"name": event.get("name"), "arguments": event.get("arguments"),
+                      "outcome": event.get("outcome")}
+                     for event in TraceReader(recorder.events).of_kind("action")]
+    admission = None
+    if accepted:
+        semantic = record["semantics"].get("contract") if record["kind"] == "lambda_scenario" else None
+        required = tuple({"name": item["tool"], "arguments": item["arguments"]}
+                         for item in (semantic or {}).get("required_actions", []))
+        constraints = tuple((semantic or {}).get("constrained_calls", []))
+        effects = (tuple(("out.emit", [payload]) for payload in program.expected_effects)
+                   if program.expected_effects is not None else None)
+        try:
+            admission = admit(TraceReader(recorder.events), ScenarioContract(
+                expected_kind, actual if expected_kind == "done" else None,
+                effects=effects, required_actions=required, constrained_calls=constraints))
+        except ValueError as exc:
+            limits.append("semantic_admission_failed:" + str(exc))
+            accepted = False
+    row = {"version": VERSION, "id": "teacher-program:" + digest([record["id"], model_id, options.run_id])[:20],
+           "task": {"kind": "whole_program", "program_ir": record,
+                    "source_program_ids": [record["id"]]},
+           "provenance": {"model": model_id, "program_ir_sha256": digest(record),
+                          "tool_schema": "tools-v2", "seed_policy": vars(options.seed),
+                          "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
+                          "trace_sha256": digest(recorder.events)},
+           "outcome": {"status": outcome.kind, "detail": outcome.detail, "value": actual,
+                       "effects": rt.emitted, "accepted": accepted, "admission": admission,
+                       "action_ledger": action_ledger},
+           "trajectory": trajectory, "capture_limits": limits}
+    return row, recorder
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("ir", type=Path)
+    parser.add_argument("out", type=Path)
+    parser.add_argument("--server", default="http://127.0.0.1:8081")
+    parser.add_argument("--model-id", required=True)
+    parser.add_argument("--root-seed", type=int, required=True)
+    parser.add_argument("--limit", type=int, default=1)
+    args = parser.parse_args()
+    from natlang.native import NativeCallDecoder
+    decoder = NativeCallDecoder(base_url=args.server)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.ir.open() as source, args.out.open("x") as target:
+        for index, line in enumerate(source):
+            if index >= args.limit:
+                break
+            record = json.loads(line)
+            options = RunOptions(seed=SeedPolicy("derived", args.root_seed))
+            row, _ = collect(record, decoder, model_id=args.model_id, options=options,
+                             trace_path=args.out.parent / f"{args.out.stem}-{index}.trace.jsonl")
+            target.write(json.dumps(row, ensure_ascii=False) + "\n")
+            print(f"{record['id']}: {row['outcome']['status']} accepted={row['outcome']['accepted']}", flush=True)
+
+
+if __name__ == "__main__":
+    main()

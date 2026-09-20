@@ -30,7 +30,7 @@ class _Missing:
 
 MISSING = _Missing()
 
-UNREDUCED, RUNNING, QUIESCED, DONE = "unreduced", "running", "quiesced", "done"
+UNREDUCED, RUNNING, QUIESCED, WAITING, DONE = "unreduced", "running", "quiesced", "waiting", "done"
 
 
 @dataclass(eq=False)
@@ -51,6 +51,7 @@ class Pending:
 class Lambda(Pending):
     type: LambdaT = None
     kind: str = "instructions"  # or "code"
+    engine: str = "quickjs-isolated"  # crisp binding fixed when the function is loaded
     body: str = ""
     in_: dict = field(default_factory=dict)
     ret: Any = MISSING

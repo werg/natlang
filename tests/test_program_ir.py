@@ -173,6 +173,15 @@ def test_outcome_contract_rejects_destination_change_and_skipped_effect_call():
     assert len(lines) == 2
 
 
+def test_scenario_materialization_can_link_an_admitted_whole_run_trace(tmp_path):
+    case = next(c for c in matched_cases(81, 0) if c["name"] == "effect_error")
+    record = scenario_record(case, "failures", 81, 0, ["fixture"])
+    lines, _ = materialize_record(record, trace_dir=tmp_path)
+    assert lines and all(line["trace"]["admitted"] for line in lines)
+    assert len({line["trace"]["trace_sha256"] for line in lines}) == 1
+    assert (tmp_path / next(iter(tmp_path.iterdir())).name).exists()
+
+
 def test_linked_review_renders_from_fresh_base_execution():
     case = next(c for c in support_cases(113, 0) if c["name"] == "binding_repair")
     base = scenario_record(case, "support", 113, 0, ["fixture"])

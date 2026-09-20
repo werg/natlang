@@ -44,7 +44,7 @@ def project(row, *, tool_map, accepted_only=False, drop_reasoning=False,
     if empty_success_reply and selected["outcome"]["status"] == "done":
         if selected["trajectory"] and selected["trajectory"][-1]["assistant"]["calls"]:
             selected["trajectory"].append({"index": len(selected["trajectory"]),
-                                            "function": selected["task"]["function"],
+                                            "function": selected["trajectory"][-1].get("function") or selected["task"].get("function"),
                                             "context": [], "tools_offered": None,
                                             "assistant": {"content": "", "reasoning": None,
                                                           "calls": []},
