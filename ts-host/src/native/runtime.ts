@@ -3,6 +3,7 @@ import { TypeScriptEnvironment, type HostEvent } from '../environment.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, isPending, loadProgram,
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
+import { changes, NativeTraceRecorder } from './trace.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -30,9 +31,11 @@ const itemRef = (container: Record<string, Value> | Value[], key: string | numbe
 
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
+  readonly trace: NativeTraceRecorder;
   readonly emitted: unknown[] = [];
   readonly origins = new Map<string, LambdaNode>();
   readonly options: { maxEpisodes: number; maxDepth: number; runId: string };
+  readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
   readonly environment: TypeScriptEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
@@ -45,9 +48,15 @@ export class NativeRuntime {
 
   constructor(options: { environment?: TypeScriptEnvironment; host?: object; agent?: NativeAgent;
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
-    maxDepth?: number; runId?: string; stream?: NativeStream } = {}) {
+    maxDepth?: number; runId?: string; stream?: NativeStream;
+    seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
     this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
       runId: options.runId ?? 'native-run' };
+    this.seedPolicy = options.seedPolicy ?? { mode: 'backend' };
+    this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'tools-v3',
+      engines: ['typescript-host'], engine_contracts: { 'typescript-host': {
+        environment_mode: options.environment?.mode ?? 'fresh', authority: 'shared-node-host', native_state_replayable: false } },
+      seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
     this.environment = options.environment ?? new TypeScriptEnvironment({ mode: 'fresh', host: options.host,
@@ -62,13 +71,16 @@ export class NativeRuntime {
     const entry = { seq: node.journal.length + 1, capability: name, function: fn, args_preview: q(args).slice(0, 80), status: 'pending' };
     node.journal.push(entry);
     this.events.push({ operation: 'effect.requested', capability: name, args });
+    this.trace.emit('effect', { phase: 'requested', capability: name, sequence: entry.seq, args });
     try {
       const value = name === 'out.emit' ? (this.emitted.push(args[0]), null) : this.capabilities[name]?.(args);
       if (value === undefined && name !== 'out.emit') throw new Error('effect-unavailable');
       entry.status = 'ok'; this.events.push({ operation: 'effect.completed', capability: name, result: value });
+      this.trace.emit('effect', { phase: 'completed', capability: name, sequence: entry.seq, result: value });
       return value;
     } catch (error) {
       entry.status = 'error'; this.events.push({ operation: 'effect.failed', capability: name });
+      this.trace.emit('effect', { phase: 'failed', capability: name, sequence: entry.seq });
       throw error;
     }
   }
@@ -78,19 +90,27 @@ export class NativeRuntime {
     if (!this.root) this.root = { value: source };
     else this.root.value = source;
     const box = this.root;
+    const before = dump(box.value);
+    if (!this.trace.events.some(event => event.kind === 'state')) this.trace.emit('state', { phase: 'initial', value: before });
     const ref: Ref = { path: '', env: new TypeEnv(), get: () => box.value,
       set: value => { box.value = value; }, del: () => { box.value = MISSING; } };
     const outcome = await this.trigger(ref);
+    const after = dump(box.value);
+    const delta = changes(before, after);
+    if (delta.length) this.trace.emit('reduction', { phase: 'final', changes: delta });
+    this.trace.emit('state', { phase: 'final', value: after, outcome: outcome.kind });
     return { outcome, value: box.value, events: this.events, emitted: this.emitted };
   }
 
   private done(ref: Ref, node: Pending, value: Value): NativeOutcome {
     node.status = 'done'; ref.set(value);
+    this.trace.emit('node', { path: ref.path, transition: 'done', node_type: node.nodeKind });
     if (node.nodeKind === 'lambda') this.origins.set(ref.path, node);
     return { path: ref.path, kind: 'done', detail: q(dump(value)), value };
   }
   private quiesce(ref: Ref, node: Pending, detail: string): NativeOutcome {
     node.status = 'quiesced'; node.note = detail;
+    this.trace.emit('node', { path: ref.path, transition: 'quiesced', node_type: node.nodeKind, detail });
     return { path: ref.path, kind: 'quiesced', detail };
   }
 
@@ -132,6 +152,8 @@ export class NativeRuntime {
   private crisp(ref: Ref, node: LambdaNode, env: TypeEnv): NativeOutcome {
     node.status = 'running';
     this.acting = node;
+    this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: node.engine,
+      code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
       const result = this.environment.execute({ code: node.body, body: true, path: ref.path,
@@ -139,8 +161,12 @@ export class NativeRuntime {
       const value = coerce(result.result, node.type.returns, env, ref.path);
       const missing = problems(value, node.type.returns, env, ref.path);
       if (missing.holes.length) return this.quiesce(ref, node, 'returned value is incomplete');
+      this.trace.emit('eval', { phase: 'completed', path: ref.path, value: dump(value) });
       return this.done(ref, node, value);
-    } catch (error) { return this.quiesce(ref, node, `code error: ${error instanceof Error ? error.message : String(error)}`); }
+    } catch (error) {
+      this.trace.emit('eval', { phase: 'failed', path: ref.path, error: error instanceof Error ? error.message : String(error) });
+      return this.quiesce(ref, node, `code error: ${error instanceof Error ? error.message : String(error)}`);
+    }
     finally { this.acting = undefined; }
   }
 
@@ -153,12 +179,14 @@ export class NativeRuntime {
     node.status = 'running'; node.note = ''; node.attempts++;
     node.originalBody ??= node.body;
     this.episodesStarted++; this.depth++; this.stack.push(key);
-    const session = new NativeSession(this, node, ref.env);
+    const callId = `${ref.path || '$root'}@${node.attempts}`;
+    this.trace.emit('invocation', { phase: 'start', call_id: callId, path: ref.path, attempt: node.attempts });
+    const session = new NativeSession(this, node, ref.env, ref.path);
     try {
       const note = await this.agent(session);
       if (session.completed) return this.done(ref, node, node.return);
       return this.quiesce(ref, node, String(note || 'budget exhausted'));
-    } finally { this.stack.pop(); this.depth--; }
+    } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId }); this.stack.pop(); this.depth--; }
   }
 
   private async map(ref: Ref, node: Extract<Pending, { nodeKind: 'map' }>, env: TypeEnv): Promise<NativeOutcome> {
@@ -251,7 +279,8 @@ export class NativeRuntime {
 export class NativeSession {
   completed = false;
   readonly env: TypeEnv;
-  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv) {
+  constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
+    readonly path = '') {
     this.env = outerEnv.child(lam.types);
   }
   finish(): boolean {
@@ -260,7 +289,15 @@ export class NativeSession {
     if (p.holes.length || p.pending.length) return false;
     this.completed = true; this.lam.body = ''; return true;
   }
+  private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
+    this.runtime.trace.emit('action', { surface: 'tools-v3', name, arguments: args,
+      outcome: result.kind, codes: result.codes ?? [] });
+    return result;
+  }
   apply(name: string, args: Record<string, unknown>): NativeResult {
+    return this.record(name, args, this.applyNow(name, args));
+  }
+  private applyNow(name: string, args: Record<string, unknown>): NativeResult {
     try {
       if (name === 'report_blocker' || name === 'report_error') {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
@@ -323,11 +360,11 @@ export class NativeSession {
         const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
         const outcomes = [];
         for (const path of paths) outcomes.push(await this.runtime.trigger(this.resolve(String(path))));
-        return { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
-          text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined };
+        return this.record(name, args, { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
+          text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined });
       } catch (error) {
-        if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
-        return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+        if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
       }
     }
     if (name !== 'call') return this.apply(name, args);
@@ -392,10 +429,10 @@ export class NativeSession {
       const existing = ref.get();
       if (!(pending(existing) && (existing.nodeKind !== 'lambda' || existing.functionName === label))) ref.set(child);
       const outcome = await this.runtime.trigger(ref);
-      return { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value };
+      return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
     } catch (error) {
-      if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+      if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+      return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
   }
 

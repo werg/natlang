@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { NativeRuntime } from '../dist/native/runtime.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
+import { readTrace } from '../../web/natlang_lite.mjs';
+import { deriveSeed } from '../dist/native/trace.js';
 
 const crisp = (type, code, extra = {}) => ({ $lambda: { type, code, engine: 'typescript-host', ...extra } });
 
@@ -109,4 +111,30 @@ test('native source calls lower to Map and Fold combinators', async () => {
     } } });
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 12);
   assert.deepEqual(actions.map(x => x.kind), ['done', 'done']);
+});
+
+test('native traces reconstruct in the shared offline reader', async () => {
+  const runtime = new NativeRuntime();
+  const result = await runtime.runRoot(crisp('Lambda<{}, Num>', 'return 14;'));
+  assert.equal(result.outcome.kind, 'done');
+  assert.equal(runtime.trace.reconstruct(), 14);
+  const inspected = readTrace(runtime.trace.events);
+  assert.equal(inspected.outcome, 'done');
+  assert.equal(inspected.reconstructed, 14);
+  assert.equal(runtime.trace.events[0].engine_contracts['typescript-host'].native_state_replayable, false);
+});
+
+test('native model seeds match Python derivation vectors', async () => {
+  assert.equal(deriveSeed(43, '', 1, 'model-turn', 0), 1079124865);
+  assert.equal(deriveSeed(43, 'return/0', 1, 'model-turn', 0), 365401298);
+  const seen = [];
+  const agent = new NativeToolAgent(request => {
+    seen.push(request.seed);
+    return seen.length === 1 ? { calls: [['write', { path: 'return', type: 'Bool', value: true }]], completion_tokens: 1 } :
+      { calls: [], text: 'done', completion_tokens: 1 };
+  });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session), seedPolicy: { mode: 'derived', root: 43 } });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Bool>', instructions: 'Return true.' } });
+  assert.equal(result.outcome.kind, 'done');
+  assert.deepEqual(seen, [1079124865, deriveSeed(43, '', 1, 'model-turn', 1)]);
 });

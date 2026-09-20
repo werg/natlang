@@ -2,6 +2,7 @@ import { formatType } from './types.js';
 import { MISSING, dump, problems } from './values.js';
 import type { NativeResult, NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../runtime.js';
+import { deriveSeed } from './trace.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 
@@ -60,7 +61,11 @@ export class NativeToolAgent {
       if (this.options.turnTokens) allowance = Math.min(allowance, this.options.turnTokens);
       if (allowance < 1) return 'episode token budget exhausted';
       const response = await this.driver({ messages, tools: this.tools(session),
-        temperature: this.options.temperature ?? 0.2, seed: null, max_tokens: allowance });
+        temperature: this.options.temperature ?? 0.2,
+        seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+          session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
+          deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turn),
+        max_tokens: allowance });
       tokens += response.completion_tokens ?? allowance;
       if (tokens > maxTokens) return 'episode token budget exhausted';
       if (!response.calls?.length) {
