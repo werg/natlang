@@ -70,10 +70,14 @@ class RunOptions:
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     def __post_init__(self):
-        for name in ("max_episodes", "max_depth", "max_actions", "max_tool_calls"):
-            value = getattr(self, name)
-            if value is not None and value < 1:
-                raise ValueError(f"{name} must be positive or None")
+        if self.max_episodes is not None and self.max_episodes < 1:
+            raise ValueError("max_episodes must be positive or None")
+        if self.max_depth is not None and self.max_depth < 1:
+            raise ValueError("max_depth must be positive or None")
+        if self.max_actions is not None and self.max_actions < 1:
+            raise ValueError("max_actions must be positive or None")
+        if self.max_tool_calls is not None and self.max_tool_calls < 1:
+            raise ValueError("max_tool_calls must be positive or None")
 
     @classmethod
     def compatibility(cls, **kwargs) -> "RunOptions":

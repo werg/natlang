@@ -174,6 +174,7 @@ class ToolSurface:
             if pos:                                           # a range can only name positions that exist
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
         NEW_LOCAL = {"type": "string", "x-natlang": "new-local",
+                     "pattern": "^let/[a-z_][a-z0-9_]*$",
                      "description": "let/<name>: a new local, created by this call"}
         plain = named_first([sl for sl in existing if not is_body(sl) and not is_pending(sl.value)])
         def fitting(type_text, env_types):

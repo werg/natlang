@@ -65,3 +65,16 @@ def test_child_logical_identity_includes_parent_call_for_seed_isolation():
     assert one["call_id"] == "parent-a@1/child@1"
     assert two["call_id"] == "parent-b@1/child@1"
     assert parent.episodes_started == 2
+
+
+def test_unbounded_defaults_flow_through_parent_and_child():
+    options = RunOptions()
+    assert options.max_episodes is None and options.max_depth is None
+    parent = Runtime(None, options=options)
+    for _ in range(300):
+        assert parent._budget.reserve()
+    assert parent._budget.used == 300
+    workspace = _workspace()
+    child = workspace.invoke("cell", {"n": 1}, agent_factory=None, options=options,
+                             parent_runtime=parent, parent_call_id="parent@1")
+    assert child.outcome == "done" and parent._budget.used == 300

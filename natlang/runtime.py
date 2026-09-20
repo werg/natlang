@@ -20,7 +20,7 @@ from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
 from .trace import TraceRecorder, _view, changes
 from .streams import StreamBuffer
-from .actions import Action
+from .actions import Action, parse_action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
 from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
                     MapNode, Pending, is_pending)
@@ -32,12 +32,12 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 from .values import dump_state
 
-# Reference values for explicitly configured legacy budgets; defaults are unrestricted.
+# Reference values for explicit legacy budgets; RunOptions defaults to None.
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
 MAX_NESTING = 6
 MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
-sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
+sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
 
 
@@ -153,11 +153,6 @@ class Runtime:
                                              "model_settings": vars(self.options.model) if self.options.model else None,
                                              "tool_schema": "tools-v3" if self.engine_selection else "tools-v2",
                                              "engines": sorted(self.executors),
-                                             "engine_contracts": {
-                                                 name: {"environment_mode": getattr(engine, "environment_mode", "unknown"),
-                                                        "authority": getattr(engine, "authority", "host-defined"),
-                                                        "native_state_replayable": getattr(engine, "native_state_replayable", False)}
-                                                 for name, engine in sorted(self.executors.items())},
                                              "engine_selection": self.engine_selection,
                                              "coverage": "natlang-state-and-declared-effects"}, self.trace_path)
         elif self.trace_path is not None:
@@ -651,6 +646,30 @@ class Session:
         return f"problems: 0 blocking · {len(holes)} holes"
 
     # -- acting
+    def act(self, text: str) -> Result:
+        if self.completed:
+            return Result("error", "the episode has ended")
+        if self.rt.options.max_actions is not None and self.actions >= self.rt.options.max_actions:
+            return Result("budget", "action budget exhausted")
+        self.actions += 1
+        self.lam.steps += 1
+        try:
+            action = parse_action(text)
+            result = getattr(self, "_do_" + action.tool)(action)
+        except Reject as e:
+            result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)), e.diags)
+        except Refuse as e:
+            result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)), e.diags)
+        except (js.JsError, ExecutionError) as e:
+            result = Result("error", f"error: {e}")
+        self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
+                              "kind": result.kind, "result": result.text})
+        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                         surface="text", action=text, outcome=result.kind,
+                         result_text=result.text, diagnostics=result.codes)
+        self.rt._observe_state("after-action")
+        return result
+
     # ------------------------------------------------------------------ tool surface (natlang/surface.py)
     def apply(self, name: str, args: dict) -> Result:
         """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
@@ -694,7 +713,8 @@ class Session:
                               "kind": result.kind, "result": result.text})
         self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
                          surface="tools-v2", name=name, arguments=submitted,
-                         outcome=result.kind, diagnostics=result.codes)
+                         outcome=result.kind, result_text=result.text,
+                         diagnostics=result.codes)
         self.rt._observe_state("after-action")
         return result
 
@@ -1107,12 +1127,16 @@ class Session:
         if args.get("init_from"):
             copies.append((args["init_from"], f"{path}/init"))
 
+        # A call may update its own destination, as in state = step(state).
+        # Capture every source before replacing the destination tree.
+        snapshots = [(self._snapshot_copy(src), dst) for src, dst in copies]
+
         _, ref = self.resolve(path, create=True)
         before = ref.get()
         result = self._set_value(path, stated, body, yaml=False)
         try:
-            for src, dst in copies:
-                self._do_copy(Action("copy", path=src, dst=dst))
+            for snapshot, dst in snapshots:
+                self._apply_copy_snapshot(snapshot, dst)
         except (Reject, Refuse):
             ref.set(before) if before is not MISSING else ref.delete()   # a define is all or nothing
             raise
@@ -1157,6 +1181,25 @@ class Session:
         return "(not recorded)"
 
     # -- edit
+    def _do_edit(self, a: Action) -> Result:
+        p, ref = self.resolve(a.path)
+        self._writable(ref)
+        old = ref.get()
+        if not isinstance(old, str):
+            raise reject(ref.path, "type-mismatch", "a Text node", format_type(ref.type) if ref.type else "")
+        lines = old.splitlines(keepends=True)
+        body = a.body
+        if body and not body.endswith("\n"):
+            body += "\n"
+        if p.rng:
+            lo, hi = p.rng
+            if lo < 1 or hi > len(lines):
+                raise reject(p.text, "bad-range", f"lines 1..{len(lines)}")
+            new = "".join(lines[: lo - 1]) + body + "".join(lines[hi:])
+        else:
+            new = body
+        return self._write_text(ref, new)
+
     def _write_text(self, ref: Ref, new: str) -> Result:
         is_own_body = ref.holder is self.lam and ref.attr == "body"
         if is_own_body and new.strip() == "":
@@ -1175,6 +1218,14 @@ class Session:
             raise Refuse(*diags)
 
     # -- set / unset
+    def _do_set(self, a: Action) -> Result:
+        try:
+            stated = parse_type(a.type_text)
+        except TypeSyntaxError as e:
+            raise reject(a.path, "type-mismatch", "a type", str(e))
+        body = a.body[:-1] if a.body.endswith("\n") else a.body
+        return self._set_value(a.path, stated, body, yaml=True)
+
     def _set_value(self, path_text: str, stated, raw, *, yaml: bool) -> Result:
         """Create or replace the node at a path. `stated` None means: the slot's declared type."""
         p, ref = self.resolve(path_text, create=True)
@@ -1251,26 +1302,30 @@ class Session:
         return Result("ok", "ok   " + self._summary())
 
     # -- copy
-    def _do_copy(self, a: Action) -> Result:
-        sp, src = self.resolve(a.path)
+    def _snapshot_copy(self, path: str):
+        sp, src = self.resolve(path)
         value = src.get()
         if value is MISSING:
-            raise reject(a.path, "no-such-path")
+            raise reject(path, "no-such-path")
         stype = src.type
         if sp.rng:
             value, stype = _slice(value, sp, src)
         if is_pending(value):
             if value.status == RUNNING:
-                raise reject(a.path, "frozen", "a node that is not running")
+                raise reject(path, "frozen", "a node that is not running")
             value = _instantiate(value) if isinstance(value, Lambda) else copy.deepcopy(value)
             value.status = UNREDUCED
             stype = value.type
         else:
             value = copy.deepcopy(value)
-        dp, dst = self.resolve(a.dst, create=True)
+        return value, stype
+
+    def _apply_copy_snapshot(self, snapshot, destination: str) -> Result:
+        value, stype = snapshot
+        dp, dst = self.resolve(destination, create=True)
         self._writable(dst)
         if dp.rng or dp.meta:
-            raise reject(a.dst, "not-writable")
+            raise reject(destination, "not-writable")
         if stype is not None:
             self._check_fit(stype, dst)
         self._check_effects(value, dst.path)
@@ -1279,6 +1334,9 @@ class Session:
         self._set_checked(dst, value)
         self._collapse()
         return Result("ok", "ok   " + self._summary())
+
+    def _do_copy(self, a: Action) -> Result:
+        return self._apply_copy_snapshot(self._snapshot_copy(a.path), a.dst)
 
     def _set_checked(self, ref: Ref, value):
         """Write, then undo if pending nodes now nest too deeply (SPEC 6.3)."""

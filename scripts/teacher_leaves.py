@@ -141,8 +141,8 @@ def main():
     ap.add_argument("--thinking", type=int, default=256)
     ap.add_argument("--turn-tokens", type=int,
                     help="optional maximum generated tokens for one teacher turn")
-    ap.add_argument("--max-seconds", type=float, default=300,
-                    help="wall-clock limit per teacher leaf (default: 300 seconds)")
+    ap.add_argument("--max-seconds", type=float,
+                    help="optional wall-clock limit per teacher leaf")
     ap.add_argument("--retry-audit", type=Path,
                     help="retry only rejected keys from this audit")
     ap.add_argument("--retry-status", choices=("all", "quiesced", "done", "exception"), default="all")
@@ -159,7 +159,7 @@ def main():
     a = ap.parse_args()
     if a.turn_tokens is not None and a.turn_tokens < 1:
         ap.error("--turn-tokens must be positive")
-    if a.max_seconds <= 0:
+    if a.max_seconds is not None and a.max_seconds <= 0:
         ap.error("--max-seconds must be positive")
     if a.retry_status != "all" and not a.retry_audit:
         ap.error("--retry-status requires --retry-audit")
@@ -196,7 +196,7 @@ def main():
         wanted = retry_keys(a.retry_audit, a.retry_status)
         todo = [item for item in todo if item[0] in wanted]
     print(f"{len(todo)} generative leaves without a reference", flush=True)
-    dec = LlamaServerDecoder(a.server, timeout=900, chat_extra={"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20,
+    dec = LlamaServerDecoder(a.server, chat_extra={"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20,
                                          "chat_template_kwargs": {"reasoning_effort": a.reasoning_effort}},
                              tool_aliases={"call": "call_function"}, json_text_values=True)
     judge = make_judge(LlamaServerDecoder(a.server, timeout=300, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
@@ -217,8 +217,7 @@ def main():
             out, value = Runtime(lambda lam: ToolAgent(dec, temperature=a.temperature, system_prompt=prompt,
                                  validation_feedback="caller", log=log, transcript=transcript,
                                  teacher_turns=teacher_turns, turn_tokens=a.turn_tokens,
-                                 max_seconds=a.max_seconds),
-                                 max_episodes=4).run_root(root)
+                                 max_seconds=a.max_seconds)).run_root(root)
             text = dump(value) if out.kind == "done" else None
             results = run_checks(CHECKS[fn](args), text, judge) if text else []
             ok = bool(text) and all(r is True for _, r in results)

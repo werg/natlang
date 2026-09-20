@@ -50,7 +50,8 @@ def mechanical_checks(case: dict, outcome: str, value: dict | None, reader: Trac
 
 
 def collect(case: dict, decoder, *, model_id: str, trace_path: Path,
-            max_turns: int = 64, max_tokens: int = 4000, max_seconds: float = 900,
+            max_turns: int | None = None, max_tokens: int | None = None,
+            max_seconds: float | None = None,
             temperature: float = 0) -> dict:
     if digest(case["inputs"]) != case["input_sha256"]:
         raise ValueError(f"input digest mismatch for {case['case_id']}")
@@ -100,9 +101,9 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--case-id")
     parser.add_argument("--temperature", type=float, default=0)
-    parser.add_argument("--max-turns", type=int, default=64)
-    parser.add_argument("--max-tokens", type=int, default=4000)
-    parser.add_argument("--max-seconds", type=float, default=900)
+    parser.add_argument("--max-turns", type=int, help="optional per-episode turn cap")
+    parser.add_argument("--max-tokens", type=int, help="optional per-episode token cap")
+    parser.add_argument("--max-seconds", type=float, help="optional per-episode wall-clock cap")
     args = parser.parse_args()
     decoder = NativeCallDecoder(base_url=args.server)
     args.out.parent.mkdir(parents=True, exist_ok=True)

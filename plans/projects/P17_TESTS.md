@@ -45,6 +45,10 @@ source revision, input hashes, model seeds, trace digests and shrink attempts.
 The oracle does not judge semantic priority among ready tasks. Runtime failure
 or invalid output remains unknown. The next gate is a live teacher run over all
 four scenario groups with manually reviewed traces, followed by a separate saga
-effect and queue contract.
+effect and queue contract. The assessment now returns exact `confirmed_ids` and
+`unknown_ids` beside its explanations. The host checks these against the
+independent observations, so a fluent but incorrect assessment cannot pass.
+The generic experiment lab has frozen dependency-edge and missing-dependency
+fixtures, retaining selection, target and assessment traces.
 
 Capture proposal, actual execution, oracle identity and minimisation history. Accepted cases become linked contrast families: correct behavior, execution mistake, legitimate blocker and verified repair. Keep each family in one split. Rejected hypotheses remain useful diagnostic data but are not supervised success targets. This is an early consumer of trace-as-data and can improve the other projects' fixtures without becoming the sole judge of its own outputs.

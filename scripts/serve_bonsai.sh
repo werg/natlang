@@ -7,7 +7,7 @@
 # Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL]          stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PORT="${1:-8081}"; CTX="${2:-12288}"; NGL="${3:-99}"
+PORT="${1:-8081}"; CTX="${2:-32768}"; NGL="${3:-99}"
 MODEL="Ternary-Bonsai-2-27B-PTQ1_0.gguf"
 [ -f "$ROOT/models/$MODEL" ] || { echo "missing models/$MODEL"; exit 1; }
 [ -x "$ROOT/vendor/prism/bin/llama-server" ] || { echo "missing vendor/prism/bin (see README)"; exit 1; }

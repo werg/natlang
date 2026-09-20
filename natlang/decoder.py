@@ -12,6 +12,7 @@ import json
 import math
 import time
 import urllib.request
+import urllib.error
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
@@ -36,6 +37,7 @@ class ChatTurn:
     text: str = ""
     raw_calls: list = field(default_factory=list)   # the API's tool_calls, for the history
     completion_tokens: Optional[int] = None
+    prompt_tokens: Optional[int] = None
 
 
 class Decoder(Protocol):
@@ -52,6 +54,39 @@ class TurnDriver(Protocol):
              seed: Optional[int], max_tokens: int) -> ChatTurn: ...
 
 
+def _compact_write_alternatives(alternatives: list) -> list:
+    """Share one typed chat tool across destinations with the same value type.
+
+    Source-copy alternatives group only when they have the same fitting source
+    set, so every offered destination/source pair remains valid. Literal value
+    schemas remain exact. This keeps the chat menu smaller as the workspace
+    gains fields and locals without weakening type guidance.
+    """
+    grouped = {}
+    for alternative in alternatives:
+        alt = deepcopy(alternative)
+        path = alt.get("path") or {}
+        stated = alt.get("type") or {}
+        if "const" not in path or "const" not in stated or not ("value" in alt or "source" in alt):
+            key = ("unique", len(grouped))
+            grouped[key] = alt
+            continue
+        kind = "value" if "value" in alt else "source"
+        if kind == "source" and "enum" not in alt["source"]:
+            grouped[("unique", len(grouped))] = alt
+            continue
+        key = (kind, stated["const"],
+               json.dumps(alt.get("value") if kind == "value" else alt.get("source"), sort_keys=True),
+               json.dumps(alt.get("done"), sort_keys=True))
+        previous = grouped.get(key)
+        if previous is None:
+            grouped[key] = alt
+            continue
+        paths = previous["path"]["enum"] if "enum" in previous["path"] else [previous["path"]["const"]]
+        previous["path"] = {"enum": list(dict.fromkeys([*paths, path["const"]]))}
+    return list(grouped.values())
+
+
 class LlamaServerDecoder:
     """llama.cpp `llama-server`, native /completion endpoint.
 
@@ -60,12 +95,17 @@ class LlamaServerDecoder:
     and that prefix reuse works for this hybrid architecture.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None, timeout: float = 120,
-                 chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None, json_text_values: bool = False):
+    def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None,
+                 timeout: Optional[float] = None,
+                 chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None,
+                 json_text_values: bool = False, typed_alternatives: bool = False):
+        if json_text_values and typed_alternatives:
+            raise ValueError("typed alternatives and JSON-text values are different transports")
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
         self.deadline = None
         self._request_deadline = ContextVar(f"decoder-deadline-{id(self)}", default=None)
         self.json_text_values = json_text_values
+        self.typed_alternatives = typed_alternatives
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
         self.tool_aliases = tool_aliases or {}
@@ -82,7 +122,7 @@ class LlamaServerDecoder:
         left = deadline - time.monotonic()
         if left <= 0:
             raise TimeoutError("episode wall-clock budget exhausted")
-        return min(self.timeout, left)
+        return left if self.timeout is None else min(self.timeout, left)
 
     @contextmanager
     def request_scope(self, *, deadline):
@@ -101,13 +141,35 @@ class LlamaServerDecoder:
         with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
             return json.loads(resp.read())["prompt"]
 
-    def chat(self, messages: list, tools: list, *, temperature: float, seed: Optional[int] = None,
-             max_tokens: Optional[int] = None) -> ChatTurn:
-        """One assistant turn with native tool calling. The server renders the model's own chat
-        template, constrains arguments to each tool's JSON schema, and parses the model's native
-        tool-call format, so this is the same call for every model."""
+    def _chat_tools(self, tools: list) -> tuple[list, dict]:
+        """Compile the stable natlang actions into this server's tool schemas."""
         # `x-...` keys are for our own grammar (natlang/native.py); a server only reads plain JSON Schema,
         # and the alternatives are most of the schema's size
+        variant_names = {}
+        if self.typed_alternatives:
+            expanded = []
+            for tool in tools:
+                fn = tool["function"]
+                alts = (fn.get("parameters") or {}).get("x-natlang-alternatives")
+                if fn["name"] not in ("write", "call") or not alts:
+                    expanded.append(tool)
+                    continue
+                if fn["name"] == "write":
+                    alts = _compact_write_alternatives(alts)
+                for index, alt in enumerate(alts):
+                    name = f"{fn['name']}_alt_{index}"
+                    variant_names[name] = fn["name"]
+                    optional = alt.get("x-optional") or []
+                    fields = {key: value for key, value in alt.items() if key != "x-optional"}
+                    summary = ", ".join(f"{key}={value['const']}" for key, value in fields.items()
+                                        if isinstance(value, dict) and "const" in value)
+                    verb = "Write or copy" if fn["name"] == "write" else "Call"
+                    expanded.append({**tool, "function": {**fn, "name": name,
+                        "description": f"{verb}. {summary}.",
+                        "parameters": {"type": "object", "properties": fields,
+                                       "required": [key for key in fields if key not in optional],
+                                       "additionalProperties": False}}})
+            tools = expanded
         tools = [{**t, "function": {**t["function"], "parameters": {
             k: v for k, v in (t["function"].get("parameters") or {}).items() if not k.startswith("x-")}}} for t in tools]
         if self.json_text_values:
@@ -124,8 +186,25 @@ class LlamaServerDecoder:
         if self.tool_aliases:
             out_name = lambda n: self.tool_aliases.get(n, n)
             tools = [{**t, "function": {**t["function"], "name": out_name(t["function"]["name"])}} for t in tools]
-            messages = [{**m, "tool_calls": [{**c, "function": {**c["function"], "name": out_name(c["function"]["name"])}}
-                                             for c in m["tool_calls"]]} if m.get("tool_calls") else m for m in messages]
+        return tools, variant_names
+
+    def presented_tools(self, tools: list) -> list:
+        """The exact schemas offered to the model, for trajectory capture."""
+        return self._chat_tools(tools)[0]
+
+    def presented_messages(self, messages: list) -> list:
+        if not self.tool_aliases:
+            return messages
+        out_name = lambda n: self.tool_aliases.get(n, n)
+        return [{**m, "tool_calls": [{**c, "function": {**c["function"],
+                 "name": out_name(c["function"]["name"])}}
+                 for c in m["tool_calls"]]} if m.get("tool_calls") else m for m in messages]
+
+    def chat(self, messages: list, tools: list, *, temperature: float, seed: Optional[int] = None,
+             max_tokens: Optional[int] = None) -> ChatTurn:
+        """One assistant turn with native tool calling through the server's chat template."""
+        tools, variant_names = self._chat_tools(tools)
+        messages = self.presented_messages(messages)
         payload = {"messages": messages, "tools": tools, "tool_choice": "auto", "temperature": temperature,
                    "parallel_tool_calls": True}
         if max_tokens is not None:
@@ -139,8 +218,12 @@ class LlamaServerDecoder:
                                      headers={"Content-Type": "application/json"})
         import time
         t0 = time.time()
-        with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
-            out = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=self.request_timeout()) as resp:
+                out = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:4000]
+            raise ValueError(f"chat server HTTP {exc.code}: {detail}") from exc
         raw_response = deepcopy(out)
         msg = out["choices"][0]["message"]
         self.usage["turns"] += 1
@@ -149,16 +232,17 @@ class LlamaServerDecoder:
         self.usage["completion_tokens"] += tokens
         calls = []
         back = {v: k for k, v in self.tool_aliases.items()}
+        back.update(variant_names)
         for c in msg.get("tool_calls") or []:
             fn = c.get("function", {})
-            if fn.get("name") in back:
-                fn["name"] = back[fn["name"]]
+            name = back.get(fn.get("name"), fn.get("name", ""))
             try:
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {"__unparsed__": fn.get("arguments")}
-            calls.append((fn.get("name", ""), args if isinstance(args, dict) else {"value": args}))
+            calls.append((name, args if isinstance(args, dict) else {"value": args}))
         return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [], tokens,
+                        prompt_tokens=(out.get("usage") or {}).get("prompt_tokens"),
                         raw_response=raw_response)
 
     def generate(self, prompt, *, grammar, max_tokens, temperature, seed, stop, n_probs=0) -> Generation:

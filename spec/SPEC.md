@@ -503,18 +503,16 @@ that is already running above a call is not started again (`recursion`), and:
 2. *Bounded nesting.* At most 6 pending nodes may nest inside one another
    below the acting lambda; a write that would exceed this is rejected
    (`too-deep`).
-3. *Run budgets.*
+3. *Optional run budgets.*
 
-Per run: at most 256 episodes, nested at most 8 deep; beyond either, a
-called function quiesces with a run-budget note instead of starting. Per episode:
-40 work actions, 128 tool calls including bookkeeping, 64 model requests, 4,000
-generated tokens, and 900 seconds elapsed time. `mark_done` does not spend a work
-action but spends a tool call and its model request. Native requests receive at
-most 700 generated tokens and never more than the episode's remaining allowance.
-Backends without token usage are charged the requested allowance. Failures are
-shown to the model and count toward the limits. The native agent's model-request,
-token and elapsed-time defaults are configurable through `ToolAgent`.
-Nested native episodes inherit the caller's deadline.
+Episode count, call depth, work actions, tool calls, model turns, generated
+tokens, and elapsed time have no default cap. An embedding may set positive
+limits explicitly. An exhausted explicit limit quiesces the affected function
+with a budget note. `mark_done` spends a tool call but no work action. Backends
+without token usage are charged their requested allowance when a token limit
+is configured. Failures remain visible and count toward configured limits.
+Nested native episodes inherit an explicit caller deadline. Host transports
+may still fail independently; a transport failure is not a successful result.
 
 ### 6.4 Commit points
 
@@ -899,7 +897,7 @@ the most recent 1,000 step records by default.
 | 2 | TypeScript type syntax; `Dict<T>`; numeric literal types, no range refinement; literals widen to their base type |
 | 2.1 | Lists and dicts are covariant |
 | 5.8 | Constrained decoding over the model's native call text; grammar alternatives tie path, type and value |
-| 6.3 | Budgets: 40 work actions, 128 tool calls, 64 model requests, 4,000 tokens, 900 s per episode; 256 episodes, 8 deep per run; 6 nested pending nodes |
+| 6.3 | Agentic run budgets default to unlimited and may be explicitly configured; structural limit of 6 nested pending nodes |
 | 6.5 | The diagnostic code list |
 | 8 | `render/0.2`: short texts whole (400 characters, 8 lines), lists preview 3, no value-like placeholders |
 | 9 | The bound-parameter part is **`args`**; `run_code` sees `args` and `locals` and cannot write |

@@ -2,6 +2,7 @@ from natlang.decoder import ChatTurn, LlamaServerDecoder
 from natlang.invocation import Invocation, ModelSettings, RunOptions, SeedPolicy
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
+from natlang.trace import TraceRecorder
 from natlang.values import load_program
 import pytest
 
@@ -74,3 +75,17 @@ def test_run_owned_model_settings_and_separate_world_randomness():
     assert options.world_rng("fixture").random() == options.world_rng("fixture").random()
     assert options.world_rng("other").random() != options.world_rng("fixture").random()
     assert options.seed.backend_range.endswith("2147483647)")
+
+
+def test_unbounded_defaults_still_observe_each_model_request():
+    settings = ModelSettings()
+    assert settings.max_turns is settings.max_tokens is settings.max_seconds is None
+    driver = RecordedTurns()
+    root = load_program({"$lambda": {"type": "Lambda<{}, Bool>", "instructions": "Return true."}})
+    trace = TraceRecorder({"run_id": "unbounded", "source_sha256": "fixture"})
+    outcome, value = Runtime(lambda lam: ToolAgent(driver), trace_sink=trace).run_root(root)
+    assert (outcome.kind, value) == ("done", True)
+    requests = [row for row in trace.events if row["kind"] == "model_request"]
+    assert [row["phase"] for row in requests] == ["start", "end", "start", "end"]
+    assert all(row["observed_at"] and row["elapsed_ms"] >= 0 for row in trace.events)
+    assert driver.requests == [(0.2, None), (0.2, None)]

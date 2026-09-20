@@ -58,7 +58,11 @@ A 20 September 2026 live Bonsai pilot of `map.nl` used the established chat-tool
 adapter and quiesced when the model wrote `source_customer_id`, a field absent
 from the declared `Mapping` record. The type boundary correctly rejected the
 write. The prompt now spells out the exact result shape. A second 120-second
-single-leaf pilot did not finish. These are model/tool-use and latency blockers
+single-leaf pilot did not finish. These are model/tool-use and latency observations
 for accepting teacher samples; they do not justify weakening the type boundary.
+The generic experiment lab now runs fixed export fixtures against an isolated
+SQLite target, checking row count, cents, lineage and review count after apply.
+Model episodes have no default time or turn cap. Capture the whole trajectory
+before treating an incomplete mapping as a blocker.
 
 Capture source snapshots or exact row observations, semantic decisions, patch sets and transaction outcomes. Use known synthetic mappings and independently checked real examples as references. Score false merges separately from missed matches. A successful SQL transaction validates application, not the semantic identity judgments that generated it. No native connection must become a natlang value.

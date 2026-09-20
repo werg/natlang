@@ -14,7 +14,10 @@ class Analyst:
         if self.lam.fn_name == "select":
             value = {"ids": [self.lam.in_["cases"][0]["id"]], "reason": "Probe a dependency edge."}
         else:
-            value = {"findings": ["Dependency order violated."], "unknowns": [], "followups": []}
+            observations = self.lam.in_["observations"]
+            value = {"confirmed_ids": [x["id"] for x in observations if x["status"] == "violated"],
+                     "unknown_ids": [x["id"] for x in observations if x["status"] not in ("done", "violated")],
+                     "findings": ["Dependency order violated."], "unknowns": [], "followups": []}
         result = SURFACE.apply(session, "write", {"path": "return",
                                                  "type": format_type(self.lam.type.returns), "value": value})
         assert result.kind not in ("rejected", "refused", "error"), result.text
@@ -56,6 +59,7 @@ def test_explorer_selects_runs_and_shrinks_against_same_oracle(tmp_path):
     assert observation["minimized"] == ["b"]
     assert all(seed == calls[0][1] for _, seed in calls)
     assert result["traces"]["selection"]["path"] and result["assessment"]["findings"]
+    assert result["assessment_check"]["ok"]
 
 
 def test_real_planner_runtime_handles_empty_graph():
@@ -90,3 +94,28 @@ def test_target_exception_is_unknown_not_confirmed_violation():
     observation = result["observations"][0]
     assert observation["status"] == "execution-error" and observation["violations"] == []
     assert "target unavailable" in observation["detail"]
+    assert result["assessment_check"]["ok"]
+
+
+def test_assessment_must_classify_independent_observations():
+    class WrongAnalyst(Analyst):
+        def run(self, session):
+            if self.lam.fn_name == "select":
+                return super().run(session)
+            value = {"confirmed_ids": ["x"], "unknown_ids": [],
+                     "findings": ["Claimed a violation"], "unknowns": [], "followups": []}
+            result = SURFACE.apply(session, "write", {"path": "return",
+                                                     "type": format_type(self.lam.type.returns),
+                                                     "value": value})
+            assert result.kind == "ok"
+            assert session.finish()
+
+    def failed_backend(tasks, seed):
+        raise RuntimeError("target unavailable")
+
+    result = Explorer(analyst_factory=lambda lam: WrongAnalyst(lam),
+                      target_factory=lambda lam: None, model_id="scripted",
+                      analyst_seed=2, target_seed=3, backend=failed_backend).run(
+                          "Probe failure", [GraphCase("x", "error", "Target fails", ())], budget=1)
+    assert not result["assessment_check"]["ok"]
+    assert result["assessment_check"]["expected_unknown_ids"] == ["x"]

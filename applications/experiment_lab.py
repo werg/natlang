@@ -19,7 +19,6 @@ ROOT = Path(__file__).resolve().parent.parent
 DESIGN = ROOT / "codebases/experiment_lab/design.nl"
 REPORT = ROOT / "codebases/experiment_lab/report.nl"
 STATUSES = frozenset({"done", "quiesced", "exception", "missing"})
-CONFLICTS = frozenset({"merged", "unresolved", "rejected", "unknown"})
 QUALITIES = frozenset({"pass", "fail", "pending"})
 
 
@@ -48,6 +47,11 @@ class LabCase:
     def descriptor(self) -> dict:
         return {"id": self.id, "group": self.group, "description": self.description,
                 "expected": self.expected}
+
+    @classmethod
+    def from_payload(cls, *, id: str, group: str, description: str, expected: str,
+                     split: str, payload: dict) -> "LabCase":
+        return cls(id, group, description, expected, split, copy.deepcopy(payload), digest(payload))
 
 
 @dataclass(frozen=True)
@@ -95,13 +99,16 @@ def _exact_metrics(candidates: list[Candidate], trials: list[dict]) -> list[dict
 
 class ExperimentLab:
     def __init__(self, *, agent_factory: Callable, backend: TrialBackend, world_seed: int,
-                 analyst_seed: int, analyst_model_id: str, trace_dir: Path | None = None):
+                 analyst_seed: int, analyst_model_id: str, trace_dir: Path | None = None,
+                 harness_revision: str = "", harness_config: dict | None = None):
         self.agent_factory = agent_factory
         self.backend = backend
         self.world_seed = world_seed
         self.analyst_seed = analyst_seed
         self.analyst_model_id = analyst_model_id
         self.trace_dir = trace_dir
+        self.harness_revision = harness_revision
+        self.harness_config = dict(harness_config or {})
 
     def _natlang(self, entry: Path, inputs: dict) -> tuple[dict, dict]:
         from natlang.codebase import load_function
@@ -111,6 +118,7 @@ class ExperimentLab:
             self.trace_dir.mkdir(parents=True, exist_ok=True)
         trace_path = self.trace_dir / f"{entry.stem}-{options.run_id}.jsonl" if self.trace_dir else None
         recorder = TraceRecorder({"run_id": options.run_id, "source_sha256": source_revision,
+                                  "harness_revision": self.harness_revision,
                                   "model": self.analyst_model_id, "seed_policy": vars(options.seed),
                                   "phase": entry.stem}, trace_path)
         try:
@@ -126,8 +134,8 @@ class ExperimentLab:
     def run(self, question: str, cases: list[LabCase], candidates: list[Candidate], *,
             budget: int, repeats: int = 1, split: str = "train",
             journal_path: Path | None = None) -> dict:
-        if budget < 1 or repeats < 1 or repeats > 8 or not candidates:
-            raise ValueError("positive case budget, one to eight repeats and candidates are required")
+        if budget < 1 or repeats < 1 or not candidates:
+            raise ValueError("positive case budget and repeats, and candidates are required")
         if len({c.id for c in cases}) != len(cases) or len({c.id for c in candidates}) != len(candidates):
             raise ValueError("case and candidate IDs must be unique")
         if any(not c.id or not c.source_revision or not c.model_id for c in candidates):
@@ -148,6 +156,8 @@ class ExperimentLab:
                     "candidates": [c.descriptor() for c in candidates],
                     "cases": [{"id": by_id[case_id].id, "input_sha256": by_id[case_id].input_sha256}
                               for case_id in selected], "world_root_seed": self.world_seed,
+                    "harness_revision": self.harness_revision,
+                    "harness_config": self.harness_config,
                     "analyst_seed": self.analyst_seed, "design_trace_sha256": design_trace["sha256"]}
         if journal_path is not None:
             journal_path.parent.mkdir(parents=True, exist_ok=True)
@@ -161,14 +171,22 @@ class ExperimentLab:
                 world_seed = SeedPolicy("derived", self.world_seed).seed(case_id, attempt, "world")
                 for candidate in candidates:
                     model_seed = SeedPolicy("derived", candidate.model_seed).seed(case_id, attempt, "trial-root")
+                    if journal_path is not None:
+                        with journal_path.open("a") as stream:
+                            stream.write(json.dumps({"kind": "trial_start", "candidate": candidate.id,
+                                                     "case_id": case_id, "attempt": attempt,
+                                                     "input_sha256": case.input_sha256,
+                                                     "model_seed": model_seed,
+                                                     "world_seed": world_seed}) + "\n")
                     try:
                         result = self.backend.run(candidate, copy.deepcopy(case), attempt,
                                                   model_seed=model_seed, world_seed=world_seed)
                         if result.get("source_revision") != candidate.source_revision:
                             raise ValueError("candidate source revision changed during the experiment")
-                        trial = {key: result[key] for key in ("status", "conflict", "provenance",
+                        trial = {key: result[key] for key in ("status", "label", "provenance",
                                                               "quality", "value_digest", "trace_id")}
-                        if (trial["status"] not in STATUSES or trial["conflict"] not in CONFLICTS or
+                        if (trial["status"] not in STATUSES or not isinstance(trial["label"], str) or
+                                len(trial["label"]) > 120 or
                                 trial["quality"] not in QUALITIES or not isinstance(trial["provenance"], bool) or
                                 (trial["status"] != "done" and trial["quality"] != "pending") or
                                 (trial["quality"] != "pending" and not result.get("review_ref"))):
@@ -179,7 +197,7 @@ class ExperimentLab:
                                              "detail": result.get("detail", ""),
                                              "review_ref": result.get("review_ref", "")})
                     except Exception as exc:
-                        trial = {"status": "exception", "conflict": "unknown", "provenance": False,
+                        trial = {"status": "exception", "label": "unknown", "provenance": False,
                                  "quality": "pending", "value_digest": "", "trace_id": ""}
                         observations.append({"candidate": candidate.id, "case_id": case_id,
                                              "attempt": attempt, "model_seed": model_seed,
@@ -207,6 +225,8 @@ class ExperimentLab:
                           for case in (by_id[case_id] for case_id in selected)],
                 "candidates": [c.descriptor() for c in candidates], "world_root_seed": self.world_seed,
                 "analyst_seed": self.analyst_seed, "analyst_model_id": self.analyst_model_id,
+                "harness_revision": self.harness_revision,
+                "harness_config": self.harness_config,
                 "traces": {"design": design_trace, "report": report_trace},
                 "journal": str(journal_path) if journal_path else None,
                 "repeats": repeats, "report": report, "observations": observations}
@@ -223,12 +243,18 @@ def inspect_journal(path: Path) -> dict:
                for attempt in range(1, manifest["repeats"] + 1)
                for candidate in manifest["candidates"]}
     observed = {}
+    started = set()
     for row in rows[1:]:
-        if row["kind"] == "trial":
+        if row["kind"] == "trial_start":
+            key = (row["candidate"], row["case_id"], row["attempt"])
+            if key not in planned or key in started:
+                raise ValueError("journal contains an unplanned or repeated trial start")
+            started.add(key)
+        elif row["kind"] == "trial":
             trial = row["trial"]
             key = (trial["candidate"], trial["case_id"], trial["attempt"])
-            if key not in planned or key in observed:
-                raise ValueError("journal contains an unplanned or repeated trial")
+            if key not in started or key in observed:
+                raise ValueError("journal contains an unstarted or repeated trial")
             observed[key] = trial
         elif row["kind"] != "complete":
             raise ValueError("unknown experiment journal event")
@@ -237,6 +263,8 @@ def inspect_journal(path: Path) -> dict:
         raise ValueError("journal completion marker has unobserved trials")
     return {"complete": complete,
             "planned": len(planned), "observed": len(observed),
+            "in_progress": [{"candidate": c, "case_id": case, "attempt": attempt}
+                            for c, case, attempt in sorted(started - observed.keys())],
             "missing": [{"candidate": c, "case_id": case, "attempt": attempt}
                         for c, case, attempt in sorted(planned - observed.keys())],
             "manifest": manifest}
@@ -339,7 +367,8 @@ class MergeTrialBackend:
         provenance = (len(claims) == len(ids) and len(set(claims)) == len(ids) and set(claims) == ids)
         conflict = (value["status"] if program == "merge_history" else
                     ("unresolved" if value["alternatives"] else "merged")) if value else "unknown"
-        return {"source_revision": source_revision, "status": status, "conflict": conflict,
+        return {"source_revision": source_revision, "status": status, "label": conflict,
+                "conflict": conflict,
                 "provenance": provenance, "quality": "pending",
                 "value_digest": digest(value) if value else "", "trace_id": digest(traces),
                 "detail": {"trace_hashes": traces, "matches_expected_conflict": conflict == case.expected}}

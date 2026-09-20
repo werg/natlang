@@ -99,11 +99,10 @@ def test_marks_have_an_independent_call_budget():
     assert s.apply('mark_done', {'start': 1}).kind == 'budget'
 
 
-def test_unset_call_and_action_budgets_do_not_quiesce_long_episodes():
+def test_default_episode_has_no_tool_call_limit():
     s = session()
     for _ in range(MAX_TOOL_CALLS + 2):
-        assert s.apply('read', {'path': 'instructions'}).kind == 'ok'
-    assert s.actions == MAX_TOOL_CALLS + 2
+        assert s.apply('mark_done', {'start': 1}).kind == 'ok'
     assert s.tool_calls == MAX_TOOL_CALLS + 2
 
 
@@ -225,11 +224,12 @@ def test_server_decoder_cannot_override_remaining_token_allowance(monkeypatch):
     def urlopen(req, timeout):
         assert json.loads(req.data)['max_tokens'] == 3
         return io.BytesIO(json.dumps({'choices': [{'message': {'content': 'ok'}}],
-                                     'usage': {'completion_tokens': 2}}).encode())
+                                     'usage': {'prompt_tokens': 17, 'completion_tokens': 2}}).encode())
     monkeypatch.setattr(urllib.request, 'urlopen', urlopen)
     dec = LlamaServerDecoder(chat_extra={'max_tokens': 999})
     result = dec.chat([], [], temperature=0, max_tokens=3)
-    assert result.completion_tokens == 2 and dec.usage['completion_tokens'] == 2
+    assert result.completion_tokens == 2 and result.prompt_tokens == 17
+    assert dec.usage['completion_tokens'] == 2
 
 
 def test_server_decoder_omits_default_response_token_cap(monkeypatch):
@@ -242,3 +242,74 @@ def test_server_decoder_omits_default_response_token_cap(monkeypatch):
                                      'usage': {'completion_tokens': 2}}).encode())
     monkeypatch.setattr(urllib.request, 'urlopen', urlopen)
     assert LlamaServerDecoder().chat([], [], temperature=0).text == 'ok'
+
+
+def test_server_decoder_optional_timeout_still_honors_explicit_deadline():
+    from natlang.decoder import LlamaServerDecoder
+    dec = LlamaServerDecoder()
+    with dec.request_scope(deadline=time.monotonic() + 5):
+        assert 0 < dec.request_timeout() <= 5
+
+
+def test_server_decoder_expands_typed_alternatives_and_maps_calls(monkeypatch):
+    import io
+    import urllib.request
+    from natlang.decoder import LlamaServerDecoder
+    tool = {"type": "function", "function": {"name": "call", "description": "Invoke a function",
+            "parameters": {"type": "object", "properties": {},
+                "x-natlang-alternatives": [{"function": {"const": "summarize"},
+                    "to": {"const": "let/metrics"}, "inputs": {"type": "object",
+                        "properties": {"candidates": {"type": "string"},
+                                       "trials": {"type": "string"}},
+                        "required": ["candidates", "trials"],
+                        "additionalProperties": False}}]}}}
+    def urlopen(req, timeout):
+        payload = json.loads(req.data)
+        variant = payload["tools"][0]["function"]
+        assert variant["name"] == "call_alt_0"
+        assert variant["parameters"]["properties"]["inputs"]["required"] == ["candidates", "trials"]
+        assert "x-natlang-alternatives" not in variant["parameters"]
+        return io.BytesIO(json.dumps({"choices": [{"message": {"content": "",
+            "tool_calls": [{"id": "t1", "type": "function", "function": {
+                "name": "call_alt_0", "arguments": json.dumps({"function": "summarize",
+                    "to": "let/metrics", "inputs": {"candidates": "args/candidates",
+                                                   "trials": "args/trials"}})}}]}}],
+            "usage": {"completion_tokens": 12}}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    dec = LlamaServerDecoder(typed_alternatives=True)
+    turn = dec.chat([], [tool], temperature=0)
+    assert turn.calls == [("call", {"function": "summarize", "to": "let/metrics",
+                                   "inputs": {"candidates": "args/candidates", "trials": "args/trials"}})]
+    assert turn.raw_calls[0]["function"]["name"] == "call_alt_0"
+
+
+def test_typed_chat_groups_same_value_type_without_losing_schema():
+    from natlang.decoder import LlamaServerDecoder
+    value = {"type": "object", "properties": {"id": {"type": "number"}},
+             "required": ["id"], "additionalProperties": False}
+    alts = [{"path": {"const": path}, "type": {"const": "Item"}, "value": value}
+            for path in ("return/first", "return/second")]
+    tool = {"type": "function", "function": {"name": "write", "description": "Write",
+            "parameters": {"type": "object", "properties": {},
+                           "x-natlang-alternatives": alts}}}
+    offered = LlamaServerDecoder(typed_alternatives=True).presented_tools([tool])
+    assert len(offered) == 1
+    params = offered[0]["function"]["parameters"]
+    assert params["properties"]["path"] == {"enum": ["return/first", "return/second"]}
+    assert params["properties"]["type"] == {"const": "Item"}
+    assert params["properties"]["value"] == value
+
+
+def test_typed_chat_keeps_distinct_copy_source_sets_separate():
+    from natlang.decoder import LlamaServerDecoder
+    alts = [{"path": {"const": "return/first"}, "type": {"const": "Item"},
+             "source": {"enum": ["args/a"]}},
+            {"path": {"const": "return/second"}, "type": {"const": "Item"},
+             "source": {"enum": ["args/b"]}}]
+    tool = {"type": "function", "function": {"name": "write", "description": "Write",
+            "parameters": {"type": "object", "properties": {},
+                           "x-natlang-alternatives": alts}}}
+    offered = LlamaServerDecoder(typed_alternatives=True).presented_tools([tool])
+    assert len(offered) == 2
+    assert [item["function"]["parameters"]["properties"]["source"]["enum"]
+            for item in offered] == [["args/a"], ["args/b"]]
