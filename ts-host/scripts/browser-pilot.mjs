@@ -9,6 +9,8 @@ import { chromium } from 'playwright-core';
 const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
 const cpu = process.argv.includes('--cpu');
+const gpu = process.argv.includes('--gpu');
+if (cpu && gpu) throw new Error('--cpu and --gpu are mutually exclusive');
 const broad = process.argv.includes('--broad');
 const probe = process.argv.find(arg => arg.startsWith('--probe='))?.slice('--probe='.length);
 const probeTokens = Number(process.argv.find(arg => arg.startsWith('--probe-tokens='))?.slice('--probe-tokens='.length) ?? 8);
@@ -46,7 +48,9 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true,
   executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath(),
-  args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
+  args: gpu ? ['--no-sandbox', '--enable-unsafe-webgpu',
+    '--enable-features=Vulkan,WebGPU', '--use-angle=vulkan'] :
+    ['--no-sandbox', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage();
   const errors = [];
