@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment, type HostEvent } from '../environment.js';
+import { hexDigest } from './hash.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
@@ -15,7 +15,7 @@ export interface NativeStream { poll(): Promise<NativePoll> | NativePoll }
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 const pending = (value: Value): value is Pending => isPending(value);
-const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const hash = (value: unknown) => hexDigest(JSON.stringify(value));
 const q = (value: unknown) => JSON.stringify(value);
 function pythonJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(pythonJson).join(', ')}]`;
@@ -225,10 +225,8 @@ export class NativeRuntime {
     else this.root.value = source;
     const box = this.root;
     const before = this.traceView(box.value);
-    if (!this.trace.events.some(event => event.kind === 'state')) {
-      this.trace.emit('state', { phase: 'initial', value: before });
-      this.lastObserved = before;
-    }
+    this.trace.emit('state', { phase: 'initial', value: before });
+    this.lastObserved = before;
     const ref: Ref = { path: '', env: new TypeEnv(), get: () => box.value,
       set: value => { box.value = value; }, del: () => { box.value = MISSING; } };
     const outcome = await this.trigger(ref);

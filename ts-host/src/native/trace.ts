@@ -1,12 +1,14 @@
-import { createHash } from 'node:crypto';
+import { digest } from './hash.js';
 
 export const TRACE_VERSION = 'reduction-trace/1';
 export type TraceEvent = { version: typeof TRACE_VERSION; seq: number; kind: string; [key: string]: unknown };
 
 export function deriveSeed(root: number, path: string, attempt: number, purpose: string, ordinal = 0): number {
   const payload = { attempt, ordinal, path, purpose, root, version: 'sha256-json-v1' };
-  const digest = createHash('sha256').update(JSON.stringify(payload)).digest();
-  return Number(digest.readBigUInt64BE(0) % (2n ** 31n));
+  const bytes = digest(JSON.stringify(payload));
+  let first = 0n;
+  for (const byte of bytes.slice(0, 8)) first = (first << 8n) | BigInt(byte);
+  return Number(first % (2n ** 31n));
 }
 
 function valueType(value: unknown): string {

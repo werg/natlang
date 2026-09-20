@@ -325,18 +325,12 @@ export function dump(value: Value, full = false): unknown {
     if (value.nodeKind === 'fold') {
       if (value.acc !== MISSING) body.acc = dump(value.acc, full);
       if (value.at) body.at = value.at;
-      if (full && value.current !== null) body.current = dump(value.current, full);
     }
     if (value.nodeKind === 'iterate') {
       if (value.state !== MISSING) body.state = dump(value.state, full);
       if (value.iteration) body.iteration = value.iteration;
       if (value.stateName !== 'state') body.state_name = value.stateName;
       if (value.checkName) body.check_name = value.checkName;
-      if (full) {
-        if (value.current !== null) body.current = dump(value.current, full);
-        if (value.recent.length) body.recent = dump(value.recent, full);
-        if (value.seenHashes.length) body.seen_hashes = value.seenHashes;
-      }
     }
   }
   return { [`$${value.nodeKind}`]: body };

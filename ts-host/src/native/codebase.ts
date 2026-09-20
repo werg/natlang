@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hexDigest } from './hash.js';
 import { TypeEnv, parseType } from './types.js';
 import { Reject, buildPending, type LambdaNode } from './values.js';
 
@@ -50,7 +50,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       codebase: Object.fromEntries(Object.entries(def.uses ?? {}).map(([alias, target]) => [alias, inline(target)])) };
   }
   const stable = canonical(supplied);
-  const revision = createHash('sha256').update(stable).digest('hex');
+  const revision = hexDigest(stable);
   return { root, definitions: supplied, revision, instantiate(inputs = {}) {
     const doc = inline(root), def = supplied[root]!;
     const params = Object.entries(def.args ?? {}).map(([name, type]) =>

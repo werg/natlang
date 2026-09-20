@@ -352,6 +352,80 @@ test('native nested model Map trace matches Python invocation and action order',
   assert.deepEqual(actual, expected);
 });
 
+test('native nested model Fold trace matches Python state and invocation order', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ items: Num[] }, Num>', instructions: 'Sum every item.',
+    args: { items: [2, 3] }, codebase: { add: { args: { acc: 'Num', item: 'Num' }, returns: 'Num',
+      instructions: 'Add the item to the accumulator.' } } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self,lam): self.lam=lam; self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index>1: return ChatTurn([], 'done',completion_tokens=1)\n  if self.lam.fn_name=='add': return ChatTurn([('write',{'path':'return','type':'Num','value':self.lam.in_['acc']+self.lam.in_['item']})],completion_tokens=1)\n  return ChatTurn([('call',{'function':'add','to':'return','over':'args/items','init':0})],completion_tokens=1)\nsink=TraceRecorder({})\nRuntime(lambda lam:ToolAgent(Decoder(lam)),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const runtime = new NativeRuntime({ agent: session => {
+    let index = 0;
+    const agent = new NativeToolAgent(() => {
+      index++;
+      if (index > 1) return { calls: [], text: 'done', completion_tokens: 1 };
+      if (session.lam.functionName === 'add') return { calls: [['write', {
+        path: 'return', type: 'Num', value: session.lam.args.acc + session.lam.args.item }]], completion_tokens: 1 };
+      return { calls: [['call', { function: 'add', to: 'return', over: 'args/items', init: 0 }]], completion_tokens: 1 };
+    });
+    return agent.run(session);
+  } });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected);
+});
+
+test('native nested model Iterate trace matches Python step and check order', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Count to two.',
+    codebase: { inc: { args: { state: 'Num' }, returns: 'Num', instructions: 'Increment the state.' },
+      enough: { args: { value: 'Num' }, returns: 'Bool', instructions: 'Check if value reached two.' } } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self,lam): self.lam=lam; self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index>1: return ChatTurn([], 'done',completion_tokens=1)\n  if self.lam.fn_name=='inc': return ChatTurn([('write',{'path':'return','type':'Num','value':self.lam.in_['state']+1})],completion_tokens=1)\n  if self.lam.fn_name=='enough': return ChatTurn([('write',{'path':'return','type':'Bool','value':self.lam.in_['value']>=2})],completion_tokens=1)\n  return ChatTurn([('call',{'function':'inc','to':'return','until':'enough','init':0,'max':4})],completion_tokens=1)\nsink=TraceRecorder({})\nRuntime(lambda lam:ToolAgent(Decoder(lam)),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const runtime = new NativeRuntime({ agent: session => {
+    let index = 0;
+    const agent = new NativeToolAgent(() => {
+      index++;
+      if (index > 1) return { calls: [], text: 'done', completion_tokens: 1 };
+      if (session.lam.functionName === 'inc') return { calls: [['write', {
+        path: 'return', type: 'Num', value: session.lam.args.state + 1 }]], completion_tokens: 1 };
+      if (session.lam.functionName === 'enough') return { calls: [['write', {
+        path: 'return', type: 'Bool', value: session.lam.args.value >= 2 }]], completion_tokens: 1 };
+      return { calls: [['call', { function: 'inc', to: 'return', until: 'enough', init: 0, max: 4 }]], completion_tokens: 1 };
+    });
+    return agent.run(session);
+  } });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected);
+});
+
+test('native quiesced root resumes with the same Python trace transitions', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven once available.' } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nturns=[0]\nclass Decoder:\n def chat(self,*args,**kwargs):\n  turns[0]+=1\n  if turns[0]==1: return ChatTurn([('report_blocker',{'missing':'the number is unavailable'})],completion_tokens=1)\n  if turns[0]==2: return ChatTurn([('write',{'path':'return','type':'Num','value':7})],completion_tokens=1)\n  return ChatTurn([], 'done',completion_tokens=1)\nsink=TraceRecorder({})\nrt=Runtime(lambda lam:ToolAgent(Decoder()),trace_sink=sink)\nnode=load_program(json.load(sys.stdin))\nrt.run_root(node)\nrt.run_root(node)\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  let turns = 0;
+  const agent = new NativeToolAgent(() => {
+    turns++;
+    if (turns === 1) return { calls: [['report_blocker', { missing: 'the number is unavailable' }]], completion_tokens: 1 };
+    if (turns === 2) return { calls: [['write', { path: 'return', type: 'Num', value: 7 }]], completion_tokens: 1 };
+    return { calls: [], text: 'done', completion_tokens: 1 };
+  });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const node = buildPending(doc);
+  await runtime.runRoot(node);
+  await runtime.runRoot(node);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected);
+});
+
 test('native completion-mark output matches Python compact listing', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{}, Num>',
     instructions: '1. Do this.\n2. Do that.\n3. Skip this.\n4. Finish.' } };

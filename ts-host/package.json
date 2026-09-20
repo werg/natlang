@@ -13,11 +13,13 @@
     "test:conformance": "node scripts/native-conformance.mjs && node scripts/native-harness.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2"
   },
   "exports": {
     ".": "./dist/index.js"
