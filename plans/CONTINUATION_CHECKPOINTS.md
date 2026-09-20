@@ -212,7 +212,7 @@ backup and revisits their original frozen arguments. Seed 73 covers 79 of the
 80 keys, and seed 74 covers the last; collection is queued after the current
 36-key pass and still requires manual semantic review. A separate watcher
 will replay and render the nine remaining whole-program attempts after their
-collector finishes. Rebuild the two synthetic seeds only after the reviewed
+collector finishes. Refresh the rebuilt synthetic IR only after the reviewed
 new references are admitted.
 
 **Do not train from the existing seed-73 or seed-74 synthetic SFT snapshots**
@@ -231,3 +231,12 @@ Seed 73 has 125 provisional programs and seed 74 has 138. All 144 and 113
 occurrences, respectively, of the 80 pruned sale keys are provisional rather
 than concrete gold. These are base IRs; after teacher review, refresh their
 leaf references, verify the runtime replay, and render training data.
+
+The first 26 rows of the new 36-key dialogue pass were pinned as an immutable
+audit snapshot and manually reviewed. Twenty-four were admitted, including
+one judge false negative; two lines with future-tense payment demands were
+excluded. All 24 teacher trajectories replayed into 53 turns and rendered
+with the pinned LFM2.5 template. The available reviewed teacher bundle now has
+1,490 pairs in `data/teacher-available-s74-reviewed-plus26.sft.jsonl`.
+Seed 74 now has 24 of its 98 provisional reference keys covered in the live
+bank; final refresh waits for the rest of the review.

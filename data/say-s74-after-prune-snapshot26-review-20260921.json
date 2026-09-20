@@ -1,0 +1,42 @@
+{
+  "source": "runs/teacher-leaves-s74-say-after-prune-snapshot26-20260921.jsonl",
+  "source_sha256": "e53e2444a01636b1d0abe471333d5c2d724786f258cfb3496d81d8d322bb95ee",
+  "reviewer": "manual semantic review",
+  "rule": "A sell action must clearly state or enact completed transfer of the stated quantity and good at the stated unit price. Quotes, future payment demands, and conditional transfers are excluded.",
+  "approved": {
+    "sell_list_price": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      11,
+      12,
+      13,
+      14,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25
+    ],
+    "sell_at_offer": [
+      10
+    ]
+  },
+  "notes": {
+    "4": "Judge false negative: the customer already has two maps at 25 coins each.",
+    "5": "All yours is followed by That'll be 12 a piece; payment is left as a future demand.",
+    "15": "That'll be 15 in all leaves payment as a future demand."
+  },
+  "excluded_policy": "Rows 5 and 15 are excluded. All other rows in this pinned 26-row snapshot have completed goods transfer at the stated unit price."
+}
