@@ -17,6 +17,8 @@ from scripts.collect_semantic_merge_teacher import collect
 ROOT = Path(__file__).resolve().parent.parent
 SURFACE = ToolSurface()
 STATES = {
+    "counter-independent": {"revision": 2, "value": 17, "unit": "visitors"},
+    "set-independent": {"revision": 2, "members": ["red", "blue", "green"]},
     "map-independent": {"revision": 2, "fields": {"owner": "Bo", "region": "east"}},
     "list-move-edit": {"revision": 2, "items": [
         {"id": "safety", "text": "Safety and preparation"}, {"id": "intro", "text": "Introduction"}]},
@@ -97,12 +99,13 @@ def test_graph_rejects_dangling_edge_even_when_all_updates_are_claimed():
 
 def test_scenarios_expand_in_groups_without_turning_agreement_into_an_oracle():
     rows = generate()
-    assert len(rows) == 64 and len({r["group"] for r in rows}) == 16
+    assert len(rows) == 80 and len({r["group"] for r in rows}) == 20
     assert {r["delivery"] for r in rows} == {"canonical", "reversed", "redelivery-first", "redelivery-last"}
     for group in {r["group"] for r in rows}:
         variants = [r for r in rows if r["group"] == group]
         assert len(variants) == 4 and len({r["input_sha256"] for r in variants}) >= 2
         assert len({r["rubric"] for r in variants}) == 1
+        assert len({r["split"] for r in variants}) == 1
         assert all(r["root_seed"] == 43 for r in variants)
 
 

@@ -14,10 +14,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SEEDS = ROOT / "codebases/semantic_merge/scenarios/seed_cases.jsonl"
+EVAL_GROUPS = frozenset({"counter-correction", "map-independent", "list-order-conflict",
+                         "tree-move-rename", "schedule-time-conflict", "scene-move-recolor"})
 
 
 def canonical(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def split_for(group: str) -> str:
+    return "eval" if group in EVAL_GROUPS else "train"
 
 
 def expand(seed: dict, root_seed: int = 43) -> list[dict]:
@@ -35,7 +41,9 @@ def expand(seed: dict, root_seed: int = 43) -> list[dict]:
     for delivery, presented in variants.items():
         inputs = {"base": seed["base"], "updates": presented, "policy": seed["policy"]}
         rows.append({"schema": "semantic-merge-case/v1", "case_id": f"{seed['group']}:{delivery}",
-                     "group": seed["group"], "program": seed["program"], "delivery": delivery,
+                     "group": seed["group"], "split": split_for(seed["group"]),
+                     "split_version": "semantic-merge-split/v1",
+                     "program": seed["program"], "delivery": delivery,
                      "inputs": inputs, "root_seed": root_seed, "expected": seed["expected"],
                      "rubric": seed["rubric"],
                      "input_sha256": hashlib.sha256(canonical(inputs).encode()).hexdigest()})
@@ -47,6 +55,8 @@ def generate(seed_path: Path = SEEDS, root_seed: int = 43) -> list[dict]:
     groups = [seed["group"] for seed in seeds]
     if len(groups) != len(set(groups)):
         raise ValueError("semantic merge scenario groups must be unique")
+    if not EVAL_GROUPS.issubset(groups):
+        raise ValueError("semantic merge evaluation group is missing from the seed corpus")
     rows = []
     for seed in seeds:
         if len(seed["changes"]) < 2 or seed["expected"] not in ("merged", "unresolved"):

@@ -11,11 +11,11 @@ one new update, then makes another semantic decision while preserving prior unre
 alternatives. Whole-history and incremental results are compared as experiments; neither
 path claims a crisp convergence law.
 
-The seven other entry points cover keyed maps, ordered lists, parent-linked trees, graphs,
-calendars, permissions and scenes. Each has its own semantic leaf and a small exact shape
-validator. `scripts/generate_semantic_merge_cases.py` expands 16 reviewed scenarios to 64
-delivery variants in `scenarios/cases.jsonl`. Related variants share a `group`
-and must stay together across training splits. Their rubrics are semantic expectations,
+The nine other entry points cover counters, set-like collections, keyed maps, ordered lists,
+parent-linked trees, graphs, calendars, permissions and scenes. Each has its own semantic
+leaf and a small exact shape validator. `scripts/generate_semantic_merge_cases.py` expands
+20 handwritten scenarios to 80 delivery variants in `scenarios/cases.jsonl`. Related variants share a `group`
+and stay together in a deterministic `train` or `eval` split. Their rubrics are semantic expectations,
 not executable merge oracles; a teacher still has to produce and pass reviewed trajectories.
 
 To regenerate the scenario inputs:

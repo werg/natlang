@@ -2,9 +2,9 @@
 
 Status: first finite application slice implemented in [codebases/semantic_merge](../../codebases/semantic_merge/README.md). [Shared capabilities](README.md). This is intentionally semantic merging performed by natlang, not a crisp CRDT merge algebra.
 
-The delivered slice has whole-history and incremental document entry points, seven typed
-data-shape programmes, exact delivery/provenance/shape checks, 16 reviewed scenario groups
-expanded to 64 transport variants, and a trace-linked teacher collector. The live-model
+The delivered slice has whole-history and incremental document entry points, nine typed
+data-shape programmes, exact delivery/provenance/shape checks, 20 handwritten scenario groups
+expanded to 80 transport variants, and a trace-linked teacher collector. The live-model
 repeatability and semantic quality gates, streamed replicas and reviewed teacher shards
 remain to be run. The typed variants currently use whole-history input; incremental
 experiments beyond documents can follow their measured failure cases.
