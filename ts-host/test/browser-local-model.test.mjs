@@ -147,6 +147,7 @@ test('natlang model manifest and storage headroom are explicit', async () => {
   assert.ok(spec.url.startsWith('/models/natlang-'));
   assert.ok(spec.url.endsWith(spec.file));
   assert.ok(spec.templateUrl.endsWith('.jinja'));
+  assert.equal(spec.sha256.length, 64);
   const status = await checkModelStorage(spec, { async estimate() { return { usage: 100, quota: spec.bytes }; },
     async persisted() { return false; } });
   assert.equal(status.enough, false);

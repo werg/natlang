@@ -35,11 +35,16 @@
     checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
   const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
+  const canonical = value => Array.isArray(value) ? value.map(canonical) :
+    value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort()
+      .map(key => [key, canonical(value[key])])) : value;
   $('model').innerHTML = BROWSER_MODEL_CATALOG.map((item, index) =>
     `<option value="${index}">${item.label}</option>`).join('');
   const chosen = () => BROWSER_MODEL_CATALOG[Number($('model').value)];
   const status = value => { $('status').textContent = value; };
   let model, host, controller, reports = [];
+  window.natlangPilot = { get model() { return model; }, get host() { return host; },
+    get reports() { return reports; } };
   async function inspect() {
     const spec = chosen(), storage = await checkModelStorage(spec);
     $('storage').textContent = `${mb(spec.bytes)} download; recommended free ${mb(storage.recommendedFree)}; ` +
@@ -108,13 +113,14 @@
     let outcome, value, trace = [], error = null;
     try {
       const result = await host.run({ source: { kind: 'program', program: task.program },
-        signal: controller.signal, timeoutMs: 180000,
+        signal: controller.signal, timeoutMs: 240000, validationFeedback: 'local',
         options: { model: { max_turns: 20, max_tokens: 2048, turn_tokens: 128 } } });
       ({ outcome, value, trace } = result);
     } catch (failure) { error = String(failure); }
     const turns = model.turnHistory.slice(before);
     return { id: task.id, expected: task.expected, outcome, value, error,
-      correct: !error && outcome?.kind === 'done' && JSON.stringify(value) === JSON.stringify(task.expected),
+      correct: !error && outcome?.kind === 'done' &&
+        JSON.stringify(canonical(value)) === JSON.stringify(canonical(task.expected)),
       total_ms: Math.round(performance.now() - started),
       prompt_tokens: turns.reduce((n, turn) => n + (turn.promptTokens ?? 0), 0),
       cached_tokens: turns.reduce((n, turn) => n + (turn.cachedTokens ?? 0), 0),
@@ -152,6 +158,7 @@
   $('run').onclick = () => void run([{ id: 'single', program: { $lambda: { type: 'Lambda<{}, Num>',
     instructions: $('task').value } }, expected: 7 }]);
   $('suite').onclick = () => void run(tasks);
+  Object.assign(window.natlangPilot, { run, tasks });
   $('cancel').onclick = () => controller?.abort();
   $('download').onclick = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ reports }, null, 2)], { type: 'application/json' }));
