@@ -151,3 +151,23 @@ SFT bundle after the page-content collector finishes. It checks the pair count
 and the pinned student template hash before publishing the rendered bundle.
 The teacher replay bridge has no episode cap; the finite recorded trajectory
 itself bounds replay.
+
+## Collection status (2026-09-21)
+
+The page-content pass completed 110 attempts: 100 accepted and admitted,
+eight quiesced, and two raised exceptions. Its reference-bank refresh verified
+all 10,000 seed-74 programs and rendered 274,406 eligible SFT pairs in
+`data/external_pilot/synthetic-s74-refrozen-after-pages-1a566fa5eb67.sft.jsonl`.
+The other 106 programs remain provisional. All 100 admitted page trajectories
+replayed into 240 teacher turns.
+
+The dialogue pass completed 76 attempts. Its judge accepted 63, but none were
+automatically admitted. Manual inspection found accepted `sell_list_price`
+outputs that merely quote or offer a price even though the action says a sale
+has already happened; the dialogue pass needs semantic review and likely a
+targeted rerun before use as gold.
+
+The balanced whole-program collector remains active. A fixed snapshot of its
+first 15 completed programs had seven accepted trajectories, which replayed
+into 146 turns. `data/teacher-available-s74-current.sft.jsonl` combines those
+with the reviewed teacher bundle and the 240 page turns: 1,329 pairs total.
