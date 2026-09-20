@@ -19,8 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 def evaluation_harness_revision() -> str:
     paths = ["natlang/invocation.py", "natlang/runtime.py", "natlang/surface.py",
              "natlang/tool_agent.py", "natlang/decoder.py", "natlang/trace.py",
+             "natlang/prompts/tools_teacher_compact.md",
              "applications/teacher.py", "applications/experiment_lab.py",
-             "applications/evaluation_backends.py"]
+             "applications/evaluation_backends.py", "scripts/run_application_evals.py"]
     return digest({path: (ROOT / path).read_text() for path in paths})
 
 

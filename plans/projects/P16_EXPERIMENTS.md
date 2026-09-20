@@ -19,6 +19,15 @@ compare lossless grouping and a backend-only staged constrained decoder. Keep
 the natlang action set and exact destination/type checks unchanged. Do not
 replace schema cost with an arbitrary run-length cap.
 
+Operationally, separate evaluation processes can submit to the same one-slot
+teacher server at once. This interleaves long trials and makes wall time hard to
+attribute even when neither process leaks memory. Give the *outer* evaluation
+launcher an endpoint-capacity lease or queue, with explicit capacity per target;
+do not put scheduling into natlang's core reduction semantics. Preserve partial
+journals and traces before any deliberate cancellation. Monitor available disk
+space during artifact-heavy training runs, and use an explicit retention policy
+for generated datasets rather than silently deleting evidence.
+
 ## Natlang prerequisites
 
 C2 is fundamental: explicit seed policy and independent model/world/random-helper streams. C3 invokes supplied candidate programmes in isolated child runs. C4 records outcomes, failures and captured observations. C6 may accelerate independent trials but is not required for the first comparison. Copying simulation state is ordinary data manipulation; cloning an unfinished interpreter requires additional snapshot support and is not assumed.

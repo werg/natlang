@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import traceback
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +38,13 @@ def main():
              if case.payload["suite"] == args.suite]
     if not any(case.split == args.split for case in cases):
         parser.error("no cases in the requested suite and split")
+    with urllib.request.urlopen(args.server.rstrip("/") + "/props", timeout=10) as response:
+        server_props = json.load(response)
+    server_profile = {"model_alias": server_props.get("model_alias"),
+                      "model_ftype": server_props.get("model_ftype"),
+                      "build_info": server_props.get("build_info"),
+                      "n_ctx": server_props["default_generation_settings"]["n_ctx"],
+                      "total_slots": server_props.get("total_slots")}
     args.out.mkdir(parents=True)
     traces = args.out / "traces"
     journal = args.out / "journal.jsonl"
@@ -50,7 +58,8 @@ def main():
                         analyst_model_id=args.model_id, trace_dir=traces,
                         harness_revision=evaluation_harness_revision(),
                         harness_config={"typed_chat": True,
-                                        "validation_feedback": "local"})
+                                        "validation_feedback": "local",
+                                        "server_profile": server_profile})
     print(f"Running {args.suite}; journal: {journal}; traces: {traces}", flush=True)
     try:
         result = lab.run(f"Which {args.suite} cases complete and meet their independent rubric?",
