@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101723">
+  <meta name="description" content="A local browser playground for editing, running, and inspecting natlang programs.">
+  <title>natlang playground</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="natlang playground home"><span class="brand-mark">λ</span><span>natlang <small>playground</small></span></a>
+      <div class="project-switch">
+        <label class="sr-only" for="projectSelect">Project</label>
+        <select id="projectSelect" aria-label="Project"></select>
+        <button id="newProject" class="icon-button" title="New project" aria-label="New project">＋</button>
+        <button id="renameProject" class="icon-button" title="Rename project" aria-label="Rename project">✎</button>
+        <button id="deleteProject" class="icon-button" title="Delete project" aria-label="Delete project">×</button>
+      </div>
+      <div class="top-actions">
+        <button id="importProject" class="quiet">Import</button>
+        <button id="exportProject" class="quiet">Export</button>
+        <button id="modelButton" class="model-chip" aria-haspopup="dialog"><span class="model-dot"></span><span id="modelLabel">Model not loaded</span></button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="Project explorer">
+        <div class="sidebar-head"><span>EXPLORER</span><button id="addFile" class="icon-button" title="Add file" aria-label="Add file">＋</button></div>
+        <div class="project-name" id="projectName"></div>
+        <label class="search-wrap"><span class="sr-only">Filter files</span><input id="fileFilter" placeholder="Find a file…" autocomplete="off"></label>
+        <nav id="fileList" class="file-list" aria-label="Files"></nav>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-head"><span>RUN HISTORY</span><button id="clearRuns" class="icon-button" title="Clear run history" aria-label="Clear run history">↺</button></div>
+        <div id="runList" class="run-list"></div>
+        <div class="sidebar-footer"><button id="examplesButton" class="quiet wide">Open example</button></div>
+      </aside>
+
+      <main class="main-column">
+        <div class="editor-bar">
+          <div class="tab-title"><span id="fileIcon">⌘</span><span id="fileName">No file</span><span id="dirtyBadge" hidden>●</span></div>
+          <div class="editor-actions"><button id="renameFile" class="quiet small">Rename</button><button id="deleteFile" class="quiet small">Delete</button></div>
+        </div>
+        <div class="editor-frame">
+          <div id="lineNumbers" class="line-numbers" aria-hidden="true">1</div>
+          <div class="code-stack">
+            <pre id="highlight" aria-hidden="true"></pre>
+            <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Source editor"></textarea>
+          </div>
+        </div>
+        <div class="editor-footer"><span id="cursorInfo">Ln 1, Col 1</span><span id="languageInfo">natlang</span><span id="revisionInfo"></span></div>
+
+        <div class="run-config">
+          <div class="section-title">RUN CONFIGURATION <button id="checkButton" class="quiet small">Check source</button></div>
+          <label class="root-target">Entry function <select id="rootSelect" aria-label="Entry function"></select></label>
+          <div class="config-grid">
+            <label>Inputs <textarea id="inputs" class="json-input" spellcheck="false" aria-label="Input JSON">{}</textarea></label>
+            <label>Expected value <textarea id="expected" class="json-input" spellcheck="false" aria-label="Expected value JSON" placeholder="Optional"></textarea></label>
+          </div>
+          <div id="diagnosticsList" class="diagnostics-list" aria-live="polite"></div>
+          <div class="run-controls">
+            <button id="runButton" class="primary">▶ Run program <span class="shortcut">Ctrl ↵</span></button>
+            <button id="stopButton" class="danger" disabled>Stop</button>
+            <span id="runStatus" role="status">Ready</span>
+          </div>
+        </div>
+      </main>
+
+      <aside class="inspector" aria-label="Execution inspector">
+        <div class="inspector-tabs" role="tablist" aria-label="Inspector views">
+          <button class="selected" data-panel="result" role="tab" aria-selected="true">Result</button>
+          <button data-panel="trace" role="tab" aria-selected="false">Trace</button>
+          <button data-panel="cases" role="tab" aria-selected="false">Cases</button>
+          <button data-panel="jobs" role="tab" aria-selected="false">Jobs</button>
+        </div>
+        <section id="resultPanel" class="panel-content">
+          <div id="resultEmpty" class="empty-state"><div class="empty-symbol">{ λ }</div><h2>Ready to run</h2><p>Edit a function, check its source, then run it. The result and recorded execution appear here.</p></div>
+          <div id="resultBody" hidden>
+            <div id="outcomeBanner" class="outcome-banner"></div>
+            <div class="result-meta" id="resultMeta"></div>
+            <h3>Return value</h3><pre id="resultValue" class="data-block"></pre>
+            <h3>Emissions</h3><pre id="resultEmitted" class="data-block"></pre>
+            <div class="result-actions"><button id="captureCase" class="secondary">Save as case</button><button id="downloadRun" class="quiet">Download run</button><button id="forkRun" class="quiet">Fork source</button></div>
+          </div>
+        </section>
+        <section id="tracePanel" class="panel-content" hidden>
+          <div id="traceEmpty" class="empty-state"><div class="empty-symbol">◫</div><h2>No trace yet</h2><p>Run a program to inspect committed events. Moving the cursor never replays effects.</p></div>
+          <div id="traceBody" hidden>
+            <div class="trace-nav"><button id="tracePrev" aria-label="Previous event">←</button><span id="tracePosition"></span><button id="traceNext" aria-label="Next event">→</button><button id="tracePlay" aria-label="Play recorded trace">▶</button></div>
+            <input id="traceSlider" type="range" min="0" max="0" value="0" aria-label="Trace event position">
+            <div id="traceEvents" class="trace-events" role="list"></div>
+            <h3>Selected event</h3><pre id="traceDetail" class="data-block"></pre>
+            <h3>State at cursor</h3><pre id="traceState" class="data-block"></pre>
+            <h3>Active calls and effects</h3><pre id="traceContext" class="data-block"></pre>
+          </div>
+        </section>
+        <section id="casesPanel" class="panel-content" hidden>
+          <div class="cases-intro"><h2>Case workbench</h2><p>Keep source, expected behavior, and observed traces together. Export cases for review and dataset admission.</p></div>
+          <div class="case-toolbar"><button id="newCase" class="quiet">New scenario</button><button id="exportCases" class="secondary">Export JSONL</button><button id="importCases" class="quiet">Import</button></div>
+          <div id="caseList" class="case-list"></div>
+        </section>
+        <section id="jobsPanel" class="panel-content" hidden>
+          <div class="cases-intro"><h2>Training workbench</h2><p>Run the repository's data, teacher, training, evaluation, and GGUF jobs on this local machine. Each job writes a durable log under <code>runs/playground-jobs</code>.</p></div>
+          <p id="jobsAvailability" role="status">Checking local job service…</p>
+          <div id="jobsBody" hidden>
+            <label>Pipeline step <select id="jobKind"><option value="materialize">Materialize program IR</option><option value="teacher">Collect teacher trajectories</option><option value="export">Export SFT samples</option><option value="train">Train LoRA</option><option value="evaluate">Evaluate checkpoint</option><option value="gguf">Export GGUF</option></select></label>
+            <label>Dataset <select id="jobDataset"></select></label>
+            <label>Checkpoint <select id="jobCheckpoint"></select></label>
+            <label>Job name <input id="jobName" value="experiment-1" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"></label>
+            <div class="dialog-grid"><label>Steps <input id="jobSteps" type="number" min="1" max="100000" value="300"></label><label>Root seed <input id="jobSeed" type="number" min="0" value="0"></label></div>
+            <label>Teacher model ID <input id="jobModelId" placeholder="server model identifier"></label>
+            <label>GGUF quantization <select id="jobQuant"><option>Q4_K_M</option><option>Q5_K_M</option><option>Q6_K</option><option>Q8_0</option></select></label>
+            <div class="case-toolbar"><button id="startJob" class="primary">Start job</button><button id="refreshJobs" class="quiet">Refresh</button></div>
+            <div id="jobList" class="case-list"></div>
+            <h3>Selected job log</h3><pre id="jobLog" class="data-block job-log">Select a job to inspect its log.</pre>
+          </div>
+        </section>
+      </aside>
+    </div>
+    <footer class="statusbar"><span id="diagnosticCount">No diagnostics</span><span id="saveStatus">Saved locally</span><span id="runtimeStatus">Browser runtime ready</span></footer>
+  </div>
+
+  <dialog id="modelDialog" aria-labelledby="modelDialogTitle">
+    <form method="dialog" class="dialog-body"><div class="dialog-head"><h2 id="modelDialogTitle">Local model</h2><button class="icon-button" value="cancel" aria-label="Close">×</button></div>
+      <p>Natural `.nl` functions use a GGUF model inside this browser. Crisp `.ts` functions run without one.</p>
+      <label>Checkpoint <select id="modelSelect"></select></label>
+      <label>Or choose a GGUF file <input id="modelFile" type="file" accept=".gguf"></label>
+      <div class="dialog-grid"><label>Context tokens <input id="modelContext" type="number" min="512" step="512" value="4096"></label><label>GPU layers <input id="modelGpuLayers" type="number" min="0" placeholder="Auto"></label></div>
+      <pre id="modelDiagnostics" class="data-block"></pre>
+      <p id="modelProgress" role="status"></p>
+      <div class="dialog-actions"><button value="cancel" class="quiet">Close</button><button id="loadModel" type="button" class="primary">Load model</button></div>
+    </form>
+  </dialog>
+  <dialog id="textDialog" aria-labelledby="textDialogTitle"><form method="dialog" class="dialog-body"><h2 id="textDialogTitle"></h2><p id="textDialogHelp"></p><label class="sr-only" for="textDialogInput">Value</label><input id="textDialogInput" required><p id="textDialogError" class="form-error"></p><div class="dialog-actions"><button value="cancel" class="quiet">Cancel</button><button value="confirm" class="primary">Save</button></div></form></dialog>
+  <dialog id="examplesDialog" aria-labelledby="examplesTitle"><div class="dialog-body"><div class="dialog-head"><h2 id="examplesTitle">Start from an example</h2><button id="closeExamples" class="icon-button" aria-label="Close">×</button></div><div id="exampleList" class="example-list"></div></div></dialog>
+  <dialog id="caseDialog" aria-labelledby="caseDialogTitle"><form method="dialog" class="dialog-body"><h2 id="caseDialogTitle">Save a case</h2><p>The source revision and any observed trace stay frozen in this record.</p><label>Case name <input id="caseName" required></label><label>Expected outcome <select id="caseOutcome"><option value="done">Success</option><option value="error">Error</option><option value="blocked">Blocker</option></select></label><label>Expected value (JSON) <textarea id="caseExpected" class="json-input" spellcheck="false"></textarea></label><label>Required ordered actions (JSON array) <textarea id="caseActions" class="json-input" spellcheck="false">[]</textarea></label><label>Required ordered effects (JSON array) <textarea id="caseEffects" class="json-input" spellcheck="false">[]</textarea></label><label>Constrained calls (JSON array) <textarea id="caseCalls" class="json-input" spellcheck="false">[]</textarea></label><label>Split <select id="caseSplit"><option value="train">Train</option><option value="dev">Dev</option><option value="test">Test</option></select></label><label>Review notes <textarea id="caseNotes"></textarea></label><p id="caseError" class="form-error"></p><div class="dialog-actions"><button value="cancel" class="quiet">Cancel</button><button value="confirm" class="primary">Save case</button></div></form></dialog>
+  <input id="importInput" type="file" accept=".json,.jsonl" hidden>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>

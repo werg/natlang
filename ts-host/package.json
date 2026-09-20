@@ -12,7 +12,9 @@
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:browser": "node scripts/browser-pilot.mjs",
+    "test:playground": "node scripts/playground-smoke.mjs",
     "serve:browser": "node scripts/serve-browser-local.mjs",
+    "playground": "npm run build && node scripts/serve-browser-local.mjs --playground --open-gpu",
     "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
     "test:conformance": "node scripts/native-conformance.mjs"
   },

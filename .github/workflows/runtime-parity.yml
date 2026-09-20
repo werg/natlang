@@ -51,3 +51,6 @@ jobs:
       - name: Run actual browser interpreter smoke
         working-directory: ts-host
         run: npm run test:browser
+      - name: Run browser playground smoke
+        working-directory: ts-host
+        run: npm run test:playground

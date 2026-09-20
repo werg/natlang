@@ -50,6 +50,16 @@ function compile(code: string, body: boolean, asyncBody: boolean): string {
   return result.outputText;
 }
 
+/** Parse a browser-host TypeScript function body without evaluating it. */
+export function checkTypeScriptBody(code: string): string[] {
+  const source = `async function __natlang_body(self: unknown, args: unknown, fx: unknown, host: unknown) {\n${code}\n}`;
+  const result = ts.transpileModule(source, { fileName: 'natlang-source.ts', reportDiagnostics: true,
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
+      isolatedModules: true } });
+  return (result.diagnostics ?? []).filter(d => d.category === ts.DiagnosticCategory.Error)
+    .map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+}
+
 type Evaluator = (scope: Record<string, unknown>, code: string, effect: (cap: string, fn: string, args: unknown[]) => unknown) => unknown;
 /** Trusted browser evaluator. The host object is shared by identity and may be mutated. */
 export class TypeScriptEnvironment {

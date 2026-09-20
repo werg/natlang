@@ -52,6 +52,13 @@ export class NativeTraceRecorder {
   readonly events: TraceEvent[] = [];
   private readonly started = performance.now();
   constructor(manifest: Record<string, unknown>) { this.emit('manifest', manifest); }
+  /** Open a captured trace for read-only reconstruction and admission checks. */
+  static fromEvents(events: Record<string, unknown>[]): NativeTraceRecorder {
+    const trace = new NativeTraceRecorder({});
+    trace.events.splice(0, trace.events.length, ...structuredClone(events) as TraceEvent[]);
+    trace.reconstruct();
+    return trace;
+  }
   emit(kind: string, data: Record<string, unknown> = {}): TraceEvent {
     const event = JSON.parse(JSON.stringify({ version: TRACE_VERSION, seq: this.events.length, kind,
       observed_at: new Date().toISOString(), elapsed_ms: Math.round(performance.now() - this.started),

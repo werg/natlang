@@ -4,6 +4,11 @@ export { BROWSER_MODEL_CATALOG, checkModelStorage } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { loadFunctionFiles } from './source.js';
+export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
+  validatePlaygroundProject, validProjectPath, runPlaygroundProject, traceFrame,
+  admitPlaygroundRun } from './playground.js';
+export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from './playground.js';
+export { checkTypeScriptBody } from './environment.js';
 export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics,
   BrowserSchemaMode } from './local-model.js';
 export type { BrowserModelManifest, BrowserStorageStatus } from './models.js';

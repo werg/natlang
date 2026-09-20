@@ -7,14 +7,18 @@ import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
+import { createPlaygroundJobs } from './playground-jobs.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
+const handleWorkbench = createPlaygroundJobs(root);
 const port = Number(process.argv.find(arg => arg.startsWith('--port='))?.slice(7) ?? 8765);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('invalid --port');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.wasm': 'application/wasm', '.json': 'application/json', '.jinja': 'text/plain; charset=utf-8' };
 const server = createServer(async (request, response) => {
   try {
+    if (await handleWorkbench(request, response)) return;
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (!pathname.startsWith('/ts-host/') && !pathname.startsWith('/models/'))
       throw new Error('path is not a pilot asset');
@@ -54,8 +58,9 @@ function chromiumPath() {
 }
 
 await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
-const url = `http://127.0.0.1:${server.address().port}/ts-host/examples/browser-local/`;
-console.log(`natlang browser pilot: ${url}`);
+const page = process.argv.includes('--playground') ? 'playground' : 'examples/browser-local';
+const url = `http://127.0.0.1:${server.address().port}/ts-host/${page}/`;
+console.log(`natlang browser ${page === 'playground' ? 'playground' : 'pilot'}: ${url}`);
 if (process.argv.includes('--open-gpu') || process.argv.includes('--open')) {
   const gpu = process.argv.includes('--open-gpu');
   const flags = gpu && process.platform === 'linux' ? [
