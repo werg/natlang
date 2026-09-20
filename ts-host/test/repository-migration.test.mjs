@@ -1,0 +1,85 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { NatlangHost } from '../dist/index.js';
+import { RepositoryMigration } from '../../applications/repository_migration.mjs';
+
+const path = fileURLToPath(new URL('../../codebases/repository_migration/migrate.nl', import.meta.url));
+const source = {
+  'lib.mjs': 'export function sum(a, b) { return a + b; }\n',
+  'caller.mjs': "import { sum } from './lib.mjs';\nexport const total = sum(2, 3);\n",
+  'test.mjs': "import { strict as assert } from 'node:assert';\nimport { total } from './caller.mjs';\nassert.equal(total, 5);\n",
+};
+
+test('natlang plans a checked migration without editing the original repository', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'natlang-repo-'));
+  for (const [name, text] of Object.entries(source)) await writeFile(join(root, name), text);
+  const repository = new RepositoryMigration(root, { files: Object.keys(source),
+    checks: [{ id: 'scenario', argv: [process.execPath, '--test', 'test.mjs'] }] });
+  await repository.open();
+  const host = new NatlangHost({ host: { repository,
+    drainEvents: () => repository.drainEvents() } });
+  try {
+    const result = await host.run({ source: { kind: 'file', path },
+      inputs: { request: 'Rename sum to add while preserving the calculation', query: 'sum' },
+      options: { model: { segment_turns: 2 } },
+      modelTurn: turn => {
+        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
+          return { calls: [], text: 'done', completion_tokens: 1 };
+        const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
+        if (prompt.includes('function migrate(')) return { calls: [
+          ['call', { function: 'inspect', to: 'let/snapshot' }],
+          ['call', { function: 'search', to: 'let/uses', inputs: {
+            query: 'args/query', revision: 'let/snapshot/revision' } }],
+          ['call', { function: 'propose', to: 'let/patch', inputs: {
+            request: 'args/request', snapshot: 'let/snapshot', uses: 'let/uses' } }],
+          ['call', { function: 'apply', to: 'let/candidate', inputs: {
+            revision: 'let/snapshot/revision', patch: 'let/patch' } }],
+          ['call', { function: 'validate', to: 'let/checks', inputs: {
+            revision: 'let/candidate/revision' } }],
+          ['call', { function: 'report', to: 'return', inputs: {
+            revision: 'let/candidate/revision', checks: 'let/checks' } }],
+        ], completion_tokens: 1 };
+        return { calls: [['write', { path: 'return', value: [
+          { path: 'lib.mjs', old: 'function sum(', new: 'function add(' },
+          { path: 'caller.mjs', old: '{ sum }', new: '{ add }' },
+          { path: 'caller.mjs', old: 'sum(2, 3)', new: 'add(2, 3)' },
+        ] }]], completion_tokens: 1 };
+      } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value.status, 'reviewable');
+    assert.equal(result.value.changed.length, 2);
+    const base = repository.snapshot().revision;
+    assert.equal(await readFile(join(root, 'caller.mjs'), 'utf8'), source['caller.mjs']);
+    assert.throws(() => repository.apply(base, [{ path: 'caller.mjs', old: 'sum', new: 'add' }]),
+      /ambiguous/);
+    assert.equal(await readFile(join(root, 'lib.mjs'), 'utf8'), source['lib.mjs']);
+  } finally { host.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('failed checks and stale patch context remain visible for repair', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'natlang-repo-'));
+  for (const [name, text] of Object.entries(source)) await writeFile(join(root, name), text);
+  const repository = new RepositoryMigration(root, { files: Object.keys(source),
+    checks: [{ id: 'scenario', argv: [process.execPath, '--test', 'test.mjs'] }] });
+  try {
+    const base = (await repository.open()).revision;
+    const broken = repository.apply(base, [
+      { path: 'lib.mjs', old: 'function sum(', new: 'function add(' },
+    ]);
+    const validation = await repository.validate(broken.revision);
+    assert.equal(validation.status, 'failed', JSON.stringify(validation));
+    assert.equal(repository.report(broken.revision, validation).status, 'checks-failed');
+    const repaired = repository.apply(broken.revision, [
+      { path: 'caller.mjs', old: '{ sum }', new: '{ add }' },
+      { path: 'caller.mjs', old: 'sum(2, 3)', new: 'add(2, 3)' },
+    ]);
+    assert.equal((await repository.validate(repaired.revision)).status, 'passed');
+    assert.throws(() => repository.apply(broken.revision, [
+      { path: 'lib.mjs', old: 'function sum(', new: 'function add(' },
+    ]), /missing/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

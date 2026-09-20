@@ -1,6 +1,21 @@
 # P20 — Repository maintenance and migration agent
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: isolated migration workbench in `codebases/repository_migration/` and
+`applications/repository_migration.mjs`. [Shared capabilities](README.md).
+
+Natlang searches the task manifest and proposes exact old/new patches. The
+host rejects ambiguous context, retains immutable candidate revisions, runs
+declared checks in a temporary materialization, and returns a reviewable diff
+identity without editing the original checkout. Failed candidates can be
+patched and checked again. Tests cover a multi-file signature migration,
+hidden caller failure, repair, stale context and unchanged source checkout.
+
+The test run exposed a real harness issue: a child `node --test` inherited
+`NODE_TEST_CONTEXT` from the parent test process and exited successfully while
+skipping its files. The migration host now clears that variable for declared
+checks. Broader check provenance, natlang's own loader/type checks as declared
+gates, dirty-worktree import and a reviewed worktree publication operation
+remain open.
 
 ## Natlang prerequisites
 
