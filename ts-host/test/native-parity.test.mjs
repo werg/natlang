@@ -137,6 +137,27 @@ test('native marked request text matches Python program and function listing', {
   assert.deepEqual(actual, expected);
 });
 
+test('native review prompts and tools match Python across prompt variants', { skip: !python }, async () => {
+  for (const variant of ['baseline', 'repeat_instructions', 'checklist']) {
+    let initial, review;
+    const calls = [['edit', { path: 'instructions', old: 'seven', new: '7' }]];
+    const agent = new NativeToolAgent(request => { initial = request.messages;
+      return { calls, completion_tokens: 1 }; }, { review: {
+      scope: 'actions', prompt: variant, driver: request => { review = request;
+        return { calls: [['review_write', { reason: 'Reject the edit.', decision: 'withdraw' }]], completion_tokens: 1 }; },
+    } });
+    await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+      type: 'Lambda<{}, Num>', instructions: 'Return seven.' } });
+    const script = `import json,sys\nfrom natlang.tool_agent import review_messages,review_tools\nmessages,calls,variant=json.load(sys.stdin)\nprint(json.dumps({'prompt':review_messages(messages,calls,0,variant)[-1]['content'],'tools':review_tools()}))`;
+    const py = spawnSync(python, ['-c', script], { cwd: root,
+      input: JSON.stringify([initial, calls, variant]), encoding: 'utf8' });
+    assert.equal(py.status, 0, py.stderr);
+    const expected = JSON.parse(py.stdout);
+    assert.equal(review.messages.at(-1).content, expected.prompt, variant);
+    assert.deepEqual(review.tools, expected.tools);
+  }
+});
+
 test('native complete checked-call and completion-mark schema equals Python tools-v3', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{ item: Num, items: Num[] }, Num>',
     instructions: '1. Double the item.\n2. Write the answer.', args: { item: 4, items: [2, 3] },
