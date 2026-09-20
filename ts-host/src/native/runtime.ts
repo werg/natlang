@@ -17,6 +17,14 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
 const pending = (value: Value): value is Pending => isPending(value);
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const q = (value: unknown) => JSON.stringify(value);
+function pythonJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(pythonJson).join(', ')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value)
+    .map(([key, item]) => `${JSON.stringify(key)}: ${pythonJson(item)}`).join(', ')}}`;
+  return JSON.stringify(value);
+}
+const nodeType = (node: Pending) => ({ lambda: 'Lambda', map: 'MapNode', fold: 'FoldNode',
+  iterate: 'IterateNode' })[node.nodeKind];
 const DIAGNOSTIC_HINTS: Record<string, string> = {
   'commit-holes': 'Fill what is still missing with write, then finish your turn.',
   'commit-pending': 'A sub-task has not produced its result yet: call run on it, then finish your turn.',
@@ -179,21 +187,23 @@ export class NativeRuntime {
     this.checkInterruption();
     const name = `${cap}.${fn}`, node = this.acting;
     if (!node || !node.effects.includes(name)) throw new Error('effect-undeclared');
-    const entry = { seq: node.journal.length + 1, capability: name, function: fn, args_preview: q(args).slice(0, 80), status: 'pending' };
+    const entry = { seq: node.journal.length + 1, capability: name, function: fn,
+      args_preview: pythonJson(args).slice(0, 80), status: 'pending' };
     node.journal.push(entry);
     this.events.push({ operation: 'effect.requested', capability: name, args });
-    this.trace.emit('effect', { phase: 'requested', capability: name, sequence: entry.seq, args });
+    const callId = this.currentCallId?.startsWith('$root@') ? null : this.currentCallId ?? null;
+    this.trace.emit('effect', { phase: 'requested', call_id: callId, capability: name, sequence: entry.seq, args });
     try {
       const value = name === 'out.emit' ? (this.emitted.push(args[0]), null) : this.capabilities[name]?.(args);
       if (value === undefined && name !== 'out.emit') throw new Error('effect-unavailable');
       const complete = (resolved: unknown) => {
         entry.status = 'ok'; this.events.push({ operation: 'effect.completed', capability: name, result: resolved });
-        this.trace.emit('effect', { phase: 'completed', capability: name, sequence: entry.seq, result: resolved });
+        this.trace.emit('effect', { phase: 'completed', call_id: callId, capability: name, sequence: entry.seq, result: resolved });
         return resolved;
       };
       const fail = (error: unknown): never => {
         entry.status = 'error'; this.events.push({ operation: 'effect.failed', capability: name });
-        this.trace.emit('effect', { phase: 'failed', capability: name, sequence: entry.seq });
+        this.trace.emit('effect', { phase: 'failed', call_id: callId, capability: name, sequence: entry.seq });
         throw error;
       };
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
@@ -236,13 +246,13 @@ export class NativeRuntime {
 
   private done(ref: Ref, node: Pending, value: Value): NativeOutcome {
     node.status = 'done'; ref.set(value);
-    this.trace.emit('node', { path: ref.path, transition: 'done', node_type: node.nodeKind });
+    this.trace.emit('node', { path: ref.path, transition: 'done', node_type: nodeType(node) });
     if (node.nodeKind === 'lambda') this.origins.set(ref.path, node);
     return { path: ref.path, kind: 'done', detail: q(dump(value)), value };
   }
   private quiesce(ref: Ref, node: Pending, detail: string): NativeOutcome {
     node.status = 'quiesced'; node.note = detail;
-    this.trace.emit('node', { path: ref.path, transition: 'quiesced', node_type: node.nodeKind, detail });
+    this.trace.emit('node', { path: ref.path, transition: 'quiesced', node_type: nodeType(node), detail });
     return { path: ref.path, kind: 'quiesced', detail };
   }
 
@@ -305,7 +315,6 @@ export class NativeRuntime {
       if (pending(value)) {
         node.status = 'done'; ref.set(value);
         this.trace.emit('eval', { phase: 'completed', path: ref.path, value: dump(value) });
-        this.trace.emit('node', { path: ref.path, transition: 'replaced', node_type: value.nodeKind });
         return { path: ref.path, kind: 'replaced', detail: `${formatType(value.type)} unreduced` };
       }
       const missing = problems(value, node.type.returns, env, ref.path);

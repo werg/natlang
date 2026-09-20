@@ -225,7 +225,7 @@ test('native tool rejection text includes Python diagnostic hints', { skip: !pyt
 test('native trace preserves declared effect order before a failed eval', { skip: !python }, async () => {
   const doc = { $lambda: { type: 'Lambda<{}, Num>', effects: ['out.emit'],
     code: "fx.out.emit({ id: 'first' }); throw new Error('failed');" } };
-  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nsink=TraceRecorder({})\nrt=Runtime(None,trace_sink=sink)\nout,value=rt.run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'outcome':out.kind,'emitted':rt.emitted,'effects':[(e['phase'],e['capability']) for e in sink.events if e['kind']=='effect'],'evals':[e['phase'] for e in sink.events if e['kind']=='eval']}))`;
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nsink=TraceRecorder({})\nrt=Runtime(None,trace_sink=sink)\nout,value=rt.run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'outcome':out.kind,'emitted':rt.emitted,'effects':[(e['phase'],e['capability']) for e in sink.events if e['kind']=='effect'],'evals':[e['phase'] for e in sink.events if e['kind']=='eval'],'trace':sink.events[1:]}))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
@@ -238,7 +238,28 @@ test('native trace preserves declared effect order before a failed eval', { skip
   assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'eval').map(event => event.phase), expected.evals);
   assert.equal(runtime.trace.events.find(event => event.kind === 'eval' && event.phase === 'start').engine,
     'typescript-host');
+  assert.deepEqual(runtime.trace.events.slice(1).map(event => {
+    if (event.kind !== 'eval' || event.phase !== 'start') return event;
+    const { declared_engine, ...rest } = event;
+    return { ...rest, engine: declared_engine };
+  }), expected.trace);
   assert.deepEqual(runtime.trace.reconstruct(), runtime.trace.finalState());
+});
+
+test('native finite crisp reduction trace matches Python events apart from executor identity', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', code: 'return 7;' } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nsink=TraceRecorder({})\nRuntime(None,trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const runtime = new NativeRuntime();
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => {
+    if (event.kind !== 'eval' || event.phase !== 'start') return event;
+    const { declared_engine, ...rest } = event;
+    return { ...rest, engine: declared_engine };
+  });
+  assert.deepEqual(actual, expected);
 });
 
 test('native completion-mark output matches Python compact listing', { skip: !python }, () => {
