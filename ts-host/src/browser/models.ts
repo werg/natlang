@@ -4,6 +4,15 @@ export type BrowserModelManifest = { id: string; label: string; trainingRun: str
   contextTokens: number; url: string };
 
 export const BROWSER_MODEL_CATALOG: readonly BrowserModelManifest[] = [{
+  id: 'natlang-v8-failures-pilot-q4', label: 'natlang 350M v8 failures pilot Q4_K_M (smaller)',
+  trainingRun: 'runs/lora-v8-failures-pilot',
+  file: 'natlang-350M-v8-failures-pilot-Q4_K_M.gguf',
+  templateUrl: '/models/templates/natlang-350M-v8-failures-pilot.jinja',
+  quant: 'Q4_K_M', bytes: 229314496,
+  sha256: 'a7fb96883bbe29a41c4f832b6d5c8fbfa6eebe0b2952814423cd9b1d14881cfd',
+  contextTokens: 8192,
+  url: '/models/natlang-350M-v8-failures-pilot-Q4_K_M.gguf',
+}, {
   id: 'natlang-v8-failures-pilot', label: 'natlang 350M v8 failures pilot Q8_0',
   trainingRun: 'runs/lora-v8-failures-pilot',
   file: 'natlang-350M-v8-failures-pilot-Q8_0.gguf',

@@ -10,6 +10,8 @@ const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
 const cpu = process.argv.includes('--cpu');
 const gpu = process.argv.includes('--gpu');
+const headed = process.argv.includes('--headed');
+const quant = process.argv.find(arg => arg.startsWith('--quant='))?.slice('--quant='.length);
 const broad = process.argv.includes('--broad');
 const probe = process.argv.find(arg => arg.startsWith('--probe='))?.slice('--probe='.length);
 const probeTokens = Number(process.argv.find(arg => arg.startsWith('--probe-tokens='))?.slice('--probe-tokens='.length) ?? 8);
@@ -45,10 +47,11 @@ const server = createServer(async (request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({ headless: true,
+const browser = await chromium.launch({ headless: !headed,
   executablePath: process.env.NATLANG_CHROMIUM || chromium.executablePath(),
-  args: gpu ? ['--no-sandbox', '--enable-unsafe-webgpu',
-    '--enable-features=Vulkan,WebGPU', '--use-angle=vulkan'] :
+  args: gpu ? ['--no-sandbox', ...(headed ? [] : ['--headless=new', '--disable-vulkan-surface']),
+    '--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan',
+    '--enable-dawn-features=vulkan_enable_f16_on_nvidia'] :
     ['--no-sandbox', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage();
@@ -66,6 +69,9 @@ try {
   if (errors.length) throw new Error(errors.join('\n'));
   if (liveModel) {
     await page.goto(`${url}/ts-host/examples/browser-local/`);
+    if (quant) await page.locator('#model').selectOption({ label:
+      quant === 'Q4_K_M' ? 'natlang 350M v8 failures pilot Q4_K_M (smaller)' :
+        quant === 'Q8_0' ? 'natlang 350M v8 failures pilot Q8_0' : quant });
     if (broad) await page.locator('#schema').selectOption('broad');
     if (cpu) await page.locator('#gpuLayers').fill('0');
     await page.locator('#context').fill(String(contextTokens));
