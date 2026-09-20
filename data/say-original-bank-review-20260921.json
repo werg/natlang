@@ -1,0 +1,19 @@
+{
+  "source": "data/leaf_references.jsonl",
+  "prefix_lines": 437,
+  "prefix_sha256": "702a03e889022ef56dda88e80fbf6ab7e678e0fa8d2090ab8eee77b8048a59e0",
+  "scope": "say references whose action code begins with sell_ in the first 437 bank rows",
+  "expected_scoped_rows": 132,
+  "approved_indices": [
+    8, 20, 30, 217, 279, 281, 329, 337, 380,
+    388, 389, 390, 392, 393, 394, 395, 396, 397, 398, 399, 400, 401, 402, 403, 404,
+    405, 406, 408, 409, 410, 412, 414, 415, 416, 417, 418, 419, 420, 421, 422, 423,
+    424, 425, 426, 427, 428, 429, 430, 432, 434, 435, 436
+  ],
+  "review_rule": "Retain a sell reference only when it clearly states or enacts a completed sale of the stated quantity and good at the stated unit price. A quote, future offer, conditional handover, or ambiguous deal is insufficient.",
+  "excluded_note": "The other 80 scoped rows are quarantined for regeneration. This also excludes multi-item lines that could be read as giving the unit price as the total.",
+  "special_cases": {
+    "383": "Take them and pay up still makes payment future, so the sale is not complete.",
+    "433": "You will receive the goods contradicts the claim that the sale is complete."
+  }
+}
