@@ -29,7 +29,7 @@ continuation bundle below replaces them for a continuation-focused training
 run. Do not splice rendered SFT text without reconstructing runtime state.
 Bonsai may be used for targeted probes while collectors remain paused.
 
-Local checks: 370 tests passed, one skipped. A Bonsai probe
+Local checks: 371 tests passed, one skipped. A Bonsai probe
 completed a partial-record task after a fresh checkpoint prompt with four
 messages. A one-turn boundary initially caused unnecessary repeated actions
 after a complete return; completion detection and transient-result handling
@@ -66,7 +66,7 @@ to 800 characters before storage.
 Whole-program teacher capture now retains the checkpoint phase, setting,
 context, and offered tools, allowing the replay bridge to materialize the
 checkpoint note and the following fresh-context turn. A scripted end-to-end
-capture/replay test covers this path. The TS host port passes 38 native parity
+capture/replay test covers this path. The TS host port passes 39 native parity
 tests against Python, including continuation, note persistence, and effect
 journal visibility.
 
