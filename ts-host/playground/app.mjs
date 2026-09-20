@@ -324,6 +324,8 @@ function renderCases() {
       await storage.put('projects', next); projects.push(next); switchProject(next); };
     const edit = document.createElement('button'); edit.className = 'quiet'; edit.textContent = 'Edit';
     edit.onclick = () => openCaseDialog(item);
+    const execute = document.createElement('button'); execute.className = 'quiet'; execute.textContent = 'Run case';
+    execute.onclick = () => void runCase(item);
     const accept = document.createElement('button'); accept.className = 'quiet'; accept.textContent = 'Accept';
     accept.onclick = async () => { try { const admission = verifyCase(item);
       item.admission = admission; item.reviewStatus = 'accepted'; await storage.put('cases', item);
@@ -335,7 +337,7 @@ function renderCases() {
     const remove = document.createElement('button'); remove.className = 'quiet'; remove.textContent = 'Delete';
     remove.onclick = async () => { if (!confirm(`Delete case “${item.name}”?`)) return;
       await storage.delete('cases', item.id); cases = cases.filter(found => found.id !== item.id); renderCases(); };
-    card.append(open, edit, accept, reject, remove); return card;
+    card.append(open, execute, edit, accept, reject, remove); return card;
   }));
   if (!visible.length) { const p = document.createElement('p'); p.className = 'cases-intro';
     p.textContent = 'No saved cases yet. Run a program, then use “Save as case” to capture its source and trace.'; $('caseList').append(p); }
@@ -403,24 +405,46 @@ async function run() {
     if (!sameJSON(project.inputs, inputs) || !sameJSON(project.expected, expected))
       replaceProject(editPlaygroundProject(project, { inputs, expected }));
     if (check().length) return;
-    if (project.root.endsWith('.nl') && !model?.loaded) { $('modelDialog').showModal(); throw new Error('Load a local model to run natural instructions'); }
+    const record = await executeProject(project);
+    runs.unshift(record); await storage.put('runs', record); selectRun(record);
+    message(`${record.outcome.kind} in ${record.durationMs} ms${record.correct === false ? ' · expected value differed' : ''}`,
+      record.outcome.kind !== 'done' || record.correct === false);
+  } catch (error) { message(error.message, true); }
+  finally { busy = false; abort = null; $('stopButton').disabled = true; renderDiagnostics(); }
+}
+
+async function executeProject(snapshot) {
+    if (snapshot.root.endsWith('.nl') && !model?.loaded) { $('modelDialog').showModal(); throw new Error('Load a local model to run natural instructions'); }
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
-    message(`Running revision ${project.revision.slice(0, 8)}…`);
+    message(`Running revision ${snapshot.revision.slice(0, 8)}…`);
     const host = new BrowserNatlangHost({ model });
     const firstTurn = model?.turnHistory.length ?? 0;
     const modelTurn = model ? async request => { message(`Model turn ${model.turnHistory.length - firstTurn + 1}…`);
       return model.turn(request, abort.signal); } : undefined;
     let record;
-    try { record = await runPlaygroundProject(host, project, { signal: abort.signal,
+    try { record = await runPlaygroundProject(host, snapshot, { signal: abort.signal,
       runOptions: { seed: { mode: 'compatibility' } }, modelTurn,
       model: modelSpec ? { id: modelSpec.id, diagnostics: model.diagnostics } : undefined }); }
     finally { host.close(); }
     if (record.model) record.model.turns = structuredClone(model.turnHistory.slice(firstTurn));
-    runs.unshift(record); await storage.put('runs', record); selectRun(record);
-    message(`${record.outcome.kind} in ${record.durationMs} ms${record.correct === false ? ' · expected value differed' : ''}`,
-      record.outcome.kind !== 'done' || record.correct === false);
-  } catch (error) { message(error.message, true); }
+    return record;
+}
+
+async function runCase(item) {
+  if (busy) return;
+  try {
+    const snapshot = { ...project, id: item.projectId, name: item.name, root: item.source.root,
+      files: structuredClone(item.source.files), inputs: structuredClone(item.inputs),
+      expected: structuredClone(item.expected.value), revision: item.revision };
+    const record = await executeProject(snapshot);
+    runs.unshift(record); await storage.put('runs', record);
+    Object.assign(item, { runId: record.id, trace: record.trace, observed: {
+      outcome: record.outcome, value: record.value, emitted: record.emitted },
+      model: record.model ?? null, reviewStatus: 'draft', admission: null });
+    await storage.put('cases', item); selectRun(record); renderCases();
+    message(`Case run recorded: ${record.outcome.kind} · review and accept if correct`, record.outcome.kind !== 'done');
+  } catch (error) { message(`Case run failed: ${error.message}`, true); }
   finally { busy = false; abort = null; $('stopButton').disabled = true; renderDiagnostics(); }
 }
 

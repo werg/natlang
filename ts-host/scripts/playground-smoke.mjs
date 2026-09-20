@@ -48,6 +48,15 @@ try {
   await page.locator('[data-panel=cases]').click();
   await page.locator('.case-card').first().getByText('Accept').click();
   await page.getByText('train · accepted').waitFor();
+  await page.locator('#newCase').click();
+  await page.locator('#caseDialog button[value=confirm]').click();
+  await page.locator('.case-card').first().getByText('Run case').click();
+  await page.getByText('Case run recorded: done').waitFor();
+  await page.locator('[data-panel=cases]').click();
+  await page.locator('.case-card').first().getByText('Accept').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('.case-split')]
+    .filter(element => element.textContent === 'train · accepted').length === 2);
+  assert.equal(await page.getByText('train · accepted').count(), 2);
   await page.locator('#editor').fill('/*---\nreturns: Num\nengine: typescript-host\n---*/\nreturn (;');
   await page.getByText('1 diagnostic').waitFor();
   assert.equal(await page.locator('#runButton').isDisabled(), true);
