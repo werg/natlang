@@ -258,7 +258,8 @@ export class NativeRuntime {
   private async crisp(ref: Ref, node: LambdaNode, env: TypeEnv): Promise<NativeOutcome> {
     node.status = 'running';
     node.originalBody ??= node.body;
-    this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: node.engine,
+    this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: 'typescript-host',
+      ...(node.engine !== 'typescript-host' ? { declared_engine: node.engine } : {}),
       code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');

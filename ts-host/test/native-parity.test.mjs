@@ -236,5 +236,7 @@ test('native trace preserves declared effect order before a failed eval', { skip
   assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'effect').map(event =>
     [event.phase, event.capability]), expected.effects);
   assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'eval').map(event => event.phase), expected.evals);
+  assert.equal(runtime.trace.events.find(event => event.kind === 'eval' && event.phase === 'start').engine,
+    'typescript-host');
   assert.deepEqual(runtime.trace.reconstruct(), runtime.trace.finalState());
 });
