@@ -20,7 +20,8 @@ export type RunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backen
 export type ModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
   seed: number | null; max_tokens: number };
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
-  raw_calls?: unknown[]; completion_tokens?: number; value_confidence?: (number | null)[];
+  raw_calls?: unknown[]; completion_tokens?: number;
+  value_confidence?: (number | { geometric_mean?: number } | null)[];
   raw_response?: Record<string, unknown> };
 export type RunRequest = { source: Source; inputs?: Record<string, unknown>;
   options?: RunOptions; mapWorkers?: number; tracePath?: string;

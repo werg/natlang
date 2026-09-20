@@ -1,21 +1,36 @@
 import { TypeScriptEnvironment } from './environment.js';
 import { NativeRuntime, type NativeStream } from '../native/runtime.js';
-import { NativeToolAgent, type NativeReviewOptions } from '../native/agent.js';
+import { NativeToolAgent } from '../native/agent.js';
 import { checkedDefinitions, type NativeDefinition } from '../native/codebase.js';
 import { buildPending, coerce, dump, type Pending } from '../native/values.js';
 import { TypeEnv } from '../native/types.js';
-import type { ModelTurn, ModelTurnRequest, RunOptions } from '../runtime.js';
+
+export type BrowserModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
+  seed: number | null; max_tokens: number };
+export type BrowserModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
+  raw_calls?: unknown[]; completion_tokens?: number;
+  value_confidence?: (number | { geometric_mean?: number } | null)[];
+  raw_response?: Record<string, unknown> };
+export type BrowserRunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backend'; root?: number;
+  version?: string }; model?: { temperature?: number; max_turns?: number; max_tokens?: number;
+  max_seconds?: number; turn_tokens?: number }; world_seed?: number;
+  max_episodes?: number; max_depth?: number; run_id?: string };
+export type BrowserReviewOptions = { driver?: (request: BrowserModelTurnRequest) =>
+    Promise<BrowserModelTurn> | BrowserModelTurn; threshold?: number;
+  scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
+  prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
+  order?: 'reason_first' | 'decision_first' };
 
 export type BrowserRunRequest = {
   source: { kind: 'program'; program: Record<string, unknown> } |
     { kind: 'definitions'; entries: Record<string, NativeDefinition>; root: string };
   inputs?: Record<string, unknown>;
   streams?: { over?: AsyncIterable<unknown> | Iterable<unknown> };
-  modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
-  review?: NativeReviewOptions;
+  modelTurn?: (request: BrowserModelTurnRequest) => Promise<BrowserModelTurn> | BrowserModelTurn;
+  review?: BrowserReviewOptions;
   validationFeedback?: 'caller' | 'local';
   capabilities?: Record<string, (args: unknown[]) => unknown>;
-  options?: RunOptions;
+  options?: BrowserRunOptions;
   mapWorkers?: number;
   parallelMapSafe?: boolean;
   signal?: AbortSignal;

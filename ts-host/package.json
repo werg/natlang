@@ -9,8 +9,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-browser.mjs",
     "build:browser": "node scripts/build-browser.mjs",
+    "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test test/*.test.mjs && npm run test:conformance",
+    "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
     "test:conformance": "node scripts/native-conformance.mjs && node scripts/native-harness.mjs"
   },
   "dependencies": {
