@@ -19,16 +19,19 @@ Implementation branch: `infrastructure-implementation`. The sequence in [INFRAST
 | 15 | Opt-in bounded parallel finite Map and honest windowed stream composition | `natlang/runtime.py`, `natlang/streams.py`; `tests/test_parallel_map.py` |
 | 16 | Lightweight browser/JS source, recorded-decision, seed, combinator and trace subset | `web/natlang_lite.mjs`, `web/inspector.html`; `tests/test_portable_embedding.py` |
 | 17 | Local Fold checkpoints and external operation receipt reconciliation | `hosts/recovery.py`; `tests/test_recovery.py` |
+| TS host | Native TypeScript interpreter, crisp eval with direct native sharing, model/capability callbacks, live Fold streams, desktop bindings, and package | `ts-host/src/native/`, `ts-host/src/browser/`; `ts-host/test/native-host.test.mjs` |
 
-The existing interpreter tool inventory remains unchanged except for the versioned `engine` argument on `run_code`. Optional host libraries are installed with the wheel but are not imported by the core. The Node host is trusted code, not a sandbox. Trace readers reconstruct captured natlang state and never replay live effects or arbitrary native memory.
+The existing interpreter tool inventory remains unchanged except for the versioned `engine` argument on `run_code`. Optional host libraries are installed with the wheel but are not imported by the core. The Node host is trusted code, not a sandbox. Trace manifests identify each engine's environment lifetime and authority. Trace readers reconstruct captured natlang state and never replay live effects or arbitrary native memory. The TypeScript host runs its own native reducer. [The native port plan](NATIVE_TYPESCRIPT_PORT.md) records its parity work and limits.
 
 ## Verification and empirical gates
 
-- The final full Python suite passed with **313 passed, 1 skipped** after the child-call identity and bounded host-observation changes.
+- The current TypeScript host suite passes **90 Node tests** and **23 native conformance checks**; the full Python suite passes **298 tests, 1 skipped**. The packed npm artifact contains compiled JavaScript, declarations, prelude and README.
 - `uv build --out-dir /tmp/natlang-infrastructure-release-final` succeeded. The wheel contains `hosts/retained_js_worker.js`, `hosts/recovery.py`, `web/natlang_lite.mjs`, `web/inspector.html`, and the core runtime. The retained JS host requires Node.js; the build added no new Python dependencies.
 - The paired real-model surface probe is implemented in `scripts/probe_engine_surface.py`. Its recorded-driver test passes. It has not been run against the local Bonsai server because the prior teacher backfill is actively using its single model slot. Model reproducibility and student success are measured properties of a selected backend, not consequences of the seed API alone.
+- The TypeScript host runs without Python and directly receives application-owned Node objects. Its Node integration suite covers checked sources, model turns, Map, Fold, declared capabilities, traces, files, processes, retained identity, and failure effects. `plans/NATIVE_TYPESCRIPT_PORT.md` records its design and authority limits.
 - The browser embedding supports the declared portable fixture subset. It does not claim general language compatibility, local inference, shell execution, or arbitrary native-state checkpointing.
 - Whole-program teacher collection and materialization round trip nested Map and correct blocker fixtures. Large teacher shards and template-rendered student pilots should be collected only after the paired live-model probe and the desired student surface are selected.
+- The implementation plan's empirical gates remain open: the paired live-model tools-v2/tools-v3 comparison, selected student pilot, and named P01/P03/P04/P10/P13/P18 application demonstrations. The delivered fixtures show the required mechanisms but do not measure those applications or student behavior. The one-slot Bonsai server remains occupied by the teacher backfill.
 
 ## Typical commands
 

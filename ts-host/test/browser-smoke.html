@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>natlang browser smoke</title>
+<style>body { font: 22px system-ui; padding: 2rem; }</style>
+<main id="result">RUNNING</main>
+<script type="module">
+  import { BrowserNatlangHost } from '../dist/browser/natlang.js';
+  const application = { count: 2 };
+  const host = new BrowserNatlangHost({ host: application });
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Num>', code: 'host.count += 3; return host.count;'
+    } } } });
+    document.getElementById('result').textContent = result.outcome.kind === 'done' &&
+      result.value === 5 && application.count === 5 ? 'PASS browser interpreter' :
+      `FAIL ${JSON.stringify(result)}`;
+  } catch (error) {
+    document.getElementById('result').textContent = `FAIL ${error}`;
+  } finally { host.close(); }
+</script>

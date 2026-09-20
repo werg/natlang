@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Run conformance programs against the served model and summarize. Usage: baseline.py [--wrapper W] [IDS...]"""
+"""Run conformance programs against the served model through structured tools."""
 import re, argparse, json, sys, time, os
 from collections import Counter
 from pathlib import Path
 import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from natlang.decoder import WRAPPERS, LlamaServerDecoder
+from natlang.decoder import LlamaServerDecoder
 from natlang.host import load
-from natlang.model_agent import SMALL_PROMPT, SYSTEM_PROMPT, ModelAgent
 from natlang.surface import ToolSurface
 from natlang.tool_agent import ToolAgent
 from natlang.native import NativeCallDecoder
@@ -17,7 +16,6 @@ from natlang.corpus import file_digest
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
-ap.add_argument("--surface", default="tools", choices=("tools", "text"))
 ap.add_argument("--decode", default="native", choices=("native", "server"),
                 help="native: our grammar over the model's native call text; server: the server's tool calling")
 ap.add_argument("--require-call", action="store_true", help="native only: no reply until a call was made")
@@ -26,8 +24,6 @@ ap.add_argument("--max-episodes", type=int, default=64)
 ap.add_argument("--server", default="http://127.0.0.1:8080")
 ap.add_argument("--thinking", type=int, default=None, help="thinking budget in tokens (reasoning teachers)")
 ap.add_argument("--timeout", type=float, default=600)
-ap.add_argument("--wrapper", default="generic", choices=tuple(WRAPPERS))
-ap.add_argument("--prompt", default="small", choices=("small", "full"))
 ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
 ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model that answers judge checks; 'none' to skip")
@@ -42,11 +38,7 @@ ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="cal
 ap.add_argument("--write-constraints", choices=("typed", "runtime"), default="runtime")
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
-a.validation_feedback = a.validation_feedback or ("caller" if a.surface == "tools" else "local")
-if (a.careful_threshold is not None or a.review_scope != "values") and a.surface != "tools":
-    ap.error("careful review requires --surface=tools")
-if a.surface != "tools" and a.validation_feedback != "local":
-    ap.error("--validation-feedback=caller requires --surface=tools")
+a.validation_feedback = a.validation_feedback or "caller"
 root = Path(__file__).resolve().parent.parent
 files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
@@ -57,8 +49,7 @@ dec = (NativeCallDecoder(a.server, timeout=a.timeout, write_constraints=a.write_
 from natlang.checks import grade, make_judge
 judge = None if a.judge_server == "none" else make_judge(
     LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
-prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
-print(f"surface={a.surface} decode={a.decode}")
+print(f"surface=tools decode={a.decode}")
 records = []
 for f in files:
     doc = yaml.safe_load(f.read_text())
@@ -72,13 +63,9 @@ for f in files:
     log = Live()
     if a.verbose:
         print(f"  > {f.stem}", flush=True)
-    if a.surface == "tools":
-        make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
-                                     validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold, surface=ToolSurface(state_view=a.state_view), review_scope=a.review_scope, withdrawal_policy=a.withdrawal_policy, review_prompt=a.review_prompt,
-                                     **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
-    else:
-        make = lambda lam: ModelAgent(dec, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
-                                      system_prompt=prompt, log=log)
+    make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
+                                 validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold, surface=ToolSurface(state_view=a.state_view), review_scope=a.review_scope, withdrawal_policy=a.withdrawal_policy, review_prompt=a.review_prompt,
+                                 **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     rt = Runtime(make, max_episodes=a.max_episodes)
     t = time.time()
     try:
@@ -114,7 +101,7 @@ print(f"\nprograms={len(records)} correct={counts.get('yes', 0)} incorrect={coun
       f"unjudged={counts.get('?', 0)}")
 result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
 result_path.parent.mkdir(parents=True, exist_ok=True)
-result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": a.surface,
+result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": "tools",
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
                                   "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold, "state_view": a.state_view, "review_scope": a.review_scope, "review_prompt": a.review_prompt, "withdrawal_policy": a.withdrawal_policy,
                                   "write_constraints": a.write_constraints,

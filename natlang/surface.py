@@ -27,7 +27,7 @@ import os
 import json
 from typing import Any, Optional
 
-from .grammar import enumerate_slots
+from .slots import enumerate_slots
 from .nodes import MISSING, QUIESCED, RUNNING, UNREDUCED, Lambda, is_pending
 from .render import INLINE, PREVIEW_ITEMS, numbered, pending_line, scalar
 from .types import (DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Prim, Record, TypeEnv, UnionT,

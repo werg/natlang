@@ -24,7 +24,6 @@ PARTS = {
     "Iterate": {"init", "step", "check", "max"},
 }
 META = {"type", "types", "effects", "status", "note", "effects_journal"}
-HEADER_WORDS = {"read", "edit", "set", "unset", "copy", "reduce", "reopen", "eval"}
 
 
 class TypeErr(Exception):
@@ -270,27 +269,6 @@ class Checker:
                 self.err(f"{where}: Iterate requires max")
         return t
 
-    def actions(self, text, scope, where):
-        """Check `set PATH : TYPE` headers and header words in an action block."""
-        for line in text.splitlines():
-            m = re.match(r"\s*(?:>>>\s*)?(\w+)\b(.*)$", line)
-            if not m:
-                continue
-            is_action_line = line.lstrip().startswith(">>>") or where.endswith("action")
-            if not is_action_line:
-                continue
-            word, rest = m.group(1), m.group(2)
-            if word not in HEADER_WORDS:
-                self.err(f"{where}: unknown tool {word!r}")
-            if word == "set":
-                hm = re.match(r"\s*(\S+)\s+:\s+(.*)$", rest)
-                if not hm:
-                    self.err(f"{where}: malformed set header {line.strip()!r}")
-                else:
-                    self.check_type(hm.group(2), scope, f"{where}: set {hm.group(1)}")
-            if where.endswith("action"):
-                break  # only the first line of a scripted action is a header
-
 
 def all_type_names(doc):
     names = set()
@@ -353,17 +331,6 @@ def check_file(path):
             for item in (doc.get("lint") or {}).get(key) or []:
                 if not isinstance(item, str):
                     c.err(f"lint/{key}: entry is not a string (unquoted colon?): {item!r}")
-        if "canonical_trace" in doc:
-            c.actions(doc["canonical_trace"], names, "canonical_trace")
-    elif doc.get("kind") == "harness":
-        c.walk(doc.get("setup"), set(), "setup")
-        for i, step in enumerate(doc.get("script") or []):
-            if "action" not in step or "expect" not in step:
-                c.err(f"script/{i}: action and expect required")
-                continue
-            c.actions(step["action"], names, f"script/{i}/action")
-            for j, d in enumerate(step.get("during") or []):
-                c.actions(d["action"], names, f"script/{i}/during/{j}/action")
     else:
         c.err(f"unknown kind {doc.get('kind')!r}")
     return c

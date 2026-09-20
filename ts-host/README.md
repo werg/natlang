@@ -1,0 +1,91 @@
+# TypeScript application host for natlang
+
+`NatlangHost` is the Python-free TypeScript interpreter. `NativeNatlangHost` is an alias for it. Crisp TypeScript can run in a context that directly references application objects.
+
+## Install and build
+
+From this repository:
+
+```bash
+cd ts-host
+npm ci
+npm run build
+NATLANG_PYTHON=/path/to/natlang-python npm test
+```
+
+`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed for paired differential tests. The production package does not use Python. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The native conformance checks run with `npm run test:conformance` and do not require Python.
+
+Import `NatlangHost` for runs. The declared conformance and paired trace coverage is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
+
+The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior; use `local` to let the model repair missing results or rejected actions within its current episode.
+
+## Run a program
+
+```ts
+import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/typescript-host';
+
+const desktop = new DesktopBindings();
+const environment = new TypeScriptEnvironment({ mode: 'retained', host: desktop });
+const host = new NatlangHost({ environment });
+
+try {
+  const result = await host.run({
+    source: { kind: 'program', program: {
+      $lambda: {
+        type: 'Lambda<{ file: Text }, Num>',
+        engine: 'typescript-host',
+        code: 'return host.readText(args.file).length;',
+      },
+    } },
+    inputs: { file: '/tmp/example.txt' },
+    tracePath: '/tmp/example.trace.jsonl',
+  });
+  console.log(result.outcome, result.value);
+} finally {
+  host.close();
+  desktop.close();
+}
+```
+
+For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. The host loads `.nl`, `.ts`, YAML, and JSON sources. `options` accepts seed and model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but the shared engine serializes those calls unless the host is configured for safe parallel execution.
+
+`capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
+
+The native host runs Map slots serially by default. For independent pure work, pass `mapWorkers` and `parallelMapSafe: true`; parallel execution requires a fresh eval environment with no shared host object. Nested `NativeSourceWorkspace` invocations share the parent episode budget when the workspace is exposed directly on that host object.
+
+The native host accepts declared capability callbacks that return values or promises. Authored crisp functions can `await` asynchronous application methods exposed through `host` and declared `fx` calls. `run_code` accepts an awaited expression. `NativeSourceWorkspace` provides versioned source description, type checking, and isolated child invocation through the shared host route.
+
+## Eval environment and authority
+
+`mode: 'fresh'` creates fresh TypeScript globals for each crisp eval. `mode: 'retained'` preserves globals across evals. In both modes, the supplied `host` object is passed by identity into the Node VM context. A retained environment can therefore share buffers, jobs, database clients, DOM-like objects, or application objects with authored crisp functions and `run_code` calls. `self`, `args`, and `locals` are frozen portable snapshots; they cannot modify natlang state directly. Results must be exact portable JSON values and are then checked against the destination's natlang type.
+
+The shared engine is **trusted code**, not a sandbox. It can mutate exposed host objects before returning an invalid result or throwing. The VM's synchronous CPU timeout does not cancel a native operation or bound all memory use. Authored crisp functions and native `run_code` may await promises, but interruption cannot undo a native operation already in progress. Direct host access does not enter natlang's declared `fx` journal; declared `fx` calls do. The TypeScript host supports the `typescript-host` engine; the separate Python interpreter supports isolated QuickJS. Traces record the engine and host events but cannot reconstruct arbitrary native state or replay external effects.
+
+## Browser host
+
+`@natlang/typescript-host/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights stay in browser storage after the first download. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.
+
+```ts
+import { BrowserNatlangHost, BrowserLocalModel } from '@natlang/typescript-host/browser';
+
+const application = { count: 2 };
+const model = new BrowserLocalModel();
+await model.loadFromHuggingFace({ repo: 'Qwen/Qwen3-0.6B-GGUF', quant: 'Q4_K_M' },
+  { contextTokens: 8192, onProgress: ({ loaded, total }) => console.log(loaded, total) });
+const host = new BrowserNatlangHost({ host: application, model });
+try {
+  const result = await host.run({ source: { kind: 'program', program: {
+    $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return the current count plus one.' },
+  } }, options: { model: { max_turns: 12, turn_tokens: 512 } } });
+  console.log(result.outcome, result.value, result.trace);
+} finally {
+  host.close();
+  await model.close();
+}
+```
+
+`model.loadFromUrl(url)` and `model.loadFiles([file])` also accept a hosted GGUF or a user-selected `File`; pass `wasmUrl`, `compatWorkerUrl`, and `compatWasmUrl` to the constructor when assets have different paths. By default Wllama requests **all model layers on WebGPU** when available, then uses CPU where WebGPU is unavailable. `model.supportsWebGPU` reports browser capability. Set `gpuLayers: 0` to force CPU, or a positive layer count when a model exceeds VRAM. The optional `firefoxGpuCompatibility: true` enables Wllama's slower Firefox compatibility path; its default leaves that path disabled. You can still supply `modelTurn` per run to use another model backend. The host accepts `program`, checked `definitions`, and `files` sources. For `files`, pass `{ kind: 'files', root: 'tasks/main.nl', files: { 'tasks/main.nl': sourceText, ... } }`; the shared loader resolves companion files, `types.ts`, and `uses`. A [complete local browser example](examples/browser-local/index.html) can be served from `ts-host` after building, for example with `python3 -m http.server 8000` and then opening `/examples/browser-local/`.
+
+Inference quality depends on the chosen model, available memory, and its tool calling support. More capable models need more storage and RAM. Multiple WASM CPU threads require cross origin isolation (COOP and COEP headers); WebGPU itself does not require those headers. The browser host returns the complete trace in memory; applications can save it with `new Blob([JSON.stringify(result.trace)], { type: 'application/json' })`. Browser capabilities use application callbacks, including DOM or network access when supplied by the application. Eval uses `Function` and direct `eval`, so the page's CSP must permit dynamic code execution. The shared eval environment is trusted application code, not an isolation boundary. Browser code does not expose Node process bindings, a disk trace writer, or a Node VM CPU timeout.
+
+`DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` disposes its owned TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.

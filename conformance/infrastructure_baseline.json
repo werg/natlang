@@ -37,7 +37,7 @@
     "missing_null_empty": "tests/test_infrastructure_baseline.py::test_optional_missing_null_and_empty_are_three_distinct_observations",
     "completion_marks": "tests/test_marking_probe.py::test_reference_marks_real_branch_occurrences_and_constructed_returns",
     "failure_after_effect": "tests/test_failure_references.py",
-    "canonical_actions": "tests/test_canonical_traces.py"
+    "structured_actions": "tests/test_structured_session.py"
   },
   "known_drift": [
     {

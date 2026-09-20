@@ -38,12 +38,12 @@ function triage(tickets, rubric) -> Report
 | `TRAINING.md` | Use cases, skill taxonomy, datasets, the teacher's roles, training recipe, evaluation |
 | `SYNTHETIC_DATA.md` | Detailed designs and prior art for the fifteen synthesized datasets |
 | `examples/`, `codebases/` | Code bases on disk: `triage`; `nlprolog`, `highlighter`, `webserver`, `moderation`, `shopkeeper`, `legal_move`; the linkable crisp library `std/` |
-| `conformance/` | The conformance suite and the harness scripts |
+| `conformance/` | Program references and infrastructure baseline fixtures |
 | `natlang/` | The harness (Python): tree, types, code bases, tool surface, constrained decoding, generators |
 
 ```
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e '.[js,dev]'
-.venv/bin/python -m pytest -q          # harness, code bases, surface, grammar, generator
+.venv/bin/python -m pytest -q          # harness, code bases, tool surface, generator
 python3 tools/check_conformance.py    # static checks on the suite and the spec's type expressions
 ```
 

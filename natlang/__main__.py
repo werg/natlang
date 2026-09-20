@@ -6,10 +6,10 @@ import json
 import sys
 from pathlib import Path
 
-from .decoder import WRAPPERS, LlamaServerDecoder
+from .native import NativeCallDecoder
 from .host import export, load
-from .model_agent import SMALL_PROMPT, SYSTEM_PROMPT, ModelAgent
 from .runtime import Runtime
+from .tool_agent import ToolAgent
 
 
 def main(argv=None) -> int:
@@ -20,10 +20,6 @@ def main(argv=None) -> int:
     run.add_argument("--in", dest="inputs", action="append", default=[], metavar="NAME=PATH")
     run.add_argument("--server", default="http://127.0.0.1:8080", help="llama-server base URL")
     run.add_argument("--temperature", type=float, default=0.2)
-    run.add_argument("--prompt", choices=("small", "full"), default="small",
-                     help="small: for an untuned small model; full: for a capable teacher")
-    run.add_argument("--wrapper", choices=tuple(WRAPPERS), default="generic",
-                     help="generic: template-agnostic; lfm: native tool-call token; reasoning: think first")
     run.add_argument("--format", choices=("yaml", "json"), default="yaml")
     run.add_argument("--trace", type=Path, help="write the action trace as JSON lines")
     a = ap.parse_args(argv)
@@ -35,16 +31,8 @@ def main(argv=None) -> int:
     if isinstance(doc, dict) and "inputs" in doc:     # conformance files carry their own inputs
         doc_inputs = doc["inputs"]
     root = load(a.program, {**doc_inputs, **inputs})
-    decoder = LlamaServerDecoder(a.server)
-    prompt = SMALL_PROMPT if a.prompt == "small" else SYSTEM_PROMPT
-    if a.program.suffix in (".nl", ".ts"):            # a code base: the tool surface with native constrained decoding
-        from .native import NativeCallDecoder
-        from .tool_agent import ToolAgent
-        native = NativeCallDecoder(a.server)
-        rt = Runtime(lambda lam: ToolAgent(native, temperature=a.temperature))
-    else:
-        rt = Runtime(lambda lam: ModelAgent(decoder, wrapper=WRAPPERS[a.wrapper], temperature=a.temperature,
-                                               system_prompt=prompt))
+    decoder = NativeCallDecoder(a.server)
+    rt = Runtime(lambda lam: ToolAgent(decoder, temperature=a.temperature))
     out, value = rt.run_root(root)
     if a.trace:
         a.trace.write_text("".join(json.dumps(t, default=str) + "\n" for t in rt.trace))

@@ -20,7 +20,7 @@ from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
 from .trace import TraceRecorder, _view, changes
 from .streams import StreamBuffer
-from .actions import Action, parse_action
+from .actions import Action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
 from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
                     MapNode, Pending, is_pending)
@@ -644,31 +644,6 @@ class Session:
     def _summary(self) -> str:
         holes, _ = self._draft_problems()
         return f"problems: 0 blocking · {len(holes)} holes"
-
-    # -- acting
-    def act(self, text: str) -> Result:
-        if self.completed:
-            return Result("error", "the episode has ended")
-        if self.rt.options.max_actions is not None and self.actions >= self.rt.options.max_actions:
-            return Result("budget", "action budget exhausted")
-        self.actions += 1
-        self.lam.steps += 1
-        try:
-            action = parse_action(text)
-            result = getattr(self, "_do_" + action.tool)(action)
-        except Reject as e:
-            result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)), e.diags)
-        except Refuse as e:
-            result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)), e.diags)
-        except (js.JsError, ExecutionError) as e:
-            result = Result("error", f"error: {e}")
-        self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
-                              "kind": result.kind, "result": result.text})
-        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
-                         surface="text", action=text, outcome=result.kind,
-                         result_text=result.text, diagnostics=result.codes)
-        self.rt._observe_state("after-action")
-        return result
 
     # ------------------------------------------------------------------ tool surface (natlang/surface.py)
     def apply(self, name: str, args: dict) -> Result:

@@ -22,6 +22,9 @@ def _scope(value):
 
 class RetainedJSExecutor:
     name = "node-retained"
+    environment_mode = "retained"
+    authority = "shared-node-host"
+    native_state_replayable = False
 
     def __init__(self, timeout: float = 10):
         self.timeout = timeout

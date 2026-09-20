@@ -18,3 +18,5 @@ notes: >
 lint:
   must_not: [construct a child]
   max_actions: 3
+reference:
+  '': { answer: { customer: 'Dana Whitfield', order_id: '0077', amount: 42.5 } }

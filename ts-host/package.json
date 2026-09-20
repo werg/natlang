@@ -1,0 +1,44 @@
+{
+  "name": "@natlang/typescript-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/build-browser.mjs",
+    "build:browser": "node scripts/build-browser.mjs",
+    "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
+    "test:conformance": "node scripts/native-conformance.mjs"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "@wllama/wllama": "^3.6.1",
+    "@wllama/wllama-compat": "^3.6.1",
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "default": "./dist/browser/natlang.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples/browser-local",
+    "prelude.js",
+    "README.md"
+  ]
+}

@@ -1,0 +1,18 @@
+export { TypeScriptEnvironment, portable } from './environment.js';
+export type { EnvironmentMode, EvalRequest, EvalResult, HostEvent } from './environment.js';
+export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './contracts.js';
+export { DesktopBindings } from './desktop.js';
+export type { JobState } from './desktop.js';
+export { TypeEnv, TypeSyntaxError, LOOP_VERDICT, parseType, formatType, fitsType, resultType } from './native/types.js';
+export type { Type as NatlangType } from './native/types.js';
+export { NativeNatlangHost, NativeNatlangHost as NatlangHost } from './native/host.js';
+export type { NativeRunRequest } from './native/host.js';
+export type { NativeReviewOptions } from './native/agent.js';
+export { NativeRuntime, NativeSession } from './native/runtime.js';
+export { NativeToolAgent } from './native/agent.js';
+export { checkedDefinitions } from './native/codebase.js';
+export { loadFunctionFile } from './native/source.js';
+export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from './native/values.js';
+export { NativeSourceWorkspace } from './native/workspace.js';
+export { admitNativeTrace } from './native/scenario.js';
+export type { NativeScenarioContract } from './native/scenario.js';

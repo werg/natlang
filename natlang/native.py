@@ -18,7 +18,10 @@ import json
 from typing import Optional
 
 from .decoder import ChatTurn, LlamaServerDecoder
-from .grammar import lit
+
+def lit(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
+    return f'"{escaped}"'
 
 CALL_OPEN, CALL_CLOSE = "<|tool_call_start|>", "<|tool_call_end|>"
 
