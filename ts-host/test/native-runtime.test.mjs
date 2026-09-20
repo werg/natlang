@@ -277,3 +277,16 @@ test('native scenario admission checks exact calls and ordered effects without r
   assert.equal(admitNativeTrace(effects.trace, { outcome: 'done', value: 3,
     effects: [['out.emit', [{ x: 1 }]]] }).admitted, true);
 });
+
+test('native run_code can await a declared asynchronous capability', async () => {
+  const runtime = new NativeRuntime({ capabilities: { 'counter.add': async ([n]) => n + 4 },
+    agent: async session => {
+      const result = await session.applyAsync('run_code', { engine: 'typescript-host', code: 'await fx.counter.add(3)' });
+      assert.equal(result.kind, 'ok'); assert.equal(result.value, 7);
+      session.apply('write', { path: 'return', value: result.value });
+      session.finish();
+    } });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Compute seven.',
+    effects: ['counter.add'] } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 7);
+});

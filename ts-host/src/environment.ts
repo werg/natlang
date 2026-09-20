@@ -128,11 +128,24 @@ export class TypeScriptEnvironment {
       const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
       const scope = snapshot(request.scope) as Record<string, unknown>;
       context.self = scope; context.args = scope.args; context.locals = scope.let ?? {};
+      const previousFx = context.fx;
+      context.fx = new Proxy({}, { get: (_, capability) => new Proxy({}, {
+        get: (_, operation) => (...rawArgs: unknown[]) => {
+          if (!this.effect) throw new Error('NATLANG:effect-undeclared');
+          const args = JSON.parse(JSON.stringify(portable(rawArgs))) as unknown[];
+          const result = this.effect(String(capability), String(operation), args);
+          if (result && typeof result === 'object' && typeof (result as Promise<unknown>).then === 'function')
+            return Promise.resolve(result).then(portable);
+          return portable(result);
+        },
+      }) });
       const code = '"use strict";\n' + compile(request.code, request.body, request.body);
-      const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
-      const value = await pending;
-      const result = portable(value === undefined ? null : value);
-      return { result, events: this.capture(request, 'completed') };
+      try {
+        const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
+        const value = await pending;
+        const result = portable(value === undefined ? null : value);
+        return { result, events: this.capture(request, 'completed') };
+      } finally { context.fx = previousFx; }
     } catch (error) {
       throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
     }

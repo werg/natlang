@@ -99,12 +99,12 @@ export class NativeRuntime {
     } finally { this.acting = previous; }
   }
 
-  async evalForAsync(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>) {
+  async evalForAsync(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>, body = true) {
     this.checkInterruption();
     const previous = this.acting;
     this.acting = node;
     try {
-      const result = await this.environment.executeAsync({ code, body: true, path,
+      const result = await this.environment.executeAsync({ code, body, path,
         effectful: node.effects.length > 0, scope });
       this.checkInterruption();
       this.events.push(...result.events);
@@ -124,9 +124,19 @@ export class NativeRuntime {
     try {
       const value = name === 'out.emit' ? (this.emitted.push(args[0]), null) : this.capabilities[name]?.(args);
       if (value === undefined && name !== 'out.emit') throw new Error('effect-unavailable');
-      entry.status = 'ok'; this.events.push({ operation: 'effect.completed', capability: name, result: value });
-      this.trace.emit('effect', { phase: 'completed', capability: name, sequence: entry.seq, result: value });
-      return value;
+      const complete = (resolved: unknown) => {
+        entry.status = 'ok'; this.events.push({ operation: 'effect.completed', capability: name, result: resolved });
+        this.trace.emit('effect', { phase: 'completed', capability: name, sequence: entry.seq, result: resolved });
+        return resolved;
+      };
+      const fail = (error: unknown): never => {
+        entry.status = 'error'; this.events.push({ operation: 'effect.failed', capability: name });
+        this.trace.emit('effect', { phase: 'failed', capability: name, sequence: entry.seq });
+        throw error;
+      };
+      if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
+        return Promise.resolve(value).then(complete, fail);
+      return complete(value);
     } catch (error) {
       entry.status = 'error'; this.events.push({ operation: 'effect.failed', capability: name });
       this.trace.emit('effect', { phase: 'failed', capability: name, sequence: entry.seq });
@@ -620,6 +630,23 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
+    if (name === 'run_code' && /\bawait\b/.test(String(args.code ?? ''))) {
+      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+      if (this.actions >= 40 || this.toolCalls >= 128)
+        return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      this.actions++; this.toolCalls++; this.lam.steps++;
+      try {
+        if (args.engine !== 'typescript-host') throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'typescript-host' }]);
+        const expression = String(args.code ?? '');
+        const result = await this.runtime.evalForAsync(this.lam, `(async () => (${expression}))()`, 'eval',
+          { instructions: this.lam.body, args: jsView(this.lam.args as Value),
+            return: jsView(this.lam.return), let: jsView(this.lam.let as Value) }, false);
+        return this.record(name, args, { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value });
+      } catch (error) {
+        if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
+        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      }
+    }
     if (name === 'run') {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });

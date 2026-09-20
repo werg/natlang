@@ -121,3 +121,16 @@ test('a native workspace versions source and can invoke a checked child from cri
     assert.equal(child.source_revision, workspace.revision);
   } finally { host.close(); }
 });
+
+test('native declared effects await asynchronous application callbacks before completion', async () => {
+  const host = new NativeNatlangHost();
+  let settled = false;
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Num>', effects: ['counter.add'], engine: 'typescript-host',
+      code: 'return await fx.counter.add(3);',
+    } } }, capabilities: { 'counter.add': async ([n]) => { await Promise.resolve(); settled = true; return n + 2; } } });
+    assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 5);
+    assert.equal(settled, true);
+  } finally { host.close(); }
+});
