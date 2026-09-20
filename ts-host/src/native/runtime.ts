@@ -16,7 +16,17 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 const pending = (value: Value): value is Pending => isPending(value);
 const hash = (value: unknown) => hexDigest(JSON.stringify(value));
-const q = (value: unknown) => JSON.stringify(value);
+function oneLine(value: unknown): string {
+  if (Array.isArray(value)) return `${value.length} items`;
+  if (value && typeof value === 'object') return `{ ${Object.entries(value).slice(0, 4)
+    .map(([key, item]) => `${key}: ${item && typeof item === 'object' ? '…' : oneLine(item)}`).join(', ')} }`;
+  if (typeof value === 'string') {
+    const clean = value.replace(/\n+$/, '');
+    if (clean.includes('\n')) return `${JSON.stringify(clean.split('\n')[0]!.slice(0, 80))} (${value.split(/\r?\n/).length} lines)`;
+    return clean.length <= 80 ? JSON.stringify(clean) : `${JSON.stringify(clean.slice(0, 80))} … (${clean.length} chars)`;
+  }
+  return JSON.stringify(value);
+}
 function pythonJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(pythonJson).join(', ')}]`;
   if (value && typeof value === 'object') return `{${Object.entries(value)
@@ -266,7 +276,7 @@ export class NativeRuntime {
     node.status = 'done'; ref.set(value);
     this.trace.emit('node', { path: ref.path, transition: 'done', node_type: nodeType(node) });
     if (node.nodeKind === 'lambda') this.origins.set(ref.path, node);
-    return { path: ref.path, kind: 'done', detail: q(dump(value)), value };
+    return { path: ref.path, kind: 'done', detail: oneLine(dump(value)), value };
   }
   private quiesce(ref: Ref, node: Pending, detail: string): NativeOutcome {
     node.status = 'quiesced'; node.note = detail;
@@ -593,7 +603,7 @@ export class NativeSession {
       result.text = result.text.trimEnd() + '\n' + this.progress();
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null,
       surface: 'tools-v3', name, arguments: args,
-      outcome: result.kind, diagnostics: result.codes ?? [] });
+      outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     this.runtime.observeState('after-action');
     return result;
   }

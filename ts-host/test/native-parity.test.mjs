@@ -18,6 +18,18 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const python = process.env.NATLANG_PYTHON;
 const SCRIPT = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.values import load_program,dump\nroot=load_program(json.load(sys.stdin))\nout,value=Runtime(None).run_root(root)\nprint(json.dumps({'kind':out.kind,'value':dump(value)},sort_keys=True))`;
 
+function assertTraceParity(actual, expected) {
+  const stable = events => events.map(event => {
+    assert.ok(Number.isFinite(Date.parse(event.observed_at)));
+    assert.ok(Number.isInteger(event.elapsed_ms) && event.elapsed_ms >= 0);
+    const { observed_at, elapsed_ms, duration_ms, tool_schema_bytes, ...rest } = event;
+    if (duration_ms !== undefined) assert.ok(Number.isInteger(duration_ms) && duration_ms >= 0);
+    if (tool_schema_bytes !== undefined) assert.ok(Number.isInteger(tool_schema_bytes) && tool_schema_bytes > 0);
+    return rest;
+  });
+  assert.deepEqual(stable(actual), stable(expected));
+}
+
 test('native default system prompt stays aligned with Python tool agent', { skip: !python }, async () => {
   const reference = readFileSync(new URL('../../natlang/prompts/tools_small.md', import.meta.url), 'utf8');
   assert.equal(TOOLS_PROMPT, reference);
@@ -368,7 +380,7 @@ test('native trace preserves declared effect order before a failed eval', { skip
   assert.deepEqual(runtime.trace.events.filter(event => event.kind === 'eval').map(event => event.phase), expected.evals);
   assert.equal(runtime.trace.events.find(event => event.kind === 'eval' && event.phase === 'start').engine,
     'typescript-host');
-  assert.deepEqual(runtime.trace.events.slice(1).map(event => {
+  assertTraceParity(runtime.trace.events.slice(1).map(event => {
     if (event.kind !== 'eval' || event.phase !== 'start') return event;
     const { declared_engine, ...rest } = event;
     return { ...rest, engine: declared_engine };
@@ -389,7 +401,7 @@ test('native finite crisp reduction trace matches Python events apart from execu
     const { declared_engine, ...rest } = event;
     return { ...rest, engine: declared_engine };
   });
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native model-driven leaf trace matches Python actions and state observations', { skip: !python }, async () => {
@@ -406,7 +418,7 @@ test('native model-driven leaf trace matches Python actions and state observatio
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native nested model Map trace matches Python invocation and action order', { skip: !python }, async () => {
@@ -431,7 +443,7 @@ test('native nested model Map trace matches Python invocation and action order',
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native nested model Fold trace matches Python state and invocation order', { skip: !python }, async () => {
@@ -456,7 +468,7 @@ test('native nested model Fold trace matches Python state and invocation order',
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native nested model Iterate trace matches Python step and check order', { skip: !python }, async () => {
@@ -483,7 +495,7 @@ test('native nested model Iterate trace matches Python step and check order', { 
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native quiesced root resumes with the same Python trace transitions', { skip: !python }, async () => {
@@ -505,7 +517,7 @@ test('native quiesced root resumes with the same Python trace transitions', { sk
   await runtime.runRoot(node);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native live Fold stream matches Python waiting and resumed trace', { skip: !python }, async () => {
@@ -526,7 +538,7 @@ test('native live Fold stream matches Python waiting and resumed trace', { skip:
     const { declared_engine, ...rest } = event;
     return { ...rest, engine: declared_engine };
   });
-  assert.deepEqual(actual, expected);
+  assertTraceParity(actual, expected);
 });
 
 test('native approved review preserves Python proposal trace and audit decisions', { skip: !python }, async () => {
@@ -545,7 +557,7 @@ test('native approved review preserves Python proposal trace and audit decisions
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected.events);
+  assertTraceParity(actual, expected.events);
   assert.deepEqual(agent.proposals.map(item => ({ released: item.released, confidence: item.value_confidence })),
     expected.proposals);
   assert.deepEqual(agent.reviews.map(item => ({ decision: item.decision, trigger: item.trigger,
@@ -569,7 +581,7 @@ test('native withdrawn review retries from unchanged state like Python', { skip:
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);
-  assert.deepEqual(actual, expected.events);
+  assertTraceParity(actual, expected.events);
   assert.deepEqual(agent.proposals.map(item => ({ released: item.released, withdrawn: item.withdrawn ?? false })),
     expected.proposals);
   assert.deepEqual(agent.reviews.map(item => ({ decision: item.decision, trigger: item.trigger })), expected.reviews);

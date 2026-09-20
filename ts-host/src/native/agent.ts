@@ -19,6 +19,7 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 });
 
 const newLocal = { type: 'string', 'x-natlang': 'new-local',
+  pattern: '^let/[a-z_][a-z0-9_]*$',
   description: 'let/<name>: a new local, created by this call' };
 
 
@@ -417,12 +418,29 @@ export class NativeToolAgent {
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
       const limit = allowance();
-      const response = await this.driver({ messages, tools: this.tools(session),
-        temperature: this.options.temperature ?? 0.2,
-        seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-          session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-          deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turns),
-        max_tokens: limit });
+      const availableTools = this.tools(session);
+      const callId = session.runtime.currentCallId ?? null;
+      const started = performance.now();
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
+        tool_schema_bytes: new TextEncoder().encode(JSON.stringify(availableTools)).length,
+        messages: messages.length });
+      let response: ModelTurn;
+      try {
+        response = await this.driver({ messages, tools: availableTools,
+          temperature: this.options.temperature ?? 0.2,
+          seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
+            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turns),
+          max_tokens: limit });
+      } catch (error) {
+        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
+          duration_ms: Math.round(performance.now() - started),
+          error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
+        throw error;
+      }
+      session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
+        duration_ms: Math.round(performance.now() - started),
+        prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
       turns++;
       session.runtime.checkInterruption();
       const calls = response.calls ?? [];

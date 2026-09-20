@@ -50,9 +50,12 @@ export function changes(before: unknown, after: unknown, path: (string | number)
 
 export class NativeTraceRecorder {
   readonly events: TraceEvent[] = [];
+  private readonly started = performance.now();
   constructor(manifest: Record<string, unknown>) { this.emit('manifest', manifest); }
   emit(kind: string, data: Record<string, unknown> = {}): TraceEvent {
-    const event = JSON.parse(JSON.stringify({ version: TRACE_VERSION, seq: this.events.length, kind, ...data })) as TraceEvent;
+    const event = JSON.parse(JSON.stringify({ version: TRACE_VERSION, seq: this.events.length, kind,
+      observed_at: new Date().toISOString(), elapsed_ms: Math.round(performance.now() - this.started),
+      ...data })) as TraceEvent;
     this.events.push(event);
     return event;
   }
