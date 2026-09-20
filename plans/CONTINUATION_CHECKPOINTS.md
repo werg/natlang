@@ -202,10 +202,22 @@ is complete. The pinned review is in
 `data/say-original-bank-review-20260921.json`; a reversible bank prune is
 queued after the active page retry so it cannot race the reference writer.
 
+The page retries finished and the 80 reviewed bad sale references were pruned
+with an exact backup at `data/leaf_references-pre-s74-prune-20260921.jsonl`.
+The new `say` pass is collecting the 36 originally missing keys without auto
+admission. The pruned keys were embedded as concrete oracle cases in the old
+frozen IR, so a template-only collector would silently miss them.
+`teacher_leaves.py --reopen-removed-from` now finds those keys from the bank
+backup and revisits their original frozen arguments. Seed 73 covers 79 of the
+80 keys, and seed 74 covers the last; collection is queued after the current
+36-key pass and still requires manual semantic review. A separate watcher
+will replay and render the nine remaining whole-program attempts after their
+collector finishes. Rebuild the two synthetic seeds only after the reviewed
+new references are admitted.
+
 **Do not train from the existing seed-73 or seed-74 synthetic SFT snapshots**
 until they are rebuilt. Their actual source IRs embed these questionable sale
-references in 125 and 99 programs, respectively. The retry queue will rerun
-remaining page cases, prune the reviewed references with an exact backup, and
-collect missing dialogue cases with explicit completed-sale instructions. Once
+references in 125 and 99 programs, respectively. The page retry and reference
+prune have finished. Dialogue collection and review are still running. Once
 the reference bank settles, rebuild both seeds from their pinned generator
 manifests, verify, and render fresh continuation SFT bundles.
