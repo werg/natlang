@@ -275,6 +275,16 @@ two-export preview: both mappings were correct, one same-email pair became
 no review items. Each pilot has its own SQLite file and trace directory; no
 import was applied.
 
+The one-case test-explorer pilot first wrote a bare ID list instead of its
+`Selection` record. After the shape was clarified, it selected the
+`missing-parent` case and ran the nested dependency planner; the independent
+graph oracle found no violation. Its assessment then used invented record
+fields and failed typing. With `Assessment`'s three field names stated
+explicitly, replaying the saved observation completed with empty `findings`,
+`unknowns`, and `followups` in
+`runs/test-explorer-assess-replay.json`. This checks the current interface on
+one case; the full explorer has not yet completed a second end-to-end run.
+
 The terminal `done` tool has been removed from the model-facing surface and
 reference policy. `done=N` on `write` and `call` still closes a numbered line.
 The harness now checks open marked lines when the assistant ends with a normal
