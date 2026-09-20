@@ -13,8 +13,23 @@ are quarantined under `runs/`; they never append training references.
   "call_function"})` for this teacher/server combination. Text values are plain
   strings; other values are JSON text. Runtime validation still decides
   whether a proposal fits its destination. Invalid proposals remain possible.
-- Keep compact state, caller validation feedback, and no self-review or local
-  repair loop. Expanded state and review prompts remain student experiments.
+- This adapter does not constrain `write.value` to the destination's nested
+  type while generating. `ToolSurface` publishes destination-specific typed
+  alternatives for native grammar decoders, but Bonsai's chat endpoint uses
+  the JSON-text transport above because its parser mishandled nested payloads
+  in earlier probes. Test any typed chat adaptation against exact record/list
+  cases before using it for collection.
+- A 20 September typed-chat probe (`scripts/probe_typed_chat.py`) found that
+  this server preserved a nested `{id, label, tags}` record under one exact
+  tool schema and under two separately named exact tools. A single tool with
+  `oneOf` alternatives instead returned empty argument objects. These probes
+  are narrow, but they support a teacher adapter that exposes typed alternatives
+  as separate tool names and maps them back to the stable natlang action. Test
+  realistic call/write menus and trajectory quality before switching collection.
+- Keep compact state and no self-review. The established leaf collector uses
+  caller validation feedback. The application evaluation harness uses local
+  validation feedback so rejected writes remain visible to the model for
+  repair; rejected and corrected turns are retained in raw audits.
 - A normal assistant reply signals successful completion. The harness checks
   return validity and closed numbered lines at that boundary. `report_error`
   and `report_blocker` remain failure signals.
@@ -202,9 +217,9 @@ final reference bank has 437 distinct keys, with no duplicates, and the
 original frozen IR has zero missing generative-leaf keys. `teacher_leaves.py`
 now records `say` results for review by default; `--admit-say` is an explicit
 override. Normal tool and legacy inference have no default episode token,
-turn-count, or wall-clock cutoff. The teacher collector applies its own
-per-leaf wall-clock limit (300 seconds by default), while its response length
-is left to the model and server unless `--turn-tokens` is supplied.
+turn-count, or wall-clock cutoff. The teacher collector likewise leaves each
+leaf's wall-clock time and response length open unless `--max-seconds` or
+`--turn-tokens` is supplied.
 
 The complete reference bank has SHA-256 prefix `702a03e8`. Applying it to the
 frozen seed-73 IR with `--require-complete` produced
@@ -268,6 +283,19 @@ two turns, and exported both turns with captured reasoning to
 are `runs/teacher-program-bridge-pilot.ir.jsonl` and its adjacent trace file.
 This verified the whole-program bridge on one frozen program; each incoming
 batch still needs its own admission and replay check.
+
+The remaining 15 programs in that frozen set also completed and passed
+admission, including an eight-item map/count program. Their raw IR is
+`runs/teacher-program-simple-s73-remaining.ir.jsonl`. Replaying both files
+produced 53 turns in `data/teacher-program-simple-s73.turns.jsonl`; the LFM
+template export has 53 SFT pairs, all with captured reasoning. None exceeds
+3,072 student tokens. `scripts/combine_sft.py` checks source template
+identities and duplicate IDs while writing a hashed bundle. The current
+combined teacher SFT file is `data/teacher-reviewed-bundle.sft.jsonl`: 921
+distinct pairs from the reviewed leaf set and these 16 whole programs, 897
+with reasoning. Its manifest pins the two source SFT hashes. Add the incoming
+program batch's admitted SFT pairs to a new combined file with
+`combine_sft.py` before the next fresh training run.
 
 The data-migration Bonsai pilot uses
 `codebases/data_migration/scenarios/two_exports.json` with
