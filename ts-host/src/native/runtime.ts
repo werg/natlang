@@ -612,14 +612,10 @@ export class NativeSession {
       else if (simple) {
         const [, tool, path] = simple;
         if (tool === 'read') result = this.apply('read', { path });
+        else if (tool === 'edit') result = this.legacyEdit(path!, joined);
         else if (tool === 'unset') result = this.apply('delete', { path });
         else if (tool === 'reopen') result = this.apply('retry', { path, feedback: joined });
-        else if (path === 'instructions[1..1]') {
-          const missing = this.lam.type.kind === 'lambda' ? problems(this.lam.return, this.lam.type.returns, this.env, 'return').holes : [];
-          result = missing.length ? { kind: 'refused', text: `commit has holes: ${missing.map(item => item.path).join(', ')}`, codes: ['commit-holes'] } :
-            this.finish() ? { kind: 'completed', text: 'completed', value: this.lam.return } :
-              { kind: 'refused', text: 'commit is incomplete', codes: ['commit-holes'] };
-        } else throw new Reject([{ path: path!, code: 'bad-action' }]);
+        else throw new Reject([{ path: path!, code: 'bad-action' }]);
       } else throw new Reject([{ path: command, code: 'bad-action' }]);
     } catch (error) {
       result = error instanceof Reject ? { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) } :
@@ -629,6 +625,43 @@ export class NativeSession {
       surface: 'text', action: source, outcome: result.kind, diagnostics: result.codes ?? [] });
     this.runtime.observeState('after-action');
     return result;
+  }
+  private legacyEdit(path: string, body: string): NativeResult {
+    try {
+      const match = /^(.*?)\[(\d+)\.\.(\d+)\]$/.exec(path);
+      const ref = this.resolve(match?.[1] ?? path);
+      if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
+      const old = ref.get();
+      if (typeof old !== 'string') throw new Reject([{ path: ref.path, code: 'type-mismatch',
+        expected: 'a Text node', got: ref.type ? formatType(ref.type) : '' }]);
+      const lines = old.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+      const replacement = body && !body.endsWith('\n') ? body + '\n' : body;
+      let next = replacement;
+      if (match) {
+        const start = Number(match[2]), end = Number(match[3]);
+        if (start < 1 || end < start || end > lines.length)
+          throw new Reject([{ path, code: 'bad-range', expected: `lines 1..${lines.length}` }]);
+        next = lines.slice(0, start - 1).join('') + replacement + lines.slice(end).join('');
+      }
+      if (ref.path === this.lam.kind && !next.trim()) {
+        if (this.lam.type.kind !== 'lambda') throw new Reject([{ path, code: 'type-mismatch' }]);
+        const issues = problems(this.lam.return, this.lam.type.returns, this.env, 'return');
+        if (issues.holes.length || issues.pending.length) {
+          const diagnostics = [...issues.holes.map(item => ({ path: item.path, code: 'commit-holes',
+            expected: item.expected })), ...issues.pending.map(item => ({ path: item, code: 'commit-pending' }))];
+          const text = `refused\n${diagnostics.map(item => `${item.path}: ${item.code}${'expected' in item && item.expected ? `, expected ${item.expected}` : ''}`).join('\n')}`;
+          return { kind: 'refused', text, codes: [...new Set(diagnostics.map(item => item.code))] };
+        }
+        ref.set(''); this.completed = true;
+        return { kind: 'completed', text: 'completed', value: this.lam.return };
+      }
+      ref.set(next);
+      return { kind: 'ok', text: `ok   ${this.summary()}` };
+    } catch (error) {
+      if (error instanceof Reject) return { kind: 'rejected', text: `rejected\n${error.message}`,
+        codes: error.diagnostics.map(item => item.code) };
+      throw error;
+    }
   }
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();

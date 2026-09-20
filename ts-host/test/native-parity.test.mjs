@@ -345,3 +345,24 @@ test('native ranged reads match Python line and item numbering', { skip: !python
     const result = session.apply(name, args); return { kind: result.kind, text: result.text };
   }), expected);
 });
+
+test('native legacy edit ranges and commit behavior agree with Python actions', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'First.\nSecond.' } };
+  const actions = [
+    'edit instructions[1..1]\nRevised.',
+    'edit instructions\n',
+    'set return : Num\n7',
+    'edit instructions\n',
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,actions=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([{'kind':r.kind,'codes':r.codes} for action in actions for r in [s.act(action)]]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, actions]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const actual = [];
+  for (const action of actions) {
+    const result = await session.act(action);
+    actual.push({ kind: result.kind, codes: result.codes ?? [] });
+  }
+  assert.deepEqual(actual, expected);
+});
