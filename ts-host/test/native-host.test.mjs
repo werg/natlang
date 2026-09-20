@@ -53,6 +53,17 @@ test('native cancellation prevents model actions after an interrupted turn', asy
   host.close();
 });
 
+test('native timeout returns while a model callback is still pending', async () => {
+  const host = new NativeNatlangHost();
+  const source = { kind: 'program', program: { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return 1.' } } };
+  try {
+    await assert.rejects(host.run({ source, modelTurn: () => new Promise(() => {}), timeoutMs: 15 }), /timed out/);
+    const next = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Num>', engine: 'typescript-host', code: 'return 2;' } } } });
+    assert.equal(next.value, 2);
+  } finally { host.close(); }
+});
+
 test('native host loads JSON program files and accepts a write with inferred slot type', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-native-file-'));
   const path = join(folder, 'program.json');

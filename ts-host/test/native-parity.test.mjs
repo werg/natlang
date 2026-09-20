@@ -49,3 +49,24 @@ test('native write actions match Python typed outcomes', { skip: !python }, () =
   assert.deepEqual(actual, expected.kinds);
   assert.deepEqual(dump(lam.return), expected.value);
 });
+
+test('native action diagnostics match Python for rejected copy, edit, and reduce', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ item: Text }, { answer: Text, count: Num }>',
+    instructions: 'Complete the record.', args: { item: 'abc' },
+    return: { answer: { $lambda: { type: 'Lambda<{ missing: Text }, Text>', instructions: 'Use missing.' } } } } };
+  const calls = [['copy', { from: 'args/item', to: 'return/count' }],
+    ['edit', { path: 'args/item', old: 'a', new: 'z' }],
+    ['run', { paths: 'return/answer' }],
+    ['write', { path: 'return/answer/args/missing', type: 'Text', value: 'ready' }]];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\nroot=load_program(doc)\ns=Session(Runtime(None),root,TypeEnv())\nprint(json.dumps([{'kind':r.kind,'codes':r.codes} for n,a in calls for r in [s.apply(n,a)]]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const actual = [];
+  for (const [name, args] of calls) {
+    const result = await session.applyAsync(name, args);
+    actual.push({ kind: result.kind, codes: result.codes ?? [] });
+  }
+  assert.deepEqual(actual, expected);
+});

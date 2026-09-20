@@ -27,8 +27,8 @@ export class NativeNatlangHost {
     if (this.closed) throw new Error('natlang host is disposed');
     if (this.running) throw new Error('concurrent runs cannot share a native eval environment');
     if (request.signal?.aborted) throw new Error('natlang run aborted');
-    if (request.mapWorkers !== undefined && request.mapWorkers !== 1)
-      throw new RangeError('native Map workers must be 1 until concurrent Map parity is implemented');
+    if (request.mapWorkers !== undefined && (!Number.isInteger(request.mapWorkers) || request.mapWorkers < 1))
+      throw new RangeError('mapWorkers must be positive');
     if (request.typescript === false) throw new Error('native host requires the TypeScript eval engine');
     this.running = true;
     let runtime: NativeRuntime | undefined;
@@ -77,7 +77,24 @@ export class NativeNatlangHost {
         runId: request.options?.run_id ?? randomUUID(), signal: request.signal, timeoutMs: request.timeoutMs,
         seedPolicy: request.options?.seed?.mode ? {
           mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
-      const outcome = await runtime.runRoot(root);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let abortListener: (() => void) | undefined;
+      const interruption = new Promise<never>((_, reject) => {
+        if (request.timeoutMs !== undefined)
+          timer = setTimeout(() => reject(new Error('natlang run timed out; external effects may have occurred')),
+            request.timeoutMs);
+        if (request.signal) {
+          abortListener = () => reject(new Error('natlang run aborted; external effects may have occurred'));
+          request.signal.addEventListener('abort', abortListener, { once: true });
+          if (request.signal.aborted) abortListener();
+        }
+      });
+      let outcome;
+      try { outcome = await Promise.race([runtime.runRoot(root), interruption]); }
+      finally {
+        if (timer) clearTimeout(timer);
+        if (abortListener) request.signal?.removeEventListener('abort', abortListener);
+      }
       if (request.tracePath) writeFileSync(request.tracePath,
         runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
       return { outcome: { kind: outcome.outcome.kind, path: outcome.outcome.path, detail: outcome.outcome.detail },
