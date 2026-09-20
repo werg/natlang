@@ -1,6 +1,8 @@
 # P05 — Natlang type inference and checking
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: first finite application implemented in `codebases/type_studio`,
+`applications/type_studio.py`, and `scripts/run_type_studio.py`. Live teacher
+quality and broader type diagnostic calibration remain unmeasured.
 
 ## Natlang prerequisites
 
@@ -36,3 +38,18 @@ Include ambiguous prose, unions, missing versus empty inputs, recursive data, ra
 ## Trace and teacher
 
 Trace which definitions/spans were read, which hypothetical calls were proposed and how exact checks answered. Captured runtime examples supplement rather than define the allowed type. Teacher training targets include alternative signatures and uncertainty; a type signature that happens to fit one trace is not automatically admitted as the correct general answer. This application can run over an in-memory source graph with no filesystem, stream service or host-type extension.
+
+## Implemented boundary and next gate
+
+The application masks a target's declared signature while retaining its body,
+parameter names, named types, nearby signatures and frozen evidence. Natlang
+proposes a candidate and possible calls; the host only parses, resolves named
+types, applies the existing fit relation and checks witness IDs. This keeps one
+type algebra in both the programme and checker. `consistent` means compatible
+with supplied obligations, not complete inference. Evidence provenance belongs
+to the caller: a forged evidence file can make an exact conditional check about
+false premises. An IDE integration must build witnesses from trusted traces.
+
+The fixture corpus groups variants by misconception, with train/eval separation.
+The next gate is live teacher runs over held-out existing codebases, followed by
+precision and abstention review before training samples are accepted.

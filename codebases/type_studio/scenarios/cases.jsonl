@@ -1,0 +1,6 @@
+{"id":"text-input","group":"text-obligation","split":"train","candidate":{"args":{"raw":"Text"},"returns":"Text","effects":[],"reason":"Both observations are text.","alternatives":[]},"expected":"compatible"}
+{"id":"number-input","group":"text-obligation","split":"train","candidate":{"args":{"raw":"Num"},"returns":"Text","effects":[],"reason":"Incorrectly narrows the caller.","alternatives":[]},"expected":"invalid"}
+{"id":"number-return","group":"return-obligation","split":"train","candidate":{"args":{"raw":"Text"},"returns":"Num","effects":[],"reason":"Incorrectly changes the return.","alternatives":[]},"expected":"invalid"}
+{"id":"unknown-name","group":"name-resolution","split":"eval","candidate":{"args":{"raw":"CustomerId"},"returns":"Text","effects":[],"reason":"Name is not declared.","alternatives":[]},"expected":"invalid"}
+{"id":"ambiguous-union","group":"ambiguous-prose","split":"eval","candidate":{"args":{"raw":"Text | Num"},"returns":"Text","effects":[],"reason":"The available caller permits text; body may permit numbers.","alternatives":["Text alone may be sufficient."]},"expected":"compatible-uncertain"}
+{"id":"missing-parameter","group":"parameter-shape","split":"eval","candidate":{"args":{},"returns":"Text","effects":[],"reason":"Omitted raw.","alternatives":[]},"expected":"invalid"}
