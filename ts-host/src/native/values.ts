@@ -10,7 +10,7 @@ type Base = { type: Type; types: Record<string, Type>; typesSrc: Record<string, 
   status: Status; note: string; attempts: number; steps: number };
 export type LambdaNode = Base & { nodeKind: 'lambda'; kind: 'instructions' | 'code'; engine: string;
   body: string; args: Record<string, Value>; return: Value; effects: string[];
-  journal: unknown[]; originalBody?: string; let: Record<string, Value>;
+  journal: unknown[]; continuationNote: string; originalBody?: string; let: Record<string, Value>;
   letTypes: Record<string, Type>; codebase: Record<string, unknown>; functionName: string;
   marks: Record<number, string>; fnCopies: Record<string, unknown> };
 export type MapNode = Base & { nodeKind: 'map'; over: Value; fn: Value; slots?: Value[]; itemName: string };
@@ -195,7 +195,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   const expected = key.slice(1);
   if (type.kind !== expected) return reject(path, 'type-mismatch', `a ${expected} type`, formatType(type));
   const lambdaKeys = new Set(['type', 'types', 'effects', 'engine', 'instructions', 'code', 'args', 'return',
-    'status', 'note', 'effects_journal', 'codebase', 'let', 'let_types', 'function', 'marks']);
+    'status', 'note', 'effects_journal', 'continuation_note', 'codebase', 'let', 'let_types', 'function', 'marks']);
   const nodeKeys = new Set(['type', 'types', 'status', 'note', 'over', 'fn', 'init', 'step', 'check', 'max',
     'acc', 'at', 'state', 'iteration', 'item_name', 'state_name', 'check_name']);
   const extra = Object.keys(body).filter(name => !(key === '$lambda' ? lambdaKeys : nodeKeys).has(name) &&
@@ -217,6 +217,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
       args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
       journal: structuredClone((body.effects_journal ?? []) as unknown[]),
+      continuationNote: String(body.continuation_note ?? ''),
       let: {}, letTypes: {}, codebase: inlineCodebase(body.codebase, typesSrc),
       functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {} };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
@@ -321,6 +322,7 @@ export function dump(value: Value, full = false): unknown {
     if (value.return !== MISSING) body.return = dump(value.return, full);
     if (value.effects.length) body.effects = value.effects;
     if (value.journal.length) body.effects_journal = value.journal;
+    if (value.continuationNote) body.continuation_note = value.continuationNote;
     if (Object.keys(value.let).length) body.let = dump(value.let, full);
     if (full && Object.keys(value.letTypes).length)
       body.let_types = Object.fromEntries(Object.entries(value.letTypes).map(([k, t]) => [k, formatType(t)]));

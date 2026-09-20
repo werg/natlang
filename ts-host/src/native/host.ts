@@ -73,6 +73,7 @@ export class NativeNatlangHost {
       const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
+        segmentTurns: request.options?.model?.segment_turns,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
         review: request.review }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,

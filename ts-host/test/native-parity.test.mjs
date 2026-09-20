@@ -74,6 +74,87 @@ print(json.dumps([m.get('tool_call_id') for m in driver.history if m['role']=='t
     JSON.parse(py.stdout));
 });
 
+test('long conversations checkpoint from durable lambda state in both runtimes', { skip: !python }, async () => {
+  const program = { $lambda: { type: 'Lambda<{}, { a: Num, b: Num }>',
+    instructions: 'Write a as 1 and b as 2.' } };
+  const script = `import json,sys
+from natlang.decoder import ChatTurn
+from natlang.runtime import Runtime
+from natlang.tool_agent import ToolAgent
+from natlang.values import load_program,dump
+program=json.load(sys.stdin)
+class Driver:
+ def __init__(self): self.requests=[]
+ def chat(self,messages,tools,*,temperature,seed,max_tokens):
+  self.requests.append((list(messages),tools))
+  n=len(self.requests)
+  if n==1: return ChatTurn(calls=[('write',{'path':'return/a','type':'Num','value':1})],completion_tokens=1)
+  if n==2: return ChatTurn(text='Need to fill b.',completion_tokens=1)
+  if n==3: return ChatTurn(calls=[('write',{'path':'return/b','type':'Num','value':2})],completion_tokens=1)
+  return ChatTurn(completion_tokens=1)
+driver=Driver()
+out,value=Runtime(lambda _:ToolAgent(driver,segment_turns=1)).run_root(load_program(program))
+fresh=driver.requests[2][0]
+print(json.dumps({'kind':out.kind,'value':dump(value),'checkpoint_tools':len(driver.requests[1][1]),
+ 'fresh_messages':len(fresh),'has_note':any('Earlier working note' in str(m.get('content')) for m in fresh)}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(program), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  let turns = 0, checkpointTools = -1, freshMessages = -1, hasNote = false;
+  const agent = new NativeToolAgent(request => {
+    turns++;
+    if (turns === 1) return { calls: [['write', { path: 'return/a', type: 'Num', value: 1 }]],
+      completion_tokens: 1 };
+    if (turns === 2) { checkpointTools = request.tools.length; return { text: 'Need to fill b.',
+      completion_tokens: 1 }; }
+    if (turns === 3) {
+      freshMessages = request.messages.length;
+      hasNote = request.messages.some(message => String(message.content).includes('Earlier working note'));
+      return { calls: [['write', { path: 'return/b', type: 'Num', value: 2 }]],
+        completion_tokens: 1 };
+    }
+    return { calls: [], completion_tokens: 1 };
+  }, { segmentTurns: 1 });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const result = await runtime.runRoot(program);
+  assert.deepEqual({ kind: result.outcome.kind, value: result.value, checkpoint_tools: checkpointTools,
+    fresh_messages: freshMessages, has_note: hasNote }, JSON.parse(py.stdout));
+  assert.ok(runtime.trace.events.some(event => event.kind === 'checkpoint'));
+});
+
+test('continuation notes and effect journals round-trip in both runtimes', { skip: !python }, () => {
+  const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Continue.',
+    continuation_note: 'Need the final count.', effects_journal: [
+      { seq: 1, capability: 'send', ok: true }] } };
+  const script = `import json,sys
+from natlang.values import load_program,dump
+print(json.dumps(dump(load_program(json.load(sys.stdin)))))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(program), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  assert.deepEqual(dump(buildPending(program)), JSON.parse(py.stdout));
+});
+
+test('continuation state is visible through the same tools and workspace text', { skip: !python }, () => {
+  const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Continue.',
+    continuation_note: 'Need the final count.', effects_journal: [
+      { seq: 1, capability: 'send', ok: true }] } };
+  const script = `import json,sys
+from natlang.runtime import Runtime,Session
+from natlang.types import TypeEnv
+from natlang.values import load_program
+from natlang.surface import ToolSurface
+session=Session(Runtime(None,executors={'typescript-host':object()},engine_selection=True),
+                load_program(json.load(sys.stdin)),TypeEnv())
+surface=ToolSurface()
+print(json.dumps({'state':surface.render_state(session),'tools':surface.tools(session)}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(program), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const session = new NativeSession(new NativeRuntime(), buildPending(program), new TypeEnv());
+  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const expected = JSON.parse(py.stdout);
+  assert.equal(agent.opening(session), expected.state);
+  assert.deepEqual(agent.tools(session), expected.tools);
+});
+
 test('default model turn has no implicit token limit in either runtime', { skip: !python }, async () => {
   const script = `import json\nfrom natlang.decoder import ChatTurn\nfrom natlang.runtime import Runtime\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.values import load_program\nclass Driver:\n def __init__(self): self.limits=[]\n def chat(self, messages, tools, *, temperature, seed, max_tokens):\n  self.limits.append(max_tokens)\n  return ChatTurn(calls=[], text='done', completion_tokens=1)\ndriver=Driver()\nagent=ToolAgent(driver)\nout,_=Runtime(lambda _: agent).run_root(load_program({'$lambda': {'type':'Lambda<{}, Num>', 'instructions':'Return one.'}}))\nprint(json.dumps({'limits':driver.limits,'kind':out.kind}))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, encoding: 'utf8' });

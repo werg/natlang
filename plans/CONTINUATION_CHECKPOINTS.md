@@ -33,3 +33,9 @@ messages. A one-turn boundary initially caused unnecessary repeated actions
 after a complete return; completion detection and transient-result handling
 were added before the successful rerun. A full teacher corpus comparison and
 training throughput measurement remain to be done before restarting collection.
+
+The TypeScript host and browser host now use the same six-turn rollover, persist
+`continuation_note` in lambda values, expose `args@effects`, and include
+the note and recent effects in the fresh workspace opening. Paired fixtures
+exercise checkpointing, value round trips, and tool-surface parity across both
+runtimes.

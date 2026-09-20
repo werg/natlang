@@ -21,6 +21,10 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 const newLocal = { type: 'string', 'x-natlang': 'new-local',
   pattern: '^let/[a-z_][a-z0-9_]*$',
   description: 'let/<name>: a new local, created by this call' };
+const CHECKPOINT_REQUEST = 'Before continuing this same task in a fresh conversation, leave yourself a concise working note. ' +
+  'State only unresolved decisions or facts that are not obvious from the program and workspace. ' +
+  'The workspace, line marks, and effects will be shown again; do not restate them. ' +
+  'Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters.';
 
 
 function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
@@ -130,7 +134,12 @@ export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
-      validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions } = {}) {}
+      validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
+      segmentTurns?: number | null } = {}) {
+    if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
+        (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
+      throw new RangeError('segmentTurns must be positive or null');
+  }
 
   private reviewTools(): unknown[] {
     const order = this.options.review?.order === 'decision_first' ? ['decision', 'reason'] : ['reason', 'decision'];
@@ -221,6 +230,7 @@ export class NativeToolAgent {
       ...Object.keys(lam.codebase).map(name => ({ path: newLocal, type: { const: `Function<${name}>` } }))];
     const readAlternatives: Record<string, unknown>[] = lam.type.kind === 'lambda' && lam.type.params.fields.length ?
       [{ path: { const: 'args' } }] : [];
+    if (lam.journal.length) readAlternatives.push({ path: { const: 'args@effects' } });
     for (const slot of present.slice(0, 48)) {
       readAlternatives.push({ path: { const: slot.path } });
       const length = typeof slot.value === 'string' ? slot.value.split('\n').length :
@@ -249,8 +259,10 @@ export class NativeToolAgent {
     };
     if (unmarked.length) writeProperties.done = done;
     const tools = [
-      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function.', {
-        path: { type: 'string', description: 'what to read', enum: [...new Set([...readable, ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
+      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function; `args@effects` shows the full effect journal.', {
+        path: { type: 'string', description: 'what to read', enum: [...new Set([
+          ...(lam.journal.length ? ['args@effects'] : []), ...readable,
+          ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
         start: { type: 'integer' }, end: { type: 'integer' } }, ['path']),
       tool('write', 'Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name creates the local; `type` says what it holds). Supply `value` or `source`; a type alone is not a value. The value must be complete; to reuse a value that already exists, give `source` (its path) instead of `value`. Source copying preserves the value and type; it does not wrap or convert. Use the destination requested by the program; do not append a field name to make incompatible types fit. To change how a function works, copy it first: type `Function<name>` with path `let/<copy>`, then `edit` `let/<copy>/instructions`, then `call` it as `let/<copy>`.', writeProperties, ['path', 'type']),
       tool('edit', 'Replace text: `old` must occur exactly once in the text at `path`. Use it to delete finished steps from `instructions` (new = ""), to substitute a result into them, or to adapt a copied function.', {
@@ -349,6 +361,14 @@ export class NativeToolAgent {
     const lam = session.lam, type = lam.type;
     if (type.kind !== 'lambda') return 'Workspace:';
     const lines = ['Workspace:'];
+    if (lam.continuationNote)
+      lines.push('  Earlier working note (check against the workspace): ' + lam.continuationNote);
+    if (lam.journal.length) {
+      const omitted = Math.max(0, lam.journal.length - 4);
+      lines.push(`  Effects already attempted: ${lam.journal.length}` +
+        (omitted ? ` (last 4 shown; read args@effects for all ${lam.journal.length})` : ''));
+      for (const entry of lam.journal.slice(-4)) lines.push('    ' + pythonJson(entry));
+    }
     for (const field of type.params.fields) lines.push(`  args/${field.name} (${formatType(field.type)}, read-only): ` +
       (Object.hasOwn(lam.args, field.name) ? previewValue(lam.args[field.name]!) : 'not supplied'));
     for (const [name, localType] of Object.entries(lam.letTypes)) {
@@ -378,6 +398,7 @@ export class NativeToolAgent {
   }
 
   async run(session: NativeSession): Promise<string | void> {
+    const openingMessages = (): Record<string, unknown>[] => {
     const lam = session.lam;
     const output = lam.type.kind === 'lambda' ? formatType(lam.type.returns) : 'unknown';
     const signatures = Object.entries(lam.codebase).map(([name, raw]) => {
@@ -401,12 +422,18 @@ export class NativeToolAgent {
         (functions.length ? `\n\nFunctions you can call:\n${functions.join('\n')}` : '') },
     ];
     const opening = this.opening(session);
-    if (lam.type.kind === 'lambda' && lam.type.params.fields.length) messages.push({ role: 'assistant', content: '', tool_calls: [{ id: 'call_0', type: 'function',
+    if (lam.type.kind === 'lambda' && (lam.type.params.fields.length || lam.continuationNote ||
+        lam.journal.length || Object.keys(lam.let).length || lam.return !== MISSING))
+      messages.push({ role: 'assistant', content: '', tool_calls: [{ id: 'call_0', type: 'function',
       function: { name: 'read', arguments: '{"path":"args"}' } }] },
       { role: 'tool', tool_call_id: 'call_0', content: opening });
+    return messages;
+    };
+    const messages = openingMessages();
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
-    let tokens = 0, nudges = 0, turns = 0, withdrawals = 0;
+    let tokens = 0, nudges = 0, turns = 0, withdrawals = 0, segmentTurns = 0;
+    let checkpointReady = true;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -417,6 +444,39 @@ export class NativeToolAgent {
     };
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
+      const rollover = this.options.segmentTurns === undefined ? 6 : this.options.segmentTurns;
+      if (rollover !== null && segmentTurns >= rollover && checkpointReady &&
+          (this.missing(session) || this.openMarks(session).length)) {
+        const budget = allowance();
+        const checkpointLimit = budget === null ? 256 : Math.min(256, budget);
+        const checkpointMessages = [...messages, { role: 'user', content: CHECKPOINT_REQUEST }];
+        const callId = session.runtime.currentCallId ?? null;
+        const started = performance.now();
+        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start',
+          purpose: 'checkpoint', turn: turns + 1, messages: checkpointMessages.length });
+        const response = await this.driver({ messages: checkpointMessages, tools: [],
+          temperature: this.options.temperature ?? 0.2,
+          seed: session.runtime.seedPolicy.mode === 'backend' ? null :
+            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
+            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'checkpoint', turns),
+          max_tokens: checkpointLimit });
+        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end',
+          purpose: 'checkpoint', turn: turns + 1, duration_ms: Math.round(performance.now() - started),
+          prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+        turns++;
+        tokens += response.completion_tokens === undefined ? checkpointLimit :
+          Math.max(1, response.completion_tokens);
+        session.runtime.checkInterruption();
+        if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
+          return 'episode token or wall-clock budget exhausted';
+        session.lam.continuationNote = (response.text ?? '').trim().slice(0, 800);
+        session.runtime.trace.emit('checkpoint', { call_id: callId, note: session.lam.continuationNote, turn: turns });
+        session.runtime.observeState('after-checkpoint');
+        messages.splice(0, messages.length, ...openingMessages());
+        segmentTurns = 0;
+        checkpointReady = true;
+        continue;
+      }
       const limit = allowance();
       const availableTools = this.tools(session);
       const callId = session.runtime.currentCallId ?? null;
@@ -442,6 +502,7 @@ export class NativeToolAgent {
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
       turns++;
+      segmentTurns++;
       session.runtime.checkInterruption();
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
@@ -457,6 +518,7 @@ export class NativeToolAgent {
           if (++nudges > 2) return `validation failed: unfinished lines: ${marks.join(', ')}`;
           messages.push({ role: 'assistant', content: response.text ?? '' },
             { role: 'user', content: `Lines still marked [ ]: ${marks.join(', ')}. Mark completed work done and untaken work skipped (skipped=true).` });
+          checkpointReady = false;
           continue;
         }
         if (session.finish()) { session.lam.note = response.text ?? ''; return; }
@@ -465,6 +527,7 @@ export class NativeToolAgent {
         const missing = this.missing(session);
         messages.push({ role: 'assistant', content: response.text ?? '' },
           { role: 'user', content: missing || 'return is incomplete' });
+        checkpointReady = false;
         continue;
       }
       const proposal: Record<string, unknown> = { calls, value_confidence: response.value_confidence ?? [],
@@ -509,6 +572,7 @@ export class NativeToolAgent {
           session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
             phase: 'withdrawn', turn: turns, calls });
           messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
+          checkpointReady = false;
           break;
         }
         if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
@@ -535,6 +599,8 @@ export class NativeToolAgent {
       messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length) });
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
+      checkpointReady = !['rejected', 'refused', 'error', 'budget'].includes(results.at(-1)?.kind ?? '') &&
+        ['write', 'call', 'edit', 'mark_done'].includes(calls[results.length - 1]?.[0] ?? '');
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       if (results.at(-1)?.kind === 'completed') return;
       if (this.options.validationFeedback !== 'local' &&
