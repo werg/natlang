@@ -1,6 +1,10 @@
 # P07 — Natlang package manager
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: offline resolver and atomic installer implemented in
+[`codebases/packages`](../../codebases/packages/README.md) and
+[`applications/package_registry.mjs`](../../applications/package_registry.mjs).
+Upgrade planning, archive/remote sources and live-model choice remain open.
+[Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -25,6 +29,16 @@ Resolve and validate before starting the consuming programme. A running lambda r
 Dependency graph traversal uses crisp worklists or bounded natlang combinators. Installation state belongs to the package application. Recovery after interrupted publication preserves the previous installed tree and exposes the incomplete attempt; it is not a general runtime transaction feature.
 
 ## Delivery and checks
+
+The first implementation pins transitive package content, checks engine
+closure and source definitions, and publishes an immutable bundle by an atomic
+symlink creation. A loaded bundle reconstructs a checked source workspace and
+can execute the exported natlang function. Integration tests cover two root
+versions, a transitive dependency, conflicts, cycles, missing engine, tampered
+lock, path traversal, existing install and modified installed content. The
+model chooses among exact solver results; it cannot alter their pins. Current
+constraint syntax is exact, wildcard and caret, rather than an implied full
+package-registry grammar.
 
 1. Package two existing helper libraries and resolve/install from an offline index.
 2. Reconstruct the same checked codebase from the lock in another directory/in-memory bundle. Gate: identical exported definitions and compatible engine closure.
