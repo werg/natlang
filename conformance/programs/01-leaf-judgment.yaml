@@ -17,10 +17,3 @@ lint:
   max_actions: 3
 reference:
   '': { answer: true }
-canonical_trace: |
-  >>> set return : Bool
-      true
-  <<< ok
-  >>> edit instructions[1..1]
-      (empty body)
-  <<< completed

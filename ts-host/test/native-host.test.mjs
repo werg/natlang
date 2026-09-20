@@ -4,7 +4,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DesktopBindings, NativeNatlangHost, NativeRuntime, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
+import { DesktopBindings, NatlangHost, NativeNatlangHost, NativeRuntime, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
+
+test('public NatlangHost defaults to the Python-free native interpreter', () => {
+  assert.equal(NatlangHost, NativeNatlangHost);
+});
 
 test('public native host runs a program without starting Python', async () => {
   const host = new NativeNatlangHost();

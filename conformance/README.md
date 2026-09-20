@@ -1,6 +1,6 @@
 # Conformance suite
 
-Programs and harness scripts that define what "the interpreter works" means
+Program references and structured tests that define what "the interpreter works" means
 for natlang `spec/SPEC.md` v0.2.
 
 ## `programs/`: interpreter conformance
@@ -61,8 +61,7 @@ Two kinds of program:
   rules are checkable because the required structure is in the program text.
 
 Programs 03–22 are code-base programs (pseudocode plus an inline `codebase`,
-or `program_file` for one on disk), each with a `reference` block in place of
-the old `canonical_trace`/prose-lint style. Program 20 keeps its structure but
+or `program_file` for one on disk), each with a `reference` block. Program 20 keeps its structure but
 its `reference` is a `known_issue`: a root-level `Fold` over an open,
 streaming list has no supported loading path in the current harness.
 
@@ -70,13 +69,9 @@ Uses: acceptance test for the harness with a strong model as interpreter;
 test of the language with the teacher (`TRAINING.md` §3.4); seed for the
 synthesizer's shapes; permanent regression suite.
 
-## `harness/`: harness conformance
-
-Scripted operation sequences with the harness's required responses, in the
-trace notation of SPEC Appendix A. No model is involved; where child behaviour
-matters a `stub_agent` stands in. `decoding: unconstrained` means the script
-deliberately sends operations the grammar would normally make impossible, to
-test the validator behind it.
+Structured tool checks live in `tests/test_structured_session.py`, while
+`tests/test_conformance_reference.py` runs the program references, including
+combinators and resumed tasks.
 
 ## Checking
 

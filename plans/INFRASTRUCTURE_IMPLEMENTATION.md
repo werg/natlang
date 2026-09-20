@@ -72,7 +72,7 @@ Capture representative cases for typed writes and rejected writes, missing versu
 
 ### I1 — Explicit invocation context and randomness
 
-**Touchpoints:** `Runtime.__init__`, `_run_episode`, `_instantiate`, `ToolAgent.run`, `decoder.py`, `native.py`, CLI/probe configuration. Start in `tests/test_model_agent.py`, `test_native.py`, `test_agent_support.py`; add focused invocation fixtures.
+**Touchpoints:** `Runtime.__init__`, `_run_episode`, `_instantiate`, `ToolAgent.run`, `decoder.py`, `native.py`, CLI/probe configuration. Start in `tests/test_native.py` and `tests/test_agent_support.py`; add focused invocation fixtures.
 
 1. Define the model-turn protocol actually consumed by `ToolAgent`, preserving the existing `ChatTurn` where suitable. Raw formatting/generation stay additional backend interfaces.
 2. Introduce run options and per-invocation settings. Stop sharing mutable request deadlines/seed state between unrelated invocations. Preserve current defaults through an explicit compatibility constructor/profile.
@@ -114,7 +114,7 @@ Expose a small embedding API for load/check/invoke and read-only definitions/typ
 
 ### I4 — Reduction trace data and a small reader
 
-**Touchpoints:** `Session.apply`/`act`, `_swap_out`, `_quiesce`, combinator transitions, invocation/evaluator boundaries, `nodes.py`, `values.dump_state`, teacher capture/materialisation scripts. Current `test_canonical_traces.py` and `test_teacher_trajectory_ir.py` provide useful compatibility context.
+**Touchpoints:** `Session.apply`, `_swap_out`, `_quiesce`, combinator transitions, invocation/evaluator boundaries, `nodes.py`, `values.dump_state`, teacher capture/materialisation scripts. Current `test_structured_session.py` and `test_teacher_trajectory_ir.py` provide useful compatibility context.
 
 Implement the [trace proposal](EXECUTION_INTERFACES.md#7-execution-and-reduction-traces-as-data) in two increments:
 

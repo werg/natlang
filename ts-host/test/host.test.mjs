@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DesktopBindings, NatlangHost, TypeScriptEnvironment, portable } from '../dist/index.js';
+import { DesktopBindings, PythonBridgeNatlangHost as NatlangHost, TypeScriptEnvironment, portable } from '../dist/index.js';
 
 const lambda = (type, code, engine = 'typescript-host') => ({ $lambda: { type, engine, code } });
 test('host and isolated engines use the same crisp standard library source', () => {

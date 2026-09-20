@@ -1,6 +1,6 @@
 # TypeScript application host for natlang
 
-This package exposes two hosts. `NatlangHost` runs the complete Python interpreter through a bridge. `NativeNatlangHost` is a Python-free TypeScript interpreter under parity testing. Both can execute crisp TypeScript in a context that directly references application objects.
+`NatlangHost` is the Python-free TypeScript interpreter. `NativeNatlangHost` is an alias for it. `PythonBridgeNatlangHost` keeps the original Python interpreter available when a caller needs its isolated QuickJS executor or wants to compare behavior. Both hosts can execute crisp TypeScript in a context that directly references application objects.
 
 ## Install and build
 
@@ -13,9 +13,9 @@ npm run build
 NATLANG_PYTHON=/path/to/natlang-python npm test
 ```
 
-`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed for the bridge tests. Use the project environment's `bin/python`. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The Python `natlang` package must be importable to the selected interpreter for `NatlangHost`. The native conformance checks run with `npm run test:conformance` and do not require Python.
+`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed for the paired parity and bridge tests. The production `NatlangHost` does not use Python. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The native conformance checks run with `npm run test:conformance` and do not require Python.
 
-For Python-free runs, import `NativeNatlangHost` instead. Its runtime is opt-in until the parity gate in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md) is complete.
+Import `NatlangHost` for Python-free runs. Import `PythonBridgeNatlangHost` explicitly for the bridge. The declared conformance and paired trace coverage for this switch is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
 
 The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior; use `local` to let the model repair missing results or rejected actions within its current episode.
 
@@ -26,7 +26,7 @@ import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/ty
 
 const desktop = new DesktopBindings();
 const environment = new TypeScriptEnvironment({ mode: 'retained', host: desktop });
-const host = new NatlangHost({ environment, python: '/path/to/.venv/bin/python' });
+const host = new NatlangHost({ environment });
 
 try {
   const result = await host.run({
@@ -78,4 +78,4 @@ host.close();
 
 The browser entry has no filesystem source loader, trace file writer, process bindings, or Node VM CPU timeout. File sources must be loaded by the application and supplied as in-memory programs or definitions. Eval uses `Function` and direct `eval`, so the page must allow dynamic code execution; it is trusted application code, not an isolation boundary. The portable natlang state, actions, reductions, and traces use the same implementation as the Node native host.
 
-`DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` stops active interpreter processes and disposes the TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.
+`DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` disposes its owned TypeScript context; close application-owned bindings separately. `PythonBridgeNatlangHost.close()` also stops active interpreter processes. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.

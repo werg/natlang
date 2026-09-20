@@ -12,7 +12,7 @@
     "check:browser-types": "tsc -p tsconfig.browser-smoke.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
-    "test:conformance": "node scripts/native-conformance.mjs && node scripts/native-harness.mjs"
+    "test:conformance": "node scripts/native-conformance.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",

@@ -1,15 +1,24 @@
 """The native tool-call surface: schemas from types, a fixed tool list, operations, hints."""
 import yaml
 
-from natlang.agents import OracleAgent
 from natlang.decoder import ChatTurn
 from natlang.runtime import Runtime, Session
 from natlang.surface import ToolSurface, schema_of
 from natlang.tool_agent import ToolAgent
 from natlang.types import TypeEnv, parse_type
 
-from test_canonical_traces import PROGRAMS, oracle
-from test_grammar import _root
+from pathlib import Path
+from natlang.values import coerce, load_program
+
+PROGRAMS = Path(__file__).resolve().parent.parent / "conformance" / "programs"
+
+
+def _root(doc):
+    root = load_program(doc["program"])
+    env = root.env(TypeEnv())
+    for name, value in (doc.get("inputs") or {}).items():
+        root.in_[name] = coerce(value, root.type.params.get(name)[0], env, yaml=False, path=f"args/{name}")
+    return root
 
 S = ToolSurface()
 

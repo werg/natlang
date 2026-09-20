@@ -529,7 +529,6 @@ export class NativeSession {
   completed = false;
   actions = 0;
   toolCalls = 0;
-  private textSet = false;
   readonly env: TypeEnv;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
@@ -602,82 +601,6 @@ export class NativeSession {
       throw new Reject([{ path: 'start', code: 'bad-range',
         expected: `line numbers between 1 and ${lines.length}, start <= end`, got: `${start}..${end}` }]);
   }
-  /** Legacy one-header text action surface used by the conformance harness. */
-  async act(source: string): Promise<NativeResult> {
-    const text = source.replace(/^\s*<\|tool_call_start\|>/, '').replace(/<\|tool_call_end\|>\s*$/, '').replace(/^\n+|\n+$/g, '');
-    const [header, ...body] = text.split('\n');
-    const command = header?.trim() ?? '';
-    const joined = body.join('\n');
-    let result: NativeResult;
-    try {
-      const set = /^set\s+(\S+)\s+:\s+(.+)$/.exec(command);
-      const copy = /^copy\s+(\S+)\s+to\s+(\S+)$/.exec(command);
-      const simple = /^(read|edit|unset|reopen)\s+(\S+)$/.exec(command);
-      if (set) {
-        const type = set[2]!.trim(), parsed = parseType(type);
-        const raw = this.env.resolve(parsed).kind === 'prim' && formatType(parsed) === 'Text' ? joined : YAML.parse(joined);
-        const wrapper = ['lambda', 'map', 'fold', 'iterate'].includes(parsed.kind) ? `$${parsed.kind}` : '';
-        this.textSet = true;
-        try { result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw });
-          if (result.kind === 'ok') result = { ...result, text: result.text.split('\n')[0]! }; }
-        finally { this.textSet = false; }
-      } else if (copy) result = this.apply('copy', { from: copy[1], to: copy[2] });
-      else if (command.startsWith('reduce ')) result = await this.applyAsync('run', { paths: command.slice(7).trim().split(/\s+/) });
-      else if (command === 'eval') result = this.apply('run_code', { code: joined, engine: 'typescript-host' });
-      else if (simple) {
-        const [, tool, path] = simple;
-        if (tool === 'read') result = this.apply('read', { path });
-        else if (tool === 'edit') result = this.legacyEdit(path!, joined);
-        else if (tool === 'unset') result = this.apply('delete', { path });
-        else if (tool === 'reopen') result = this.apply('retry', { path, feedback: joined });
-        else throw new Reject([{ path: path!, code: 'bad-action' }]);
-      } else throw new Reject([{ path: command, code: 'bad-action' }]);
-    } catch (error) {
-      result = error instanceof Reject ? { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) } :
-        { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null,
-      surface: 'text', action: source, outcome: result.kind, diagnostics: result.codes ?? [] });
-    this.runtime.observeState('after-action');
-    return result;
-  }
-  private legacyEdit(path: string, body: string): NativeResult {
-    try {
-      const match = /^(.*?)\[(\d+)\.\.(\d+)\]$/.exec(path);
-      const ref = this.resolve(match?.[1] ?? path);
-      if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
-      const old = ref.get();
-      if (typeof old !== 'string') throw new Reject([{ path: ref.path, code: 'type-mismatch',
-        expected: 'a Text node', got: ref.type ? formatType(ref.type) : '' }]);
-      const lines = old.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-      const replacement = body && !body.endsWith('\n') ? body + '\n' : body;
-      let next = replacement;
-      if (match) {
-        const start = Number(match[2]), end = Number(match[3]);
-        if (start < 1 || end < start || end > lines.length)
-          throw new Reject([{ path, code: 'bad-range', expected: `lines 1..${lines.length}` }]);
-        next = lines.slice(0, start - 1).join('') + replacement + lines.slice(end).join('');
-      }
-      if (ref.path === this.lam.kind && !next.trim()) {
-        if (this.lam.type.kind !== 'lambda') throw new Reject([{ path, code: 'type-mismatch' }]);
-        const issues = problems(this.lam.return, this.lam.type.returns, this.env, 'return');
-        if (issues.holes.length || issues.pending.length) {
-          const diagnostics = [...issues.holes.map(item => ({ path: item.path, code: 'commit-holes',
-            expected: item.expected })), ...issues.pending.map(item => ({ path: item, code: 'commit-pending' }))];
-          const text = `refused\n${diagnostics.map(item => `${item.path}: ${item.code}${'expected' in item && item.expected ? `, expected ${item.expected}` : ''}`).join('\n')}`;
-          return { kind: 'refused', text, codes: diagnostics.map(item => item.code) };
-        }
-        ref.set(''); this.completed = true;
-        return { kind: 'completed', text: 'completed', value: this.lam.return };
-      }
-      ref.set(next);
-      return { kind: 'ok', text: `ok   ${this.summary()}` };
-    } catch (error) {
-      if (error instanceof Reject) return { kind: 'rejected', text: `rejected\n${error.message}`,
-        codes: error.diagnostics.map(item => item.code) };
-      throw error;
-    }
-  }
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
@@ -734,7 +657,7 @@ export class NativeSession {
         const typeText = String(args.type ?? '').trim();
         const stated = typeText ? parseType(typeText) : this.resolve(path, true).type;
         if (!stated) throw new Reject([{ path, code: 'type-mismatch', expected: 'a type for the new local' }]);
-        if (!this.textSet && args.source === undefined &&
+        if (args.source === undefined &&
             (['lambda', 'map', 'fold', 'iterate'].includes(stated.kind) ||
               (args.value && typeof args.value === 'object' && !Array.isArray(args.value) &&
                 Object.keys(args.value as object).some(key => ['$lambda', '$map', '$fold', '$iterate'].includes(key)))))

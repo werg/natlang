@@ -35,7 +35,7 @@ def test_inline_eval_uses_same_boundary_without_committing_state():
     root = load_program({"$lambda": {"type": "Lambda<{}, Num>", "instructions": "Compute a number."}})
     executor = RecordingExecutor([1, 2])
     session = Session(Runtime(None, executor=executor), root, TypeEnv())
-    result = session.act("eval\n[1, 2]")
+    result = session.apply("run_code", {"code": "[1, 2]"})
     assert result.kind == "ok" and result.value == [1, 2]
     assert executor.requests[0].body is False and root.ret is not result.value
 

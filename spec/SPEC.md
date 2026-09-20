@@ -905,11 +905,7 @@ the most recent 1,000 step records by default.
 | 9 | The bound-parameter part is **`args`**; `run_code` sees `args` and `locals` and cannot write |
 | 9.5, 10 | Capabilities are host-registered with typed signatures; state size, lifetime, and shutdown are host concerns |
 
-## Appendix A. Trace notation of the harness scripts
+## Appendix A. Structured harness checks
 
-`conformance/harness/*.yaml` exercise the harness's internal operations
-directly, in a text notation of one header line plus a body (`set PATH : TYPE`,
-`unset`, `copy SRC to DST`, `reduce`, `reopen`, `eval`, `read`, `edit`). It is
-a test notation for the tree, the validator and the combinators. The model
-never sees it and no training data uses it; the tools of §5 are implemented on
-the same operations.
+`tests/test_structured_session.py` checks typed writes, incomplete drafts,
+copy ranges, and read-only input through the tool surface in §5.

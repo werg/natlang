@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import YAML from 'yaml';
 import { NativeRuntime } from '../dist/native/runtime.js';
 import { TypeEnv } from '../dist/index.js';
 import { buildPending } from '../dist/native/values.js';
@@ -133,21 +132,6 @@ test('native checked definitions preserve Python isolated uses scopes', { skip: 
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(entries), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   assert.deepEqual(dumpState(checkedDefinitions(entries, 'main').instantiate()), JSON.parse(py.stdout));
-});
-
-test('native text harness matches Python action results and intermediate state', { skip: !python }, async () => {
-  const fixture = YAML.parse(readFileSync(`${root}/conformance/harness/h1-draft-holes-and-commit.yaml`, 'utf8'));
-  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program,dump_state\ndoc=json.load(sys.stdin);root=load_program(doc['setup']);session=Session(Runtime(None),root,TypeEnv())\nrows=[]\nfor step in doc['script']:\n result=session.act(step['action'])\n rows.append({'kind':result.kind,'text':result.text,'codes':result.codes,'state':dump_state(root)})\nprint(json.dumps(rows))`;
-  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(fixture), encoding: 'utf8' });
-  assert.equal(py.status, 0, py.stderr);
-  const expected = JSON.parse(py.stdout);
-  const node = buildPending(fixture.setup), session = new NativeSession(new NativeRuntime(), node, new TypeEnv());
-  const actual = [];
-  for (const step of fixture.script) {
-    const result = await session.act(step.action);
-    actual.push({ kind: result.kind, text: result.text, codes: result.codes ?? [], state: dumpState(node) });
-  }
-  assert.deepEqual(actual, expected);
 });
 
 test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {
@@ -623,25 +607,4 @@ test('native ranged reads match Python line and item numbering', { skip: !python
   assert.deepEqual(calls.map(([name, args]) => {
     const result = session.apply(name, args); return { kind: result.kind, text: result.text };
   }), expected);
-});
-
-test('native legacy edit ranges and commit behavior agree with Python actions', { skip: !python }, async () => {
-  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'First.\nSecond.' } };
-  const actions = [
-    'edit instructions[1..1]\nRevised.',
-    'edit instructions\n',
-    'set return : Num\n7',
-    'edit instructions\n',
-  ];
-  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,actions=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([{'kind':r.kind,'codes':r.codes} for action in actions for r in [s.act(action)]]))`;
-  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, actions]), encoding: 'utf8' });
-  assert.equal(py.status, 0, py.stderr);
-  const expected = JSON.parse(py.stdout);
-  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
-  const actual = [];
-  for (const action of actions) {
-    const result = await session.act(action);
-    actual.push({ kind: result.kind, codes: result.codes ?? [] });
-  }
-  assert.deepEqual(actual, expected);
 });

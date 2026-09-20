@@ -15,7 +15,7 @@ import { buildPending, coerce, dump, isPending, type Pending } from './values.js
 export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions; parallelMapSafe?: boolean;
   validationFeedback?: 'caller' | 'local' };
 
-/** Python-free host. Its interpreter remains opt-in while differential parity is expanded. */
+/** Default Python-free natlang host. */
 export class NativeNatlangHost {
   readonly environment: TypeScriptEnvironment;
   private readonly ownsEnvironment: boolean;

@@ -20,7 +20,7 @@ from .execution import CrispRequest, ExecutionError, QuickJSExecutor, portable
 from .invocation import Invocation, RunOptions
 from .trace import TraceRecorder, _view, changes
 from .streams import StreamBuffer
-from .actions import Action, parse_action
+from .actions import Action
 from .diag import BLOCKS, Diagnostic, Refuse, Reject, reject
 from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNode, IterateNode, Lambda,
                     MapNode, Pending, is_pending)
@@ -648,29 +648,6 @@ class Session:
         return f"problems: 0 blocking · {len(holes)} holes"
 
     # -- acting
-    def act(self, text: str) -> Result:
-        if self.completed:
-            return Result("error", "the episode has ended")
-        if self.actions >= MAX_ACTIONS:
-            return Result("budget", "action budget exhausted")
-        self.actions += 1
-        self.lam.steps += 1
-        try:
-            action = parse_action(text)
-            result = getattr(self, "_do_" + action.tool)(action)
-        except Reject as e:
-            result = Result("rejected", "rejected\n" + "\n".join(map(str, e.diags)), e.diags)
-        except Refuse as e:
-            result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)), e.diags)
-        except (js.JsError, ExecutionError) as e:
-            result = Result("error", f"error: {e}")
-        self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
-                              "kind": result.kind, "result": result.text})
-        self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
-                         surface="text", action=text, outcome=result.kind, diagnostics=result.codes)
-        self.rt._observe_state("after-action")
-        return result
-
     # ------------------------------------------------------------------ tool surface (natlang/surface.py)
     def apply(self, name: str, args: dict) -> Result:
         """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
@@ -1175,25 +1152,6 @@ class Session:
         return "(not recorded)"
 
     # -- edit
-    def _do_edit(self, a: Action) -> Result:
-        p, ref = self.resolve(a.path)
-        self._writable(ref)
-        old = ref.get()
-        if not isinstance(old, str):
-            raise reject(ref.path, "type-mismatch", "a Text node", format_type(ref.type) if ref.type else "")
-        lines = old.splitlines(keepends=True)
-        body = a.body
-        if body and not body.endswith("\n"):
-            body += "\n"
-        if p.rng:
-            lo, hi = p.rng
-            if lo < 1 or hi > len(lines):
-                raise reject(p.text, "bad-range", f"lines 1..{len(lines)}")
-            new = "".join(lines[: lo - 1]) + body + "".join(lines[hi:])
-        else:
-            new = body
-        return self._write_text(ref, new)
-
     def _write_text(self, ref: Ref, new: str) -> Result:
         is_own_body = ref.holder is self.lam and ref.attr == "body"
         if is_own_body and new.strip() == "":
@@ -1212,14 +1170,6 @@ class Session:
             raise Refuse(*diags)
 
     # -- set / unset
-    def _do_set(self, a: Action) -> Result:
-        try:
-            stated = parse_type(a.type_text)
-        except TypeSyntaxError as e:
-            raise reject(a.path, "type-mismatch", "a type", str(e))
-        body = a.body[:-1] if a.body.endswith("\n") else a.body
-        return self._set_value(a.path, stated, body, yaml=True)
-
     def _set_value(self, path_text: str, stated, raw, *, yaml: bool) -> Result:
         """Create or replace the node at a path. `stated` None means: the slot's declared type."""
         p, ref = self.resolve(path_text, create=True)
