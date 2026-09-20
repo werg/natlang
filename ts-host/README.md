@@ -61,6 +61,11 @@ The native host accepts declared capability callbacks that return values or prom
 
 The shared engine is **trusted code**, not a sandbox. It can mutate exposed host objects before returning an invalid result or throwing. The VM's synchronous CPU timeout does not cancel a native operation or bound all memory use. Authored crisp functions and native `run_code` may await promises, but interruption cannot undo a native operation already in progress. Direct host access does not enter natlang's declared `fx` journal; declared `fx` calls do. The TypeScript host supports the `typescript-host` engine; the separate Python interpreter supports isolated QuickJS. Traces record the engine and host events but cannot reconstruct arbitrary native state or replay external effects.
 
+An application host may expose `drainEvents()` returning portable observation
+records. The runtime writes these as `host` trace events for successful and
+failed crisp evals. They describe observed native operations; they do not make
+those operations replayable or undo them.
+
 ## Browser host
 
 `@natlang/typescript-host/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights can be cached in browser storage. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.

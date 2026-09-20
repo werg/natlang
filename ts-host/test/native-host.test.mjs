@@ -46,6 +46,23 @@ test('retained native eval sees the same application object across runs', async 
   host.close(); environment.close();
 });
 
+test('host observations survive an eval failure after a native mutation', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-host-trace-'));
+  const native = { count: 0, events: [], change() {
+    this.count++; this.events.push({ operation: 'sample.changed', count: this.count });
+    throw new Error('failed after mutation');
+  }, drainEvents() { return this.events.splice(0); } };
+  const host = new NativeNatlangHost({ host: native });
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Num>', engine: 'typescript-host', code: 'return host.change();',
+    } } }, tracePath: join(folder, 'run.jsonl') });
+    assert.equal(result.outcome.kind, 'quiesced');
+    assert.equal(native.count, 1);
+    assert.ok(result.trace.some(event => event.kind === 'host' && event.event?.operation === 'sample.changed'));
+  } finally { host.close(); rmSync(folder, { recursive: true, force: true }); }
+});
+
 test('native cancellation prevents model actions after an interrupted turn', async () => {
   const host = new NativeNatlangHost();
   const abort = new AbortController();

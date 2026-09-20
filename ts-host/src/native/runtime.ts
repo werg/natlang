@@ -1,5 +1,5 @@
 import YAML from 'yaml';
-import { TypeScriptEnvironment, type HostEvent } from '../environment.js';
+import { EvalFailure, TypeScriptEnvironment, type HostEvent } from '../environment.js';
 import { hexDigest } from './hash.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
@@ -183,8 +183,11 @@ export class NativeRuntime {
     this.acting = node;
     try {
       const result = this.environment.execute({ code, body, path, effectful: node.effects.length > 0, scope });
-      this.events.push(...result.events);
+      this.recordHostEvents(path, result.events);
       return result;
+    } catch (error) {
+      if (error instanceof EvalFailure) this.recordHostEvents(path, error.events);
+      throw error;
     } finally { this.acting = previous; }
   }
 
@@ -197,10 +200,19 @@ export class NativeRuntime {
     try {
       const result = await this.environment.executeAsync({ code, body, path,
         effectful: node.effects.length > 0, scope });
+      this.recordHostEvents(path, result.events);
       this.checkInterruption();
-      this.events.push(...result.events);
       return result;
+    } catch (error) {
+      if (error instanceof EvalFailure) this.recordHostEvents(path, error.events);
+      throw error;
     } finally { this.acting = previous; this.currentCallId = previousCallId; }
+  }
+
+  private recordHostEvents(path: string, events: HostEvent[]): void {
+    this.events.push(...events);
+    for (const event of events) if (event.operation !== 'typescript.eval')
+      this.trace.emit('host', { path, event });
   }
 
   private acting?: LambdaNode;
