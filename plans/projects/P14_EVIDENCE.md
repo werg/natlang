@@ -1,6 +1,10 @@
 # P14 — Evidence atlas / research notebook
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local cited-answer workflow implemented in
+[`codebases/evidence_atlas`](../../codebases/evidence_atlas/README.md) and
+[`applications/evidence_atlas.mjs`](../../applications/evidence_atlas.mjs).
+Trace-corpus ingestion and live-model grounding review remain open.
+[Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -25,6 +29,14 @@ Finite search/assess/revise uses bounded Iterate. A search result is evidence wi
 Live collection updates later arrive as stream events that invalidate affected answer revisions. Running answers pin a snapshot; they do not receive invisible corpus mutation. A retained native collection must provide a versioned view or label results as observations from a changing source.
 
 ## Delivery and checks
+
+The first implementation uses exact token search over versioned paragraph
+spans, explicit retrieval truncation, and a natlang claim composition step.
+The host checks citation identity, revision, passage authenticity and quote
+presence. Tests cover an answer, fabricated quotes, changed passages and stale
+collection revisions. `citation-checked` is intentionally narrower than
+semantic support; independent review and retrieval-recall measurement are
+still needed before admitting teacher answers as training gold.
 
 1. Index selected natlang docs and answer a fixed question set with exact citations.
 2. Add conflicting revisions, absent answers and misleading near-matches. Gate: cited spans exist and substantiate the stated claims.
