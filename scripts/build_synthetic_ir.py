@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from generate import make_program
 from natlang.corpus import digest, file_digest
+from natlang.gen import codebases as codebase_references
 from natlang.gen.programs import BLOCKED
 from program_ir import VERSION, validate
 
@@ -243,7 +244,14 @@ def main():
     if original.get("version") != "generation/2":
         parser.error("requires a generation/2 manifest with seed and source hashes")
     repo = Path(__file__).resolve().parent.parent
+    bank_path = repo / "data/leaf_references.jsonl"
+    bank_before = file_digest(bank_path)
+    codebase_references.load_references()
+    if file_digest(bank_path) != bank_before:
+        raise RuntimeError("reference bank changed while loading generator references")
     current = generator_fingerprint(repo)
+    if current["leaf_references"] != bank_before:
+        raise RuntimeError("reference bank changed before generation started")
     changes = [key for key in current if original.get(key) != current[key]]
     if changes and not args.allow_source_drift:
         parser.error("historical generator inputs differ: " + ", ".join(changes) +
@@ -281,6 +289,8 @@ def main():
             if pool is not None:
                 pool.terminate()
                 pool.join()
+    if generator_fingerprint(repo) != current:
+        raise RuntimeError("generator sources or references changed during build; staged output is not published")
     staging.replace(args.out)
     manifest = {"version": VERSION, "historical_match": not changes,
                 "generator_changes": changes, "input_manifest": str(args.manifest),
