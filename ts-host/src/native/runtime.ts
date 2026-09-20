@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment, type HostEvent } from '../environment.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
-import { MISSING, Reject, buildPending, cloneValue, coerce, dump, isPending, loadProgram,
+import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 
@@ -121,12 +121,12 @@ export class NativeRuntime {
     if (!this.root) this.root = { value: source };
     else this.root.value = source;
     const box = this.root;
-    const before = dump(box.value);
+    const before = dumpState(box.value);
     if (!this.trace.events.some(event => event.kind === 'state')) this.trace.emit('state', { phase: 'initial', value: before });
     const ref: Ref = { path: '', env: new TypeEnv(), get: () => box.value,
       set: value => { box.value = value; }, del: () => { box.value = MISSING; } };
     const outcome = await this.trigger(ref);
-    const after = dump(box.value);
+    const after = dumpState(box.value);
     const delta = changes(before, after);
     if (delta.length) this.trace.emit('reduction', { phase: 'final', changes: delta });
     this.trace.emit('state', { phase: 'final', value: after, outcome: outcome.kind });

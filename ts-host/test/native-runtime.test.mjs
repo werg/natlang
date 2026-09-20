@@ -5,7 +5,7 @@ import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { readTrace } from '../../web/natlang_lite.mjs';
 import { deriveSeed } from '../dist/native/trace.js';
-import { buildPending, MISSING } from '../dist/native/values.js';
+import { buildPending, dumpState, MISSING } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { TypeEnv } from '../dist/native/types.js';
 
@@ -187,4 +187,26 @@ test('native tool schemas narrow to typed slots and expand as workspace values a
   assert.equal(session.apply('write', { path: 'return/label', type: '"yes" | "no"', value: 'yes' }).kind, 'ok');
   const readAfter = agent.tools(session).find(item => item.function.name === 'read').function.parameters;
   assert.ok(readAfter.properties.path.enum.includes('return/label'));
+});
+
+test('complete native state snapshot resumes only unfinished Map slots', async () => {
+  const program = { $map: { type: 'Map<Text, Text>', over: ['a', 'bad', 'c'],
+    fn: { $lambda: { type: 'Lambda<{ item: Text }, Text>', instructions: 'Echo item.' } } } };
+  const firstRuntime = new NativeRuntime({ agent: session => {
+    if (session.lam.args.item === 'bad') return 'unreadable item';
+    session.apply('write', { path: 'return', value: session.lam.args.item });
+    session.finish();
+  } });
+  const first = await firstRuntime.runRoot(program);
+  assert.equal(first.outcome.kind, 'quiesced');
+  const snapshot = dumpState(first.value);
+  assert.equal(snapshot.$map.slots.length, 3);
+  const resumed = new NativeRuntime({ agent: session => {
+    session.apply('write', { path: 'return', value: session.lam.args.item === 'bad' ? 'b' : session.lam.args.item });
+    session.finish();
+  } });
+  const result = await resumed.runRoot(snapshot);
+  assert.equal(result.outcome.kind, 'done');
+  assert.deepEqual(result.value, ['a', 'b', 'c']);
+  assert.equal(resumed.episodesStarted, 1);
 });

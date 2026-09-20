@@ -11,3 +11,4 @@ export { NativeRuntime, NativeSession } from './native/runtime.js';
 export { NativeToolAgent } from './native/agent.js';
 export { checkedDefinitions } from './native/codebase.js';
 export { loadFunctionFile } from './native/source.js';
+export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from './native/values.js';

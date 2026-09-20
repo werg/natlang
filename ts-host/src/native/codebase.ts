@@ -8,6 +8,12 @@ export type NativeDefinition = { args?: Record<string, string>; returns: string;
 export type NativeGraph = { root: string; definitions: Record<string, NativeDefinition>;
   revision: string; instantiate(inputs?: Record<string, unknown>): LambdaNode };
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}`;
+  return JSON.stringify(value);
+}
 
 export function checkedDefinitions(entries: Record<string, NativeDefinition>, root: string): NativeGraph {
   const supplied = structuredClone(entries);
@@ -42,7 +48,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       types: def.types ?? {}, effects: def.effects ?? [], description: def.description ?? '',
       codebase: Object.fromEntries(Object.entries(def.uses ?? {}).map(([alias, target]) => [alias, inline(target)])) };
   }
-  const stable = JSON.stringify(Object.fromEntries(Object.entries(supplied).sort(([a], [b]) => a.localeCompare(b))));
+  const stable = canonical(supplied);
   const revision = createHash('sha256').update(stable).digest('hex');
   return { root, definitions: supplied, revision, instantiate(inputs = {}) {
     const doc = inline(root), def = supplied[root]!;

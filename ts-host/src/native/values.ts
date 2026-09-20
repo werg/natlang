@@ -203,6 +203,8 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   if (key === '$map' && type.kind === 'map') {
     const node: MapNode = { ...common, nodeKind: 'map', itemName: String(body.item_name ?? 'item'), over: MISSING, fn: MISSING };
     for (const part of ['over', 'fn'] as const) if (part in body) node[part] = coerce(body[part], partType(node, part), inner, `${path}/${part}`);
+    if (Array.isArray(body.slots)) node.slots = body.slots.map((item, index) =>
+      coerce(item, type.b, inner, `${path}/slots/${index}`));
     return node;
   }
   if (key === '$fold' && type.kind === 'fold') {
@@ -210,6 +212,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       acc: MISSING, at: Number(body.at ?? 0), current: null };
     for (const part of ['over', 'init', 'step'] as const) if (part in body) node[part] = coerce(body[part], partType(node, part), inner, `${path}/${part}`);
     if ('acc' in body) node.acc = coerce(body.acc, type.s, inner, `${path}/acc`);
+    if ('current' in body && body.current !== null) node.current = coerce(body.current, partType(node, 'step'), inner, `${path}/current`);
     return node;
   }
   if (key === '$iterate' && type.kind === 'iterate') {
@@ -218,6 +221,9 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       stateName: String(body.state_name ?? 'state'), checkName: String(body.check_name ?? '') };
     for (const part of ['init', 'step', 'check', 'max'] as const) if (part in body) node[part] = coerce(body[part], partType(node, part), inner, `${path}/${part}`);
     if ('state' in body) node.state = coerce(body.state, type.s, inner, `${path}/state`);
+    if ('current' in body && body.current !== null) node.current = coerce(body.current, partType(node, 'step'), inner, `${path}/current`);
+    if (Array.isArray(body.recent)) node.recent = body.recent.map((item, index) => coerce(item, type.s, inner, `${path}/recent/${index}`));
+    if (Array.isArray(body.seen_hashes)) node.seenHashes = body.seen_hashes.map(String);
     return node;
   }
   return reject(path, 'type-mismatch', `a ${expected} type`);
@@ -264,11 +270,11 @@ export function unboundParts(node: Pending, env: TypeEnv, path: string): Diagnos
   return out;
 }
 
-export function dump(value: Value): unknown {
+export function dump(value: Value, full = false): unknown {
   if (value === MISSING) return null;
-  if (Array.isArray(value)) return value.map(dump);
+  if (Array.isArray(value)) return value.map(item => dump(item, full));
   if (value && typeof value === 'object' && !isPending(value))
-    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, dump(child)]));
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, dump(child, full)]));
   if (!isPending(value)) return value;
   const body: Record<string, unknown> = { type: formatType(value.type) };
   if (Object.keys(value.typesSrc).length) body.types = value.typesSrc;
@@ -277,21 +283,44 @@ export function dump(value: Value): unknown {
   if (value.nodeKind === 'lambda') {
     body[value.kind] = value.body;
     if (value.engine !== 'quickjs-isolated') body.engine = value.engine;
-    if (Object.keys(value.args).length) body.args = dump(value.args);
-    if (value.return !== MISSING) body.return = dump(value.return);
+    if (Object.keys(value.args).length) body.args = dump(value.args, full);
+    if (value.return !== MISSING) body.return = dump(value.return, full);
     if (value.effects.length) body.effects = value.effects;
     if (value.journal.length) body.effects_journal = value.journal;
-    if (Object.keys(value.let).length) { body.let = dump(value.let); body.let_types = Object.fromEntries(Object.entries(value.letTypes).map(([k, t]) => [k, formatType(t)])); }
+    if (Object.keys(value.let).length) body.let = dump(value.let, full);
+    if (full && Object.keys(value.letTypes).length)
+      body.let_types = Object.fromEntries(Object.entries(value.letTypes).map(([k, t]) => [k, formatType(t)]));
+    if (full && Object.keys(value.codebase).length) body.codebase = value.codebase;
     if (value.functionName) body.function = value.functionName;
     if (Object.keys(value.marks).length) body.marks = value.marks;
   } else {
     const parts = value.nodeKind === 'map' ? ['over', 'fn'] : value.nodeKind === 'fold' ? ['over', 'init', 'step'] : ['init', 'step', 'check', 'max'];
     for (const part of parts) {
       const item = (value as unknown as Record<string, Value>)[part];
-      if (item !== undefined && item !== MISSING) body[part] = dump(item);
+      if (item !== undefined && item !== MISSING) body[part] = dump(item, full);
     }
-    if (value.nodeKind === 'fold') { if (value.acc !== MISSING) body.acc = dump(value.acc); if (value.at) body.at = value.at; }
-    if (value.nodeKind === 'iterate') { if (value.state !== MISSING) body.state = dump(value.state); if (value.iteration) body.iteration = value.iteration; }
+    if (value.nodeKind === 'map') {
+      if (value.slots) body.slots = dump(value.slots, full);
+      if (value.itemName !== 'item') body.item_name = value.itemName;
+    }
+    if (value.nodeKind === 'fold') {
+      if (value.acc !== MISSING) body.acc = dump(value.acc, full);
+      if (value.at) body.at = value.at;
+      if (full && value.current !== null) body.current = dump(value.current, full);
+    }
+    if (value.nodeKind === 'iterate') {
+      if (value.state !== MISSING) body.state = dump(value.state, full);
+      if (value.iteration) body.iteration = value.iteration;
+      if (value.stateName !== 'state') body.state_name = value.stateName;
+      if (value.checkName) body.check_name = value.checkName;
+      if (full) {
+        if (value.current !== null) body.current = dump(value.current, full);
+        if (value.recent.length) body.recent = dump(value.recent, full);
+        if (value.seenHashes.length) body.seen_hashes = value.seenHashes;
+      }
+    }
   }
   return { [`$${value.nodeKind}`]: body };
 }
+
+export function dumpState(value: Value): unknown { return dump(value, true); }

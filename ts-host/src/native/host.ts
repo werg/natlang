@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment } from '../environment.js';
 import type { RunRequest, RunResult } from '../runtime.js';
@@ -73,7 +74,7 @@ export class NativeNatlangHost {
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,
         maxEpisodes: request.options?.max_episodes, maxDepth: request.options?.max_depth,
-        runId: request.options?.run_id, signal: request.signal, timeoutMs: request.timeoutMs,
+        runId: request.options?.run_id ?? randomUUID(), signal: request.signal, timeoutMs: request.timeoutMs,
         seedPolicy: request.options?.seed?.mode ? {
           mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
       const outcome = await runtime.runRoot(root);
