@@ -10,7 +10,6 @@ const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
 const cpu = process.argv.includes('--cpu');
 const gpu = process.argv.includes('--gpu');
-if (cpu && gpu) throw new Error('--cpu and --gpu are mutually exclusive');
 const broad = process.argv.includes('--broad');
 const probe = process.argv.find(arg => arg.startsWith('--probe='))?.slice('--probe='.length);
 const probeTokens = Number(process.argv.find(arg => arg.startsWith('--probe-tokens='))?.slice('--probe-tokens='.length) ?? 8);
@@ -54,7 +53,13 @@ const browser = await chromium.launch({ headless: true,
 try {
   const page = await browser.newPage();
   const errors = [];
+  const backendLogs = [];
   page.on('pageerror', error => errors.push(String(error)));
+  page.on('console', message => {
+    const line = message.text();
+    if (/webgpu|offload|gpu.layers|backend|shader.f16/i.test(line) && backendLogs.length < 200)
+      backendLogs.push(line.slice(0, 500));
+  });
   await page.goto(`${url}/ts-host/test/browser-smoke.html`);
   await page.getByText('PASS browser interpreter').waitFor({ timeout: 30000 });
   console.log('PASS actual Chromium browser interpreter smoke');
@@ -111,6 +116,7 @@ try {
             request_bytes: request ? JSON.stringify(request).length : null, error: String(error) };
         }
       }, { kind: probe, probeTokens });
+      result.backendLogs = backendLogs;
       if (output) await writeFile(output, JSON.stringify(result, null, 2) + '\n');
       console.log(JSON.stringify(result, null, 2));
       if (result.error) process.exitCode = 1;
@@ -148,7 +154,8 @@ try {
       diagnostics: JSON.parse(await page.locator('#diagnostics').textContent()),
       task: JSON.parse(await page.locator('#result').textContent()),
       report: await page.evaluate(() => window.natlangPilot.reports.at(-1)),
-      turnEvents: await page.evaluate(() => window.natlangTurnEvents) };
+      turnEvents: await page.evaluate(() => window.natlangTurnEvents),
+      backendLogs };
     if (output) await writeFile(output, JSON.stringify(result, null, 2) + '\n');
     console.log(JSON.stringify({ status: result.status, task: result.task }, null, 2));
     if (!result.task.every(task => task.correct)) process.exitCode = 1;

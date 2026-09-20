@@ -1,6 +1,8 @@
 export { BrowserNatlangHost } from './host.js';
 export { BrowserLocalModel, compileBrowserTools } from './local-model.js';
 export { BROWSER_MODEL_CATALOG, checkModelStorage } from './models.js';
+export { probeBrowserGpu } from './gpu.js';
+export type { BrowserGpuCapability } from './gpu.js';
 export { loadFunctionFiles } from './source.js';
 export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics,
   BrowserSchemaMode } from './local-model.js';

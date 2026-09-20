@@ -87,12 +87,39 @@ test('local model requests full GPU offload by default', async () => {
     async loadModelFromHF(_model, received) { params = received; },
     async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion() { return { choices: [{ message: { content: '' } }] }; } };
-  const model = new BrowserLocalModel({ engine: fake });
+  const model = new BrowserLocalModel({ engine: fake, gpuProbe: async () => ({
+    apiAvailable: true, adapterAvailable: true, shaderF16: true,
+    browser: 'chromium', usable: true, reason: 'WebGPU adapter supports shader-f16' }) });
   try {
     await model.loadFromHuggingFace({ repo: 'example/model' });
     assert.equal(params.n_gpu_layers, 99999);
     await assert.rejects(() => model.loadFromHuggingFace({ repo: 'example/model' },
       { gpuLayers: -1 }), /gpuLayers must be a nonnegative integer/);
+  } finally { await model.close(); }
+});
+
+test('browser GPU selection checks adapter features and keeps CPU fallback', async () => {
+  const { BrowserLocalModel, probeBrowserGpu } = await browserApi();
+  const capable = { requestAdapter: async () => ({ features: new Set(['shader-f16']) }) };
+  const unsupported = { requestAdapter: async () => ({ features: new Set() }) };
+  assert.equal((await probeBrowserGpu({ gpu: capable, userAgent: 'Chrome/140' })).usable, true);
+  assert.match((await probeBrowserGpu({ gpu: unsupported, userAgent: 'Chrome/140' })).reason,
+    /lacks shader-f16/);
+  assert.equal((await probeBrowserGpu({ gpu: capable, userAgent: 'Firefox/140' })).usable, false);
+  assert.equal((await probeBrowserGpu({ gpu: capable, userAgent: 'Firefox/140',
+    firefoxCompatibility: true })).usable, true);
+  let params;
+  const fake = { isSupportWebGPU: () => true, isModelLoaded: () => true,
+    async loadModelFromHF(_model, received) { params = received; },
+    async loadModelFromUrl() {}, async loadModel() {}, async exit() {} };
+  const model = new BrowserLocalModel({ engine: fake, gpuProbe: () => probeBrowserGpu({
+    gpu: unsupported, userAgent: 'Chrome/140' }) });
+  try {
+    await model.loadFromHuggingFace({ repo: 'example/model' });
+    assert.equal(params.n_gpu_layers, 0);
+    assert.match(model.diagnostics.gpuSelectionReason, /Automatic CPU fallback/);
+    await assert.rejects(() => model.loadFromHuggingFace({ repo: 'example/model' },
+      { gpuLayers: 3 }), /Cannot request GPU layers/);
   } finally { await model.close(); }
 });
 

@@ -17,7 +17,7 @@
 <div class="row">
   <label>Model <select id="model"></select></label>
   <label>Tool schema <select id="schema"><option value="typed">Typed alternatives</option><option value="broad">Broad tools</option></select></label>
-  <label>GPU layers <input id="gpuLayers" type="number" min="0" placeholder="All available layers"></label>
+  <label>GPU layers <input id="gpuLayers" type="number" min="0" placeholder="Auto (all supported layers, else CPU)"></label>
   <label>Context tokens <input id="context" type="number" min="512" value="8192"></label>
 </div>
 <label>Or use a local GGUF <input id="file" type="file" accept=".gguf"></label>
@@ -31,7 +31,7 @@
 <button id="cancel" disabled>Cancel</button><button id="download" disabled>Download report</button>
 <pre id="result"></pre>
 <script type="module">
-  import { BrowserLocalModel, BrowserNatlangHost, BROWSER_MODEL_CATALOG,
+  import { BrowserLocalModel, BrowserNatlangHost, BROWSER_MODEL_CATALOG, probeBrowserGpu,
     checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
   const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
@@ -50,11 +50,9 @@
     $('storage').textContent = `${mb(spec.bytes)} download; recommended free ${mb(storage.recommendedFree)}; ` +
       `available ${storage.available === null ? 'unknown' : mb(storage.available)}; ` +
       `persistent storage ${storage.persisted === null ? 'unknown' : storage.persisted ? 'on' : 'off'}.`;
-    let adapter = null;
-    try { adapter = await navigator.gpu?.requestAdapter(); } catch { /* diagnostic only */ }
+    const gpu = await probeBrowserGpu();
     $('diagnostics').textContent = JSON.stringify({ secure_context: isSecureContext,
-      cross_origin_isolated: crossOriginIsolated, webgpu_adapter: Boolean(adapter),
-      shader_f16: adapter?.features?.has('shader-f16') ?? null, model: model?.diagnostics ?? null,
+      cross_origin_isolated: crossOriginIsolated, gpu, model: model?.diagnostics ?? null,
       note: 'Wllama does not expose actual GPU layers; compare GPU and CPU pilot timings.' }, null, 2);
     return storage;
   }
@@ -70,8 +68,6 @@
       const file = $('file').files[0], storage = await inspect();
       if (!file && storage.enough === false) throw new Error('Estimated storage is too low for this download');
       host?.close(); if (model) await model.close();
-      model = new BrowserLocalModel({ schemaMode: $('schema').value });
-      host = new BrowserNatlangHost({ model });
       const contextTokens = Number($('context').value);
       if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
       const gpuLayers = $('gpuLayers').value === '' ? undefined : Number($('gpuLayers').value);
@@ -80,16 +76,29 @@
       if (!templateResponse.ok) throw new Error(`Cannot load natlang tool template: ${templateUrl}`);
       const chatTemplate = await templateResponse.text();
       const options = { contextTokens, chatTemplate,
-        threads: crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1,
+        ...(crossOriginIsolated ? {} : { threads: 1 }),
         ...(gpuLayers === undefined ? {} : { gpuLayers }),
         onProgress: ({ loaded, total }) => status(total ?
           `Downloading ${Math.round(loaded / total * 100)}% (${mb(loaded)} / ${mb(total)})` : 'Loading model…') };
-      status(`Loading ${file?.name ?? chosen().label}…`);
-      if (file) await model.loadFiles([file], options);
-      else await model.loadFromUrl(chosen().url, options);
+      async function attempt(layers) {
+        model = new BrowserLocalModel({ schemaMode: $('schema').value });
+        host = new BrowserNatlangHost({ model });
+        status(`Loading ${file?.name ?? chosen().label}…`);
+        if (file) await model.loadFiles([file], { ...options, ...layers });
+        else await model.loadFromUrl(chosen().url, { ...options, ...layers });
+      }
+      let fallbackReason = null;
+      try { await attempt({}); }
+      catch (error) {
+        if (gpuLayers !== undefined || model?.diagnostics.requestedGpuLayers !== 99999) throw error;
+        fallbackReason = error.message;
+        host?.close(); await model.close();
+        await attempt({ gpuLayers: 0 });
+      }
       $('cpu').disabled = true; $('run').disabled = false; $('suite').disabled = false;
       await inspect();
-      status(`Model ready in ${(model.lastLoadMs / 1000).toFixed(1)} s; GPU layers requested: ${model.diagnostics.requestedGpuLayers}`);
+      status(`Model ready in ${(model.lastLoadMs / 1000).toFixed(1)} s; ${model.diagnostics.gpuSelectionReason}` +
+        (fallbackReason ? ` (GPU load failed: ${fallbackReason})` : ''));
     } catch (error) {
       $('cpu').disabled = $('gpuLayers').value === '0';
       status(`Load failed: ${error.message}. CPU retry is available if the GPU path failed.`);

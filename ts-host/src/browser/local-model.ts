@@ -1,5 +1,6 @@
 import * as wllamaRuntime from '@wllama/wllama/esm/index.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
@@ -39,7 +40,7 @@ export type BrowserModelLoadOptions = {
   contextTokens?: number;
   /** Official model tool-call template, when the GGUF embeds a reduced template. */
   chatTemplate?: string;
-  /** Defaults to all layers. Set 0 for CPU or a smaller number for limited VRAM. */
+  /** Auto-selects all layers on a capable adapter, otherwise CPU. Set 0 for CPU. */
   gpuLayers?: number;
   threads?: number;
   onProgress?: (progress: { loaded: number; total: number }) => void;
@@ -50,6 +51,7 @@ export type BrowserModelDiagnostics = {
   loaded: boolean; supportsWebGPU: boolean; requestedGpuLayers: number | null;
   contextTokens: number | null; modelLayers: number | null;
   workerCompatibility: boolean | null; workerNoWebGPU: boolean | null;
+  gpuCapability: BrowserGpuCapability | null; gpuSelectionReason: string | null;
   /** Wllama does not expose the actual number of offloaded layers. */
   actualGpuLayers: null;
 };
@@ -180,6 +182,9 @@ export class BrowserLocalModel {
   private closed = false;
   private requestedGpuLayers: number | null = null;
   private requestedContextTokens: number | null = null;
+  private gpuCapability: BrowserGpuCapability | null = null;
+  private gpuSelectionReason: string | null = null;
+  private readonly gpuProbe: () => Promise<BrowserGpuCapability>;
   private turnQueue: Promise<void> = Promise.resolve();
   readonly schemaMode: BrowserSchemaMode;
   lastLoadMs: number | null = null;
@@ -189,8 +194,10 @@ export class BrowserLocalModel {
 
   constructor(options: { wasmUrl?: string; compatWasmUrl?: string; compatWorkerUrl?: string;
     firefoxGpuCompatibility?: boolean; engine?: BrowserInferenceEngine; allowOffline?: boolean;
-    schemaMode?: BrowserSchemaMode } = {}) {
+    schemaMode?: BrowserSchemaMode; gpuProbe?: () => Promise<BrowserGpuCapability> } = {}) {
     this.schemaMode = options.schemaMode ?? 'typed';
+    this.gpuProbe = options.gpuProbe ?? (() => probeBrowserGpu({
+      firefoxCompatibility: options.firefoxGpuCompatibility }));
     this.ownsEngine = !options.engine;
     this.engine = options.engine ?? new Wllama({ default: options.wasmUrl ??
       new URL('./wllama.wasm', import.meta.url).href },
@@ -212,16 +219,29 @@ export class BrowserLocalModel {
       requestedGpuLayers: this.requestedGpuLayers,
       contextTokens: info?.n_ctx ?? this.requestedContextTokens, modelLayers: info?.n_layer ?? null,
       workerCompatibility: worker?.compat ?? null, workerNoWebGPU: worker?.noWebGPU ?? null,
+      gpuCapability: this.gpuCapability, gpuSelectionReason: this.gpuSelectionReason,
       actualGpuLayers: null };
   }
 
   private async load(options: BrowserModelLoadOptions, action: (params: LoadParams) => Promise<void>): Promise<void> {
     if (this.closed) throw new Error('local model is closed');
+    const gpuLayers = options.gpuLayers;
     const params = loadParams(options);
-    const started = performance.now();
-    await action(params);
+    this.gpuCapability = await this.gpuProbe();
+    if (gpuLayers === undefined) {
+      params.n_gpu_layers = this.gpuCapability.usable ? 99999 : 0;
+      this.gpuSelectionReason = this.gpuCapability.usable ?
+        'Automatic full GPU offload requested' : `Automatic CPU fallback: ${this.gpuCapability.reason}`;
+    } else {
+      this.gpuSelectionReason = gpuLayers === 0 ? 'CPU selected explicitly' :
+        `${gpuLayers} GPU layers requested explicitly`;
+      if (gpuLayers > 0 && !this.gpuCapability.usable)
+        throw new Error(`Cannot request GPU layers: ${this.gpuCapability.reason}`);
+    }
     this.requestedGpuLayers = params.n_gpu_layers ?? null;
     this.requestedContextTokens = params.n_ctx;
+    const started = performance.now();
+    await action(params);
     this.lastLoadMs = Math.round(performance.now() - started);
   }
 
