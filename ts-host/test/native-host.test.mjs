@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NativeNatlangHost, TypeScriptEnvironment } from '../dist/index.js';
+import { NativeNatlangHost, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
 
 test('public native host runs a program without starting Python', async () => {
   const host = new NativeNatlangHost();
@@ -86,5 +86,38 @@ test('native host consumes an async Fold stream in order', async () => {
       init: 1, step: { $lambda: { type: 'Lambda<{ acc: Num, item: Num }, Num>',
         engine: 'typescript-host', code: 'return args.acc + args.item;' } } } } }, streams: { over: source() } });
     assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 6);
+  } finally { host.close(); }
+});
+
+test('native crisp TypeScript can await an application method in the shared environment', async () => {
+  const state = { count: 0, async next() { await Promise.resolve(); return ++this.count; } };
+  const host = new NativeNatlangHost({ host: state, mode: 'retained' });
+  const source = { kind: 'program', program: { $lambda: {
+    type: 'Lambda<{}, Num>', engine: 'typescript-host', code: 'return await host.next();' } } };
+  try {
+    assert.equal((await host.run({ source })).value, 1);
+    assert.equal((await host.run({ source })).value, 2);
+    assert.equal(state.count, 2);
+  } finally { host.close(); }
+});
+
+test('a native workspace versions source and can invoke a checked child from crisp eval', async () => {
+  const workspace = new NativeSourceWorkspace({ double: { args: { item: 'Num' }, returns: 'Num',
+    code: 'return args.item * 2;', engine: 'typescript-host' } }, 'double');
+  const edited = workspace.edited('double', { args: { item: 'Num' }, returns: 'Num',
+    code: 'return args.item * 3;', engine: 'typescript-host' });
+  assert.notEqual(workspace.revision, edited.revision);
+  assert.equal(workspace.describe().signature, 'double(item: Num) -> Num');
+  assert.equal(workspace.typeCheck('Num', 'Num').fits, true);
+  const host = new NativeNatlangHost({ host: { workspace } });
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{ item: Num }, Num>', engine: 'typescript-host',
+      code: 'const child = await host.workspace.invoke("double", { item: args.item }); return child.value;',
+    } } }, inputs: { item: 4 } });
+    assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 8);
+    const child = await workspace.invoke('double', { item: 4 }, { parentCallId: 'root@1' });
+    assert.equal(child.trace[0].parent_call_id, 'root@1');
+    assert.equal(child.source_revision, workspace.revision);
   } finally { host.close(); }
 });

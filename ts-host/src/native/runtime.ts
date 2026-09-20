@@ -54,6 +54,7 @@ export class NativeRuntime {
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
     maxDepth?: number; runId?: string; stream?: NativeStream;
     signal?: AbortSignal; timeoutMs?: number;
+    sourceRevision?: string; parentCallId?: string;
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
     this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
       runId: options.runId ?? 'native-run' };
@@ -61,6 +62,8 @@ export class NativeRuntime {
     if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
       throw new TypeError('derived seed policy requires an integer root');
     this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'tools-v3',
+      ...(options.sourceRevision ? { source_revision: options.sourceRevision } : {}),
+      ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       engines: ['typescript-host'], engine_contracts: { 'typescript-host': {
         environment_mode: options.environment?.mode ?? 'fresh', authority: 'shared-node-host', native_state_replayable: false } },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
@@ -90,6 +93,19 @@ export class NativeRuntime {
     this.acting = node;
     try {
       const result = this.environment.execute({ code, body, path, effectful: node.effects.length > 0, scope });
+      this.events.push(...result.events);
+      return result;
+    } finally { this.acting = previous; }
+  }
+
+  async evalForAsync(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>) {
+    this.checkInterruption();
+    const previous = this.acting;
+    this.acting = node;
+    try {
+      const result = await this.environment.executeAsync({ code, body: true, path,
+        effectful: node.effects.length > 0, scope });
+      this.checkInterruption();
       this.events.push(...result.events);
       return result;
     } finally { this.acting = previous; }
@@ -184,14 +200,14 @@ export class NativeRuntime {
     }
   }
 
-  private crisp(ref: Ref, node: LambdaNode, env: TypeEnv): NativeOutcome {
+  private async crisp(ref: Ref, node: LambdaNode, env: TypeEnv): Promise<NativeOutcome> {
     node.status = 'running';
     node.originalBody ??= node.body;
     this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: node.engine,
       code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
-      const result = this.evalFor(node, node.body, true, ref.path,
+      const result = await this.evalForAsync(node, node.body, ref.path,
         { args: jsView(node.args as Value), return: jsView(node.return) });
       let value: Value;
       try { value = coerce(result.result, node.type.returns, env, ref.path); }

@@ -49,8 +49,8 @@ export function portable(value: unknown, seen = new Set<object>()): unknown {
   return out;
 }
 
-function compile(code: string, body: boolean): string {
-  const source = body ? `function __natlang_body(self: unknown, args: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,args,fx,host)` : code;
+function compile(code: string, body: boolean, asyncBody = false): string {
+  const source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, args: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,args,fx,host)` : code;
   const result = ts.transpileModule(source, {
     fileName: 'natlang-eval.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
@@ -113,6 +113,24 @@ export class TypeScriptEnvironment {
       const value = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
         throw new TypeError('async eval results require a host job and later poll');
+      const result = portable(value === undefined ? null : value);
+      return { result, events: this.capture(request, 'completed') };
+    } catch (error) {
+      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
+    }
+  }
+
+  async executeAsync(request: EvalRequest): Promise<EvalResult> {
+    if (this.disposed) throw new Error('TypeScript environment is disposed');
+    if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
+      throw new TypeError('invalid eval request');
+    try {
+      const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
+      const scope = snapshot(request.scope) as Record<string, unknown>;
+      context.self = scope; context.args = scope.args; context.locals = scope.let ?? {};
+      const code = '"use strict";\n' + compile(request.code, request.body, request.body);
+      const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
+      const value = await pending;
       const result = portable(value === undefined ? null : value);
       return { result, events: this.capture(request, 'completed') };
     } catch (error) {
