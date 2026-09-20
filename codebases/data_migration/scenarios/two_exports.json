@@ -1,0 +1,16 @@
+{
+  "exports": [
+    {"source": "direct", "customers": [
+      {"id": "c1", "email": "Ada@Example.org", "name": "Ada"}
+    ], "orders": [
+      {"id": "o1", "customer": "c1", "amount": "1234", "unit": "cents"}
+    ]},
+    {"source": "legacy", "customers": [
+      {"cid": "c7", "mail": "ada@example.org", "person": "Ada"},
+      {"cid": "c8", "mail": "bea@example.org", "person": "Ada"}
+    ], "orders": [
+      {"oid": "o7", "buyer": "c7", "price": "12.34", "unit": "dollars"},
+      {"oid": "o8", "buyer": "c8", "price": "2.50", "unit": "dollars"}
+    ]}
+  ]
+}

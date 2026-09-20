@@ -12,8 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from applications.experiment_lab import (Candidate, ExperimentLab, MergeTrialBackend,
                                          load_merge_cases, merge_source_revision)
-from natlang.native import NativeCallDecoder
-from natlang.tool_agent import ToolAgent
+from applications.teacher import teacher_factory
 
 
 def main() -> None:
@@ -39,8 +38,7 @@ def main() -> None:
         parser.error("the output, trace directory or journal already exists")
     cases = [case for case in load_merge_cases(args.cases)
              if case.payload["program"] == args.program]
-    decoder = NativeCallDecoder(base_url=args.server)
-    agent_factory = lambda lam: ToolAgent(decoder, validation_feedback="caller")
+    agent_factory = teacher_factory(args.server)
     candidates = [Candidate(strategy, merge_source_revision(args.program, strategy),
                             args.model_id, args.model_seed, strategy)
                   for strategy in args.strategies]

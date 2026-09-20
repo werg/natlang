@@ -5,7 +5,7 @@ args:
   observations: Observation[]
 returns: Assessment
 types:
-  Observation: '{ id: Text, source_revision: Text, status: Text, violations: Text[], minimized: Text[], trace_sha256: Text }'
+  Observation: '{ id: Text, source_revision: Text, status: Text, violations: Text[], minimized: Text[], trace_sha256: Text, detail: Text }'
   Assessment: '{ findings: Text[], unknowns: Text[], followups: Text[] }'
 ---
 Explain confirmed contract violations, execution failures, and unresolved cases.

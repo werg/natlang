@@ -11,8 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from applications.type_studio import TypeStudio
-from natlang.native import NativeCallDecoder
-from natlang.tool_agent import ToolAgent
+from applications.teacher import teacher_factory
 
 
 def main() -> None:
@@ -33,12 +32,11 @@ def main() -> None:
     if set(evidence) - allowed:
         parser.error("unknown evidence keys")
     studio = TypeStudio.from_file(args.source, args.target, **evidence)
-    decoder = NativeCallDecoder(base_url=args.server)
     trace = args.out.with_suffix(".trace.jsonl")
     if trace.exists():
         parser.error("trace already exists")
     result = studio.run(args.operation,
-                        agent_factory=lambda lam: ToolAgent(decoder, validation_feedback="caller"),
+                        agent_factory=teacher_factory(args.server),
                         model_id=args.model_id, root_seed=args.seed, trace_path=trace)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("x") as target:

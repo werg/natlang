@@ -97,18 +97,25 @@ class Explorer:
         if digest(load_function(PLAN).to_inline()) != self.source_revision:
             raise ValueError("target source changed during exploration")
         seed = SeedPolicy("derived", self.target_seed).seed(case_id, attempt, "target")
-        if self.backend is not None:
-            status, state, trace = self.backend(copy.deepcopy(tasks), seed)
-        else:
-            status, state, trace = self._run(PLAN, {"tasks": tasks}, seed=seed,
-                                             agent_factory=self.target_factory,
-                                             label=f"target-{case_id}-{attempt}")
+        try:
+            if self.backend is not None:
+                status, state, trace = self.backend(copy.deepcopy(tasks), seed)
+            else:
+                status, state, trace = self._run(PLAN, {"tasks": tasks}, seed=seed,
+                                                 agent_factory=self.target_factory,
+                                                 label=f"target-{case_id}-{attempt}")
+            detail = ""
+        except Exception as exc:
+            status, state = "execution-error", None
+            detail = f"{type(exc).__name__}: {exc}"
+            trace = {"sha256": digest(detail), "path": None, "events": None}
         try:
             violations = graph_violations(tasks, state) if status == "done" else []
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
             status, violations = "invalid-output", []
+            detail = f"{type(exc).__name__}: {exc}"
         return {"status": "violated" if violations else status, "state": state,
-                "violations": violations, "trace": trace, "model_seed": seed}
+                "violations": violations, "trace": trace, "model_seed": seed, "detail": detail}
 
     def _shrink(self, case: GraphCase, original: dict) -> tuple[list[dict], list[dict]]:
         tasks = list(copy.deepcopy(case.tasks))
@@ -160,12 +167,13 @@ class Explorer:
                                  "minimized": [t["id"] for t in minimized],
                                  "trace_sha256": trial["trace"]["sha256"],
                                  "input_sha256": digest(list(case.tasks)),
-                                 "model_seed": trial["model_seed"], "state": trial["state"]})
+                                 "model_seed": trial["model_seed"], "state": trial["state"],
+                                 "detail": trial["detail"]})
             observations[-1]["shrink_history"] = shrink_history
         status, assessment, assessment_trace = self._run(
             ASSESS, {"question": question, "observations": [
                 {k: row[k] for k in ("id", "source_revision", "status", "violations",
-                                       "minimized", "trace_sha256")} for row in observations]},
+                                       "minimized", "trace_sha256", "detail")} for row in observations]},
             seed=self.analyst_seed, agent_factory=self.analyst_factory, label="assess")
         if status != "done":
             raise ValueError("natlang did not assess observations")

@@ -11,8 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from applications.test_explorer import Explorer, GraphCase
-from natlang.native import NativeCallDecoder
-from natlang.tool_agent import ToolAgent
+from applications.teacher import teacher_factory
 
 
 def main():
@@ -32,8 +31,7 @@ def main():
     cases = [GraphCase(row["id"], row["group"], row["description"],
                        tuple(row["tasks"]), row["split"])
              for row in (json.loads(line) for line in args.cases.read_text().splitlines() if line.strip())]
-    decoder = NativeCallDecoder(base_url=args.server)
-    factory = lambda lam: ToolAgent(decoder, validation_feedback="caller")
+    factory = teacher_factory(args.server)
     result = Explorer(analyst_factory=factory, target_factory=factory, model_id=args.model_id,
                       analyst_seed=args.analyst_seed, target_seed=args.target_seed,
                       trace_dir=trace_dir).run("Find violations of the dependency-plan graph contract",

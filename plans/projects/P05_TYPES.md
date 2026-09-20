@@ -53,3 +53,12 @@ false premises. An IDE integration must build witnesses from trusted traces.
 The fixture corpus groups variants by misconception, with train/eval separation.
 The next gate is live teacher runs over held-out existing codebases, followed by
 precision and abstention review before training samples are accepted.
+
+The 20 September 2026 Bonsai pilot first exposed a CLI harness mistake: the
+native constrained decoder treated Bonsai's chat-tool text as a reply. All four
+application CLIs now share the repository's established Bonsai chat-tool adapter.
+With that adapter, a P05 inference pilot reached `propose.nl` and read the
+relevant body, parameters and named types, but did not finish within 180 seconds.
+The retained trace is diagnostic evidence, not a successful sample. Reduce
+context/turn cost and measure completion before using this programme for bulk
+teacher collection.

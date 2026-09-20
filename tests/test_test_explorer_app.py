@@ -77,3 +77,16 @@ def test_real_planner_runtime_handles_empty_graph():
         "empty", "boundary", "No tasks", ())], budget=1)
     observation = result["observations"][0]
     assert observation["status"] == "done" and observation["violations"] == []
+
+
+def test_target_exception_is_unknown_not_confirmed_violation():
+    def failed_backend(tasks, seed):
+        raise RuntimeError("target unavailable")
+
+    explorer = Explorer(analyst_factory=lambda lam: Analyst(lam), target_factory=lambda lam: None,
+                        model_id="scripted", analyst_seed=2, target_seed=3,
+                        backend=failed_backend)
+    result = explorer.run("Probe failure", [GraphCase("x", "error", "Target fails", ())], budget=1)
+    observation = result["observations"][0]
+    assert observation["status"] == "execution-error" and observation["violations"] == []
+    assert "target unavailable" in observation["detail"]
