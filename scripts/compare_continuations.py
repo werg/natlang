@@ -72,13 +72,16 @@ def main():
     try:
         outcome, value = Runtime(lambda lam: ToolAgent(
             decoder, system_prompt=PROMPT, temperature=0, validation_feedback="caller",
-            segment_turns=segment_turns, teacher_turns=captured, max_seconds=360),
+            segment_turns=segment_turns,
+            segment_messages=None if segment_turns is None else 12,
+            teacher_turns=captured, max_seconds=360),
             options=options, trace_sink=recorder).run_root(root)
         actual = dump(value) if outcome.kind == "done" else None
         requests = [e for e in recorder.events if e["kind"] == "model_request" and e.get("phase") == "end"]
         checkpoints = [e for e in recorder.events if e["kind"] == "checkpoint"]
         actions = [e for e in recorder.events if e["kind"] == "action"]
-        summary = {"case": args.case, "segment_turns": segment_turns, "seed": args.seed,
+        summary = {"case": args.case, "segment_turns": segment_turns,
+                   "segment_messages": None if segment_turns is None else 12, "seed": args.seed,
                    "probe_deadline_seconds": 360,
                    "status": outcome.kind, "detail": outcome.detail, "expected": expected,
                    "actual": actual, "correct": outcome.kind == "done" and actual == expected,

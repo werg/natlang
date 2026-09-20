@@ -24,10 +24,10 @@ examples after a checkpoint contain only the new segment.
 
 Data generation and application evaluation were paused on 2026-09-20 while this
 change is checked. Existing raw data and journals remain available. The
-existing synthetic SFT files still contain full conversation prefixes; they
-need a fresh materialization from frozen programs before a continuation-focused
-training run. Do not splice rendered SFT text without reconstructing runtime
-state. Bonsai may be used for targeted probes while collectors remain paused.
+older synthetic SFT files still contain full conversation prefixes; the new
+continuation bundle below replaces them for a continuation-focused training
+run. Do not splice rendered SFT text without reconstructing runtime state.
+Bonsai may be used for targeted probes while collectors remain paused.
 
 Local checks: 370 tests passed, one skipped. A Bonsai probe
 completed a partial-record task after a fresh checkpoint prompt with four
@@ -101,8 +101,18 @@ exporter records `context_items` directly from structured messages, so the
 next rendered bundle can be audited without depending on template delimiters.
 
 The full frozen 10,000-program replay verified all programs and yielded the
-same 280,472 targets. Its structured prompts have 279,385 (99.61%) with at
+same 280,472 targets. The rendered `data/synthetic-continuation-items.sft.jsonl`
+was checked against its manifest and has 279,385 (99.61%) prompts with at
 most 12 context items, 1,087 with 13 or 14, and none above 14. The message
 threshold is soft because a single durable action can add multiple feedback
-items before the next safe boundary. The local LFM2.5-350M rendering pilot
-matched the prior template hash exactly.
+items before the next safe boundary. The local LFM2.5-350M rendering used the
+same template hash as the prior synthetic bundle.
+
+One targeted Bonsai recollection of frozen `73:map_then_count:13` was admitted.
+Its 22-turn IR has one teacher-authored checkpoint note with the 12-item and
+two-turn settings recorded. Replay preserved the result, materialized the note
+as a target, and reopened the next sample from four messages containing the
+note and current workspace. Rendered with the same student template, this
+trajectory is included in `data/teacher-reviewed-with-continuation.sft.jsonl`
+(943 pairs total). Bulk teacher generation remains paused pending a broader
+checkpoint-success comparison.
