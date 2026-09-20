@@ -12,7 +12,8 @@ import { NativeSourceWorkspace } from './workspace.js';
 import { TypeEnv, type Type } from './types.js';
 import { buildPending, coerce, dump, isPending, type Pending } from './values.js';
 
-export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions; parallelMapSafe?: boolean };
+export type NativeRunRequest = RunRequest & { review?: NativeReviewOptions; parallelMapSafe?: boolean;
+  validationFeedback?: 'caller' | 'local' };
 
 /** Python-free host. Its interpreter remains opt-in while differential parity is expanded. */
 export class NativeNatlangHost {
@@ -73,7 +74,8 @@ export class NativeNatlangHost {
       const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
-        maxSeconds: request.options?.model?.max_seconds, review: request.review }) : undefined;
+        maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
+        review: request.review }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,

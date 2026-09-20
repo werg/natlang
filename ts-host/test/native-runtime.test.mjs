@@ -87,6 +87,22 @@ test('native model-turn loop drives tool actions without Python', async () => {
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 11); assert.equal(turn, 2);
 });
 
+test('native model loop returns validation to caller by default and can nudge locally', async () => {
+  const root = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Write a number.' } };
+  let defaultTurns = 0;
+  const caller = new NativeToolAgent(() => { defaultTurns++; return { calls: [], text: '7', completion_tokens: 1 }; });
+  const first = await new NativeRuntime({ agent: session => caller.run(session) }).runRoot(root);
+  assert.equal(first.outcome.kind, 'quiesced');
+  assert.match(first.outcome.detail, /validation failed: `return` has not been written yet/);
+  assert.equal(defaultTurns, 1);
+  let localTurns = 0;
+  const local = new NativeToolAgent(() => ++localTurns === 1 ? { calls: [], text: '7', completion_tokens: 1 } :
+    localTurns === 2 ? { calls: [['write', { path: 'return', type: 'Num', value: 7 }]], completion_tokens: 1 } :
+      { calls: [], text: 'done', completion_tokens: 1 }, { validationFeedback: 'local' });
+  const second = await new NativeRuntime({ agent: session => local.run(session) }).runRoot(root);
+  assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 7); assert.equal(localTurns, 3);
+});
+
 test('native checked definitions snapshot and link source calls', async () => {
   const source = { main: { args: { price: 'Num' }, returns: 'Num',
     instructions: 'Use double.', uses: { double: 'helper' } },

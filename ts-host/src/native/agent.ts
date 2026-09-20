@@ -109,7 +109,7 @@ export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
-      review?: NativeReviewOptions } = {}) {}
+      validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions } = {}) {}
 
   private reviewTools(): unknown[] {
     const order = this.options.review?.order === 'decision_first' ? ['decision', 'reason'] : ['reason', 'decision'];
@@ -359,9 +359,11 @@ export class NativeToolAgent {
         max_tokens: allowance });
       turns++;
       session.runtime.checkInterruption();
-      tokens += response.completion_tokens ?? allowance;
+      tokens += response.completion_tokens === undefined ? allowance : Math.max(1, response.completion_tokens);
       if (tokens > maxTokens) return 'episode token budget exhausted';
       if (!response.calls?.length) {
+        if (this.options.validationFeedback !== 'local' && this.missing(session))
+          return `validation failed: ${this.missing(session)}`;
         const marks = this.openMarks(session);
         if (marks.length) {
           if (++nudges > 2) return `validation failed: unfinished lines: ${marks.join(', ')}`;
@@ -369,7 +371,8 @@ export class NativeToolAgent {
             { role: 'user', content: `Lines still marked [ ]: ${marks.join(', ')}. Mark completed work done and untaken work skipped (skipped=true).` });
           continue;
         }
-        if (session.finish()) return;
+        if (session.finish()) { session.lam.note = response.text ?? ''; return; }
+        if (this.options.validationFeedback !== 'local') return `validation failed: ${this.missing(session)}`;
         if (++nudges > 2) return `replied without writing \`return\`: ${(response.text ?? '').slice(0, 280)}`;
         const missing = this.missing(session);
         messages.push({ role: 'assistant', content: response.text ?? '' },
@@ -396,7 +399,7 @@ export class NativeToolAgent {
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
             deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'review', turns),
           max_tokens: budget });
-        turns++; tokens += answer.completion_tokens ?? budget;
+        turns++; tokens += answer.completion_tokens === undefined ? budget : Math.max(1, answer.completion_tokens);
         session.runtime.checkInterruption();
         if (tokens > maxTokens || Date.now() >= deadline) return 'careful review budget exhausted before applying proposal';
         if (answer.calls?.length !== 1 || answer.calls[0]![0] !== 'review_write')
@@ -425,10 +428,14 @@ export class NativeToolAgent {
         if (result.kind === 'blocked') return result.text;
         if (['rejected', 'refused', 'error', 'budget', 'completed'].includes(result.kind)) break;
       }
-      messages.push({ role: 'assistant', content: response.text ?? '', tool_calls: raw.slice(0, results.length) });
+      messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length) });
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
+      if (results.at(-1)?.kind === 'completed') return;
+      if (this.options.validationFeedback !== 'local' &&
+          ['rejected', 'refused'].includes(results.at(-1)?.kind ?? ''))
+        return `validation failed: ${results.at(-1)!.text}`;
     }
     return 'episode turn budget exhausted';
   }
