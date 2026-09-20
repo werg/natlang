@@ -1,4 +1,4 @@
-import { BrowserLocalModel, BrowserNatlangHost, BROWSER_MODEL_CATALOG, checkModelStorage,
+import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, checkModelStorage,
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
   validProjectPath, validatePlaygroundProject, runPlaygroundProject, traceFrame,
   admitPlaygroundRun } from '../dist/browser/natlang.js';
@@ -25,6 +25,7 @@ const sameJSON = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let projects = [], project = null, selectedFile = null, runs = [], cases = [], selectedRun = null;
 let diagnostics = [], model = null, modelSpec = null, abort = null, saveTimer = null, checkTimer = null;
+const client = new BrowserNatlangClient();
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
 let modelChoices = [...BROWSER_MODEL_CATALOG];
@@ -418,17 +419,8 @@ async function executeProject(snapshot) {
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
     message(`Running revision ${snapshot.revision.slice(0, 8)}…`);
-    const host = new BrowserNatlangHost({ model });
-    const firstTurn = model?.turnHistory.length ?? 0;
-    const modelTurn = model ? async request => { message(`Model turn ${model.turnHistory.length - firstTurn + 1}…`);
-      return model.turn(request, abort.signal); } : undefined;
-    let record;
-    try { record = await runPlaygroundProject(host, snapshot, { signal: abort.signal,
-      runOptions: { seed: { mode: 'compatibility' } }, modelTurn,
-      model: modelSpec ? { id: modelSpec.id, diagnostics: model.diagnostics } : undefined }); }
-    finally { host.close(); }
-    if (record.model) record.model.turns = structuredClone(model.turnHistory.slice(firstTurn));
-    return record;
+    return runPlaygroundProject(client, snapshot, { signal: abort.signal,
+      runOptions: { seed: { mode: 'compatibility' } } });
 }
 
 async function runCase(item) {
@@ -464,31 +456,24 @@ async function loadModel() {
   try {
     if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
     if (gpuLayers !== undefined && (!Number.isInteger(gpuLayers) || gpuLayers < 0)) throw new Error('GPU layers must be nonnegative');
-    const template = file || !spec.templateUrl ? undefined : await fetch(spec.templateUrl).then(response => {
-      if (!response.ok) throw new Error(`Template unavailable: ${spec.templateUrl}`); return response.text(); });
-    if (model) await model.close(); model = null;
-    const options = { contextTokens, ...(template ? { chatTemplate: template } : {}),
+    const options = { contextTokens,
       ...(gpuLayers === undefined ? {} : { gpuLayers }),
-      ...(crossOriginIsolated ? {} : { threads: 1 }),
       onProgress: ({ loaded, total }) => { $('modelProgress').textContent = total ?
         `Downloading ${Math.round(100 * loaded / total)}%` : 'Loading model…'; } };
-    async function attempt(override) {
-      model = new BrowserLocalModel();
-      if (file) await model.loadFiles([file], { ...options, ...override });
-      else await model.loadFromUrl(spec.url, { ...options, ...override });
-    }
-    try { await attempt({}); }
-    catch (error) {
-      if (gpuLayers !== undefined || model?.diagnostics.requestedGpuLayers !== 99999) throw error;
-      await model.close(); $('modelProgress').textContent = `GPU load failed; retrying on CPU: ${error.message}`;
-      await attempt({ gpuLayers: 0 });
-    }
+    const status = await client.loadModel(file ? { kind: 'files', files: [file], id: `file:${file.name}`,
+      templateUrl: spec.templateUrl } : { kind: 'url', url: spec.url, id: spec.id,
+      templateUrl: spec.templateUrl }, options);
+    model = client.model;
     modelSpec = file ? { id: `file:${file.name}`, label: file.name } : spec;
     $('modelButton').classList.add('loaded'); $('modelLabel').textContent = modelSpec.label;
-    $('modelProgress').textContent = `Ready · ${model.diagnostics.gpuSelectionReason}`;
+    $('modelProgress').textContent = `Ready · ${model.diagnostics.gpuSelectionReason}` +
+      (status.gpuFallbackReason ? ` (GPU load failed: ${status.gpuFallbackReason})` : '');
     $('runtimeStatus').textContent = model.diagnostics.gpuSelectionReason;
     await refreshModelDiagnostics();
-  } catch (error) { $('modelProgress').textContent = `Load failed: ${error.message}`; }
+  } catch (error) { model = client.model;
+    if (!model?.loaded) { modelSpec = null; $('modelButton').classList.remove('loaded');
+      $('modelLabel').textContent = 'No model loaded'; }
+    $('modelProgress').textContent = `Load failed: ${error.message}`; }
   finally { button.disabled = false; }
 }
 

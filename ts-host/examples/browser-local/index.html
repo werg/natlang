@@ -31,7 +31,7 @@
 <button id="cancel" disabled>Cancel</button><button id="download" disabled>Download report</button>
 <pre id="result"></pre>
 <script type="module">
-  import { BrowserLocalModel, BrowserNatlangHost, BROWSER_MODEL_CATALOG, probeBrowserGpu,
+  import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, probeBrowserGpu,
     checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
   const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
@@ -42,8 +42,9 @@
     `<option value="${index}">${item.label}</option>`).join('');
   const chosen = () => BROWSER_MODEL_CATALOG[Number($('model').value)];
   const status = value => { $('status').textContent = value; };
-  let model, host, controller, reports = [];
-  window.natlangPilot = { get model() { return model; }, get host() { return host; },
+  const client = new BrowserNatlangClient();
+  let model, controller, reports = [];
+  window.natlangPilot = { get model() { return model; }, get host() { return client; },
     get reports() { return reports; } };
   async function inspect() {
     const spec = chosen(), storage = await checkModelStorage(spec);
@@ -67,39 +68,24 @@
     try {
       const file = $('file').files[0], storage = await inspect();
       if (!file && storage.enough === false) throw new Error('Estimated storage is too low for this download');
-      host?.close(); if (model) await model.close();
       const contextTokens = Number($('context').value);
       if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
       const gpuLayers = $('gpuLayers').value === '' ? undefined : Number($('gpuLayers').value);
-      const templateUrl = chosen().templateUrl;
-      const templateResponse = await fetch(templateUrl);
-      if (!templateResponse.ok) throw new Error(`Cannot load natlang tool template: ${templateUrl}`);
-      const chatTemplate = await templateResponse.text();
-      const options = { contextTokens, chatTemplate,
-        ...(crossOriginIsolated ? {} : { threads: 1 }),
+      const options = { contextTokens, schemaMode: $('schema').value,
         ...(gpuLayers === undefined ? {} : { gpuLayers }),
         onProgress: ({ loaded, total }) => status(total ?
           `Downloading ${Math.round(loaded / total * 100)}% (${mb(loaded)} / ${mb(total)})` : 'Loading model…') };
-      async function attempt(layers) {
-        model = new BrowserLocalModel({ schemaMode: $('schema').value });
-        host = new BrowserNatlangHost({ model });
-        status(`Loading ${file?.name ?? chosen().label}…`);
-        if (file) await model.loadFiles([file], { ...options, ...layers });
-        else await model.loadFromUrl(chosen().url, { ...options, ...layers });
-      }
-      let fallbackReason = null;
-      try { await attempt({}); }
-      catch (error) {
-        if (gpuLayers !== undefined || model?.diagnostics.requestedGpuLayers !== 99999) throw error;
-        fallbackReason = error.message;
-        host?.close(); await model.close();
-        await attempt({ gpuLayers: 0 });
-      }
+      status(`Loading ${file?.name ?? chosen().label}…`);
+      const loaded = await client.loadModel(file ? { kind: 'files', files: [file],
+        id: file.name, templateUrl: chosen().templateUrl } : { kind: 'url',
+        id: chosen().id, url: chosen().url, templateUrl: chosen().templateUrl }, options);
+      model = client.model;
       $('cpu').disabled = true; $('run').disabled = false; $('suite').disabled = false;
       await inspect();
       status(`Model ready in ${(model.lastLoadMs / 1000).toFixed(1)} s; ${model.diagnostics.gpuSelectionReason}` +
-        (fallbackReason ? ` (GPU load failed: ${fallbackReason})` : ''));
+        (loaded.gpuFallbackReason ? ` (GPU load failed: ${loaded.gpuFallbackReason})` : ''));
     } catch (error) {
+      model = client.model;
       $('cpu').disabled = $('gpuLayers').value === '0';
       status(`Load failed: ${error.message}. CPU retry is available if the GPU path failed.`);
     } finally { $('load').disabled = false; }
@@ -121,7 +107,7 @@
     const before = model.turnHistory.length, started = performance.now();
     let outcome, value, trace = [], error = null;
     try {
-      const result = await host.run({ source: { kind: 'program', program: task.program },
+      const result = await client.run({ source: { kind: 'program', program: task.program },
         signal: controller.signal, timeoutMs: 240000, validationFeedback: 'local',
         options: { model: { max_turns: 20, max_tokens: 2048, turn_tokens: 128 } } });
       ({ outcome, value, trace } = result);

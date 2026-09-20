@@ -44,6 +44,7 @@
     "dist",
     "examples/browser-local",
     "prelude.js",
+    "BROWSER_CLIENT.md",
     "README.md"
   ]
 }

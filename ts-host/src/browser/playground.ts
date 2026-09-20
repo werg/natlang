@@ -1,6 +1,7 @@
 import { loadFunctionFiles } from './source.js';
 import { checkTypeScriptBody } from './environment.js';
 import type { BrowserNatlangHost, BrowserRunOptions } from './host.js';
+import type { BrowserNatlangClient } from './client.js';
 import { NativeTraceRecorder } from '../native/trace.js';
 import { admitNativeTrace, type NativeScenarioContract } from '../native/scenario.js';
 
@@ -91,7 +92,7 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /** Pin source and inputs before execution; later edits cannot alter this run's identity. */
-export async function runPlaygroundProject(host: BrowserNatlangHost, project: PlaygroundProject,
+export async function runPlaygroundProject(host: BrowserNatlangHost | BrowserNatlangClient, project: PlaygroundProject,
   options: { signal?: AbortSignal; timeoutMs?: number; runOptions?: BrowserRunOptions;
     model?: PlaygroundRun['model']; modelTurn?: Parameters<BrowserNatlangHost['run']>[0]['modelTurn'] } = {}):
   Promise<PlaygroundRun> {
@@ -113,6 +114,10 @@ export async function runPlaygroundProject(host: BrowserNatlangHost, project: Pl
     record.correct = result.outcome.kind === 'done' && sameValue(result.value, snapshot.expected);
   }
   if (options.model) record.model = structuredClone(options.model);
+  else {
+    const modelRun = result as Awaited<ReturnType<BrowserNatlangClient['run']>>;
+    if (modelRun.model?.id) record.model = structuredClone(modelRun.model);
+  }
   return record;
 }
 

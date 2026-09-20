@@ -1,4 +1,5 @@
-import { BrowserLocalModel, BrowserNatlangHost, NativeSourceWorkspace, loadFunctionFiles,
+import { BrowserLocalModel, BrowserNatlangHost, BrowserNatlangClient,
+  NativeSourceWorkspace, loadFunctionFiles,
   type BrowserRunRequest } from '../dist/browser/index.js';
 
 const request: BrowserRunRequest = {
@@ -14,6 +15,12 @@ void model.loadFromHuggingFace({ repo: 'Qwen/Qwen3-0.6B-GGUF', quant: 'Q4_K_M' }
 void localHost.run(request);
 localHost.close();
 void model.close();
+
+const client = new BrowserNatlangClient({ host: { count: 1 }, mode: 'retained' });
+void client.loadModel({ kind: 'url', url: '/models/natlang.gguf',
+  templateUrl: '/models/template.jinja' }, { contextTokens: 4096 });
+void client.run(request);
+void client.close();
 
 const files = { 'main.nl': '---\nreturns: Num\n---\nReturn one.' };
 void loadFunctionFiles('main.nl', files);
