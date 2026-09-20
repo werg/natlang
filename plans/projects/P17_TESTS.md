@@ -1,6 +1,8 @@
 # P17 — Living specification and test explorer
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: finite dependency-plan explorer implemented in `codebases/test_explorer`,
+`applications/test_explorer.py`, and `scripts/run_test_explorer.py`. Teacher runs
+and multi-target exploration remain unmeasured.
 
 ## Natlang prerequisites
 
@@ -34,5 +36,15 @@ A later UI may consume test-result streams, but the first explorer is finite. Sc
 Test type-invalid input generation, unrelated failures during shrinking, changed source, incomplete traces, state leakage and attempts to weaken the contract to make a run pass.
 
 ## Trace and training
+
+The first explorer uses an independently written graph oracle. Natlang selects
+offered cases and explains observations; the host validates inputs, runs a fresh
+target runtime for each case, checks task identity, dependency and completion,
+and tries one-task deletions under the same seed and failure code. Reports retain
+source revision, input hashes, model seeds, trace digests and shrink attempts.
+The oracle does not judge semantic priority among ready tasks. Runtime failure
+or invalid output remains unknown. The next gate is a live teacher run over all
+four scenario groups with manually reviewed traces, followed by a separate saga
+effect and queue contract.
 
 Capture proposal, actual execution, oracle identity and minimisation history. Accepted cases become linked contrast families: correct behavior, execution mistake, legitimate blocker and verified repair. Keep each family in one split. Rejected hypotheses remain useful diagnostic data but are not supervised success targets. This is an early consumer of trace-as-data and can improve the other projects' fixtures without becoming the sole judge of its own outputs.
