@@ -1,6 +1,6 @@
 # P09 — Spell interpretation game and specialised student
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: finite arena slice implemented in [codebases/spell_arena](../../codebases/spell_arena/README.md). [Shared capabilities](README.md). The semantic interpreter proposes a typed plan; the exact resolver validates and atomically applies it. Live-model intent quality, broader mechanics, training and graphical integration remain open.
 
 ## Natlang prerequisites
 

@@ -1,0 +1,4 @@
+{"id":"simple-edge","group":"edge","split":"train","description":"Two tasks with one dependency","tasks":[{"id":"a","needs":[],"description":"Security remediation"},{"id":"b","needs":["a"],"description":"Customer notice"}]}
+{"id":"missing-parent","group":"missing","split":"train","description":"Task references an absent predecessor","tasks":[{"id":"a","needs":["missing"],"description":"Customer notice"}]}
+{"id":"two-cycle","group":"cycle","split":"eval","description":"Two mutually dependent tasks","tasks":[{"id":"a","needs":["b"],"description":"Internal work"},{"id":"b","needs":["a"],"description":"Internal work"}]}
+{"id":"mixed-ready-cycle","group":"mixed","split":"eval","description":"An independent task beside a cycle","tasks":[{"id":"a","needs":[],"description":"Security remediation"},{"id":"b","needs":["c"],"description":"Internal work"},{"id":"c","needs":["b"],"description":"Internal work"}]}

@@ -13,8 +13,23 @@ are quarantined under `runs/`; they never append training references.
   "call_function"})` for this teacher/server combination. Text values are plain
   strings; other values are JSON text. Runtime validation still decides
   whether a proposal fits its destination. Invalid proposals remain possible.
-- Keep compact state, caller validation feedback, and no self-review or local
-  repair loop. Expanded state and review prompts remain student experiments.
+- This adapter does not constrain `write.value` to the destination's nested
+  type while generating. `ToolSurface` publishes destination-specific typed
+  alternatives for native grammar decoders, but Bonsai's chat endpoint uses
+  the JSON-text transport above because its parser mishandled nested payloads
+  in earlier probes. Test any typed chat adaptation against exact record/list
+  cases before using it for collection.
+- A 20 September typed-chat probe (`scripts/probe_typed_chat.py`) found that
+  this server preserved a nested `{id, label, tags}` record under one exact
+  tool schema and under two separately named exact tools. A single tool with
+  `oneOf` alternatives instead returned empty argument objects. These probes
+  are narrow, but they support a teacher adapter that exposes typed alternatives
+  as separate tool names and maps them back to the stable natlang action. Test
+  realistic call/write menus and trajectory quality before switching collection.
+- Keep compact state and no self-review. The established leaf collector uses
+  caller validation feedback. The application evaluation harness uses local
+  validation feedback so rejected writes remain visible to the model for
+  repair; rejected and corrected turns are retained in raw audits.
 - A normal assistant reply signals successful completion. The harness checks
   return validity and closed numbered lines at that boundary. `report_error`
   and `report_blocker` remain failure signals.
@@ -174,18 +189,137 @@ were rejected. A failed or truncated teacher pass publishes no snapshot.
 
 The first long frozen-IR pass stopped after 14 of 394 attempts. Its watcher
 correctly refused to publish (`runs/finalize-synthetic-backfill-pass1.log`).
-The resumed pass uses `--turn-tokens 1600`, started with 387 missing keys,
-and writes `runs/teacher-leaves-frozen-s73-extended-20260919.jsonl`. The
+The resumed pass used `--turn-tokens 1600`, started with 387 missing keys,
+and wrote `runs/teacher-leaves-frozen-s73-extended-20260919.jsonl`. The
 original 700-token cap caused six responses to stop at `finish_reason=length`;
-four responses in the resumed audit also hit the 1600-token cap. The active
-watcher (`runs/finalize-synthetic-backfill-uncapped.log`) therefore runs one
-more pass over missing keys with no separate per-turn cap, writing
-`runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.jsonl`, before it
-creates `synthetic-all-after-uncapped-retry-<bank hash>` artifacts. All pass
-audits remain available; admitted references are shared through
+four responses in the resumed audit also hit the 1600-token cap. The watcher
+(`runs/finalize-synthetic-backfill-uncapped.log`) then ran another pass without
+a separate per-turn cap, writing
+`runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.jsonl`. That snapshot
+remained incomplete; the follow-up review below closed its remaining keys.
+All pass audits remain available; admitted references are shared through
 `data/leaf_references.jsonl`.
 
+### Frozen-leaf rejection review, 20 September 2026
+
+The 387-attempt resumed pass admitted 299 references and rejected 88. An
+uncapped retry recovered 17 of the 18 unfinished cases; the last HTML page
+needed 4,125 generated tokens across two turns and completed after removal of
+the 4,000-token episode budget. The other 70 cases had completed `say` writes.
+Many were rejected by the Bonsai yes/no semantic judge, whose short question
+conflated a customer's rejected offer with the shopkeeper's counter-offer and
+sometimes rejected valid sale dialogue. A revised question also produced false
+positives, so its answer is advisory for dialogue. The follow-up audits and
+manual decisions are in `runs/teacher-leaves-*20260920*.jsonl`.
+
+All 70 `say` keys were filled after manual review and targeted retries. The
+final reference bank has 437 distinct keys, with no duplicates, and the
+original frozen IR has zero missing generative-leaf keys. `teacher_leaves.py`
+now records `say` results for review by default; `--admit-say` is an explicit
+override. Normal tool and legacy inference have no default episode token,
+turn-count, or wall-clock cutoff. The teacher collector likewise leaves each
+leaf's wall-clock time and response length open unless `--max-seconds` or
+`--turn-tokens` is supplied.
+
+The complete reference bank has SHA-256 prefix `702a03e8`. Applying it to the
+frozen seed-73 IR with `--require-complete` produced
+`data/external_pilot/synthetic-all-complete-702a03e8.ir.jsonl` and its
+manifest: 10,000 eligible programs, 453 refreshed programs, 929 replaced leaf
+cases, and zero provisional programs. `audit_program_ir.py` passed. The
+verified training traces are in
+`data/external_pilot/synthetic-all-complete-702a03e8-shards`: 100 compressed
+shards, 280,472 eligible turns, and 100,647 episodes. All shards passed gzip
+integrity checks. Eight materialization workers caused a two-second effectful
+JavaScript timeout under contention; the successful run used four workers.
+
 ## End-of-turn completion
+
+## Teacher trajectories to the next student corpus
+
+`scripts/prepare_teacher_training.py` selects exact teacher trajectory IR rows
+whose output matches `data/leaf_references.jsonl`. It applies the later
+rejudgments and manual decisions by original audit file and line, with a
+manual rejection overriding an automated approval. It replays each selected
+choice in the current harness before writing structured turns. The source IR
+is immutable. Older audits that lack a leaf definition can recover it from the
+frozen program IR through `--program-ir`; the manifest records that source.
+
+The current reviewed leaf set is `data/teacher-leaf-training-v4.jsonl`:
+402 trajectories and 868 turns. Its manifest lists 35 bank entries with no
+matching captured teacher trajectory. `data/teacher-leaf-sft-v2.jsonl` is the
+corresponding LFM2.5 SFT view, rendered by the live model template on port
+8080. It retains the teacher's action order and includes captured reasoning
+for 844 turns in the training completion. The other 24 turns had no recorded
+reasoning. The source, selection decision, and trajectory digest are carried
+through the SFT rows. Tokenization with the student tokenizer found 40 of 868
+teacher pairs above the trainer's default 3,072-token limit (maximum 6,050).
+Use at least `--max-len 6050` for a run meant to include every teacher turn;
+the next run should use `--max-len 8192`, subject to its GPU memory check.
+
+For an incoming frozen program batch, collect accepted whole-program teacher
+IR with `scripts/collect_scenario_teacher.py`, then pass its JSONL to
+`prepare_teacher_training.py --whole-ir`. Only attempts with successful
+semantic trace admission are selected; replay checks them again. The same
+`export_sft.py` step renders those turns for the next training corpus. Use a
+new destination for each batch and concatenate the resulting SFT JSONL files
+with the base corpus before starting the next fresh training run.
+The collector's `--start` and `--limit` select disjoint ranges of an already
+frozen JSONL file, so completed ranges can run while other program files are
+still being generated. Preserve each range's raw trajectory and trace files.
+
+```bash
+.venv/bin/python scripts/collect_scenario_teacher.py data/new-batch.ir.jsonl runs/new-batch.teacher.ir.jsonl \
+  --model-id Ternary-Bonsai-2-27B-PTQ1_0 --root-seed 907 --start 0 --limit 100
+.venv/bin/python scripts/prepare_teacher_training.py data/new-batch.teacher.turns.jsonl \
+  --whole-ir runs/new-batch.teacher.ir.jsonl
+.venv/bin/python scripts/export_sft.py data/new-batch.teacher.turns.jsonl data/new-batch.teacher.sft.jsonl \
+  --server http://127.0.0.1:8080 --template-id LFM2.5-350M --workers 8
+```
+
+One real smoke run on `data/external_pilot/synthetic-simple-seed73-current.ir.jsonl`
+completed as `73:judge:4` with Bonsai. It passed trace admission, replayed as
+two turns, and exported both turns with captured reasoning to
+`data/teacher-program-bridge-pilot.sft.jsonl`. The source attempt and trace
+are `runs/teacher-program-bridge-pilot.ir.jsonl` and its adjacent trace file.
+This verified the whole-program bridge on one frozen program; each incoming
+batch still needs its own admission and replay check.
+
+The remaining 15 programs in that frozen set also completed and passed
+admission, including an eight-item map/count program. Their raw IR is
+`runs/teacher-program-simple-s73-remaining.ir.jsonl`. Replaying both files
+produced 53 turns in `data/teacher-program-simple-s73.turns.jsonl`; the LFM
+template export has 53 SFT pairs, all with captured reasoning. None exceeds
+3,072 student tokens. `scripts/combine_sft.py` checks source template
+identities and duplicate IDs while writing a hashed bundle. The current
+combined teacher SFT file is `data/teacher-reviewed-bundle.sft.jsonl`: 921
+distinct pairs from the reviewed leaf set and these 16 whole programs, 897
+with reasoning. Its manifest pins the two source SFT hashes. Add the incoming
+program batch's admitted SFT pairs to a new combined file with
+`combine_sft.py` before the next fresh training run.
+
+The data-migration Bonsai pilot uses
+`codebases/data_migration/scenarios/two_exports.json` with
+`scripts/run_data_migration.py` in preview mode. Early traces showed that
+Bonsai invented output field names (`source_customer_id`, then `decision`),
+which the type checker rejected. A later attempt treated two same-email source
+customers as separate `new` identities because the instructions only described
+the database snapshot. The codebase now names every output field and explains
+within-batch identity matching; the host validates decisions independent of
+their reply order. `runs/data-migration-bonsai-pilot4.json` completed the
+two-export preview: both mappings were correct, one same-email pair became
+`new` plus `merge`, and the plan contains two customers and three orders with
+no review items. Each pilot has its own SQLite file and trace directory; no
+import was applied.
+
+The one-case test-explorer pilot first wrote a bare ID list instead of its
+`Selection` record. After the shape was clarified, it selected the
+`missing-parent` case and ran the nested dependency planner; the independent
+graph oracle found no violation. Its assessment then used invented record
+fields and failed typing. With `Assessment`'s three field names stated
+explicitly, replaying the saved observation completed with empty `findings`,
+`unknowns`, and `followups` in
+`runs/test-explorer-assess-replay.json`. This checks the current interface on
+one case; the full explorer has not yet completed a second end-to-end run.
 
 The terminal `done` tool has been removed from the model-facing surface and
 reference policy. `done=N` on `write` and `call` still closes a numbered line.

@@ -93,14 +93,23 @@ def materialize(row, *, system_prompt: str):
         expected = [(execution["name"], execution["kind"])
                     for turn in row["trajectory"] for execution in turn["executions"]
                     if execution.get("kind") is not None]
+        if not expected and "raw_server_response_unavailable" in row.get("capture_limits", []):
+            expected = None  # old audits lack a per-turn execution ledger
     if expected is not None and actual != expected:
         raise ValueError(f"replay changed tool outcomes: {actual!r} != {expected!r}")
     effects = (tuple(("out.emit", [payload]) for payload in lowered.expected_effects)
                if lowered is not None and lowered.expected_effects is not None else None)
+    semantic = (program["semantics"].get("contract") if task_kind == "whole_program" and
+                program["kind"] == "lambda_scenario" else None)
+    required = tuple({"name": item["tool"], "arguments": item["arguments"]}
+                     for item in (semantic or {}).get("required_actions", []))
+    constraints = tuple((semantic or {}).get("constrained_calls", []))
     admission = admit(TraceReader(recorder.events), ScenarioContract(
-        row["outcome"]["status"], row["outcome"]["value"], effects=effects))
+        row["outcome"]["status"], row["outcome"]["value"], effects=effects,
+        required_actions=required, constrained_calls=constraints))
     provenance = {"teacher_trajectory_id": row["id"],
                   "teacher_trajectory_digest": digest(row),
+                  "training_admission": row.get("training_admission"),
                   "source_program_ids": row["task"]["source_program_ids"],
                   "reference_key": row["task"].get("reference_key"),
                   "teacher_model": row["provenance"]["model"],

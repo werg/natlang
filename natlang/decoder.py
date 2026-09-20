@@ -102,7 +102,7 @@ class LlamaServerDecoder:
             return json.loads(resp.read())["prompt"]
 
     def chat(self, messages: list, tools: list, *, temperature: float, seed: Optional[int] = None,
-             max_tokens: int = 700) -> ChatTurn:
+             max_tokens: Optional[int] = None) -> ChatTurn:
         """One assistant turn with native tool calling. The server renders the model's own chat
         template, constrains arguments to each tool's JSON schema, and parses the model's native
         tool-call format, so this is the same call for every model."""
@@ -127,11 +127,14 @@ class LlamaServerDecoder:
             messages = [{**m, "tool_calls": [{**c, "function": {**c["function"], "name": out_name(c["function"]["name"])}}
                                              for c in m["tool_calls"]]} if m.get("tool_calls") else m for m in messages]
         payload = {"messages": messages, "tools": tools, "tool_choice": "auto", "temperature": temperature,
-                   "max_tokens": max_tokens, "parallel_tool_calls": True}
+                   "parallel_tool_calls": True}
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         if seed is not None:
             payload["seed"] = seed
         payload.update(self.chat_extra)
-        payload["max_tokens"] = min(payload.get("max_tokens", max_tokens), max_tokens)
+        if max_tokens is not None:
+            payload["max_tokens"] = min(payload.get("max_tokens", max_tokens), max_tokens)
         req = urllib.request.Request(self.base_url + "/v1/chat/completions", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         import time
@@ -142,7 +145,7 @@ class LlamaServerDecoder:
         msg = out["choices"][0]["message"]
         self.usage["turns"] += 1
         self.usage["seconds"] += time.time() - t0
-        tokens = (out.get("usage") or {}).get("completion_tokens", max_tokens)
+        tokens = (out.get("usage") or {}).get("completion_tokens", max_tokens or 0)
         self.usage["completion_tokens"] += tokens
         calls = []
         back = {v: k for k, v in self.tool_aliases.items()}
@@ -159,7 +162,8 @@ class LlamaServerDecoder:
                         raw_response=raw_response)
 
     def generate(self, prompt, *, grammar, max_tokens, temperature, seed, stop, n_probs=0) -> Generation:
-        payload = {"prompt": prompt, "n_predict": max_tokens, "temperature": temperature, "stop": stop,
+        payload = {"prompt": prompt, "n_predict": -1 if max_tokens is None else max_tokens,
+                   "temperature": temperature, "stop": stop,
                    "cache_prompt": True, "n_probs": n_probs, "post_sampling_probs": False}
         if grammar:
             payload["grammar"] = grammar

@@ -43,7 +43,8 @@ def main():
     renderer = {"version": "llama.cpp-apply-template/2", "template_id": a.template_id,
                 "template_sha256": template_hash, "end_token": a.end_token,
                 "server": a.server, "include_template": a.include_template,
-                "terminal_tool_policy": "empty-success-turn-v2"}
+                "terminal_tool_policy": "empty-success-turn-v2",
+                "teacher_reasoning_policy": "render-if-present-v1"}
     manifest_path = a.dst.with_suffix(a.dst.suffix + ".manifest.json")
 
     def render(messages, tools):
@@ -77,16 +78,24 @@ def main():
         s = reply_only_sample(s)
         prompt = render(s["messages"], s["tools"])
         calls = s["target"].get("tool_calls")
-        if calls:                      # the template decides how a call reads: that is what the history will show
-            tgt = {**s["target"], "tool_calls": [{**c, "id": f"x{j}"} for j, c in enumerate(calls)]}
-            after = [{"role": "tool", "tool_call_id": f"x{j}", "content": "X"} for j in range(len(calls))]
+        reasoning = s.get("teacher_reasoning")
+        if calls or reasoning:        # let the model template serialize both decisions and thinking
+            tgt = {**s["target"]}
+            if calls:
+                tgt["tool_calls"] = [{**c, "id": f"x{j}"} for j, c in enumerate(calls)]
+            if reasoning:
+                tgt["reasoning_content"] = reasoning
+            after = ([{"role": "tool", "tool_call_id": f"x{j}", "content": "X"}
+                      for j in range(len(calls))] if calls else [{"role": "user", "content": "X"}])
             full = render(s["messages"] + [tgt] + after, s["tools"])
             if not full.startswith(prompt):
                 raise ValueError("template does not preserve the assistant prefix; choose a compatible renderer")
             suffix = full[len(prompt):]
             if a.end_token not in suffix:
-                raise ValueError("assistant end token is absent from rendered tool call")
+                raise ValueError("assistant end token is absent from rendered target")
             completion = suffix.split(a.end_token, 1)[0] + a.end_token
+            if reasoning and reasoning not in completion:
+                raise ValueError("template dropped teacher reasoning; use a reasoning-capable renderer")
         else:
             completion = s["target"]["content"] + a.end_token
         source_groups = s.get("source_groups") or []
@@ -94,6 +103,9 @@ def main():
         return {"id": s["id"], "program_id": source_groups[0] if grouped and source_groups else program_id(s),
                 "source_groups": source_groups, "family": s.get("family", s.get("kind")),
                 "skill": s["skill"], "renderer": a.template_id,
+                "teacher_trajectory_id": s.get("teacher_trajectory_id"),
+                "teacher_trajectory_digest": s.get("teacher_trajectory_digest"),
+                "training_admission": s.get("training_admission"),
                 "prompt": prompt, "completion": completion}
 
     existing = 0

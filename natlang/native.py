@@ -288,7 +288,7 @@ class NativeCallDecoder(LlamaServerDecoder):
         """Exactly one review-tool call; no free-text affirmative interpretation."""
         return self.chat(messages, tools, allow_reply=False, single_call=True, **kwargs)
 
-    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=700, allow_reply: Optional[bool] = None, single_call: bool = False):
+    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=None, allow_reply: Optional[bool] = None, single_call: bool = False):
         allow = self.allow_reply if allow_reply is None else allow_reply
         prompt = self.render(messages, tools)
         gen = self.generate(prompt, grammar=call_grammar(write_grammar_tools(tools, self.write_constraints), allow, single_call=single_call), max_tokens=max_tokens,

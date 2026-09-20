@@ -57,7 +57,8 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
                               "capture": "teacher-whole-program"}, trace_path)
     captured = []
     rt = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
-                                      validation_feedback="caller", teacher_turns=captured),
+                                      temperature=0, validation_feedback="caller",
+                                      teacher_turns=captured),
                  options=options, capabilities=program.capabilities, trace_sink=recorder)
     try:
         outcome, value = rt.run_root(_root(program))
@@ -113,20 +114,34 @@ def main():
     parser.add_argument("--server", default="http://127.0.0.1:8081")
     parser.add_argument("--model-id", required=True)
     parser.add_argument("--root-seed", type=int, required=True)
+    parser.add_argument("--start", type=int, default=0, help="first zero-based program row in a frozen batch")
     parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument("--system-file", type=Path,
+                        default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_teacher_compact.md")
     args = parser.parse_args()
-    from natlang.native import NativeCallDecoder
-    decoder = NativeCallDecoder(base_url=args.server)
+    if args.start < 0 or args.limit < 1:
+        parser.error("start must be nonnegative and limit positive")
+    from natlang.decoder import LlamaServerDecoder
+    decoder = LlamaServerDecoder(
+        args.server, timeout=900,
+        chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
+                    "chat_template_kwargs": {"reasoning_effort": "low"}},
+        tool_aliases={"call": "call_function"}, json_text_values=True)
+    system_prompt = args.system_file.read_text()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.ir.open() as source, args.out.open("x") as target:
         for index, line in enumerate(source):
-            if index >= args.limit:
+            if index < args.start:
+                continue
+            if index >= args.start + args.limit:
                 break
             record = json.loads(line)
             options = RunOptions(seed=SeedPolicy("derived", args.root_seed))
             row, _ = collect(record, decoder, model_id=args.model_id, options=options,
+                             system_prompt=system_prompt,
                              trace_path=args.out.parent / f"{args.out.stem}-{index}.trace.jsonl")
             target.write(json.dumps(row, ensure_ascii=False) + "\n")
+            target.flush()
             print(f"{record['id']}: {row['outcome']['status']} accepted={row['outcome']['accepted']}", flush=True)
 
 

@@ -1,6 +1,8 @@
 # P13 — Data reconciliation and migration studio
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: first finite SQLite migration application implemented in
+`codebases/data_migration`, `applications/data_migration.py`, and
+`scripts/run_data_migration.py`. Live teacher mapping quality remains unmeasured.
 
 ## Natlang prerequisites
 
@@ -34,5 +36,29 @@ Avoid a general cross-database atomicity promise. A single database transaction 
 Test same-name different entities, missing IDs, absent versus null/empty data, changed units, repeated imports and source changes after preview.
 
 ## Trace and teacher
+
+The implemented application calls natlang separately for each source schema's
+field mapping and for customer identity decisions. The host validates all
+selected columns, converts decimal money exactly, requires matching email for
+merges, sends missing IDs/email and conflicting names to review, accounts for
+every source row, and constructs a frozen preview. Apply verifies both source
+and target snapshots, then writes customers, orders, source identity records,
+field lineage and the target revision in one SQLite transaction. Reimport of
+unchanged orders is recorded as unchanged; changed committed orders are rejected.
+The CLI writes the preview before optional apply.
+
+The main semantic risk is that an email match is evidence, not a universal
+identity proof. The bounded synthetic case uses that rule deliberately; wider
+domains require a source-specific identity policy and independent review data.
+The next gate is live teacher runs on held-out schema and identity cases. A
+cross-database transaction, automatic resolution of conflicting names, and
+arbitrary currency conversion remain outside this first application's contract.
+
+A 20 September 2026 live Bonsai pilot of `map.nl` used the established chat-tool
+adapter and quiesced when the model wrote `source_customer_id`, a field absent
+from the declared `Mapping` record. The type boundary correctly rejected the
+write. The prompt now spells out the exact result shape. A second 120-second
+single-leaf pilot did not finish. These are model/tool-use and latency blockers
+for accepting teacher samples; they do not justify weakening the type boundary.
 
 Capture source snapshots or exact row observations, semantic decisions, patch sets and transaction outcomes. Use known synthetic mappings and independently checked real examples as references. Score false merges separately from missed matches. A successful SQL transaction validates application, not the semantic identity judgments that generated it. No native connection must become a natlang value.

@@ -1,7 +1,7 @@
 import json
 
 from natlang.gen import codebases as C
-from scripts.teacher_leaves import _leaf_audit_status, missing_from_ir
+from scripts.teacher_leaves import _leaf_audit_status, may_admit, missing_from_ir, retry_keys
 
 
 def test_missing_from_ir_uses_exact_template_cases_and_deduplicates(tmp_path):
@@ -66,3 +66,21 @@ def test_missing_from_ir_prioritizes_keys_that_finish_programs(tmp_path):
 def test_leaf_exception_is_serializable_as_an_audit_outcome():
     error = {"type": "TimeoutError", "message": "judge timed out"}
     assert _leaf_audit_status(None, error) == ("exception", error)
+
+
+def test_retry_keys_selects_only_rejected_statuses(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in [
+        {"key": "a", "accepted": True, "status": "done"},
+        {"key": "b", "accepted": False, "status": "done"},
+        {"key": "c", "accepted": False, "status": "quiesced"},
+    ]) + "\n")
+    assert retry_keys(path) == {"b", "c"}
+    assert retry_keys(path, "quiesced") == {"c"}
+
+
+def test_dialogue_requires_review_before_admission():
+    assert not may_admit("say", False, False)
+    assert may_admit("say", False, True)
+    assert may_admit("page_content", False, False)
+    assert not may_admit("page_content", True, True)
