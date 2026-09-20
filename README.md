@@ -63,15 +63,16 @@ The whole loop on one 8 GB GPU (the training image reuses any local PyTorch imag
 scripts/serve.sh &                                                          # the base model, for its chat template
 .venv/bin/python scripts/export_sft.py data/ref.jsonl data/sft.jsonl        # pairs rendered exactly as at inference
 docker build -t natlang-train -f docker/train.Dockerfile docker
-docker run --rm --gpus all -v "$PWD:/work" -e HF_HOME=/work/models/hf natlang-train \
-    python scripts/train_lora.py data/sft.jsonl runs/lora --steps 300         # LoRA, bf16, checkpointing: about 3 GB
-# stoppable and resumable: `docker stop -t 120 natlang-train` writes a checkpoint; the same command continues;
-# `--merge-only` exports runs/lora/merged from the latest checkpoint; `--fresh` starts over
-scripts/to_gguf.sh runs/lora/merged models/natlang-350M-Q8_0.gguf
-docker stop natlang-llama; scripts/serve.sh natlang-350M-Q8_0.gguf &
+scripts/train_and_publish_browser_docker.sh data/sft.jsonl runs/lora natlang-350M 300
+# trains LoRA on the GPU, merges the checkpoint, converts Q4_K_M GGUF, and publishes the browser default
+# training checkpoints are resumable; a repeated wrapper invocation continues the same run
+# for manual merge-only or fresh starts, call scripts/train_lora.py with those flags
+node scripts/publish_browser_model.mjs --run runs/lora --name natlang-350M --quant Q8_0  # optional larger browser variant
 .venv/bin/python scripts/eval_turns.py data/ref.jsonl                       # next-turn accuracy per kind of turn
 .venv/bin/python scripts/baseline.py                                        # whole programs, graded by their checks
 ```
+
+The published browser catalog is `models/browser-catalog.json`. It is written only after GGUF conversion and verification succeed. The playground, browser pilot, browser board, and applications using `BrowserNatlangClient.loadDefaultModel()` read its `defaultId`. The catalog and generated weights live in the local, ignored `models/` directory; copy both with the matching template to a deployment's `/models/` directory. Direct calls to `scripts/train_lora.py` still produce a merged checkpoint; use `scripts/publish_browser_model.mjs --run runs/NAME --name NAME` afterward to publish it.
 
 A web server whose every request is interpreted by the model (`codebases/webserver`):
 

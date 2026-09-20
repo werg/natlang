@@ -6,7 +6,7 @@ export type { BrowserAppEvent, BrowserAppSource, BrowserAppTransition,
 export type { BrowserModelSource, BrowserClientLoadOptions, BrowserClientModelStatus,
   BrowserClientRun, BrowserClientOptions } from './client.js';
 export { BrowserLocalModel, compileBrowserTools } from './local-model.js';
-export { BROWSER_MODEL_CATALOG, checkModelStorage } from './models.js';
+export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } from './models.js';
 export { probeBrowserGpu } from './gpu.js';
 export type { BrowserGpuCapability } from './gpu.js';
 export { loadFunctionFiles } from './source.js';
@@ -17,7 +17,7 @@ export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame
 export { checkTypeScriptBody } from './environment.js';
 export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics,
   BrowserSchemaMode } from './local-model.js';
-export type { BrowserModelManifest, BrowserStorageStatus } from './models.js';
+export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export type { BrowserRunRequest, BrowserModelTurn, BrowserModelTurnRequest,
   BrowserRunOptions, BrowserReviewOptions } from './host.js';
 export { TypeScriptEnvironment } from './environment.js';

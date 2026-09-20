@@ -88,8 +88,8 @@ export function createPlaygroundJobs(root) {
         const steps = Number(config.steps ?? 300);
         if (!Number.isInteger(steps) || steps < 1 || steps > 100000) fail('steps must be 1–100000');
         const model = config.model ? inside(config.model, ['runs']) : null;
-        return { cmd: 'python', args: ['scripts/train_lora.py', data, inside(output, ['runs']),
-          '--steps', String(steps), ...(model ? ['--model', model] : [])] };
+        return { cmd: 'bash', args: ['scripts/train_and_publish_browser.sh', data,
+          inside(output, ['runs']), `playground-${name}`, String(steps), ...(model ? [model] : [])] };
       }
       case 'evaluate': {
         const label = String(config.modelLabel ?? '').trim();
@@ -103,8 +103,9 @@ export function createPlaygroundJobs(root) {
         if (!source.endsWith('/merged')) fail('checkpoint must be a merged model directory');
         const quant = config.quant ?? 'Q4_K_M';
         if (!['Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0'].includes(quant)) fail('unsupported quantization');
-        return { cmd: 'bash', args: ['scripts/to_gguf.sh',
-          source.slice(root.length + 1), `models/${name}-${quant}.gguf`, quant] };
+        return { cmd: 'node', args: ['scripts/publish_browser_model.mjs',
+          '--run', source.slice(root.length + 1, -'/merged'.length), '--name', name,
+          '--quant', quant] };
       }
       default: fail('unknown job kind');
     }

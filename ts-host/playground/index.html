@@ -107,7 +107,7 @@
           <div class="cases-intro"><h2>Training workbench</h2><p>Run the repository's data, teacher, training, evaluation, and GGUF jobs on this local machine. Each job writes a durable log under <code>runs/playground-jobs</code>.</p></div>
           <p id="jobsAvailability" role="status">Checking local job service…</p>
           <div id="jobsBody" hidden>
-            <label>Pipeline step <select id="jobKind"><option value="cases_ir">Admit playground cases to IR</option><option value="materialize">Materialize program IR</option><option value="teacher">Collect teacher trajectories</option><option value="export">Export SFT samples</option><option value="train">Train LoRA</option><option value="evaluate">Evaluate checkpoint</option><option value="gguf">Export GGUF</option></select></label>
+            <label>Pipeline step <select id="jobKind"><option value="cases_ir">Admit playground cases to IR</option><option value="materialize">Materialize program IR</option><option value="teacher">Collect teacher trajectories</option><option value="export">Export SFT samples</option><option value="train">Train LoRA and publish browser model</option><option value="evaluate">Evaluate checkpoint</option><option value="gguf">Publish browser model from checkpoint</option></select></label>
             <label>Dataset <select id="jobDataset"></select></label>
             <label>Checkpoint <select id="jobCheckpoint"></select></label>
             <label>Job name <input id="jobName" value="experiment-1" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"></label>

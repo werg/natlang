@@ -2,6 +2,7 @@ import { BrowserNatlangHost, type BrowserRunRequest } from './host.js';
 import { BrowserLocalModel, type BrowserModelLoadOptions, type BrowserModelDiagnostics,
   type BrowserSchemaMode } from './local-model.js';
 import { TypeScriptEnvironment } from './environment.js';
+import { loadBrowserModelCatalog } from './models.js';
 
 export type BrowserModelSource =
   | { kind: 'url'; url: string; id?: string; templateUrl?: string; chatTemplate?: string }
@@ -116,6 +117,16 @@ export class BrowserNatlangClient {
         loadMs: this.current.lastLoadMs, gpuFallbackReason: fallbackReason };
       return this.statusValue;
     } finally { this.loading = false; }
+  }
+
+  /** Resolve the currently published default instead of baking a checkpoint into an app. */
+  async loadDefaultModel(options: BrowserClientLoadOptions = {},
+    catalogUrl?: string): Promise<BrowserClientModelStatus> {
+    const catalog = await loadBrowserModelCatalog(catalogUrl);
+    const selected = catalog.models.find(model => model.id === catalog.defaultId)!;
+    return this.loadModel({ kind: 'url', id: selected.id, url: selected.url,
+      templateUrl: selected.templateUrl },
+    { contextTokens: selected.contextTokens, ...options });
   }
 
   async unloadModel(): Promise<void> {

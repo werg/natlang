@@ -1,4 +1,4 @@
-import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, checkModelStorage,
+import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage,
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
   validProjectPath, validatePlaygroundProject, runPlaygroundProject, traceFrame,
   admitPlaygroundRun } from '../dist/browser/natlang.js';
@@ -28,7 +28,8 @@ let diagnostics = [], model = null, modelSpec = null, abort = null, saveTimer = 
 const client = new BrowserNatlangClient();
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
-let modelChoices = [...BROWSER_MODEL_CATALOG];
+let modelCatalog = { defaultId: BROWSER_MODEL_CATALOG[0].id, models: [...BROWSER_MODEL_CATALOG] };
+let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false;
 window.natlangPlayground = { get project() { return project; }, get runs() { return runs; },
   get selectedRun() { return selectedRun; }, get model() { return model; } };
 
@@ -250,29 +251,33 @@ async function refreshJobs() {
   if (!jobToken) return;
   try {
     jobs = await jobApi('jobs'); renderJobs();
+    jobCatalog = await jobApi('catalog');
+    modelCatalog = await loadBrowserModelCatalog();
+    renderJobCatalog();
     if (selectedJobId) await renderJobLog();
   } catch (error) { $('jobsAvailability').textContent = `Job service error: ${error.message}`; }
 }
-function renderModelChoices() {
-  const selected = $('modelSelect').selectedIndex;
+function renderModelChoices(selectedId = modelCatalog.defaultId) {
   $('modelSelect').replaceChildren(...modelChoices.map((spec, index) => new Option(spec.label, String(index))));
-  $('modelSelect').selectedIndex = Math.min(Math.max(selected, 0), modelChoices.length - 1);
+  const index = modelChoices.findIndex(spec => spec.id === selectedId);
+  $('modelSelect').selectedIndex = index >= 0 ? index : 0;
 }
 function renderJobCatalog() {
   if (!jobCatalog) return;
+  const selectedModel = modelSelectionExplicit ? modelChoices[Number($('modelSelect').value)]?.id : modelCatalog.defaultId;
   const selectedData = $('jobDataset').value, selectedCheckpoint = $('jobCheckpoint').value;
   $('jobDataset').replaceChildren(...jobCatalog.datasets.map(item => new Option(
     `${item.path} · ${(item.bytes / 1_000_000).toFixed(1)} MB`, item.path)));
   $('jobCheckpoint').replaceChildren(...jobCatalog.checkpoints.map(item => new Option(item.name, item.merged)));
   if (selectedData) $('jobDataset').value = selectedData;
   if (selectedCheckpoint) $('jobCheckpoint').value = selectedCheckpoint;
-  const known = new Set(BROWSER_MODEL_CATALOG.map(spec => spec.file));
-  modelChoices = [...BROWSER_MODEL_CATALOG, ...jobCatalog.models.filter(item => !known.has(item.path.split('/').at(-1)))
+  const known = new Set(modelCatalog.models.map(spec => spec.file));
+  modelChoices = [...modelCatalog.models, ...jobCatalog.models.filter(item => !known.has(item.path.split('/').at(-1)))
     .map(item => ({ id: `local:${item.path}`, label: item.path.split('/').at(-1),
       trainingRun: 'local workbench', file: item.path.split('/').at(-1),
       templateUrl: null, quant: 'local', bytes: item.bytes, sha256: '',
       contextTokens: 4096, url: `/${item.path}` }))];
-  renderModelChoices();
+  renderModelChoices(selectedModel);
   $('evaluationList').replaceChildren(...(jobCatalog.evaluations ?? []).map(item => {
     const card = document.createElement('div'); card.className = 'case-card';
     const count = item.summary?.all?.n ?? 0, exact = item.summary?.all?.exact ?? 0;
@@ -304,8 +309,6 @@ async function renderJobLog() {
 async function initJobs() {
   try {
     const session = await jobApi('session'); jobToken = session.token;
-    jobCatalog = await jobApi('catalog');
-    renderJobCatalog();
     $('jobsBody').hidden = false;
     $('jobsAvailability').textContent = 'Local pipeline service ready';
     updateJobForm(); await refreshJobs();
@@ -674,7 +677,7 @@ function bind() {
     $('importInput').value = ''; };
   $('exportProject').onclick = () => download(`${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`, pretty(project));
   $('modelButton').onclick = async () => { $('modelDialog').showModal(); await refreshModelDiagnostics(); };
-  $('modelSelect').onchange = refreshModelDiagnostics;
+  $('modelSelect').onchange = () => { modelSelectionExplicit = true; void refreshModelDiagnostics(); };
   $('loadModel').onclick = loadModel;
   $('examplesButton').onclick = () => { renderExamples(); $('examplesDialog').showModal(); $('exampleSearch').focus(); };
   $('closeExamples').onclick = () => $('examplesDialog').close();
@@ -693,6 +696,8 @@ async function start() {
     if (!projects.length) { const template = examples[0]; const starter = newPlaygroundProject(template.name,
       template.root, template.files, template.inputs, template.expected);
       await storage.put('projects', starter); projects.push(starter); }
+    try { modelCatalog = await loadBrowserModelCatalog(); modelChoices = [...modelCatalog.models]; }
+    catch (error) { message(`Model catalog: ${error.message}`, true); }
     renderModelChoices();
     bind(); switchProject(projects[0]);
     const gpu = await probeBrowserGpu();

@@ -1,5 +1,5 @@
 import { BrowserNatlangClient, BrowserNatlangApplication, BrowserDomRenderer,
-  BROWSER_MODEL_CATALOG } from '../../dist/browser/natlang.js';
+  loadBrowserModelCatalog } from '../../dist/browser/natlang.js';
 
 const $ = id => document.getElementById(id);
 const files = {};
@@ -16,8 +16,10 @@ let app, renderer, currentEvent = null;
 let uiQueue = Promise.resolve();
 const status = text => { $('status').textContent = text; };
 const initial = () => ({ revision: 0, next_id: 1, items: [] });
-for (const model of BROWSER_MODEL_CATALOG)
+const catalog = await loadBrowserModelCatalog();
+for (const model of catalog.models)
   $('model').add(new Option(model.label, model.id));
+$('model').value = catalog.defaultId;
 
 async function source() {
   if (!Object.keys(files).length) for (const name of names) {
@@ -90,7 +92,7 @@ async function start(fixture = false) {
 $('load').onclick = async () => {
   $('load').disabled = true;
   try {
-    const selected = BROWSER_MODEL_CATALOG.find(row => row.id === $('model').value);
+    const selected = catalog.models.find(row => row.id === $('model').value);
     if (!selected) throw new Error('choose a model');
     status('Loading browser model…');
     await client.loadModel({ kind: 'url', id: selected.id, url: selected.url,

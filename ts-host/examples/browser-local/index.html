@@ -31,16 +31,19 @@
 <button id="cancel" disabled>Cancel</button><button id="download" disabled>Download report</button>
 <pre id="result"></pre>
 <script type="module">
-  import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, probeBrowserGpu,
+  import { BrowserNatlangClient, loadBrowserModelCatalog, probeBrowserGpu,
     checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
   const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
   const canonical = value => Array.isArray(value) ? value.map(canonical) :
     value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort()
       .map(key => [key, canonical(value[key])])) : value;
-  $('model').innerHTML = BROWSER_MODEL_CATALOG.map((item, index) =>
+  const catalog = await loadBrowserModelCatalog();
+  const models = catalog.models;
+  $('model').innerHTML = models.map((item, index) =>
     `<option value="${index}">${item.label}</option>`).join('');
-  const chosen = () => BROWSER_MODEL_CATALOG[Number($('model').value)];
+  $('model').value = String(models.findIndex(item => item.id === catalog.defaultId));
+  const chosen = () => models[Number($('model').value)];
   const status = value => { $('status').textContent = value; };
   const client = new BrowserNatlangClient();
   let model, controller, reports = [];

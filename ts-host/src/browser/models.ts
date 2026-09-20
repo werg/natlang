@@ -23,6 +23,35 @@ export const BROWSER_MODEL_CATALOG: readonly BrowserModelManifest[] = [{
   url: '/models/natlang-350M-v8-failures-pilot-Q8_0.gguf',
 }];
 
+export type BrowserModelCatalog = { schema: 'natlang.browser-model-catalog/1';
+  defaultId: string; models: BrowserModelManifest[]; source: 'published' | 'builtin' };
+
+/** One published pointer is shared by the playground, pilot, and application frontends. */
+export async function loadBrowserModelCatalog(
+  url = '/models/browser-catalog.json',
+  fetcher: typeof fetch = globalThis.fetch,
+): Promise<BrowserModelCatalog> {
+  const response = await fetcher(url, { cache: 'no-store' });
+  if (response.status === 404) return { schema: 'natlang.browser-model-catalog/1',
+    defaultId: BROWSER_MODEL_CATALOG[0]!.id, models: [...BROWSER_MODEL_CATALOG], source: 'builtin' };
+  if (!response.ok) throw new Error(`browser model catalog unavailable: HTTP ${response.status}`);
+  const value = await response.json() as Partial<BrowserModelCatalog>;
+  const models = value.models;
+  if (value.schema !== 'natlang.browser-model-catalog/1' || !Array.isArray(models) || !models.length ||
+      typeof value.defaultId !== 'string' ||
+      models.some(model => !model || typeof model.id !== 'string' || !model.id ||
+        typeof model.url !== 'string' || !model.url || typeof model.templateUrl !== 'string' ||
+        !model.templateUrl || typeof model.label !== 'string' || !model.label ||
+        typeof model.file !== 'string' || !model.file || !Number.isSafeInteger(model.bytes) ||
+        model.bytes < 1 || !/^[a-f0-9]{64}$/.test(model.sha256) ||
+        !Number.isSafeInteger(model.contextTokens) || model.contextTokens < 512) ||
+      !models.some(model => model.id === value.defaultId) ||
+      new Set(models.map(model => model.id)).size !== models.length)
+    throw new Error('invalid published browser model catalog');
+  return { schema: 'natlang.browser-model-catalog/1', defaultId: value.defaultId,
+    models, source: 'published' };
+}
+
 export type BrowserStorageStatus = { usage: number | null; quota: number | null;
   available: number | null; recommendedFree: number; enough: boolean | null; persisted: boolean | null };
 

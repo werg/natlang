@@ -87,9 +87,12 @@ try {
   }
   if (liveModel) {
     await page.goto(`${url}/ts-host/examples/browser-local/`);
-    if (quant) await page.locator('#model').selectOption({ label:
-      quant === 'Q4_K_M' ? 'natlang 350M v8 failures pilot Q4_K_M (smaller)' :
-        quant === 'Q8_0' ? 'natlang 350M v8 failures pilot Q8_0' : quant });
+    if (quant) {
+      const labels = await page.locator('#model option').allTextContents();
+      const index = labels.findIndex(label => label.includes(quant));
+      if (index < 0) throw new Error(`No browser model with quantization ${quant}`);
+      await page.locator('#model').selectOption({ index });
+    }
     if (broad) await page.locator('#schema').selectOption('broad');
     if (cpu) await page.locator('#gpuLayers').fill('0');
     await page.locator('#context').fill(String(contextTokens));
