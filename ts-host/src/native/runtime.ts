@@ -452,9 +452,24 @@ export class NativeSession {
     this.completed = true; this.lam.body = ''; return true;
   }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
+    if ((name === 'write' || name === 'call') && args.done !== undefined && ['ok', 'done'].includes(result.kind)) {
+      const mark = this.doneRange(args.done);
+      const marked = this.applyNow('mark_done', mark);
+      result.text = result.text.trimEnd() + '\n' + marked.text;
+    }
     this.runtime.trace.emit('action', { surface: 'tools-v3', name, arguments: args,
       outcome: result.kind, codes: result.codes ?? [] });
     return result;
+  }
+  private doneRange(raw: unknown): { start: number; end: number } {
+    const values = Array.isArray(raw) ? raw : [raw];
+    if (values.length < 1 || values.length > 2 || values.some(value => !Number.isInteger(value)))
+      throw new Reject([{ path: 'done', code: 'bad-range' }]);
+    const start = Number(values[0]), end = Number(values.at(-1));
+    const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
+    if (start < 1 || end < start || end > lines.length)
+      throw new Reject([{ path: 'done', code: 'bad-range', expected: `line numbers between 1 and ${lines.length}` }]);
+    return { start, end };
   }
   /** Legacy one-header text action surface used by the conformance harness. */
   async act(source: string): Promise<NativeResult> {
@@ -504,6 +519,9 @@ export class NativeSession {
     this.toolCalls++;
     if (name !== 'mark_done') this.actions++;
     this.lam.steps++;
+    if (name === 'write' && args.done !== undefined) try { this.doneRange(args.done); }
+    catch (error) { if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message,
+      codes: error.diagnostics.map(d => d.code) }); throw error; }
     return this.record(name, args, this.applyNow(name, args));
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
@@ -514,16 +532,14 @@ export class NativeSession {
         return { kind: 'blocked', text: message };
       }
       if (name === 'mark_done') {
-        const start = args.start, end = args.end ?? start;
+        const { start, end } = this.doneRange([args.start, args.end ?? args.start]);
         const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-        if (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > lines.length)
-          throw new Reject([{ path: 'start', code: 'bad-range', expected: `line numbers between 1 and ${lines.length}` }]);
-        for (let i = Number(start); i <= Number(end); i++) {
+        for (let i = start; i <= end; i++) {
           const text = lines[i - 1]!.trim();
           if (text && !text.startsWith('#') && !text.startsWith('function '))
             this.lam.marks[i] = args.skipped === true ? 'skipped' : 'done';
         }
-        return { kind: 'ok', text: `ok\n${Number(start)}..${Number(end)} marked` };
+        return { kind: 'ok', text: `ok\n${start}..${end} marked` };
       }
       if (name === 'write') {
         const path = String(args.path ?? '');
@@ -556,6 +572,8 @@ export class NativeSession {
           throw new Reject([{ path: 'type', code: 'anonymous-lambda', expected: 'call with a checked function' }]);
         const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
         const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
+        if (created && Object.keys(this.lam.letTypes).length >= 16)
+          throw new Reject([{ path, code: 'too-many-locals', expected: 'at most 16 locals' }]);
         if (created) this.lam.letTypes[local!] = stated;
         try {
           const ref = this.resolve(path, true);
@@ -644,6 +662,23 @@ export class NativeSession {
         this.checkEffects(value, to);
         dst.set(value);
         return { kind: 'ok', text: `ok   ${to}`, value };
+      }
+      if (name === 'retry') {
+        const path = String(args.path ?? '');
+        const ref = this.resolve(path), value = ref.get();
+        if (ref.deny) throw new Reject([{ path, code: ref.deny }]);
+        if (value === MISSING || pending(value) || !ref.type)
+          throw new Reject([{ path, code: 'no-such-path', expected: 'a completed value' }]);
+        const origin = this.runtime.origins.get(ref.path);
+        if (!origin || origin.kind !== 'instructions')
+          throw new Reject([{ path, code: 'no-origin', expected: 'a value that a natural-language lambda produced' }]);
+        const retry = cloneValue(origin);
+        const feedback = String(args.feedback ?? '').replace(/^\n+|\n+$/g, '');
+        retry.body = (feedback || origin.originalBody || '').replace(/\n+$/, '') + '\n';
+        retry.return = cloneValue(value);
+        retry.status = 'unreduced'; retry.note = '';
+        ref.set(retry);
+        return { kind: 'ok', text: `ok   ${path}: draft return prefilled`, value: retry };
       }
       if (name === 'run_code') {
         if (args.engine === undefined) throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'an explicit available engine' }]);
@@ -748,6 +783,10 @@ export class NativeSession {
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (this.actions >= 40 || this.toolCalls >= 128) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.actions++; this.toolCalls++; this.lam.steps++;
+    if (args.done !== undefined) try { this.doneRange(args.done); }
+    catch (error) { if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message,
+      codes: error.diagnostics.map(d => d.code) }); throw error; }
+    let newLocal: string | undefined;
     try {
       const label = String(args.function ?? '');
       const copyName = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(label)?.[1];
@@ -821,7 +860,13 @@ export class NativeSession {
       const child = buildPending(raw, this.env);
       if (path.startsWith('let/')) {
         const local = path.slice(4);
-        if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(destination);
+        if (!this.lam.letTypes[local]) {
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(local))
+            throw new Reject([{ path, code: 'no-such-path', expected: 'let/<name>' }]);
+          if (Object.keys(this.lam.letTypes).length >= 16)
+            throw new Reject([{ path, code: 'too-many-locals', expected: 'at most 16 locals' }]);
+          this.lam.letTypes[local] = parseType(destination); newLocal = local;
+        }
       }
       const ref = this.resolve(path, true);
       if (ref.deny) throw new Reject([{ path, code: ref.deny }]);
@@ -831,6 +876,7 @@ export class NativeSession {
       const outcome = await this.runtime.trigger(ref);
       return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
     } catch (error) {
+      if (newLocal && !Object.hasOwn(this.lam.let, newLocal)) delete this.lam.letTypes[newLocal];
       if (error instanceof Reject) return this.record(name, args, { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) });
       return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }

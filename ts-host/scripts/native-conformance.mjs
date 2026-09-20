@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import YAML from 'yaml';
 import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeSession } from '../dist/native/runtime.js';
 import { loadFunctionFile } from '../dist/native/source.js';
 import { buildPending, coerce, dump } from '../dist/native/values.js';
 import { TypeEnv, formatType } from '../dist/native/types.js';
@@ -14,6 +15,7 @@ function pyKey(value) {
 
 const root = resolve(import.meta.dirname, '../..');
 const folder = resolve(root, 'conformance/programs');
+const baseline = JSON.parse(readFileSync(resolve(root, 'conformance/infrastructure_baseline.json'), 'utf8'));
 let passed = 0, failed = 0, skipped = 0;
 for (const name of readdirSync(folder).filter(x => x.endsWith('.yaml')).sort()) {
   const file = resolve(folder, name), doc = YAML.parse(readFileSync(file, 'utf8'));
@@ -78,8 +80,33 @@ for (const name of readdirSync(folder).filter(x => x.endsWith('.yaml')).sort()) 
       throw new Error(`wrong value ${JSON.stringify(dump(result.value))}; expected ${JSON.stringify(expected.value)}`);
     if (expected.status && result.outcome.kind !== expected.status)
       throw new Error(`wrong outcome ${result.outcome.kind}; expected ${expected.status}`);
+    const frozen = baseline.fixtures.find(item => item.file === name);
+    if (frozen && (result.outcome.kind !== frozen.outcome ||
+      (frozen.value !== undefined && JSON.stringify(dump(result.value)) !== JSON.stringify(frozen.value)) ||
+      JSON.stringify(result.emitted) !== JSON.stringify(frozen.effects)))
+      throw new Error(`infrastructure baseline drift: ${JSON.stringify({ outcome: result.outcome.kind,
+        value: dump(result.value), effects: result.emitted })}`);
     console.log(`PASS ${name}`); passed++;
   } catch (error) { console.log(`FAIL ${name}: ${error.message}`); failed++; }
+}
+for (const fixture of baseline.action_fixtures) {
+  const doc = YAML.parse(readFileSync(resolve(folder, fixture.file), 'utf8'));
+  const pending = buildPending(doc.program);
+  const env = new TypeEnv().child(pending.types);
+  for (const [key, value] of Object.entries(doc.inputs ?? {})) {
+    const field = pending.type.params.fields.find(item => item.name === key);
+    pending.args[key] = coerce(value, field.type, env, `args/${key}`);
+  }
+  const session = new NativeSession(new NativeRuntime(), pending, new TypeEnv());
+  for (const call of fixture.calls) {
+    const result = session.apply(call.name, call.arguments);
+    if (result.kind !== call.outcome || JSON.stringify(result.codes ?? []) !== JSON.stringify(call.codes)) {
+      console.log(`FAIL baseline ${fixture.file}: ${call.name} ${result.kind} ${JSON.stringify(result.codes)}`);
+      failed++;
+    }
+  }
+  if (session.finish() !== fixture.finish) { console.log(`FAIL baseline ${fixture.file}: finish`); failed++; }
+  else { console.log(`PASS baseline ${fixture.file}`); passed++; }
 }
 console.log(JSON.stringify({ passed, failed, skipped }));
 if (failed) process.exitCode = 1;

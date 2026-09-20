@@ -308,3 +308,45 @@ test('bounded independent Map work overlaps while preserving slot order and shar
   assert.equal(peak, 2);
   assert.equal(runtime.trace.events.filter(event => event.kind === 'map_slot').length, 4);
 });
+
+test('native en-passant done marks validate before work and follow successful writes', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'First step.\nSecond step.',
+    codebase: { one: { returns: 'Num', code: 'return 1;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.deepEqual(session.apply('write', { path: 'return', value: 7, done: [1, 9] }).codes, ['bad-range']);
+  assert.equal(lam.return, MISSING);
+  assert.equal(session.apply('write', { path: 'return', value: 'bad', done: 1 }).kind, 'rejected');
+  assert.deepEqual(lam.marks, {});
+  assert.equal(session.apply('write', { path: 'return', value: 7, done: 1 }).kind, 'ok');
+  assert.equal(lam.marks[1], 'done');
+  const tools = new NativeToolAgent(() => ({ calls: [] })).tools(session);
+  const mark = tools.find(item => item.function.name === 'mark_done');
+  assert.deepEqual(mark.function.parameters.properties.start.enum, [2]);
+  assert.ok(tools.find(item => item.function.name === 'write').function.parameters.properties.done);
+});
+
+test('native retry reopens a completed natural-language child with its draft value', async () => {
+  const runtime = new NativeRuntime({ agent: async session => {
+    if (session.lam.functionName === 'draft') {
+      session.apply('write', { path: 'return', value: session.lam.body.includes('short') ? 'short' : 'too long' });
+      session.finish(); return;
+    }
+    assert.equal((await session.applyAsync('call', { function: 'draft', to: 'let/headline' })).kind, 'done');
+    assert.equal(session.apply('retry', { path: 'let/headline', feedback: 'Write a short headline.' }).kind, 'ok');
+    assert.equal((await session.applyAsync('run', { paths: 'let/headline' })).kind, 'done');
+    session.apply('write', { path: 'return', source: 'let/headline' });
+    session.finish();
+  } });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Text>', instructions: 'Draft then refine.',
+    codebase: { draft: { returns: 'Text', instructions: 'Write a headline.' } } } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 'short');
+});
+
+test('failed checked call does not leave an empty local declaration', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Do the work.',
+    codebase: { emit: { returns: 'Num', effects: ['out.emit'], code: 'fx.out.emit(1); return 1;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('call', { function: 'emit', to: 'let/draft' });
+  assert.deepEqual(result.codes, ['effect-wider-than-parent']);
+  assert.equal(Object.hasOwn(lam.letTypes, 'draft'), false);
+});

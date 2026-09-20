@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NativeNatlangHost, NativeRuntime, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
+import { DesktopBindings, NativeNatlangHost, NativeRuntime, NativeSourceWorkspace, TypeScriptEnvironment } from '../dist/index.js';
 
 test('public native host runs a program without starting Python', async () => {
   const host = new NativeNatlangHost();
@@ -147,4 +147,42 @@ test('nested source invocations share the parent episode budget', async () => {
   const second = await workspace.invoke('leaf', {}, { parentRuntime: parent, modelTurn });
   assert.equal(second.outcome, 'quiesced'); assert.equal(parent.episodesStarted, 1);
   parent.close();
+});
+
+test('native host matches the application bridge for TypeScript syntax, model eval and desktop bindings', async () => {
+  const mapped = new NativeNatlangHost();
+  try {
+    const result = await mapped.run({ source: { kind: 'program', program: { $map: {
+      type: 'Map<Num, Num>', over: [1, 2, 3], fn: { $lambda: {
+        type: 'Lambda<{ item: Num }, Num>', engine: 'typescript-host',
+        code: 'enum Scale { Double = 2 }; return args.item * Scale.Double;',
+      } },
+    } } } });
+    assert.deepEqual(result.value, [2, 4, 6]);
+  } finally { mapped.close(); }
+
+  const native = { count: 0, increase(n) { this.count += n; return this.count; } };
+  const modelHost = new NativeNatlangHost({ host: native, mode: 'retained' });
+  let turn = 0;
+  try {
+    const result = await modelHost.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Num>', instructions: 'Increment the counter and return it.',
+    } } }, modelTurn: () => ++turn === 1 ?
+      { calls: [['run_code', { engine: 'typescript-host', code: 'host.increase(4)' }]], completion_tokens: 1 } :
+      turn === 2 ? { calls: [['write', { path: 'return', value: native.count }]], completion_tokens: 1 } :
+        { calls: [], text: 'done', completion_tokens: 1 } });
+    assert.equal(result.value, 4); assert.equal(native.count, 4);
+  } finally { modelHost.close(); }
+
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-native-desktop-'));
+  const path = join(folder, 'input.txt'); writeFileSync(path, 'sample');
+  const desktop = new DesktopBindings();
+  const desktopHost = new NativeNatlangHost({ host: desktop, mode: 'retained' });
+  try {
+    const result = await desktopHost.run({ source: { kind: 'program', program: { $lambda: {
+      type: 'Lambda<{}, Text>', engine: 'typescript-host',
+      code: `const content = host.readText(${JSON.stringify(path)}); return host.run(["node", "-e", "process.stdout.write(process.argv[1].toUpperCase())", content]).stdout;`,
+    } } } });
+    assert.equal(result.value, 'SAMPLE');
+  } finally { desktopHost.close(); desktop.close(); rmSync(folder, { recursive: true, force: true }); }
 });

@@ -82,6 +82,10 @@ export class NativeToolAgent {
 
   private openMarks(session: NativeSession): number[] {
     if (!Object.keys(session.lam.marks).length) return [];
+    return this.unmarkedLines(session);
+  }
+
+  private unmarkedLines(session: NativeSession): number[] {
     return (session.lam.originalBody ?? session.lam.body).replace(/^\n+|\n+$/g, '').split('\n')
       .flatMap((line, index) => {
         const text = line.trim(), number = index + 1;
@@ -114,24 +118,37 @@ export class NativeToolAgent {
         Record<string, unknown> | undefined;
       return Object.keys(definition?.args as Record<string, unknown> ?? {});
     }).map(name => name.replace(/\?$/, '')))];
+    const unmarked = names.length ? this.unmarkedLines(session) : [];
+    const done = { anyOf: [{ enum: unmarked },
+      { type: 'array', items: { enum: unmarked }, minItems: 1, maxItems: 2 }] };
+    const writeProperties: Record<string, unknown> = {
+      path: { anyOf: [{ enum: slotPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
+      type: { type: 'string' }, value: writeValue, source: { type: 'string', enum: readable },
+    };
+    if (unmarked.length) writeProperties.done = done;
     const tools = [
       tool('read', 'Read a value from the workspace. Use a range for long text or lists.', {
         path: { type: 'string', enum: [...new Set([...readable, ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
         start: { type: 'integer' }, end: { type: 'integer' } }, ['path']),
-      tool('write', 'Write a complete typed value to return or a local.', {
-        path: { anyOf: [{ enum: slotPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
-        type: { type: 'string' }, value: writeValue, source: { type: 'string', enum: readable } }, ['path', 'type']),
+      tool('write', 'Write a complete typed value to return or a local.', writeProperties, ['path', 'type']),
       tool('edit', 'Replace one exact occurrence in a text value.', {
         path: { type: 'string', enum: textSlots }, old: { type: 'string' }, new: { type: 'string' } }, ['path', 'old', 'new']),
       tool('run_code', 'Run exact TypeScript work in the selected engine.', {
         code: { type: 'string' }, engine: { enum: ['typescript-host'] } }, ['code', 'engine']),
     ];
-    if (names.length) tools.push(tool('call', 'Call a checked function and place its result at to.', {
+    (tools[1]!.function.parameters as Record<string, unknown>).anyOf = [{ required: ['value'] }, { required: ['source'] },
+      ...Object.keys(lam.codebase).map(name => ({ properties: { type: { const: `Function<${name}>` } }, required: ['type'] }))];
+    const callProperties: Record<string, unknown> = {
       function: { enum: names }, to: { anyOf: [{ enum: slotPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
       inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string', enum: readable }])), additionalProperties: false }, over: { type: 'string', enum: readable },
-      init: {}, until: { type: 'string' }, max: { type: 'integer' } }, ['function', 'to']));
-    if (names.length) tools.push(tool('mark_done', 'Mark completed or untaken lines of the program.', {
-      start: { type: 'integer' }, end: { type: 'integer' }, skipped: { type: 'boolean' } }, ['start']));
+      init: {}, until: { type: 'string' }, max: { type: 'integer' },
+    };
+    if (unmarked.length) callProperties.done = done;
+    if (names.length) tools.push(tool('call', 'Call a checked function and place its result at to.',
+      callProperties, ['function', 'to']));
+    if (unmarked.length) tools.push(tool('mark_done', 'Mark completed or untaken lines of the program.', {
+      start: { type: 'integer', enum: unmarked }, end: { type: 'integer', enum: unmarked },
+      skipped: { type: 'boolean' } }, ['start']));
     tools.push(tool('report_blocker', 'Explain information missing from the task.', { missing: { type: 'string' } }, ['missing']));
     tools.push(tool('report_error', 'Explain an unsatisfiable or invalid instruction.', { message: { type: 'string' } }, ['message']));
     return tools;
