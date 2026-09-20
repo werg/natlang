@@ -1,6 +1,19 @@
 # P19 — Scheduling and personal workflow engine
 
-Status: proposed implementation. [Shared capabilities](README.md).
+Status: local scheduling application in `codebases/scheduler/` and
+`applications/scheduling.mjs`. [Shared capabilities](README.md).
+
+Natlang chooses among host-enumerated complete feasible schedules using a
+request's soft preferences. Exact UTC-minute arithmetic checks durations,
+windows, dependencies, existing commitments and non-overlap. The host then
+revalidates the selected schedule against its current revision before commit.
+Explicit block observations invalidate stale candidates, and duplicate event
+IDs are checked. Integration tests execute the natlang planner and exercise
+conflict, staleness, dependency-cycle and missing-offset cases.
+
+The fixture is in memory and has no live calendar adapter. Candidate
+enumeration reports truncation; selection quality, external conditional
+writes, timer events and durable replanning remain product gates.
 
 ## Natlang prerequisites
 
