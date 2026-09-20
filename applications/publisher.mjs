@@ -105,6 +105,10 @@ export class DocumentPublisher {
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, 'document.md'), texts.markdown);
       await writeFile(join(directory, 'document.html'), texts.html);
+      const markdownHash = sha(await readFile(join(directory, 'document.md'), 'utf8'));
+      const htmlHash = sha(await readFile(join(directory, 'document.html'), 'utf8'));
+      if (markdownHash !== sha(texts.markdown) || htmlHash !== sha(texts.html))
+        throw new Error('rendered file verification failed');
       const again = this.check(snapshot);
       if (!again.ok || again.revision !== checked.revision)
         return { status: 'rejected', target, revision: '', markdown_sha256: '', html_sha256: '',
@@ -123,8 +127,7 @@ export class DocumentPublisher {
       }
     }
     const report = { status: 'prepared', target, revision: checked.revision,
-      markdown_sha256: sha(await readFile(join(this.root, target, 'document.md'), 'utf8')),
-      html_sha256: sha(await readFile(join(this.root, target, 'document.html'), 'utf8')), detail: '' };
+      markdown_sha256: sha(texts.markdown), html_sha256: sha(texts.html), detail: '' };
     this.events.push({ operation: 'publisher.prepare', target,
       revision: report.revision, markdown_sha256: report.markdown_sha256,
       html_sha256: report.html_sha256 });
