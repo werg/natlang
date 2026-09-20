@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import YAML from 'yaml';
 import { TypeScriptEnvironment, type HostEvent } from '../environment.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, isPending, loadProgram,
@@ -308,6 +309,44 @@ export class NativeSession {
       outcome: result.kind, codes: result.codes ?? [] });
     return result;
   }
+  /** Legacy one-header text action surface used by the conformance harness. */
+  async act(source: string): Promise<NativeResult> {
+    const text = source.replace(/^\s*<\|tool_call_start\|>/, '').replace(/<\|tool_call_end\|>\s*$/, '').replace(/^\n+|\n+$/g, '');
+    const [header, ...body] = text.split('\n');
+    const command = header?.trim() ?? '';
+    const joined = body.join('\n');
+    let result: NativeResult;
+    try {
+      const set = /^set\s+(\S+)\s+:\s+(.+)$/.exec(command);
+      const copy = /^copy\s+(\S+)\s+to\s+(\S+)$/.exec(command);
+      const simple = /^(read|edit|unset|reopen)\s+(\S+)$/.exec(command);
+      if (set) {
+        const type = set[2]!.trim(), parsed = parseType(type);
+        const raw = this.env.resolve(parsed).kind === 'prim' && formatType(parsed) === 'Text' ? joined : YAML.parse(joined);
+        const wrapper = ['lambda', 'map', 'fold', 'iterate'].includes(parsed.kind) ? `$${parsed.kind}` : '';
+        result = this.apply('write', { path: set[1], type, value: wrapper ? { [wrapper]: { type, ...raw as object } } : raw });
+      } else if (copy) result = this.apply('copy', { from: copy[1], to: copy[2] });
+      else if (command.startsWith('reduce ')) result = await this.applyAsync('run', { paths: command.slice(7).trim().split(/\s+/) });
+      else if (command === 'eval') result = this.apply('run_code', { code: joined, engine: 'typescript-host' });
+      else if (simple) {
+        const [, tool, path] = simple;
+        if (tool === 'read') result = this.apply('read', { path });
+        else if (tool === 'unset') result = this.apply('delete', { path });
+        else if (tool === 'reopen') result = this.apply('retry', { path, feedback: joined });
+        else if (path === 'instructions[1..1]') {
+          const missing = this.lam.type.kind === 'lambda' ? problems(this.lam.return, this.lam.type.returns, this.env, 'return').holes : [];
+          result = missing.length ? { kind: 'refused', text: `commit has holes: ${missing.map(item => item.path).join(', ')}`, codes: ['commit-holes'] } :
+            this.finish() ? { kind: 'completed', text: 'completed', value: this.lam.return } :
+              { kind: 'refused', text: 'commit is incomplete', codes: ['commit-holes'] };
+        } else throw new Reject([{ path: path!, code: 'bad-action' }]);
+      } else throw new Reject([{ path: command, code: 'bad-action' }]);
+    } catch (error) {
+      result = error instanceof Reject ? { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) } :
+        { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    this.runtime.trace.emit('action', { surface: 'text', action: source, outcome: result.kind, diagnostics: result.codes ?? [] });
+    return result;
+  }
   apply(name: string, args: Record<string, unknown>): NativeResult {
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
     if (this.actions >= 40 || this.toolCalls >= 128)
@@ -385,6 +424,15 @@ export class NativeSession {
       }
       if (name === 'read') {
         const path = String(args.path ?? '');
+        const meta = /^(.+)@(status|note)$/.exec(path);
+        if (meta) {
+          const ref = this.resolve(meta[1]!); const value = ref.get();
+          if (!pending(value)) throw new Reject([{ path, code: 'no-such-path' }]);
+          const item = meta[2] === 'status' ? value.status : value.note;
+          return { kind: 'ok', text: String(item), value: item };
+        }
+        const ranged = this.ranged(path);
+        if (ranged) return { kind: 'ok', text: typeof ranged.value === 'string' ? ranged.value : JSON.stringify(ranged.value), value: ranged.value };
         if (path === 'codebase') return { kind: 'ok', text: Object.keys(this.lam.codebase).join('\n') || '(no functions)' };
         if (path.startsWith('codebase/')) {
           const key = path.slice(9), fn = this.lam.codebase[key] as Record<string, unknown> | undefined;
@@ -414,10 +462,12 @@ export class NativeSession {
       }
       if (name === 'copy') {
         const from = String(args.from ?? ''), to = String(args.to ?? '');
-        const src = this.resolve(from), dst = this.resolve(to, true), original = src.get();
-        if (original === MISSING || !src.type) throw new Reject([{ path: from, code: 'no-such-path' }]);
+        const ranged = this.ranged(from);
+        const src = ranged?.ref ?? this.resolve(from), dst = this.resolve(to, true), original = ranged?.value ?? src.get();
+        const sourceType = ranged?.type ?? src.type;
+        if (original === MISSING || !sourceType) throw new Reject([{ path: from, code: 'no-such-path' }]);
         if (dst.deny) throw new Reject([{ path: to, code: dst.deny }]);
-        if (!dst.type || !fitsType(src.type, dst.type, dst.env))
+        if (!dst.type || !fitsType(sourceType, dst.type, dst.env))
           throw new Reject([{ path: to, code: 'type-does-not-fit-slot', expected: dst.type ? formatType(dst.type) : '' }]);
         const value = cloneValue(original);
         if (pending(value)) value.status = 'unreduced';
@@ -437,8 +487,31 @@ export class NativeSession {
       throw new Reject([{ path: name, code: 'bad-action' }]);
     } catch (error) {
       if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('NATLANG:effect-undeclared')) return { kind: 'rejected', text: message, codes: ['effect-undeclared'] };
+      if (name === 'run_code' && /read only|Cannot assign|not extensible/i.test(message))
+        return { kind: 'rejected', text: message, codes: ['eval-cannot-write'] };
+      return { kind: 'error', text: message };
     }
+  }
+
+  private ranged(path: string): { ref: Ref; type: Type; value: Value } | undefined {
+    const match = /^(.*?)\[(\d+)\.\.(\d+)\]$/.exec(path);
+    if (!match) return;
+    const ref = this.resolve(match[1]!);
+    const start = Number(match[2]), end = Number(match[3]);
+    if (start > end) throw new Reject([{ path, code: 'bad-range' }]);
+    const value = ref.get(), type = ref.env.resolve(ref.type!);
+    if (Array.isArray(value) && type.kind === 'list') {
+      if (end >= value.length) throw new Reject([{ path, code: 'bad-range' }]);
+      return { ref, type: ref.type!, value: value.slice(start, end + 1) };
+    }
+    if (typeof value === 'string' && type.kind === 'prim' && type.name === 'Text') {
+      const lines = value.split('\n');
+      if (start < 1 || end > lines.length) throw new Reject([{ path, code: 'bad-range' }]);
+      return { ref, type: ref.type!, value: lines.slice(start - 1, end).join('\n') + '\n' };
+    }
+    throw new Reject([{ path, code: 'bad-range' }]);
   }
 
   private checkEffects(value: Value, path: string): void {
@@ -468,6 +541,12 @@ export class NativeSession {
         for (const path of paths) {
           const ref = this.resolve(String(path));
           if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
+          const value = ref.get();
+          if (pending(value)) {
+            const missing = unboundParts(value, ref.env, ref.path);
+            if (missing.length) return this.record(name, args, { kind: 'refused',
+              text: missing.map(d => `${d.path}: ${d.code}`).join('\n'), codes: [...new Set(missing.map(d => d.code))] });
+          }
           outcomes.push(await this.runtime.trigger(ref));
         }
         return this.record(name, args, { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
@@ -570,6 +649,8 @@ export class NativeSession {
   }
 
   private resolve(path: string, create = false): Ref {
+    if (path.startsWith('/') || path.split('/').some(part => part === '..' || part === '.'))
+      throw new Reject([{ path, code: 'out-of-scope' }]);
     const parts = path.split('/').filter(Boolean);
     if (!parts.length) throw new Reject([{ path, code: 'no-such-path' }]);
     const first = parts.shift()!;
@@ -577,6 +658,10 @@ export class NativeSession {
     if (first === 'args') { container = this.lam.args; type = this.lam.type.kind === 'lambda' ? this.lam.type.params : parseType('{}'); deny = 'not-writable'; }
     else if (first === 'return') { container = this.lam as unknown as Record<string, Value>; type = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('Null'); }
     else if (first === 'let') { container = this.lam.let; type = parseType('{}'); }
+    else if (first === this.lam.kind) {
+      if (parts.length) throw new Reject([{ path, code: 'no-such-path' }]);
+      return itemRef(this.lam as unknown as Record<string, Value>, 'body', parseType('Text'), this.env, first);
+    }
     else throw new Reject([{ path, code: 'no-such-path' }]);
     if (first === 'return' && parts.length === 0) return itemRef(container, 'return', type, this.env, path, deny);
     if (first === 'args' && parts.length === 0) return { path, type, env: this.env, deny, get: () => this.lam.args as Value,
