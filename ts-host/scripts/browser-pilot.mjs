@@ -79,7 +79,7 @@ try {
   await page.getByRole('button', { name: 'Apply command' }).click();
   await page.getByText('Revision 1 ready').waitFor({ timeout: 30000 });
   await page.locator('#app').getByText('Buy milk', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Complete' }).click();
+  await page.getByRole('button', { name: 'Complete', exact: true }).click();
   await page.getByText('Revision 2 ready').waitFor({ timeout: 30000 });
   await page.locator('#app').getByText('Buy milk (done)', { exact: true }).waitFor();
   console.log('PASS browser natlang application and DOM event smoke');
