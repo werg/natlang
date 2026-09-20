@@ -69,18 +69,25 @@ export class TypeScriptEnvironment {
   private context?: Context;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
+  private readonly effect?: (capability: string, operation: string, args: unknown[]) => unknown;
 
   constructor(options: { mode?: EnvironmentMode; host?: object; timeoutMs?: number;
-    observe?: (event: HostEvent) => void } = {}) {
+    observe?: (event: HostEvent) => void;
+    effect?: (capability: string, operation: string, args: unknown[]) => unknown } = {}) {
     this.mode = options.mode ?? 'fresh';
     this.host = options.host ?? Object.freeze({});
     this.timeoutMs = options.timeoutMs ?? 2000;
     this.observe = options.observe;
+    this.effect = options.effect;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new RangeError('timeoutMs must be positive');
   }
 
   private makeContext(): Context {
-    const context = createContext({ host: this.host, __fx: () => JSON.stringify({ __error: 'effect-undeclared' }),
+    const context = createContext({ host: this.host, __fx: (cap: string, fn: string, raw: string) => {
+      if (!this.effect) return JSON.stringify({ __error: 'effect-undeclared' });
+      try { return JSON.stringify({ value: portable(this.effect(cap, fn, JSON.parse(raw))) }); }
+      catch (error) { return JSON.stringify({ __error: error instanceof Error ? error.message : String(error) }); }
+    },
       console: undefined });
     runInContext(prelude, context, { timeout: this.timeoutMs });
     return context;
