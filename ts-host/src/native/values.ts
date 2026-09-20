@@ -34,6 +34,23 @@ const reject = (path: string, code: string, expected?: string, got?: string): ne
 const plain = (value: unknown): value is Record<string, unknown> => value !== null &&
   typeof value === 'object' && !Array.isArray(value) &&
   (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+function inlineCodebase(entries: unknown, inherited: Record<string, string>): Record<string, unknown> {
+  if (!plain(entries)) return {};
+  return Object.fromEntries(Object.entries(entries).map(([name, raw]) => {
+    if (!plain(raw)) return [name, raw];
+    const kind = Object.hasOwn(raw, 'code') ? 'code' : 'instructions';
+    const types = { ...inherited, ...(plain(raw.types) ? raw.types : {}) } as Record<string, string>;
+    const source = String(raw[kind] ?? '').replace(/^\n+|\n+$/g, '') + '\n';
+    const doc: Record<string, unknown> = { description: String(raw.description ?? ''),
+      args: raw.args ?? {}, returns: String(raw.returns ?? ''), [kind]: source };
+    if (Object.keys(types).length) doc.types = types;
+    if (Array.isArray(raw.effects) && raw.effects.length) doc.effects = raw.effects;
+    if (kind === 'code' && raw.engine && raw.engine !== 'quickjs-isolated') doc.engine = raw.engine;
+    const children = inlineCodebase(raw.codebase, types);
+    if (Object.keys(children).length) doc.codebase = children;
+    return [name, doc];
+  }));
+}
 export const isPending = (value: unknown): value is Pending => plain(value) &&
   ['lambda', 'map', 'fold', 'iterate'].includes(String(value.nodeKind));
 
@@ -187,7 +204,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
       args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
       journal: structuredClone((body.effects_journal ?? []) as unknown[]),
-      let: {}, letTypes: {}, codebase: structuredClone((body.codebase ?? {}) as Record<string, unknown>),
+      let: {}, letTypes: {}, codebase: inlineCodebase(body.codebase, typesSrc),
       functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {} };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
@@ -284,7 +301,7 @@ export function dump(value: Value, full = false): unknown {
   if (value.note) body.note = value.note;
   if (value.nodeKind === 'lambda') {
     body[value.kind] = value.body;
-    if (value.engine !== 'quickjs-isolated') body.engine = value.engine;
+    if (value.kind === 'code' && value.engine !== 'quickjs-isolated') body.engine = value.engine;
     if (Object.keys(value.args).length) body.args = dump(value.args, full);
     if (value.return !== MISSING) body.return = dump(value.return, full);
     if (value.effects.length) body.effects = value.effects;

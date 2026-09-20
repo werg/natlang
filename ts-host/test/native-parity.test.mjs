@@ -253,7 +253,7 @@ test('native editable function copies keep the checked source immutable', { skip
   assert.deepEqual(actual.map(result => result.kind), expected.kinds);
   assert.deepEqual(actual.map(result => result.codes ?? []), expected.codes);
   assert.deepEqual(dump(lam.return), expected.value);
-  assert.equal(lam.codebase.inc.code, 'return args.value + 1;');
+  assert.equal(lam.codebase.inc.code, 'return args.value + 1;\n');
 });
 
 test('native tool rejection text includes Python diagnostic hints', { skip: !python }, () => {
@@ -321,6 +321,31 @@ test('native model-driven leaf trace matches Python actions and state observatio
     { calls: [['write', { path: 'return', type: 'Num', value: 7 }]], completion_tokens: 1 } :
     { calls: [], text: 'done', completion_tokens: 1 });
   const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected);
+});
+
+test('native nested model Map trace matches Python invocation and action order', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{ items: Num[] }, Num[]>', instructions: 'Double every item.',
+    args: { items: [2, 3] }, codebase: { double: { args: { item: 'Num' }, returns: 'Num',
+      instructions: 'Double the item.' } } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self,lam): self.lam=lam; self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index>1: return ChatTurn([], 'done',completion_tokens=1)\n  if self.lam.fn_name=='double': return ChatTurn([('write',{'path':'return','type':'Num','value':self.lam.in_['item']*2})],completion_tokens=1)\n  return ChatTurn([('call',{'function':'double','to':'return','over':'args/items'})],completion_tokens=1)\nsink=TraceRecorder({})\nRuntime(lambda lam:ToolAgent(Decoder(lam)),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const runtime = new NativeRuntime({ agent: session => {
+    let index = 0;
+    const agent = new NativeToolAgent(() => {
+      index++;
+      if (index > 1) return { calls: [], text: 'done', completion_tokens: 1 };
+      if (session.lam.functionName === 'double') return { calls: [['write', {
+        path: 'return', type: 'Num', value: session.lam.args.item * 2 }]], completion_tokens: 1 };
+      return { calls: [['call', { function: 'double', to: 'return', over: 'args/items' }]], completion_tokens: 1 };
+    });
+    return agent.run(session);
+  } });
   await runtime.runRoot(doc);
   const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
     { ...event, surface: 'tools-v2' } : event);

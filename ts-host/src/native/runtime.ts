@@ -1011,7 +1011,8 @@ export class NativeSession {
           throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: `${itemType}[]` }]);
       }
       const leaf = { type: typeText, [kind]: definition[kind],
-        engine: definition.engine ?? 'typescript-host', args: values, types: definition.types ?? {},
+        ...(kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated' ?
+          { engine: definition.engine } : {}), args: values, types: definition.types ?? {},
         effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName };
       let raw: Record<string, unknown> = { $lambda: leaf };
       let destination = String(definition.returns);
@@ -1027,7 +1028,9 @@ export class NativeSession {
         raw = { $iterate: { type: `Iterate<${stateType}>`, init, max: args.max,
           state_name: stateName, check_name: checkName,
           step: { $lambda: leaf }, check: { $lambda: { type: `Lambda<{ ${checkName}: ${checkArgs[checkName]} }, ${check.returns}>`,
-            [checkKind]: check[checkKind], engine: check.engine ?? 'typescript-host', function: String(args.until) } } } };
+            [checkKind]: check[checkKind],
+            ...(checkKind === 'code' && check.engine && check.engine !== 'quickjs-isolated' ?
+              { engine: check.engine } : {}), function: String(args.until) } } } };
         destination = stateType;
       } else if (over !== undefined && init !== undefined) {
         if (!('acc' in signature) || !('item' in signature)) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);
