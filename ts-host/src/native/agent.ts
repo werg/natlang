@@ -41,7 +41,17 @@ function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> 
 type Slot = { path: string; type: Type; value: Value; writable: boolean };
 function slots(path: string, type: Type, value: Value, env: TypeEnv, writable: boolean, depth = 0): Slot[] {
   const out: Slot[] = [{ path, type, value, writable }];
-  if (depth >= 3 || isPending(value)) return out;
+  if (depth >= 3) return out;
+  if (isPending(value)) {
+    if (value.nodeKind === 'lambda' && value.type.kind === 'lambda') {
+      out.push({ path: `${path}/args`, type: value.type.params, value: value.args as Value,
+        writable: false });
+      for (const field of value.type.params.fields)
+        if (!Object.hasOwn(value.args, field.name)) out.push({ path: `${path}/args/${field.name}`,
+          type: field.type, value: MISSING, writable: writable && value.status !== 'running' });
+    }
+    return out;
+  }
   const resolved = env.resolve(type);
   if (resolved.kind === 'record') for (const field of resolved.fields) {
     const child = value && value !== MISSING && typeof value === 'object' && !Array.isArray(value) &&
@@ -165,14 +175,20 @@ export class NativeToolAgent {
       return 0;
     });
     const readable = present.map(slot => slot.path);
-    const writable = all.filter(slot => slot.writable && !isPending(slot.value)).slice(0, 48);
+    const writable = all.filter(slot => slot.writable &&
+      !['lambda', 'map', 'fold', 'iterate'].includes(session.env.resolve(slot.type).kind)).slice(0, 48);
+    const definable = all.filter(slot => slot.writable).slice(0, 48);
     const textSlots = all.filter(slot => slot.writable && typeof slot.value === 'string').map(slot => slot.path);
     const path = { type: 'string' };
     const slotPaths = writable.map(slot => slot.path);
+    const definitionPaths = definable.map(slot => slot.path);
     const valueSchemas = [...new Map(writable.map(slot => {
       const schema = schemaOf(slot.type, session.env); return [JSON.stringify(schema), schema] as const;
     })).values()];
-    const writeValue = valueSchemas.length === 1 ? valueSchemas[0] : { anyOf: valueSchemas };
+    const scalarShapes = ['string', 'number', 'boolean', 'null', 'object', 'array'].map(type => ({ type }));
+    const writeShapes = [...new Map([...valueSchemas.flatMap(schema => Object.keys(schema).length ? [schema] : scalarShapes),
+      ...scalarShapes].map(schema => [JSON.stringify(schema), schema])).values()];
+    const writeValue = { description: 'The value itself, complete (not wrapped in an object).', anyOf: writeShapes };
     const fitting = (target: Type): string[] => present.filter(slot =>
       !isPending(slot.value) && fitsType(slot.type, target, session.env)).map(slot => slot.path).slice(0, 48);
     const valueAlternatives = writable.map(slot => ({ path: { const: slot.path },
@@ -225,14 +241,19 @@ export class NativeToolAgent {
     (tools[1]!.function.parameters as Record<string, unknown>).anyOf = [{ required: ['value'] }, { required: ['source'] },
       ...Object.keys(lam.codebase).map(name => ({ properties: { type: { const: `Function<${name}>` } }, required: ['type'] }))];
     const callProperties: Record<string, unknown> = {
-      function: { enum: names }, to: { anyOf: [{ enum: slotPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
+      function: { enum: names }, to: { anyOf: [{ enum: definitionPaths }, { type: 'string', pattern: '^let/[A-Za-z_][A-Za-z0-9_]*$' }] },
       inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string', enum: readable }])), additionalProperties: false }, over: { type: 'string', enum: readable },
       init: {}, until: { type: 'string' }, max: { type: 'integer' },
     };
     if (unmarked.length) callProperties.done = done;
     if (names.length) {
-      const destinations = { anyOf: [{ enum: slotPaths }, newLocal] };
+      const destinations = { anyOf: [{ enum: definitionPaths }, newLocal] };
       const callAlternatives: Record<string, unknown>[] = [];
+      const checkNames = Object.entries(lam.codebase).flatMap(([name, raw]) => {
+        const definition = raw as Record<string, unknown>;
+        const params = Object.keys(definition.args as Record<string, string> ?? {}).filter(param => !param.endsWith('?'));
+        return definition.returns === 'Bool' && params.length === 1 ? [name] : [];
+      });
       for (const name of names) {
         const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
           Record<string, unknown> | undefined;
@@ -258,7 +279,16 @@ export class NativeToolAgent {
                 'x-optional': ['inputs'] } : {}) });
           }
         }
+        if (checkNames.length && namesAndTypes.length) {
+          const starts = [...new Set(Object.values(properties).flatMap(schema => schema.enum))];
+          callAlternatives.push({ ...base, init: { enum: starts.length ? starts : present.map(slot => slot.path).slice(0, 48) },
+            until: { enum: checkNames }, max: { type: 'integer' }, inputs: { ...inputs, required: [] },
+            'x-optional': ['inputs'] });
+        }
       }
+      for (const name of names) for (const slot of present.filter(slot => isPending(slot.value) &&
+        ['unreduced', 'quiesced'].includes(slot.value.status)).slice(0, 4))
+        callAlternatives.push({ function: { const: name }, to: { enum: [slot.path] } });
       const call = tool('call', 'Call a checked function and place its result at to.', callProperties, ['function', 'to']);
       (call.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = callAlternatives;
       tools.push(call);
