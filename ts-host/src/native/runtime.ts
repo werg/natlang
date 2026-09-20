@@ -41,6 +41,7 @@ export class NativeRuntime {
   episodesStarted = 0;
   private root?: { value: Value };
   private stream?: NativeStream;
+  private streamCurrent: Value | undefined;
 
   constructor(options: { environment?: TypeScriptEnvironment; host?: object; agent?: NativeAgent;
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
@@ -93,7 +94,7 @@ export class NativeRuntime {
     return { path: ref.path, kind: 'quiesced', detail };
   }
 
-  private async trigger(ref: Ref): Promise<NativeOutcome> {
+  async trigger(ref: Ref): Promise<NativeOutcome> {
     const node = ref.get();
     if (!pending(node)) throw new Reject([{ path: ref.path, code: 'no-such-path', expected: 'a pending node' }]);
     if (node.status === 'running') throw new Reject([{ path: ref.path, code: 'frozen' }]);
@@ -190,11 +191,14 @@ export class NativeRuntime {
     while (true) {
       let item: Value;
       if (this.stream && !ref.path) {
-        const polled = await this.stream.poll();
-        if (polled.kind === 'empty') { node.status = 'waiting'; node.note = 'waiting for stream input'; return { path: ref.path, kind: 'waiting', detail: node.note }; }
-        if (polled.kind === 'closed') return this.done(ref, node, node.acc);
-        if (polled.kind === 'failed') return this.quiesce(ref, node, `stream failed: ${polled.detail}`);
-        item = coerce(polled.value, node.type.a, env, `${ref.path}/over/${node.at}`);
+        if (this.streamCurrent === undefined) {
+          const polled = await this.stream.poll();
+          if (polled.kind === 'empty') { node.status = 'waiting'; node.note = 'waiting for stream input'; return { path: ref.path, kind: 'waiting', detail: node.note }; }
+          if (polled.kind === 'closed') return this.done(ref, node, node.acc);
+          if (polled.kind === 'failed') return this.quiesce(ref, node, `stream failed: ${polled.detail}`);
+          this.streamCurrent = coerce(polled.value, node.type.a, env, `${ref.path}/over/${node.at}`);
+        }
+        item = this.streamCurrent;
       } else {
         if (!Array.isArray(node.over)) return this.quiesce(ref, node, 'invalid Fold input');
         if (node.at >= node.over.length) return this.done(ref, node, node.acc);
@@ -209,6 +213,7 @@ export class NativeRuntime {
       const out = await this.trigger(child);
       if (out.kind !== 'done') return this.quiesce(ref, node, `step ${node.at} ${out.kind}: ${out.detail}`);
       node.acc = node.current; node.current = null; node.at++;
+      if (this.stream && !ref.path) this.streamCurrent = undefined;
     }
   }
 
@@ -305,6 +310,42 @@ export class NativeSession {
         return { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value };
       }
       throw new Reject([{ path: name, code: 'bad-action' }]);
+    } catch (error) {
+      if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
+    if (name !== 'call') return this.apply(name, args);
+    try {
+      const label = String(args.function ?? '');
+      const definition = this.lam.codebase[label] as Record<string, unknown> | undefined;
+      if (!definition) throw new Reject([{ path: 'function', code: 'no-such-function', got: label }]);
+      const signature = definition.args as Record<string, string> ?? {};
+      const params = Object.entries(signature).map(([name, type]) => `${name.replace(/\?$/, '')}${name.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
+      const typeText = `Lambda<{ ${params} }, ${String(definition.returns)}>`;
+      const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
+      const inputPaths = (args.inputs ?? {}) as Record<string, string>;
+      const values: Record<string, unknown> = {};
+      for (const [name, path] of Object.entries(inputPaths)) values[name] = cloneValue(this.resolve(path).get());
+      const required = Object.keys(signature).filter(name => !name.endsWith('?')).map(name => name.replace(/\?$/, ''));
+      if (required.some(name => !(name in values))) throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
+      const child = buildPending({ $lambda: { type: typeText, [kind]: definition[kind],
+        engine: definition.engine ?? 'typescript-host', args: values, types: definition.types ?? {},
+        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: label } }, this.env);
+      const path = String(args.to ?? '');
+      if (path.startsWith('let/')) {
+        const local = path.slice(4);
+        if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(String(definition.returns));
+      }
+      const ref = this.resolve(path, true);
+      if (!ref.type || !fitsType(child.type, ref.type, this.env))
+        throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: ref.type ? formatType(ref.type) : '' }]);
+      const existing = ref.get();
+      if (!(pending(existing) && existing.nodeKind === 'lambda' && existing.functionName === label)) ref.set(child);
+      const outcome = await this.runtime.trigger(ref);
+      return { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value };
     } catch (error) {
       if (error instanceof Reject) return { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) };
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };

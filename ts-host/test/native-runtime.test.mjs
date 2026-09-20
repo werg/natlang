@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeToolAgent } from '../dist/native/agent.js';
+import { checkedDefinitions } from '../dist/native/codebase.js';
 
 const crisp = (type, code, extra = {}) => ({ $lambda: { type, code, engine: 'typescript-host', ...extra } });
 
@@ -49,4 +51,46 @@ test('native Iterate uses a checked step and Boolean completion condition', asyn
     check: crisp('Lambda<{ value: Num }, Bool>', 'return args.value >= 3;'),
   } });
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 3);
+});
+
+test('native codebase call binds typed inputs and reduces a child', async () => {
+  const actions = [];
+  const runtime = new NativeRuntime({ agent: async session => {
+    actions.push(await session.applyAsync('call', { function: 'double', to: 'return',
+      inputs: { item: 'args/item' } }));
+    session.finish();
+  } });
+  const result = await runtime.runRoot({ $lambda: {
+    type: 'Lambda<{ item: Num }, Num>', instructions: 'Double the item.', args: { item: 8 },
+    codebase: { double: { args: { item: 'Num' }, returns: 'Num', engine: 'typescript-host',
+      code: 'return args.item * 2;' } },
+  } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 16);
+  assert.equal(actions[0].kind, 'done');
+});
+
+test('native model-turn loop drives tool actions without Python', async () => {
+  let turn = 0;
+  const agent = new NativeToolAgent(() => ++turn === 1 ? {
+    calls: [['write', { path: 'return', type: 'Num', value: 11 }]], completion_tokens: 3,
+  } : { calls: [], text: 'done', completion_tokens: 2 });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return eleven.' } });
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 11); assert.equal(turn, 2);
+});
+
+test('native checked definitions snapshot and link source calls', async () => {
+  const source = { main: { args: { price: 'Num' }, returns: 'Num',
+    instructions: 'Use double.', uses: { double: 'helper' } },
+    helper: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' } };
+  const graph = checkedDefinitions(source, 'main');
+  source.helper.code = 'return 999;';
+  const runtime = new NativeRuntime({ agent: async session => {
+    const out = await session.applyAsync('call', { function: 'double', to: 'return',
+      inputs: { item: 'args/price' } });
+    assert.equal(out.kind, 'done'); session.finish();
+  } });
+  const result = await runtime.runRoot(graph.instantiate({ price: 8 }));
+  assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 16);
+  assert.throws(() => checkedDefinitions({ a: { returns: 'Num', code: 'return 1;', uses: { a: 'a' } } }, 'a'), /recursion/);
 });
