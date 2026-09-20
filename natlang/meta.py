@@ -50,13 +50,16 @@ class SourceWorkspace:
                executors: dict | None = None, capabilities: dict | None = None,
                parent_call_id: str | None = None, max_episodes: int | None = None,
                parent_runtime: Runtime | None = None) -> ChildResult:
-        max_episodes = min(32, options.max_episodes) if max_episodes is None else max_episodes
-        if max_episodes < 1 or max_episodes > options.max_episodes:
-            raise ValueError("child episode budget must be positive and bounded by parent")
+        max_episodes = options.max_episodes if max_episodes is None else max_episodes
+        if ((max_episodes is not None and max_episodes < 1) or
+                (options.max_episodes is not None and max_episodes is not None and
+                 max_episodes > options.max_episodes)):
+            raise ValueError("child episode budget must be positive and bounded by explicit parent budget")
         graph, root = load_definitions(self.definitions, name, inputs)
         child_options = RunOptions(seed=options.seed, model=options.model,
                                    world_seed=options.world_seed, max_episodes=max_episodes,
-                                   max_depth=options.max_depth)
+                                   max_depth=options.max_depth, max_actions=options.max_actions,
+                                   max_tool_calls=options.max_tool_calls)
         recorder = TraceRecorder({"run_id": child_options.run_id, "source_sha256": graph.revision,
                                   "parent_call_id": parent_call_id, "seed_policy": vars(options.seed),
                                   "capture": "reduction"})
@@ -90,7 +93,7 @@ def meta_capabilities(workspace: SourceWorkspace, *, agent_factory, options: Run
         result = workspace.invoke(request["name"], request.get("inputs") or {},
                                   agent_factory=agent_factory, options=options, executors=executors,
                                   parent_call_id=request.get("parent_call_id"),
-                                  max_episodes=request.get("max_episodes", min(32, options.max_episodes)),
+                                  max_episodes=request.get("max_episodes"),
                                   parent_runtime=parent_runtime)
         return {"source_revision": result.source_revision, "parent_call_id": result.parent_call_id,
                 "outcome": result.outcome, "value": result.value, "trace": result.trace}

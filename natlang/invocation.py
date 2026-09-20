@@ -44,14 +44,16 @@ class SeedPolicy:
 @dataclass(frozen=True)
 class ModelSettings:
     temperature: float = 0.2
-    max_turns: int = 64
-    max_tokens: int = 4000
-    max_seconds: float = 900
+    max_turns: Optional[int] = None
+    max_tokens: Optional[int] = None
+    max_seconds: Optional[float] = None
     turn_tokens: Optional[int] = None
 
     def __post_init__(self):
-        if self.max_turns < 1 or self.max_tokens < 1 or self.max_seconds <= 0:
-            raise ValueError("model budgets must be positive")
+        if ((self.max_turns is not None and self.max_turns < 1) or
+                (self.max_tokens is not None and self.max_tokens < 1) or
+                (self.max_seconds is not None and self.max_seconds <= 0)):
+            raise ValueError("explicit model budgets must be positive")
         if self.turn_tokens is not None and self.turn_tokens < 1:
             raise ValueError("turn token budget must be positive")
 
@@ -61,9 +63,17 @@ class RunOptions:
     seed: SeedPolicy = field(default_factory=SeedPolicy)
     model: Optional[ModelSettings] = None  # None keeps per-agent compatibility settings
     world_seed: Optional[int] = None
-    max_episodes: int = 256
-    max_depth: int = 8
+    max_episodes: Optional[int] = None
+    max_depth: Optional[int] = None
+    max_actions: Optional[int] = None
+    max_tool_calls: Optional[int] = None
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def __post_init__(self):
+        for name in ("max_episodes", "max_depth", "max_actions", "max_tool_calls"):
+            value = getattr(self, name)
+            if value is not None and value < 1:
+                raise ValueError(f"{name} must be positive or None")
 
     @classmethod
     def compatibility(cls, **kwargs) -> "RunOptions":

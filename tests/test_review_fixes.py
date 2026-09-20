@@ -11,6 +11,7 @@ from natlang.checks import grade
 from natlang.corpus import program_id, split_programs
 from natlang.decoder import ChatTurn
 from natlang.host import load
+from natlang.invocation import RunOptions
 from natlang.runtime import Runtime, Session, MAX_TOOL_CALLS
 from natlang.tool_agent import ToolAgent
 from natlang.types import TypeEnv
@@ -20,9 +21,9 @@ from scripts.eval_turns import select_samples, score, summary
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def session():
+def session(options=None):
     lam = load_program({'$lambda': {'type': 'Lambda<{}, Num>', 'instructions': 'return 1'}})
-    return Session(Runtime(None), lam, TypeEnv())
+    return Session(Runtime(None, options=options), lam, TypeEnv())
 
 
 def test_holdout_reserves_every_turn_of_a_program():
@@ -91,11 +92,19 @@ def test_bad_mark_cannot_execute_an_effectful_callee():
 
 
 def test_marks_have_an_independent_call_budget():
-    s = session()
+    s = session(RunOptions(max_tool_calls=MAX_TOOL_CALLS))
     for _ in range(MAX_TOOL_CALLS):
         assert s.apply('mark_done', {'start': 1}).kind == 'ok'
     assert s.actions == 0
     assert s.apply('mark_done', {'start': 1}).kind == 'budget'
+
+
+def test_unset_call_and_action_budgets_do_not_quiesce_long_episodes():
+    s = session()
+    for _ in range(MAX_TOOL_CALLS + 2):
+        assert s.apply('read', {'path': 'instructions'}).kind == 'ok'
+    assert s.actions == MAX_TOOL_CALLS + 2
+    assert s.tool_calls == MAX_TOOL_CALLS + 2
 
 
 class RepeatingDecoder:

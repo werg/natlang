@@ -37,27 +37,11 @@ test('native episodes write through typed actions and reject wrong values', asyn
   assert.equal(actions[1].kind, 'ok');
 });
 
-test('inference and action budgets are absent by default and enforce explicit limits', async () => {
+test('explicit inference and action limits still apply', async () => {
   const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven.' } };
-  let turns = 0;
-  const allowances = [];
-  const agent = new NativeToolAgent(request => {
-    allowances.push(request.max_tokens);
-    turns++;
-    if (turns <= 130) return { calls: [['read', { path: 'instructions' }]], completion_tokens: 1 };
-    if (turns === 131) return { calls: [['write', { path: 'return', type: 'Num', value: 7 }]],
-      completion_tokens: 1 };
-    return { calls: [], completion_tokens: 1 };
-  });
-  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
-  const result = await runtime.runRoot(program);
-  assert.equal(result.outcome.kind, 'done');
-  assert.equal(result.value, 7);
-  assert.equal(turns, 132);
-  assert(allowances.every(value => value === null));
+  const runtime = new NativeRuntime();
   assert.equal(runtime.options.maxEpisodes, undefined);
   assert.equal(runtime.options.maxDepth, undefined);
-
   const capped = new NativeSession(new NativeRuntime({ maxActions: 2, maxToolCalls: 3 }),
     buildPending(program), new TypeEnv());
   assert.equal(capped.apply('read', { path: 'instructions' }).kind, 'ok');

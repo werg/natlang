@@ -43,6 +43,25 @@ test('default model turn has no implicit token limit in either runtime', { skip:
   assert.equal(outcome.outcome.kind, expected.kind);
 });
 
+test('long structured episodes cross former turn and action limits in both runtimes', { skip: !python }, async () => {
+  const script = `import json\nfrom natlang.decoder import ChatTurn\nfrom natlang.runtime import Runtime\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.values import load_program,dump\nclass Driver:\n def __init__(self): self.turns=0; self.limits=[]\n def chat(self, messages, tools, *, temperature, seed, max_tokens):\n  self.turns+=1; self.limits.append(max_tokens)\n  if self.turns<=130: return ChatTurn(calls=[('read',{'path':'instructions'})],completion_tokens=1)\n  if self.turns==131: return ChatTurn(calls=[('write',{'path':'return','type':'Num','value':7})],completion_tokens=1)\n  return ChatTurn(calls=[],completion_tokens=1)\ndriver=Driver(); agent=ToolAgent(driver)\nout,value=Runtime(lambda _:agent).run_root(load_program({'$lambda':{'type':'Lambda<{}, Num>','instructions':'Return seven.'}}))\nprint(json.dumps({'kind':out.kind,'value':dump(value),'turns':driver.turns,'unbounded':all(x is None for x in driver.limits)}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  let turns = 0;
+  const limits = [];
+  const agent = new NativeToolAgent(request => {
+    turns++; limits.push(request.max_tokens);
+    if (turns <= 130) return { calls: [['read', { path: 'instructions' }]], completion_tokens: 1 };
+    if (turns === 131) return { calls: [['write', { path: 'return', type: 'Num', value: 7 }]],
+      completion_tokens: 1 };
+    return { calls: [], completion_tokens: 1 };
+  });
+  const result = await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: 'Lambda<{}, Num>', instructions: 'Return seven.' } });
+  assert.deepEqual({ kind: result.outcome.kind, value: result.value, turns,
+    unbounded: limits.every(value => value === null) }, JSON.parse(py.stdout));
+});
+
 test('native reducer matches Python outcomes for finite crisp programs', { skip: !python }, async () => {
   const leaf = (type, code) => ({ $lambda: { type, code } });
   const fixtures = [

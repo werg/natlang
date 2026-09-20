@@ -3,6 +3,7 @@ from natlang.invocation import Invocation, ModelSettings, RunOptions, SeedPolicy
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.values import load_program
+import pytest
 
 
 class RecordedTurns:
@@ -15,6 +16,15 @@ class RecordedTurns:
         if len(self.seeds) == 1:
             return ChatTurn(calls=[("write", {"path": "return", "value": True})], completion_tokens=1)
         return ChatTurn(text="done", completion_tokens=1)
+
+
+def test_run_and_model_limits_are_only_present_when_explicit():
+    run, model = RunOptions(), ModelSettings()
+    assert (run.max_episodes, run.max_depth, run.max_actions, run.max_tool_calls) == (None,) * 4
+    assert (model.max_turns, model.max_tokens, model.max_seconds, model.turn_tokens) == (None,) * 4
+    for name in ("max_episodes", "max_depth", "max_actions", "max_tool_calls"):
+        with pytest.raises(ValueError, match=name):
+            RunOptions(**{name: 0})
 
 
 def test_seed_derivation_vectors_and_attempts():

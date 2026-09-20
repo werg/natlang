@@ -32,6 +32,7 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 from .values import dump_state
 
+# Reference values for explicitly configured legacy budgets; defaults are unrestricted.
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
 MAX_NESTING = 6
@@ -89,13 +90,13 @@ class Outcome:
 
 
 class EpisodeBudget:
-    def __init__(self, limit: int):
+    def __init__(self, limit: Optional[int]):
         self.limit, self.used = limit, 0
         self.lock = threading.Lock()
 
     def reserve(self) -> bool:
         with self.lock:
-            if self.used >= self.limit:
+            if self.limit is not None and self.used >= self.limit:
                 return False
             self.used += 1
             return True
@@ -103,7 +104,8 @@ class EpisodeBudget:
 
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
-                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
+                 max_episodes: Optional[int] = None, max_depth: Optional[int] = None,
+                 options: Optional[RunOptions] = None,
                  executor=None, trace_sink: Optional[TraceRecorder] = None,
                  trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
                  engine_selection: bool = False, map_workers: int = 1,
@@ -287,9 +289,10 @@ class Runtime:
 
     # -- natural-language lambda
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
-        if self._depth >= self.max_depth:
+        if self.max_depth is not None and self._depth >= self.max_depth:
             return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
-        if self.episodes_started >= self.max_episodes or self._budget.used >= self._budget.limit:
+        if ((self.max_episodes is not None and self.episodes_started >= self.max_episodes) or
+                (self._budget.limit is not None and self._budget.used >= self._budget.limit)):
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
         if key in self._stack:
@@ -653,7 +656,9 @@ class Session:
         """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
         if self.completed:
             return Result("error", "the task has already finished")
-        if self.actions >= MAX_ACTIONS or self.tool_calls >= MAX_TOOL_CALLS:
+        if ((self.rt.options.max_actions is not None and self.actions >= self.rt.options.max_actions) or
+                (self.rt.options.max_tool_calls is not None and
+                 self.tool_calls >= self.rt.options.max_tool_calls)):
             return Result("budget", "action or tool-call budget exhausted")
         self.tool_calls += 1
         if name != "mark_done":                 # bookkeeping does not spend the budget of work
