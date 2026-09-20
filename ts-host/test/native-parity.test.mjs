@@ -10,6 +10,8 @@ import { NativeSession } from '../dist/native/runtime.js';
 import { dump } from '../dist/native/values.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
+import { loadFunctionFile } from '../dist/native/source.js';
+import { dumpState } from '../dist/native/values.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -112,6 +114,14 @@ test('native checked-source revision uses Python canonical key ordering', { skip
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(entries), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   assert.equal(checkedDefinitions(entries, 'A').revision, py.stdout.trim());
+});
+
+test('native disk source loader reproduces Python triage program state', { skip: !python }, () => {
+  const path = `${root}/examples/triage/main.nl`;
+  const script = `import json,sys\nfrom pathlib import Path\nfrom natlang.host import load\nfrom natlang.values import dump_state\nprint(json.dumps(dump_state(load(Path(sys.argv[1]),{}))))`;
+  const py = spawnSync(python, ['-c', script, path], { cwd: root, encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  assert.deepEqual(dumpState(loadFunctionFile(path)), JSON.parse(py.stdout));
 });
 
 test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {

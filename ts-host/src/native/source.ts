@@ -6,6 +6,17 @@ import { Reject, buildPending, type LambdaNode } from './values.js';
 type FileDefinition = { description: string; args: Record<string, string>; returns: string;
   instructions?: string; code?: string; engine?: string; types: Record<string, string>;
   effects?: string[]; codebase: Record<string, FileDefinition>; function: string };
+function inline(def: FileDefinition): Record<string, unknown> {
+  const kind = def.code === undefined ? 'instructions' : 'code';
+  const doc: Record<string, unknown> = { description: def.description, args: def.args,
+    returns: def.returns, [kind]: def[kind] };
+  if (Object.keys(def.types).length) doc.types = def.types;
+  if (def.effects?.length) doc.effects = def.effects;
+  if (kind === 'code' && def.engine && def.engine !== 'quickjs-isolated') doc.engine = def.engine;
+  if (Object.keys(def.codebase).length) doc.codebase = Object.fromEntries(Object.entries(def.codebase)
+    .map(([name, child]) => [name, inline(child)]));
+  return doc;
+}
 const frontNl = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const frontTs = /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/;
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -67,7 +78,9 @@ export function loadFunctionFile(path: string): LambdaNode {
   const kind = definition.code === undefined ? 'instructions' : 'code';
   const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${definition.returns}>`,
     [kind]: definition[kind], engine: definition.engine, types: definition.types,
-    effects: definition.effects, codebase: definition.codebase, function: definition.function } });
+    effects: definition.effects, function: definition.function } });
   if (node.nodeKind !== 'lambda') throw new Error('internal file source error');
+  node.codebase = Object.fromEntries(Object.entries(definition.codebase)
+    .map(([name, child]) => [name, inline(child)]));
   return node;
 }
