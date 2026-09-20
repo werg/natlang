@@ -53,6 +53,7 @@ function compile(code: string, body: boolean, asyncBody: boolean): string {
 type Evaluator = (scope: Record<string, unknown>, code: string, effect: (cap: string, fn: string, args: unknown[]) => unknown) => unknown;
 /** Trusted browser evaluator. The host object is shared by identity and may be mutated. */
 export class TypeScriptEnvironment {
+  readonly authority = 'shared-browser-host';
   readonly mode: EnvironmentMode;
   readonly host: object;
   private evaluator?: Evaluator;

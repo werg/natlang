@@ -63,6 +63,7 @@ function compile(code: string, body: boolean, asyncBody = false): string {
 
 /** Trusted VM context. `host` is a direct reference to caller-owned native objects. */
 export class TypeScriptEnvironment {
+  readonly authority = 'shared-node-host';
   readonly mode: EnvironmentMode;
   readonly host: object;
   readonly timeoutMs: number;

@@ -10,7 +10,7 @@ export type NativeGraph = { root: string; definitions: Record<string, NativeDefi
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}`;
   return JSON.stringify(value);
 }

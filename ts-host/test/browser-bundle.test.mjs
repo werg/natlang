@@ -16,6 +16,7 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
     assert.equal(crisp.outcome.kind, 'done');
     assert.equal(crisp.value, 5);
     assert.equal(shared.count, 5);
+    assert.equal(crisp.trace[0].engine_contracts['typescript-host'].authority, 'shared-browser-host');
     let turns = 0;
     const natural = await host.run({ source: { kind: 'program', program: { $lambda: {
       type: 'Lambda<{}, Num>', instructions: 'Return the current count.' } } },

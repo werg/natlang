@@ -9,6 +9,7 @@ import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { dump } from '../dist/native/values.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
+import { checkedDefinitions } from '../dist/native/codebase.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -102,6 +103,15 @@ test('native pending loader rejects malformed fields and capabilities at Python 
     catch (error) { return error.diagnostics.map(item => [item.path, item.code]); }
   });
   assert.deepEqual(actual, expected);
+});
+
+test('native checked-source revision uses Python canonical key ordering', { skip: !python }, () => {
+  const entries = { A: { returns: 'Num', code: 'return 1;' },
+    a: { returns: 'Num', code: 'return 2;' } };
+  const script = `import json,sys\nfrom natlang.codebase import from_definitions\nprint(from_definitions(json.load(sys.stdin),'A').revision)`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(entries), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  assert.equal(checkedDefinitions(entries, 'A').revision, py.stdout.trim());
 });
 
 test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {

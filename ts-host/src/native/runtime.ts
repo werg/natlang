@@ -136,7 +136,8 @@ export class NativeRuntime {
       ...(options.sourceRevision ? { source_revision: options.sourceRevision } : {}),
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       engines: ['typescript-host'], engine_contracts: { 'typescript-host': {
-        environment_mode: options.environment?.mode ?? 'fresh', authority: 'shared-node-host', native_state_replayable: false } },
+        environment_mode: options.environment?.mode ?? 'fresh',
+        authority: options.environment?.authority ?? 'shared-node-host', native_state_replayable: false } },
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
