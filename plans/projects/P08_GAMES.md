@@ -1,6 +1,21 @@
 # P08 — Economic, combat and NPC game prototypes
 
-Status: proposed implementation. [Shared capabilities](README.md). Build three small prototypes, not one universal game engine.
+Status: three headless prototypes in `codebases/game_economy/`,
+`codebases/game_combat/`, `codebases/game_npc/` and
+`applications/game_worlds.mjs`. [Shared capabilities](README.md).
+
+Natlang chooses merchant trades, fighter tactics and NPC dialogue/actions.
+The exact hosts settle seeded simultaneous trade intents with conservation,
+resolve movement and damage at round boundaries, and guard NPC inventory and
+promise provenance. Actor observations expose only assigned information.
+Integration tests execute all three natlang policy entry points, check legal
+effects, determinism under reordered trade submissions, stale combat plans,
+and forged/replayed NPC observations.
+
+These are local headless worlds. Graphical rendering, deeper economic goals,
+real-time tactic deadlines, interacting NPC quests, parallel actor policy
+execution, and live-model quality evaluation remain product gates. No game
+engine primitive was added to the natlang core.
 
 ## Natlang prerequisites
 
