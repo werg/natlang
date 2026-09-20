@@ -1,0 +1,25 @@
+{
+  "source": "runs/teacher-leaves-s74-say-after-prune-snapshot10b-20260921.jsonl",
+  "source_sha256": "c5311b5fa9e59866475d6a178b615b5f286f37bb0f86465e8b55ba3b15777ecf",
+  "reviewer": "manual semantic review",
+  "rule": "A sell action must clearly state or enact completed transfer of the stated quantity and good at the stated unit price. Quotes, future payment demands, and conditional transfers are excluded. Out-of-stock must not claim a sale.",
+  "approved": {
+    "sell_list_price": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6,
+      7,
+      9
+    ],
+    "out_of_stock": [
+      2
+    ]
+  },
+  "notes": {
+    "8": "The lanterns are described as ready to go and the payment as That'll be 40 a piece, leaving transfer/payment as a future transaction."
+  },
+  "excluded_policy": "Only snapshot row 8 (original audit row 34) is excluded as an ambiguous future transaction."
+}

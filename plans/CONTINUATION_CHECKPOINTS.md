@@ -238,5 +238,15 @@ one judge false negative; two lines with future-tense payment demands were
 excluded. All 24 teacher trajectories replayed into 53 turns and rendered
 with the pinned LFM2.5 template. The available reviewed teacher bundle now has
 1,490 pairs in `data/teacher-available-s74-reviewed-plus26.sft.jsonl`.
-Seed 74 now has 24 of its 98 provisional reference keys covered in the live
-bank; final refresh waits for the rest of the review.
+That first snapshot covered 24 of seed 74's 98 provisional reference keys.
+
+The 36-key dialogue pass has finished. Manual review admitted 33 responses
+and excluded three that leave payment or transfer in the future. The last
+ten-row audit snapshot admitted nine trajectories, replayed into 19 turns.
+The available reviewed teacher bundle is now
+`data/teacher-available-s74-reviewed-plus36.sft.jsonl` with 1,509 pairs,
+1,485 containing teacher reasoning. The seed-74 base IR has 33 of its 98
+provisional keys covered in the live bank. A new teacher pass is collecting
+the 79 pruned keys present in seed 73; a follow-up pass will collect the one
+additional key found only in seed 74. Neither pruned-key pass auto-admits
+dialogue; both need manual semantic review.
