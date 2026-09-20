@@ -1,4 +1,4 @@
-import { formatType } from './types.js';
+import { fitsType, formatType, parseType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, dump, isPending, problems } from './values.js';
 import type { Value } from './values.js';
@@ -16,6 +16,10 @@ const tool = (name: string, description: string, properties: Record<string, unkn
   type: 'function', function: { name, description, parameters: { type: 'object', properties,
     required, additionalProperties: false } },
 });
+
+const newLocal = { type: 'string', 'x-natlang': 'new-local',
+  description: 'let/<name>: a new local, created by this call' };
+
 
 function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
   if (depth > 5) return {};
@@ -50,6 +54,54 @@ function slots(path: string, type: Type, value: Value, env: TypeEnv, writable: b
     for (const [key, child] of Object.entries(value))
       out.push(...slots(`${path}/${key}`, resolved.element, child, env, writable, depth + 1));
   return out;
+}
+
+function pendingLine(value: Extract<Value, { nodeKind: string }>): string {
+  let line = `${formatType(value.type)}  ${value.status}`;
+  if (value.nodeKind === 'map' && value.slots) line += `  ${value.slots.filter(item => !isPending(item)).length} of ${value.slots.length} reduced`;
+  if (value.nodeKind === 'fold' && value.acc !== MISSING) line += `  at ${value.at} of ${Array.isArray(value.over) ? value.over.length : '?'}`;
+  if (value.nodeKind === 'iterate' && value.state !== MISSING) line += `  iteration ${value.iteration} of max ${String(value.max)}`;
+  if (value.status === 'quiesced' && value.note) line += `  "${value.note.slice(0, 60)}"`;
+  return line;
+}
+
+function previewValue(value: Value): string {
+  if (isPending(value)) return `[${pendingLine(value)}]`;
+  if (typeof value === 'string') {
+    const text = value.trimEnd(), lines = text.split('\n');
+    if (text.length > 400 || lines.length > 8)
+      return `${JSON.stringify(lines[0]!.slice(0, 80))} … CUT OFF: only the beginning of ${lines.length} lines, ${text.length} characters. Read it before using it.`;
+    return lines.length > 1 ? '\n' + lines.map(line => `      | ${line}`).join('\n') : JSON.stringify(text);
+  }
+  if (Array.isArray(value)) {
+    const head = value.slice(0, 3).map(previewValue).join(', ');
+    const more = value.length > 3 ? `, … ${value.length - 3} more (read to see)` : '';
+    return `${value.length} items: [${head}${more}]`;
+  }
+  if (value && typeof value === 'object')
+    return `{ ${Object.entries(value).slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item)}`).join(', ')} }`;
+  if (value === null) return 'null';
+  return String(value);
+}
+
+function stateParts(value: Value, type: Type, env: TypeEnv, path: string,
+  filled: string[], todo: string[], subs: string[], depth = 0): void {
+  if (value === MISSING) { todo.push(`${path} (${formatType(type)})`); return; }
+  if (isPending(value)) { subs.push(`${path} [${pendingLine(value)}]`); return; }
+  const resolved = env.resolve(type);
+  if (resolved.kind === 'record' && value && typeof value === 'object' && !Array.isArray(value) && depth < 3) {
+    for (const field of resolved.fields) {
+      if (Object.hasOwn(value, field.name)) stateParts((value as Record<string, Value>)[field.name]!,
+        field.type, env, `${path}/${field.name}`, filled, todo, subs, depth + 1);
+      else if (!field.optional) todo.push(`${path}/${field.name} (${formatType(field.type)})`);
+    }
+    return;
+  }
+  if (Array.isArray(value) && value.some(isPending)) {
+    subs.push(`${path} [${value.filter(item => !isPending(item)).length} of ${value.length} items done]`);
+    return;
+  }
+  filled.push(`${path} = ${previewValue(value)}`);
 }
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
@@ -104,7 +156,15 @@ export class NativeToolAgent {
     }
     for (const [name, type] of Object.entries(lam.letTypes))
       all.push(...slots(`let/${name}`, type, lam.let[name] ?? MISSING, session.env, true));
-    const readable = all.filter(slot => slot.value !== MISSING).map(slot => slot.path);
+    const zone = (path: string) => path.startsWith('let/') ? 0 : path.startsWith('return') ? 1 : 2;
+    const rank = (slot: Slot) => [slot.path.split('/').some(part => /^\d+$/.test(part)) ? 1 : 0,
+      slot.path.split('/').length > 3 ? 1 : 0, zone(slot.path), slot.path.split('/').length];
+    const present = all.filter(slot => slot.value !== MISSING).sort((a, b) => {
+      const left = rank(a), right = rank(b);
+      for (let index = 0; index < left.length; index++) if (left[index] !== right[index]) return left[index]! - right[index]!;
+      return 0;
+    });
+    const readable = present.map(slot => slot.path);
     const writable = all.filter(slot => slot.writable && !isPending(slot.value)).slice(0, 48);
     const textSlots = all.filter(slot => slot.writable && typeof slot.value === 'string').map(slot => slot.path);
     const path = { type: 'string' };
@@ -113,6 +173,30 @@ export class NativeToolAgent {
       const schema = schemaOf(slot.type, session.env); return [JSON.stringify(schema), schema] as const;
     })).values()];
     const writeValue = valueSchemas.length === 1 ? valueSchemas[0] : { anyOf: valueSchemas };
+    const fitting = (target: Type): string[] => present.filter(slot =>
+      !isPending(slot.value) && fitsType(slot.type, target, session.env)).map(slot => slot.path).slice(0, 48);
+    const valueAlternatives = writable.map(slot => ({ path: { const: slot.path },
+      type: { const: formatType(slot.type) }, value: schemaOf(slot.type, session.env) }));
+    const sourceAlternatives = writable.flatMap(slot => {
+      const sources = fitting(slot.type).filter(path => path !== slot.path && !path.startsWith(`${slot.path}/`));
+      return sources.length ? [{ path: { const: slot.path }, type: { const: formatType(slot.type) },
+        source: { enum: sources } }] : [];
+    });
+    const writeAlternatives: Record<string, unknown>[] = [...valueAlternatives,
+      { path: newLocal, type: { type: 'string' }, value: {} }, ...sourceAlternatives,
+      ...Object.keys(lam.codebase).map(name => ({ path: newLocal, type: { const: `Function<${name}>` } }))];
+    const readAlternatives: Record<string, unknown>[] = lam.type.kind === 'lambda' && lam.type.params.fields.length ?
+      [{ path: { const: 'args' } }] : [];
+    for (const slot of present.slice(0, 48)) {
+      readAlternatives.push({ path: { const: slot.path } });
+      const length = typeof slot.value === 'string' ? slot.value.split('\n').length :
+        Array.isArray(slot.value) ? slot.value.length : 0;
+      if (length > 1 && length <= 60) {
+        const positions = Array.from({ length }, (_, i) => i + (typeof slot.value === 'string' ? 1 : 0));
+        readAlternatives.push({ path: { const: slot.path }, start: { enum: positions }, end: { enum: positions } });
+      }
+    }
+    for (const name of Object.keys(lam.codebase)) readAlternatives.push({ path: { const: `codebase/${name}` } });
     const inputNames = [...new Set(names.flatMap(name => {
       const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
         Record<string, unknown> | undefined;
@@ -136,6 +220,8 @@ export class NativeToolAgent {
       tool('run_code', 'Run exact TypeScript work in the selected engine.', {
         code: { type: 'string' }, engine: { enum: ['typescript-host'] } }, ['code', 'engine']),
     ];
+    (tools[0]!.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = readAlternatives;
+    (tools[1]!.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = writeAlternatives;
     (tools[1]!.function.parameters as Record<string, unknown>).anyOf = [{ required: ['value'] }, { required: ['source'] },
       ...Object.keys(lam.codebase).map(name => ({ properties: { type: { const: `Function<${name}>` } }, required: ['type'] }))];
     const callProperties: Record<string, unknown> = {
@@ -144,23 +230,95 @@ export class NativeToolAgent {
       init: {}, until: { type: 'string' }, max: { type: 'integer' },
     };
     if (unmarked.length) callProperties.done = done;
-    if (names.length) tools.push(tool('call', 'Call a checked function and place its result at to.',
-      callProperties, ['function', 'to']));
-    if (unmarked.length) tools.push(tool('mark_done', 'Mark completed or untaken lines of the program.', {
-      start: { type: 'integer', enum: unmarked }, end: { type: 'integer', enum: unmarked },
-      skipped: { type: 'boolean' } }, ['start']));
+    if (names.length) {
+      const destinations = { anyOf: [{ enum: slotPaths }, newLocal] };
+      const callAlternatives: Record<string, unknown>[] = [];
+      for (const name of names) {
+        const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
+          Record<string, unknown> | undefined;
+        const params = definition?.args as Record<string, string> ?? {};
+        const namesAndTypes = Object.entries(params).map(([raw, type]) => [raw.replace(/\?$/, ''), type, raw.endsWith('?')] as const);
+        const properties = Object.fromEntries(namesAndTypes.flatMap(([param, type]) => {
+          try { const paths = fitting(parseType(type)); return paths.length ? [[param, { enum: paths }]] : []; }
+          catch { return []; }
+        }));
+        const required = namesAndTypes.filter(([param, , optional]) => !optional && param in properties).map(([param]) => param);
+        const allRequiredFit = namesAndTypes.every(([param, , optional]) => optional || param in properties);
+        const inputs = { type: 'object', properties, required, additionalProperties: false };
+        const base = { function: { const: name }, to: destinations };
+        if (allRequiredFit) callAlternatives.push(namesAndTypes.length ? { ...base, inputs } : base);
+        const lists = present.filter(slot => Array.isArray(slot.value)).map(slot => slot.path);
+        if (lists.length && namesAndTypes.length) {
+          callAlternatives.push({ ...base, over: { enum: lists }, inputs: { ...inputs, required: [] },
+            'x-optional': ['inputs'] });
+          if ('acc' in properties && 'item' in properties) {
+            const rest = Object.fromEntries(Object.entries(properties).filter(([param]) => param !== 'acc' && param !== 'item'));
+            callAlternatives.push({ ...base, over: { enum: lists }, init: {},
+              ...(Object.keys(rest).length ? { inputs: { ...inputs, properties: rest, required: [] },
+                'x-optional': ['inputs'] } : {}) });
+          }
+        }
+      }
+      const call = tool('call', 'Call a checked function and place its result at to.', callProperties, ['function', 'to']);
+      (call.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = callAlternatives;
+      tools.push(call);
+    }
+    if (unmarked.length) for (const name of ['write', 'call']) {
+      const entry = tools.find(item => item.function.name === name);
+      const alternatives = (entry?.function.parameters as Record<string, unknown> | undefined)?.['x-natlang-alternatives'];
+      if (!Array.isArray(alternatives)) continue;
+      for (const alternative of alternatives) {
+        alternative.done = done;
+        alternative['x-optional'] = [...(alternative['x-optional'] ?? []), 'done'];
+      }
+    }
+    if (unmarked.length) {
+      const markable = [...new Set([...unmarked, ...(lam.originalBody ?? lam.body).replace(/^\n+|\n+$/g, '').split('\n')
+        .flatMap((line, index) => line.trim().startsWith('function ') ? [index + 1] : [])])].sort((a, b) => a - b);
+      const mark = tool('mark_done', 'Mark completed or untaken lines of the program.', {
+        start: { type: 'integer', enum: markable }, end: { type: 'integer', enum: markable },
+        skipped: { type: 'boolean' } }, ['start']);
+      (mark.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = [
+        { start: { enum: markable }, skipped: { const: true }, 'x-optional': ['skipped'] },
+        { start: { enum: markable }, end: { enum: markable }, skipped: { const: true }, 'x-optional': ['skipped'] },
+      ];
+      tools.push(mark);
+    }
     tools.push(tool('report_blocker', 'Explain information missing from the task.', { missing: { type: 'string' } }, ['missing']));
     tools.push(tool('report_error', 'Explain an unsatisfiable or invalid instruction.', { message: { type: 'string' } }, ['message']));
     return tools;
   }
 
   opening(session: NativeSession): string {
-    const args = session.lam.args;
-    const fields = session.lam.type.kind === 'lambda' ? session.lam.type.params.fields : [];
-    return ['Workspace:', ...fields.map(field => `  args/${field.name} (${formatType(field.type)}, read-only): ` +
-      (Object.hasOwn(args, field.name) ? JSON.stringify(dump(args[field.name]!)) : 'not supplied')),
-    `  return (${session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : 'unknown'}): ` +
-      (session.lam.return === MISSING ? 'not written yet' : 'written')].join('\n');
+    const lam = session.lam, type = lam.type;
+    if (type.kind !== 'lambda') return 'Workspace:';
+    const lines = ['Workspace:'];
+    for (const field of type.params.fields) lines.push(`  args/${field.name} (${formatType(field.type)}, read-only): ` +
+      (Object.hasOwn(lam.args, field.name) ? previewValue(lam.args[field.name]!) : 'not supplied'));
+    for (const [name, localType] of Object.entries(lam.letTypes)) {
+      const value = lam.let[name];
+      if (value !== undefined && value !== MISSING)
+        lines.push(`  let/${name} (${name in lam.fnCopies ? `a copy of ${name}, editable` : formatType(localType)}): ` +
+          (name in lam.fnCopies ? '' : previewValue(value)));
+    }
+    const filled: string[] = [], todo: string[] = [], subs: string[] = [];
+    stateParts(lam.return, type.returns, session.env, 'return', filled, todo, subs);
+    lines.push(`  return (${formatType(type.returns)}): ` +
+      (lam.return === MISSING ? 'not written yet' : todo.length || subs.length ? 'partly written' : 'written'));
+    if (filled.length && (todo.length || subs.length)) lines.push(`    written so far: ${filled.join('; ')}`);
+    if (todo.length && lam.return !== MISSING) lines.push(`    still missing: ${todo.join(', ')}`);
+    if (subs.length) lines.push(`    sub-tasks: ${subs.join('; ')}`);
+    return lines.join('\n');
+  }
+
+  missing(session: NativeSession): string {
+    const lam = session.lam;
+    if (lam.type.kind !== 'lambda') return '';
+    if (lam.return === MISSING) return `\`return\` has not been written yet. Write a ${formatType(lam.type.returns)} to \`return\`.`;
+    const filled: string[] = [], todo: string[] = [], subs: string[] = [];
+    stateParts(lam.return, lam.type.returns, session.env, 'return', filled, todo, subs);
+    if (subs.length) return `A sub-task has not been run yet: ${subs.map(item => item.split(' [')[0]).join(', ')}. Run it.`;
+    return todo.length ? `\`return\` is missing: ${todo.join(', ')}.` : '';
   }
 
   async run(session: NativeSession): Promise<string | void> {
@@ -175,7 +333,7 @@ export class NativeToolAgent {
     const program = functions.length ? original.replace(/^\n+|\n+$/g, '').split('\n').map((line, index) => {
       const text = line.trim(), markable = text && !text.startsWith('#') && !text.startsWith('function ');
       return `${index + 1} ${markable ? lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`;
-    }).join('\n') : lam.body.trim();
+    }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
     const messages: Record<string, unknown>[] = [
       { role: 'system', content: this.options.systemPrompt ?? 'Interpret the program. Use tools to complete return; do not invent missing facts.' },
       { role: 'user', content: `${program}\n\nWrite the result to \`return\` (${output}).` +
@@ -213,8 +371,7 @@ export class NativeToolAgent {
         }
         if (session.finish()) return;
         if (++nudges > 2) return `replied without writing \`return\`: ${(response.text ?? '').slice(0, 280)}`;
-        const missing = lam.return === MISSING ? `return has not been written (${output})` :
-          lam.type.kind === 'lambda' ? problems(lam.return, lam.type.returns, session.env, 'return').holes.map(d => d.path).join(', ') : '';
+        const missing = this.missing(session);
         messages.push({ role: 'assistant', content: response.text ?? '' },
           { role: 'user', content: missing || 'return is incomplete' });
         continue;

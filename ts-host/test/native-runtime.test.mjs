@@ -192,6 +192,39 @@ test('native tool schemas narrow to typed slots and expand as workspace values a
   assert.ok(readAfter.properties.path.enum.includes('return/label'));
 });
 
+test('native tool alternatives bind paths to their declared types and readable sources', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ number: Num, words: Text[] }, { count: Num, label: Text }>',
+    instructions: 'Copy the number and label the words.', args: { number: 3, words: ['a', 'b'] },
+    codebase: { identity: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const definitions = new NativeToolAgent(() => ({ calls: [] })).tools(session);
+  const parameters = name => definitions.find(item => item.function.name === name).function.parameters;
+  const writes = parameters('write')['x-natlang-alternatives'];
+  assert.ok(writes.some(alt => alt.path?.const === 'return/count' && alt.type?.const === 'Num' &&
+    alt.value?.type === 'number'));
+  assert.ok(writes.some(alt => alt.path?.const === 'return/count' && alt.source?.enum.includes('args/number')));
+  assert.ok(!writes.some(alt => alt.path?.const === 'return/label' && alt.source?.enum.includes('args/number')));
+  assert.ok(parameters('read')['x-natlang-alternatives'].some(alt => alt.path?.const === 'args/words' &&
+    alt.start?.enum.includes(0) && alt.end?.enum.includes(1)));
+  assert.ok(parameters('call')['x-natlang-alternatives'].some(alt => alt.function?.const === 'identity' &&
+    alt.inputs?.properties?.item?.enum.includes('args/number')));
+});
+
+test('native opening state distinguishes absent inputs, empty text, partial records, and pending tasks', () => {
+  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ text?: Text }, { label: Text, count: Num }>',
+    instructions: 'Summarize.', args: {} } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.match(agent.opening(session), /args\/text \(Text, read-only\): not supplied/);
+  assert.equal(agent.missing(session), '`return` has not been written yet. Write a { label: Text, count: Num } to `return`.');
+  lam.args.text = '';
+  assert.match(agent.opening(session), /args\/text \(Text, read-only\): ""/);
+  session.apply('write', { path: 'return/label', type: 'Text', value: 'ok' });
+  assert.match(agent.opening(session), /return \(\{ label: Text, count: Num \}\): partly written/);
+  assert.match(agent.opening(session), /still missing: return\/count \(Num\)/);
+  assert.match(agent.missing(session), /`return` is missing: return\/count \(Num\)\./);
+});
+
 test('complete native state snapshot resumes only unfinished Map slots', async () => {
   const program = { $map: { type: 'Map<Text, Text>', over: ['a', 'bad', 'c'],
     fn: { $lambda: { type: 'Lambda<{ item: Text }, Text>', instructions: 'Echo item.' } } } };

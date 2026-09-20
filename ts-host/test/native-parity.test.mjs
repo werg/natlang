@@ -7,6 +7,7 @@ import { TypeEnv } from '../dist/index.js';
 import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { dump } from '../dist/native/values.js';
+import { NativeToolAgent } from '../dist/native/agent.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const python = process.env.NATLANG_PYTHON;
@@ -69,4 +70,39 @@ test('native action diagnostics match Python for rejected copy, edit, and reduce
     actual.push({ kind: result.kind, codes: result.codes ?? [] });
   }
   assert.deepEqual(actual, expected);
+});
+
+test('native workspace text and core tool alternatives agree with Python surface', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ number: Num, text?: Text }, { count: Num, label: Text }>',
+    instructions: 'Copy the number and label it.', args: { number: 3 },
+    return: { count: 3 } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\nroot=load_program(json.load(sys.stdin))\ns=Session(Runtime(None),root,TypeEnv())\nt=ToolSurface()\ntools={x['function']['name']:x['function']['parameters'] for x in t.tools(s)}\nprint(json.dumps({'state':t.render_state(s),'missing':t.missing(s),'read':tools['read']['x-natlang-alternatives'],'write':tools['write']['x-natlang-alternatives']}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const definitions = Object.fromEntries(agent.tools(session).map(item =>
+    [item.function.name, item.function.parameters]));
+  assert.equal(agent.opening(session), expected.state);
+  assert.equal(agent.missing(session), expected.missing);
+  assert.deepEqual(definitions.read['x-natlang-alternatives'], expected.read);
+  assert.deepEqual(definitions.write['x-natlang-alternatives'], expected.write);
+});
+
+test('native checked-call and completion-mark alternatives agree with Python surface', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ item: Num, items: Num[] }, Num>',
+    instructions: '1. Double the item.\n2. Write the answer.', args: { item: 4, items: [2, 3] },
+    codebase: { double: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item * 2;' } } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.surface import ToolSurface\ns=Session(Runtime(None),load_program(json.load(sys.stdin)),TypeEnv())\ntools={x['function']['name']:x['function']['parameters'] for x in ToolSurface().tools(s)}\nprint(json.dumps({n:tools[n] for n in ('call','write','mark_done')}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const actual = Object.fromEntries(agent.tools(session).map(item =>
+    [item.function.name, item.function.parameters]));
+  for (const name of ['call', 'write', 'mark_done']) {
+    assert.deepEqual(actual[name]?.['x-natlang-alternatives'], expected[name]?.['x-natlang-alternatives'], name);
+  }
 });
