@@ -124,6 +124,8 @@ function stateParts(value: Value, type: Type, env: TypeEnv, path: string,
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
 export class NativeToolAgent {
+  readonly proposals: Record<string, unknown>[] = [];
+  readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
@@ -440,6 +442,9 @@ export class NativeToolAgent {
           { role: 'user', content: missing || 'return is incomplete' });
         continue;
       }
+      const proposal: Record<string, unknown> = { calls, value_confidence: response.value_confidence ?? [],
+        released: false, messages: [...messages] };
+      this.proposals.push(proposal);
       let withdrawn = false;
       const review = this.options.review;
       if (review) for (const [index, [name, args]] of calls.entries()) {
@@ -459,6 +464,11 @@ export class NativeToolAgent {
             deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'review', turns),
           max_tokens: budget });
         turns++; tokens += answer.completion_tokens === undefined ? budget : Math.max(1, answer.completion_tokens);
+        const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,
+          confidence: rawConfidence ?? null, messages: fork, calls: answer.calls ?? [], text: answer.text ?? '',
+          order: review.order ?? 'reason_first', trigger: structural ? 'structural' : 'confidence',
+          prompt_variant: review.prompt ?? 'baseline' };
+        this.reviews.push(audit);
         session.runtime.checkInterruption();
         if (tokens > maxTokens || Date.now() >= deadline) return 'careful review budget exhausted before applying proposal';
         if (answer.calls?.length !== 1 || answer.calls[0]![0] !== 'review_write')
@@ -466,9 +476,10 @@ export class NativeToolAgent {
         const verdict = answer.calls[0]![1], decision = verdict.decision, reason = verdict.reason;
         if (!['approve', 'withdraw', 'error', 'blocker'].includes(String(decision)) || typeof reason !== 'string')
           return 'careful review invalid verdict; proposal not applied';
-        session.runtime.trace.emit('review', { call_index: index, decision, reason, trigger: structural ? 'structural' : 'confidence' });
+        audit.decision = decision;
         if (decision === 'withdraw' && review.withdrawalPolicy === 'retry' && withdrawals < 1) {
           withdrawals++; withdrawn = true;
+          proposal.withdrawn = true;
           session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
             phase: 'withdrawn', turn: turns, calls });
           messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
@@ -477,6 +488,7 @@ export class NativeToolAgent {
         if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
       }
       if (withdrawn) continue;
+      proposal.released = true;
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
         phase: 'released', turn: turns, calls });
       const raw = calls.map(([name, args], i) => ({ id: `call_${turns}_${i}`, type: 'function',

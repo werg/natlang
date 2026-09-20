@@ -426,6 +426,52 @@ test('native quiesced root resumes with the same Python trace transitions', { sk
   assert.deepEqual(actual, expected);
 });
 
+test('native approved review preserves Python proposal trace and audit decisions', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seventeen.' } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self): self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index==1: return ChatTurn([('write',{'path':'return','type':'Num','value':17})],completion_tokens=1,value_confidence=[{'geometric_mean':0.1}])\n  if self.index==2: return ChatTurn([('review_write',{'decision':'approve','reason':'The value is correct.'})],completion_tokens=1)\n  return ChatTurn([], 'done',completion_tokens=1)\nsink=TraceRecorder({})\nproposals=[];reviews=[]\nRuntime(lambda lam:ToolAgent(Decoder(),careful_threshold=0.5,proposals=proposals,reviews=reviews),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'events':sink.events[1:],'proposals':[{'released':p['released'],'confidence':p['value_confidence']} for p in proposals], 'reviews':[{'decision':r['decision'],'trigger':r['trigger'],'order':r['order'],'prompt_variant':r['prompt_variant']} for r in reviews]}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  let turns = 0;
+  const driver = () => ++turns === 1 ? { calls: [['write', { path: 'return', type: 'Num', value: 17 }]],
+    completion_tokens: 1, value_confidence: [{ geometric_mean: 0.1 }] } : turns === 2 ?
+    { calls: [['review_write', { decision: 'approve', reason: 'The value is correct.' }]], completion_tokens: 1 } :
+    { calls: [], text: 'done', completion_tokens: 1 };
+  const agent = new NativeToolAgent(driver, { review: { threshold: 0.5, driver } });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected.events);
+  assert.deepEqual(agent.proposals.map(item => ({ released: item.released, confidence: item.value_confidence })),
+    expected.proposals);
+  assert.deepEqual(agent.reviews.map(item => ({ decision: item.decision, trigger: item.trigger,
+    order: item.order, prompt_variant: item.prompt_variant })), expected.reviews);
+});
+
+test('native withdrawn review retries from unchanged state like Python', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seventeen.' } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self): self.index=0\n def chat(self,*args,**kwargs):\n  self.index+=1\n  if self.index==1: return ChatTurn([('write',{'path':'return','type':'Num','value':99})],completion_tokens=1,value_confidence=[{'geometric_mean':0.1}])\n  if self.index==2: return ChatTurn([('review_write',{'decision':'withdraw','reason':'The value must be seventeen.'})],completion_tokens=1)\n  if self.index==3: return ChatTurn([('write',{'path':'return','type':'Num','value':17})],completion_tokens=1)\n  return ChatTurn([], 'done',completion_tokens=1)\nsink=TraceRecorder({})\nproposals=[];reviews=[]\nRuntime(lambda lam:ToolAgent(Decoder(),careful_threshold=0.5,withdrawal_policy='retry',proposals=proposals,reviews=reviews),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps({'events':sink.events[1:],'proposals':[{'released':p['released'],'withdrawn':p.get('withdrawn',False)} for p in proposals], 'reviews':[{'decision':r['decision'],'trigger':r['trigger']} for r in reviews]}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  let turns = 0;
+  const driver = () => ++turns === 1 ? { calls: [['write', { path: 'return', type: 'Num', value: 99 }]],
+    completion_tokens: 1, value_confidence: [{ geometric_mean: 0.1 }] } : turns === 2 ?
+    { calls: [['review_write', { decision: 'withdraw', reason: 'The value must be seventeen.' }]], completion_tokens: 1 } :
+    turns === 3 ? { calls: [['write', { path: 'return', type: 'Num', value: 17 }]], completion_tokens: 1 } :
+    { calls: [], text: 'done', completion_tokens: 1 };
+  const agent = new NativeToolAgent(driver, { review: { threshold: 0.5, withdrawalPolicy: 'retry', driver } });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected.events);
+  assert.deepEqual(agent.proposals.map(item => ({ released: item.released, withdrawn: item.withdrawn ?? false })),
+    expected.proposals);
+  assert.deepEqual(agent.reviews.map(item => ({ decision: item.decision, trigger: item.trigger })), expected.reviews);
+});
+
 test('native completion-mark output matches Python compact listing', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{}, Num>',
     instructions: '1. Do this.\n2. Do that.\n3. Skip this.\n4. Finish.' } };

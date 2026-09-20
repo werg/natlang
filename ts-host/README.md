@@ -47,9 +47,9 @@ try {
 }
 ```
 
-For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. File sources use the existing Python loader, including `.nl`, `.ts`, YAML and JSON programs. `options` accepts the Python `RunOptions` fields, including seed/model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but this host's shared engine is marked unsafe for parallel native access and the runtime serializes those calls.
+For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. The Python bridge uses the Python source loader; the native host has its own `.nl`, `.ts`, YAML, and JSON loader. `options` accepts the Python `RunOptions` fields, including seed/model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but this host's shared engine is marked unsafe for parallel native access and the runtime serializes those calls.
 
-`capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls in the isolated QuickJS engine. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
+`capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
 
 The native host runs Map slots serially by default. For independent pure work, pass `mapWorkers` and `parallelMapSafe: true`; parallel execution requires a fresh eval environment with no shared host object. Nested `NativeSourceWorkspace` invocations share the parent episode budget when the workspace is exposed directly on that host object.
 
@@ -60,5 +60,22 @@ The native host accepts declared capability callbacks that return values or prom
 `mode: 'fresh'` creates fresh TypeScript globals for each crisp eval. `mode: 'retained'` preserves globals across evals. In both modes, the supplied `host` object is passed by identity into the Node VM context. A retained environment can therefore share buffers, jobs, database clients, DOM-like objects, or application objects with authored crisp functions and `run_code` calls. `self`, `args`, and `locals` are frozen portable snapshots; they cannot modify natlang state directly. Results must be exact portable JSON values and are then checked against the destination's natlang type.
 
 The shared engine is **trusted code**, not a sandbox. It can mutate exposed host objects before returning an invalid result or throwing. The VM's synchronous CPU timeout does not cancel a native operation or bound all memory use. Authored crisp functions and native `run_code` may await promises, but interruption cannot undo a native operation already in progress. Direct host access does not enter natlang's declared `fx` journal; declared `fx` calls do. The Python-backed host can also offer `quickjs-isolated` when isolated capability enforcement is required. Traces record the engine and host events but cannot reconstruct arbitrary native state or replay external effects.
+
+## Browser host
+
+`@natlang/typescript-host/browser` exports `BrowserNatlangHost`, the same typed reducer and model tool agent bundled with a browser eval environment. Build it with `npm run build:browser`. The entry accepts in-memory `program` and checked `definitions` sources, input values, model callbacks, declared capabilities, and live root Fold streams. It returns the complete trace in memory.
+
+```ts
+import { BrowserNatlangHost } from '@natlang/typescript-host/browser';
+
+const application = { count: 2 };
+const host = new BrowserNatlangHost({ host: application });
+const result = await host.run({ source: { kind: 'program', program: {
+  $lambda: { type: 'Lambda<{}, Num>', code: 'return host.count + 1;' },
+} } });
+host.close();
+```
+
+The browser entry has no filesystem source loader, trace file writer, process bindings, or Node VM CPU timeout. File sources must be loaded by the application and supplied as in-memory programs or definitions. Eval uses `Function` and direct `eval`, so the page must allow dynamic code execution; it is trusted application code, not an isolation boundary. The portable natlang state, actions, reductions, and traces use the same implementation as the Node native host.
 
 `DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` stops active interpreter processes and disposes the TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.
