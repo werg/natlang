@@ -1,0 +1,38 @@
+{
+  "version": "natlang.program/1",
+  "historical_match": false,
+  "generator_changes": [
+    "sources",
+    "leaf_references"
+  ],
+  "input_manifest": "data/ref-v8-arch-seed73/manifest.json",
+  "programs_considered": 10000,
+  "counts": {
+    "migrated:cb_moderation": 278,
+    "migrated:review_digest": 265,
+    "migrated:expense_audit": 257,
+    "migrated:per_item_condition": 653,
+    "migrated:judge": 291,
+    "migrated:tiny": 700,
+    "migrated:cb_reconciliation": 272,
+    "migrated:composed": 2781,
+    "migrated:nested_assessment": 275,
+    "migrated:crisp_scalar": 270,
+    "migrated:map_then_count": 201,
+    "migrated:fold_with_steps": 519,
+    "migrated:cb_nlprolog": 266,
+    "migrated:cb_shopkeeper": 286,
+    "migrated:cb_legal_move": 255,
+    "migrated:classify": 374,
+    "migrated:ticket_report": 265,
+    "migrated:cb_order_saga": 264,
+    "migrated:cb_highlighter": 190,
+    "migrated:cb_webserver": 247,
+    "migrated:cb_mail_rules": 269,
+    "migrated:extract": 390,
+    "migrated:cb_dependency_plan": 257,
+    "migrated:map_leaf": 175
+  },
+  "provisional_programs": 125,
+  "ir_sha256": "63c4ffd2400659d933e2ba20ba80d66fe30ec47ccfb60a010401f465e2e5d564"
+}

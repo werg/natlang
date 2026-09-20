@@ -1,0 +1,38 @@
+{
+  "version": "natlang.program/1",
+  "historical_match": false,
+  "generator_changes": [
+    "sources",
+    "leaf_references"
+  ],
+  "input_manifest": "data/external_pilot/synthetic-s74-reference-shards/manifest.json",
+  "programs_considered": 10000,
+  "counts": {
+    "migrated:cb_nlprolog": 273,
+    "migrated:extract": 350,
+    "migrated:composed": 2707,
+    "migrated:map_leaf": 201,
+    "migrated:classify": 347,
+    "migrated:per_item_condition": 634,
+    "migrated:cb_reconciliation": 291,
+    "migrated:review_digest": 295,
+    "migrated:expense_audit": 262,
+    "migrated:nested_assessment": 275,
+    "migrated:tiny": 733,
+    "migrated:judge": 263,
+    "migrated:cb_mail_rules": 291,
+    "migrated:cb_legal_move": 287,
+    "migrated:map_then_count": 154,
+    "migrated:cb_webserver": 274,
+    "migrated:fold_with_steps": 551,
+    "migrated:cb_shopkeeper": 275,
+    "migrated:cb_dependency_plan": 267,
+    "migrated:ticket_report": 289,
+    "migrated:cb_order_saga": 272,
+    "migrated:cb_highlighter": 176,
+    "migrated:crisp_scalar": 277,
+    "migrated:cb_moderation": 256
+  },
+  "provisional_programs": 138,
+  "ir_sha256": "d77a982a3836ed93fa0caa553fb3f0ed3da97ab75083ecf81f559ac48da4ceb4"
+}
