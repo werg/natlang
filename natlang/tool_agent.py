@@ -126,21 +126,44 @@ class ToolAgent:
                     return "episode turn, token, or wall-clock budget exhausted"
                 limit = allowance()
                 available_tools = s.tools(session)
-                offered_tools = copy.deepcopy(available_tools) if self.teacher_turns is not None else None
+                presented_tools = getattr(self.dec, "presented_tools", None)
+                offered_tools = (copy.deepcopy(presented_tools(available_tools) if presented_tools else available_tools)
+                                 if self.teacher_turns is not None else None)
                 invocation = getattr(session, "invocation", None)
                 call_path = invocation.path if invocation else ""
                 attempt = invocation.attempt if invocation else 1
                 policy = session.rt.options.seed
-                turn = self.dec.chat(messages, available_tools, temperature=temperature,
-                                     seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=limit)
+                request_started = time.monotonic()
+                measured_tools = offered_tools if offered_tools is not None else (
+                    presented_tools(available_tools) if presented_tools else available_tools)
+                session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
+                                    phase="start", turn=turns + 1,
+                                    tool_schema_bytes=len(json.dumps(measured_tools, ensure_ascii=False)),
+                                    messages=len(messages))
+                try:
+                    turn = self.dec.chat(messages, available_tools, temperature=temperature,
+                                         seed=policy.seed(call_path, attempt, "model-turn", turns), max_tokens=limit)
+                except Exception as exc:
+                    session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
+                                        phase="error", turn=turns + 1,
+                                        duration_ms=round((time.monotonic() - request_started) * 1000),
+                                        error=f"{type(exc).__name__}: {exc}")
+                    raise
+                session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
+                                    phase="end", turn=turns + 1,
+                                    duration_ms=round((time.monotonic() - request_started) * 1000),
+                                    prompt_tokens=getattr(turn, "prompt_tokens", None),
+                                    completion_tokens=getattr(turn, "completion_tokens", None))
                 turns += 1
                 session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
                                     phase="generated", turn=turns, calls=turn.calls, text=turn.text)
                 teacher_turn = None
                 if self.teacher_turns is not None:
+                    presented_messages = getattr(self.dec, "presented_messages", None)
                     teacher_turn = {"function": session.lam.fn_name,
                                     "call_id": getattr(invocation, "call_id", None),
-                                    "messages_before": list(messages),
+                                    "messages_before": copy.deepcopy(
+                                        presented_messages(messages) if presented_messages else messages),
                                     "tools_offered": offered_tools,
                                     "response": turn.raw_response,
                                     "calls": turn.calls, "text": turn.text,

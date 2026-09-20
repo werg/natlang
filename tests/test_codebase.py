@@ -7,12 +7,12 @@ from natlang import gbnf
 from natlang.codebase import load_function
 from natlang.diag import Reject
 from natlang.gen.policy import native_text
-from natlang.host import load
+from natlang.host import instantiate, load
 from natlang.native import call_grammar
 from natlang.runtime import Runtime, Session
 from natlang.surface import ToolSurface
 from natlang.types import TypeEnv, format_type
-from natlang.values import dump
+from natlang.values import coerce, dump
 
 ROOT = Path(__file__).resolve().parent.parent
 TRIAGE = ROOT / "examples" / "triage" / "main.nl"
@@ -98,6 +98,23 @@ def test_calls_are_checked_against_the_signature():
     assert "unknown-field" in s.apply("call", {"function": "is_urgent", "to": "let/u", "inputs": {"nope": "args/rubric"}}).text
     r = s.apply("call", {"function": "is_urgent", "to": "let/u", "over": "args/rubric"})          # not a list
     assert r.kind == "rejected" and "u" not in s.lam.let_types
+
+
+def test_call_can_update_destination_from_its_previous_value():
+    step = load_function(ROOT / "codebases" / "dependency_plan" / "plan.nl").codebase["step"]
+    tasks = [{"id": "a", "needs": [], "description": "first"}]
+    root = instantiate(step)
+    root.in_["state"] = coerce({"tasks": tasks, "order": [], "blocked": ["a"],
+                                 "finished": False}, root.type.params.get("state")[0],
+                                root.env(TypeEnv()), yaml=False, path="args/state")
+    s = Session(Runtime(lambda lam: None), root, TypeEnv())
+    assert S.apply(s, "write", {"path": "let/state", "type": "State",
+                                "source": "args/state"}).kind == "ok"
+    assert S.apply(s, "write", {"path": "let/chosen", "type": "Text", "value": "a"}).kind == "ok"
+    result = S.apply(s, "call", {"function": "advance", "to": "let/state",
+                                 "inputs": {"state": "let/state", "chosen": "let/chosen"}})
+    assert result.kind == "done", result.text
+    assert dump(s.lam.let["state"])["order"] == ["a"]
 
 
 def test_editing_means_copying_into_a_local_first():

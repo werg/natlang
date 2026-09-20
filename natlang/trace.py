@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import copy
 import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -66,12 +68,15 @@ class TraceRecorder:
         self.events: list[dict] = []
         self._lock = threading.Lock()
         self.path = Path(path) if path is not None else None
+        self._started = time.monotonic()
         self._stream = self.path.open("w", encoding="utf-8") if self.path else None
         self.emit("manifest", **manifest)
 
     def emit(self, kind: str, **data) -> dict:
         with self._lock:
-            event = _view({"version": VERSION, "seq": len(self.events), "kind": kind, **data})
+            event = _view({"version": VERSION, "seq": len(self.events), "kind": kind,
+                           "observed_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                           "elapsed_ms": round((time.monotonic() - self._started) * 1000), **data})
             encoded = json.dumps(event, ensure_ascii=False, allow_nan=False)
             clean = json.loads(encoded)
             self.events.append(clean)

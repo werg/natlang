@@ -32,11 +32,12 @@ from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PEND
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 from .values import dump_state
 
+# Reference values for explicit legacy budgets; RunOptions defaults to None.
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
 MAX_NESTING = 6
 MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
-sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))   # nesting is bounded by the limits above
+sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
 
 
@@ -89,13 +90,13 @@ class Outcome:
 
 
 class EpisodeBudget:
-    def __init__(self, limit: int):
+    def __init__(self, limit: Optional[int]):
         self.limit, self.used = limit, 0
         self.lock = threading.Lock()
 
     def reserve(self) -> bool:
         with self.lock:
-            if self.used >= self.limit:
+            if self.limit is not None and self.used >= self.limit:
                 return False
             self.used += 1
             return True
@@ -103,7 +104,8 @@ class EpisodeBudget:
 
 class Runtime:
     def __init__(self, agent_factory: Callable[[Lambda], Any], capabilities: Optional[dict] = None,
-                 max_episodes: int = 256, max_depth: int = 8, options: Optional[RunOptions] = None,
+                 max_episodes: Optional[int] = None, max_depth: Optional[int] = None,
+                 options: Optional[RunOptions] = None,
                  executor=None, trace_sink: Optional[TraceRecorder] = None,
                  trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
                  engine_selection: bool = False, map_workers: int = 1,
@@ -282,9 +284,10 @@ class Runtime:
 
     # -- natural-language lambda
     def _run_episode(self, node: Lambda, ref: Ref) -> Outcome:
-        if self._depth >= self.max_depth:
+        if self.max_depth is not None and self._depth >= self.max_depth:
             return self._quiesce(node, ref, f"run budget: episodes nested deeper than {self.max_depth}")
-        if self.episodes_started >= self.max_episodes or self._budget.used >= self._budget.limit:
+        if ((self.max_episodes is not None and self.episodes_started >= self.max_episodes) or
+                (self._budget.limit is not None and self._budget.used >= self._budget.limit)):
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         key = _hash({"body": node.body, "args": node.in_, "type": format_type(node.type)})
         if key in self._stack:
@@ -646,7 +649,7 @@ class Session:
     def act(self, text: str) -> Result:
         if self.completed:
             return Result("error", "the episode has ended")
-        if self.actions >= MAX_ACTIONS:
+        if self.rt.options.max_actions is not None and self.actions >= self.rt.options.max_actions:
             return Result("budget", "action budget exhausted")
         self.actions += 1
         self.lam.steps += 1
@@ -662,7 +665,8 @@ class Session:
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": text,
                               "kind": result.kind, "result": result.text})
         self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
-                         surface="text", action=text, outcome=result.kind, diagnostics=result.codes)
+                         surface="text", action=text, outcome=result.kind,
+                         result_text=result.text, diagnostics=result.codes)
         self.rt._observe_state("after-action")
         return result
 
@@ -671,7 +675,9 @@ class Session:
         """Apply one native tool call. Same bookkeeping as `act`, plus a hint on failure."""
         if self.completed:
             return Result("error", "the task has already finished")
-        if self.actions >= MAX_ACTIONS or self.tool_calls >= MAX_TOOL_CALLS:
+        if ((self.rt.options.max_actions is not None and self.actions >= self.rt.options.max_actions) or
+                (self.rt.options.max_tool_calls is not None and
+                 self.tool_calls >= self.rt.options.max_tool_calls)):
             return Result("budget", "action or tool-call budget exhausted")
         self.tool_calls += 1
         if name != "mark_done":                 # bookkeeping does not spend the budget of work
@@ -707,7 +713,8 @@ class Session:
                               "kind": result.kind, "result": result.text})
         self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
                          surface="tools-v2", name=name, arguments=submitted,
-                         outcome=result.kind, diagnostics=result.codes)
+                         outcome=result.kind, result_text=result.text,
+                         diagnostics=result.codes)
         self.rt._observe_state("after-action")
         return result
 
@@ -1120,12 +1127,16 @@ class Session:
         if args.get("init_from"):
             copies.append((args["init_from"], f"{path}/init"))
 
+        # A call may update its own destination, as in state = step(state).
+        # Capture every source before replacing the destination tree.
+        snapshots = [(self._snapshot_copy(src), dst) for src, dst in copies]
+
         _, ref = self.resolve(path, create=True)
         before = ref.get()
         result = self._set_value(path, stated, body, yaml=False)
         try:
-            for src, dst in copies:
-                self._do_copy(Action("copy", path=src, dst=dst))
+            for snapshot, dst in snapshots:
+                self._apply_copy_snapshot(snapshot, dst)
         except (Reject, Refuse):
             ref.set(before) if before is not MISSING else ref.delete()   # a define is all or nothing
             raise
@@ -1291,26 +1302,30 @@ class Session:
         return Result("ok", "ok   " + self._summary())
 
     # -- copy
-    def _do_copy(self, a: Action) -> Result:
-        sp, src = self.resolve(a.path)
+    def _snapshot_copy(self, path: str):
+        sp, src = self.resolve(path)
         value = src.get()
         if value is MISSING:
-            raise reject(a.path, "no-such-path")
+            raise reject(path, "no-such-path")
         stype = src.type
         if sp.rng:
             value, stype = _slice(value, sp, src)
         if is_pending(value):
             if value.status == RUNNING:
-                raise reject(a.path, "frozen", "a node that is not running")
+                raise reject(path, "frozen", "a node that is not running")
             value = _instantiate(value) if isinstance(value, Lambda) else copy.deepcopy(value)
             value.status = UNREDUCED
             stype = value.type
         else:
             value = copy.deepcopy(value)
-        dp, dst = self.resolve(a.dst, create=True)
+        return value, stype
+
+    def _apply_copy_snapshot(self, snapshot, destination: str) -> Result:
+        value, stype = snapshot
+        dp, dst = self.resolve(destination, create=True)
         self._writable(dst)
         if dp.rng or dp.meta:
-            raise reject(a.dst, "not-writable")
+            raise reject(destination, "not-writable")
         if stype is not None:
             self._check_fit(stype, dst)
         self._check_effects(value, dst.path)
@@ -1319,6 +1334,9 @@ class Session:
         self._set_checked(dst, value)
         self._collapse()
         return Result("ok", "ok   " + self._summary())
+
+    def _do_copy(self, a: Action) -> Result:
+        return self._apply_copy_snapshot(self._snapshot_copy(a.path), a.dst)
 
     def _set_checked(self, ref: Ref, value):
         """Write, then undo if pending nodes now nest too deeply (SPEC 6.3)."""
