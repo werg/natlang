@@ -132,6 +132,8 @@ def new_turns(audit):
                                           or review_message.get("thinking")),
                             "raw_response_sha256": digest(review_response) if review_response is not None else None})
         result.append({"index": index, "function": source.get("function"),
+                       "phase": source.get("phase", "action"),
+                       "segment_turns": source.get("segment_turns"),
                        "context": source.get("messages_before") or [],
                        "tools_offered": source.get("tools_offered"),
                        "assistant": {"content": message.get("content") if response is not None else source.get("text", ""),

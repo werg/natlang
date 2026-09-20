@@ -155,7 +155,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
 # --------------------------------------------------------------------------- pending nodes
 
 _LAMBDA_KEYS = {"type", "types", "effects", "engine", "instructions", "code", "args", "return", "status", "note",
-                "effects_journal", "codebase", "let", "let_types", "function", "marks"}
+                "effects_journal", "continuation_note", "codebase", "let", "let_types", "function", "marks"}
 
 
 def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: str,
@@ -223,6 +223,7 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
         if "return" in body:
             node.ret = coerce(body["return"], t.returns, inner, yaml=yaml, path=f"{path}/return")
         node.journal = list(body.get("effects_journal") or [])
+        node.continuation_note = str(body.get("continuation_note") or "")
         if body.get("codebase"):
             from .codebase import check, from_inline
             node.codebase = from_inline(body["codebase"], dict(types_src), path or "program")
@@ -419,6 +420,8 @@ def dump(x: Any) -> Any:
             body["return"] = dump(x.ret)
         if x.journal:
             body["effects_journal"] = [dict(j) for j in x.journal]
+        if x.continuation_note:
+            body["continuation_note"] = x.continuation_note
         if x.fn_name:
             body["function"] = x.fn_name
         if x.marks:

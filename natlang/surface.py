@@ -168,6 +168,8 @@ class ToolSurface:
             return list(range(first, first + n)) if 1 < n <= 60 else []
 
         read_alts = [{"path": {"const": "args"}}] if lam.in_ else []
+        if lam.journal:
+            read_alts.append({"path": {"const": "args@effects"}})
         for sl in readable[:MAX_PATHS]:
             read_alts.append({"path": {"const": sl.path}})
             pos = positions(sl.value)
@@ -253,8 +255,9 @@ class ToolSurface:
 
         tools = [
             tool("read", "Read a value from the workspace. Optional line or item range for long ones. "
-                         "`codebase/<function>` shows the text of a function.",
-                 {"path": _enum_or_string((["args"] if lam.in_ else []) + [s.path for s in readable] +
+                         "`codebase/<function>` shows the text of a function; `args@effects` shows the full effect journal.",
+                 {"path": _enum_or_string((["args"] if lam.in_ else []) +
+                                          (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
                                           [f"codebase/{n}" for n in lam.codebase], "what to read"),
                   "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
                  alternatives=read_alts + [{"path": {"const": f"codebase/{n}"}} for n in lam.codebase]),
@@ -368,7 +371,9 @@ class ToolSurface:
     def opening_read(self, session):
         """A first step the harness performs on the agent's behalf: read the workspace. Returns
         (tool name, arguments, result text), or None when there is nothing to read."""
-        if not session.lam.in_ and not session.lam.type.params.fields and not self.state_view:
+        lam = session.lam
+        if (not lam.in_ and not lam.type.params.fields and not self.state_view and
+                not lam.continuation_note and not lam.journal and not lam.let and lam.ret is MISSING):
             return None
         return "read", {"path": "args"}, self.execution_state(session) if self.state_view else self.render_state(session)
 
@@ -382,6 +387,14 @@ class ToolSurface:
         Anti-parroting rules: no value-like placeholders; filled values apart from what is missing."""
         lam, env = session.lam, session.env
         out = ["Workspace:"]
+        if lam.continuation_note:
+            out.append("  Earlier working note (check against the workspace): " + lam.continuation_note)
+        if lam.journal:
+            omitted = max(0, len(lam.journal) - 4)
+            out.append(f"  Effects already attempted: {len(lam.journal)}"
+                       + (f" (last 4 shown; read args@effects for all {len(lam.journal)})" if omitted else ""))
+            for entry in lam.journal[-4:]:
+                out.append("    " + json.dumps(entry, ensure_ascii=False, default=str))
         for n, ft, _ in lam.type.params.fields:
             if n in lam.in_:
                 out.append(f"  args/{n} ({format_type(ft)}, read-only): {_preview(lam.in_[n])}")

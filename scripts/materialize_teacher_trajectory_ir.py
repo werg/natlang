@@ -44,7 +44,8 @@ class ReplayDecoder:
                              "call_id": turn.get("call_id"), "function": turn.get("function"),
                              "target": {"role": "assistant", "content": assistant.get("content") or "",
                                         **({"tool_calls": target_calls} if target_calls else {})},
-                             "skill": "+".join(name for name, _ in calls) if calls else "reply",
+                             "skill": "checkpoint" if turn.get("phase") == "checkpoint" else
+                                      "+".join(name for name, _ in calls) if calls else "reply",
                              "teacher_reasoning": assistant.get("reasoning")})
         self.cursor += 1
         return ChatTurn(calls, assistant.get("content") or "", target_calls, completion_tokens=1)
@@ -66,6 +67,11 @@ def materialize(row, *, system_prompt: str):
     if program is None:
         raise ValueError("teacher trajectory lacks a frozen program")
     decoder = ReplayDecoder(row["trajectory"])
+    checkpoint_limits = {turn["segment_turns"] for turn in row["trajectory"]
+                         if turn.get("phase") == "checkpoint"}
+    if len(checkpoint_limits) > 1:
+        raise ValueError("teacher trajectory has inconsistent checkpoint settings")
+    segment_turns = next(iter(checkpoint_limits)) if checkpoint_limits else None
     log = []
     lowered = lower(program) if task_kind == "whole_program" else None
     root = whole_root(lowered) if lowered is not None else load_program(program)
@@ -74,7 +80,8 @@ def materialize(row, *, system_prompt: str):
                               "tool_schema": "tools-v2", "engine_bindings": ["quickjs-isolated"],
                               "capture": "recorded-teacher-replay"})
     outcome, value = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
-                                                  validation_feedback="caller", log=log),
+                                                  validation_feedback="caller", log=log,
+                                                  segment_turns=segment_turns),
                              max_episodes=2000 if lowered is not None else 4,
                              capabilities=lowered.capabilities if lowered is not None else None,
                              trace_sink=recorder).run_root(root)

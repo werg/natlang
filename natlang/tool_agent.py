@@ -18,6 +18,12 @@ from .surface import ToolSurface
 TOOLS_PROMPT = (Path(__file__).parent / "prompts" / "tools_small.md").read_text()
 MAX_NUDGES = 2
 FAILED = ("rejected", "refused", "error", "budget")
+CHECKPOINT_REQUEST = (
+    "Before continuing this same task in a fresh conversation, leave yourself a concise working note. "
+    "State only unresolved decisions or facts that are not obvious from the program and workspace. "
+    "The workspace, line marks, and effects will be shown again; do not restate them. "
+    "Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters."
+)
 
 
 class ToolAgent:
@@ -29,7 +35,8 @@ class ToolAgent:
                  validation_feedback: str = "caller", careful_threshold: Optional[float] = None,
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
-                 review_prompt: str = "baseline", teacher_turns: Optional[list] = None):
+                 review_prompt: str = "baseline", teacher_turns: Optional[list] = None,
+                 segment_turns: Optional[int] = 6):
         if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
             raise ValueError("unknown review prompt")
         self.review_prompt = review_prompt
@@ -58,6 +65,20 @@ class ToolAgent:
         self.turn_tokens = turn_tokens
         self.transcript = transcript          # if given, receives the final message list (for debugging)
         self.teacher_turns = teacher_turns    # exact model replies and their pre-action context, for audit/distillation
+        if segment_turns is not None and segment_turns < 1:
+            raise ValueError("segment_turns must be positive or None")
+        self.segment_turns = segment_turns
+
+    def _opening_messages(self, session, surface, system):
+        messages = [{"role": "system", "content": system},
+                    {"role": "user", "content": surface.render_request(session)}]
+        opening = surface.opening_read(session)
+        if opening:
+            name, args, text = opening
+            call = {"id": "call_0", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+            messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
+                         {"role": "tool", "tool_call_id": "call_0", "content": text}]
+        return messages
 
     def run(self, session) -> Optional[str]:
         s = self.surface
@@ -70,14 +91,7 @@ class ToolAgent:
         system = self.system
         if session.rt.engine_selection:
             system += "\nFor run_code, always name an engine offered in its current tool schema."
-        messages = [{"role": "system", "content": system},
-                    {"role": "user", "content": s.render_request(session)}]
-        opening = s.opening_read(session)
-        if opening:                               # data reaches the model only through the tool channel
-            name, args, text = opening
-            call = {"id": "call_0", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
-            messages += [{"role": "assistant", "content": "", "tool_calls": [call]},
-                         {"role": "tool", "tool_call_id": "call_0", "content": text}]
+        messages = self._opening_messages(session, s, system)
         nudges = turns = tokens = withdrawals = 0
         previous_deadline = getattr(self.dec, "deadline", None)
         deadline = time.monotonic() + max_seconds if max_seconds is not None else None
@@ -106,6 +120,8 @@ class ToolAgent:
 
     def _run_turns(self, session, s, messages, deadline, nudges, turns, tokens, withdrawals,
                    max_turns, max_tokens, turn_tokens, temperature):
+        segment_turns = 0
+        checkpoint_ready = True
         def timed_out() -> bool:
             return deadline is not None and time.monotonic() >= deadline
 
@@ -124,6 +140,44 @@ class ToolAgent:
             while True:
                 if exhausted():
                     return "episode turn, token, or wall-clock budget exhausted"
+                if (self.segment_turns is not None and segment_turns >= self.segment_turns
+                        and checkpoint_ready and (s.missing(session) or s.pending(session))):
+                    checkpoint_messages = [*messages, {"role": "user", "content": CHECKPOINT_REQUEST}]
+                    checkpoint_limit = min(256, allowance()) if allowance() is not None else 256
+                    invocation = getattr(session, "invocation", None)
+                    session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
+                                        phase="start", purpose="checkpoint", turn=turns + 1,
+                                        messages=len(checkpoint_messages))
+                    response = self.dec.chat(checkpoint_messages, [], temperature=temperature,
+                                             seed=session.rt.options.seed.seed(
+                                                 getattr(invocation, "path", ""),
+                                                 getattr(invocation, "attempt", 1),
+                                                 "checkpoint", turns), max_tokens=checkpoint_limit)
+                    session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
+                                        phase="end", purpose="checkpoint", turn=turns + 1,
+                                        prompt_tokens=getattr(response, "prompt_tokens", None),
+                                        completion_tokens=getattr(response, "completion_tokens", None))
+                    turns += 1
+                    used = getattr(response, "completion_tokens", None)
+                    tokens += checkpoint_limit if used is None else max(1, used)
+                    if timed_out() or (max_tokens is not None and tokens > max_tokens):
+                        return "episode token or wall-clock budget exhausted"
+                    note = (response.text or "").strip()[:800]
+                    session.lam.continuation_note = note
+                    if self.teacher_turns is not None:
+                        self.teacher_turns.append({"phase": "checkpoint", "segment_turns": self.segment_turns,
+                                                   "function": session.lam.fn_name,
+                                                   "call_id": getattr(getattr(session, "invocation", None), "call_id", None),
+                                                   "messages_before": copy.deepcopy(checkpoint_messages),
+                                                   "tools_offered": [], "response": response.raw_response,
+                                                   "calls": [], "text": note, "reviews": [], "executions": []})
+                    session.rt._observe("checkpoint", call_id=getattr(getattr(session, "invocation", None), "call_id", None),
+                                        note=note, turn=turns)
+                    session.rt._observe_state("after-checkpoint")
+                    messages[:] = self._opening_messages(session, s, messages[0]["content"])
+                    segment_turns = 0
+                    checkpoint_ready = True
+                    continue
                 limit = allowance()
                 available_tools = s.tools(session)
                 presented_tools = getattr(self.dec, "presented_tools", None)
@@ -155,6 +209,7 @@ class ToolAgent:
                                     prompt_tokens=getattr(turn, "prompt_tokens", None),
                                     completion_tokens=getattr(turn, "completion_tokens", None))
                 turns += 1
+                segment_turns += 1
                 session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
                                     phase="generated", turn=turns, calls=turn.calls, text=turn.text)
                 teacher_turn = None
@@ -238,6 +293,7 @@ class ToolAgent:
                         if decision != "approve":
                             return "careful review " + decision + ": " + verdict["reason"]
                     if withdrawn:
+                        checkpoint_ready = False
                         continue
                     proposal["released"] = True
                     session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
@@ -265,6 +321,7 @@ class ToolAgent:
                                                                  ". Mark completed work done and untaken work skipped (skipped=true). "
                                                                  "A done range marks EVERY line between its endpoints; do not include untaken work. "
                                                                  "Carry out any applicable unfinished work before marking it."}]
+                        checkpoint_ready = False
                         continue
                     if open_:
                         return "validation failed: unfinished lines: " + ", ".join(map(str, open_))
@@ -279,6 +336,7 @@ class ToolAgent:
                         return "replied without writing `return`: " + turn.text[:280]
                     messages += [{"role": "assistant", "content": turn.text or "(no reply)"},
                                  {"role": "user", "content": s.missing(session)}]
+                    checkpoint_ready = False
                     continue
 
                 results = [first]
@@ -303,6 +361,10 @@ class ToolAgent:
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})
                 for c, r in zip(raw, results):
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
+                # A read or run_code result may be the only copy of information the
+                # next turn needs. Keep that tool response in the live conversation.
+                checkpoint_ready = (results[-1].kind not in FAILED and
+                                    turn.calls[len(results) - 1][0] in ("write", "call", "edit", "mark_done"))
                 if results[-1].kind == "completed":
                     return None
                 if self.validation_feedback == "caller" and results[-1].kind in ("rejected", "refused"):

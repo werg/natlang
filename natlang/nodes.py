@@ -57,6 +57,7 @@ class Lambda(Pending):
     ret: Any = MISSING
     effects: list = field(default_factory=list)
     journal: list = field(default_factory=list)
+    continuation_note: str = ""  # model-written reminder for a fresh conversation on this invocation
     original_body: Optional[str] = None  # body at first trigger, for reopen
     let: dict = field(default_factory=dict)        # typed locals (CODEBASES 2.1): name -> value or pending node
     let_types: dict = field(default_factory=dict)  # name -> Type, fixed by the write that created the local
