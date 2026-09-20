@@ -30,6 +30,9 @@ function triage(tickets, rubric) -> Report
 | File | Contents |
 |------|----------|
 | `PLAN.md` | Thesis, language design, tool surface, runtime, data generation, phases, status and findings |
+| `plans/AMBITIOUS_ARCHITECTURE.md`, `plans/EMBEDDING_REFACTOR.md`, `plans/EXECUTION_INTERFACES.md`, `plans/AMBITIOUS_PROJECTS.md`, `plans/AMBITIOUS_ROADMAP.md` | Minimal-core architecture, embedding refactors, stream/evaluator/type/seed/trace interfaces, 20 application families and teacher/student training loop |
+| [Infrastructure implementation plan](plans/INFRASTRUCTURE_IMPLEMENTATION.md) | Prioritised cross-project infrastructure, 17 proposed patches, code touchpoints and acceptance gates |
+| [Individual project plans](plans/projects/README.md) | Concrete natlang feature dependencies, eval/host boundaries, delivery gates and teacher/trace requirements for all 20 projects |
 | `spec/SPEC.md` | The normative language specification (v0.2-draft); `spec/CODEBASES.md` gives the rationale for code bases and `call` |
 | `TYPES.md` | Type system, validation, write-time typing, how validation feedback reaches the model |
 | `TRAINING.md` | Use cases, skill taxonomy, datasets, the teacher's roles, training recipe, evaluation |

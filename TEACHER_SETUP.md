@@ -15,23 +15,21 @@ hide repetitive prompts or oversized tool menus.
 
 - Use `natlang/prompts/tools_teacher_compact.md`, temperature 0, low reasoning
   effort, and a 256-token thinking budget.
-- Use `LlamaServerDecoder(json_text_values=True, tool_aliases={"call":
-  "call_function"})` for this teacher/server combination. Text values are plain
-  strings; other values are JSON text. Runtime validation still decides
-  whether a proposal fits its destination. Invalid proposals remain possible.
-- This adapter does not constrain `write.value` to the destination's nested
-  type while generating. `ToolSurface` publishes destination-specific typed
-  alternatives for native grammar decoders, but Bonsai's chat endpoint uses
-  the JSON-text transport above because its parser mishandled nested payloads
-  in earlier probes. Test any typed chat adaptation against exact record/list
-  cases before using it for collection.
+- Application evaluations use `LlamaServerDecoder(typed_alternatives=True)`:
+  the chat adapter compiles natlang's destination-specific alternatives into
+  separate named tools and maps their calls back to the stable action. The
+  runtime still validates every proposed call. Older leaf/scenario collectors
+  retain their recorded JSON-text transport until those collection paths are
+  migrated and checked against their own fixtures.
 - A 20 September typed-chat probe (`scripts/probe_typed_chat.py`) found that
   this server preserved a nested `{id, label, tags}` record under one exact
   tool schema and under two separately named exact tools. A single tool with
   `oneOf` alternatives instead returned empty argument objects. These probes
-  are narrow, but they support a teacher adapter that exposes typed alternatives
-  as separate tool names and maps them back to the stable natlang action. Test
-  realistic call/write menus and trajectory quality before switching collection.
+  are narrow. A full type-study report replay later passed its exact metric and
+  output assertions with typed tools and the 32,768-token server context.
+  Its peak prompt was 14,949 tokens; tool menus reached about 40 KB. Preserve
+  exact source/destination pairs when grouping alternatives, and measure prompt
+  and schema costs on each application run.
 - Keep compact state and no self-review. The established leaf collector uses
   caller validation feedback. The application evaluation harness uses local
   validation feedback so rejected writes remain visible to the model for

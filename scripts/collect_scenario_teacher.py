@@ -123,7 +123,7 @@ def main():
         parser.error("start must be nonnegative and limit positive")
     from natlang.decoder import LlamaServerDecoder
     decoder = LlamaServerDecoder(
-        args.server, timeout=900,
+        args.server,
         chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
         tool_aliases={"call": "call_function"}, json_text_values=True)

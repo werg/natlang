@@ -59,9 +59,11 @@ native constrained decoder treated Bonsai's chat-tool text as a reply. All four
 application CLIs now share the repository's established Bonsai chat-tool adapter.
 With that adapter, a P05 inference pilot reached `propose.nl` and read the
 relevant body, parameters and named types, but did not finish within 180 seconds.
-The retained trace is diagnostic evidence, not a successful sample. Reduce
-context/turn cost and measure completion before using this programme for bulk
-teacher collection.
+That observation is not grounds for shortening the algorithmic work. The
+application evaluation harness now records each model request, complete raw
+turns, and a live progress summary, with no default run limit. A fixed
+signature fixture supplies an independent rubric. Admit a teacher trajectory
+only after the whole inference completes and passes that rubric.
 
 There is also an IDE integration boundary: the runtime loader requires a valid
 declared signature before it can create a `CheckedGraph`. The application now

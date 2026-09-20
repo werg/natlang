@@ -177,8 +177,19 @@ class Explorer:
             seed=self.analyst_seed, agent_factory=self.analyst_factory, label="assess")
         if status != "done":
             raise ValueError("natlang did not assess observations")
+        expected_confirmed = {row["id"] for row in observations if row["status"] == "violated"}
+        expected_unknown = {row["id"] for row in observations
+                            if row["status"] not in ("done", "violated")}
+        assessment_check = {
+            "ok": (len(assessment["confirmed_ids"]) == len(set(assessment["confirmed_ids"])) and
+                   len(assessment["unknown_ids"]) == len(set(assessment["unknown_ids"])) and
+                   set(assessment["confirmed_ids"]) == expected_confirmed and
+                   set(assessment["unknown_ids"]) == expected_unknown),
+            "expected_confirmed_ids": sorted(expected_confirmed),
+            "expected_unknown_ids": sorted(expected_unknown)}
         return {"schema": "test-explorer/v1", "question": question,
                 "source_revision": self.source_revision, "model_id": self.model_id,
                 "analyst_seed": self.analyst_seed, "target_seed": self.target_seed,
                 "selection": selection, "observations": observations, "assessment": assessment,
+                "assessment_check": assessment_check,
                 "traces": {"selection": selection_trace, "assessment": assessment_trace}}

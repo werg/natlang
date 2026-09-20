@@ -48,7 +48,7 @@ class Backend:
         if candidate.id == "incremental" and attempt == 2:
             raise RuntimeError("worker lost")
         return {"source_revision": candidate.source_revision, "status": "done",
-                "conflict": "unresolved", "provenance": True, "quality": "pending",
+                "label": "unresolved", "provenance": True, "quality": "pending",
                 "value_digest": f"stable-{candidate.id}-{case.id}", "trace_id": f"trace-{len(self.calls)}"}
 
 
@@ -76,9 +76,10 @@ def test_lab_accounts_for_every_trial_and_keeps_seed_namespaces_stable(tmp_path)
     assert cases[0].payload["inputs"]["policy"] != "MUTATED BY TRIAL"
     assert inspect_journal(journal)["complete"] and inspect_journal(journal)["missing"] == []
     lines = journal.read_text().splitlines()
-    journal.write_text("\n".join(lines[:3]) + "\n")
+    journal.write_text("\n".join(lines[:4]) + "\n")
     partial = inspect_journal(journal)
-    assert not partial["complete"] and partial["observed"] == 2 and len(partial["missing"]) == 6
+    assert not partial["complete"] and partial["observed"] == 1 and len(partial["missing"]) == 7
+    assert len(partial["in_progress"]) == 1
 
 
 def test_lab_rejects_unoffered_or_oversized_natlang_plan():

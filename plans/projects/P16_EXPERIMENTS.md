@@ -1,6 +1,18 @@
 # P16 — Simulation and experiment laboratory
 
-Status: finite laboratory implemented in [codebases/experiment_lab](../../codebases/experiment_lab/README.md) and [applications/experiment_lab.py](../../applications/experiment_lab.py). [Shared capabilities](README.md). Natlang selects bounded cases and interprets exact results; the host runs isolated trials, pins seeds/source revisions, records traces and an append-only journal, and verifies report metrics. The first backend compares whole-history and incremental semantic document merges. Live-model and semantic-review pilots, other simulation backends, and streaming progress remain open.
+Status: finite laboratory implemented in [codebases/experiment_lab](../../codebases/experiment_lab/README.md) and [applications/experiment_lab.py](../../applications/experiment_lab.py). [Shared capabilities](README.md). Natlang selects cases and interprets exact results; the host runs isolated trials, pins seeds/source revisions, records traces and an append-only journal, and verifies report metrics. Trial labels are domain-neutral. Backends now cover semantic merge, type inference, dependency-plan testing and SQLite migration. The case menu is finite, while model runs have no default episode or time limit. Live teacher quality and semantic review remain open.
+
+The first unbounded Bonsai type trial completed after more than seven minutes
+and passed its frozen signature rubric. The old JSON-text chat adapter then
+repeated a `summarize` call without the required `trials` input. A typed chat
+adapter compiled the existing natlang alternatives into separate exact tools;
+the captured first report turn then supplied both required inputs. Naively
+splitting every field exceeded the server's earlier 12,288-token launch context,
+so the adapter groups only destinations with identical value schemas or copy
+source sets and uses short descriptions. With a 32,768-token launch context,
+the complete typed report replay passed its exact metrics and output assertions.
+The peak prompt was 14,949 tokens and the largest tool menu about 40 KB; reducing
+that repeated schema cost is the next teacher-harness efficiency task.
 
 ## Natlang prerequisites
 
@@ -14,7 +26,7 @@ Records contain experiment identity, candidate/source revisions, initial world, 
 
 ## Crisp environment
 
-A headless host supplies `experiments.run(candidate, fixture, config)`, world snapshot/restore and exact analysis. Meta-invocation uses explicit budgets and child-run links, so trials are not invisible work hidden inside one eval. Native simulators may share a process, but each trial gets independent state or a verified reset.
+A headless host supplies `experiments.run(candidate, fixture, config)`, world snapshot/restore and exact analysis. Meta-invocation retains child-run links and optional explicit budgets, so trials are not invisible work hidden inside one eval. Native simulators may share a process, but each trial gets independent state or a verified reset.
 
 Candidate programmes and metrics are frozen before evaluation. Adaptive scenario selection creates a new exploratory batch; it does not modify the untouched evaluation set. Matched environment seeds are separate from policy model seeds, so a changed policy does not accidentally change exogenous randomness.
 
