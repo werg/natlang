@@ -116,6 +116,38 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
     return row, recorder
 
 
+def _resume_count(output: Path, records: list[dict],
+                  model_id: str, root_seed: int) -> int:
+    if not output.exists():
+        return 0
+    count = 0
+    with output.open() as stream:
+        for line in stream:
+            row = json.loads(line)
+            if count >= len(records):
+                raise ValueError("existing teacher output exceeds the requested source range")
+            record = records[count]
+            if (row["task"]["program_ir"]["id"] != record["id"] or
+                    row["provenance"]["program_ir_sha256"] != digest(record) or
+                    row["provenance"]["model"] != model_id or
+                    row["provenance"]["seed_policy"] != vars(SeedPolicy("derived", root_seed))):
+                raise ValueError(f"existing teacher row {count} does not match this run")
+            count += 1
+    return count
+
+
+def _trace_path(output: Path, index: int) -> Path:
+    base = output.parent / f"{output.stem}-{index}.trace.jsonl"
+    if not base.exists():
+        return base
+    attempt = 1
+    while True:
+        retry = output.parent / f"{output.stem}-{index}.retry{attempt}.trace.jsonl"
+        if not retry.exists():
+            return retry
+        attempt += 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ir", type=Path)
@@ -125,6 +157,8 @@ def main():
     parser.add_argument("--root-seed", type=int, required=True)
     parser.add_argument("--start", type=int, default=0, help="first zero-based program row in a frozen batch")
     parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument("--resume", action="store_true",
+                        help="append after verifying completed rows; keep interrupted traces")
     parser.add_argument("--segment-turns", type=int, default=6,
                         help="conversation work turns before a continuation checkpoint")
     parser.add_argument("--segment-messages", type=int, default=12,
@@ -141,19 +175,27 @@ def main():
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
         tool_aliases={"call": "call_function"}, json_text_values=True)
     system_prompt = args.system_file.read_text()
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.ir.open() as source, args.out.open("x") as target:
+    records = []
+    with args.ir.open() as source:
         for index, line in enumerate(source):
-            if index < args.start:
-                continue
             if index >= args.start + args.limit:
                 break
-            record = json.loads(line)
+            if index >= args.start:
+                records.append(json.loads(line))
+    if len(records) != args.limit:
+        parser.error("requested source range exceeds the frozen batch")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    completed = (_resume_count(args.out, records,
+                               args.model_id, args.root_seed) if args.resume else 0)
+    with args.out.open("a" if args.resume and args.out.exists() else "x") as target:
+        for offset in range(completed, args.limit):
+            index = args.start + offset
+            record = records[offset]
             options = RunOptions(seed=SeedPolicy("derived", args.root_seed))
             row, _ = collect(record, decoder, model_id=args.model_id, options=options,
                              system_prompt=system_prompt,
                              segment_turns=args.segment_turns, segment_messages=args.segment_messages,
-                             trace_path=args.out.parent / f"{args.out.stem}-{index}.trace.jsonl")
+                             trace_path=_trace_path(args.out, index))
             target.write(json.dumps(row, ensure_ascii=False) + "\n")
             target.flush()
             print(f"{record['id']}: {row['outcome']['status']} accepted={row['outcome']['accepted']}", flush=True)

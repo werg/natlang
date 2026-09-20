@@ -1,9 +1,14 @@
+import json
+
+import pytest
+
 from natlang.decoder import ChatTurn
 from natlang.invocation import RunOptions, SeedPolicy
-from scripts.collect_scenario_teacher import collect
+from scripts.collect_scenario_teacher import _resume_count, _trace_path, collect
 from scripts.materialize_teacher_trajectory_ir import materialize
 from scripts.build_scenario_ir import scenario_record
 from scripts.generate_failures import matched_cases
+from scripts.program_ir import digest
 
 
 class Teacher:
@@ -65,3 +70,22 @@ def test_correct_blocker_is_admitted_as_whole_program_gold():
     assert row["outcome"]["status"] == "quiesced" and row["outcome"]["accepted"]
     samples = materialize(row, system_prompt="Follow the instructions.")
     assert len(samples) == 1 and samples[0]["skill"] == "report_blocker"
+
+
+def test_resume_verifies_completed_rows_and_preserves_interrupted_trace(tmp_path):
+    record = program_ir()
+    output = tmp_path / "teacher.ir.jsonl"
+    row = {"task": {"program_ir": {"id": record["id"]}},
+           "provenance": {"program_ir_sha256": digest(record), "model": "teacher",
+                          "seed_policy": vars(SeedPolicy("derived", 43))}}
+    output.write_text(json.dumps(row) + "\n")
+    assert _resume_count(output, [record], "teacher", 43) == 1
+    with pytest.raises(ValueError, match="does not match"):
+        _resume_count(output, [record], "other-teacher", 43)
+
+    first_trace = _trace_path(output, 15)
+    first_trace.write_text("interrupted\n")
+    retry_trace = _trace_path(output, 15)
+    assert retry_trace != first_trace
+    assert retry_trace.name.endswith("15.retry1.trace.jsonl")
+    assert first_trace.read_text() == "interrupted\n"
