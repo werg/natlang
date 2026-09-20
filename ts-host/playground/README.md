@@ -1,0 +1,25 @@
+# Browser playground and local workbench
+
+From `ts-host`, run `npm ci` once and then `npm run playground`. This builds the browser runtime, starts a server bound to `127.0.0.1`, and opens Chromium with the Linux WebGPU flags when available. `npm run serve:browser -- --playground` prints the URL without opening a browser. The page can also be served as static files after `npm run build`; the Jobs tab then has no local pipeline API.
+
+## Editor and interpreter
+
+The project selector, file tree, entry function selector, and editor work on browser-local projects stored in IndexedDB. Projects contain `.nl` and `.ts` files, inputs, and an optional expected value. Import and export use project JSON. Starter examples include a crisp multi-file program and natural-language programs. The editor highlights source and checks the natlang graph and TypeScript syntax while keeping invalid edits editable. `Ctrl`/`Cmd`+`Enter` runs a checked revision; the Stop button requests cancellation.
+
+The browser runs the native TypeScript interpreter. Crisp programs run without a model. Natural-language functions need a loaded GGUF checkpoint, either from the listed model catalog, a GGUF in the local `models/` directory, or a user-selected file. The model dialog reports WebGPU capability and storage headroom. Automatic loading requests full GPU offload when the adapter supports it and retries on CPU if GPU loading fails. A local GGUF made by the training pipeline appears after refreshing the Jobs catalog. The starter checkpoints' quality is limited; exact expected values and case admission must still be reviewed.
+
+Every run pins its source, inputs, revision, outcome, emitted values, and reduction trace. Runs are stored locally and can be downloaded. The Result panel compares any two runs from the same project, including outcome, value, duration, model turns, token counts, and retries. The Trace panel navigates captured events and reconstructed state without executing recorded actions or effects. Fork source creates a new editable project from the recorded revision; it does not resume execution from a trace event.
+
+## Cases and training
+
+Save a run as a case, edit its expected outcome and ordered action/effect/call obligations, then Accept it. Acceptance checks the captured trace against the case contract. Cases remain browser-local until exported as JSONL or sent to the local pipeline. Import retains their source and trace. Sending accepted cases freezes a JSONL batch in `data/` with a digest and split manifest. The `cases_ir` job converts representable cases into shared `natlang.program/1` IR and writes a rejects JSONL for cases it cannot represent. Currently this adapter admits natural-language leaf functions with successful root actions and no host effects; linked child calls or richer traces are explicitly rejected. No rejected case silently becomes training gold.
+
+The Jobs tab runs the repository's existing CLIs: case conversion, IR materialization, teacher collection, SFT export, LoRA training, turn evaluation, and GGUF export. Select a dataset and a unique job name, then start a step. Teacher collection, SFT export, and turn evaluation use an HTTP model server on localhost; these jobs do not use the GGUF currently loaded in the browser. Evaluation results show exact counts and the frozen sample manifest hash. The checkpoint selector lists only merged checkpoint directories. Job state and logs survive page refreshes under `runs/playground-jobs/`; interrupted jobs are marked as such after a server restart. Stop requests termination of the job process group.
+
+For a reviewed leaf case, the usual path is: send accepted cases → `cases_ir` → choose its `*-program-ir.jsonl` → `materialize` or `teacher` → choose the resulting data → `export` → `train` → `evaluate` → `gguf`. Select the data format expected by each CLI. The import step is deterministic, while teacher collection needs a running model server and review of its output. The local job service checks origin and a per-server token, only accepts localhost requests, and restricts generated paths to `data/`, `runs/`, or `models/`. It is intended for a trusted local workstation.
+
+## Verification and limits
+
+Run `npm test` for TypeScript/runtime checks, `npm run test:playground` for a real browser UI smoke, and `python -m pytest tests/test_import_playground_cases.py -q` from the repository root for the case-to-IR round trip. Set `NATLANG_CHROMIUM` if Playwright's bundled Chromium is unavailable.
+
+The browser app shell uses deterministic JavaScript and the native natlang interpreter for user programs. The existing natlang `codebases/ide/` exercises IDE behavior in the Node workbench; the interactive shell does not yet execute a natlang `ide/step.nl` on every UI event. Source checks are syntactic and graph checks, not a proof that model actions will be correct. Recorded trace navigation cannot replay external effects or pause a live model at arbitrary events. The browser eval environment is trusted application code; do not load untrusted programs into a privileged host object.

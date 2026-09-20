@@ -80,6 +80,8 @@
           <div id="resultBody" hidden>
             <div id="outcomeBanner" class="outcome-banner"></div>
             <div class="result-meta" id="resultMeta"></div>
+            <label class="compare-select">Compare with <select id="compareRun"><option value="">Choose another run</option></select></label>
+            <div id="compareSummary" class="compare-summary" hidden></div>
             <h3>Return value</h3><pre id="resultValue" class="data-block"></pre>
             <h3>Emissions</h3><pre id="resultEmitted" class="data-block"></pre>
             <div class="result-actions"><button id="captureCase" class="secondary">Save as case</button><button id="downloadRun" class="quiet">Download run</button><button id="forkRun" class="quiet">Fork source</button></div>
@@ -98,22 +100,25 @@
         </section>
         <section id="casesPanel" class="panel-content" hidden>
           <div class="cases-intro"><h2>Case workbench</h2><p>Keep source, expected behavior, and observed traces together. Export cases for review and dataset admission.</p></div>
-          <div class="case-toolbar"><button id="newCase" class="quiet">New scenario</button><button id="exportCases" class="secondary">Export JSONL</button><button id="importCases" class="quiet">Import</button></div>
+          <div class="case-toolbar"><button id="newCase" class="quiet">New scenario</button><button id="exportCases" class="secondary">Export JSONL</button><button id="sendCases" class="secondary">Send accepted to pipeline</button><button id="importCases" class="quiet">Import</button></div>
           <div id="caseList" class="case-list"></div>
         </section>
         <section id="jobsPanel" class="panel-content" hidden>
           <div class="cases-intro"><h2>Training workbench</h2><p>Run the repository's data, teacher, training, evaluation, and GGUF jobs on this local machine. Each job writes a durable log under <code>runs/playground-jobs</code>.</p></div>
           <p id="jobsAvailability" role="status">Checking local job service…</p>
           <div id="jobsBody" hidden>
-            <label>Pipeline step <select id="jobKind"><option value="materialize">Materialize program IR</option><option value="teacher">Collect teacher trajectories</option><option value="export">Export SFT samples</option><option value="train">Train LoRA</option><option value="evaluate">Evaluate checkpoint</option><option value="gguf">Export GGUF</option></select></label>
+            <label>Pipeline step <select id="jobKind"><option value="cases_ir">Admit playground cases to IR</option><option value="materialize">Materialize program IR</option><option value="teacher">Collect teacher trajectories</option><option value="export">Export SFT samples</option><option value="train">Train LoRA</option><option value="evaluate">Evaluate checkpoint</option><option value="gguf">Export GGUF</option></select></label>
             <label>Dataset <select id="jobDataset"></select></label>
             <label>Checkpoint <select id="jobCheckpoint"></select></label>
             <label>Job name <input id="jobName" value="experiment-1" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"></label>
             <div class="dialog-grid"><label>Steps <input id="jobSteps" type="number" min="1" max="100000" value="300"></label><label>Root seed <input id="jobSeed" type="number" min="0" value="0"></label></div>
             <label>Teacher model ID <input id="jobModelId" placeholder="server model identifier"></label>
+            <label>Local model server <input id="jobServer" value="http://127.0.0.1:8080" type="url"></label>
+            <label>Evaluation model label <input id="jobModelLabel" placeholder="checkpoint or server model identity"></label>
             <label>GGUF quantization <select id="jobQuant"><option>Q4_K_M</option><option>Q5_K_M</option><option>Q6_K</option><option>Q8_0</option></select></label>
             <div class="case-toolbar"><button id="startJob" class="primary">Start job</button><button id="refreshJobs" class="quiet">Refresh</button></div>
             <div id="jobList" class="case-list"></div>
+            <h3>Completed evaluations</h3><div id="evaluationList" class="case-list"></div>
             <h3>Selected job log</h3><pre id="jobLog" class="data-block job-log">Select a job to inspect its log.</pre>
           </div>
         </section>

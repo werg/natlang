@@ -68,6 +68,8 @@ those operations replayable or undo them.
 
 ## Browser host
 
+The [interactive playground](playground/README.md) adds a browser-local multi-file editor, revisioned runs and trace inspection, reviewed cases, and a localhost training workbench. Start it with `npm run playground` after `npm ci`. Its case adapter sends exactly admitted natural-language leaf traces to the shared program IR and records explicit rejects for richer cases.
+
 `@natlang/typescript-host/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights can be cached in browser storage. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.
 
 ```ts

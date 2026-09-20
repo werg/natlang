@@ -38,20 +38,40 @@ export function createPlaygroundJobs(root) {
       return found.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     }
     const runs = await readdir(join(root, 'runs'), { withFileTypes: true }).catch(() => []);
+    const checkpoints = [], evaluations = [];
+    for (const entry of runs) if (entry.isDirectory() && entry.name !== 'playground-jobs') {
+      const merged = `runs/${entry.name}/merged`;
+      if ((await stat(join(root, merged)).catch(() => null))?.isDirectory())
+        checkpoints.push({ name: entry.name, merged });
+      const evaluation = `runs/${entry.name}/eval.json`;
+      try {
+        const report = JSON.parse(await readFile(join(root, evaluation), 'utf8'));
+        evaluations.push({ path: evaluation, model: report.model, manifest: report.manifest_sha256,
+          summary: report.summary });
+      } catch { /* no completed evaluation */ }
+    }
     return { datasets: await files('data', '.jsonl'), models: await files('models', '.gguf'),
-      checkpoints: runs.filter(entry => entry.isDirectory() && entry.name !== 'playground-jobs')
-        .map(entry => ({ name: entry.name, merged: `runs/${entry.name}/merged` })) };
+      checkpoints, evaluations };
   }
   function command(config) {
     const { kind, dataset, name } = config;
     if (!slug(name)) fail('job name must use letters, digits, hyphen, or underscore');
     const data = kind === 'gguf' ? null : inside(dataset, ['data']);
     if (data && !data.endsWith('.jsonl')) fail('dataset must be a JSONL file');
+    const server = String(config.server ?? 'http://127.0.0.1:8080');
+    let parsedServer;
+    try { parsedServer = new URL(server); } catch { fail('invalid model server URL'); }
+    if (parsedServer.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsedServer.hostname) ||
+        parsedServer.username || parsedServer.password || parsedServer.search || parsedServer.hash)
+      fail('model server must be an HTTP localhost URL');
     const output = `runs/playground-${name}`;
     switch (kind) {
       case 'materialize':
         return { cmd: 'python', args: ['scripts/materialize_ir.py', data,
           inside(`data/${name}-materialized.jsonl`, ['data'])] };
+      case 'cases_ir':
+        return { cmd: 'python', args: ['scripts/import_playground_cases.py', data,
+          inside(`data/${name}-program-ir.jsonl`, ['data'])] };
       case 'teacher': {
         const modelId = String(config.modelId ?? '').trim();
         if (!modelId || modelId.length > 128) fail('teacher model ID is required');
@@ -59,11 +79,11 @@ export function createPlaygroundJobs(root) {
         if (!Number.isSafeInteger(seed) || seed < 0) fail('root seed must be a nonnegative integer');
         return { cmd: 'python', args: ['scripts/collect_scenario_teacher.py', data,
           inside(`data/${name}-teacher.jsonl`, ['data']), '--model-id', modelId,
-          '--root-seed', String(seed)] };
+          '--root-seed', String(seed), '--server', server] };
       }
       case 'export':
         return { cmd: 'python', args: ['scripts/export_sft.py', data,
-          inside(`data/${name}-sft.jsonl`, ['data']), '--resume'] };
+          inside(`data/${name}-sft.jsonl`, ['data']), '--resume', '--server', server] };
       case 'train': {
         const steps = Number(config.steps ?? 300);
         if (!Number.isInteger(steps) || steps < 1 || steps > 100000) fail('steps must be 1–100000');
@@ -71,9 +91,13 @@ export function createPlaygroundJobs(root) {
         return { cmd: 'python', args: ['scripts/train_lora.py', data, inside(output, ['runs']),
           '--steps', String(steps), ...(model ? ['--model', model] : [])] };
       }
-      case 'evaluate':
+      case 'evaluate': {
+        const label = String(config.modelLabel ?? '').trim();
+        if (!label || label.length > 128) fail('evaluation model label is required');
         return { cmd: 'python', args: ['scripts/eval_turns.py', data,
-          '--out', inside(`${output}/eval.json`, ['runs']), '--model-label', name] };
+          '--out', inside(`${output}/eval.json`, ['runs']), '--model-label', label,
+          '--server', server] };
+      }
       case 'gguf': {
         const source = inside(config.checkpoint, ['runs']);
         if (!source.endsWith('/merged')) fail('checkpoint must be a merged model directory');
@@ -85,11 +109,11 @@ export function createPlaygroundJobs(root) {
       default: fail('unknown job kind');
     }
   }
-  async function readBody(request) {
+  async function readBody(request, maxBytes = 10000) {
     let body = '';
     for await (const chunk of request) {
       body += chunk;
-      if (body.length > 10000) fail('request is too large');
+      if (body.length > maxBytes) fail('request is too large');
     }
     return JSON.parse(body);
   }
@@ -123,6 +147,34 @@ export function createPlaygroundJobs(root) {
     });
     return record;
   }
+  async function uploadCases(payload) {
+    if (!slug(payload.name) || !Array.isArray(payload.cases) || !payload.cases.length)
+      fail('case batch needs a name and accepted cases');
+    const splits = new Map(), ids = new Set();
+    for (const item of payload.cases) {
+      if (item?.schema !== 'natlang.playground.case/1' || item.reviewStatus !== 'accepted' ||
+          item.admission?.admitted !== true || !item.source?.files || !Array.isArray(item.trace) ||
+          !['train', 'dev', 'test'].includes(item.split)) fail('case batch contains an unadmitted record');
+      if (typeof item.id !== 'string' || !item.id || ids.has(item.id)) fail('duplicate or missing case ID');
+      ids.add(item.id);
+      const group = String(item.groupId ?? item.projectId ?? item.id);
+      if (splits.has(group) && splits.get(group) !== item.split) fail('one source group crosses data splits');
+      splits.set(group, item.split);
+    }
+    const text = payload.cases.map(item => JSON.stringify(item)).join('\n') + '\n';
+    const sha256 = createHash('sha256').update(text).digest('hex');
+    const path = `data/playground-${payload.name}-${sha256.slice(0, 10)}-cases.jsonl`;
+    await writeFile(join(root, path), text, { flag: 'wx' }).catch(error => {
+      if (error.code !== 'EEXIST') throw error;
+    });
+    const manifest = { schema: 'natlang.playground.dataset/1', path, sha256,
+      count: payload.cases.length, sourceGroups: splits.size,
+      splits: Object.fromEntries(['train', 'dev', 'test'].map(split =>
+        [split, payload.cases.filter(item => item.split === split).length])),
+      createdAt: new Date().toISOString() };
+    await writeFile(join(root, path.replace(/\.jsonl$/, '.manifest.json')), JSON.stringify(manifest, null, 2) + '\n');
+    return manifest;
+  }
   async function list() {
     const directories = await readdir(jobRoot, { withFileTypes: true }).catch(() => []);
     const found = [];
@@ -153,6 +205,8 @@ export function createPlaygroundJobs(root) {
         return json(response, 200, await list()), true;
       if (url.pathname === '/api/playground/jobs' && request.method === 'POST')
         return json(response, 201, await start(await readBody(request))), true;
+      if (url.pathname === '/api/playground/cases' && request.method === 'POST')
+        return json(response, 201, await uploadCases(await readBody(request, 20_000_000))), true;
       const match = /^\/api\/playground\/jobs\/([0-9a-f-]+)(?:\/(log|stop))?$/.exec(url.pathname);
       if (match && match[2] === 'log' && request.method === 'GET') {
         const file = join(jobRoot, match[1], 'output.log');

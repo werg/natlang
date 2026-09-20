@@ -31,6 +31,13 @@ try {
   await page.locator('#runButton').click();
   await page.getByText('Expected value matched').waitFor();
   assert.match(await page.locator('#resultValue').textContent(), /"sum": 8/);
+  const firstRevision = await page.locator('#revisionInfo').textContent();
+  await page.locator('#runButton').click();
+  await page.waitForFunction(() => window.natlangPlayground.runs.length === 2);
+  assert.equal(await page.locator('#revisionInfo').textContent(), firstRevision);
+  await page.locator('#compareRun').selectOption({ index: 1 });
+  assert.match(await page.locator('#compareSummary').textContent(), /"sameRevision": true/);
+  assert.match(await page.locator('#compareSummary').textContent(), /"sameOutput": true/);
   await page.locator('[data-panel=trace]').click();
   assert.match(await page.locator('#tracePosition').textContent(), /^Event \d+ \/ \d+$/);
   await page.locator('#tracePrev').click();

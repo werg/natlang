@@ -16,7 +16,10 @@ export type PlaygroundRun = {
   inputs: Record<string, unknown>; startedAt: string; durationMs: number;
   outcome: { kind: string; path: string; detail: string }; value: unknown; emitted: unknown[];
   trace: Record<string, unknown>[]; expected?: unknown; correct?: boolean;
-  model?: { id: string; diagnostics?: Record<string, unknown> };
+  model?: { id: string; diagnostics?: Record<string, unknown>; turns?: Array<{
+    durationMs: number; promptTokens: number | null; cachedTokens: number | null;
+    completionTokens: number | null; toolSchemaBytes: number; retries: number;
+    tokensPerSecond: number | null }> };
 };
 export type TraceFrame = { cursor: number; event: Record<string, unknown> | null;
   state: Record<string, unknown> | null; actions: Record<string, unknown>[];

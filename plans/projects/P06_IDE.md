@@ -1,7 +1,12 @@
 # P06 — Natlang IDE and training workbench
 
-Status: local IDE workbench in `codebases/ide/` and
-`applications/ide_workbench.mjs`. [Shared capabilities](README.md).
+Status: headless natlang IDE workbench in `codebases/ide/` and
+`applications/ide_workbench.mjs`, plus an interactive browser playground in
+`ts-host/playground/`. [Shared capabilities](README.md). The browser shell now
+provides multi-file editing, live source diagnostics, revision-pinned native
+runs, trace inspection, source forks, reviewed cases, IR admission, local
+pipeline jobs, and run/evaluation comparison. See the
+[playground guide](../../ts-host/playground/README.md) for operation and limits.
 
 Natlang interprets text edits into exact revisioned patches and composes the
 editor view. The host retains editable source revisions, checks source graph
@@ -11,12 +16,12 @@ store freezes inputs/expected values with source identity and re-evaluates
 them exactly. Integration tests exercise natlang edit/run/view, escaped HTML,
 scenario evaluation, stale edits and invalid syntax.
 
-This is a headless IDE backend with generated HTML, not yet an interactive
-browser editor. The trace cursor does not claim replay or fork. Syntax
-screening does not prove natlang semantic correctness, and the scenario
-evaluator is not a training-job manager. Dataset admission, teacher collection,
-fine-tune launch and checkpoint comparison still require explicit product
-work and infrastructure integration.
+The older natlang IDE workbench remains a headless backend with generated HTML;
+the new browser editor uses the native TypeScript runtime and deterministic UI
+state. The browser trace cursor does not claim execution replay or live pause.
+Dataset admission currently covers natural-language leaf traces; graph and
+host-effect case adapters require additional semantic lowering. The browser
+shell has not yet moved event handling into `ide/step.nl`.
 
 ## Natlang prerequisites
 

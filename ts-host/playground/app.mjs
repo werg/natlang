@@ -21,6 +21,7 @@ const parseJSON = (text, label, emptyValue) => {
   try { return JSON.parse(text); }
   catch (error) { throw new Error(`${label}: ${error.message}`); }
 };
+const sameJSON = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let projects = [], project = null, selectedFile = null, runs = [], cases = [], selectedRun = null;
 let diagnostics = [], model = null, modelSpec = null, abort = null, saveTimer = null, checkTimer = null;
@@ -159,6 +160,30 @@ function renderResult() {
   if (run.revision !== project.revision) labels.push('Source has changed since this run');
   $('resultMeta').replaceChildren(...labels.map(label => { const span = document.createElement('span'); span.textContent = label; return span; }));
   $('resultValue').textContent = pretty(run.value); $('resultEmitted').textContent = pretty(run.emitted);
+  const prior = $('compareRun').value;
+  const comparable = runs.filter(item => item.projectId === run.projectId && item.id !== run.id);
+  $('compareRun').replaceChildren(new Option('Choose another run', ''), ...comparable.map(item =>
+    new Option(`${new Date(item.startedAt).toLocaleTimeString()} · ${item.model?.id ?? 'crisp'} · ${item.outcome.kind}`, item.id)));
+  if (comparable.some(item => item.id === prior)) $('compareRun').value = prior;
+  renderComparison();
+}
+function runMetrics(run) {
+  const turns = run.model?.turns ?? [];
+  const sum = field => turns.reduce((total, turn) => total + (turn[field] ?? 0), 0);
+  return { model: run.model?.id ?? 'crisp only', outcome: run.outcome.kind,
+    correct: run.correct ?? null, durationMs: run.durationMs, turns: turns.length,
+    promptTokens: sum('promptTokens'), cachedTokens: sum('cachedTokens'),
+    completionTokens: sum('completionTokens'), retries: sum('retries') };
+}
+function renderComparison() {
+  const other = runs.find(item => item.id === $('compareRun').value);
+  const box = $('compareSummary'); box.hidden = !selectedRun || !other;
+  if (!selectedRun || !other) return;
+  const sameRevision = selectedRun.revision === other.revision;
+  const sameInputs = sameJSON(selectedRun.inputs, other.inputs);
+  const sameOutput = selectedRun.outcome.kind === other.outcome.kind && sameJSON(selectedRun.value, other.value);
+  box.textContent = pretty({ sameRevision, sameInputs, sameOutput,
+    selected: runMetrics(selectedRun), compared: runMetrics(other) });
 }
 function summary(event) {
   if (event.kind === 'action') return `${event.name ?? 'action'} → ${event.outcome ?? ''}`;
@@ -216,6 +241,8 @@ function updateJobForm() {
   $('jobSteps').parentElement.hidden = kind !== 'train';
   $('jobSeed').parentElement.hidden = kind !== 'teacher';
   $('jobModelId').parentElement.hidden = kind !== 'teacher';
+  $('jobServer').parentElement.hidden = !['teacher', 'export', 'evaluate'].includes(kind);
+  $('jobModelLabel').parentElement.hidden = kind !== 'evaluate';
   $('jobQuant').parentElement.hidden = kind !== 'gguf';
 }
 async function refreshJobs() {
@@ -245,6 +272,13 @@ function renderJobCatalog() {
       templateUrl: null, quant: 'local', bytes: item.bytes, sha256: '',
       contextTokens: 4096, url: `/${item.path}` }))];
   renderModelChoices();
+  $('evaluationList').replaceChildren(...(jobCatalog.evaluations ?? []).map(item => {
+    const card = document.createElement('div'); card.className = 'case-card';
+    const count = item.summary?.all?.n ?? 0, exact = item.summary?.all?.exact ?? 0;
+    card.textContent = `${item.model ?? 'unspecified'} · ${exact}/${count} exact · manifest ${(item.manifest ?? '').slice(0, 10)} · ${item.path}`;
+    return card;
+  }));
+  if (!jobCatalog.evaluations?.length) $('evaluationList').textContent = 'No completed evaluations yet.';
 }
 function renderJobs() {
   $('jobList').replaceChildren(...jobs.map(item => {
@@ -322,10 +356,25 @@ async function startJob() {
     dataset: $('jobDataset').value, checkpoint: $('jobCheckpoint').value,
     model: $('jobKind').value === 'train' ? $('jobCheckpoint').value : undefined,
     steps: Number($('jobSteps').value), rootSeed: Number($('jobSeed').value),
-    modelId: $('jobModelId').value.trim(), quant: $('jobQuant').value };
+    modelId: $('jobModelId').value.trim(), modelLabel: $('jobModelLabel').value.trim(),
+    server: $('jobServer').value.trim(), quant: $('jobQuant').value };
   try { const job = await jobApi('jobs', 'POST', config);
     selectedJobId = job.id; message(`${job.kind} job started`); await refreshJobs(); }
   catch (error) { message(`Cannot start job: ${error.message}`, true); }
+}
+async function sendCases() {
+  if (!jobToken) { message('Start the local playground server to send cases to the pipeline', true); return; }
+  const accepted = cases.filter(item => item.projectId === project.id && item.reviewStatus === 'accepted' && item.admission);
+  if (!accepted.length) { message('Accept at least one exact-admitted case first', true); return; }
+  try {
+    for (const item of accepted) item.admission = verifyCase(item);
+    const name = $('jobName').value.trim();
+    const manifest = await jobApi('cases', 'POST', { name, cases: accepted });
+    jobCatalog = await jobApi('catalog'); renderJobCatalog();
+    $('jobKind').value = 'cases_ir'; $('jobDataset').value = manifest.path;
+    updateJobForm(); selectPanel('jobs');
+    message(`${manifest.count} accepted cases frozen in ${manifest.path}`);
+  } catch (error) { message(`Cannot send cases: ${error.message}`, true); }
 }
 
 function promptText(title, help, value = '') {
@@ -351,20 +400,23 @@ async function run() {
     const inputs = parseJSON($('inputs').value, 'Inputs', {});
     if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('Inputs must be a JSON object');
     const expected = parseJSON($('expected').value, 'Expected value', undefined);
-    project = editPlaygroundProject(project, { inputs, expected }); replaceProject(project);
+    if (!sameJSON(project.inputs, inputs) || !sameJSON(project.expected, expected))
+      replaceProject(editPlaygroundProject(project, { inputs, expected }));
     if (check().length) return;
     if (project.root.endsWith('.nl') && !model?.loaded) { $('modelDialog').showModal(); throw new Error('Load a local model to run natural instructions'); }
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
     message(`Running revision ${project.revision.slice(0, 8)}…`);
     const host = new BrowserNatlangHost({ model });
-    const modelTurn = model ? async request => { message(`Model turn ${model.turnHistory.length + 1}…`);
+    const firstTurn = model?.turnHistory.length ?? 0;
+    const modelTurn = model ? async request => { message(`Model turn ${model.turnHistory.length - firstTurn + 1}…`);
       return model.turn(request, abort.signal); } : undefined;
     let record;
     try { record = await runPlaygroundProject(host, project, { signal: abort.signal,
       runOptions: { seed: { mode: 'compatibility' } }, modelTurn,
       model: modelSpec ? { id: modelSpec.id, diagnostics: model.diagnostics } : undefined }); }
     finally { host.close(); }
+    if (record.model) record.model.turns = structuredClone(model.turnHistory.slice(firstTurn));
     runs.unshift(record); await storage.put('runs', record); selectRun(record);
     message(`${record.outcome.kind} in ${record.durationMs} ms${record.correct === false ? ' · expected value differed' : ''}`,
       record.outcome.kind !== 'done' || record.correct === false);
@@ -538,9 +590,11 @@ function bind() {
     editor.setRangeText('  ', start, end, 'end'); editor.dispatchEvent(new Event('input'));
   };
   $('inputs').onchange = () => { try { const inputs = parseJSON($('inputs').value, 'Inputs', {});
-    replaceProject(editPlaygroundProject(project, { inputs })); } catch (error) { message(error.message, true); } };
+    if (!sameJSON(project.inputs, inputs)) replaceProject(editPlaygroundProject(project, { inputs }));
+  } catch (error) { message(error.message, true); } };
   $('expected').onchange = () => { try { const expected = parseJSON($('expected').value, 'Expected value', undefined);
-    replaceProject(editPlaygroundProject(project, { expected })); } catch (error) { message(error.message, true); } };
+    if (!sameJSON(project.expected, expected)) replaceProject(editPlaygroundProject(project, { expected }));
+  } catch (error) { message(error.message, true); } };
   $('checkButton').onclick = check; $('runButton').onclick = run;
   $('stopButton').onclick = () => { abort?.abort(); message('Stopping…'); };
   document.addEventListener('keydown', event => {
@@ -566,12 +620,14 @@ function bind() {
     }, 300);
   };
   $('downloadRun').onclick = () => selectedRun && download(`natlang-run-${selectedRun.id}.json`, pretty(selectedRun));
+  $('compareRun').onchange = renderComparison;
   $('forkRun').onclick = async () => { if (!selectedRun) return;
     const run = selectedRun, next = newPlaygroundProject(`${run.projectName} (fork)`, run.source.root,
       run.source.files, run.inputs, run.expected);
     await storage.put('projects', next); projects.push(next); switchProject(next); message('Forked source from recorded revision'); };
   $('captureCase').onclick = captureCase;
   $('newCase').onclick = () => openCaseDialog();
+  $('sendCases').onclick = sendCases;
   $('jobKind').onchange = updateJobForm;
   $('startJob').onclick = startJob;
   $('refreshJobs').onclick = async () => { try { jobCatalog = await jobApi('catalog'); renderJobCatalog(); await refreshJobs(); }
