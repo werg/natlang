@@ -80,5 +80,7 @@ The task board runs with a browser-local GGUF model selected from the catalog.
 Its `?fixture` mode uses scripted model turns to verify wiring without model
 weights. CPU-side tests execute the actual `.nl` source, event queue and DOM
 projection. A Chromium end-to-end smoke is available through
-`node scripts/browser-pilot.mjs --application`; it has not been completed on
-the current workstation after an AMD display-driver failure during testing.
+`node scripts/browser-pilot.mjs --application`; it passed with hardware GPU
+paths disabled. Live GGUF interpretation and GPU inference were not exercised
+in that smoke. An earlier browser attempt coincided with an AMD display-driver
+failure on this workstation; the kernel log did not establish causation.

@@ -1,0 +1,19 @@
+{
+  "source": "runs/teacher-leaves-s74-say-20260920.jsonl",
+  "source_sha256": "4d92b60f395ed1bb718d2dc131637b16f054c8fa56ed3489cf14fbfb104e2d2d",
+  "reviewer": "manual semantic review",
+  "rule": "A sell action must state or clearly enact the completed transfer of the stated quantity and good at the stated unit price. A quote or future offer is insufficient. Out-of-stock and counter-offer lines must not claim a sale.",
+  "approved": {
+    "out_of_stock": [5, 6, 7, 8, 10, 14, 17, 18, 20, 22, 26, 29, 32, 34, 37, 42, 43, 45, 47, 49, 55, 57, 59, 60, 61, 63, 64, 65, 67, 68, 70, 71, 73],
+    "counter_offer": [1, 12, 62],
+    "sell_at_offer": [2, 13, 58],
+    "sell_list_price": [19]
+  },
+  "notes": {
+    "1": "The rejected judge result is a valid counter-offer at ten coins and does not claim a sale.",
+    "19": "Take one apple enacts the completed transfer of one apple at five coins.",
+    "62": "The rejected judge result counters at four coins and does not claim a sale.",
+    "72": "Semantically sound out-of-stock line, but it exceeds the 45-word check and remains excluded."
+  },
+  "excluded_policy": "All other rows are excluded. In particular, most sell_list_price lines merely state a price, propose a sale, or promise a future handover. Several multi-item lines misstate the total or leave it ambiguous."
+}
