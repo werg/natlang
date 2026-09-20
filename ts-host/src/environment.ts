@@ -69,7 +69,7 @@ export class TypeScriptEnvironment {
   private context?: Context;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
-  private readonly effect?: (capability: string, operation: string, args: unknown[]) => unknown;
+  private effect?: (capability: string, operation: string, args: unknown[]) => unknown;
 
   constructor(options: { mode?: EnvironmentMode; host?: object; timeoutMs?: number;
     observe?: (event: HostEvent) => void;
@@ -80,6 +80,12 @@ export class TypeScriptEnvironment {
     this.observe = options.observe;
     this.effect = options.effect;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new RangeError('timeoutMs must be positive');
+  }
+
+  bindEffect(handler: (capability: string, operation: string, args: unknown[]) => unknown): () => void {
+    const prior = this.effect;
+    this.effect = handler;
+    return () => { if (this.effect === handler) this.effect = prior; };
   }
 
   private makeContext(): Context {

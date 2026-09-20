@@ -39,6 +39,7 @@ export class NativeRuntime {
   readonly environment: TypeScriptEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
+  private releaseEffect: () => void;
   private stack: string[] = [];
   private depth = 0;
   episodesStarted = 0;
@@ -59,10 +60,12 @@ export class NativeRuntime {
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
-    this.environment = options.environment ?? new TypeScriptEnvironment({ mode: 'fresh', host: options.host,
-      observe: event => this.events.push(event), effect: (cap, fn, args) => this.effect(cap, fn, args) });
+    this.environment = options.environment ?? new TypeScriptEnvironment({ mode: 'fresh', host: options.host });
+    this.releaseEffect = this.environment.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
     this.stream = options.stream;
   }
+
+  close(): void { this.releaseEffect(); }
 
   private acting?: LambdaNode;
   private effect(cap: string, fn: string, args: unknown[]): unknown {
@@ -158,6 +161,7 @@ export class NativeRuntime {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
       const result = this.environment.execute({ code: node.body, body: true, path: ref.path,
         effectful: node.effects.length > 0, scope: { args: jsView(node.args as Value), return: jsView(node.return) } });
+      this.events.push(...result.events);
       const value = coerce(result.result, node.type.returns, env, ref.path);
       const missing = problems(value, node.type.returns, env, ref.path);
       if (missing.holes.length) return this.quiesce(ref, node, 'returned value is incomplete');
@@ -295,6 +299,8 @@ export class NativeSession {
     return result;
   }
   apply(name: string, args: Record<string, unknown>): NativeResult {
+    if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+    this.lam.steps++;
     return this.record(name, args, this.applyNow(name, args));
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
@@ -307,36 +313,73 @@ export class NativeSession {
       if (name === 'write') {
         const path = String(args.path ?? '');
         if (path.startsWith('args/')) throw new Reject([{ path, code: 'not-writable' }]);
-        if (path.startsWith('let/')) {
-          const local = path.split('/')[1]!;
-          if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(String(args.type));
+        const stated = parseType(String(args.type ?? ''));
+        const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
+        const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
+        if (created) this.lam.letTypes[local!] = stated;
+        try {
+          const ref = this.resolve(path, true);
+          if (ref.deny) throw new Reject([{ path, code: ref.deny }]);
+          if (!ref.type || !fitsType(stated, ref.type, ref.env))
+            throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: ref.type ? formatType(ref.type) : '' }]);
+          const raw = args.source !== undefined ? this.resolve(String(args.source)).get() : args.value;
+          if (raw === undefined || raw === MISSING) throw new Reject([{ path, code: 'bad-action', expected: 'a value or source' }]);
+          let value: Value;
+          try { value = coerce(raw, stated, ref.env, path); }
+          catch (first) {
+            if (typeof raw !== 'string') throw first;
+            try { value = coerce(JSON.parse(raw), stated, ref.env, path); }
+            catch { throw first; }
+          }
+          this.checkEffects(value, path);
+          ref.set(value);
+          return { kind: 'ok', text: `ok   ${path}`, value };
+        } catch (error) {
+          if (created && !Object.hasOwn(this.lam.let, local!)) delete this.lam.letTypes[local!];
+          throw error;
         }
-        const ref = this.resolve(path, true);
-        const raw = args.source ? this.resolve(String(args.source)).get() : args.value;
-        if (raw === undefined) throw new Reject([{ path, code: 'bad-action', expected: 'a value or source' }]);
-        let value: Value;
-        try { value = coerce(raw, ref.type!, ref.env, path); }
-        catch (first) {
-          if (typeof raw !== 'string') throw first;
-          try { value = coerce(JSON.parse(raw), ref.type!, ref.env, path); }
-          catch { throw first; }
-        }
-        ref.set(value);
-        return { kind: 'ok', text: `ok   ${path}`, value };
       }
       if (name === 'read') {
-        const ref = this.resolve(String(args.path ?? ''));
+        const path = String(args.path ?? '');
+        if (path === 'codebase') return { kind: 'ok', text: Object.keys(this.lam.codebase).join('\n') || '(no functions)' };
+        if (path.startsWith('codebase/')) {
+          const key = path.slice(9), fn = this.lam.codebase[key] as Record<string, unknown> | undefined;
+          if (!fn) throw new Reject([{ path, code: 'no-such-path' }]);
+          return { kind: 'ok', text: `${key}(${Object.entries(fn.args as Record<string, string> ?? {}).map(([n,t]) => `${n}: ${t}`).join(', ')}) -> ${fn.returns}\n${fn.description ?? ''}\n\n${fn.code ?? fn.instructions ?? ''}` };
+        }
+        const ref = this.resolve(path);
+        if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
         const value = ref.get();
         return { kind: 'ok', text: value === MISSING ? `${ref.path}: not supplied (missing value; not empty text)` :
           typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1), value };
       }
       if (name === 'edit') {
         const ref = this.resolve(String(args.path ?? ''));
+        if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
         const value = ref.get(), old = String(args.old ?? ''), replacement = String(args.new ?? '');
         if (typeof value !== 'string') throw new Reject([{ path: ref.path, code: 'type-mismatch', expected: 'a text' }]);
         if (!old || value.split(old).length !== 2) throw new Reject([{ path: ref.path, code: value.includes(old) ? 'old-not-unique' : 'old-not-found' }]);
         ref.set(value.replace(old, replacement));
         return { kind: 'ok', text: `ok   ${ref.path}` };
+      }
+      if (name === 'delete') {
+        const ref = this.resolve(String(args.path ?? ''));
+        if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
+        ref.del();
+        return { kind: 'ok', text: `ok   ${ref.path}` };
+      }
+      if (name === 'copy') {
+        const from = String(args.from ?? ''), to = String(args.to ?? '');
+        const src = this.resolve(from), dst = this.resolve(to, true), original = src.get();
+        if (original === MISSING || !src.type) throw new Reject([{ path: from, code: 'no-such-path' }]);
+        if (dst.deny) throw new Reject([{ path: to, code: dst.deny }]);
+        if (!dst.type || !fitsType(src.type, dst.type, dst.env))
+          throw new Reject([{ path: to, code: 'type-does-not-fit-slot', expected: dst.type ? formatType(dst.type) : '' }]);
+        const value = cloneValue(original);
+        if (pending(value)) value.status = 'unreduced';
+        this.checkEffects(value, to);
+        dst.set(value);
+        return { kind: 'ok', text: `ok   ${to}`, value };
       }
       if (name === 'run_code') {
         if (args.engine === undefined) throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'an explicit available engine' }]);
@@ -345,6 +388,7 @@ export class NativeSession {
         const result = this.runtime.environment.execute({ code: String(args.code ?? ''), body: false, path: 'eval',
           effectful: this.lam.effects.length > 0, scope: { instructions: this.lam.body,
             args: jsView(this.lam.args as Value), return: jsView(this.lam.return), let: jsView(this.lam.let as Value) } });
+        this.runtime.events.push(...result.events);
         return { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value };
       }
       throw new Reject([{ path: name, code: 'bad-action' }]);
@@ -354,12 +398,32 @@ export class NativeSession {
     }
   }
 
+  private checkEffects(value: Value, path: string): void {
+    if (pending(value)) {
+      if (value.nodeKind === 'lambda') {
+        const extra = value.effects.filter(effect => !this.lam.effects.includes(effect));
+        if (extra.length) throw new Reject([{ path, code: 'effect-wider-than-parent', got: extra.join(', ') }]);
+        for (const [key, child] of Object.entries(value.args)) this.checkEffects(child, `${path}/args/${key}`);
+        this.checkEffects(value.return, `${path}/return`);
+      } else for (const part of ['over', 'fn', 'init', 'step', 'check'] as const) {
+        const child = (value as unknown as Record<string, Value>)[part];
+        if (child !== undefined) this.checkEffects(child, `${path}/${part}`);
+      }
+    } else if (Array.isArray(value)) value.forEach((child, index) => this.checkEffects(child, `${path}/${index}`));
+    else if (value && typeof value === 'object') for (const [key, child] of Object.entries(value))
+      this.checkEffects(child, `${path}/${key}`);
+  }
+
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     if (name === 'run') {
       try {
         const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
         const outcomes = [];
-        for (const path of paths) outcomes.push(await this.runtime.trigger(this.resolve(String(path))));
+        for (const path of paths) {
+          const ref = this.resolve(String(path));
+          if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
+          outcomes.push(await this.runtime.trigger(ref));
+        }
         return this.record(name, args, { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
           text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined });
       } catch (error) {
@@ -424,10 +488,14 @@ export class NativeSession {
         if (!this.lam.letTypes[local]) this.lam.letTypes[local] = parseType(destination);
       }
       const ref = this.resolve(path, true);
+      if (ref.deny) throw new Reject([{ path, code: ref.deny }]);
       if (!ref.type || !fitsType(child.type, ref.type, this.env))
         throw new Reject([{ path, code: 'type-does-not-fit-slot', expected: ref.type ? formatType(ref.type) : '' }]);
       const existing = ref.get();
-      if (!(pending(existing) && (existing.nodeKind !== 'lambda' || existing.functionName === label))) ref.set(child);
+      const resume = pending(existing) && ['unreduced', 'quiesced'].includes(existing.status) &&
+        existing.nodeKind === 'lambda' && existing.functionName === label &&
+        ['inputs', 'values', 'over', 'init', 'until', 'max'].every(key => args[key] === undefined);
+      if (!resume) { this.checkEffects(child, path); ref.set(child); }
       const outcome = await this.runtime.trigger(ref);
       return this.record(name, args, { kind: outcome.kind, text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
     } catch (error) {
@@ -466,6 +534,11 @@ export class NativeSession {
 
   private descend(ref: Ref, parts: string[], create: boolean, deny: string): Ref {
     for (const part of parts) {
+      const current = ref.get();
+      if (pending(current)) {
+        ref = this.pendingChild(ref, current, part);
+        continue;
+      }
       const type = ref.env.resolve(ref.type!);
       let childType: Type;
       if (type.kind === 'record') {
@@ -480,7 +553,7 @@ export class NativeSession {
         childType = type.element;
       } else throw new Reject([{ path: `${ref.path}/${part}`, code: 'no-such-path' }]);
       const parent = ref, key = part;
-      ref = { path: `${parent.path}/${part}`, type: childType, env: parent.env, deny,
+      ref = { path: `${parent.path}/${part}`, type: childType, env: parent.env, deny: parent.deny || deny,
         get: () => {
           const value = parent.get();
           return value !== MISSING && value !== null && typeof value === 'object' &&
@@ -496,5 +569,37 @@ export class NativeSession {
           else if (object && typeof object === 'object') delete (object as Record<string, Value>)[key]; } };
     }
     return ref;
+  }
+
+  private pendingChild(parent: Ref, node: Pending, part: string): Ref {
+    const at = `${parent.path}/${part}`;
+    const env = parent.env.child(node.types);
+    const deny = parent.deny || (node.status === 'running' && node !== this.lam ? 'frozen' : '');
+    const field = (key: string, type: Type, denied = deny): Ref => itemRef(node as unknown as Record<string, Value>, key, type, env, at, denied);
+    if (node.nodeKind === 'lambda' && node.type.kind === 'lambda') {
+      if (part === 'args') return { path: at, type: node.type.params, env,
+        deny: node === this.lam ? 'not-writable' : deny,
+        get: () => node.args as Value, set: () => { throw new Reject([{ path: at, code: 'not-writable' }]); }, del: () => {} };
+      if (part === 'return') return field('return', node.type.returns);
+      if (part === node.kind) return field('body', parseType('Text'));
+      if (part === 'let' && node === this.lam) return { path: at, env, deny,
+        get: () => node.let as Value, set: () => { throw new Reject([{ path: at, code: 'not-writable' }]); }, del: () => {} };
+    }
+    if (node.nodeKind === 'map' && node.type.kind === 'map') {
+      if (part === 'over' || part === 'fn') return field(part, partType(node, part));
+      if (/^\d+$/.test(part) && node.slots && Number(part) < node.slots.length)
+        return itemRef(node.slots, Number(part), node.type.b, env, at, deny);
+    }
+    if (node.nodeKind === 'fold' && node.type.kind === 'fold') {
+      if (['over', 'init', 'step'].includes(part)) return field(part, partType(node, part));
+      if (part === 'acc' || part === 'at') return field(part, part === 'acc' ? node.type.s : parseType('Num'), 'not-writable');
+      if (part === 'current' && node.current !== null) return field(part, partType(node, 'step'));
+    }
+    if (node.nodeKind === 'iterate' && node.type.kind === 'iterate') {
+      if (['init', 'step', 'check', 'max'].includes(part)) return field(part, partType(node, part));
+      if (part === 'state' || part === 'iteration') return field(part, part === 'state' ? node.type.s : parseType('Num'), 'not-writable');
+      if (part === 'current' && node.current !== null) return field(part, partType(node, 'step'));
+    }
+    throw new Reject([{ path: at, code: 'no-such-path' }]);
   }
 }

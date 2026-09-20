@@ -6,3 +6,8 @@ export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
 export { TypeEnv, TypeSyntaxError, LOOP_VERDICT, parseType, formatType, fitsType, resultType } from './native/types.js';
 export type { Type as NatlangType } from './native/types.js';
+export { NativeNatlangHost } from './native/host.js';
+export { NativeRuntime, NativeSession } from './native/runtime.js';
+export { NativeToolAgent } from './native/agent.js';
+export { checkedDefinitions } from './native/codebase.js';
+export { loadFunctionFile } from './native/source.js';

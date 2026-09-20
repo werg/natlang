@@ -5,6 +5,9 @@ import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { readTrace } from '../../web/natlang_lite.mjs';
 import { deriveSeed } from '../dist/native/trace.js';
+import { buildPending, MISSING } from '../dist/native/values.js';
+import { NativeSession } from '../dist/native/runtime.js';
+import { TypeEnv } from '../dist/native/types.js';
 
 const crisp = (type, code, extra = {}) => ({ $lambda: { type, code, engine: 'typescript-host', ...extra } });
 
@@ -137,4 +140,32 @@ test('native model seeds match Python derivation vectors', async () => {
   const result = await runtime.runRoot({ $lambda: { type: 'Lambda<{}, Bool>', instructions: 'Return true.' } });
   assert.equal(result.outcome.kind, 'done');
   assert.deepEqual(seen, [1079124865, deriveSeed(43, '', 1, 'model-turn', 1)]);
+});
+
+test('nested pending paths preserve types, frozen slots, and writable child results', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, { score: Num }>', instructions: 'Compute a score.',
+    return: { score: { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Find it.' } } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.equal(session.apply('read', { path: 'return/score/instructions' }).kind, 'ok');
+  assert.equal(session.apply('write', { path: 'return/score/return', type: 'Num', value: 5 }).kind, 'ok');
+  assert.equal(session.apply('write', { path: 'return/score/args/unknown', type: 'Num', value: 5 }).kind, 'rejected');
+  assert.equal(session.apply('edit', { path: 'args/name', old: 'a', new: 'b' }).kind, 'rejected');
+  assert.equal(lam.return.score.return, 5);
+});
+
+test('failed local writes roll back declaration; source copy, delete and effect scope are checked', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ item: Num }, Num>', instructions: 'Use item.', args: { item: 3 } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.equal(session.apply('write', { path: 'let/a', type: 'Num', value: 'bad' }).kind, 'rejected');
+  assert.equal(Object.hasOwn(lam.letTypes, 'a'), false);
+  assert.equal(session.apply('write', { path: 'let/a', type: 'Num', source: 'args/item' }).kind, 'ok');
+  assert.equal(lam.let.a, 3);
+  assert.equal(session.apply('copy', { from: 'let/a', to: 'return' }).kind, 'ok');
+  assert.equal(lam.return, 3);
+  assert.equal(session.apply('delete', { path: 'let/a' }).kind, 'ok');
+  assert.equal(Object.hasOwn(lam.let, 'a'), false);
+  assert.equal(session.apply('write', { path: 'return', type: 'Num', value: { $lambda: {
+    type: 'Lambda<{}, Num>', code: 'return 1;', effects: ['out.emit'] } } }).kind, 'rejected');
+  assert.equal(lam.return, 3);
+  assert.notEqual(lam.return, MISSING);
 });
