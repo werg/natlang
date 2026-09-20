@@ -143,7 +143,7 @@ export class NativeToolAgent {
       function: { name: 'read', arguments: '{"path":"args"}' } }] },
       { role: 'tool', tool_call_id: 'call_0', content: opening });
     const maxTurns = this.options.maxTurns ?? 64, maxTokens = this.options.maxTokens ?? 4000;
-    const deadline = Date.now() + (this.options.maxSeconds ?? 180) * 1000;
+    const deadline = Date.now() + (this.options.maxSeconds ?? 900) * 1000;
     let tokens = 0, nudges = 0;
     for (let turn = 0; turn < maxTurns; turn++) {
       if (Date.now() >= deadline) return 'episode wall-clock budget exhausted';

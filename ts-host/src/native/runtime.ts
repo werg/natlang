@@ -57,7 +57,9 @@ export class NativeRuntime {
     seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
     this.options = { maxEpisodes: options.maxEpisodes ?? 256, maxDepth: options.maxDepth ?? 8,
       runId: options.runId ?? 'native-run' };
-    this.seedPolicy = options.seedPolicy ?? { mode: 'backend' };
+    this.seedPolicy = options.seedPolicy ?? { mode: 'compatibility' };
+    if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
+      throw new TypeError('derived seed policy requires an integer root');
     this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'tools-v3',
       engines: ['typescript-host'], engine_contracts: { 'typescript-host': {
         environment_mode: options.environment?.mode ?? 'fresh', authority: 'shared-node-host', native_state_replayable: false } },
@@ -184,13 +186,28 @@ export class NativeRuntime {
 
   private crisp(ref: Ref, node: LambdaNode, env: TypeEnv): NativeOutcome {
     node.status = 'running';
+    node.originalBody ??= node.body;
     this.trace.emit('eval', { phase: 'start', path: ref.path, mode: 'body', engine: node.engine,
       code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
       const result = this.evalFor(node, node.body, true, ref.path,
         { args: jsView(node.args as Value), return: jsView(node.return) });
-      const value = coerce(result.result, node.type.returns, env, ref.path);
+      let value: Value;
+      try { value = coerce(result.result, node.type.returns, env, ref.path); }
+      catch (error) {
+        if (error instanceof Reject) {
+          this.trace.emit('eval', { phase: 'rejected', path: ref.path, error: error.message });
+          return this.quiesce(ref, node, `rejected: ${error.message}`);
+        }
+        throw error;
+      }
+      if (pending(value)) {
+        node.status = 'done'; ref.set(value);
+        this.trace.emit('eval', { phase: 'completed', path: ref.path, value: dump(value) });
+        this.trace.emit('node', { path: ref.path, transition: 'replaced', node_type: value.nodeKind });
+        return { path: ref.path, kind: 'replaced', detail: `${formatType(value.type)} unreduced` };
+      }
       const missing = problems(value, node.type.returns, env, ref.path);
       if (missing.holes.length) return this.quiesce(ref, node, 'returned value is incomplete');
       this.trace.emit('eval', { phase: 'completed', path: ref.path, value: dump(value) });
@@ -446,12 +463,25 @@ export class NativeSession {
       }
       if (name === 'read') {
         const path = String(args.path ?? '');
-        const meta = /^(.+)@(status|note)$/.exec(path);
+        const meta = /^(.+)@(status|note|effects|problems|origin|dist)$/.exec(path);
         if (meta) {
           const ref = this.resolve(meta[1]!); const value = ref.get();
-          if (!pending(value)) throw new Reject([{ path, code: 'no-such-path' }]);
-          const item = meta[2] === 'status' ? value.status : value.note;
-          return { kind: 'ok', text: String(item), value: item };
+          let item: string;
+          if (meta[2] === 'status') item = pending(value) ? value.status : 'done';
+          else if (meta[2] === 'note') item = pending(value) ? value.note : '';
+          else if (meta[2] === 'effects') {
+            const lam = pending(value) && value.nodeKind === 'lambda' ? value : this.lam;
+            item = lam.journal.length ? YAML.stringify(lam.journal) : '(none)';
+          } else if (meta[2] === 'problems') {
+            if (pending(value) || !ref.type) item = '(not a value)';
+            else { const issues = problems(value, ref.type, ref.env, ref.path);
+              item = [...issues.holes.map(d => `${d.path}: ${d.code}`),
+                ...issues.pending.map(at => `${at}: pending`)].join('\n') || 'no problems'; }
+          } else if (meta[2] === 'origin') {
+            const origin = this.runtime.origins.get(ref.path);
+            item = origin ? YAML.stringify(dump(origin)) : '(no lambda origin)';
+          } else item = '(not recorded)';
+          return { kind: 'ok', text: item, value: item };
         }
         const ranged = this.ranged(path);
         if (ranged) return { kind: 'ok', text: typeof ranged.value === 'string' ? ranged.value : JSON.stringify(ranged.value), value: ranged.value };

@@ -1,6 +1,6 @@
 # TypeScript application host for natlang
 
-This package runs the complete Python natlang interpreter from a TypeScript application. The interpreter remains responsible for checked programs, tool actions, typed state, Map/Fold/Iterate, budgets, declared Python effects, and traces. Node owns the model-turn callback and can execute crisp TypeScript in a context that directly references application objects.
+This package exposes two hosts. `NatlangHost` runs the complete Python interpreter through a bridge. `NativeNatlangHost` is a Python-free TypeScript interpreter under parity testing. Both can execute crisp TypeScript in a context that directly references application objects.
 
 ## Install and build
 
@@ -13,7 +13,9 @@ npm run build
 NATLANG_PYTHON=/path/to/natlang-python npm test
 ```
 
-`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed. Use the project environment's `bin/python`. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The Python `natlang` package must be importable to the selected interpreter.
+`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed for the bridge tests. Use the project environment's `bin/python`. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The Python `natlang` package must be importable to the selected interpreter for `NatlangHost`. The native conformance checks run with `npm run test:conformance` and do not require Python.
+
+For Python-free runs, import `NativeNatlangHost` instead. Its runtime is opt-in until the parity gate in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md) is complete.
 
 ## Run a program
 
@@ -46,6 +48,8 @@ try {
 For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. File sources use the existing Python loader, including `.nl`, `.ts`, YAML and JSON programs. `options` accepts the Python `RunOptions` fields, including seed/model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but this host's shared engine is marked unsafe for parallel native access and the runtime serializes those calls.
 
 `capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls in the isolated QuickJS engine. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
+
+The native host currently accepts synchronous declared capability callbacks. Application methods exposed through `host` can manage their own asynchronous jobs, while `fx` calls in the current native eval engine are synchronous.
 
 ## Eval environment and authority
 

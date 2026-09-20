@@ -210,3 +210,11 @@ test('complete native state snapshot resumes only unfinished Map slots', async (
   assert.deepEqual(result.value, ['a', 'b', 'c']);
   assert.equal(resumed.episodesStarted, 1);
 });
+
+test('crisp code may replace itself with an unreduced typed task', async () => {
+  const result = await new NativeRuntime().runRoot(crisp('Lambda<{}, Num>',
+    'return lambda({ type: "Lambda<{}, Num>", instructions: "Compute seven." });'));
+  assert.equal(result.outcome.kind, 'replaced');
+  assert.equal(result.value.nodeKind, 'lambda');
+  assert.equal(result.value.status, 'unreduced');
+});
