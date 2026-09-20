@@ -391,6 +391,9 @@ export class NativeToolAgent {
         max_tokens: allowance });
       turns++;
       session.runtime.checkInterruption();
+      const calls = response.calls ?? [];
+      session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
+        phase: 'generated', turn: turns, calls, text: response.text ?? '' });
       tokens += response.completion_tokens === undefined ? allowance : Math.max(1, response.completion_tokens);
       if (tokens > maxTokens) return 'episode token budget exhausted';
       if (!response.calls?.length) {
@@ -411,8 +414,6 @@ export class NativeToolAgent {
           { role: 'user', content: missing || 'return is incomplete' });
         continue;
       }
-      const calls = response.calls;
-      session.runtime.trace.emit('proposal', { phase: 'generated', turn: turns, calls, text: response.text ?? '' });
       let withdrawn = false;
       const review = this.options.review;
       if (review) for (const [index, [name, args]] of calls.entries()) {
@@ -442,14 +443,16 @@ export class NativeToolAgent {
         session.runtime.trace.emit('review', { call_index: index, decision, reason, trigger: structural ? 'structural' : 'confidence' });
         if (decision === 'withdraw' && review.withdrawalPolicy === 'retry' && withdrawals < 1) {
           withdrawals++; withdrawn = true;
-          session.runtime.trace.emit('proposal', { phase: 'withdrawn', turn: turns, calls });
+          session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
+            phase: 'withdrawn', turn: turns, calls });
           messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
           break;
         }
         if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
       }
       if (withdrawn) continue;
-      session.runtime.trace.emit('proposal', { phase: 'released', turn: turns, calls });
+      session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
+        phase: 'released', turn: turns, calls });
       const raw = calls.map(([name, args], i) => ({ id: `call_${turns}_${i}`, type: 'function',
         function: { name, arguments: JSON.stringify(args) } }));
       const results: NativeResult[] = [];

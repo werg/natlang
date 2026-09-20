@@ -102,11 +102,13 @@ export class NativeRuntime {
   readonly episodeBudget: { limit: number; used: number };
   private releaseEffect: () => void;
   private stack: string[] = [];
+  private invocationPaths: string[] = [];
   private depth = 0;
   private localEpisodesStarted = 0;
   get episodesStarted(): number { return this.episodeBudget.used; }
   currentCallId?: string;
   private root?: { value: Value };
+  private lastObserved?: unknown;
   private stream?: NativeStream;
   private streamCurrent: Value | undefined;
   private streamPosition = 0;
@@ -223,14 +225,14 @@ export class NativeRuntime {
     else this.root.value = source;
     const box = this.root;
     const before = this.traceView(box.value);
-    if (!this.trace.events.some(event => event.kind === 'state')) this.trace.emit('state', { phase: 'initial', value: before });
+    if (!this.trace.events.some(event => event.kind === 'state')) {
+      this.trace.emit('state', { phase: 'initial', value: before });
+      this.lastObserved = before;
+    }
     const ref: Ref = { path: '', env: new TypeEnv(), get: () => box.value,
       set: value => { box.value = value; }, del: () => { box.value = MISSING; } };
     const outcome = await this.trigger(ref);
-    const after = this.traceView(box.value);
-    const delta = changes(before, after);
-    if (delta.length) this.trace.emit('reduction', { phase: 'final', changes: delta });
-    this.trace.emit('state', { phase: 'final', value: after, outcome: outcome.kind });
+    this.observeState('final', outcome.kind);
     return { outcome, value: box.value, events: this.events, emitted: this.emitted };
   }
 
@@ -242,6 +244,15 @@ export class NativeRuntime {
         admitted: this.streamCurrent === undefined ? null : 'item', history: 'not-captured' } };
     }
     return state;
+  }
+
+  observeState(phase: string, outcome?: string): void {
+    if (!this.root) return;
+    const value = this.traceView(this.root.value);
+    const delta = changes(this.lastObserved, value);
+    if (delta.length) this.trace.emit('reduction', { phase, changes: delta });
+    this.trace.emit('state', { phase, value, ...(outcome ? { outcome } : {}) });
+    this.lastObserved = value;
   }
 
   private done(ref: Ref, node: Pending, value: Value): NativeOutcome {
@@ -340,15 +351,19 @@ export class NativeRuntime {
     const callId = `${ref.path || '$root'}@${node.attempts}`;
     const previousCallId = this.currentCallId;
     this.currentCallId = callId;
-    this.trace.emit('invocation', { phase: 'start', call_id: callId, path: ref.path, attempt: node.attempts });
+    const parentPath = this.invocationPaths.at(-1) ?? null;
+    this.invocationPaths.push(ref.path);
+    this.trace.emit('invocation', { phase: 'start', call_id: callId, path: ref.path,
+      attempt: node.attempts, parent_path: parentPath });
     const session = new NativeSession(this, node, ref.env, ref.path);
+    let note: string | void;
     try {
-      const note = await this.agent(session);
+      note = await this.agent(session);
       this.checkInterruption();
-      if (session.completed) return this.done(ref, node, node.return);
-      return this.quiesce(ref, node, String(note || 'budget exhausted'));
     } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId });
-      this.stack.pop(); this.depth--; this.currentCallId = previousCallId; }
+      this.stack.pop(); this.invocationPaths.pop(); this.depth--; this.currentCallId = previousCallId; }
+    if (session.completed) return this.done(ref, node, node.return);
+    return this.quiesce(ref, node, String(note || 'budget exhausted'));
   }
 
   private async map(ref: Ref, node: Extract<Pending, { nodeKind: 'map' }>, env: TypeEnv): Promise<NativeOutcome> {
@@ -552,8 +567,10 @@ export class NativeSession {
     }
     if (['write', 'edit', 'call'].includes(name) && ['ok', 'done', 'quiesced'].includes(result.kind))
       result.text = result.text.trimEnd() + '\n' + this.progress();
-    this.runtime.trace.emit('action', { surface: 'tools-v3', name, arguments: args,
-      outcome: result.kind, codes: result.codes ?? [] });
+    this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null,
+      surface: 'tools-v3', name, arguments: args,
+      outcome: result.kind, diagnostics: result.codes ?? [] });
+    this.runtime.observeState('after-action');
     return result;
   }
   private doneRange(raw: unknown): { start: number; end: number } {
@@ -608,7 +625,9 @@ export class NativeSession {
       result = error instanceof Reject ? { kind: 'rejected', text: error.message, codes: error.diagnostics.map(d => d.code) } :
         { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
-    this.runtime.trace.emit('action', { surface: 'text', action: source, outcome: result.kind, diagnostics: result.codes ?? [] });
+    this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null,
+      surface: 'text', action: source, outcome: result.kind, diagnostics: result.codes ?? [] });
+    this.runtime.observeState('after-action');
     return result;
   }
   apply(name: string, args: Record<string, unknown>): NativeResult {

@@ -262,6 +262,23 @@ test('native finite crisp reduction trace matches Python events apart from execu
   assert.deepEqual(actual, expected);
 });
 
+test('native model-driven leaf trace matches Python actions and state observations', { skip: !python }, async () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Write seven.' } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.trace import TraceRecorder\nfrom natlang.values import load_program\nfrom natlang.tool_agent import ToolAgent\nfrom natlang.decoder import ChatTurn\nclass Decoder:\n def __init__(self): self.turns=iter([ChatTurn([('write',{'path':'return','type':'Num','value':7})],completion_tokens=1),ChatTurn([], 'done',completion_tokens=1)])\n def chat(self,*args,**kwargs): return next(self.turns)\nsink=TraceRecorder({})\nRuntime(lambda lam:ToolAgent(Decoder()),trace_sink=sink).run_root(load_program(json.load(sys.stdin)))\nprint(json.dumps(sink.events[1:]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  let turn = 0;
+  const agent = new NativeToolAgent(() => ++turn === 1 ?
+    { calls: [['write', { path: 'return', type: 'Num', value: 7 }]], completion_tokens: 1 } :
+    { calls: [], text: 'done', completion_tokens: 1 });
+  const runtime = new NativeRuntime({ agent: session => agent.run(session) });
+  await runtime.runRoot(doc);
+  const actual = runtime.trace.events.slice(1).map(event => event.kind === 'action' ?
+    { ...event, surface: 'tools-v2' } : event);
+  assert.deepEqual(actual, expected);
+});
+
 test('native completion-mark output matches Python compact listing', { skip: !python }, () => {
   const doc = { $lambda: { type: 'Lambda<{}, Num>',
     instructions: '1. Do this.\n2. Do that.\n3. Skip this.\n4. Finish.' } };
