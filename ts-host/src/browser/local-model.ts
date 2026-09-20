@@ -16,6 +16,8 @@ type ModelCompletionRequest = { messages: ModelMessage[]; tools: ModelTool[]; to
 
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
 export type BrowserInferenceEngine = {
+  isSupportWebGPU(): boolean;
+  setCompat(compat: { wasm: string; worker: string }, mode?: 'safari' | 'firefox_safari'): void;
   isModelLoaded(): boolean;
   loadModelFromHF(model: { repo: string; file?: string; quant?: string }, params: LoadParams): Promise<void>;
   loadModelFromUrl(url: string, params: LoadParams): Promise<void>;
@@ -29,6 +31,7 @@ const Wllama = (wllamaRuntime as unknown as { Wllama: new (paths: { default: str
 
 export type BrowserModelLoadOptions = {
   contextTokens?: number;
+  /** Defaults to all layers. Set 0 for CPU or a smaller number for limited VRAM. */
   gpuLayers?: number;
   threads?: number;
   onProgress?: (progress: { loaded: number; total: number }) => void;
@@ -36,7 +39,9 @@ export type BrowserModelLoadOptions = {
 };
 
 function loadParams(options: BrowserModelLoadOptions) {
-  return { n_ctx: options.contextTokens ?? 4096, n_gpu_layers: options.gpuLayers,
+  if (options.gpuLayers !== undefined && (!Number.isInteger(options.gpuLayers) || options.gpuLayers < 0))
+    throw new RangeError('gpuLayers must be a nonnegative integer');
+  return { n_ctx: options.contextTokens ?? 4096, n_gpu_layers: options.gpuLayers ?? 99999,
     n_threads: options.threads, jinja: true, reasoning: false,
     progressCallback: options.onProgress, signal: options.signal };
 }
@@ -89,20 +94,27 @@ export function localModelTurn(response: ModelResponse): ModelTurn {
     raw_response: response as unknown as Record<string, unknown> };
 }
 
-/** GGUF inference in a browser worker; model weights stay in browser storage. */
+/** GGUF inference in a browser worker; WebGPU offloads all layers when available. */
 export class BrowserLocalModel {
   readonly engine: BrowserInferenceEngine;
   private readonly ownsEngine: boolean;
   private closed = false;
 
-  constructor(options: { wasmUrl?: string; engine?: BrowserInferenceEngine; allowOffline?: boolean } = {}) {
+  constructor(options: { wasmUrl?: string; compatWasmUrl?: string; compatWorkerUrl?: string;
+    firefoxGpuCompatibility?: boolean; engine?: BrowserInferenceEngine; allowOffline?: boolean } = {}) {
     this.ownsEngine = !options.engine;
     this.engine = options.engine ?? new Wllama({ default: options.wasmUrl ??
       new URL('./wllama.wasm', import.meta.url).href },
       { allowOffline: options.allowOffline ?? true });
+    if (this.ownsEngine) this.engine.setCompat({
+      wasm: options.compatWasmUrl ?? new URL('./wllama-compat.wasm', import.meta.url).href,
+      worker: options.compatWorkerUrl ?? new URL('./wllama-compat.js', import.meta.url).href,
+    }, options.firefoxGpuCompatibility ? 'firefox_safari' : 'safari');
   }
 
   get loaded(): boolean { return !this.closed && this.engine.isModelLoaded(); }
+  /** Browser capability, not a promise that a particular model fits in VRAM. */
+  get supportsWebGPU(): boolean { return !this.closed && this.engine.isSupportWebGPU(); }
 
   async loadFromHuggingFace(model: { repo: string; file?: string; quant?: string },
     options: BrowserModelLoadOptions = {}): Promise<void> {

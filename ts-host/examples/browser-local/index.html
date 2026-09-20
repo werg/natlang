@@ -15,6 +15,7 @@
 <p>The model and interpreter run in this browser. The initial model download comes from Hugging Face.</p>
 <label>GGUF repository <input id="repo" value="Qwen/Qwen3-0.6B-GGUF"></label>
 <label>Quantization <input id="quant" value="Q4_K_M"></label>
+<label>GPU layers (blank requests all; 0 uses CPU) <input id="gpuLayers" type="number" min="0" placeholder="All"></label>
 <button id="load">Load model</button>
 <p id="status" role="status">Model not loaded</p>
 <label>Task <textarea id="task">Count the letters in “natlang” and return the count.</textarea></label>
@@ -30,11 +31,14 @@
     $('load').disabled = true;
     $('run').disabled = true;
     try {
+      status(model.supportsWebGPU ? 'WebGPU detected; requesting GPU offload' : 'WebGPU unavailable; using CPU');
       await model.loadFromHuggingFace({ repo: $('repo').value, quant: $('quant').value }, {
         contextTokens: 8192,
-        onProgress: ({ loaded, total }) => status(`Downloading ${Math.round(loaded / total * 100)}%`),
+        ...($('gpuLayers').value === '' ? {} : { gpuLayers: Number($('gpuLayers').value) }),
+        onProgress: ({ loaded, total }) => status(total ? `Downloading ${Math.round(loaded / total * 100)}%` : 'Downloading model'),
       });
-      status('Model ready');
+      status(model.supportsWebGPU && $('gpuLayers').value !== '0' ?
+        'Model ready; WebGPU offload requested' : 'Model ready; CPU inference');
       $('run').disabled = false;
     } catch (error) { status(`Model load failed: ${error.message}`); }
     finally { $('load').disabled = false; }

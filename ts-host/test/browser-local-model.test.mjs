@@ -12,6 +12,7 @@ test('browser local inference drives the native tool loop without a server', asy
   const { BrowserLocalModel, BrowserNatlangHost } = await browserApi();
   const requests = [];
   const fake = {
+    isSupportWebGPU: () => true,
     isModelLoaded: () => true,
     async loadModelFromHF() {}, async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion(request) {
@@ -26,6 +27,7 @@ test('browser local inference drives the native tool loop without a server', asy
     },
   };
   const model = new BrowserLocalModel({ engine: fake });
+  assert.equal(model.supportsWebGPU, true);
   const host = new BrowserNatlangHost({ model });
   try {
     const result = await host.run({ source: { kind: 'program', program: { $lambda: {
@@ -45,7 +47,7 @@ test('browser local inference drives the native tool loop without a server', asy
 test('local model validates calls and exposes local loading options', async () => {
   const { BrowserLocalModel } = await browserApi();
   let loaded = false, params;
-  const fake = { isModelLoaded: () => loaded,
+  const fake = { isSupportWebGPU: () => false, isModelLoaded: () => loaded,
     async loadModelFromHF(_model, received) { params = received; loaded = true; },
     async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion() { return { choices: [{ finish_reason: 'tool_calls', message: {
@@ -64,4 +66,22 @@ test('local model validates calls and exposes local loading options', async () =
       temperature: 0, seed: null, max_tokens: 10 }), /invalid JSON arguments/);
   } finally { await model.close(); }
   assert.equal(statSync(new URL('../dist/browser/wllama.wasm', import.meta.url)).size > 1_000_000, true);
+  assert.equal(statSync(new URL('../dist/browser/wllama-compat.wasm', import.meta.url)).size > 1_000_000, true);
+  assert.equal(statSync(new URL('../dist/browser/wllama-compat.js', import.meta.url)).size > 10_000, true);
+});
+
+test('local model requests full GPU offload by default', async () => {
+  const { BrowserLocalModel } = await browserApi();
+  let params;
+  const fake = { isSupportWebGPU: () => true, isModelLoaded: () => true,
+    async loadModelFromHF(_model, received) { params = received; },
+    async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
+    async createChatCompletion() { return { choices: [{ message: { content: '' } }] }; } };
+  const model = new BrowserLocalModel({ engine: fake });
+  try {
+    await model.loadFromHuggingFace({ repo: 'example/model' });
+    assert.equal(params.n_gpu_layers, 99999);
+    await assert.rejects(() => model.loadFromHuggingFace({ repo: 'example/model' },
+      { gpuLayers: -1 }), /gpuLayers must be a nonnegative integer/);
+  } finally { await model.close(); }
 });

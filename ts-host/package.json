@@ -17,6 +17,7 @@
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "@wllama/wllama": "^3.6.1",
+    "@wllama/wllama-compat": "^3.6.1",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },

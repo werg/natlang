@@ -16,3 +16,7 @@ await build({ entryPoints: [resolve(root, 'src/browser/index.ts')], bundle: true
   legalComments: 'none' });
 copyFileSync(fileURLToPath(import.meta.resolve('@wllama/wllama/esm/wasm/wllama.wasm')),
   resolve(root, 'dist/browser/wllama.wasm'));
+for (const [source, target] of [['wllama.js', 'wllama-compat.js'],
+  ['wllama.wasm', 'wllama-compat.wasm']])
+  copyFileSync(fileURLToPath(import.meta.resolve(`@wllama/wllama-compat/wasm/${source}`)),
+    resolve(root, `dist/browser/${target}`));
