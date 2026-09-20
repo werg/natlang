@@ -12,3 +12,8 @@ source identity or altering acceptance tests. Publishing a reviewable revision
 to a worktree remains a separate explicit operation. The manifest and check
 commands are trusted host configuration; model output cannot add files or
 arbitrary commands to them.
+
+Declared checks stream stdout/stderr. The result retains the last 4,000
+characters, total output bytes and a truncation flag; large output does not
+cause a false check failure. No time limit is imposed unless the host
+configuration explicitly supplies one.

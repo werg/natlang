@@ -83,3 +83,20 @@ test('failed checks and stale patch context remain visible for repair', async ()
     ]), /missing/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('long checks stream output and retain a bounded diagnostic tail', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'natlang-repo-'));
+  await writeFile(join(root, 'lib.mjs'), source['lib.mjs']);
+  const repository = new RepositoryMigration(root, { files: ['lib.mjs'], checks: [
+    { id: 'verbose', argv: [process.execPath, '-e',
+      "process.stdout.write('x'.repeat(2_000_000))"] },
+  ] });
+  try {
+    const snapshot = await repository.open();
+    const checked = await repository.validate(snapshot.revision);
+    assert.equal(checked.status, 'passed');
+    assert.equal(checked.checks[0].output_bytes, 2_000_000);
+    assert.equal(checked.checks[0].truncated, true);
+    assert.equal(checked.checks[0].output.length, 4000);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

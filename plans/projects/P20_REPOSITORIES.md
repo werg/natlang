@@ -13,7 +13,9 @@ hidden caller failure, repair, stale context and unchanged source checkout.
 The test run exposed a real harness issue: a child `node --test` inherited
 `NODE_TEST_CONTEXT` from the parent test process and exited successfully while
 skipping its files. The migration host now clears that variable for declared
-checks. Broader check provenance, natlang's own loader/type checks as declared
+checks. It streams long check output and keeps a bounded tail plus byte count
+in the natlang value, without a default runtime limit. Broader check
+provenance, natlang's own loader/type checks as declared
 gates, dirty-worktree import and a reviewed worktree publication operation
 remain open.
 

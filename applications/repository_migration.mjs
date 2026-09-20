@@ -1,15 +1,38 @@
 /** Isolated candidate revisions for semantic repository migrations. */
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 
-const exec = promisify(execFile);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const safe = path => typeof path === 'string' && path.length > 0 &&
   !path.startsWith('/') && !path.split(/[\\/]/).some(part => part === '..' || part === '');
+
+function runCheck(check, directory) {
+  return new Promise(resolve => {
+    const env = { ...process.env };
+    // A nested Node test runner otherwise reports success while skipping files.
+    delete env.NODE_TEST_CONTEXT;
+    const child = spawn(check.argv[0], check.argv.slice(1), {
+      cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let tail = '', bytes = 0, failed = false, timedOut = false;
+    const capture = chunk => {
+      bytes += chunk.length;
+      tail = (tail + chunk.toString('utf8')).slice(-4000);
+    };
+    child.stdout.on('data', capture); child.stderr.on('data', capture);
+    child.on('error', error => { failed = true; capture(Buffer.from(error.message)); });
+    const timeout = check.timeoutMs && check.timeoutMs > 0 ?
+      setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, check.timeoutMs) : null;
+    child.on('close', code => {
+      if (timeout) clearTimeout(timeout);
+      resolve({ id: check.id, status: !failed && !timedOut && code === 0 ? 'passed' : 'failed',
+        output: tail, output_bytes: bytes, truncated: bytes > 4000,
+        ...(timedOut ? { detail: 'timeout' } : {}) });
+    });
+  });
+}
 
 export class RepositoryMigration {
   constructor(root, { files, checks = [] }) {
@@ -17,7 +40,9 @@ export class RepositoryMigration {
     if (!this.files.length || this.files.some(path => !safe(path)) ||
         new Set(this.files).size !== this.files.length) throw new Error('invalid file manifest');
     if (checks.some(check => !Array.isArray(check.argv) || !check.argv.length ||
-        check.argv.some(arg => typeof arg !== 'string'))) throw new Error('invalid check');
+        check.argv.some(arg => typeof arg !== 'string') ||
+        check.timeoutMs !== undefined && (!Number.isSafeInteger(check.timeoutMs) ||
+          check.timeoutMs < 1))) throw new Error('invalid check');
     this.revisions = new Map(); this.events = [];
   }
 
@@ -104,19 +129,7 @@ export class RepositoryMigration {
       }
       const results = [];
       for (const check of this.checks) {
-        try {
-          const env = { ...process.env };
-          // A nested Node test runner otherwise reports success while skipping files.
-          delete env.NODE_TEST_CONTEXT;
-          const result = await exec(check.argv[0], check.argv.slice(1), {
-            cwd: directory, timeout: check.timeoutMs ?? 0,
-            maxBuffer: 1024 * 1024, env });
-          results.push({ id: check.id, status: 'passed',
-            output: (result.stdout + result.stderr).slice(-4000) });
-        } catch (error) {
-          results.push({ id: check.id, status: 'failed',
-            output: String((error.stdout ?? '') + (error.stderr ?? '') || error.message).slice(-4000) });
-        }
+        results.push(await runCheck(check, directory));
       }
       const status = results.every(row => row.status === 'passed') ? 'passed' : 'failed';
       this.events.push({ operation: 'repository.validate', revision, status,
