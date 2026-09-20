@@ -171,3 +171,31 @@ The balanced whole-program collector remains active. A fixed snapshot of its
 first 15 completed programs had seven accepted trajectories, which replayed
 into 146 turns. `data/teacher-available-s74-current.sft.jsonl` combines those
 with the reviewed teacher bundle and the 240 page turns: 1,329 pairs total.
+
+### Post-crash review (2026-09-21)
+
+An unexpected reboot interrupted the first whole-program pass during row 15.
+The 15 completed rows survived; Bonsai and its watchdog were restarted, and
+rows 15–23 resumed in `runs/teacher-program-balanced-s909-pass2.ir.jsonl`.
+The prior boot's kernel journal has AMD display-driver warnings and a display
+flip timeout immediately before the reboot; this is evidence of a display
+failure, not a confirmed cause. The collector now supports `--resume`, checks
+completed source rows and model identity, and preserves interrupted trace files.
+
+Manual semantic review admitted 40 dialogue references and replayed their full
+teacher trajectories into 108 turns. The current reviewed teacher bundle is
+`data/teacher-available-s74-reviewed.sft.jsonl` (1,437 pairs). The review and
+judge overrides are pinned in `data/say-s74-review-20260921.json`. A second
+review of the original reference bank found 80 earlier `sell_*` lines that
+quote a price, offer a later transfer, or otherwise fail to say that the sale
+is complete. The pinned review is in
+`data/say-original-bank-review-20260921.json`; a reversible bank prune is
+queued after the active page retry so it cannot race the reference writer.
+
+**Do not train from the existing seed-73 or seed-74 synthetic SFT snapshots**
+until they are rebuilt. Their actual source IRs embed these questionable sale
+references in 125 and 99 programs, respectively. The retry queue will rerun
+remaining page cases, prune the reviewed references with an exact backup, and
+collect missing dialogue cases with explicit completed-sale instructions. Once
+the reference bank settles, rebuild both seeds from their pinned generator
+manifests, verify, and render fresh continuation SFT bundles.
