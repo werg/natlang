@@ -618,8 +618,10 @@ export class NativeSession {
     try {
       if (name === 'report_blocker' || name === 'report_error') {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
-        if (message.length < 8) throw new Reject([{ path: name, code: 'bad-action' }]);
-        return { kind: 'blocked', text: message };
+        if (message.length < 8) throw new Reject([{ path: name === 'report_blocker' ? 'missing' : 'message',
+          code: 'bad-action', expected: name === 'report_blocker' ?
+            'a sentence saying what is missing' : 'a sentence explaining the error' }]);
+        return { kind: 'blocked', text: `${name === 'report_blocker' ? 'blocked' : 'error'}: ${message}` };
       }
       if (name === 'mark_done') {
         const start = args.start, end = args.end ?? args.start;
@@ -710,8 +712,15 @@ export class NativeSession {
           } else item = '(not recorded)';
           return { kind: 'ok', text: item, value: item };
         }
-        const ranged = this.ranged(path);
-        if (ranged) return { kind: 'ok', text: typeof ranged.value === 'string' ? ranged.value : JSON.stringify(ranged.value), value: ranged.value };
+        const selected = args.start !== undefined || args.end !== undefined ?
+          `${path}[${args.start ?? args.end}..${args.end ?? args.start}]` : path;
+        const ranged = this.ranged(selected);
+        if (ranged) {
+          const first = Number(/\[(\d+)\.\./.exec(selected)?.[1] ?? 0);
+          const text = typeof ranged.value === 'string' ? ranged.value :
+            (ranged.value as Value[]).map((item, index) => `${first + index}: ${typeof item === 'string' ? item : JSON.stringify(dump(item))}`).join('\n');
+          return { kind: 'ok', text, value: ranged.value };
+        }
         if (path === 'codebase') return { kind: 'ok', text: Object.keys(this.lam.codebase).join('\n') || '(no functions)' };
         if (path.startsWith('codebase/')) {
           const key = path.slice(9), fn = this.lam.codebase[key] as Record<string, unknown> | undefined;
@@ -806,9 +815,9 @@ export class NativeSession {
       return { ref, type: ref.type!, value: value.slice(start, end + 1) };
     }
     if (typeof value === 'string' && type.kind === 'prim' && type.name === 'Text') {
-      const lines = value.split('\n');
+      const lines = value.match(/[^\n]*\n|[^\n]+$/g) ?? [];
       if (start < 1 || end > lines.length) throw new Reject([{ path, code: 'bad-range' }]);
-      return { ref, type: ref.type!, value: lines.slice(start - 1, end).join('\n') + '\n' };
+      return { ref, type: ref.type!, value: lines.slice(start - 1, end).join('') };
     }
     throw new Reject([{ path, code: 'bad-range' }]);
   }

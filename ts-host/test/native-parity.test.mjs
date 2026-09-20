@@ -271,3 +271,39 @@ test('native successful writes and edits include Python progress text', { skip: 
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
   assert.deepEqual(calls.map(([name, args]) => session.apply(name, args).text), expected);
 });
+
+test('native blocker and error reports preserve Python result text', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Use unavailable information.' } };
+  const calls = [
+    ['report_blocker', { missing: 'x' }],
+    ['report_error', { message: 'x' }],
+    ['report_blocker', { missing: 'The source document is missing.' }],
+    ['report_error', { message: 'The requested result is impossible.' }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([{'kind':r.kind,'text':r.text} for n,a in calls for r in [s.apply(n,a)]]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(calls.map(([name, args]) => {
+    const result = session.apply(name, args); return { kind: result.kind, text: result.text };
+  }), expected);
+});
+
+test('native ranged reads match Python line and item numbering', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ lines: Text, items: Num[] }, Num>',
+    instructions: 'Read the supplied inputs.', args: { lines: 'first\nsecond\nthird', items: [10, 20, 30] } } };
+  const calls = [
+    ['read', { path: 'args/lines', start: 2, end: 3 }],
+    ['read', { path: 'args/items', start: 1, end: 2 }],
+    ['read', { path: 'args/items', start: 0 }],
+  ];
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,calls=json.load(sys.stdin)\ns=Session(Runtime(None),load_program(doc),TypeEnv())\nprint(json.dumps([{'kind':r.kind,'text':r.text} for n,a in calls for r in [s.apply(n,a)]]))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  assert.deepEqual(calls.map(([name, args]) => {
+    const result = session.apply(name, args); return { kind: result.kind, text: result.text };
+  }), expected);
+});
