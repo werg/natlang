@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NativeNatlangHost, TypeScriptEnvironment } from '../dist/index.js';
 
@@ -48,4 +51,29 @@ test('native cancellation prevents model actions after an interrupted turn', asy
     return { calls: [['write', { path: 'return', type: 'Num', value: 1 }]], completion_tokens: 1 };
   } }), /aborted/);
   host.close();
+});
+
+test('native host loads JSON program files and accepts a write with inferred slot type', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-native-file-'));
+  const path = join(folder, 'program.json');
+  writeFileSync(path, JSON.stringify({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return 12.' } }));
+  const host = new NativeNatlangHost();
+  let turn = 0;
+  try {
+    const result = await host.run({ source: { kind: 'file', path }, modelTurn: () => ++turn === 1 ?
+      { calls: [['write', { path: 'return', value: 12 }]], completion_tokens: 1 } :
+      { calls: [], text: 'done', completion_tokens: 1 } });
+    assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 12);
+  } finally { host.close(); rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('native host consumes an async Fold stream in order', async () => {
+  async function* source() { yield 2; yield 3; }
+  const host = new NativeNatlangHost();
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $fold: { type: 'Fold<Num, Num>',
+      init: 1, step: { $lambda: { type: 'Lambda<{ acc: Num, item: Num }, Num>',
+        engine: 'typescript-host', code: 'return args.acc + args.item;' } } } } }, streams: { over: source() } });
+    assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 6);
+  } finally { host.close(); }
 });

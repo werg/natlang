@@ -169,3 +169,22 @@ test('failed local writes roll back declaration; source copy, delete and effect 
   assert.equal(lam.return, 3);
   assert.notEqual(lam.return, MISSING);
 });
+
+test('native tool schemas narrow to typed slots and expand as workspace values appear', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ item: Num }, { label: "yes" | "no", count: Num }>',
+    instructions: 'Classify and count.', args: { item: 2 }, codebase: {
+      count: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item;' },
+    } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const tools = agent.tools(session);
+  const write = tools.find(item => item.function.name === 'write').function.parameters;
+  assert.ok(write.properties.path.anyOf[0].enum.includes('return/label'));
+  assert.ok(write.properties.path.anyOf[0].enum.includes('return/count'));
+  const read = tools.find(item => item.function.name === 'read').function.parameters;
+  assert.ok(read.properties.path.enum.includes('args/item'));
+  assert.ok(!read.properties.path.enum.includes('return/label'));
+  assert.equal(session.apply('write', { path: 'return/label', type: '"yes" | "no"', value: 'yes' }).kind, 'ok');
+  const readAfter = agent.tools(session).find(item => item.function.name === 'read').function.parameters;
+  assert.ok(readAfter.properties.path.enum.includes('return/label'));
+});

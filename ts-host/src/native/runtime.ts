@@ -416,7 +416,9 @@ export class NativeSession {
           this.lam.fnCopies[local] = def;
           return { kind: 'ok', text: `ok   ${path} is a copy of ${functionCopy[1]}` };
         }
-        const stated = parseType(String(args.type ?? ''));
+        const typeText = String(args.type ?? '').trim();
+        const stated = typeText ? parseType(typeText) : this.resolve(path, true).type;
+        if (!stated) throw new Reject([{ path, code: 'type-mismatch', expected: 'a type for the new local' }]);
         const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
         const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
         if (created) this.lam.letTypes[local!] = stated;
