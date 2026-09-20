@@ -3,7 +3,8 @@ export type Type =
   | { kind: 'prim'; name: 'Text' | 'Num' | 'Bool' | 'Null' | 'Blob' }
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
-  | { kind: 'list' | 'dict'; element: Type }
+  | { kind: 'list'; element: Type }
+  | { kind: 'dict'; element: Type }
   | { kind: 'union'; members: Type[] }
   | { kind: 'name'; name: string }
   | { kind: 'lambda'; params: Extract<Type, { kind: 'record' }>; returns: Type }
