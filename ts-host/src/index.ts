@@ -16,3 +16,10 @@ export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from '
 export { NativeSourceWorkspace } from './native/workspace.js';
 export { admitNativeTrace } from './native/scenario.js';
 export type { NativeScenarioContract } from './native/scenario.js';
+export { TerminalNatlangApplication, createTerminalHost, TerminalSessionStore,
+  renderTerminalView, runTerminalShell, TerminalEventQueue } from './terminal/index.js';
+export type { TerminalEvent, TerminalSource, TerminalTransition, TerminalFailure,
+  TerminalCommit, TerminalRunner, TerminalApplicationOptions, TerminalCheckpoint,
+  TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
+export { openAICompatibleModelTurn } from './model/index.js';
+export type { OpenAICompatibleOptions, OpenAICompatibleExchange } from './model/index.js';

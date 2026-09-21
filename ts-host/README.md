@@ -21,7 +21,14 @@ NATLANG_PYTHON=/path/to/natlang-python npm test
 
 Import `NatlangHost` for runs. The declared conformance and paired trace coverage is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
 
-The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior. The higher-level `BrowserNatlangApplication` defaults to `local`; for low-level runs use `local` to let the model repair missing results or rejected actions within its current episode.
+For native CLIs and terminal dashboards, use the [terminal application
+framework](TERMINAL_APPLICATIONS.md). It provides a queued natlang reducer/view
+lifecycle, concurrent event sources, durable local sessions, structured terminal
+views and a configurable model driver. The semantic terminal, log console,
+evidence console and notebook console are executable integrations rather than
+separate harnesses.
+
+The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior. The higher-level `BrowserNatlangApplication` and `TerminalNatlangApplication` default to `local`; for low-level runs use `local` to let the model repair missing results or rejected actions within its current episode.
 
 ## Run a program
 

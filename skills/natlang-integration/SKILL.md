@@ -11,7 +11,7 @@ Start by locating the installed natlang version or source checkout and existing 
 
 ## Choose the smallest adequate boundary
 
-Read [hosts and model adapters](references/hosts.md) for Python/Node and driver contracts; [frontend applications](references/frontend.md) for browser model loading, event reducers, and generated interfaces; [effects and recovery](references/recovery.md) for native objects, streams, traces, concurrency, and durability. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
+Read [hosts and model adapters](references/hosts.md) for Python/Node and driver contracts; [frontend applications](references/frontend.md) for browser model loading, event reducers, and generated interfaces; [terminal applications](references/terminal.md) for native CLIs, event queues, structured views and durable sessions; [effects and recovery](references/recovery.md) for native objects, streams, traces, concurrency, and durability. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
 
 1. Describe who owns state, the semantic algorithm, native objects, and effects. Choose the runtime, evaluator, and model independently. An engine name selects an implementation available in that embedding; it does not install a new language backend.
 2. Pass typed values or checked source definitions to the runtime. Expose host operations through crisp helpers or declared effect callbacks. Let natlang call them repeatedly and inspect observations. Host objects may hold databases, jobs, binary data, or a stronger model client without extending the language core.

@@ -38,6 +38,14 @@
     "./browser": {
       "types": "./dist/browser/index.d.ts",
       "default": "./dist/browser/natlang.js"
+    },
+    "./terminal": {
+      "types": "./dist/terminal/index.d.ts",
+      "default": "./dist/terminal/index.js"
+    },
+    "./model": {
+      "types": "./dist/model/index.d.ts",
+      "default": "./dist/model/index.js"
     }
   },
   "files": [
@@ -45,6 +53,7 @@
     "examples/browser-local",
     "prelude.js",
     "BROWSER_CLIENT.md",
+    "TERMINAL_APPLICATIONS.md",
     "README.md"
   ]
 }
