@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scripts.select_sft import distribution, select
+from scripts.select_sft import difficulty, distribution, select
 
 
 def row(identity, program, skill):
@@ -36,3 +36,35 @@ def test_distribution_exposes_algorithm_and_target_length_mix():
     assert stats["algorithmic_fraction"] == .5
     assert stats["reasoning_rows"] == 1
     assert stats["completion_chars"]["max"] == len(rows[0]["completion"])
+
+
+def test_selection_prefers_dependent_and_iterated_calls():
+    simple = row("simple", "p", "call")
+    simple["native_target"] = "<|tool_call_start|>[call(function='f', to='return', inputs={'x': 'args/x'})]"
+    dependent = row("dependent", "p", "call")
+    dependent["native_target"] = "<|tool_call_start|>[call(function='f', to='return', inputs={'x': 'let/x'})]"
+    iterated = row("iterated", "p", "call")
+    iterated["native_target"] = "<|tool_call_start|>[call(function='f', to='return', over='args/x')]"
+    kept, _ = select([simple, dependent, iterated], max_per_program=2,
+                     max_writes=1, max_terminals=1)
+    assert {r["id"] for r in kept} == {"dependent", "iterated"}
+    assert difficulty(iterated)[0] > difficulty(simple)[0]
+
+
+def test_selection_preserves_minimum_contrast_and_state_access():
+    rows = [row("read", "p", "read"), row("write-a", "p", "write"),
+            row("write-b", "p", "write"), row("reply", "p", "reply"),
+            row("error", "p", "report_error"), row("edit", "p", "edit"),
+            row("call", "p", "call")]
+    kept, _ = select(rows, max_per_program=2, max_writes=1, max_terminals=1)
+    skills = {r["skill"] for r in kept}
+    assert {"read", "write", "reply", "report_error", "edit"} <= skills
+    assert sum(r["skill"] == "write" for r in kept) == 1
+
+
+def test_selection_keeps_all_failure_contrasts():
+    rows = [row(f"valid-{i}", "p", "write") for i in range(4)]
+    for item in rows:
+        item["family"] = "failure_bounds_valid"
+    kept, _ = select(rows, max_per_program=1, max_writes=1, max_terminals=1)
+    assert kept == rows

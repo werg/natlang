@@ -21,6 +21,37 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def difficulty(row: dict) -> tuple[int, tuple[str, ...]]:
+    """Estimate execution difficulty from the target and available state.
+
+    This deliberately uses only stable, renderer-independent metadata and the
+    canonical native target.  It is a curriculum signal, not a correctness
+    judgment: higher-scoring turns are the state transitions most likely to
+    exercise orchestration rather than surface formatting.
+    """
+    skill = row.get("skill") or "unknown"
+    parts = set(skill.split("+"))
+    target = row.get("native_target") or ""
+    context_items = int(row.get("context_items") or 0)
+    features = []
+    score = 0
+    if parts & {"report_error", "report_blocker", "edit"}:
+        score += 100; features.append("failure_or_repair")
+    if any(marker in target for marker in ("over=", "init=", "until=")):
+        score += 80; features.append("iteration")
+    if "call" in parts and "inputs=" in target and "'let/" in target:
+        score += 60; features.append("dependent_call")
+    if "+" in skill:
+        score += 45; features.append("multi_action")
+    if "run_code" in parts:
+        score += 40; features.append("algorithmic_glue")
+    if "call" in parts and "to='let/" in target:
+        score += 25; features.append("local_result")
+    if context_items >= 8 and parts & {"call", "write", "mark_done", "read"}:
+        score += min(30, 10 + context_items); features.append("later_state")
+    return score, tuple(features)
+
+
 def rank(row: dict) -> tuple:
     parts = set((row.get("skill") or "unknown").split("+"))
     priority = (0 if parts & {"report_error", "report_blocker", "edit"} else
@@ -28,7 +59,8 @@ def rank(row: dict) -> tuple:
                 3 if "call" in parts else 4 if "mark_done" in parts else
                 5 if "write" in parts else 6 if "reply" in parts else 4)
     stable = hashlib.sha256(row["id"].encode()).hexdigest()
-    return priority, stable
+    score, _ = difficulty(row)
+    return -score, priority, stable
 
 
 def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminals: int):
@@ -41,10 +73,23 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
         bucket = by_program[program]
         writes = sorted((r for r in bucket if "write" in (r.get("skill") or "").split("+")), key=rank)
         terminals = sorted((r for r in bucket if r.get("skill") == "reply"), key=rank)
-        allowed = {r["id"] for r in writes[:max_writes]} | {r["id"] for r in terminals[:max_terminals]}
+        reads = sorted((r for r in bucket if "read" in (r.get("skill") or "").split("+")), key=rank)
+        rare = [r for r in bucket if
+                set((r.get("skill") or "").split("+")) & {"report_error", "report_blocker", "edit"}
+                or (r.get("family") or "").startswith("failure_")]
+        # Preserve the minimum contrast and state-access examples even when a
+        # program has more hard transitions than its ordinary cap.  In that
+        # uncommon case essential coverage may exceed max_per_program.
+        mandatory = ({r["id"] for r in writes[:max_writes]} |
+                     {r["id"] for r in terminals[:max_terminals]} |
+                     {r["id"] for r in reads[:1]} |
+                     {r["id"] for r in rare})
+        allowed = mandatory
         candidates = [r for r in bucket if ("write" not in (r.get("skill") or "").split("+")
                                              and r.get("skill") != "reply") or r["id"] in allowed]
-        chosen = sorted(candidates, key=rank)[:max_per_program]
+        required = [r for r in bucket if r["id"] in mandatory]
+        optional = [r for r in sorted(candidates, key=rank) if r["id"] not in mandatory]
+        chosen = required + optional[:max(0, max_per_program - len(required))]
         chosen_ids = {r["id"] for r in chosen}
         kept.extend(r for r in bucket if r["id"] in chosen_ids)  # retain source trajectory order
         for row in bucket:
@@ -63,9 +108,15 @@ def distribution(rows):
     algorithmic = sum((r.get("family") or "").startswith("algo_") or
                       ":array_kernel:" in r["id"] or ":staged_ranking:" in r["id"] or
                       ":algorithm_pipeline:" in r["id"] for r in rows)
+    difficulty_features = Counter(feature for row in rows for feature in difficulty(row)[1])
+    scores = sorted(difficulty(row)[0] for row in rows)
     return {"families": dict(families), "algorithmic_rows": algorithmic,
             "algorithmic_fraction": algorithmic / len(rows) if rows else 0,
             "reasoning_rows": sum("<think>" in r["completion"] for r in rows),
+            "difficulty_features": dict(difficulty_features),
+            "difficulty_score": {"p50": scores[len(scores) // 2] if scores else 0,
+                                 "p90": scores[min(len(scores) - 1, len(scores) * 9 // 10)] if scores else 0,
+                                 "max": scores[-1] if scores else 0},
             "completion_chars": {"p10": percentile(.1), "p50": percentile(.5),
                                  "p90": percentile(.9), "max": percentile(1)}}
 
