@@ -78,3 +78,16 @@ def test_microbatch_token_budget_and_cache_identity(tmp_path):
     cache.db.close()
     with pytest.raises(ValueError, match='mismatch'):
         TokenCache(tmp_path / 'tokens.db', {'data': 'two'})
+
+
+def test_partial_layer_checkpointing_retains_sparse_activations():
+    from scripts.train_lora import set_layer_checkpointing
+    config = Lfm2Config(vocab_size=32, hidden_size=32, intermediate_size=64,
+                       num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2,
+                       full_attn_idxs=[1, 3], use_cache=False)
+    model = Lfm2ForCausalLM(config)
+    total, active = set_layer_checkpointing(model, True, retain_every_n_layers=2)
+    assert (total, active) == (4, 2)
+    assert model.is_gradient_checkpointing
+    set_layer_checkpointing(model, False)
+    assert not model.is_gradient_checkpointing

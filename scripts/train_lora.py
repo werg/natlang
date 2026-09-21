@@ -137,6 +137,28 @@ def microbatches(examples, size, token_budget):
         yield batch
 
 
+def set_layer_checkpointing(model, enabled, retain_every_n_layers=0):
+    """Checkpoint a configurable subset of Transformers decoder layers.
+
+    Transformers 5.5 only exposes all-or-nothing checkpointing, although each
+    GradientCheckpointingLayer has an independent flag.  Keeping activations
+    for a sparse set of layers trades otherwise idle VRAM for less backward
+    recomputation.  A value of four retains every fourth layer and checkpoints
+    the other three.
+    """
+    if enabled:
+        model.gradient_checkpointing_enable()
+        from transformers.modeling_layers import GradientCheckpointingLayer
+        layers = [module for module in model.modules()
+                  if isinstance(module, GradientCheckpointingLayer)]
+        if retain_every_n_layers:
+            for index, layer in enumerate(layers):
+                layer.gradient_checkpointing = index % retain_every_n_layers != 0
+        return len(layers), sum(bool(layer.gradient_checkpointing) for layer in layers)
+    model.gradient_checkpointing_disable()
+    return 0, 0
+
+
 class TokenCache:
     """Lazy persistent token cache, bound to source bytes and tokenizer behavior."""
     def __init__(self, path, identity):
@@ -176,6 +198,8 @@ def main():
     ap.add_argument("--batch-tokens", type=int, default=8192, help="maximum padded tokens per microbatch; long examples run alone")
     ap.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--checkpoint-above-tokens", type=int, default=0, help="with checkpointing enabled, skip recomputation for microbatches at or below this padded-token count")
+    ap.add_argument("--retain-every-n-layers", type=int, default=0,
+                    help="retain activations for every Nth decoder layer; zero checkpoints every layer")
     ap.add_argument("--token-cache", type=Path)
     ap.add_argument("--benchmark-steps", type=int, default=0, help="isolated throughput run, no heldout evaluation or saved model")
     ap.add_argument("--max-len", type=int, default=3072)
@@ -204,8 +228,10 @@ def main():
         ap.error("--steps must be positive")
     if a.epochs is not None and a.epochs <= 0:
         ap.error("--epochs must be positive")
-    if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens, a.snapshot_every) < 0:
+    if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens, a.snapshot_every, a.retain_every_n_layers) < 0:
         ap.error("batch sizes and save interval must be positive; benchmark steps nonnegative")
+    if not a.gradient_checkpointing and a.retain_every_n_layers:
+        ap.error("--retain-every-n-layers requires gradient checkpointing")
     if a.full and a.load_in_4bit:
         ap.error("4-bit loading is for LoRA adapters, not full-weight training")
     if a.unsloth_lfm_experts and not a.load_in_4bit:
@@ -242,6 +268,8 @@ def main():
                     "target_examples": target_examples, "steps": a.steps, "lr": a.lr,
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens}
+        if a.retain_every_n_layers:
+            identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.init_adapter is not None:
             identity["init_adapter"] = {"path": str(a.init_adapter),
                                         "sha256": directory_digest(a.init_adapter)}
@@ -322,6 +350,11 @@ def main():
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
         print(f"trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.3f}%)", flush=True)
+
+    if a.gradient_checkpointing:
+        layer_count, checkpointed_count = set_layer_checkpointing(
+            model, True, a.retain_every_n_layers)
+        print(f"activation checkpointing: {checkpointed_count}/{layer_count} decoder layers", flush=True)
 
     def export_merged():
         merged = model.merge_and_unload() if not a.full else model
@@ -465,10 +498,7 @@ def main():
             encoded = collate_completions(batch, pad_id=tok.pad_token_id or 0)
             want_checkpointing = a.gradient_checkpointing and encoded["input_ids"].numel() > a.checkpoint_above_tokens
             if want_checkpointing != model.is_gradient_checkpointing:
-                if want_checkpointing:
-                    model.gradient_checkpointing_enable()
-                else:
-                    model.gradient_checkpointing_disable()
+                set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
             loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
             loss.backward()
             running += loss.detach()

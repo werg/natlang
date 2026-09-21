@@ -187,8 +187,10 @@ Training supports `--microbatch N`, `--batch-tokens N`, `--token-cache PATH`, an
 `--[no-]gradient-checkpointing`. `--accum` still counts **examples per optimizer
 step**, so changing microbatch size preserves the intended loss weighting.
 `--checkpoint-above-tokens N` retains checkpointing only above that padded-token
-count. Larger batches and disabling checkpointing are opt-in: neither is reliably
-faster or memory-safe on the laptop. Per-step throughput is saved in
+count. `--retain-every-n-layers N` keeps every Nth decoder layer's activations
+and checkpoints the intervening layers, allowing a measured memory/speed tradeoff.
+Larger batches and reducing checkpointing are opt-in: neither is reliably faster
+or memory-safe on the laptop. Per-step throughput is saved in
 `throughput.json`; `--benchmark-steps N` runs without saving a trained model.
 
 Build the optional CUDA convolution kernel against the existing training image:
