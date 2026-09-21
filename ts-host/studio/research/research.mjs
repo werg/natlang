@@ -10,12 +10,16 @@ const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
-const research = new ResearchHost({ store, runSource: async (files, root, inputs, options) => {
+const research = new ResearchHost({ store, runContext: () => ({
+    model: client?.modelStatus?.id ?? '', seed: { mode: 'derived', root: Number($('seed').value) },
+    evaluator: 'typescript-host/browser',
+}), runSource: async (files, root, inputs, options) => {
+    const provenance = options.provenance;
     const result = await runChild({ request: { source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) }, inputs,
-        options: { seed: { mode: 'derived', root: Number($('seed').value) } } }, researchNative: options?.native_ids ?? [] },
+        options: { seed: provenance.seed } }, researchNative: options?.native_ids ?? [] },
     { model: client?.model, signal: abort?.signal, onProgress: status });
     const trace_id = crypto.randomUUID();
-    await store.put('child_runs', trace_id, { ...result, files, root, inputs });
+    await store.put('child_runs', trace_id, { ...result, files, root, inputs, provenance });
     return { value: result.value, trace_id };
 } });
 async function recover(current) {

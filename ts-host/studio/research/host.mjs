@@ -3,9 +3,9 @@ import { valuePreview } from '../shared/domain.mjs';
 
 /** Bind the research program to one workspace and one in-flight event. */
 export class ResearchHost {
-    constructor({ store, runSource }) {
+    constructor({ store, runSource, runContext }) {
         this.store = store;
-        this.runtime = new ResearchRuntime({ adapter: store, runSource });
+        this.runtime = new ResearchRuntime({ adapter: store, runSource, runContext });
         this.event = null;
         this.effects = [];
     }

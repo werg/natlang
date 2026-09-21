@@ -12,7 +12,7 @@ const comparison = { tag: 'section', children: [
 test('a generated interaction is bound to a real natlang handler and a pinned manifest', async () => {
     const adapter = new MemoryResearchAdapter();
     const calls = [];
-    const runtime = new ResearchRuntime({ adapter, runSource: async (files, root, inputs) => {
+    const runtime = new ResearchRuntime({ adapter, runContext: () => ({ model: 'fixture', seed: { root: 7 } }), runSource: async (files, root, inputs) => {
         calls.push({ files, root, inputs });
         return { value: { cohort: inputs.cohort, difference: -2 }, trace_id: 'trace-1' };
     } });
@@ -25,6 +25,7 @@ test('a generated interaction is bound to a real natlang handler and a pinned ma
     assert.equal(view.revision, base.id);
     assert.equal(view.bindings.compare.root, 'methods/compare.nl');
     const first = await runtime.execute(base.id, 'methods/compare.nl', { cohort: 'A' }, 'event-1');
+    assert.deepEqual(first.provenance, { model: 'fixture', seed: { root: 7 } });
     const again = await runtime.execute(base.id, 'methods/compare.nl', { cohort: 'A' }, 'event-1');
     assert.deepEqual(again, first);
     assert.equal(calls.length, 1);
@@ -34,6 +35,16 @@ test('a generated interaction is bound to a real natlang handler and a pinned ma
     assert.equal((await runtime.read(base.id, 'methods/compare.nl')).content.includes('Compare.'), true);
     const found = await runtime.search(newVersion.id, 'failures');
     assert.equal(found[0].path, 'evidence/cohorts.json');
+});
+
+test('failed child execution keeps the invocation provenance', async () => {
+    const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(),
+        runContext: () => ({ model: 'fixture', seed: { root: 19 } }),
+        runSource: async () => { throw new Error('bad analysis'); } });
+    const manifest = await runtime.commit('', { 'methods/fail.ts': { kind: 'source', content: 'throw new Error("bad analysis")' } });
+    const receipt = await runtime.execute(manifest.id, 'methods/fail.ts', {}, 'failed-1');
+    assert.equal(receipt.status, 'failed');
+    assert.deepEqual(receipt.provenance, { model: 'fixture', seed: { root: 19 } });
 });
 
 test('view validation rejects broken bindings and duplicate controls', () => {

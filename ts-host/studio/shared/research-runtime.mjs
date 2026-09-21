@@ -54,10 +54,11 @@ export function validateInteraction(tree, bindings) {
 
 /** Application host capabilities. Meaning stays in natlang source and state. */
 export class ResearchRuntime {
-    constructor({ adapter, runSource, key = 'research' }) {
+    constructor({ adapter, runSource, runContext = () => ({}), key = 'research' }) {
         this.adapter = adapter;
         this.workspace = new ResearchWorkspace(adapter, key);
         this.runSource = runSource;
+        this.runContext = runContext;
     }
     async manifest(id) {
         const snapshot = await this.workspace.snapshot();
@@ -102,20 +103,21 @@ export class ResearchRuntime {
         assert(manifest, `Unknown manifest ${manifestId}`);
         const files = sourceFiles(snapshot, manifest);
         assert(Object.hasOwn(files, root), `Missing root source ${root}`);
-        await this.adapter.beginEffect({ id: callId, manifest: manifestId, root, inputs: copy(inputs) });
+        const provenance = copy(this.runContext());
+        await this.adapter.beginEffect({ id: callId, manifest: manifestId, root, inputs: copy(inputs), provenance });
         // A loaded model and selected eval environment are supplied by the embedding.
         // This boundary stores the actual result, including failure, as an effect.
         let receipt;
         try {
             const native_ids = [...new Set(Object.values(manifest.files).map(id => snapshot.artifacts[id]?.content?.native_id).filter(Boolean))];
-            const result = await this.runSource(Object.entries(files).map(([id, source]) => ({ id, source })), root, copy(inputs), { native_ids });
+            const result = await this.runSource(Object.entries(files).map(([id, source]) => ({ id, source })), root, copy(inputs), { native_ids, provenance });
             receipt = { id: callId, status: 'complete', manifest: manifestId, root, inputs: copy(inputs),
-                value: copy(result.value), trace_id: result.trace_id ?? '' };
+                value: copy(result.value), trace_id: result.trace_id ?? '', provenance };
         }
         catch (error) {
             const detail = String(error);
             receipt = { id: callId, status: /cancel|abort|terminat/i.test(detail) ? 'unknown' : 'failed',
-                manifest: manifestId, root, inputs: copy(inputs), error: detail };
+                manifest: manifestId, root, inputs: copy(inputs), error: detail, provenance };
         }
         await this.adapter.finishEffect(callId, receipt);
         return copy(receipt);

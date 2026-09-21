@@ -61,7 +61,9 @@ without a host operation.
 - A child call receives a stable event-derived ID and a pinned source manifest.
   Its running receipt is saved before execution. A recovered running receipt
   becomes `unknown` and is never silently replayed. Actual values and trace
-  references are saved. A cancelled call with uncertain effects is `unknown`.
+  references are saved. Every child receipt also records its model, root seed
+  and selected evaluator, including failed calls. A cancelled call with
+  uncertain effects is `unknown`.
 - Large imported text is kept in `native_values`; its artifact holds a reference
   and preview. Natlang can search it or read explicit windows. Users can
   download the complete original. Export includes full native values, source,
