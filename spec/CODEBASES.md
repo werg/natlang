@@ -1,7 +1,7 @@
 # Code bases, calls and locals: design rationale
 
 The normative text is in `SPEC.md`: §3 (lambda parts, locals, code bases),
-§4 (combinators), §5 (the seven tools, `call`), §7 (how an interpreter works).
+§4 (combinators), §5 (the eight tools, `call`), §7 (how an interpreter works).
 A worked example is `examples/triage/`; the tests are `tests/test_codebase.py`.
 This note records why the design is what it is.
 
@@ -13,10 +13,12 @@ stated structure is a small step at a time. Prompt-like tasks (judge,
 classify, extract, rewrite) are the leaves of such programs.
 
 **No anonymous lambdas.** Every sub-task is an instance of a function of the
-acting lambda's code base. Under constrained decoding the function names,
-parameter names and type-fitting input paths are enums: the model chooses, it
-does not spell, and it never authors instructions, its weakest skill. And
-because a code base without cycles is all there is to call, there is no recursion.
+acting lambda's code base. Tool alternatives constrain function and parameter
+names and literal types. Input paths carry parameter type descriptions and are
+checked by the runtime; they are not enumerated per parameter as state grows.
+The interpreter follows the authored structure. It can specialise editable copies;
+generated source can also be loaded through explicit host facilities. Checked
+codebase graphs reject cycles, so calls do not provide recursion.
 
 **One action to call.** `call(function, to, inputs, ...)` places and runs. A
 placed-but-unrun instance, a separate `run`, continuations with parameters to
@@ -45,7 +47,9 @@ The former 16-local and six-pending-node fixed limits were removed for the
 same reason. Recursion checks remain, and embeddings may explicitly choose
 execution budgets when their environment requires them.
 
-Not yet implemented: `types.ts` beyond simple aliases.
+Folder `types.ts` supports named type aliases, including nested records and recursive
+types. It is not a general TypeScript module/typechecker: imports, interfaces, and
+arbitrary TypeScript declarations are not supported.
 
 Folder `types.ts` aliases are terminated by a semicolon at declaration depth,
 not by a semicolon inside a record. Both native hosts accept comma or semicolon

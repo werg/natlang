@@ -77,7 +77,8 @@ effects: []                                  # pure; or ["ticketing.write"]
 - **`args` is frozen** once the instance starts, and always read-only to the
   instance itself.
 - **Crisp functions and combinators are typed too** (`PLAN.md` §2.4). A crisp
-  function's `code` is checked against its signature. `Map<A, B>` requires
+  function's returned value is checked against its signature; arbitrary source
+  expressions are not statically type-checked. `Map<A, B>` requires
   `over: A[]` and a function whose one unbound parameter takes `A`, and fits
   any slot of type `B[]`; `Fold<A, S>` requires a function `(acc: S, item: A)
   -> S` and fits a slot of type `S`; `Iterate<S>` requires a step `S -> S`, a
@@ -87,7 +88,8 @@ effects: []                                  # pure; or ["ticketing.write"]
   and a literal fits its base type (`Label[]` fits `Text[]`), which is what
   lets typed results flow into generic library functions.
 - **`effects`** lists the side-effect capabilities the function may use. A
-  function with no `effects` is pure. A callee cannot have effects its caller
+  function with no `effects` cannot use declared `fx` operations. Direct shared-host
+  access has separate authority and does not establish purity by this declaration. A callee cannot have effects its caller
   lacks. Effects can be caused by `run_code` and by crisp functions; both are
   checked against the enclosing function's declared `effects`. `run_code`
   never writes to the tree.
@@ -201,19 +203,20 @@ take, never reads the instructions, and never owns control flow.
 
 ### 6.1 What "deep" means, tool by tool
 
-Every turn is decoded under a grammar derived from the **current tree, its
-types, and the code base**, over the model's native tool-call text, so that
-ill-formed and ill-typed calls cannot be emitted (`spec/SPEC.md` §5.8).
+The typed decoding policy derives alternatives from the current tree, types,
+and codebase. Broader decoder policies intentionally allow invalid proposals
+through to runtime validation. Grammar acceptance alone is not a type or
+semantic correctness guarantee (`spec/SPEC.md` §5.8).
 
 | Part of the call | Constrained to |
 |------------------|----------------|
-| Tool name | the six tools (`call` only when the lambda has functions) |
+| Tool name | the eight standard tools (`call` only when callable functions are present) |
 | `read(path, start, end)` | paths that exist in scope, `codebase/<f>`; positions that exist |
 | `write(path, type, value)` | one alternative per writable slot: the path, **its type as a constant**, and the grammar of `Draft<T>` for the value; or a new `let/<name>` with a stated type |
 | `write(path, type, source)` | sources whose type fits the slot |
 | `write(path, "Function<f>")` | names of the code base |
-| `edit(path, old, new)` | editable texts: own `instructions`, instructions of function copies |
-| `call(function, to, inputs, …)` | function names of the code base and of copies; **per parameter, the paths whose type fits it**; `over` to lists; `until` to `Bool` functions of one parameter; `to` to writable slots or a new local |
+| `edit(path, old, new)` | editable texts according to the current surface, including function copies; marked program instructions remain immutable |
+| `call(function, to, inputs, …)` | function names of the code base and of copies; **per parameter, a workspace-path string with its expected type; runtime checks the binding**; `over` to lists; `until` to `Bool` functions of one parameter; `to` to writable slots or a new local |
 | `run_code` body | runtime validation at the boundary; static checking against a generated `.d.ts` is a later stage (§6.3) |
 
 Path, type and value belong together, which JSON Schema cannot say at the top
@@ -223,12 +226,14 @@ and the grammar is built from those. Grammars are cached by type hash.
 Path constraint matters as much as value constraint: in the RLM training
 data, 13 % of turns referenced variables that did not exist
 (`SYNTHETIC_DATA.md` Y9). Under a tree-derived path grammar that class of
-error cannot occur, and with type-filtered `inputs` neither can passing the
-wrong kind of value.
+error can be reduced. Current call schemas avoid enumerating all input paths
+per parameter to prevent schema growth; runtime validation catches missing paths
+and wrong types. Literal `values` retain parameter-derived schemas.
 
 ### 6.2 The layers that remain, in order
 
-1. **Unrepresentable**: type- and tree-directed decoding (§6.1).
+1. **Constrain generation where supported**: type- and tree-directed decoding
+   (§6.1), with runtime validation for constraints not represented by the decoder.
 2. **Validate before mutation**, including any attached line marks.
 3. **Reject with message**: the model sees failures and chooses a correction.
    There is no silent retry or budget refund; failed code may have performed effects.

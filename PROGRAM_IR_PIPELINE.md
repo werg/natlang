@@ -107,10 +107,11 @@ programs. The adapter checks each program against the published answer, then
 stores the natural-language question, compact scene graph, and program nodes.
 The `--every 100` sample spans the full question order and yields 7,000 train
 programs; the analogous validation sample has 1,500 programs.
-The current harness allows at most 16 locals. CLEVR graphs with at most 16
-nodes are emitted as one `run_code` and write per node; larger graphs are
-compiled into one exact code expression. The IR keeps the full node graph in
-both cases, so a later harness can choose a different execution plan.
+The original adapter used a 16-node split between per-node actions and one
+compiled expression because the harness then limited locals. That language
+limit has been removed. Treat any adapter threshold as a corpus-generation
+choice, not a current runtime requirement; the IR retains the full graph for
+alternative execution plans.
 
 ## Migration status
 

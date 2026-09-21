@@ -12,7 +12,7 @@ states the structure. The model carries it out one small step at a time with
 eight tools (`read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`);
 every function instance is a fresh short episode over a typed object tree.
 Prompt-like tasks (judge, classify, extract, rewrite) are the leaves. The
-harness provides memory, typing, a sandbox and I/O; it parses no instructions
+harness provides memory, typing, pluggable crisp execution and I/O; it parses no instructions
 and owns no control flow.
 
 ```
@@ -24,6 +24,23 @@ function triage(tickets, rubric) -> Report
   flags    = for each t in real: is_urgent(t)
   ...
 ```
+
+## Building with natlang: agent skills
+
+Coding agents should install and use the [bundled natlang skills](skills/README.md):
+[natlang-authoring](skills/natlang-authoring/SKILL.md) for typed semantic algorithms
+and [natlang-integration](skills/natlang-integration/SKILL.md) for complete
+Python, Node, and browser applications.
+
+```bash
+# After installing natlang in this environment:
+python -m natlang.install_skills --dest ~/.codex/skills
+```
+
+The installer copies complete, standalone skills and refuses existing destinations.
+For other agents, choose their skill discovery directory with `--dest` or copy the
+folders. Skills ship in the source repository and Python wheel; Node-only users
+can copy them from the checkout. See the [installation and maintenance guide](skills/README.md).
 
 ## Documents
 
@@ -99,8 +116,9 @@ Validation-policy experiments (current student server):
 ```
 
 The default interpreter leaves a failed lambda quiesced and returns validation
-diagnostics to its caller (`validation_feedback="caller"`). Local repair remains
-an explicit experiment: `ToolAgent(validation_feedback="local")`, or
+diagnostics to its caller (`validation_feedback="caller"`). Lower-level hosts retain
+that default. `BrowserNatlangApplication` defaults to local repair so interactive
+applications can correct rejected actions. For Python or lower-level hosts, select `ToolAgent(validation_feedback="local")`, or
 `--validation-feedback local` in the application/conformance runners. This does not roll back effects or automatically
 retry. The probe distinguishes impossible instructions from repairable execution
 mistakes, and counts budget exhaustion separately from deliberate failure.
@@ -134,7 +152,7 @@ models. Results separate work actions from replies and are written as JSON to
 `runs/`, or `--out PATH`. `baseline.py` also writes JSON with computed totals and
 actual emitted records. Pass `--model-label NAME` to identify a checkpoint.
 
-Crisp code runs in QuickJS. Plain JavaScript needs no Node installation; erasable
+Python's default crisp engine runs in QuickJS; the native TypeScript and browser hosts use their own shared-host evaluators. Plain JavaScript needs no Node installation; erasable
 TypeScript annotations additionally need Node >=22.13 for
 [`stripTypeScriptTypes`](https://nodejs.org/download/release/v22.13.1/docs/api/module.html).
 This strips annotations without static type checking; values remain checked at

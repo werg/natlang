@@ -34,6 +34,11 @@ or adding ambient interrupts. An eventual host step callback could let one
 open Fold stream publish intermediate snapshots, if a real application needs
 it. The event queue is the simpler first contract.
 
+The shared application defaults to `validationFeedback: 'local'`: rejected tool
+actions return diagnostics to the model for repair. Set `'caller'` explicitly to
+end the episode on validation failure. The lower-level host retains its caller
+default. Neither mode rolls back native effects.
+
 ## UI choices
 
 1. **Natlang reducer, crisp view.** Use for high-rate controls and exact
@@ -51,7 +56,9 @@ it. The event queue is the simpler first contract.
 
 Application-specific view schemas can be passed to another renderer such as
 React or a canvas host. The client and application queue have no dependency
-on the DOM renderer. Native DOM, model, editor and media objects may live in
+on the DOM renderer. Inquiry Lab additionally provides generated HTML/JS modules
+with pinned event bindings in `studio/shared/generated-module.mjs`; this is an
+application library, not an implicit capability of every browser client. Native DOM, model, editor and media objects may live in
 the selected browser eval environment; portable state and view descriptions
 cross the natlang boundary. A page-authored programme should get a separate
 host environment with only its intended capabilities.

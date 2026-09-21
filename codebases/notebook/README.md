@@ -22,9 +22,10 @@ presentation cell, changes the SQL source, verifies invalidation and reruns,
 and checks that a write-shaped SQL statement cannot mutate the database.
 
 This is a local batch notebook. SQL cells are application-level evaluator
-bindings through the TypeScript host; the natlang runtime does not yet expose
-SQLite as a selected `run_code` engine. That is the concrete cross-engine
-boundary to compare before promoting SQL into the engine registry. Live edit
+bindings through the TypeScript host. Python separately provides an optional
+registered SQLite executor in `hosts/sqlite_host.py`; the native TS notebook
+binding does not automatically register that engine in `run_code`. Cross-host
+SQL parity remains an explicit integration task. Live edit
 events, background runs, persistent datasets, large table paging and a
 teacher quality pilot remain product gates. Samples are truncated for the
 model; output hashes and full values remain in the host.

@@ -27,7 +27,7 @@ for, and carries it out. It does not invent decompositions and cannot author
 functions. Prompt-like single tasks remain essential, as the **leaves** of such
 programs and as a retained share of the corpus.
 
-The harness provides memory, typing, a sandbox, I/O, and a scheduler. It
+The harness provides memory, typing, selected crisp execution, I/O, and scheduling. It
 parses no instructions, holds no cursor, and owns no control flow. Every
 constraint it imposes is type-level and applies at write time. All
 interpretive discipline (taking statements in order, one call per loop, taking
@@ -151,7 +151,7 @@ provides a small set of **typed node kinds with fixed semantics**, all reached
 through `call`.
 
 **Crisp functions.** A function whose body is TypeScript. Calling it runs the
-code in the sandbox with `args` as its typed input; no model episode is
+code in the selected executor with `args` as its typed input; no model episode is
 involved. Results get provenance like everything else, and large values land
 in their slot without passing through the model's tokens. A failing crisp
 function quiesces like any other, with the error as its note. Crisp functions
@@ -197,17 +197,18 @@ not determine the result, `report_blocker`.
 
 ## 3. The agent interface
 
-### 3.1 Tools (seven)
+### 3.1 Tools (eight)
 
 | Tool | Arguments | Notes |
 |------|-----------|-------|
 | `read` | `path`, `start?`, `end?` | a value, a range of it, or `codebase/<f>` |
 | `write` | `path`, `type`, `value` \| `source` | a complete plain value into `return` or a local; `source` copies an existing value; type `Function<f>` copies a function into a local |
 | `edit` | `path`, `old`, `new` | `old` must occur exactly once; function copies in locals only |
-| `run_code` | `code` | exact glue; sees `args` and `locals`; the result comes back |
+| `run_code` | `code`, selected `engine` | exact glue; sees `args` and `locals`; the result comes back |
 | `call` | `function`, `to`, `inputs?`, `values?`, `over?`, `init?`, `until?`, `max?` | place and run an instance in one action; again with only `function` + `to` to resume. Present only when the lambda has functions |
 | `mark_done` | `start`, `end?`, `skipped?` | what is done is state: lines of the own program are finished or did not apply; `write` and `call` also take `done?` |
 | `report_blocker` | `missing` | end without a result, saying exactly what is missing |
+| `report_error` | `message` | end without a result, explaining invalid or impossible work |
 
 The tool list is fixed; only argument schemas change, regenerated each turn
 from the tree, the types, and the code base. **Instructions and data travel in
@@ -216,15 +217,16 @@ return type, and the function listing (signature plus one-line description);
 the harness performs the first step, `read(path="args")`, and the workspace
 arrives as a tool result. **The reply ends the episode and is never the
 result**: the result is what was written to `return`; a reply with `return`
-incomplete gets one line saying what is missing, twice at most, then the
-lambda quiesces.
+incomplete quiesces under caller feedback. Local feedback supplies missing-return
+nudges (currently at most two); browser applications default to local feedback.
 
 **Constrained decoding** (`natlang/native.py`). Each turn is decoded under a
 grammar built from the turn's tool schemas, over the model's *native* call
 text. The model chooses between calling and replying and which call to make;
-it cannot name a path or a function that does not exist, put a wrongly typed
-value into a slot, bind a parameter to a value whose type does not fit, invent
-or omit a field, or read a range that is not there. Tools carry
+typed policies constrain related paths, types and literal values. Broader policies
+allow invalid proposals to reach runtime diagnostics. In particular, call input
+paths are strings with parameter type descriptions, checked for existence and
+fit by the runtime. Grammar validity is not proof of semantic correctness. Tools carry
 `x-natlang-alternatives`, argument sets that belong together (a path, its
 type as a constant, and the value grammar; a function and its parameters). A
 turn's grammar is built from the state before the turn, so a call that depends
@@ -271,8 +273,8 @@ model, speculative execution.
   inline `codebase:` in YAML programs.
 - **Runtime**: instances, crisp functions, Map/Fold/Iterate with resumption,
   swap-out, quiescence, effect journal, open lists, recursion guards (no
-  identical child, at most 6 nested pending nodes, run budgets of 256 episodes
-  and depth 8).
+  identical child). Episode/depth/action/token/time budgets are optional and
+  unbounded by default; there is no fixed pending-node nesting limit.
 - **Tool surface** (`natlang/surface.py`) and **native constrained decoding**
   (`natlang/native.py`, portable GBNF; `natlang/gbnf.py` is a recognizer used
   to test grammars without an engine).
@@ -525,7 +527,7 @@ frontier model on quality, latency, and cost.
 | The model does the items' work itself instead of calling | Structure lint in grading and in trace filtering; drills with small lists where answering by hand is tempting. |
 | Leaves exceed the model's knowledge floor | Choose task families with small-judgment leaves; authors split leaves; escalation per leaf later. |
 | Grammar constraints distort the model's outputs | Train under the same constraints; monitor P(call) and the mask-bind rate (`TYPES.md` §6.5). |
-| Tool schemas grow with the state | Alternatives only for named slots and never inside a call in progress; path enums capped; measured in tests. |
+| Tool schemas grow with the state | Compact call parameter schemas avoid repeating state-path enums; full path/type validity is checked at runtime. Measure actual presented schemas and state previews. |
 | Rendering drifts between data generation and inference | One versioned policy; the generator and inference share `surface.py`; equality tested in CI. |
 | Overfitting to synthetic pseudocode | Several dialects, verified paraphrases, human-written code bases, held-out shapes and dialects. |
 | The base model is weak at code | Exact work is the author's crisp functions; `run_code` is one expression; a Python-shaped fallback to measure. |
@@ -543,7 +545,7 @@ frontier model on quality, latency, and cost.
   written by `mark_done` or the `done` argument). Crossing finished steps off
   by editing the text is gone. Which way of marking models prefer is to be
   measured (standalone, grouped with the next action, en passant).
-- Seven fixed tools; no selective filtering of the tool list; the reply never
+- Eight standard tools; no selective filtering of the tool list; the reply never
   carries the result; data only through the tool channel.
 - Template-agnostic by default: the prompt is rendered by the loaded model's
   own official chat template; per-model adaptations (wrappers, tool aliases)
@@ -767,13 +769,16 @@ Artifacts: `runs/student-v8-{typed,runtime}-write-types.json`,
   serve from Docker (`scripts/serve.sh`); ~26,000 tok/s prefill and 224 tok/s
   decode for the 350M on an RTX 4060.
 - **Bonsai 27B on the 8 GB GPU**: Prism ML's llama.cpp fork in a CUDA 12.8
-  runtime image, the lab's official template, q4_0 KV cache, 12k context:
+  runtime image, the lab's official template, q4_0 KV cache. The historical
+  12k-context measurement below predates the launcher's current 32,768 total-context
+  default; actual per-slot context depends on the slot count:
   6.1 GB of VRAM, ~23 tok/s, 6–8 s per turn with a 512-token thinking budget
   (judge calls run with thinking off). **Host RAM**: `--no-mmap`,
   `--cache-ram 1024` and a 5 GB container cap bring it from ~6 GB to under
   1 GB; `scripts/watch_bonsai.sh` restarts it on a failed health check.
 - Bonsai's XML call format delivers parameters as text and sometimes wraps a
-  value as `{"value": X}`; the harness parses and unwraps. **Its server cannot
+  value as `{"value": X}`. The older harness unwrapped these; current validation
+  rejects unexpected wrappers. Preserve exact schemas in the adapter. **Its server cannot
   emit a tool literally named `call`**, so decoders take per-model tool
   aliases (`call=call_function`).
 

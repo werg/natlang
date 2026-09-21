@@ -5,8 +5,8 @@ Inquiry Lab is a native natlang research application at
 companion with `node ts-host/scripts/serve-studio.mjs` after building `ts-host`.
 The Studio sidebar links to it. It shares the browser client, local model
 catalog, worker child runner and IndexedDB store with the other applications.
-Loading a model is explicit; CPU is initially selected. The teacher server is
-not involved.
+Loading a model is explicit; CPU is initially selected. The browser runs independently of the teacher server. A separate scenario
+runner can use an explicitly selected teacher endpoint (see Evaluation).
 
 The bundled example asks whether a deployment improved reliability. Its four
 rows deliberately exhibit a population-mix reversal: both desktop and mobile
@@ -82,6 +82,11 @@ without a host operation.
 
 The TypeScript eval environment can run trusted local code with host authority.
 The generated view tree does not accept raw HTML, JavaScript or style code.
+For custom interactions, `{module, bindings}` supplies HTML, CSS and JavaScript
+to the shared generated-module renderer in an origin-isolated iframe. Its CSP
+blocks network fetches; controls must emit declared bindings through
+`natlang.emit`, and drafts persist through `natlang.draft`. These modules have
+presentation authority, not direct access to the parent evaluator.
 Page-authored collaborative content would need a different environment policy.
 
 ## Why the five capabilities share this application
@@ -127,15 +132,32 @@ The browser smoke keeps hardware GPU disabled and uses no live model. It
 checks import, full large evidence through a generated method, generated view controls, drafts, reload,
 export/import and mobile layout. Tests with scripted interpreter turns verify
 source loading and state ownership, while a real child run verifies crisp
-generated source. Live semantic quality and long teacher trajectories remain
-unmeasured. The teacher server was not restarted for these checks.
+generated source. These checks do not establish live semantic quality.
+
+The application uses `programs/view.ts` for its routine view projection;
+`view.nl` remains an alternative authored view. Artifact reads use the
+`workspace_read` helper to avoid confusion with the interpreter’s `read` tool.
+
+To run a live scenario against an already available teacher:
+
+```bash
+node ts-host/scripts/run-research-teacher.mjs --list
+node ts-host/scripts/run-research-teacher.mjs --scenario cohort_reliability \
+  --model YOUR_MODEL_ID --seed 17 --server http://127.0.0.1:8081 \
+  --out runs/research/cohort.json
+```
+
+The runner saves outcomes and an unreviewed semantic rubric; completion or
+structural audit alone does not admit training data. Its current adapter
+changes the tool surface for the endpoint, so assess typed-decoding fidelity
+and capture of the actual wire payload before treating runs as training-grade
+evidence. Interrupted runs are not completed evaluations.
 
 ## Current limits that should guide the next iteration
 
-- The default generated UI path is a typed DOM tree. Truly novel canvas or
-  spatial interactions may need a versioned custom renderer/module with its
-  own lifecycle and environment policy. The present tree already supports
-  interactive comparison, tables and inputs.
+- The generated UI paths are a typed DOM tree and versioned HTML/CSS/JS modules.
+  Both bind interactions to pinned natlang handlers. New rendering capabilities
+  must preserve that binding, lifecycle, draft persistence and environment policy.
 - Artifact manifests currently occupy one IndexedDB value per workspace;
   large evidence is referenced separately. Very large source/artifact
   collections will need per-artifact storage and garbage collection.

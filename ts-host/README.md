@@ -2,6 +2,10 @@
 
 `NatlangHost` is the Python-free TypeScript interpreter. `NativeNatlangHost` is an alias for it. Crisp TypeScript can run in a context that directly references application objects.
 
+For agent-assisted development, install the [bundled authoring and integration
+skills](../skills/README.md). They include portable references and a checked
+multi-file example for both native hosts.
+
 ## Install and build
 
 From this repository:
@@ -17,7 +21,7 @@ NATLANG_PYTHON=/path/to/natlang-python npm test
 
 Import `NatlangHost` for runs. The declared conformance and paired trace coverage is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
 
-The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior; use `local` to let the model repair missing results or rejected actions within its current episode.
+The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior. The higher-level `BrowserNatlangApplication` defaults to `local`; for low-level runs use `local` to let the model repair missing results or rejected actions within its current episode.
 
 ## Run a program
 
@@ -105,7 +109,7 @@ Use `--suite` for all three pilot tasks, or `--task=record` / `--task=nested-map
 
 For an interactive browser, run `npm run build` and then `npm run serve:browser -- --open-gpu` in `ts-host`. The server binds to localhost, serves COOP/COEP and byte ranges, and opens a separate Chromium profile with Vulkan and Dawn's NVIDIA f16 toggle on Linux. Use `npm run serve:browser` to print a URL for an existing browser. On macOS and Windows, `--open-gpu` leaves browser GPU selection to the platform. A normal Linux Chromium session needs the same launch flags and a full browser restart; the page cannot enable Dawn's f16 toggle itself. Check the page's GPU diagnostics and the pilot backend logs, not merely `navigator.gpu`, to establish offload.
 
-The TypeScript agent follows the Python runtime's continuation checkpoints: after six durable work turns on an unfinished lambda, it asks for a short working note with no tools, stores the note on the lambda, and opens a fresh conversation from program and workspace state. Set `options.model.segment_turns` to another positive number or `null` to disable the rollover. The checkpoint is a conversation boundary, not an episode limit.
+The TypeScript agent follows the Python runtime's continuation checkpoints: after six durable work turns on an unfinished lambda, it asks for a short working note with no tools, stores the note on the lambda, and opens a fresh conversation from program and workspace state. Set `options.model.segment_turns` and `segment_messages` to tune rollover; their defaults are six turns and twelve messages. Set both to `null` to disable both triggers. The checkpoint is a conversation boundary, not an episode limit.
 
 The local pilot server sends COOP/COEP headers and supports byte ranges for the GGUF; the page lets Wllama select its default WASM thread count when isolated. The adapter converts prior tool-call arguments from JSON strings into objects for the official LFM template. In a headless Q8 CPU trial, v8 loaded in 2.5 seconds and completed the leaf task in 72.7 seconds with two turns, 2,927 prompt tokens, 25 completion tokens, one valid action, and the correct value 7. With local validation feedback, the structured record task completed with an incorrect sum (5 instead of 8), and a nested Map completed with the input list unchanged ([2, 3] instead of [4, 6]). A Q4 GPU suite reproduced the same outcomes: 1/3 correct; its leaf, record, and nested Map tasks took 3.0, 8.4, and 7.4 seconds. These are model-quality failures on the pilot checkpoint. The Q4 leaf task completed correctly in 33.2 seconds on CPU and 2.7 seconds with WebGPU on this RTX 4060 host, both at 4,096 context tokens. Wllama's native logs reported 17/17 layers offloaded and a 216.41 MiB WebGPU model buffer. Timings are individual pilot runs under varying host load, not general speed guarantees. The browser API does not report the actual offload count; the pilot captures Wllama's native logs for that evidence.
 

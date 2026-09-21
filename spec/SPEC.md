@@ -8,8 +8,8 @@ A natlang program is a **pseudocode algorithm**: functions with typed
 signatures, subroutine calls, loops, conditions, local variables, organised as
 a **code base** of files. The author states the structure. The interpreter, a
 small language model, carries it out: it reads the pseudocode, decides the next
-step, and performs it with seven tools. The harness provides memory, typing, a
-sandbox and I/O. It parses no instructions, holds no cursor and owns no
+step, and performs it with eight tools. The harness provides memory, typing,
+pluggable crisp execution and I/O. It parses no instructions, holds no cursor and owns no
 control flow; every constraint it imposes is type-level and applies at write
 time.
 
@@ -88,7 +88,7 @@ Name     := an identifier declared in a `types` block
 - **`Dict<T>`** is the string-keyed container. (It was called "Map" in early
   drafts; renamed so that `Map` means only the combinator.)
 - A union of literals is an enum. String literals name options
-  (`"sell_pear" | "decline"`); **numeric literals [proposed]** give small
+  (`"sell_pear" | "decline"`); **numeric literals** give small
   numeric ranges (`1 | 2 | 3`). Enum narrowing (§2.1) applies to both.
 - **Named types** are declared in a function's `types` frontmatter (or a
   folder's `types.ts`), are visible in that function and inherited by its code
@@ -143,10 +143,12 @@ touch is a part of it:
 | `let` | the interpreter | typed locals, `let/<name>` (§3.2) |
 | `return` | the interpreter | the result so far, typed `Draft<T>` until commit |
 | `codebase` | author | name -> function definition. Immutable, shared by reference (§3.4) |
-| `types?`, `effects?` | author | named types; capabilities the function may use (§9.5). No effects means pure |
+| `types?`, `effects?` | author | named types; capabilities the function may use (§9.5). No declared effects; native host authority is separate (§9) |
 
 and harness-owned metadata: status, step count, note, provenance. Swap-out
-serializes the lambda and nothing else.
+serializes interpreter state. Native objects, external resources and evaluator
+bindings need a separate host recovery contract; a tree snapshot does not
+recreate them.
 
 ### 3.2 Locals
 
@@ -156,7 +158,7 @@ serializes the lambda and nothing else.
 - A local holds a plain value, a call in progress (a pending node, §4), or an
   editable copy of a function (§5.3).
 - Locals are private to the lambda, survive its completion as provenance, and
-  are not part of the result. At most 16 per lambda; names are identifiers.
+  are not part of the result. There is no fixed local-count limit; names are identifiers.
 
 ### 3.3 Lifecycle
 
@@ -215,13 +217,13 @@ std/
 | `description` | one line: what a caller sees in its listing |
 | `uses` | name -> relative path of a function defined elsewhere (a link) |
 | `effects` | capabilities (§9.5) |
+| `engine` | selected crisp executor; must be provided by the embedding (§9.1) |
 
 **Scope is lexical.** The code base of a function is the functions in its
 companion folder plus its `uses`. Nothing else: not its siblings, not its
 caller's code base. An instance of `main/summarize.nl` carries
 `main/summarize/` (and its own `uses`) wherever it runs. Reuse is by linking:
-`uses: { word_count: ../../std/word_count }`. A code base holds at most 12
-functions.
+`uses: { word_count: ../../std/word_count }`. There is no fixed function-count limit.
 
 **Immutable, shared by reference.** Instantiating a function builds a fresh
 lambda that points at the same definition; no body is duplicated, and no tool
@@ -333,7 +335,7 @@ listing of its functions. **Data never shares a channel with instructions**:
 the harness performs the first step on the interpreter's behalf,
 `read(path="args")`, and the workspace arrives as a tool result (§8).
 
-Seven tools, always the same; `call` and `mark_done` are present only when the lambda has
+Eight standard tools; `call` and `mark_done` are present only when the lambda has
 functions. Their argument schemas are regenerated from the tree and the types
 every turn.
 
@@ -342,14 +344,18 @@ every turn.
 | `read` | `path`, `start?`, `end?` | show a value, a range of it, or `codebase/<name>` |
 | `write` | `path`, `type`, `value` \| `source` | put a plain value into `return` or a local; or copy a function (§5.3) |
 | `edit` | `path`, `old`, `new` | replace text |
-| `run_code` | `code` | exact work in TypeScript; the result comes back |
+| `run_code` | `code`, `engine` in engine-selecting surfaces | exact work in the selected executor; the result comes back |
 | `call` | `function`, `to`, `inputs?`, `values?`, `over?`, `init?`, `until?`, `max?` | run a function of the code base, result at `to` |
 | `mark_done` | `start`, `end?`, `skipped?` | lines of the own program are finished, or did not apply (§7.3). `write` and `call` also take `done?`: a line, or `[first, last]`, marked if the action succeeds |
 | `report_blocker` | `missing` | end without a result, saying what is missing |
+| `report_error` | `message` | end without a result, explaining contradictory or impossible work |
 
 Several calls may share a turn if they are independent. A call that depends on
 what an earlier call created goes in a later turn: a turn's grammar is built
-from the state before the turn.
+from the state before the turn. Batches are ordered and non-atomic: every action
+receives a result, and successful actions remain applied after another action is
+rejected. Terminal outcomes can stop the batch. Neither rejection nor cancellation
+rolls back external effects.
 
 ### 5.1 read
 
@@ -361,11 +367,12 @@ signature, description and body.
 
 `write(path, type, value)` creates or replaces the node at `path`, which is
 `return`, a part of it, or a local. `type` must fit the slot; for an existing
-slot it is determined and forced by the grammar, for a new local it is the
-interpreter's statement of what the local holds. `value` is the complete
-value, parsed **against the type** (type-directed). A `{"value": X}` wrapper is
-unwrapped, and a string that is JSON for a value the slot takes is parsed, so
-that tool-call formats which deliver parameters as text still work.
+slot it is checked against the destination type; for a new local it is the
+interpreter's statement of what the local holds. Typed decoding can constrain
+proposals further; runtime validation remains authoritative. `value` is the
+complete value. A single JSON-text layer can be parsed where the boundary
+supports it; arbitrary `{"value": X}` wrappers are rejected unless the declared
+type expects that record. Existing Text is preserved verbatim.
 
 `write(path, type, source=<path>)` copies an existing value that fits instead
 of re-emitting it. Copies are recorded in provenance.
@@ -409,8 +416,10 @@ All rules are type-level and enforced before anything enters the tree:
   from the signature (`R`, `R[]` for `over`, the type of `acc`, the state
   type); the interpreter states no type.
 - `inputs` maps parameters to paths of existing values that fit them;
-  `values` gives small literals instead. Unknown and missing parameters are
-  rejected with the signature in the message (`unknown-field`, `bad-call`).
+  `values` supplies typed literals instead. A parameter cannot appear in both.
+  Artifact names and native IDs are literals unless they really are interpreter
+  paths. Unknown, duplicate, and missing bindings are rejected; literals are
+  validated against the callee signature.
 - `over`: a Map (§4.1). `over` + `init`: a Fold (§4.2); `init` is a literal or
   a path. `init` + `until` + `max`: an Iterate (§4.3); `max` is mandatory.
 - **Resume.** The same function, unfinished, already at `to`, and no other
@@ -421,8 +430,9 @@ All rules are type-level and enforced before anything enters the tree:
 
 ### 5.6 run_code
 
-Runs TypeScript (§9) and returns the value of the final expression as the
-tool result. It can read `args` and `locals`, and can cause declared effects.
+Runs code in the selected executor (§9) and returns the value of the final
+expression as the tool result. Engine-selecting surfaces require `engine`;
+Python's compatibility surface can retain an implicit QuickJS binding. It can read `args` and `locals`, and can cause declared effects.
 It **cannot write to the tree**: the interpreter writes what it learned.
 
 ### 5.7 End of an episode
@@ -431,10 +441,11 @@ An episode (§6) ends when:
 
 1. the interpreter **replies** in prose. If `return` is complete and fits, the
    lambda completes; the reply is kept as a note and is **never parsed as the
-   result**. If `return` is not complete, the harness says what is missing, at
-   most twice, then the lambda quiesces with the reply as its note. Or
-2. the interpreter calls `report_blocker`: the lambda quiesces with `missing`
-   as its note. Or
+   result**. With caller validation feedback an incomplete return quiesces with
+   diagnostics. With local feedback the model receives missing-return nudges
+   (currently at most two), then quiesces if still incomplete. Or
+2. the interpreter calls `report_blocker` or `report_error`: the lambda quiesces
+   with the supplied diagnostic as its note. Or
 3. a budget is exhausted, or the process crashes.
 
 ### 5.8 Decoding constraints
@@ -447,7 +458,7 @@ root ::= "<|tool_call_start|>[" call (", " call)* "]"  |  reply
 ```
 
 The model still chooses between calling and replying, and which call to make.
-What it cannot do:
+Constraints depend on the selected decoder policy; typed alternatives provide:
 
 | Part | Constrained to |
 |------|----------------|
@@ -457,7 +468,8 @@ What it cannot do:
 | `write` `Function<f>` | names of the code base |
 | `edit.path` | editable texts |
 | `call.function`, `until` | names of the code base and of function copies; check functions |
-| `call.inputs` | the function's parameter names; for each, the paths whose type fits |
+| `call.inputs` | parameter names and workspace-path strings; runtime checks path existence and type fit |
+| `call.values` | literal schemas derived from parameter types; runtime checks complete bindings |
 | `call.over` | paths of lists |
 | `call.to` | writable slots, or a new `let/<name>` |
 
@@ -465,7 +477,10 @@ Tools carry `x-natlang-alternatives`: argument sets that belong together,
 which JSON Schema cannot express at the top level. `None` in an optional field
 means "does not apply" and is read as absent. An argument name must not be a
 Python keyword. A call that fails validation returns a rejection with a one-line
-hint to the model. Failures are never silently retried: an operation can have
+hint. With local feedback it is delivered to the same trajectory; with caller
+feedback the episode quiesces and reports it outward. Browser applications default
+to local feedback; low-level hosts and Python ToolAgent default to caller.
+Failures are never silently retried: an operation can have
 performed effects before failing. Every attempt spends its budget. For engines that parse tool calls themselves, a decoder may rename tools
 per model (`call` -> `call_function` for a server whose call format reserves
 the word).
@@ -717,6 +732,15 @@ Target: an opening exchange of at most 1,500 tokens.
 
 ### 9.1 Environment
 
+Crisp execution is selected independently from the language and model. The
+embedding provides an engine registry; authored functions can declare `engine`.
+Python's compatibility default is `quickjs-isolated`. The native TS and browser
+hosts provide `typescript-host`, including shared native host objects. Fresh or
+retained globals describe lifetime, not isolation. Shared-host evaluators are
+trusted execution and can mutate native objects before validation fails. Their
+portable results still cross the typed tree boundary; traces cannot replay
+arbitrary native memory. The following limits describe the QuickJS binding only.
+
 QuickJS executes JavaScript and the erasable TypeScript subset. Type annotations
 are stripped with Node.js `module.stripTypeScriptTypes` (Node >=22.13 required
 only for TypeScript syntax); enums and other syntax requiring code generation
@@ -781,23 +805,26 @@ hash, enumOf`
 
 ### 9.5 Effects
 
-**Capabilities are registered by the host** (§10), each with a TypeScript
-signature that goes into the generated declaration file. The harness ships a
-few built-ins; an embedding program registers its own; a simulated
+**Capabilities are registered by the host** (§10). The current runtime does
+not generate a static TypeScript declaration file for callbacks. `out.emit` is
+provided by the core; an embedding registers other operations; a simulated
 environment for tests or training data is simply a host that registers
 deterministic in-memory fakes (a ticketing system, an inventory). The
 language does not distinguish real capabilities from fake ones.
 
 Effects are reached through `fx.<capability>.<function>(...)`. A call is
 allowed only if the enclosing lambda declares the capability in `effects`,
-and a callee may not declare a capability its caller lacks. v0.2 capabilities:
-`fs.read`, `fs.write`, `http.get`, `http.post`, `out.emit` (write a record to
-the program's output stream). These are the built-ins.
+and a callee may not declare a capability its caller lacks. `out.emit` writes a
+record to the program's output stream. File, network, database and process
+operations depend on host registration. Direct shared `host` access follows
+its environment's authority and does not automatically enter the `fx` journal;
+absence of declared effects alone cannot establish purity in such an environment.
 
 Every effectful call is appended to the lambda's **effect journal** before it
 executes: `{ seq, capability, function, args_hash, args_preview, status }`,
-with `status` updated to `ok` or `error` afterward. The journal is readable at
-`@effects`. Delivery is at-least-once across a crash.
+with status updated after the observation. The journal is readable at `@effects`.
+A crash can leave an outcome unknown. Exactly-once delivery and safe retry require
+host operation identity and reconciliation; the journal alone guarantees neither.
 
 ---
 
@@ -862,7 +889,8 @@ $lambda:
 A quiesced or partially reduced tree serializes the same way, with `args`,
 `let`, `return`, `function`, `status`, `note`, and `effects_journal` keys present (and `acc`/`at`
 or `state`/`iteration` for combinators), so that a program in execution can
-be saved, shipped, and resumed from the file alone. The rest of provenance is
+be saved and shipped. Resumption also needs the compatible runtime and evaluator
+bindings; native resources and external effects are not reconstructed from YAML. The rest of provenance is
 stored separately.
 
 ---
@@ -872,8 +900,8 @@ stored separately.
 For every completed pending node the harness keeps: the node as it was at
 call time (function, body, `args`), its locals, the trace of tool calls and results, step and token
 counts, the effect journal, the logged distributions of finite-typed writes,
-and links to earlier attempts (resumed and repeated calls). Long-lived folds keep
-the most recent 1,000 step records by default.
+and links to earlier attempts (resumed and repeated calls). Trace retention is an embedding concern; there is no automatic 1,000-record
+retention guarantee. Configure storage and pruning for long-lived runs.
 
 ---
 
@@ -883,16 +911,16 @@ the most recent 1,000 step records by default.
 |---|----------|
 | intro, 3.4 | Programs are pseudocode code bases; the author states structure, the interpreter carries it out; **no anonymous lambdas** |
 | 3.1 | The lambda holds every zone of state: type, body, `args`, `let`, `return`, `codebase` |
-| 3.2 | Typed locals created by the first write; private; at most 16 |
+| 3.2 | Typed locals created by the first write; private; no fixed count limit |
 | 3.4 | `.nl` / `.ts` files with frontmatter, companion folders, lexical scope, `uses` links, immutable and shared by reference; no recursion |
-| 5 | Seven tools: `read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`; instructions and data in different channels; the reply ends the episode and is never the result |
+| 5 | Eight tools: `read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`; instructions and data in different channels; the reply ends the episode and is never the result |
 | 5.3 | Changing a function = copy into a local, edit, call the copy |
 | 5.5 | `call` places and runs in one action; calling again resumes; Map / Fold / Iterate are reached only through `call` |
 | 4.1, 4.3 | Combinators bind the author's parameter names; Iterate's check is a Bool function of the code base |
 | 2 | TypeScript type syntax; `Dict<T>`; numeric literal types, no range refinement; literals widen to their base type |
 | 2.1 | Lists and dicts are covariant |
 | 5.8 | Constrained decoding over the model's native call text; grammar alternatives tie path, type and value |
-| 6.3 | Agentic run budgets default to unlimited and may be explicitly configured; structural limit of 6 nested pending nodes |
+| 6.3 | Agentic run budgets default to unlimited and may be explicitly configured; no fixed pending-node nesting limit |
 | 6.5 | The diagnostic code list |
 | 8 | `render/0.2`: short texts whole (400 characters, 8 lines), lists preview 3, no value-like placeholders |
 | 9 | The bound-parameter part is **`args`**; `run_code` sees `args` and `locals` and cannot write |
