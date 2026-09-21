@@ -21,7 +21,6 @@ function validatePath(path) {
 function validateArtifact(artifact) {
     assert(artifact && ['source', 'schema', 'view', 'data', 'evidence', 'claim', 'intent', 'assessment', 'migration', 'method', 'change'].includes(artifact.kind), 'Unknown artifact kind');
     assert(Object.hasOwn(artifact, 'content'), 'Artifact has no content');
-    assert(JSON.stringify(artifact).length <= 2_000_000, 'Store large native data by reference');
 }
 
 /** A small adapter is sufficient for IndexedDB and deterministic tests. */

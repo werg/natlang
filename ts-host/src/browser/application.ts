@@ -186,13 +186,23 @@ export class BrowserDomRenderer {
 
   render(node: UiNode): void {
     if (this.disposed) throw new Error('renderer is closed');
-    let count = 0;
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
     const sources: string[] = [];
-    const build = (item: UiNode, depth: number): HTMLElement => {
-      if (++count > 2000 || depth > 32) throw new Error('view exceeds renderer bounds');
+    const seen = new WeakSet<UiNode>();
+    let next: HTMLElement | undefined;
+    const pending: Array<{ item: UiNode; parent?: HTMLElement; finish?: HTMLElement }> = [{ item: node }];
+    while (pending.length) {
+      const { item, parent, finish } = pending.pop()!;
+      if (finish) {
+        if (item.value !== undefined) (finish as HTMLSelectElement).value = item.value;
+        continue;
+      }
       if (!item || !TAGS.has(item.tag)) throw new Error(`unsupported view tag: ${item?.tag}`);
+      if (seen.has(item)) throw new Error('view tree reuses a node');
+      seen.add(item);
       const element = document.createElement(item.tag);
+      if (parent) parent.appendChild(element);
+      else next = element;
       if (item.id) element.id = item.id;
       if (item.text !== undefined) element.textContent = item.text;
       if (item.tag === 'input' || item.tag === 'textarea' || item.tag === 'select') {
@@ -235,13 +245,12 @@ export class BrowserDomRenderer {
           } catch (error) { this.onError?.(error); }
         });
       }
-      for (const child of item.children ?? []) element.appendChild(build(child, depth + 1));
-      if (item.tag === 'select' && item.value !== undefined) (element as HTMLSelectElement).value = item.value;
-      return element;
-    };
-    const next = build(node, 0);
+      if (item.children !== undefined && !Array.isArray(item.children)) throw new Error('view children must be a list');
+      if (item.tag === 'select') pending.push({ item, finish: element });
+      for (const child of [...(item.children ?? [])].reverse()) pending.push({ item: child, parent: element });
+    }
     if (sources.some(id => !inputs.has(id))) throw new Error('action references unknown input');
-    this.root.replaceChildren(next);
+    this.root.replaceChildren(next!);
   }
 
   close(): void { this.disposed = true; this.root.replaceChildren(); }

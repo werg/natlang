@@ -4,6 +4,13 @@ import { MemoryResearchAdapter, ResearchWorkspace } from '../studio/shared/resea
 
 const source = content => ({ kind: 'source', content });
 
+test('a source artifact has no arbitrary workspace size ceiling', async () => {
+    const workspace = new ResearchWorkspace(new MemoryResearchAdapter());
+    const content = 'x'.repeat(2_000_001);
+    const manifest = await workspace.commitEdits('', { 'methods/long.ts': source(content) });
+    assert.equal((await workspace.at(manifest.id, 'methods/long.ts')).content.length, content.length);
+});
+
 test('source, evidence and generated view are immutable across workspace revisions', async () => {
     const adapter = new MemoryResearchAdapter(), workspace = new ResearchWorkspace(adapter);
     const first = await workspace.commitEdits('', {

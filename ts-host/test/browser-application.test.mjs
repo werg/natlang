@@ -90,6 +90,12 @@ test('DOM renderer uses text nodes, emits typed events and rejects executable ma
     assert.throws(() => renderer.render({ tag: 'script', text: 'alert(1)' }), /unsupported/);
     assert.throws(() => renderer.render({ tag: 'button', action: {
       kind: 'command', from: 'missing' } }), /unknown input/);
+    let deep = { tag: 'p', text: 'Reached the leaf' };
+    for (let i = 0; i < 80; i++) deep = { tag: 'section', children: [deep] };
+    renderer.render(deep);
+    let leaf = root.children[0];
+    for (let i = 0; i < 80; i++) leaf = leaf.children[0];
+    assert.equal(leaf.textContent, 'Reached the leaf');
   } finally { renderer.close(); globalThis.document = prior; }
 });
 

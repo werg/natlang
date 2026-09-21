@@ -21,10 +21,13 @@ const tags = new Set(['main', 'section', 'div', 'h1', 'h2', 'h3', 'p', 'span', '
 export function validateInteraction(tree, bindings) {
     assert(bindings && typeof bindings === 'object' && !Array.isArray(bindings), 'Bindings must be a record');
     const controls = new Set(), inputs = new Set();
-    let count = 0;
-    function visit(node, depth) {
+    const seen = new WeakSet();
+    const pending = [tree];
+    while (pending.length) {
+        const node = pending.pop();
         assert(node && typeof node === 'object' && tags.has(node.tag), `Unsupported view tag ${node?.tag}`);
-        assert(++count <= 2000 && depth <= 32, 'View exceeds renderer bounds');
+        assert(!seen.has(node), 'View tree reuses a node');
+        seen.add(node);
         assert(!('html' in node) && !('script' in node), 'Raw HTML and script are not view data');
         if (node.id) {
             assert(typeof node.id === 'string' && !controls.has(node.id), `Duplicate view ID ${node.id}`);
@@ -38,9 +41,9 @@ export function validateInteraction(tree, bindings) {
             assert(node.id && ['input', 'textarea', 'select', 'button'].includes(node.tag), 'Only identified controls can emit events');
             assert(node.action.kind === node.id, 'Control action must identify its own binding');
         }
-        for (const child of node.children ?? []) visit(child, depth + 1);
+        assert(node.children === undefined || Array.isArray(node.children), 'View children must be a list');
+        for (const child of node.children ?? []) pending.push(child);
     }
-    visit(tree, 0);
     for (const [id, binding] of Object.entries(bindings)) {
         assert(controls.has(id), `Binding has no control ${id}`);
         assert(binding && typeof binding.root === 'string' && binding.root.endsWith('.nl'), `Binding ${id} needs a natlang handler`);

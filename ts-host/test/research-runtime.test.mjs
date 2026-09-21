@@ -42,6 +42,9 @@ test('view validation rejects broken bindings and duplicate controls', () => {
     assert.throws(() => validateInteraction(comparison, { missing: { root: 'methods/compare.nl' } }), /no control/);
     assert.throws(() => validateInteraction({ tag: 'section', children: [{ tag: 'input', id: 'x' }, { tag: 'input', id: 'x' }] }, {}), /Duplicate/);
     assert.throws(() => validateInteraction({ tag: 'script', text: 'bad' }, {}), /Unsupported/);
+    let deep = { tag: 'p', text: 'leaf' };
+    for (let i = 0; i < 80; i++) deep = { tag: 'section', children: [deep] };
+    validateInteraction(deep, {});
 });
 
 test('an interrupted execution keeps an unknown receipt and cannot silently replay', async () => {
