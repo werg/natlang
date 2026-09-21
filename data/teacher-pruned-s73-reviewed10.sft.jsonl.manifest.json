@@ -1,0 +1,16 @@
+{
+  "renderer": {
+    "version": "llama.cpp-apply-template/2",
+    "template_id": "LFM2.5-350M",
+    "template_sha256": "70278c3c69a31e89c2383bb2c4cb5f22ec8456069bcd194d553c30a00dbe1b05",
+    "end_token": "<|im_end|>",
+    "server": "http://127.0.0.1:8080",
+    "include_template": false,
+    "terminal_tool_policy": "empty-success-turn-v2",
+    "teacher_reasoning_policy": "render-if-present-v1"
+  },
+  "source": "data/teacher-pruned-s73-reviewed10.turns.jsonl",
+  "pairs": 28,
+  "every": 1,
+  "limit": 1000000000
+}

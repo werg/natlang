@@ -1,0 +1,26 @@
+{
+  "source": "runs/teacher-leaves-pruned-s73-20260921-snapshot10.jsonl",
+  "source_sha256": "2d70607d05d3af384e92ac29865a7ae1d91815addc4477dbfef1b19e5a17ffe9",
+  "reviewer": "manual semantic review",
+  "rule": "Completed sales must state or enact transfer of the specified goods and quantity at the stated unit price; future payment or conditional handover is excluded.",
+  "approved": {
+    "sell_list_price": [
+      0,
+      1,
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "notes": {
+    "3": "All yours is followed by that will be 40 a piece, leaving payment as a future demand.",
+    "4": "Take it enacts handover of the one apple at five coins.",
+    "5": "All settled resolves the apparent future price demand and states the buyer has the map.",
+    "9": "The price is three coins for one loaf; it is yours and Take it enact immediate handover despite the judge rejection."
+  },
+  "excluded_policy": "Snapshot row 3 is excluded as an ambiguous future transaction."
+}
