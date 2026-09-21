@@ -346,8 +346,8 @@ class ToolAgent:
                     continue
 
                 results = [first]
-                for name, args in turn.calls[1:]:     # several calls in one turn is the model's native habit
-                    if results[-1].kind in FAILED or results[-1].kind in ("blocked", "completed"):
+                for name, args in turn.calls[1:]:     # an ordered, non-atomic batch
+                    if results[-1].kind in ("blocked", "completed", "budget"):
                         break
                     if timed_out():
                         return "episode wall-clock budget exhausted"
@@ -369,12 +369,13 @@ class ToolAgent:
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
                 # A read or run_code result may be the only copy of information the
                 # next turn needs. Keep that tool response in the live conversation.
-                checkpoint_ready = (results[-1].kind not in FAILED and
+                checkpoint_ready = (not any(result.kind in FAILED for result in results) and
                                     turn.calls[len(results) - 1][0] in ("write", "call", "edit", "mark_done"))
+                failed = next((result for result in results if result.kind in ("rejected", "refused")), None)
+                if self.validation_feedback == "caller" and failed is not None:
+                    return "validation failed: " + failed.text
                 if results[-1].kind == "completed":
                     return None
-                if self.validation_feedback == "caller" and results[-1].kind in ("rejected", "refused"):
-                    return "validation failed: " + results[-1].text
         except TimeoutError:
             return "episode wall-clock budget exhausted"
 

@@ -194,6 +194,16 @@ Producer-local sequence numbers plus explicit causal links avoid a mandatory glo
 
 Use one linked record of each logical fact: an applied action links to its committed reduction; do not independently serialize contradictory copies of state changes. Rejected actions record diagnostics and no accepted tree mutation. Rejection of a result after eval does not imply the evaluation performed no host effects. Completion and quiescence retain current semantics. If capture records interruption without a terminal event, mark the run incomplete rather than inventing completion.
 
+A model turn can propose an ordered, non-atomic batch of independent actions.
+Validate, trace and report every action separately. A rejected action does not
+erase an accepted action and does not suppress later independent actions in the
+same batch. A terminal action stops the remainder. Any action that needs a
+value or diagnostic produced by another action belongs in a later turn. An
+embedding may run proven-pure independent actions concurrently while retaining
+their logical order and stable action identities; effectful or potentially
+conflicting actions remain ordered unless the environment explicitly provides
+stronger semantics.
+
 Define patches against an explicit initial state with stable node identities and path conventions. Patches need enough typed data to reconstruct partial values, missing fields, pending nodes, locals, marks and replacement/provenance links. Reuse the language's value model, but do not assume the current JSON dump already contains every necessary execution detail. Start with sequential fixtures and make reconstruction demonstrate what fields are necessary before freezing the schema.
 
 ### Values across hosts

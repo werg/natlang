@@ -599,18 +599,18 @@ export class NativeToolAgent {
         const result: NativeResult = await session.applyAsync(name, args);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
-        if (['rejected', 'refused', 'error', 'budget', 'completed'].includes(result.kind)) break;
+        if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
       }
       messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length) });
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
-      checkpointReady = !['rejected', 'refused', 'error', 'budget'].includes(results.at(-1)?.kind ?? '') &&
+      checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&
         ['write', 'call', 'edit', 'mark_done'].includes(calls[results.length - 1]?.[0] ?? '');
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
+      const failed = results.find(result => ['rejected', 'refused'].includes(result.kind));
+      if (this.options.validationFeedback !== 'local' && failed)
+        return `validation failed: ${failed.text}`;
       if (results.at(-1)?.kind === 'completed') return;
-      if (this.options.validationFeedback !== 'local' &&
-          ['rejected', 'refused'].includes(results.at(-1)?.kind ?? ''))
-        return `validation failed: ${results.at(-1)!.text}`;
     }
   }
 }

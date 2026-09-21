@@ -164,6 +164,18 @@ def test_several_calls_in_one_turn():
     assert out.kind == "done" and value == doc["expect"]["value"]
 
 
+def test_rejected_action_does_not_discard_later_independent_batch_action():
+    doc = yaml.safe_load((PROGRAMS / "01-leaf-judgment.yaml").read_text())
+    dec = ScriptedChat([ChatTurn([
+        ("write", {"path": "args/message", "type": "Text", "value": "invalid"}),
+        ("write", {"path": "return", "type": "Bool", "value": True}),
+    ]), ChatTurn([], "Done.")])
+    agent = ToolAgent(dec, validation_feedback="local")
+    out, value = Runtime(lambda lam: agent).run_root(_root(doc))
+    assert out.kind == "done" and value is True
+    assert [row["kind"] for row in agent.log] == ["rejected", "ok"]
+
+
 def test_extra_object_wrapper_is_rejected_and_value_has_a_schema():
     doc, s = _session("01-leaf-judgment.yaml")
     write = [t for t in S.tools(s) if t["function"]["name"] == "write"][0]["function"]["parameters"]["properties"]

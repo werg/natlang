@@ -61,6 +61,22 @@ the classic ambiguities of untyped formats. Validation happens on every write;
 type errors come back as ordinary tool errors with a one-line hint and are a
 trained recovery case.
 
+One model turn may propose an ordered batch of independent actions. Each action
+is validated, traced and reported separately. The batch is non-atomic: an
+accepted action remains applied when another action is rejected. A terminal
+action stops the remainder. Actions that need values or diagnostics produced by
+another action wait for a later turn. Hosts may execute proven-independent pure
+actions concurrently, but scheduling never changes their logical order or
+effect identities.
+
+One model turn may propose an ordered batch of independent actions. Each action
+is validated, traced and reported separately. The batch is non-atomic: an
+accepted action remains applied when another action is rejected. A terminal
+action stops the remainder. Actions that need values or diagnostics produced by
+another action wait for a later turn. Hosts may execute proven-independent pure
+actions concurrently, but scheduling never changes their logical order or
+effect identities.
+
 ### 2.2 Functions, instances, and code bases
 
 A **function** is a file: `name.nl` holds YAML frontmatter (`args`, `returns`,

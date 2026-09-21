@@ -48,6 +48,21 @@ test('model turns use the native tool surface and shared eval sees host identity
   } finally { host.close(); }
 });
 
+test('an ordered batch preserves later independent actions after a rejection', async () => {
+  const host = new NatlangHost();
+  let turn = 0;
+  try {
+    const result = await host.run({ source: { kind: 'program', program: {
+      $lambda: { type: 'Lambda<{}, Bool>', instructions: 'Return true.' },
+    } }, validationFeedback: 'local', modelTurn: () => ++turn === 1 ? ({ calls: [
+      ['write', { path: 'args/missing', type: 'Text', value: 'invalid' }],
+      ['write', { path: 'return', type: 'Bool', value: true }],
+    ], completion_tokens: 2 }) : ({ calls: [], text: 'done', completion_tokens: 1 }) });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, true);
+  } finally { host.close(); }
+});
+
 test('checked definitions, input binding and trace work from TypeScript', async () => {
   const host = new NatlangHost();
   const dir = mkdtempSync(join(tmpdir(), 'natlang-ts-trace-'));
