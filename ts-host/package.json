@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=22.13"
   },
+  "bin": {
+    "natlang": "bin/natlang.mjs"
+  },
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/build-browser.mjs",
     "build:browser": "node scripts/build-browser.mjs",
@@ -46,10 +49,19 @@
     "./model": {
       "types": "./dist/model/index.d.ts",
       "default": "./dist/model/index.js"
+    },
+    "./package": {
+      "types": "./dist/package/index.d.ts",
+      "default": "./dist/package/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/main.d.ts",
+      "default": "./dist/cli/main.js"
     }
   },
   "files": [
     "dist",
+    "bin",
     "examples/browser-local",
     "prelude.js",
     "BROWSER_CLIENT.md",

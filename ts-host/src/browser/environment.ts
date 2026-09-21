@@ -1,13 +1,6 @@
 import ts from 'typescript';
-
-export type EnvironmentMode = 'fresh' | 'retained';
-export type EvalRequest = { code: string; scope: Record<string, unknown>; body: boolean;
-  path: string; effectful: boolean };
-export type HostEvent = { operation: string; [key: string]: unknown };
-export type EvalResult = { result: unknown; events: HostEvent[] };
-export class EvalFailure extends Error {
-  constructor(message: string, readonly events: HostEvent[]) { super(message); }
-}
+import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
+  type EvalResult, type HostEvent } from '../native/evaluator.js';
 
 declare const __NATLANG_PRELUDE__: string;
 
@@ -62,7 +55,7 @@ export function checkTypeScriptBody(code: string): string[] {
 
 type Evaluator = (scope: Record<string, unknown>, code: string, effect: (cap: string, fn: string, args: unknown[]) => unknown) => unknown;
 /** Trusted browser evaluator. The host object is shared by identity and may be mutated. */
-export class TypeScriptEnvironment {
+export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-browser-host';
   readonly mode: EnvironmentMode;
   readonly host: object;
@@ -81,6 +74,9 @@ export class TypeScriptEnvironment {
     const previous = this.effect; this.effect = handler;
     return () => { if (this.effect === handler) this.effect = previous; };
   }
+
+  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', host: this.host,
+    observe: this.observe }); }
 
   private makeEvaluator(): Evaluator {
     const prelude = __NATLANG_PRELUDE__.split('const __deepFreeze')[0];

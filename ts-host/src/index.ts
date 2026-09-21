@@ -1,5 +1,5 @@
 export { TypeScriptEnvironment, portable } from './environment.js';
-export type { EnvironmentMode, EvalRequest, EvalResult, HostEvent } from './environment.js';
+export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './environment.js';
 export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './contracts.js';
 export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
@@ -23,3 +23,4 @@ export type { TerminalEvent, TerminalSource, TerminalTransition, TerminalFailure
   TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
 export { openAICompatibleModelTurn } from './model/index.js';
 export type { OpenAICompatibleOptions, OpenAICompatibleExchange } from './model/index.js';
+export * from './package/index.js';

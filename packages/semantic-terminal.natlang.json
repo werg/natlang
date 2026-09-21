@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.package/v1",
+  "name": "@natlang/semantic-terminal",
+  "version": "0.1.0",
+  "description": "A semantic terminal whose event reducer and view are natlang programs.",
+  "include": [
+    "applications/package_targets/semantic_terminal.mjs",
+    "applications/semantic_terminal.mjs",
+    "applications/terminal_recipes.mjs",
+    "codebases/semantic_terminal"
+  ],
+  "targets": {
+    "terminal": {
+      "kind": "terminal",
+      "entry": "applications/package_targets/semantic_terminal.mjs",
+      "export": "createTarget",
+      "reducer": "codebases/semantic_terminal/reduce.nl",
+      "view": "codebases/semantic_terminal/view.ts",
+      "description": "Run the natlang semantic workspace terminal.",
+      "authority": ["filesystem:workspace", "process:recipes"],
+      "commands": ["git", "npm", "python3", "rg"]
+    }
+  },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13" }
+}

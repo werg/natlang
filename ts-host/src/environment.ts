@@ -2,16 +2,10 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext, type Context } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-
-export type EnvironmentMode = 'fresh' | 'retained';
-export type EvalRequest = { code: string; scope: Record<string, unknown>; body: boolean;
-  path: string; effectful: boolean };
-export type HostEvent = { operation: string; [key: string]: unknown };
-export type EvalResult = { result: unknown; events: HostEvent[] };
-
-export class EvalFailure extends Error {
-  constructor(message: string, readonly events: HostEvent[]) { super(message); }
-}
+import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
+  type EvalResult, type HostEvent } from './native/evaluator.js';
+export { EvalFailure } from './native/evaluator.js';
+export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './native/evaluator.js';
 
 const prelude = readFileSync(fileURLToPath(new URL('../prelude.js', import.meta.url)), 'utf8');
 
@@ -62,7 +56,7 @@ function compile(code: string, body: boolean, asyncBody = false): string {
 }
 
 /** Trusted VM context. `host` is a direct reference to caller-owned native objects. */
-export class TypeScriptEnvironment {
+export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-node-host';
   readonly mode: EnvironmentMode;
   readonly host: object;
@@ -88,6 +82,9 @@ export class TypeScriptEnvironment {
     this.effect = handler;
     return () => { if (this.effect === handler) this.effect = prior; };
   }
+
+  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', host: this.host,
+    timeoutMs: this.timeoutMs, observe: this.observe }); }
 
   private makeContext(): Context {
     const context = createContext({ host: this.host, __fx: (cap: string, fn: string, raw: string) => {

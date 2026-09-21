@@ -1,5 +1,6 @@
 import YAML from 'yaml';
-import { EvalFailure, TypeScriptEnvironment, type HostEvent } from '../environment.js';
+import { TypeScriptEnvironment } from '../environment.js';
+import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { hexDigest } from './hash.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
@@ -106,7 +107,7 @@ export class NativeRuntime {
   readonly options: { maxEpisodes?: number; maxDepth?: number; maxActions?: number;
     maxToolCalls?: number; runId: string; mapWorkers: number; parallelModelSafe: boolean };
   readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
-  readonly environment: TypeScriptEnvironment;
+  readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
   readonly episodeBudget: { limit?: number; used: number };
@@ -125,7 +126,7 @@ export class NativeRuntime {
   private readonly signal?: AbortSignal;
   private readonly deadline?: number;
 
-  constructor(options: { environment?: TypeScriptEnvironment; host?: object; agent?: NativeAgent;
+  constructor(options: { environment?: EvalEnvironment; host?: object; agent?: NativeAgent;
     capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
     maxDepth?: number; maxActions?: number; maxToolCalls?: number;
     runId?: string; stream?: NativeStream;
@@ -444,7 +445,7 @@ export class NativeRuntime {
       while (cursor < indices.length) {
         this.checkInterruption();
         const index = indices[cursor++]!;
-        const child = new NativeRuntime({ environment: new TypeScriptEnvironment({ mode: 'fresh' }),
+        const child = new NativeRuntime({ environment: this.environment.fork(),
           agent: this.agent, maxEpisodes: this.options.maxEpisodes, maxDepth: this.options.maxDepth,
           maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls,
           seedPolicy: this.seedPolicy, sharedEpisodeBudget: this.episodeBudget,
