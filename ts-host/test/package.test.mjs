@@ -83,6 +83,12 @@ test('dependency locks choose a stable version and cycles are rejected', () => {
 
 test('CLI packs, installs, and runs a target from the content store', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
+  writeFileSync(join(root, 'direct.ts'), `/*---
+description: Return a fixture number.
+args: {}
+returns: Num
+---*/
+return 7`);
   writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
     return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length); } };
   }`);
@@ -92,9 +98,25 @@ test('CLI packs, installs, and runs a target from the content store', () => {
     } }));
   const archive = join(root, 'fixture.nlpkg'), store = join(root, 'store');
   const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
+  const direct = execFileSync(process.execPath, [cli, 'run', join(root, 'direct.ts')], { encoding: 'utf8' });
+  assert.equal(direct, '7\n');
+  const local = execFileSync(process.execPath, [cli, 'app', 'run', root, '--', 'local'], { encoding: 'utf8' });
+  assert.equal(local, 'cli-fixture:local:0');
+  const localManifest = execFileSync(process.execPath, [cli, 'run', join(root, 'natlang.json'), '--', 'path'],
+    { encoding: 'utf8', cwd: tmpdir() });
+  assert.equal(localManifest, 'cli-fixture:path:0');
+  const doctor = JSON.parse(execFileSync(process.execPath, [cli, 'app', 'doctor', root, '--json'], {
+    encoding: 'utf8', env: { ...process.env, NATLANG_SERVER: 'http://model.test', NATLANG_MODEL: 'fixture' },
+  }));
+  assert.equal(doctor.target.target, 'hello');
   execFileSync(process.execPath, [cli, 'package', 'pack', join(root, 'natlang.json'), '--out', archive]);
   execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
+  const listing = execFileSync(process.execPath, [cli, 'app', 'list', '--store', store], { encoding: 'utf8' });
+  assert.match(listing, /cli-fixture\s+hello\s+1\.0\.0/);
   const result = execFileSync(process.execPath, [cli, 'run', 'cli-fixture@1.0.0#hello',
     '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
   assert.equal(result, 'cli-fixture:one,two:0');
+  const convenient = execFileSync(process.execPath, [cli, 'app', 'run', 'cli-fixture',
+    '--store', store, '--', 'three'], { encoding: 'utf8' });
+  assert.equal(convenient, 'cli-fixture:three:0');
 });

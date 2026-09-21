@@ -19,12 +19,20 @@ if (kind === 'core') {
       join(nativeDestination, stem + extension));
 } else if (kind === 'node') {
   const source = join(root, 'ts-host', 'dist');
+  const { DEFAULT_MODEL_RELEASE } = await import(new URL('../ts-host/dist/model-default.js', import.meta.url));
+  if (!DEFAULT_MODEL_RELEASE.downloadUrl || new URL(DEFAULT_MODEL_RELEASE.downloadUrl).protocol !== 'https:')
+    throw new Error('the published default model needs an HTTPS downloadUrl before @natlang/node can be packed');
   for (const name of ['cli', 'model', 'native', 'package', 'terminal'])
     cpSync(join(source, name), join(destination, name), { recursive: true });
   for (const name of ['contracts.d.ts', 'contracts.js', 'desktop.d.ts', 'desktop.js',
-    'environment.d.ts', 'environment.js', 'index.d.ts', 'index.js', 'node-runtime.d.ts', 'node-runtime.js'])
+    'environment.d.ts', 'environment.js', 'index.d.ts', 'index.js', 'model-default.d.ts',
+    'model-default.js', 'node-runtime.d.ts', 'node-runtime.js'])
     cpSync(join(source, name), join(destination, name));
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
+  const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
+  rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
+  cpSync(join(root, 'models', 'templates', DEFAULT_MODEL_RELEASE.template),
+    join(modelAssets, 'default.jinja'));
 } else {
   cpSync(join(root, 'ts-host', 'dist', 'browser'), destination, { recursive: true });
   for (const name of readdirSync(destination).filter(name => name.endsWith('.js') &&

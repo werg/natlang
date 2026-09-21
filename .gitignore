@@ -3,7 +3,11 @@ __pycache__/
 .venv/
 .DS_Store
 runs/
-models/
+models/*
+!models/templates/
+models/templates/*
+!models/templates/LFM2.5-350M.jinja
 vendor/
 data/
 *.tgz
+.natlang/

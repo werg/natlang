@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ensureNodeBuild } from './dev-bootstrap.mjs';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const entry = join(root, 'ts-host', 'dist', 'cli', 'main.js');
+try { ensureNodeBuild(root); }
+catch (error) { process.stderr.write(`natlang: ${error instanceof Error ? error.message : String(error)}\n`); process.exit(1); }
+process.env.NATLANG_HOME ??= join(root, '.natlang', 'packages');
+process.env.NATLANG_STATE_HOME ??= join(root, '.natlang', 'state');
+process.env.NATLANG_CACHE_HOME ??= join(root, '.natlang', 'cache');
+const { main } = await import(pathToFileURL(entry).href);
+main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => {
+  process.stderr.write(`natlang: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});

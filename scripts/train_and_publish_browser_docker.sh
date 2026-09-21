@@ -15,4 +15,6 @@ else
   docker run --rm --gpus all -v "$ROOT:/work" -e HF_HOME=/work/models/hf natlang-train \
     python scripts/train_lora.py "$DATA" "$RUN" --steps "$STEPS"
 fi
-node scripts/publish_browser_model.mjs --run "$RUN" --name "$NAME" --quant Q4_K_M
+PUBLISH=(node scripts/publish_browser_model.mjs --run "$RUN" --name "$NAME" --quant Q4_K_M)
+if [ -n "${NATLANG_MODEL_DOWNLOAD_URL:-}" ]; then PUBLISH+=(--download-url "$NATLANG_MODEL_DOWNLOAD_URL"); fi
+"${PUBLISH[@]}"

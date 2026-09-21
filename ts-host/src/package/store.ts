@@ -21,6 +21,7 @@ function compare(left: Version, right: Version): number {
   if (!left[3]) return 1; if (!right[3]) return -1;
   return left[3].localeCompare(right[3]);
 }
+export function compareVersions(left: string, right: string): number { return compare(version(left), version(right)); }
 export function satisfiesVersion(actual: string, range: string): boolean {
   if (range === '*' || range === 'latest') return true;
   const candidate = version(actual);
@@ -215,5 +216,18 @@ export class NatlangPackageStore {
   manifest(specifier: string) {
     const installed = this.resolve(specifier);
     return readPackageArchive(join(dirname(installed.root), 'archive.json')).manifest;
+  }
+
+  resolveDependencies(dependencies: Record<string, string> = {}): Record<string, InstalledPackageIdentity> {
+    const installed = this.list(), resolved: Record<string, InstalledPackageIdentity> = {};
+    for (const [name, range] of Object.entries(dependencies)) {
+      const matches = installed.filter(item => item.name === name && satisfiesVersion(item.version, range))
+        .sort((left, right) => compareVersions(right.version, left.version));
+      const selected = matches[0];
+      if (!selected) throw new Error(`no installed package satisfies ${name}@${range}`);
+      resolved[name] = { name: selected.name, version: selected.version,
+        digest: selected.digest, root: selected.root };
+    }
+    return resolved;
   }
 }

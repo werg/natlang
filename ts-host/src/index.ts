@@ -24,6 +24,8 @@ export { TerminalNatlangApplication, createTerminalHost, TerminalSessionStore,
 export type { TerminalEvent, TerminalSource, TerminalTransition, TerminalFailure,
   TerminalCommit, TerminalRunner, TerminalApplicationOptions, TerminalCheckpoint,
   TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
-export { openAICompatibleModelTurn } from './model/index.js';
-export type { OpenAICompatibleOptions, OpenAICompatibleExchange } from './model/index.js';
+export { openAICompatibleModelTurn, createManagedModelSession, localModelPrerequisites,
+  DEFAULT_LOCAL_MODEL } from './model/index.js';
+export type { OpenAICompatibleOptions, OpenAICompatibleExchange, ManagedModelSession,
+  ManagedModelStatus, ModelProfile } from './model/index.js';
 export * from './package/index.js';

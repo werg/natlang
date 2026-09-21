@@ -1,5 +1,9 @@
 # Native natlang packages and executables
 
+For ordinary work in this repository, start with
+[DEV_SETUP.md](DEV_SETUP.md). Its wrappers run source paths directly. This
+document describes the optional archive and distribution workflow.
+
 Natlang applications can be shipped as deterministic `.nlpkg` archives. The
 format packages natlang source trees, crisp functions, adapters, and binary
 assets without adding module loading to the language core. A package may expose
@@ -58,6 +62,34 @@ natlang doctor @example/reviewer@1.0.0#review
 natlang run @example/reviewer@1.0.0#review --workspace . -- --application-option value
 ```
 
+Packaging is unnecessary during authoring. Run a program, manifest, or
+application directory directly:
+
+```bash
+natlang run path/to/main.nl
+natlang app run path/to/application
+natlang app run path/to/application/natlang.json
+natlang app doctor path/to/application --json
+```
+
+Local manifests are validated with the same archive rules before launch, but
+are not copied into the package store. The CLI infers the source root from the
+manifest location and its ancestors; use `--root DIR` when the source lives
+elsewhere.
+
+For interactive use, discover applications and omit the exact version when it
+is useful to follow the highest installed semantic version:
+
+```bash
+natlang app list
+natlang app run reviewer --workspace . -- --application-option value
+natlang app doctor reviewer --json
+```
+
+`app run` accepts the full package name or an unambiguous final name component.
+It selects a sole target automatically; packages with several targets require
+`--target`. Automation should continue to use the exact `run` form.
+
 Install all archives in one command when packages depend on one another. The
 installer validates the whole candidate set before publishing new objects:
 
@@ -105,7 +137,10 @@ engines and executable dependencies. They are declarations, not a sandbox.
 Natlang reducers own interpretation, planning, and decisions; adapters translate
 typed events and expose exact native operations.
 
-Model profiles live in the platform config directory as `config.json`:
+Without a profile, model use is lazy: the CLI starts an owned local
+`llama-server` with the statically published default model on the first semantic turn
+and closes it with the command. Crisp only targets do not start it. Model
+profiles in the platform config directory select externally owned services:
 
 ```json
 {
@@ -121,8 +156,10 @@ Model profiles live in the platform config directory as `config.json`:
 ```
 
 `NATLANG_SERVER`, `NATLANG_MODEL`, and `NATLANG_PROFILE` override the selected
-profile. Secrets remain in environment variables. Packaging and terminal code
-do not impose model turn or token caps.
+profile. `NATLANG_MODEL_PATH`, `NATLANG_TEMPLATE`, and
+`NATLANG_LLAMA_SERVER` customize managed local execution. Secrets remain in
+environment variables. Packaging and terminal code do not impose model turn or
+token caps.
 
 ## Included packages
 

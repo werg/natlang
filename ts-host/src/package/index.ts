@@ -5,5 +5,6 @@ export { ARCHIVE_SCHEMA, canonicalJson, createPackageArchive, parsePackageArchiv
 export type { NatlangPackageArchive, PackageFile } from './archive.js';
 export { NatlangPackageStore, defaultNatlangConfigDirectory, defaultNatlangDataDirectory,
   defaultNatlangStateDirectory, defaultNatlangCacheDirectory, satisfiesVersion } from './store.js';
+export { compareVersions } from './store.js';
 export type { InstalledPackage } from './store.js';
 export type { PackageExecutable, PackageTargetContext, PackageTargetFactory, PackageTargetIO } from './target.js';

@@ -19,6 +19,21 @@ explicit `EvalEnvironment`, so the reduction layer does not choose Node VM,
 browser eval, sandbox, filesystem, or process behavior. `@natlang/node`
 exports a convenience `NativeRuntime` that supplies the Node evaluator.
 
+For checkout development, use the repository workflow rather than managing the
+build and development package store manually:
+
+```bash
+scripts/setup_dev.sh --node-only
+scripts/natlang --help
+scripts/natlang run path/to/program.nl
+scripts/natlang-app packages/semantic-terminal.natlang.json
+```
+
+Run those commands from the repository root. `scripts/natlang` recompiles the
+Node output when TypeScript inputs change. `scripts/natlang-app` accepts any
+application manifest or directory; it has no built in application registry.
+The complete workflow is in [DEV_SETUP.md](../DEV_SETUP.md).
+
 From this repository:
 
 ```bash

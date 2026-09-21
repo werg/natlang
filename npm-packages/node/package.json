@@ -13,5 +13,5 @@
     "./package": { "types": "./dist/package/index.d.ts", "default": "./dist/package/index.js" },
     "./cli": { "types": "./dist/cli/main.d.ts", "default": "./dist/cli/main.js" }
   },
-  "files": ["dist", "prelude.js", "README.md"]
+  "files": ["dist", "model-assets", "prelude.js", "README.md"]
 }

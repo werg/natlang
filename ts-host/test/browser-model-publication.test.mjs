@@ -9,6 +9,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'natlang-browser-publish-'));
   await mkdir(join(root, 'runs/demo/merged'), { recursive: true });
   await mkdir(join(root, 'models/templates'), { recursive: true });
+  await mkdir(join(root, 'ts-host/src'), { recursive: true });
   await writeFile(join(root, 'runs/demo/merged/natlang_training.json'), JSON.stringify({
     step: 300, corpus: { data_sha256: 'a'.repeat(64) },
   }));
@@ -23,9 +24,13 @@ async function fixture() {
 test('publication verifies GGUF and provenance, then atomically changes one shared default', async () => {
   const root = await fixture();
   const first = await promoteBrowserModel({ root, run: 'runs/demo', artifact: 'models/candidate.gguf',
-    name: 'demo' });
+    name: 'demo', downloadUrl: 'https://models.example/demo.gguf' });
   assert.equal(first.entry.quant, 'Q4_K_M');
   assert.equal(first.catalog.defaultId, first.entry.id);
+  assert.match(await readFile(join(root, 'ts-host/src/model-default.ts'), 'utf8'),
+    /https:\/\/models\.example\/demo\.gguf/);
+  assert.equal(await readFile(join(root, 'models/templates/LFM2.5-350M.jinja'), 'utf8'),
+    'official tool template');
   assert.equal((await stat(join(root, 'models/candidate.gguf'))).size, 1_000_000);
   assert.equal((await readFile(join(root, 'models/templates', first.entry.file.replace('-Q4_K_M.gguf', '.jinja')), 'utf8')),
     'official tool template');
