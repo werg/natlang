@@ -1,10 +1,14 @@
 # P04 — Semantic terminal
 
-Status: finite stream session implemented in
+Status: shared interactive terminal application implemented in
 [`codebases/semantic_terminal`](../../codebases/semantic_terminal/README.md)
-and [`applications/semantic_terminal.mjs`](../../applications/semantic_terminal.mjs).
-Real build and media recipes pass an async Fold integration test. Live-model
-behavior, Git/Bash recipes and durable sessions remain open. [Shared capabilities](README.md).
+and [`applications/semantic_terminal_cli.mjs`](../../applications/semantic_terminal_cli.mjs).
+It uses the shared queued reducer/view lifecycle, durable sessions, concurrent
+job completion events, structured rendering and model transport documented in
+[`TERMINAL_APPLICATIONS.md`](../../ts-host/TERMINAL_APPLICATIONS.md). Real build
+and media recipes pass the Fold integration test; workspace Git/file/test/build
+recipes pass through the CLI library. Live-model behavior and effect
+reconciliation after restart remain open. [Shared capabilities](README.md).
 
 ## Natlang prerequisites
 
@@ -41,8 +45,11 @@ sequential jobs; no mid-episode interrupt primitive is required by this case.
 
 1. Execute a fixed recipe in a fixture workspace with exact command/result checks.
 2. Compose a build diagnosis with P03, then a media request with P01. Gate: intermediate data passes through typed function boundaries correctly.
-3. Add retained session and background stream behavior. Gate: stale output is attributed correctly; cancellation does not imply rolled-back changes.
-4. Add optional Bash and programme loading separately, with engine/authority preflight.
+3. Retained session and background event behavior are implemented. Stale output
+   is correlated, cancellation observes the actual result, and a restart turns
+   an in-memory job into an explicit unknown outcome.
+4. Add optional Bash and programme loading separately only for scenarios that
+   require them, with engine/authority preflight.
 
 Test quoting/metacharacters, missing executables, wrong directory, partial pipelines, large output and preserved unrelated Git changes.
 

@@ -4,3 +4,5 @@ export type Evidence = { id: Text, occurred_at: Num, level: Text, message: Text 
 export type Judgement = { action: Text, severity: Text, claim: Text, uncertainty: Text };
 export type Alert = { status: Text, key: Text, detail: Text };
 export type IncidentState = { cursor: Num, observed: Num, alerts: Alert[], unknowns: Text[], status: Text };
+export type ViewBlock = { kind: Text, text?: Text, tone?: Text, items?: Text[], ordered?: Bool, columns?: Text[], rows?: Text[][] };
+export type TerminalView = { title?: Text, subtitle?: Text, blocks: ViewBlock[], prompt?: Text, busy?: Bool, help?: Text[] };

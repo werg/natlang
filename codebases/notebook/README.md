@@ -21,11 +21,18 @@ outputs. The integration test joins a real SQL aggregation with a TypeScript
 presentation cell, changes the SQL source, verifies invalidation and reruns,
 and checks that a write-shaped SQL statement cannot mutate the database.
 
-This is a local batch notebook. SQL cells are application-level evaluator
+`applications/notebook_console.mjs` exposes the same algorithm through the
+shared terminal lifecycle. Natlang first chooses the goal cell from exact
+catalog metadata, then the existing `run.nl` chooses dependency order and
+explains the result. The console can persist request/run history, event IDs and
+per-reduction traces; `NotebookWorkspace.catalog()` exposes metadata without
+executing a cell.
+
+The workspace remains local. SQL cells are application-level evaluator
 bindings through the TypeScript host. Python separately provides an optional
 registered SQLite executor in `hosts/sqlite_host.py`; the native TS notebook
 binding does not automatically register that engine in `run_code`. Cross-host
-SQL parity remains an explicit integration task. Live edit
-events, background runs, persistent datasets, large table paging and a
-teacher quality pilot remain product gates. Samples are truncated for the
+SQL parity remains an explicit integration task. Live edit events, background
+runs, persistent datasets, large table paging and a teacher quality pilot
+remain product gates. Samples are truncated for the
 model; output hashes and full values remain in the host.

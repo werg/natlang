@@ -17,12 +17,17 @@ an `unknown` receipt rather than an assertion that the notification failed or
 never happened. The sink is optional; no external notification is sent by the
 application tests.
 
+`reduce.nl` and `view.ts` also expose the investigator through the shared
+terminal application lifecycle. `applications/log_console.mjs` consumes any
+async typed log source, renders every committed incident state and can persist
+revision/event IDs and traces without changing the semantic algorithm.
+
 The Fold integration test replays a regression burst, duplicate delivery, a
 source gap and misleading benign log text. A separate test rejects fabricated
 evidence and checks uncertain alert delivery. The model callback is scripted;
 independent incident-quality review and live-model behavior remain open.
 
-Production gates are bounded source buffering, persistent cursors/receipts,
+Production gates are bounded source buffering, durable native alert receipts,
 reconciliation of unknown deliveries after restart, richer query choices,
 and calibrated false-positive/false-negative evaluation. These are application
 host facilities and do not require a global search or interruption primitive.

@@ -11,7 +11,7 @@ in this application buildout. The teacher server was not started for this work.
 | P01 media | CPU FFmpeg probe, transforms, hash and metadata checks, optional visual inspector | Retained long-running jobs, revisioned library, live model quality |
 | P02 semantic merge | Ten semantic data families, whole-history and incremental examples, seeded case corpus | Live pinned-model replica comparison and semantic review |
 | P03 build | Serial graph execution, declared-input checks and verified built-in cache | Parallel ready tasks and a documented arbitrary-process read-set contract |
-| P04 terminal | Event Fold, real build/media recipes, correlated jobs and cancellation outcome | Broader Git/Bash recipes and durable session recovery |
+| P04 terminal | Shared CLI reducer/view lifecycle, durable local sessions, concurrent completion events, workspace/build/media recipes, cancellation and unknown restart recovery | Live-model evaluation and durable external-effect reconciliation; Bash only for cases that need shell semantics |
 | P05 types | Finite inference and call checking | Cross-file evidence and live model quality |
 | P06 IDE | Revisioned source edits, child runs, trace cursor, generated view and frozen scenario evaluation | Interactive editor and training pipeline/checkpoint management |
 | P07 packages | Offline dependency resolution, checked bundles and atomic install pointer | Upgrade flow, remote archive trust and actual ecosystem compatibility |

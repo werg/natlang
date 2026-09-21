@@ -49,6 +49,12 @@ export class NotebookWorkspace {
       revision: cell.revision }));
   }
 
+  catalog() {
+    return [...this.cells.values()].map(cell => ({ id: cell.id, needs: [...cell.needs],
+      description: String(cell.description ?? ''), engine: cell.engine,
+      revision: cell.revision }));
+  }
+
   query(source) {
     if (typeof source !== 'string' || !/^\s*(SELECT|WITH)\b/i.test(source) || /;\s*\S/.test(source))
       throw new Error('SQL cell must be one read-only query');

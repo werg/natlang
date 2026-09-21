@@ -1,0 +1,20 @@
+/*---
+engine: typescript-host
+args:
+  state: Session
+returns: TerminalView
+---*/
+const state = args.state;
+const latest = state.messages.slice(-8);
+const blocks = [
+  { kind: 'status', text: `Status: ${state.status}`, tone:
+      state.status === 'ok' ? 'good' : state.status === 'failed' || state.status === 'unknown' ? 'bad' :
+      state.status === 'running' || state.status === 'cancel-requested' ? 'warn' : 'muted' },
+  ...(latest.length ? [{ kind: 'list', items: latest }] : [{ kind: 'text', text: 'Describe a task to begin.', tone: 'muted' }]),
+];
+if (state.history.length) blocks.push({ kind: 'table', columns: ['Request', 'Job', 'Status', 'Detail'],
+  rows: state.history.slice(-8).map(row => [row.request_id, row.job_id, row.status, row.detail]) });
+return { title: 'Natlang Terminal', subtitle: `Session revision ${state.revision}`, blocks,
+  prompt: state.status === 'running' ? 'job running> ' : 'natlang> ',
+  busy: state.status === 'running' || state.status === 'cancel-requested',
+  help: ['/refresh redraw', '/cancel request job cancellation', '/interrupt abort current inference', '/quit exit'] };

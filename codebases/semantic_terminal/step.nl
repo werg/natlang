@@ -15,4 +15,6 @@ function step(acc, item) -> Session
     return settle(acc, item, message)
   if item.kind is "cancel":
     return cancel(acc, item)
+  if item.kind is "recover":
+    return recover(acc, item)
   return ignore(acc, item)

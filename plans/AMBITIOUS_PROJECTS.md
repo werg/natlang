@@ -142,6 +142,13 @@ The richer acceptance scenarios below apply as those features enter product scop
 
 **Training and gaps.** Generate paired tasks differing in one precondition, with verified command effects and honest failures. The terminal tests recipe composition, cross-project package imports, durable session context, bounded log retrieval and consistent authorisation without an approval prompt for every routine step.
 
+**Implemented shared path (2026-09-21).** `TerminalNatlangApplication` now
+provides the queued reducer/view lifecycle, event multiplexing, durable local
+checkpoints, terminal view rendering and model adapter. The semantic terminal
+uses it with structured workspace recipes and explicit job/recovery events; the
+log investigator and evidence atlas reuse it as streaming and interactive CLI
+applications. See `ts-host/TERMINAL_APPLICATIONS.md`.
+
 ## P05. Natlang type inference and semantic type checking
 
 **Implementation plan:** [P05 — natlang prerequisites, embedding and delivery](projects/P05_TYPES.md).
