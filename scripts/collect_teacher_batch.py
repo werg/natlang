@@ -142,15 +142,15 @@ def run_job(index: int, record: dict, args, system_prompt: str,
     result = jobs / (key + ".result.json")
     if result_matches(result, record, expected):
         return index, json.loads(result.read_text())
-    # Stale results are evidence, not valid checkpoints.  Keep the latest one
-    # beside the job rather than silently accepting it.
+    # A stale or interrupted artifact cannot resume execution and must not
+    # accumulate beside the only result that the pipeline can consume.
     if result.exists():
-        result.replace(jobs / (key + ".stale.json"))
-    attempt = 1
+        result.unlink()
+    for stale in jobs.glob(key + ".stale*.json"):
+        stale.unlink()
+    for interrupted in [jobs / (key + ".trace.jsonl"), *jobs.glob(key + ".retry*.trace.jsonl")]:
+        interrupted.unlink(missing_ok=True)
     trace = jobs / (key + ".trace.jsonl")
-    while trace.exists():
-        trace = jobs / (key + f".retry{attempt}.trace.jsonl")
-        attempt += 1
     run_id = hashlib.sha256(json.dumps({"batch": VERSION, "index": index,
         **expected}, sort_keys=True).encode()).hexdigest()[:32]
     row, _ = collect(record, decoder_for(args), model_id=args.model_id,
@@ -161,6 +161,7 @@ def run_job(index: int, record: dict, args, system_prompt: str,
     row["provenance"].update({"segment_turns": args.segment_turns,
                               "segment_messages": args.segment_messages})
     write_atomic(result, row)
+    (jobs / f"{index:06d}.error.json").unlink(missing_ok=True)
     return index, row
 
 

@@ -1,7 +1,7 @@
 import json
 
 from scripts.collect_teacher_batch import (
-    expected_provenance, import_completed, job_key, merge_completed, result_matches, write_atomic,
+    expected_provenance, import_completed, job_key, merge_completed, result_matches, run_job, write_atomic,
 )
 
 
@@ -67,3 +67,24 @@ def test_import_adopts_compact_rows_and_rejects_full_conversation_legacy(tmp_pat
     assert (imported, rejected) == (1, 1)
     assert result_matches(tmp_path / (job_key(0, rows[0][1]) + ".result.json"),
                           rows[0][1], expected(rows[0][1]))
+
+
+def test_retry_removes_non_resumable_trace_before_collection(tmp_path, monkeypatch):
+    row = record()
+    key = job_key(2, row)
+    (tmp_path / f"{key}.trace.jsonl").write_text("old")
+    (tmp_path / f"{key}.retry1.trace.jsonl").write_text("older")
+    observed = {}
+    def fake_collect(record, decoder, **kwargs):
+        observed["trace"] = kwargs["trace_path"]
+        assert not (tmp_path / f"{key}.retry1.trace.jsonl").exists()
+        return ({"task": {"program_ir": record}, "provenance": {},
+                 "outcome": {"status": "done", "accepted": True}}, None)
+    monkeypatch.setattr("scripts.collect_teacher_batch.collect", fake_collect)
+    monkeypatch.setattr("scripts.collect_teacher_batch.decoder_for", lambda args: object())
+    args = type("Args", (), {"model_id": "teacher", "root_seed": 4,
+        "segment_turns": 6, "segment_messages": 12})()
+    expected = expected_provenance(row, model_id="teacher", root_seed=4,
+        system_prompt="p", segment_turns=6, segment_messages=12)
+    run_job(2, row, args, "p", tmp_path, expected)
+    assert observed["trace"] == tmp_path / f"{key}.trace.jsonl"

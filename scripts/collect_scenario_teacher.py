@@ -138,14 +138,10 @@ def _resume_count(output: Path, records: list[dict],
 
 def _trace_path(output: Path, index: int) -> Path:
     base = output.parent / f"{output.stem}-{index}.trace.jsonl"
-    if not base.exists():
-        return base
-    attempt = 1
-    while True:
-        retry = output.parent / f"{output.stem}-{index}.retry{attempt}.trace.jsonl"
-        if not retry.exists():
-            return retry
-        attempt += 1
+    base.unlink(missing_ok=True)
+    for retry in output.parent.glob(f"{output.stem}-{index}.retry*.trace.jsonl"):
+        retry.unlink()
+    return base
 
 
 def main():
@@ -158,7 +154,7 @@ def main():
     parser.add_argument("--start", type=int, default=0, help="first zero-based program row in a frozen batch")
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--resume", action="store_true",
-                        help="append after verifying completed rows; keep interrupted traces")
+                        help="append after verifying completed rows; discard non-resumable interrupted traces")
     parser.add_argument("--segment-turns", type=int, default=6,
                         help="conversation work turns before a continuation checkpoint")
     parser.add_argument("--segment-messages", type=int, default=12,
