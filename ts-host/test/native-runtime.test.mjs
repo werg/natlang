@@ -240,7 +240,7 @@ test('native tool alternatives bind paths to their declared types and readable s
   assert.ok(parameters('read')['x-natlang-alternatives'].some(alt => alt.path?.const === 'args/words' &&
     alt.start?.enum.includes(0) && alt.end?.enum.includes(1)));
   assert.ok(parameters('call')['x-natlang-alternatives'].some(alt => alt.function?.const === 'identity' &&
-    alt.inputs?.properties?.item?.enum.includes('args/number')));
+    alt.inputs?.properties?.item?.description === 'workspace path to Num'));
   assert.ok(parameters('call')['x-natlang-alternatives'].some(alt => alt.function?.const === 'identity' &&
     alt.values?.properties?.item?.type === 'number'));
 });

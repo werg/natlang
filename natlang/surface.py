@@ -203,12 +203,23 @@ class ToolSurface:
         for name, tpl in lam.let.items():                  # edited copies are callable too
             if isinstance(tpl, Lambda) and name in lam.fn_copies:
                 functions[f"let/{name}"] = lam.fn_copies[name]
+        literal_shapes = {}
+        for f in functions.values():
+            literal_env = TypeEnv({k: parse_type(v) for k, v in f.types.items()})
+            for raw_name, type_text in f.args.items():
+                name = raw_name.rstrip("?")
+                shape = schema_of(parse_type(type_text), literal_env)
+                shapes = literal_shapes.setdefault(name, [])
+                if shape not in shapes:
+                    shapes.append(shape)
+        literal_props = {name: shapes[0] if len(shapes) == 1 else {"anyOf": shapes}
+                         for name, shapes in literal_shapes.items()}
         checks = [n for n, f in lam.codebase.items() if f.returns.strip() == "Bool" and len(f.required()) == 1]
         call_alts = []
         for ref_name, f in functions.items():
             names = {n.rstrip("?"): t for n, t in f.args.items()}
-            in_props = {n: {"enum": fitting(t, f.types)} for n, t in names.items()}
-            in_props = {n: sch for n, sch in in_props.items() if sch["enum"]}
+            in_props = {n: {"type": "string", "description": f"workspace path to {t}"}
+                        for n, t in names.items()}
             inputs_schema = {"type": "object", "properties": in_props, "required": [], "additionalProperties": False}
             value_props = {n: schema_of(parse_type(t), TypeEnv({k: parse_type(v) for k, v in f.types.items()}))
                            for n, t in names.items()}
@@ -216,8 +227,7 @@ class ToolSurface:
                              "additionalProperties": False}
             base = {"function": {"const": ref_name}, "to": to_schema}
             req_names = [n.rstrip("?") for n in f.required()]
-            if all(n in in_props for n in req_names):                      # a plain call
-                call_alts.append({**base, **({"inputs": {**inputs_schema, "required": req_names}} if names else {})})
+            call_alts.append({**base, **({"inputs": {**inputs_schema, "required": req_names}} if names else {})})
             if names:                                                       # literal or mixed path/literal call
                 call_alts.append({**base, "inputs": inputs_schema, "values": values_schema,
                                   "x-optional": ["inputs", "values"]})
@@ -230,7 +240,7 @@ class ToolSurface:
                     call_alts.append({**base, "over": {"enum": list_paths}, "init": {},
                                       **({"inputs": {**inputs_schema, "properties": rest}, "x-optional": ["inputs"]} if rest else {})})
             if checks and names:                                           # repeated until a check holds
-                starts = list(dict.fromkeys(p_ for sch in in_props.values() for p_ in sch["enum"]))   # fits some parameter
+                starts = list(dict.fromkeys(p_ for t in names.values() for p_ in fitting(t, f.types)))
                 call_alts.append({**base, "init": {"enum": starts or [sl.path for sl in plain][:MAX_PATHS]},
                                   "until": {"enum": checks}, "max": {"type": "integer"},
                                   "inputs": inputs_schema, "x-optional": ["inputs"]})
@@ -309,8 +319,7 @@ class ToolSurface:
                      {"function": {"enum": list(functions)}, "to": {"type": "string"},
                       "inputs": {"type": "object", "properties": {n.rstrip("?"): {"type": "string"}
                           for f in functions.values() for n in f.args}, "additionalProperties": False},
-                      "values": {"type": "object", "properties": {n.rstrip("?"): any_value
-                          for f in functions.values() for n in f.args}, "additionalProperties": False},
+                      "values": {"type": "object", "properties": literal_props, "additionalProperties": False},
                       "over": {"type": "string"}, "init": {"anyOf": [{"type": t} for t in
                           ("string", "number", "boolean", "null", "object", "array")]}, "until": {"type": "string"},
                       "max": {"type": "integer"}}, ["function", "to"],

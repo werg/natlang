@@ -279,10 +279,23 @@ export class NativeToolAgent {
     (tools[1]!.function.parameters as Record<string, unknown>).anyOf = [{ required: ['value'] }, { required: ['source'] },
       ...(Object.keys(lam.codebase).length ? [{ properties: { type: {
         enum: Object.keys(lam.codebase).map(name => `Function<${name}>`) } }, required: ['type'] }] : [])];
+    const literalShapes = new Map<string, Record<string, unknown>[]>();
+    for (const name of names) {
+      const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
+        Record<string, unknown> | undefined;
+      for (const [rawName, type] of Object.entries(definition?.args as Record<string, string> ?? {})) {
+        const parameter = rawName.replace(/\?$/, ''), shape = schemaOf(parseType(type), session.env);
+        const shapes = literalShapes.get(parameter) ?? [];
+        if (!shapes.some(existing => JSON.stringify(existing) === JSON.stringify(shape))) shapes.push(shape);
+        literalShapes.set(parameter, shapes);
+      }
+    }
+    const literalProperties = Object.fromEntries([...literalShapes].map(([name, shapes]) =>
+      [name, shapes.length === 1 ? shapes[0] : { anyOf: shapes }]));
     const callProperties: Record<string, unknown> = {
       function: { enum: names }, to: { type: 'string' },
       inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string' }])), additionalProperties: false },
-      values: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, writeValue])), additionalProperties: false },
+      values: { type: 'object', properties: literalProperties, additionalProperties: false },
       over: { type: 'string' },
       init: { anyOf: ['string', 'number', 'boolean', 'null', 'object', 'array'].map(type => ({ type })) },
       until: { type: 'string' }, max: { type: 'integer' },
@@ -301,17 +314,14 @@ export class NativeToolAgent {
           Record<string, unknown> | undefined;
         const params = definition?.args as Record<string, string> ?? {};
         const namesAndTypes = Object.entries(params).map(([raw, type]) => [raw.replace(/\?$/, ''), type, raw.endsWith('?')] as const);
-        const properties = Object.fromEntries(namesAndTypes.flatMap(([param, type]) => {
-          try { const paths = fitting(parseType(type)); return paths.length ? [[param, { enum: paths }]] : []; }
-          catch { return []; }
-        }));
+        const properties = Object.fromEntries(namesAndTypes.map(([param, type]) =>
+          [param, { type: 'string', description: `workspace path to ${type}` }]));
         const valueProperties = Object.fromEntries(namesAndTypes.map(([param, type]) =>
           [param, schemaOf(parseType(type), session.env)]));
         const required = namesAndTypes.filter(([param, , optional]) => !optional && param in properties).map(([param]) => param);
-        const allRequiredFit = namesAndTypes.every(([param, , optional]) => optional || param in properties);
         const inputs = { type: 'object', properties, required, additionalProperties: false };
         const base = { function: { const: name }, to: destinations };
-        if (allRequiredFit) callAlternatives.push(namesAndTypes.length ? { ...base, inputs } : base);
+        callAlternatives.push(namesAndTypes.length ? { ...base, inputs } : base);
         if (namesAndTypes.length) callAlternatives.push({ ...base, inputs: { ...inputs, required: [] },
           values: { type: 'object', properties: valueProperties, required: [], additionalProperties: false },
           'x-optional': ['inputs', 'values'] });
@@ -327,7 +337,9 @@ export class NativeToolAgent {
           }
         }
         if (checkNames.length && namesAndTypes.length) {
-          const starts = [...new Set(Object.values(properties).flatMap(schema => schema.enum))];
+          const starts = [...new Set(namesAndTypes.flatMap(([, type]) => {
+            try { return fitting(parseType(type)); } catch { return []; }
+          }))];
           callAlternatives.push({ ...base, init: { enum: starts.length ? starts : present.map(slot => slot.path).slice(0, 48) },
             until: { enum: checkNames }, max: { type: 'integer' }, inputs: { ...inputs, required: [] },
             'x-optional': ['inputs'] });
