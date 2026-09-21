@@ -5,6 +5,7 @@ export type PackageTargetIO = { input: NodeJS.ReadableStream; output: NodeJS.Wri
   error: NodeJS.WritableStream; color: boolean };
 export type PackageTargetContext = {
   package: { name: string; version: string; digest: string; root: string };
+  dependencies: Record<string, { name: string; version: string; digest: string; root: string }>;
   targetName: string;
   target: NatlangTarget;
   workspace: string;

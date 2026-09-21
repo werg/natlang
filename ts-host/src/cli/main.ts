@@ -100,7 +100,8 @@ async function runTarget(parsed: Parsed, specifier: string): Promise<number> {
   const module = await import(pathToFileURL(entry).href) as Record<string, unknown>;
   const factoryName = target.export ?? 'createTarget', factory = module[factoryName];
   if (typeof factory !== 'function') throw new Error(`target entry does not export ${factoryName}()`);
-  const context: PackageTargetContext = { package: installed, targetName, target, workspace,
+  const context: PackageTargetContext = { package: installed, dependencies: installed.dependencies,
+    targetName, target, workspace,
     stateDirectory, traceDirectory, args: parsed.rest, io: { input: process.stdin, output: process.stdout,
       error: process.stderr, color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
     modelTurn: modelDriver(option(parsed, '--profile')), runtime: Object.freeze({ NativeNatlangHost,

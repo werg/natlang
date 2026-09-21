@@ -80,8 +80,10 @@ links, duplicate paths, changed bytes, and noncanonical file order.
 Installation writes an immutable content object, then atomically publishes a
 `name@version` reference. The same version may be installed repeatedly only
 with the same digest. There are no lifecycle scripts. Dependency constraints
-are checked before a batch is installed. JSON references work across systems
-that do not support symbolic links.
+are checked before a batch is installed. Each reference pins the selected
+dependency versions and content digests; later installations cannot silently
+change an existing application's graph. Cycles are rejected. JSON references
+work across systems that do not support symbolic links.
 
 `NATLANG_HOME`, `NATLANG_CONFIG_HOME`, `NATLANG_STATE_HOME`, and
 `NATLANG_CACHE_HOME` override the platform package, configuration, application
@@ -92,8 +94,9 @@ state, and cache roots.
 The entry module exports `createTarget(context)` unless `target.export` names a
 different function. It returns an object with `run()` and optional `close()`.
 The context contains immutable package identity, package and workspace roots,
-state and trace directories, target arguments, terminal streams, an optional
-model driver, and the installed runtime API.
+the pinned dependency identities and roots, state and trace directories, target
+arguments, terminal streams, an optional model driver, and the installed
+runtime API.
 
 Target adapters are trusted host code. The manifest’s `authority` and
 `commands` fields make native access inspectable and let `natlang doctor` check

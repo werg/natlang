@@ -60,14 +60,31 @@ test('dependency ranges are checked before a package is installed', () => {
   assert.throws(() => store.install(make('app', '1.0.0', { library: '^2.0.0' })), /needs library/);
   store.installMany([make('app', '1.0.0', { library: '^2.0.0' }), make('library', '2.3.0')]);
   assert.equal(store.resolve('library@2.3.0').version, '2.3.0');
+  assert.equal(store.resolve('app@1.0.0').dependencies.library.digest,
+    store.resolve('library@2.3.0').digest);
   assert.equal(satisfiesVersion('0.2.4', '^0.2.1'), true);
   assert.equal(satisfiesVersion('0.3.0', '^0.2.1'), false);
+});
+
+test('dependency locks choose a stable version and cycles are rejected', () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-locks-'));
+  writeFileSync(join(root, 'main.nl'), 'return null');
+  const make = (name, packageVersion, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v1',
+    name, version: packageVersion, dependencies, include: ['main.nl'] }, root);
+  const store = new NatlangPackageStore(join(root, 'store'));
+  store.installMany([make('library', '1.0.0'), make('library', '1.4.0'),
+    make('app', '1.0.0', { library: '^1.0.0' })]);
+  assert.equal(store.resolve('app@1.0.0').dependencies.library.version, '1.4.0');
+  store.install(make('library', '1.8.0'));
+  assert.equal(store.resolve('app@1.0.0').dependencies.library.version, '1.4.0');
+  assert.throws(() => store.installMany([make('a', '1.0.0', { b: '*' }),
+    make('b', '1.0.0', { a: '*' })]), /dependency cycle/);
 });
 
 test('CLI packs, installs, and runs a target from the content store', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
   writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
-    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',')); } };
+    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length); } };
   }`);
   writeFileSync(join(root, 'natlang.json'), JSON.stringify({ schema: 'natlang.package/v1',
     name: 'cli-fixture', version: '1.0.0', include: ['target.mjs'], targets: {
@@ -79,5 +96,5 @@ test('CLI packs, installs, and runs a target from the content store', () => {
   execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
   const result = execFileSync(process.execPath, [cli, 'run', 'cli-fixture@1.0.0#hello',
     '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
-  assert.equal(result, 'cli-fixture:one,two');
+  assert.equal(result, 'cli-fixture:one,two:0');
 });

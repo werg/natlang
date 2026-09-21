@@ -4,7 +4,10 @@ import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { canonicalJson, parsePackageArchive, readPackageArchive, sha256, type NatlangPackageArchive } from './archive.js';
 
-export type InstalledPackage = { name: string; version: string; digest: string; root: string };
+export type InstalledPackageIdentity = { name: string; version: string; digest: string; root: string };
+export type InstalledPackage = InstalledPackageIdentity & { dependencies: Record<string, InstalledPackageIdentity> };
+type DependencyPin = { version: string; digest: string };
+type PackageReference = { name: string; version: string; digest: string; dependencies?: Record<string, DependencyPin> };
 
 type Version = [number, number, number, string];
 function version(value: string): Version {
@@ -65,41 +68,72 @@ export class NatlangPackageStore {
   private objectRoot(digest: string): string { return join(this.root, 'objects', digest); }
 
   install(value: NatlangPackageArchive | string): InstalledPackage {
-    const archive = typeof value === 'string' ? readPackageArchive(value) : parsePackageArchive(value);
-    this.checkDependencies(archive, []);
-    return this.installChecked(archive);
+    return this.installMany([value])[0]!;
   }
 
   installMany(values: Array<NatlangPackageArchive | string>): InstalledPackage[] {
     const archives = values.map(value => typeof value === 'string' ? readPackageArchive(value) : parsePackageArchive(value));
-    const identities = new Set<string>();
+    const identities = new Set<string>(), byIdentity = new Map<string, NatlangPackageArchive>();
     for (const archive of archives) {
       const identity = `${archive.manifest.name}@${archive.manifest.version}`;
       if (identities.has(identity)) throw new Error(`duplicate package candidate: ${identity}`);
-      identities.add(identity);
+      identities.add(identity); byIdentity.set(identity, archive);
       const ref = this.refPath(archive.manifest.name, archive.manifest.version);
       if (existsSync(ref) && this.resolve(identity).digest !== archive.digest)
         throw new Error(`${identity} is already bound to another digest`);
-      this.checkDependencies(archive, archives);
     }
-    return archives.map(archive => this.installChecked(archive));
+    const installed = this.list();
+    const pins = new Map<string, Record<string, DependencyPin>>();
+    for (const archive of archives) {
+      const identity = `${archive.manifest.name}@${archive.manifest.version}`;
+      const existingRef = this.refPath(archive.manifest.name, archive.manifest.version);
+      if (existsSync(existingRef)) {
+        const locked = JSON.parse(readFileSync(existingRef, 'utf8')) as PackageReference;
+        for (const [name, range] of Object.entries(archive.manifest.dependencies ?? {})) {
+          const pin = locked.dependencies?.[name];
+          if (!pin || !satisfiesVersion(pin.version, range)) throw new Error(`${identity} has an invalid dependency lock for ${name}`);
+        }
+        pins.set(identity, locked.dependencies ?? {}); continue;
+      }
+      const selected: Record<string, DependencyPin> = {};
+      for (const [name, range] of Object.entries(archive.manifest.dependencies ?? {})) {
+        const choices = [...installed.filter(item => item.name === name).map(item =>
+          ({ name, version: item.version, digest: item.digest })),
+          ...archives.filter(item => item.manifest.name === name).map(item =>
+            ({ name, version: item.manifest.version, digest: item.digest }))]
+          .filter(item => satisfiesVersion(item.version, range))
+          .sort((left, right) => compare(version(right.version), version(left.version)) || left.digest.localeCompare(right.digest));
+        const chosen = choices[0];
+        if (!chosen) throw new Error(`${archive.manifest.name}@${archive.manifest.version} needs ${name}@${range}`);
+        selected[name] = { version: chosen.version, digest: chosen.digest };
+      }
+      pins.set(identity, selected);
+    }
+    const visiting = new Set<string>(), visited = new Set<string>(), order: NatlangPackageArchive[] = [];
+    const visit = (identity: string): void => {
+      if (visiting.has(identity)) throw new Error(`package dependency cycle includes ${identity}`);
+      if (visited.has(identity)) return;
+      visiting.add(identity);
+      for (const [name, pin] of Object.entries(pins.get(identity) ?? {})) {
+        const dependencyIdentity = `${name}@${pin.version}`;
+        if (byIdentity.has(dependencyIdentity)) visit(dependencyIdentity);
+      }
+      visiting.delete(identity); visited.add(identity); order.push(byIdentity.get(identity)!);
+    };
+    for (const identity of identities) visit(identity);
+    for (const archive of order) this.installChecked(archive,
+      pins.get(`${archive.manifest.name}@${archive.manifest.version}`) ?? {});
+    return archives.map(archive => this.resolve(`${archive.manifest.name}@${archive.manifest.version}`));
   }
 
-  private checkDependencies(archive: NatlangPackageArchive, candidates: NatlangPackageArchive[]): void {
-    for (const [name, range] of Object.entries(archive.manifest.dependencies ?? {})) {
-      const available = [...this.list().filter(item => item.name === name).map(item => item.version),
-        ...candidates.filter(item => item.manifest.name === name).map(item => item.manifest.version)];
-      if (!available.some(item => satisfiesVersion(item, range)))
-        throw new Error(`${archive.manifest.name}@${archive.manifest.version} needs ${name}@${range}`);
-    }
-  }
-
-  private installChecked(archive: NatlangPackageArchive): InstalledPackage {
+  private installChecked(archive: NatlangPackageArchive, dependencies: Record<string, DependencyPin>): void {
     const ref = this.refPath(archive.manifest.name, archive.manifest.version);
     if (existsSync(ref)) {
-      const current = JSON.parse(readFileSync(ref, 'utf8')) as { digest?: string };
+      const current = JSON.parse(readFileSync(ref, 'utf8')) as PackageReference;
       if (current.digest !== archive.digest) throw new Error(`${archive.manifest.name}@${archive.manifest.version} is already bound to another digest`);
-      return this.resolve(`${archive.manifest.name}@${archive.manifest.version}`);
+      if (canonicalJson(current.dependencies ?? {}) !== canonicalJson(dependencies))
+        throw new Error(`${archive.manifest.name}@${archive.manifest.version} already has a different dependency lock`);
+      return;
     }
     mkdirSync(join(this.root, 'tmp'), { recursive: true });
     const destination = this.objectRoot(archive.digest);
@@ -126,14 +160,14 @@ export class NatlangPackageStore {
     mkdirSync(dirname(ref), { recursive: true });
     const temporaryRef = `${ref}.${process.pid}.tmp`;
     writeFileSync(temporaryRef, canonicalJson({ name: archive.manifest.name, version: archive.manifest.version,
-      digest: archive.digest }) + '\n');
+      digest: archive.digest, dependencies }) + '\n');
     try { linkSync(temporaryRef, ref); }
     catch (error) {
       if (!existsSync(ref)) throw error;
-      const current = JSON.parse(readFileSync(ref, 'utf8')) as { digest?: string };
-      if (current.digest !== archive.digest) throw new Error(`${archive.manifest.name}@${archive.manifest.version} was concurrently bound to another digest`);
+      const current = JSON.parse(readFileSync(ref, 'utf8')) as PackageReference;
+      if (current.digest !== archive.digest || canonicalJson(current.dependencies ?? {}) !== canonicalJson(dependencies))
+        throw new Error(`${archive.manifest.name}@${archive.manifest.version} was concurrently bound to another package lock`);
     } finally { unlinkSync(temporaryRef); }
-    return this.resolve(`${archive.manifest.name}@${archive.manifest.version}`);
   }
 
   resolve(specifier: string): InstalledPackage {
@@ -142,19 +176,32 @@ export class NatlangPackageStore {
     const name = specifier.slice(0, at), version = specifier.slice(at + 1);
     const ref = this.refPath(name, version);
     if (!existsSync(ref)) throw new Error(`package is not installed: ${specifier}`);
-    const value = JSON.parse(readFileSync(ref, 'utf8')) as { digest?: string };
+    const value = JSON.parse(readFileSync(ref, 'utf8')) as PackageReference;
     if (typeof value.digest !== 'string') throw new Error(`invalid package reference: ${specifier}`);
-    const root = this.objectRoot(value.digest);
+    const installed = this.verifyInstalled(name, version, value.digest);
+    const dependencies: Record<string, InstalledPackageIdentity> = {};
+    for (const [dependencyName, pin] of Object.entries(value.dependencies ?? {})) {
+      const dependencyRef = this.refPath(dependencyName, pin.version);
+      if (!existsSync(dependencyRef)) throw new Error(`locked dependency is missing: ${dependencyName}@${pin.version}`);
+      const dependency = JSON.parse(readFileSync(dependencyRef, 'utf8')) as PackageReference;
+      if (dependency.digest !== pin.digest) throw new Error(`locked dependency changed: ${dependencyName}@${pin.version}`);
+      dependencies[dependencyName] = this.verifyInstalled(dependencyName, pin.version, pin.digest);
+    }
+    return { ...installed, dependencies };
+  }
+
+  private verifyInstalled(name: string, packageVersion: string, digest: string): InstalledPackageIdentity {
+    const root = this.objectRoot(digest);
     const archive = readPackageArchive(join(root, 'archive.json'));
-    if (archive.manifest.name !== name || archive.manifest.version !== version || archive.digest !== value.digest)
-      throw new Error(`corrupt package reference: ${specifier}`);
+    if (archive.manifest.name !== name || archive.manifest.version !== packageVersion || archive.digest !== digest)
+      throw new Error(`corrupt package object: ${name}@${packageVersion}`);
     for (const file of archive.files) {
       const path = join(root, 'files', ...file.path.split('/'));
       const status = lstatSync(path);
       if (!status.isFile() || status.isSymbolicLink() || status.size !== file.size || sha256(readFileSync(path)) !== file.sha256)
         throw new Error(`installed package content changed: ${file.path}`);
     }
-    return { name, version, digest: value.digest, root: join(root, 'files') };
+    return { name, version: packageVersion, digest, root: join(root, 'files') };
   }
 
   list(): InstalledPackage[] {
