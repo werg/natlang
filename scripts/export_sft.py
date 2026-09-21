@@ -22,6 +22,8 @@ def main():
     ap.add_argument("--server", default="http://127.0.0.1:8080")
     ap.add_argument("--limit", type=int, default=10**9)
     ap.add_argument("--every", type=int, default=1, help="keep every K-th sample")
+    ap.add_argument("--terminal-every", type=int, default=1,
+                    help="keep every K-th empty terminal reply while retaining every action target")
     ap.add_argument("--workers", type=int, default=1, help="bounded parallel template requests")
     ap.add_argument("--resume", action="store_true", help="append after verifying the last existing ID")
     ap.add_argument("--include-template", action="store_true",
@@ -31,8 +33,8 @@ def main():
     ap.add_argument("--template-id", default="qwen-chatml",
                     help="human-readable identity of the server's chat template")
     a = ap.parse_args()
-    if a.workers < 1 or a.every < 1 or a.limit < 1:
-        ap.error("workers, every and limit must be positive")
+    if a.workers < 1 or a.every < 1 or a.terminal_every < 1 or a.limit < 1:
+        ap.error("workers, every, terminal-every and limit must be positive")
 
     try:
         props = json.loads(urllib.request.urlopen(a.server + "/props", timeout=10).read())
@@ -63,7 +65,11 @@ def main():
                         {"role": "user", "content": "probe"}], [])
         renderer["template_sha256"] = hashlib.sha256(probe.encode()).hexdigest()
     if a.resume and a.dst.exists():
-        if not manifest_path.exists() or json.loads(manifest_path.read_text())["renderer"] != renderer:
+        prior = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+        same_selection = (prior.get("every", 1) == a.every and
+                          prior.get("terminal_every", 1) == a.terminal_every and
+                          prior.get("limit", 10**9) == a.limit)
+        if prior.get("renderer") != renderer or not same_selection:
             ap.error("resume renderer differs from existing SFT manifest")
 
     import gzip
@@ -121,6 +127,7 @@ def main():
         selected = 0
         matched = existing == 0
         eligible = 0
+        terminals = 0
         for line in lines():
             s = json.loads(line)
             if (s.get("provisional_gold") or s.get("template")) and not a.include_template:
@@ -129,6 +136,11 @@ def main():
                 eligible += 1
                 continue
             eligible += 1
+            if s.get("skill") == "reply":
+                keep = terminals % a.terminal_every == 0
+                terminals += 1
+                if not keep:
+                    continue
             if selected >= a.limit:
                 break
             if selected < existing:
@@ -164,7 +176,9 @@ def main():
                 pass
     print(f"{n} pairs -> {a.dst}")
     manifest_path.write_text(json.dumps({"renderer": renderer, "source": str(a.src),
-                                         "pairs": n, "every": a.every, "limit": a.limit}, indent=2) + "\n")
+                                         "pairs": n, "every": a.every,
+                                         "terminal_every": a.terminal_every,
+                                         "limit": a.limit}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

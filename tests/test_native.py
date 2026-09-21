@@ -55,6 +55,7 @@ def test_several_calls_and_replies():
     assert gbnf.accepts(g, "")
     assert not gbnf.accepts(call_grammar(S.tools(s), allow_reply=False), "It is a complaint.")
     assert not gbnf.accepts(call_grammar(S.tools(s), allow_reply=False), "")
+    assert gbnf.accepts(call_grammar([], allow_reply=True), "checkpoint note")
 
 
 def test_parse_calls_and_argument_names():
@@ -80,3 +81,26 @@ def test_probability_trace_keeps_ids_without_treating_empty_token_as_call(monkey
     dec.chat([], [], temperature=0)
     assert dec.stats['p_call_first'] == [None]
     assert trace == [{'text': 'Done.', 'tokens': details}]
+
+
+def test_reasoning_native_deliberates_before_guided_action(monkeypatch):
+    from natlang.decoder import Generation
+    from natlang.native import ReasoningNativeCallDecoder
+    dec = ReasoningNativeCallDecoder(reasoning_tokens=99)
+    monkeypatch.setattr(dec, 'render', lambda messages, tools: 'PROMPT')
+    generated = []
+    def generate(prompt, **kwargs):
+        generated.append((prompt, kwargs))
+        if len(generated) == 1:
+            return Generation('check the requested Boolean', stopped='</think>', completion_tokens=5)
+        return Generation('[write(path="return", type="Bool", value=True)]', completion_tokens=7)
+    monkeypatch.setattr(dec, 'generate', generate)
+    _, session = _session('01-leaf-judgment.yaml')
+    turn = dec.chat([], S.tools(session), temperature=.2)
+    assert generated[0][0] == 'PROMPT<think>'
+    assert generated[0][1]['grammar'] is None and generated[0][1]['stop'] == ['</think>']
+    assert generated[1][0] == 'PROMPT<think>check the requested Boolean</think>'
+    assert generated[1][1]['grammar']
+    assert turn.calls == [('write', {'path':'return', 'type':'Bool', 'value':True})]
+    assert turn.completion_tokens == 12
+    assert turn.raw_response['choices'][0]['message']['reasoning_content'] == 'check the requested Boolean'

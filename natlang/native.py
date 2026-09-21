@@ -159,6 +159,10 @@ class PyGrammar:
 
 
 def call_grammar(tools: list, allow_reply: bool = True, *, single_call: bool = False) -> str:
+    if not tools:
+        if not allow_reply:
+            raise ValueError("cannot require a tool call when no tools are available")
+        return "root ::= reply\n" + _STATIC.strip() + "\n"
     return PyGrammar().text(tools, allow_reply, single_call)
 
 
@@ -296,6 +300,9 @@ class NativeCallDecoder(LlamaServerDecoder):
         prompt = self.render(messages, tools)
         gen = self.generate(prompt, grammar=call_grammar(write_grammar_tools(tools, self.write_constraints), allow, single_call=single_call), max_tokens=max_tokens,
                             temperature=temperature, seed=seed, stop=[], n_probs=6)
+        return self._decode_turn(gen)
+
+    def _decode_turn(self, gen, *, reasoning: Optional[str] = None):
         self.stats["turns"] += 1
         if self.probability_log is not None:
             self.probability_log.append({"text": gen.text, "tokens": gen.token_details})
@@ -316,10 +323,54 @@ class NativeCallDecoder(LlamaServerDecoder):
                 self.stats["calls"] += len(calls)
                 raw = [{"id": f"c{self.stats['turns']}_{i}", "type": "function",
                         "function": {"name": n, "arguments": json.dumps(a)}} for i, (n, a) in enumerate(calls)]
+                response = None
+                if reasoning is not None:
+                    response = {"choices": [{"message": {"content": "", "reasoning_content": reasoning,
+                                                            "tool_calls": raw}}]}
                 return ChatTurn(calls, "", raw, gen.completion_tokens,
-                                value_confidence=written_value_confidence(gen.text, gen.token_details))
+                                value_confidence=written_value_confidence(gen.text, gen.token_details),
+                                raw_response=response)
         self.stats["replies"] += 1
-        return ChatTurn([], text, [], gen.completion_tokens)
+        response = None
+        if reasoning is not None:
+            response = {"choices": [{"message": {"content": text, "reasoning_content": reasoning,
+                                                    "tool_calls": []}}]}
+        return ChatTurn([], text, [], gen.completion_tokens, raw_response=response)
+
+
+class ReasoningNativeCallDecoder(NativeCallDecoder):
+    """Let a reasoning model deliberate freely, then constrain only its action.
+
+    This avoids forcing a reasoning-tuned model to choose a call on its first
+    token.  The thinking guard is local to this experimental decoder: ordinary
+    inference remains uncapped.  Reaching it is reported as a failed turn rather
+    than silently truncating a thought and manufacturing a call.
+    """
+
+    def __init__(self, *args, reasoning_tokens: int = 2048, **kwargs):
+        if reasoning_tokens < 1:
+            raise ValueError("reasoning_tokens must be positive")
+        super().__init__(*args, **kwargs)
+        self.reasoning_tokens = reasoning_tokens
+        self.stats.update({"reasoning_tokens": 0, "reasoning_overflows": 0})
+
+    def chat(self, messages, tools, *, temperature, seed=None, max_tokens=None,
+             allow_reply: Optional[bool] = None, single_call: bool = False):
+        allow = self.allow_reply if allow_reply is None else allow_reply
+        prompt = self.render(messages, tools)
+        thought = self.generate(prompt + "<think>", grammar=None, max_tokens=self.reasoning_tokens,
+                                temperature=temperature, seed=seed, stop=["</think>"], n_probs=0)
+        self.stats["reasoning_tokens"] += thought.completion_tokens or 0
+        if thought.stopped != "</think>":
+            self.stats["reasoning_overflows"] += 1
+            raise ValueError("reasoning did not reach </think> before its diagnostic guard")
+        remaining = None if max_tokens is None else max(1, max_tokens - (thought.completion_tokens or 0))
+        action = self.generate(prompt + "<think>" + thought.text + "</think>",
+                               grammar=call_grammar(write_grammar_tools(tools, self.write_constraints),
+                                                    allow, single_call=single_call),
+                               max_tokens=remaining, temperature=temperature, seed=seed, stop=[], n_probs=6)
+        action.completion_tokens = (thought.completion_tokens or 0) + (action.completion_tokens or 0)
+        return self._decode_turn(action, reasoning=thought.text)
 
 
 def _strip_private(tools):

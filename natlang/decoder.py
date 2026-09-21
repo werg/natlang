@@ -140,7 +140,7 @@ class LlamaServerDecoder:
                  timeout: Optional[float] = None,
                  chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None,
                  json_text_values: bool = False, typed_alternatives: bool = False,
-                 cache_stable_tools: bool = False):
+                 cache_stable_tools: bool = False, completion_extra: Optional[dict] = None):
         if json_text_values and typed_alternatives:
             raise ValueError("typed alternatives and JSON-text values are different transports")
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
@@ -154,6 +154,7 @@ class LlamaServerDecoder:
         self.tool_aliases = tool_aliases or {}
         # extra fields for /v1/chat/completions, e.g. {"thinking_budget_tokens": 512, "top_p": 0.95, "top_k": 20}
         self.chat_extra = chat_extra or {}
+        self.completion_extra = completion_extra or {}
         self.usage = {"turns": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def request_timeout(self):
@@ -303,6 +304,10 @@ class LlamaServerDecoder:
             payload["seed"] = seed
         if self.slot is not None:
             payload["id_slot"] = self.slot
+        payload.update(self.completion_extra)
+        # The caller's per-turn allowance is authoritative even if an
+        # experimental sampling bundle also contains n_predict.
+        payload["n_predict"] = -1 if max_tokens is None else max_tokens
         req = urllib.request.Request(self.base_url + "/completion", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         started = time.monotonic()

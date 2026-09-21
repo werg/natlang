@@ -93,6 +93,15 @@ def test_template_export_records_identity_and_rejects_changed_resume(tmp_path):
                                    *base[4:]], capture_output=True, text=True)
         assert exported.returncode == 0, exported.stderr
         assert json.loads(reply_dst.read_text())["completion"] == "<|im_end|>"
+        balanced_src, balanced_dst = tmp_path / "balanced.jsonl", tmp_path / "balanced-sft.jsonl"
+        replies = [{**row, "id": f"reply-{i}", "skill": "reply", "tools": [],
+                    "target": {"role": "assistant", "content": "Done."}} for i in range(4)]
+        balanced_src.write_text("".join(json.dumps(x) + "\n" for x in [row, *replies]))
+        balanced = subprocess.run([base[0], base[1], str(balanced_src), str(balanced_dst),
+                                   *base[4:], "--terminal-every", "2"], capture_output=True, text=True)
+        assert balanced.returncode == 0, balanced.stderr
+        assert [json.loads(line)["id"] for line in balanced_dst.read_text().splitlines()] == [
+            "one", "reply-0", "reply-2"]
         reasoning_src, reasoning_dst = tmp_path / "reasoning.jsonl", tmp_path / "reasoning-sft.jsonl"
         reasoning_src.write_text(json.dumps({**row, "id": "reasoned",
                                              "teacher_reasoning": "Check the destination before writing."}) + "\n")

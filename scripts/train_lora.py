@@ -24,8 +24,54 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.corpus import split_programs, file_digest, digest, index_pairs
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+def restore_lfm_expert_quantization(model, model_dir):
+    """Attach the saved NF4 state to LFM's raw MoE expert tensors.
+
+    BitsAndBytes discovers ordinary Linear modules itself.  LFM experts are
+    packed tensors, so a prequantized checkpoint carries their QuantState in a
+    companion file and needs this one-time restoration before the first
+    forward pass.
+    """
+    from bitsandbytes.nn import Params4bit
+    from safetensors import safe_open
+
+    model_dir = Path(model_dir)
+    states_path = model_dir / "expert_quant_state.pt"
+    weights_path = model_dir / "model.safetensors"
+    if not states_path.exists() or not weights_path.exists():
+        raise FileNotFoundError("LFM expert QLoRA requires model.safetensors and expert_quant_state.pt")
+    states = torch.load(states_path, weights_only=False)
+    device = next(model.parameters()).device
+    for state in states.values():
+        state.absmax = state.absmax.to(device, non_blocking=True)
+        state.code = state.code.to(device, non_blocking=True)
+        if state.nested:
+            if state.offset is not None:
+                state.offset = state.offset.to(device, non_blocking=True)
+            if getattr(state.state2, "absmax", None) is not None:
+                state.state2.absmax = state.state2.absmax.to(device, non_blocking=True)
+            if getattr(state.state2, "code", None) is not None:
+                state.state2.code = state.state2.code.to(device, non_blocking=True)
+    restored = 0
+    with safe_open(str(weights_path), framework="pt", device="cpu") as weights:
+        for name, param in list(model.named_parameters()):
+            if name not in states or "experts" not in name:
+                continue
+            packed = Params4bit(param.data, requires_grad=False, quant_state=states[name],
+                                blocksize=64, compress_statistics=True, quant_type="nf4",
+                                bnb_quantized=True)
+            packed.data.copy_(weights.get_tensor(name).to(device))
+            parent = model
+            parts = name.split(".")
+            for part in parts[:-1]:
+                parent = getattr(parent, part)
+            setattr(parent, parts[-1], packed)
+            restored += 1
+    if not restored:
+        raise ValueError("checkpoint contained no restorable LFM expert weights")
+    print(f"restored NF4 state for {restored} LFM expert tensors", flush=True)
 
 
 def completion_loss(model, encoded):
@@ -108,6 +154,7 @@ def main():
     ap.add_argument("data", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--model", default="LiquidAI/LFM2.5-350M")
+    ap.add_argument("--model-revision", help="immutable Hugging Face commit or tag for the base model")
     ap.add_argument("--steps", type=int, default=300, help="optimizer steps in total (a resumed run continues up to this)")
     ap.add_argument("--accum", type=int, default=16, help="sequences per optimizer step (unchanged by microbatch size)")
     ap.add_argument("--microbatch", type=int, default=1)
@@ -119,6 +166,14 @@ def main():
     ap.add_argument("--max-len", type=int, default=3072)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--rank", type=int, default=32)
+    ap.add_argument("--load-in-4bit", action="store_true",
+                    help="QLoRA base loading for models that do not fit in bf16 (checkpoint stores the adapter)")
+    ap.add_argument("--unsloth-lfm-experts", action="store_true",
+                    help="load an LFM NF4 checkpoint with packed MoE experts through Unsloth")
+    ap.add_argument("--unsloth-compile", action="store_true",
+                    help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
+    ap.add_argument("--target-modules",
+                    help="comma-separated LoRA module suffixes; QLoRA defaults to q_proj,k_proj,v_proj,o_proj")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
@@ -128,6 +183,15 @@ def main():
     a = ap.parse_args()
     if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens) < 0:
         ap.error("batch sizes and save interval must be positive; benchmark steps nonnegative")
+    if a.full and a.load_in_4bit:
+        ap.error("4-bit loading is for LoRA adapters, not full-weight training")
+    if a.unsloth_lfm_experts and not a.load_in_4bit:
+        ap.error("--unsloth-lfm-experts requires --load-in-4bit")
+    if a.merge_only and a.load_in_4bit:
+        ap.error("a QLoRA checkpoint is adapter-only; convert the adapter or merge it with a non-quantized base")
+    targets = [x.strip() for x in a.target_modules.split(",") if x.strip()] if a.target_modules else None
+    if a.target_modules and not targets:
+        ap.error("--target-modules must name at least one module")
     ckpt = a.out / "checkpoint"
     state_file = ckpt / "state.json"
     if a.fresh and ckpt.exists():
@@ -143,7 +207,14 @@ def main():
         pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
-                    "max_len": a.max_len, "model": a.model, "accum": a.accum}
+                    "max_len": a.max_len, "model": a.model,
+                    "model_revision": a.model_revision, "accum": a.accum}
+        if a.load_in_4bit:
+            identity["qlora"] = {"load_in_4bit": True, "rank": a.rank, "quant_type": "nf4",
+                                 "double_quant": True,
+                                 "target_modules": targets or ["q_proj", "k_proj", "v_proj", "o_proj"],
+                                 "unsloth_lfm_experts": a.unsloth_lfm_experts,
+                                 "unsloth_compile": a.unsloth_compile}
         if resume and state.get("corpus") != identity:
             raise SystemExit("Checkpoint corpus/split/settings differ (or predate program splits). "
                              "Use --merge-only to export it, or a new output directory for this training run.")
@@ -153,20 +224,65 @@ def main():
         print(f"program split: {len(train)} training turns, {len(held)} held-out turns "
               f"from {len(split['held_programs'])} programs", flush=True)
     torch.manual_seed(a.seed)
-    tok = AutoTokenizer.from_pretrained(a.model)
+    FastLanguageModel = None
+    if a.unsloth_lfm_experts:  # Unsloth must patch Transformers before PEFT imports it.
+        compile_root = Path(os.environ.get("HF_HOME", a.out / "hf-cache")) / "unsloth_compiled_cache"
+        compile_root.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("UNSLOTH_COMPILE_LOCATION", str(compile_root))
+        if not a.unsloth_compile:
+            os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
+            os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+        from unsloth import FastLanguageModel
+    from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
     base_src = str(ckpt / "weights") if (resume and a.full) else a.model
-    model = AutoModelForCausalLM.from_pretrained(base_src, dtype=torch.bfloat16).cuda()
+    if a.unsloth_lfm_experts:
+        from huggingface_hub import snapshot_download
+        model_path = Path(a.model)
+        base_src = (str(model_path.resolve()) if model_path.is_dir() else
+                    snapshot_download(a.model, revision=a.model_revision))
+        model, tok = FastLanguageModel.from_pretrained(
+            model_name=base_src, max_seq_length=a.max_len, load_in_4bit=True, device_map=0)
+        restore_lfm_expert_quantization(model, base_src)
+    else:
+        tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision)
+        load_options = {"dtype": torch.bfloat16}
+        if a.model_revision:
+            load_options["revision"] = a.model_revision
+        if a.load_in_4bit:
+            load_options.update({"device_map": {"": 0}, "quantization_config": BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16)})
+        model = AutoModelForCausalLM.from_pretrained(base_src, **load_options)
+        if not a.load_in_4bit:
+            model = model.cuda()
     if a.gradient_checkpointing:
         model.gradient_checkpointing_enable()
     model.config.use_cache = False
     if not a.full:
+        if a.load_in_4bit and not a.unsloth_lfm_experts:
+            model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=a.gradient_checkpointing)
         if resume:
             model = PeftModel.from_pretrained(model, str(ckpt / "weights"), is_trainable=True)
         else:
-            linear = sorted({n.split(".")[-1] for n, m in model.named_modules() if isinstance(m, torch.nn.Linear) and "lm_head" not in n})
-            model = get_peft_model(model, LoraConfig(r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0, target_modules=linear,
-                                                     task_type="CAUSAL_LM"))
+            linear = targets
+            if linear is None:
+                linear = (["q_proj", "k_proj", "v_proj", "o_proj"] if a.load_in_4bit else
+                          sorted({n.split(".")[-1] for n, m in model.named_modules()
+                                  if isinstance(m, torch.nn.Linear) and "lm_head" not in n}))
+            if a.unsloth_lfm_experts:
+                model = FastLanguageModel.get_peft_model(
+                    model, r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
+                    target_modules=linear, use_gradient_checkpointing="unsloth", random_state=a.seed)
+            else:
+                model = get_peft_model(model, LoraConfig(
+                    r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
+                    target_modules=linear, task_type="CAUSAL_LM"))
         model.enable_input_require_grads()
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in model.parameters())
+        print(f"trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.3f}%)", flush=True)
 
     def export_merged():
         merged = model.merge_and_unload() if not a.full else model
@@ -261,7 +377,8 @@ def main():
     metrics = ([m for m in json.loads(metrics_file.read_text())["steps"] if m["step"] <= state["step"]]
                if resume and metrics_file.exists() else [])
     packages = {}
-    for name in ("torch", "transformers", "peft", "causal-conv1d"):
+    for name in ("torch", "transformers", "peft", "bitsandbytes", "unsloth",
+                 "unsloth_zoo", "causal-conv1d"):
         try:
             packages[name] = version(name)
         except PackageNotFoundError:

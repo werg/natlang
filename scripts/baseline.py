@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run conformance programs against the served model through structured tools."""
-import re, argparse, json, sys, time, os
+import re, argparse, hashlib, json, sys, time, os, urllib.request
 from collections import Counter
 from pathlib import Path
 import yaml
@@ -9,14 +9,14 @@ from natlang.decoder import LlamaServerDecoder
 from natlang.host import load
 from natlang.surface import ToolSurface
 from natlang.tool_agent import ToolAgent
-from natlang.native import NativeCallDecoder
+from natlang.native import NativeCallDecoder, ReasoningNativeCallDecoder
 from natlang.runtime import Runtime
 from natlang.values import dump
 from natlang.corpus import file_digest
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
-ap.add_argument("--decode", default="native", choices=("native", "server"),
+ap.add_argument("--decode", default="native", choices=("native", "reasoning-native", "server"),
                 help="native: our grammar over the model's native call text; server: the server's tool calling")
 ap.add_argument("--require-call", action="store_true", help="require a tool call on every model turn")
 ap.add_argument("--verbose", action="store_true", help="print every action as it happens")
@@ -27,6 +27,16 @@ ap.add_argument("--reasoning-effort", choices=("low", "medium", "high"),
                 help="reasoning effort passed through the model's chat template")
 ap.add_argument("--timeout", type=float, default=600)
 ap.add_argument("--temperature", type=float, default=0.2)
+ap.add_argument("--top-k", type=int)
+ap.add_argument("--top-p", type=float)
+ap.add_argument("--min-p", type=float)
+ap.add_argument("--repeat-penalty", type=float)
+ap.add_argument("--turn-tokens", type=int,
+                help="optional per-turn diagnostic guard; normal inference remains uncapped")
+ap.add_argument("--native-reasoning-tokens", type=int, default=2048,
+                help="thinking guard used only by --decode reasoning-native")
+ap.add_argument("--capture-turns", action="store_true",
+                help="retain exact server replies, including reasoning, in the result JSON")
 ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
 ap.add_argument("--judge-server", default="http://127.0.0.1:8081", help="model that answers judge checks; 'none' to skip")
 ap.add_argument("--alias", action="append", default=[], help="tool renames for this model's server, e.g. call=call_function")
@@ -45,22 +55,47 @@ ap.add_argument("--segment-messages", type=int, default=24)
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 a.validation_feedback = a.validation_feedback or "caller"
+try:
+    server_props = json.load(urllib.request.urlopen(a.server.rstrip("/") + "/props", timeout=10))
+    server_info = {"model_alias": server_props.get("model_alias"),
+                   "model_ftype": server_props.get("model_ftype"),
+                   "context_per_slot": (server_props.get("default_generation_settings") or {}).get("n_ctx"),
+                   "slots": server_props.get("total_slots"),
+                   "chat_template_sha256": hashlib.sha256(
+                       (server_props.get("chat_template_tool_use") or
+                        server_props.get("chat_template") or "").encode()).hexdigest()}
+except Exception as exc:
+    server_info = {"metadata_error": f"{type(exc).__name__}: {exc}"}
 root = Path(__file__).resolve().parent.parent
 files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
 extra = {}
 if a.thinking is not None:
-    extra.update({"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20})
+    extra["thinking_budget_tokens"] = a.thinking
+if a.top_k is not None:
+    extra["top_k"] = a.top_k
+if a.top_p is not None:
+    extra["top_p"] = a.top_p
+if a.min_p is not None:
+    extra["min_p"] = a.min_p
+if a.repeat_penalty is not None:
+    extra["repeat_penalty"] = a.repeat_penalty
 if a.reasoning_effort:
     extra.setdefault("chat_template_kwargs", {})["reasoning_effort"] = a.reasoning_effort
 if a.require_call:
     extra["tool_choice"] = "required"
-dec = (NativeCallDecoder(a.server, timeout=a.timeout, write_constraints=a.write_constraints,
-                         cache_stable_tools=a.cache_stable_tools,
-                         allow_reply=not a.require_call) if a.decode == "native"
-       else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra,
-                               tool_aliases=dict(x.split("=", 1) for x in a.alias),
-                               cache_stable_tools=a.cache_stable_tools))
+native_options = {"timeout": a.timeout, "write_constraints": a.write_constraints,
+                  "cache_stable_tools": a.cache_stable_tools, "allow_reply": not a.require_call}
+native_options["completion_extra"] = {k: v for k, v in {
+    "top_k": a.top_k, "top_p": a.top_p, "min_p": a.min_p,
+    "repeat_penalty": a.repeat_penalty}.items()
+    if v is not None}
+dec = (NativeCallDecoder(a.server, **native_options) if a.decode == "native" else
+       ReasoningNativeCallDecoder(a.server, reasoning_tokens=a.native_reasoning_tokens,
+                                  **native_options) if a.decode == "reasoning-native" else
+       LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra,
+                          tool_aliases=dict(x.split("=", 1) for x in a.alias),
+                          cache_stable_tools=a.cache_stable_tools))
 from natlang.checks import grade, make_judge
 judge = None if a.judge_server == "none" else make_judge(
     LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
@@ -76,9 +111,12 @@ for f in files:
             if a.verbose:
                 print(f"      {x['kind']:<9}{x['action'][:150]}", flush=True)
     log = Live()
+    teacher_turns = []
     if a.verbose:
         print(f"  > {f.stem}", flush=True)
     make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
+                                 teacher_turns=teacher_turns if a.capture_turns else None,
+                                 turn_tokens=a.turn_tokens,
                                  validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold, surface=ToolSurface(state_view=a.state_view), review_scope=a.review_scope, withdrawal_policy=a.withdrawal_policy, review_prompt=a.review_prompt,
                                  segment_turns=a.segment_turns, segment_messages=a.segment_messages,
                                  **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
@@ -108,26 +146,36 @@ for f in files:
     print(f"{f.stem:<32} {kind:<10} correct={verdict:<3} actions={len(log):<3} "
           f"rejected={rejected:<3} episodes={rt.episodes_started:<3} {time.time()-t:5.1f}s  structure={','.join(shapes) or '-':<12} first: {first}"
           + ("".join(f"\n      failed: {w}" for w in why)))
-    records.append({"program": f.stem, "program_sha256": file_digest(f), "status": kind,
+    record = {"program": f.stem, "program_sha256": file_digest(f), "status": kind,
                     "verdict": verdict, "details": why, "value": dump(value) if kind == "done" else None,
                     "emitted": rt.emitted, "actions": len(log), "rejected": rejected,
-                    "episodes": rt.episodes_started, "seconds": time.time() - t})
+                    "episodes": rt.episodes_started, "seconds": time.time() - t}
+    if a.capture_turns:
+        record["teacher_turns"] = teacher_turns
+    records.append(record)
 counts = dict(Counter(r["verdict"] for r in records))
 print(f"\nprograms={len(records)} correct={counts.get('yes', 0)} incorrect={counts.get('no', 0)} "
       f"unjudged={counts.get('?', 0)}")
 result_path = a.out or root / "runs" / f"baseline-{time.time_ns()}.json"
 result_path.parent.mkdir(parents=True, exist_ok=True)
 result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "surface": "tools",
+                                  "server_info": server_info,
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
                                   "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold, "state_view": a.state_view, "review_scope": a.review_scope, "review_prompt": a.review_prompt, "withdrawal_policy": a.withdrawal_policy,
                                   "write_constraints": a.write_constraints,
                                   "cache_stable_tools": a.cache_stable_tools,
                                   "segment_turns": a.segment_turns, "segment_messages": a.segment_messages,
                                   "reasoning_effort": a.reasoning_effort,
+                                  "sampling": {"temperature": a.temperature, "top_k": a.top_k,
+                                               "top_p": a.top_p, "min_p": a.min_p,
+                                               "repeat_penalty": a.repeat_penalty},
+                                  "turn_tokens": a.turn_tokens, "capture_turns": a.capture_turns,
+                                  "native_reasoning_tokens": (a.native_reasoning_tokens
+                                                              if a.decode == "reasoning-native" else None),
                                   "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                                   "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")
 print(f"results: {result_path}")
-if a.decode == "native" and dec.stats["p_call_first"]:
+if a.decode in ("native", "reasoning-native") and dec.stats["p_call_first"]:
     pc = [p for p in dec.stats["p_call_first"] if p is not None]
     print(f"\nturns={dec.stats['turns']} tool-call turns={dec.stats['turns']-dec.stats['replies']} replies={dec.stats['replies']} "
           f"mean P(model starts a call)={sum(pc)/len(pc) if pc else 'unavailable'}")

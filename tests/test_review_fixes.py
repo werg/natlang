@@ -206,10 +206,13 @@ def test_native_decoder_reports_tokens_and_honors_deadline(monkeypatch):
         requests.append((json.loads(req.data), timeout))
         return io.BytesIO(json.dumps({'content': 'ok', 'tokens_predicted': 2}).encode())
     monkeypatch.setattr(urllib.request, 'urlopen', urlopen)
-    dec = LlamaServerDecoder(timeout=300)
+    dec = LlamaServerDecoder(timeout=300, completion_extra={'top_k': 80, 'repeat_penalty': 1.05,
+                                                             'n_predict': 999})
     dec.deadline = time.monotonic() + 1
     result = dec.generate('prompt', grammar=None, max_tokens=3, temperature=0, seed=0, stop=[])
     assert result.completion_tokens == 2 and dec.usage['completion_tokens'] == 2
+    assert requests[0][0]['top_k'] == 80 and requests[0][0]['repeat_penalty'] == 1.05
+    assert requests[0][0]['n_predict'] == 3
     assert dec.usage['turns'] == 1 and 0 < requests[0][1] <= 1
     dec.deadline = time.monotonic() - 1
     with pytest.raises(TimeoutError):
