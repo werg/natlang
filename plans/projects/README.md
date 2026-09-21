@@ -1,5 +1,18 @@
 # Individual project implementation plans
 
+## Further semantic application development
+
+The [semantic software plan](../SEMANTIC_SOFTWARE.md) specifies five extensions
+to the application's role: [learned tools](S01_LEARNED_TOOLS.md),
+[revisable schemas](S02_REVISABLE_SCHEMAS.md),
+[generated interactions](S03_GENERATED_INTERACTIONS.md),
+[intent-preserving changes](S04_INTENT_CHANGES.md) and
+[beliefs and investigation](S05_BELIEFS.md). It identifies current studio
+constraints, concrete host/library changes and an integrated notebook delivery
+sequence. These are proposed work, separate from the delivered scope below.
+
+## Existing portfolio
+
 Planning status: all twenty families have an executable first slice; see the
 [implementation ledger](IMPLEMENTATION_STATUS.md) for tested scope and open
 product gates. These plans refine the [product catalogue](../AMBITIOUS_PROJECTS.md)
