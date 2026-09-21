@@ -82,7 +82,7 @@ export class BrowserNatlangApplication<S, V> {
     try {
       return await this.client.run({
         source: { kind: 'files', root, files: this.source.files }, inputs,
-        modelTurn: this.options.modelTurn, validationFeedback: this.options.validationFeedback,
+        modelTurn: this.options.modelTurn, validationFeedback: this.options.validationFeedback ?? 'local',
         signal: controller.signal,
         options: { ...this.options.runOptions,
           ...(this.options.seedRoot === undefined ? {} : {
