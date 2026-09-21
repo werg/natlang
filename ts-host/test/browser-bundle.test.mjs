@@ -65,6 +65,28 @@ test('browser loads file source, lexical types, companions, and inputs from virt
   } finally { host.close(); }
 });
 
+test('browser accepts a large lexical codebase and more than sixteen locals', async () => {
+  const nodeProcess = globalThis.process;
+  let api;
+  try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
+  finally { globalThis.process = nodeProcess; }
+  const files = { 'main.nl': '---\nreturns: Num\n---\nBuild many intermediate values.' };
+  for (let i = 0; i < 24; i++) files[`main/helper_${i}.nl`] = '---\nreturns: Num\n---\nReturn one.';
+  const loaded = api.loadFunctionFiles('main.nl', files);
+  assert.equal(Object.keys(loaded.codebase).length, 24);
+  const host = new api.BrowserNatlangHost();
+  let turns = 0;
+  try {
+    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
+      modelTurn: () => ++turns === 1 ? { calls: [
+        ...Array.from({ length: 24 }, (_, i) => ['write', { path: `let/value_${i}`, type: 'Num', value: i }]),
+        ['write', { path: 'return', type: 'Num', value: 24 }],
+      ] } : { calls: [], text: 'done' } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, 24);
+  } finally { host.close(); }
+});
+
 test('browser source workspace invokes a checked child with browser eval', async () => {
   const nodeProcess = globalThis.process;
   let api;

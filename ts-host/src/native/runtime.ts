@@ -49,7 +49,6 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
   'old-not-found': 'Copy `old` exactly from the text, including punctuation.',
   'old-not-unique': 'Make `old` longer so that it occurs only once.',
   'no-origin': 'Only a result that a sub-task produced can be retried. Write the value again instead.',
-  'too-deep': 'Sub-tasks are nested too deeply. Do this step directly.',
   'too-large': 'Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.',
   'stuck-dependency': 'An input of this sub-task could not be produced: read its note, fix it, run it again.',
 };
@@ -701,8 +700,6 @@ export class NativeSession {
           throw new Reject([{ path: 'type', code: 'anonymous-lambda', expected: 'call with a checked function' }]);
         const local = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(path)?.[1];
         const created = !!local && !Object.hasOwn(this.lam.letTypes, local);
-        if (created && Object.keys(this.lam.letTypes).length >= 16)
-          throw new Reject([{ path, code: 'too-many-locals', expected: 'at most 16 locals' }]);
         if (created) this.lam.letTypes[local!] = stated;
         try {
           const ref = this.resolve(path, true);
@@ -1024,8 +1021,6 @@ export class NativeSession {
         if (!this.lam.letTypes[local]) {
           if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(local))
             throw new Reject([{ path, code: 'no-such-path', expected: 'let/<name>' }]);
-          if (Object.keys(this.lam.letTypes).length >= 16)
-            throw new Reject([{ path, code: 'too-many-locals', expected: 'at most 16 locals' }]);
           this.lam.letTypes[local] = parseType(destination); newLocal = local;
         }
       }

@@ -35,8 +35,6 @@ from .values import dump_state
 # Reference values for explicit legacy budgets; RunOptions defaults to None.
 MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
-MAX_NESTING = 6
-MAX_LOCALS = 16          # pending nodes nested inside one another, below the acting lambda
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
 
@@ -583,20 +581,6 @@ def _split2(inner: str):
     raise reject("type", "type-mismatch", "two type arguments")
 
 
-def _nesting(x) -> int:
-    """How many pending nodes are nested inside one another at the deepest point of `x`."""
-    if isinstance(x, Lambda):
-        return 1 + max([_nesting(v) for v in x.in_.values()] + [_nesting(x.ret)], default=0)
-    if is_pending(x):
-        parts = [getattr(x, p, None) for p in ("over", "fn", "init", "step", "check", "current", "slots")]
-        return 1 + max((_nesting(p) for p in parts), default=0)
-    if isinstance(x, dict):
-        return max((_nesting(v) for v in x.values()), default=0)
-    if isinstance(x, list):
-        return max((_nesting(v) for v in x), default=0)
-    return 0
-
-
 def _one_line(value) -> str:
     if isinstance(value, list):
         return f"{len(value)} items"
@@ -909,8 +893,6 @@ class Session:
             return None
         if len(segs) != 2 or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", segs[1]):
             raise reject(path, "no-such-path", "let/<name> with an identifier as name")
-        if len(self.lam.let_types) >= MAX_LOCALS:
-            raise reject(path, "too-many-locals", f"at most {MAX_LOCALS} locals")
         try:
             t = parse_type(type_text)
         except TypeSyntaxError as e:
@@ -1320,15 +1302,8 @@ class Session:
         return self._apply_copy_snapshot(self._snapshot_copy(a.path), a.dst)
 
     def _set_checked(self, ref: Ref, value):
-        """Write, then undo if pending nodes now nest too deeply (SPEC 6.3)."""
-        old = ref.get()
+        """Write the checked value; call recursion is guarded separately."""
         ref.set(value)
-        if _nesting(self.lam) - 1 > MAX_NESTING:
-            if old is MISSING:
-                ref.delete()
-            else:
-                ref.set(old)
-            raise reject(ref.path, "too-deep", f"at most {MAX_NESTING} pending nodes nested below a lambda")
 
     # -- reduce / reopen
     def _do_reduce(self, a: Action) -> Result:
@@ -1427,7 +1402,6 @@ _HINTS = {
     "old-not-found": "Copy `old` exactly from the text, including punctuation.",
     "old-not-unique": "Make `old` longer so that it occurs only once.",
     "no-origin": "Only a result that a sub-task produced can be retried. Write the value again instead.",
-    "too-deep": "Sub-tasks are nested too deeply. Do this step directly.",
     "too-large": "Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.",
     "stuck-dependency": "An input of this sub-task could not be produced: read its note, fix it, run it again.",
 }

@@ -36,6 +36,15 @@ and its `uses`. More verbose than inheriting the caller's functions, much
 simpler to reason about, and it survives git, archives and Windows, which OS
 symlinks do not.
 
+There is no fixed number-of-functions cap. The former 12-helper listing budget
+rejected valid programs at load time and prevented a research controller from
+using its ordinary crisp library. Keep interpreter prompts efficient by
+decomposing codebases into meaningful lexical groups and reading only relevant
+source; do not turn prompt budgeting into a language validity rule.
+The former 16-local and six-pending-node fixed limits were removed for the
+same reason. Recursion checks remain, and embeddings may explicitly choose
+execution budgets when their environment requires them.
+
 Not yet implemented: `types.ts` beyond simple aliases.
 
 Folder `types.ts` aliases are terminated by a semicolon at declaration depth,

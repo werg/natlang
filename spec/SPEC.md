@@ -500,10 +500,7 @@ that is already running above a call is not started again (`recursion`), and:
    and type are identical to those of a lambda already being reduced above
    it; it quiesces with a note. (The same idea as cycle detection in
    `Iterate`.)
-2. *Bounded nesting.* At most 6 pending nodes may nest inside one another
-   below the acting lambda; a write that would exceed this is rejected
-   (`too-deep`).
-3. *Optional run budgets.*
+2. *Optional run budgets.*
 
 Episode count, call depth, work actions, tool calls, model turns, generated
 tokens, and elapsed time have no default cap. An embedding may set positive
@@ -549,15 +546,13 @@ Diagnostic codes (v0.2):
 | `type-does-not-fit-slot` | reject | the stated or source type does not fit the slot |
 | `unknown-field` | reject | the record type has no such field |
 | `reserved-key` | reject | a `$`-prefixed key used as data |
-| `too-deep` | reject | pending nodes would nest more than 6 deep |
 | `eval-cannot-write` | reject | `run_code` attempted to modify the tree |
 | `effect-undeclared` | reject | capability not in the lambda's `effects` |
 | `effect-wider-than-parent` | reject | a child declares a capability its parent lacks |
 | `no-such-function` | reject | `call` or `Function<f>` names nothing in the code base |
 | `bad-call` | reject | a required parameter is unbound, or `over` / `until` / `max` do not suit the signature |
 | `anonymous-lambda` | reject | a `write` whose type is a pending node |
-| `too-many-locals` | reject | more than 16 locals |
-| `recursion`, `codebase-too-large` | reject (at load) | a function can reach itself; more than 12 functions |
+| `recursion` | reject (at load) | a function can reach itself |
 | `unbound-param`, `unbound-part` | blocks-commit | starting a partial instance |
 | `commit-holes` | blocks-commit | completing with holes in `return` |
 | `commit-pending` | blocks-commit | completing with pending nodes in `return` |

@@ -67,6 +67,20 @@ def test_loader_scopes_lexically_and_shares_definitions():
     assert fn.codebase["count_true"].kind == "code"
 
 
+def test_codebase_and_local_count_are_not_language_limits(tmp_path):
+    root = tmp_path / "main.nl"
+    root.write_text("---\nreturns: Num\n---\nCount the values.\n")
+    folder = tmp_path / "main"
+    folder.mkdir()
+    for i in range(24):
+        (folder / f"helper_{i}.nl").write_text("---\nreturns: Num\n---\nReturn one.\n")
+    assert len(load_function(root).codebase) == 24
+    session = _session()
+    for i in range(24):
+        assert session.apply("write", {"path": f"let/value_{i}", "type": "Num", "value": i}).kind == "ok"
+    assert len(session.lam.let_types) == 24
+
+
 def test_the_triage_code_base_runs_and_every_call_is_grammatical():
     log = []
     rt = Runtime(lambda lam: Scripted(lam, log))

@@ -19,7 +19,6 @@ import yaml
 
 from .diag import reject
 
-MAX_FUNCTIONS = 12                     # listing budget per code base
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _FRONT_TS = re.compile(r"\A\s*/\*---\n(.*?)\n---\*/\n?(.*)\Z", re.S)
 _KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine"}
@@ -270,8 +269,6 @@ def check(root: FunctionDef, *, strict_names: bool = False) -> None:
                     env.check_names(declared)
         except TypeSyntaxError as exc:
             raise reject(fn.source, "type-mismatch", "a valid checked function signature", str(exc)) from exc
-        if len(fn.codebase) > MAX_FUNCTIONS:
-            raise reject(fn.source, "codebase-too-large", f"at most {MAX_FUNCTIONS} functions", str(len(fn.codebase)))
         stack.append(fn)
         for child in fn.codebase.values():
             visit(child)

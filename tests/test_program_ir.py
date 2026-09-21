@@ -95,7 +95,7 @@ def test_scene_program_executes_graph_nodes_in_harness():
     samples, _ = run_program(lower(validate(record)))
     assert sum(s["skill"] == "run_code" for s in samples) == len(nodes)
 
-    # The runtime permits 16 locals; larger graphs compile into one exact
+    # Larger graphs may compile into one exact
     # program while preserving every semantic node in the IR.
     many = [{"function": "scene", "inputs": [], "value_inputs": []} for _ in range(17)]
     many.append({"function": "count", "inputs": [16], "value_inputs": []})

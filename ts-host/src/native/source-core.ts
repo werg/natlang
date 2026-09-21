@@ -76,7 +76,6 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
         if (!id.test(alias)) throw new Reject([{ path: `${file}/uses/${alias}`, code: 'type-mismatch' }]);
         children[alias] = read(files.join(files.dirname(file), String(target)), {});
       }
-      if (Object.keys(children).length > 12) throw new Reject([{ path: file, code: 'codebase-too-large' }]);
       const body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
         returns: meta.returns, [ts ? 'code' : 'instructions']: body,
