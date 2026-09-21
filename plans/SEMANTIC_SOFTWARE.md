@@ -1,8 +1,9 @@
 # Software that develops its own understanding
 
-Status: proposed implementation plan, 2026-09-21. This document and its five
-linked plans describe new work; they do not claim these capabilities are
-implemented or that live-model evaluations have passed.
+Status: implementation in progress, 2026-09-21. A first integrated application
+and host library now live in [Inquiry Lab](../ts-host/studio/research/README.md).
+The detailed plans retain the larger product and quality gates. Live-model
+semantic evaluation has not passed.
 
 The objective is software in which natlang develops representations, algorithms
 and interactions appropriate to the task. A successful application should be

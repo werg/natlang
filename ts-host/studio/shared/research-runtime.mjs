@@ -15,7 +15,8 @@ function sourceFiles(snapshot, manifest) {
     return files;
 }
 
-const tags = new Set(['main', 'section', 'div', 'h1', 'h2', 'h3', 'p', 'span', 'strong', 'em', 'ul', 'ol', 'li', 'button', 'input', 'label', 'output']);
+const tags = new Set(['main', 'section', 'div', 'h1', 'h2', 'h3', 'p', 'span', 'strong', 'em', 'ul', 'ol', 'li', 'button', 'input', 'label', 'output',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'textarea', 'select', 'option', 'details', 'summary', 'pre', 'code', 'meter', 'progress', 'br']);
 /** Exact shape and wiring validation; the model chooses the actual interaction. */
 export function validateInteraction(tree, bindings) {
     assert(bindings && typeof bindings === 'object' && !Array.isArray(bindings), 'Bindings must be a record');
@@ -29,12 +30,12 @@ export function validateInteraction(tree, bindings) {
             assert(typeof node.id === 'string' && !controls.has(node.id), `Duplicate view ID ${node.id}`);
             controls.add(node.id);
         }
-        if (node.tag === 'input') {
+        if (['input', 'textarea', 'select'].includes(node.tag)) {
             assert(node.id, 'Input needs a stable ID');
             inputs.add(node.id);
         }
         if (node.action) {
-            assert(node.id && (node.tag === 'input' || node.tag === 'button'), 'Only identified controls can emit events');
+            assert(node.id && ['input', 'textarea', 'select', 'button'].includes(node.tag), 'Only identified controls can emit events');
             assert(node.action.kind === node.id, 'Control action must identify its own binding');
         }
         for (const child of node.children ?? []) visit(child, depth + 1);
@@ -125,6 +126,53 @@ export class ResearchRuntime {
         const paths = new Set([...Object.keys(left.files), ...Object.keys(right.files)]);
         return [...paths].sort().flatMap(path => left.files[path] === right.files[path] ? [] : [{ path,
             before: left.files[path] ?? '', after: right.files[path] ?? '' }]);
+    }
+    async branches() {
+        const snapshot = await this.workspace.snapshot();
+        const lineage = new Set();
+        for (let id = snapshot.head; id && snapshot.manifests[id]; id = snapshot.manifests[id].parent) lineage.add(id);
+        return Object.values(snapshot.manifests).filter(manifest => manifest.id !== snapshot.head).map(manifest => {
+            const parent = snapshot.manifests[manifest.parent];
+            const paths = new Set([...Object.keys(parent?.files ?? {}), ...Object.keys(manifest.files)]);
+            return { id: manifest.id, parent: manifest.parent, message: manifest.message,
+                changed: [...paths].filter(path => parent?.files[path] !== manifest.files[path]).length,
+                active: false, kind: lineage.has(manifest.id) ? 'history' : 'candidate' };
+        });
+    }
+    /** Exact dependency projection; natlang still judges relevance and entailment. */
+    async beliefGraph(manifestId) {
+        const snapshot = await this.workspace.snapshot(), manifest = snapshot.manifests[manifestId];
+        assert(manifest, `Unknown manifest ${manifestId}`);
+        const nodes = [], links = [], missing = [];
+        for (const [path, id] of Object.entries(manifest.files)) {
+            const artifact = snapshot.artifacts[id];
+            if (!['claim', 'evidence', 'assessment'].includes(artifact.kind)) continue;
+            const content = artifact.content;
+            nodes.push({ path, id, kind: artifact.kind, title: typeof content === 'string' ? content.slice(0, 180) :
+                String(content?.text ?? content?.claim ?? content?.summary ?? path),
+                status: typeof content === 'object' ? String(content?.status ?? '') : '' });
+            if (!content || typeof content !== 'object' || Array.isArray(content)) continue;
+            for (const relation of ['supports', 'opposes', 'assumptions', 'questions', 'depends_on']) {
+                for (const target of content[relation] ?? []) {
+                    if (typeof target !== 'string') continue;
+                    const edge = { from: path, to: target, relation };
+                    (manifest.files[target] ? links : missing).push(edge);
+                }
+            }
+        }
+        return { nodes, links, missing };
+    }
+    async affected(manifestId, changedPaths) {
+        const { links } = await this.beliefGraph(manifestId);
+        const affected = new Set(changedPaths);
+        for (let i = 0; i < links.length + 1; i++) {
+            let grew = false;
+            for (const link of links) if (affected.has(link.to) && !affected.has(link.from)) {
+                affected.add(link.from); grew = true;
+            }
+            if (!grew) break;
+        }
+        return [...affected].filter(path => !changedPaths.includes(path)).sort();
     }
     async interaction(manifestId, path) {
         const artifact = await this.read(manifestId, path);

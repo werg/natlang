@@ -16,3 +16,5 @@ results here. Relevance and entailment are semantic judgments; exact search
 hits and literal quotes alone do not establish them. Do not assign a numeric
 confidence unless a recorded calculation justifies it. Leave uncertainty
 explicit when the available evidence cannot settle it.
+Use belief_graph and affected in the parent reduction to find known exact links,
+then search for plausible relationships that were never recorded as links.

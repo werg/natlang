@@ -32,7 +32,32 @@ export class ResearchHost {
         list: head => this.runtime.list(head),
         search: (head, query) => this.runtime.search(head, query),
         read: async (head, path) => JSON.stringify(await this.runtime.read(head, path)),
+        nativeRead: async (id, offset, length) => {
+            const record = await this.store.get('native_values', id);
+            if (!record || typeof record.value !== 'string') throw new Error('Unknown native evidence');
+            if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > 65536)
+                throw new Error('Read a valid window of at most 65536 characters');
+            return record.value.slice(offset, offset + length);
+        },
+        nativeSearch: async (id, query) => {
+            const record = await this.store.get('native_values', id);
+            if (!record || typeof record.value !== 'string') throw new Error('Unknown native evidence');
+            if (!query || typeof query !== 'string') throw new Error('Search query is required');
+            const text = record.value, needle = query.toLowerCase(), folded = text.toLowerCase(), hits = [];
+            let from = 0, total = 0;
+            while (true) {
+                const at = folded.indexOf(needle, from);
+                if (at < 0) break;
+                total++;
+                if (hits.length < 30) hits.push({ offset: at, excerpt: text.slice(Math.max(0, at - 100), at + query.length + 100) });
+                from = at + Math.max(1, query.length);
+            }
+            return JSON.stringify({ hits, total, truncated: total > hits.length, length: text.length });
+        },
         diff: async (left, right) => JSON.stringify(await this.runtime.diff(left, right)),
+        branches: () => this.runtime.branches(),
+        beliefGraph: async head => JSON.stringify(await this.runtime.beliefGraph(head)),
+        affected: async (head, changed) => this.runtime.affected(head, changed),
         receipt: async id => {
             const receipt = await this.store.readEffect(id);
             if (!receipt?.root || !receipt.manifest) throw new Error('Unknown research receipt');

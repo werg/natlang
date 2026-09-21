@@ -55,3 +55,28 @@ test('an interrupted execution keeps an unknown receipt and cannot silently repl
     assert.equal((await runtime.execute(manifest.id, 'methods/effect.ts', {}, 'interrupted')).status, 'unknown');
     assert.equal(runs, 0);
 });
+
+test('new evidence identifies claims and assessments with recorded dependencies', async () => {
+    const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(), runSource: async () => ({ value: null }) });
+    const manifest = await runtime.commit('', {
+        'evidence/batch.json': { kind: 'evidence', content: { text: 'New mobile batch' } },
+        'claims/reliability.json': { kind: 'claim', content: { text: 'Mobile improved', status: 'supported', supports: ['evidence/batch.json'], opposes: ['evidence/missing.json'] } },
+        'assessment/summary.json': { kind: 'assessment', content: { text: 'Deployment improved reliability for mobile', depends_on: ['claims/reliability.json'] } },
+        'claims/unrelated.json': { kind: 'claim', content: { text: 'Documentation was updated' } },
+    });
+    const graph = await runtime.beliefGraph(manifest.id);
+    assert.equal(graph.links.length, 2);
+    assert.equal(graph.missing[0].to, 'evidence/missing.json');
+    assert.deepEqual(await runtime.affected(manifest.id, ['evidence/batch.json']), ['assessment/summary.json', 'claims/reliability.json']);
+});
+
+test('branch listing distinguishes live candidates from active history', async () => {
+    const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(), runSource: async () => ({ value: null }) });
+    const base = await runtime.commit('', { 'a.txt': { kind: 'data', content: 'base' } });
+    const alternative = await runtime.propose(base.id, { 'a.txt': { kind: 'data', content: 'alternative' } }, { message: 'Another interpretation' });
+    const current = await runtime.commit(base.id, { 'a.txt': { kind: 'data', content: 'current' } });
+    const branches = await runtime.branches();
+    assert.equal(branches.find(row => row.id === alternative.id).kind, 'candidate');
+    assert.equal(branches.find(row => row.id === base.id).kind, 'history');
+    assert.equal((await runtime.diff(base.id, current.id))[0].path, 'a.txt');
+});

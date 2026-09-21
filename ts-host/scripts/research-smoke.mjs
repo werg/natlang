@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -16,7 +16,7 @@ try {
     page.on('pageerror', error => errors.push(String(error)));
     await page.goto(studio.url + 'research/');
     await page.getByText('reliability-observations.json').waitFor();
-    assert.match(await page.locator('#artifact-count').textContent(), /19 artifacts/);
+    assert.match(await page.locator('#artifact-count').textContent(), /24 artifacts/);
     await page.getByRole('button', { name: /reliability-observations/ }).click();
     await page.locator('#detail-body').getByText(/failures/).waitFor();
     assert.match(await page.locator('#detail-body').textContent(), /"failures": 72/);
@@ -24,6 +24,18 @@ try {
     await page.locator('#evidence-file').setInputFiles({ name: 'later.json', mimeType: 'application/json', buffer: Buffer.from('[{"period":"later","requests":10,"failures":1}]') });
     await page.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
     assert.match(await page.locator('#revision').textContent(), /Event 1/);
+    const large = 'start\n' + 'x'.repeat(270_000) + '\ncritical observation\n';
+    await page.locator('#evidence-file').setInputFiles({ name: 'large.txt', mimeType: 'text/plain', buffer: Buffer.from(large) });
+    await page.locator('#artifacts strong').filter({ hasText: 'large.txt' }).waitFor();
+    await page.getByRole('button', { name: /large.txt/ }).click();
+    await page.getByRole('button', { name: 'Download full evidence' }).waitFor();
+    const fullDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download full evidence' }).click();
+    const full = await fullDownload;
+    const fullPath = join(temporary, 'large.txt');
+    await full.saveAs(fullPath);
+    assert.equal((await readFile(fullPath, 'utf8')).length, large.length);
+    await page.getByRole('button', { name: 'Close' }).click();
     await page.evaluate(async () => {
         const { StudioStore } = await import('../shared/store.mjs');
         const { ResearchWorkspace } = await import('../shared/research-workspace.mjs');
@@ -33,6 +45,13 @@ try {
             'methods/cohort.nl': { kind: 'source', content: '---\nargs:\n  value: Text\n  context: Text\nreturns: Text\n---\nCompare this cohort against the current evidence.' },
             'views/cohort.json': { kind: 'view', content: { tree: { tag: 'section', children: [
                 { tag: 'h2', text: 'Explore cohorts' }, { tag: 'input', id: 'cohort', label: 'Cohort' },
+                { tag: 'select', id: 'period', label: 'Period', value: 'after', children: [
+                    { tag: 'option', text: 'Before', value: 'before' }, { tag: 'option', text: 'After', value: 'after' },
+                ] },
+                { tag: 'table', children: [{ tag: 'tbody', children: [
+                    { tag: 'tr', children: [{ tag: 'th', text: 'Cohort' }, { tag: 'td', text: 'Mobile' }] },
+                ] }] },
+                { tag: 'meter', value: '0.8', min: 0, max: 1 },
                 { tag: 'button', id: 'compare', text: 'Compare cohort', action: { kind: 'compare', from: 'cohort' } },
             ] }, bindings: { compare: { root: 'methods/cohort.nl', from: 'cohort' } } } },
         }, { message: 'Generated comparison interaction' });
@@ -42,20 +61,21 @@ try {
     });
     await page.reload();
     await page.getByRole('button', { name: 'Compare cohort' }).waitFor();
+    assert.equal(await page.getByLabel('Period').inputValue(), 'after');
+    assert.equal(await page.locator('.generated td').textContent(), 'Mobile');
     await page.getByLabel('Cohort').fill('mobile');
     await page.reload();
     await page.getByRole('button', { name: 'Compare cohort' }).waitFor();
     assert.equal(await page.getByLabel('Cohort').inputValue(), 'mobile');
-    const bundle = await page.evaluate(async () => {
-        const { StudioStore } = await import('../shared/store.mjs');
-        const { ResearchWorkspace } = await import('../shared/research-workspace.mjs');
-        const store = await StudioStore.open();
-        const result = { workspace: await new ResearchWorkspace(store).export(), state: (await store.get('states', 'research')).state };
-        store.close(); return result;
-    });
+    const exported = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const exportPath = join(temporary, 'research.json');
+    await (await exported).saveAs(exportPath);
+    const bundle = JSON.parse(await readFile(exportPath, 'utf8'));
+    assert.equal(Object.keys(bundle.native_values).length, 1);
     await page.reload();
     await page.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
-    assert.match(await page.locator('#revision').textContent(), /Event 2/);
+    assert.match(await page.locator('#revision').textContent(), /Event 3/);
     const fresh = await browser.newContext({ viewport: { width: 390, height: 780 } });
     const imported = await fresh.newPage();
     imported.on('pageerror', error => errors.push(String(error)));
@@ -63,7 +83,7 @@ try {
     await imported.getByText('reliability-observations.json').waitFor();
     await imported.locator('#import-file').setInputFiles({ name: 'workspace.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
     await imported.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
-    assert.match(await imported.locator('#revision').textContent(), /Event 2/);
+    assert.match(await imported.locator('#revision').textContent(), /Event 3/);
     await imported.getByRole('button', { name: 'Compare cohort' }).waitFor();
     await imported.getByLabel('Cohort').fill('desktop');
     await imported.getByRole('button', { name: 'Compare cohort' }).click();

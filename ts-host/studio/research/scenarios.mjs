@@ -1,0 +1,28 @@
+/** Baseline and transfer scenarios; review inputs must be frozen separately. */
+export const scenarios = [
+    { id: 'cohort_reliability', capability: 'beliefs',
+      question: 'Did the deployment improve reliability, and for whom? Show the aggregate and cohort comparisons, assumptions, and evidence.',
+      review: ['Both cohorts improve while the aggregate worsens because traffic mix changes.', 'Rates use the correct denominators.', 'The answer cites the four supplied rows and does not infer individual device identity.'] },
+    { id: 'learn_transfer', capability: 'learn',
+      question: 'Develop a reusable typed comparison method from this investigation. Run it on the current data and a second, different cohort table.',
+      review: ['The method is executable source, absent from the original controller.', 'It handles a held-out table without editing its own expected answer.', 'The stated applicability conditions reject a misleading superficially similar case.'] },
+    { id: 'split_profile_device', capability: 'schema',
+      question: 'A new methods note says client profile and physical device were conflated. Revise the representation and migrate justified records; keep ambiguous identities unresolved.',
+      review: ['The old raw observations remain available.', 'New types distinguish profile, physical device, and observation.', 'Unjustified one-to-one mappings remain visibly unresolved.', 'Affected analyses and interfaces use the revised meanings.'] },
+    { id: 'investigation_ui', capability: 'interaction',
+      question: 'Create an interface where I can compare the two cohort explanations and inspect the evidence behind each result.',
+      review: ['A new view and executable natlang handler were generated.', 'A control changes an actual analysis and labels denominators.', 'Keyboard use, stale revisions, and drafts work.'] },
+    { id: 'units_and_cohorts', capability: 'intent',
+      question: 'Two branches changed this answer: one fixes rate units, the other adds cohort comparisons. Preserve both purposes in the final analysis.',
+      review: ['Both branch intentions are retained and inspectable.', 'Merged source and explanation have per-cohort rates with correct units.', 'Any incompatible requirement is shown as an alternative or question.'] },
+    { id: 'late_counterevidence', capability: 'beliefs',
+      question: 'A late batch has sharply worse mobile reliability. Reconsider the conclusion, retain the earlier assessment and show what changed.',
+      review: ['The new batch is interpreted with its own time and provenance.', 'Claims depending on it are revisited; unrelated claims are not silently rewritten.', 'The answer explains why the prior conclusion changed or remains conditional.'] },
+    { id: 'irrelevant_update', capability: 'beliefs',
+      question: 'The methods note fixes a spelling error only. Update the note and tell me whether the reliability conclusion changes.',
+      review: ['The conclusion is not changed without relevant new evidence.', 'The note revision is recorded without unnecessary recomputation.'] },
+    { id: 'incompatible_merges', capability: 'intent',
+      question: 'One branch excludes bots from request counts, another explicitly includes bots. Reconcile the two intentions for the published answer.',
+      review: ['The incompatibility is exposed in concrete denominator alternatives.', 'No arbitrary winner is hidden behind a crisp merge rule.', 'The user can inspect both branches and choose a policy.'] },
+];
+export const scenarioById = new Map(scenarios.map(scenario => [scenario.id, scenario]));

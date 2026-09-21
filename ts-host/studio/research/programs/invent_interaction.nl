@@ -15,3 +15,7 @@ reducer event can interpret. Choose labels and feedback that expose assumptions,
 denominators and evidence. Include checks for keyboard use, stale data, changed
 views and what a control actually computes. If a static explanation serves the
 user better, propose that instead of an ornamental control.
+Available view tags include headings, text, lists, table elements, input,
+textarea, select/option, button, details/summary and meter/progress. Numeric
+meters use value/min/max. View content is data, so do not include raw HTML,
+JavaScript or style code. The browser renders and wires the controls.

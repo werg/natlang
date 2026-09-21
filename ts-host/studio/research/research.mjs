@@ -5,7 +5,7 @@ import { download } from '../shared/render.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
-const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts'];
+const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
@@ -99,38 +99,75 @@ async function paint(current, view, trace) {
         root.append(button);
     }
     if (!root.children.length) root.textContent = 'Your methods, evidence, conclusions and views will appear here.';
+    const graph = await research.runtime.beliefGraph(current.head);
+    const beliefs = $('beliefs'); beliefs.replaceChildren();
+    for (const node of graph.nodes.filter(row => row.kind === 'claim' || row.kind === 'assessment')) {
+        const links = graph.links.filter(link => link.from === node.path);
+        const card = document.createElement('div'); card.className = 'belief';
+        const title = document.createElement('strong'), meta = document.createElement('small');
+        title.textContent = node.title;
+        meta.textContent = `${node.status || 'unreviewed'} · ${links.filter(link => link.relation === 'supports').length} supporting · ${links.filter(link => link.relation === 'opposes').length} opposing`;
+        card.append(title, meta); beliefs.append(card);
+    }
+    if (graph.missing.length) {
+        const warning = document.createElement('div'); warning.className = 'belief';
+        warning.textContent = `${graph.missing.length} evidence links point to missing artifacts.`; beliefs.append(warning);
+    }
+    if (!beliefs.children.length) beliefs.textContent = 'Conclusions and their evidence will appear here.';
+    const branches = $('branches'); branches.replaceChildren();
+    for (const candidate of (await research.runtime.branches()).filter(row => row.kind === 'candidate')) {
+        const button = document.createElement('button'); button.className = 'branch';
+        const title = document.createElement('strong'), meta = document.createElement('small');
+        title.textContent = candidate.message || 'Untitled candidate';
+        meta.textContent = `${candidate.changed} changed artifacts · ${candidate.id.slice(0, 12)}`;
+        button.append(title, meta);
+        button.onclick = async () => showDetail(candidate.message || 'Candidate', {
+            ...candidate, changes: await research.runtime.diff(candidate.parent, candidate.id),
+        });
+        branches.append(button);
+    }
+    if (!branches.children.length) branches.textContent = 'Proposed alternatives will appear here.';
     const receipts = $('receipts'); receipts.replaceChildren();
     for (const id of current.receipts.slice(-12).reverse()) {
         const receipt = await store.readEffect(id);
         const div = document.createElement('div'); div.className = `receipt ${receipt?.status ?? 'missing'}`;
-        div.textContent = `${receipt?.status ?? 'missing'} · ${receipt?.root ?? id} · ${id}`;
+        div.textContent = `${receipt?.status ?? 'missing'}${receipt?.imported ? ' · imported record' : ''} · ${receipt?.root ?? id} · ${id}`;
         div.onclick = () => showDetail(id, receipt);
         receipts.append(div);
     }
-    const savedInputs = new Map([...$('interaction-root').querySelectorAll('input[id]')].map(input => [input.id, input.value]));
+    const savedInputs = new Map([...$('interaction-root').querySelectorAll('input[id],select[id],textarea[id]')].map(input => [input.id, input.value]));
     const focusedInput = $('interaction-root').contains(document.activeElement) ? document.activeElement?.id : '';
-    if (renderer) renderer.close();
-    renderer = null;
-    currentInteraction = null;
     const viewPath = view?.active_view || current.active_view;
     if (viewPath) {
         try {
-            currentInteraction = await research.runtime.interaction(current.head, viewPath);
-            const pinned = currentInteraction;
-            renderer = new BrowserDomRenderer($('interaction-root'), event => onGenerated(pinned, event), error => status(error, true));
-            renderer.render(pinned.tree);
-            for (const input of $('interaction-root').querySelectorAll('input[id]'))
+            const pinned = await research.runtime.interaction(current.head, viewPath);
+            const candidateRoot = document.createElement('div');
+            const candidate = new BrowserDomRenderer(candidateRoot, event => onGenerated(pinned, event), error => status(error, true));
+            candidate.render(pinned.tree);
+            for (const input of candidateRoot.querySelectorAll('input[id],select[id],textarea[id]'))
                 if (savedInputs.has(input.id)) input.value = savedInputs.get(input.id);
                 else if (Object.hasOwn(generatedDrafts, input.id)) input.value = generatedDrafts[input.id];
+            renderer?.close();
+            $('interaction-root').replaceChildren(...candidateRoot.childNodes);
+            renderer = candidate;
+            currentInteraction = pinned;
             if (focusedInput) document.getElementById(focusedInput)?.focus({ preventScroll: true });
         }
-        catch (error) { $('interaction-root').textContent = `Generated view could not load: ${error}`; }
+        catch (error) { status(`Generated view could not load; previous interaction remains available for inspection: ${error}`, true); }
     }
-    else $('interaction-root').textContent = 'The program can develop an interaction for this investigation.';
+    else { renderer?.close(); renderer = null; currentInteraction = null;
+        $('interaction-root').textContent = 'The program can develop an interaction for this investigation.'; }
 }
 function showDetail(title, value) {
     $('detail-title').textContent = title;
     $('detail-body').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    const reference = value && typeof value === 'object' && value.native_id ? value : null;
+    $('detail-download').hidden = !reference;
+    $('detail-download').onclick = async () => {
+        const record = await store.get('native_values', reference.native_id);
+        if (!record) throw new Error('Full native evidence is missing');
+        download(reference.name || 'evidence.txt', record.value, record.type || 'text/plain');
+    };
     $('detail').showModal();
 }
 async function onGenerated(pinned, event) {
@@ -193,7 +230,7 @@ $('question-form').onsubmit = async event => {
 $('cancel').onclick = () => { abort?.abort(); app?.cancel(); status('Stopping the investigation; recorded effects remain inspectable.'); };
 $('source').onclick = async () => showDetail('Research program', (await sourceAt(state.head)).files);
 $('interaction-root').addEventListener('input', event => {
-    if (event.target instanceof HTMLInputElement && event.target.id) {
+    if ((event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) && event.target.id) {
         generatedDrafts[event.target.id] = event.target.value;
         void store.put('drafts', 'research-interaction', generatedDrafts).catch(error => status(error, true));
     }
@@ -203,7 +240,12 @@ $('evidence-file').onchange = async () => {
     try {
         const file = $('evidence-file').files?.[0]; if (!file) return;
         const raw = await file.text();
-        const content = file.name.endsWith('.json') ? JSON.parse(raw) : raw;
+        let content;
+        if (raw.length > 256_000) {
+            const native_id = `research-${crypto.randomUUID()}`;
+            await store.put('native_values', native_id, { value: raw, name: file.name, type: file.type });
+            content = { native_id, name: file.name, bytes: file.size, preview: raw.slice(0, 2000) };
+        } else content = file.name.endsWith('.json') ? JSON.parse(raw) : raw;
         const name = file.name.replace(/[^A-Za-z0-9_.-]/g, '_');
         const path = `evidence/${crypto.randomUUID().slice(0, 8)}-${name}`;
         const commit = await research.runtime.commit(state.head, { [path]: { kind: 'evidence', content } }, { message: `Imported ${file.name}` });
@@ -214,7 +256,26 @@ $('evidence-file').onchange = async () => {
     catch (error) { status(error, true); }
     finally { $('evidence-file').value = ''; }
 };
-$('export').onclick = async () => download('natlang-research.json', JSON.stringify({ workspace: await research.runtime.workspace.export(), state }, null, 2), 'application/json');
+$('export').onclick = async () => {
+    const workspace = await research.runtime.workspace.export();
+    const child_runs = {};
+    for (const receipt of Object.values(workspace.receipts))
+        if (receipt.trace_id) {
+            const run = await store.get('child_runs', receipt.trace_id);
+            if (run) child_runs[receipt.trace_id] = run;
+        }
+    const native_values = {};
+    for (const artifact of Object.values(workspace.artifacts)) {
+        const id = artifact.content?.native_id;
+        if (id) {
+            const value = await store.get('native_values', id);
+            if (value) native_values[id] = value;
+        }
+    }
+    download('natlang-research.json', JSON.stringify({ format: 1, workspace, state,
+        history: await store.history('research'), child_runs, native_values,
+        export_profile: { model: client.modelStatus?.id ?? '', seed: Number($('seed').value) } }, null, 2), 'application/json');
+};
 $('import').onclick = () => $('import-file').click();
 $('import-file').onchange = async () => {
     try {
@@ -224,10 +285,16 @@ $('import-file').onchange = async () => {
         const currentFiles = Object.keys(current?.files ?? {});
         if (currentFiles.some(path => !programFiles.includes(path) && !path.startsWith('evidence/reliability-')) || state.revision)
             throw new Error('Import into a fresh research workspace');
-        if (bundle.state?.head !== bundle.workspace?.head) throw new Error('Imported state and workspace disagree');
+        if (bundle.format !== 1 || bundle.state?.head !== bundle.workspace?.head) throw new Error('Imported state and workspace disagree');
         await research.runtime.workspace.import(bundle.workspace, current?.id ?? '');
         state = bundle.state;
         await store.put('states', 'research', { state, revision: state.revision, imported: true });
+        for (const [id, value] of Object.entries(bundle.native_values ?? {})) await store.put('native_values', id, value);
+        for (const [id, run] of Object.entries(bundle.child_runs ?? {})) await store.put('child_runs', id, run);
+        for (const record of bundle.history ?? []) {
+            const { id, ...rest } = record;
+            await store.transaction(['history'], tx => tx.objectStore('history').add({ ...rest, imported: true }));
+        }
         await paint(state);
         status('Workspace imported.');
     }

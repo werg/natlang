@@ -6,5 +6,6 @@ export type Edit = { path: Text; kind: Text; content: Text };
 export type Proposal = { purpose: Text; edits: Edit[]; removes: Text[]; checks: Text[]; unresolved: Text[]; reasoning: Text };
 export type CommitResult = { head: Text; detail: Text };
 export type CandidateResult = { id: Text; detail: Text };
+export type Branch = { id: Text; parent: Text; message: Text; changed: Num; active: Bool; kind: Text };
 export type Receipt = { id: Text; status: Text; value: Text; detail: Text };
 export type View = { heading: Text; summary: Text; active_view: Text; suggestions: Text[] };

@@ -1,5 +1,11 @@
 # Natlang Studio
 
+The [Inquiry Lab](research/README.md) adds a research workspace where natlang
+can author executable methods, revise representations, generate interactive
+views, reconcile candidate changes and maintain evidence-linked conclusions.
+It is linked from the Studio sidebar and uses the same local browser/host
+infrastructure. Its current semantic quality gates are documented separately.
+
 Twenty-two interactive applications cover the twenty project families (P08 has
 three separate games). This is one shared browser shell, model loader, storage
 layer and operation journal, with distinct application surfaces and programmes.

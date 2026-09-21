@@ -6,7 +6,7 @@ import { ResearchRuntime } from '../studio/shared/research-runtime.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
 
 const root = new URL('../studio/research/programs/', import.meta.url);
-const paths = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts'];
+const paths = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const files = Object.fromEntries(await Promise.all(paths.map(async path => [path, await readFile(new URL(path, root), 'utf8')])));
 async function api() { const process = globalThis.process; try {
     globalThis.process = undefined;
@@ -66,4 +66,14 @@ test('research host permits semantic state changes but verifies heads and real r
     await research.verifyCommit(previous, { ...previous, revision: 1, question: 'What follows?' });
     await assert.rejects(research.verifyCommit(previous, { ...previous, revision: 1, head: 'invented' }), /disagrees/);
     await assert.rejects(research.verifyCommit(previous, { ...previous, revision: 1, receipts: ['invented'] }), /Unknown execution receipt/);
+});
+
+test('native evidence can be searched and read without copying full content into state', async () => {
+    const adapter = new MemoryResearchAdapter(), full = 'x'.repeat(300_000) + 'critical observation' + 'y'.repeat(300_000);
+    adapter.get = async (store, id) => store === 'native_values' && id === 'large' ? { value: full } : undefined;
+    const api = new ResearchHost({ store: adapter, runSource: async () => ({ value: null }) }).api();
+    const found = JSON.parse(await api.nativeSearch('large', 'critical observation'));
+    assert.equal(found.total, 1);
+    assert.equal(await api.nativeRead('large', found.hits[0].offset, 20), 'critical observation');
+    await assert.rejects(api.nativeRead('large', 0, 100_000), /65536/);
 });

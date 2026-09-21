@@ -1,5 +1,17 @@
 # Interactive application delivery
 
+## Inquiry Lab extension
+
+The [Inquiry Lab](../../ts-host/studio/research/README.md) implements a first
+integrated consumer of the five directions in the
+[semantic software plan](../SEMANTIC_SOFTWARE.md). Natlang can own domain State,
+generate checked source and view handlers, retain candidate schemas and
+changes, and maintain explicit evidence links. The host provides exact
+versioned storage, execution receipts, branch activation, graph queries and
+DOM projection. Browser and integration checks cover the mechanics; live
+model quality, schema migration judgment and semantic merge quality remain
+scenario gates. This extends the twenty existing project families.
+
 The shared [Natlang Studio](../../ts-host/studio/README.md) now supplies 22
 browser application surfaces for P01–P20, including separate economy, combat
 and NPC games. The studio is launched with
