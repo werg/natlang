@@ -1,7 +1,9 @@
 import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage,
   probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
-  validProjectPath, validatePlaygroundProject, runPlaygroundProject, traceFrame,
+  validProjectPath, validatePlaygroundProject, loadFunctionFiles, runPlaygroundProject, traceFrame,
   admitPlaygroundRun } from '../dist/browser/natlang.js';
+import { applicationSource, createLivePreview } from './live.mjs';
+import { mountInputForm } from './input-form.mjs';
 import { storage } from './storage.mjs';
 import { examples, exampleCategories } from './examples.mjs';
 
@@ -24,7 +26,7 @@ const parseJSON = (text, label, emptyValue) => {
 const sameJSON = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let projects = [], project = null, selectedFile = null, runs = [], cases = [], selectedRun = null;
-let diagnostics = [], model = null, modelSpec = null, abort = null, saveTimer = null, checkTimer = null;
+let diagnostics = [], model = null, modelSpec = null, abort = null, checkTimer = null;
 const client = new BrowserNatlangClient();
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
@@ -33,25 +35,121 @@ let modelChoices = [...modelCatalog.models], modelSelectionExplicit = false;
 window.natlangPlayground = { get project() { return project; }, get runs() { return runs; },
   get selectedRun() { return selectedRun; }, get model() { return model; } };
 
+let autoTimer = null, pendingExecution = null, inputForm = null, rawInputsDirty = false;
+const live = createLivePreview({ client,
+  onBusy: value => {
+    busy = value; $('stopButton').disabled = !value;
+    for (const id of ['projectSelect', 'newProject', 'deleteProject', 'importProject', 'rootSelect', 'modelButton', 'loadModel']) $(id).disabled = value;
+    renderDiagnostics();
+  },
+  onError: error => message(error.message, true),
+  onRun: async record => {
+    runs.unshift(record); await storage.put('runs', record);
+    selectedRun = record; cursor = Math.max(0, record.trace.length - 1);
+    renderRunList(); renderResult(); renderTrace();
+  } });
+
+function openLibrary() { renderExamples(); $('examplesDialog').showModal(); $('exampleSearch').focus(); }
+async function openExample(template) {
+  if (busy) { message('Stop the current run before opening an example.', true); return; }
+  const next = newPlaygroundProject(template.name, template.root, template.files, template.inputs, template.expected);
+  await storage.put('projects', next); projects.push(next);
+  $('examplesDialog').close(); switchProject(next); selectPanel(applicationSource(next) ? 'preview' : 'result');
+  message(`Opened ${template.name} · your editable copy is saved locally`);
+  if (applicationSource(next) && !template.modelRequired) await runLive();
+}
+function renderExperience() {
+  const template = examples.find(item => item.name === project.name && item.root === project.root);
+  const appSource = applicationSource(project);
+  const isApp = Boolean(appSource);
+  const needsModel = project.root.endsWith('.nl') || Boolean(appSource?.reducer.endsWith('.nl'));
+  document.querySelector('.workspace').classList.toggle('live-project', isApp);
+  $('experimentTitle').textContent = project.name;
+  $('experimentDescription').textContent = template?.description ?? 'Your own space to write, run, and explore a typed program.';
+  $('learningText').textContent = template?.guide ?? (project.root.endsWith('.nl') ?
+    'Read the instructions, change an input, and load a local model to try it. Expected values are reference answers; inspect what the model actually returns.' :
+    'Change an input and run the program. Compare the result with your expectation, then open Trace to follow the execution.');
+  $('executionMode').textContent = needsModel && !model?.loaded ? 'Model required' : '';
+  $('executionMode').hidden = !needsModel || Boolean(model?.loaded);
+  $('previewTab').hidden = !isApp;
+  $('autoPreview').disabled = needsModel;
+  if (needsModel) $('autoPreview').checked = false;
+  $('autoPreview').title = needsModel ? 'Model-generated views run explicitly with Apply & run.' : 'Apply valid source edits automatically, keeping the current state.';
+  $('runButton').innerHTML = needsModel && !model?.loaded ? 'Load model to run' :
+    isApp ? '▶ Apply &amp; run <span class="shortcut">Ctrl ↵</span>' :
+      '▶ Run <span class="shortcut">Ctrl ↵</span>';
+}
+function requireModel(callback) {
+  pendingExecution = callback;
+  $('modelProgress').textContent = 'Load a local model to run this program.';
+  if (!$('modelDialog').open) $('modelDialog').showModal();
+  void refreshModelDiagnostics();
+}
+async function runLive(preserve = false) {
+  try {
+    const inputs = currentInputs();
+    if (!inputs?.state || typeof inputs.state !== 'object' || Array.isArray(inputs.state)) throw new Error('Live examples need an inputs.state object.');
+    if (!sameJSON(project.inputs, inputs)) replaceProject(editPlaygroundProject(project, { inputs }));
+    if (check().length) return;
+    if (Object.keys(project.files).some(path => /^ui\/(view|reduce)\.nl$/.test(path)) && !model?.loaded) {
+      requireModel(() => runLive(preserve)); return;
+    }
+    selectPanel('preview');
+    await live.start(structuredClone(project), preserve);
+    message('Interface running · try its controls');
+  } catch (error) { message(error.message, true); }
+}
+
 function message(text, error = false) {
   $('runStatus').textContent = text;
   $('runStatus').style.color = error ? 'var(--bad)' : '';
 }
 function saveSoon() {
   $('saveStatus').textContent = 'Saving…';
-  clearTimeout(saveTimer);
   const snapshot = structuredClone(project);
-  saveTimer = setTimeout(async () => {
-    try { await storage.put('projects', snapshot); $('saveStatus').textContent = 'Saved locally'; }
-    catch (error) { $('saveStatus').textContent = `Save failed: ${error.message}`; }
-  }, 250);
+  storage.put('projects', snapshot).then(() => {
+    if (project.revision === snapshot.revision) $('saveStatus').textContent = 'Saved locally';
+  }).catch(error => { $('saveStatus').textContent = `Save failed: ${error.message}`; });
 }
 function replaceProject(next) {
+  const signatureChanged = next.root !== project.root || !sameJSON(next.files, project.files);
   project = next;
   projects = projects.filter(item => item.id !== next.id).concat(next)
     .sort((a, b) => a.name.localeCompare(b.name));
   saveSoon(); renderProjectSelect(); renderFileList(); renderProjectHeader(); renderRootSelect();
+  if (signatureChanged) renderInputFields();
   scheduleCheck();
+}
+function renderInputFields() {
+  try {
+    const lambda = loadFunctionFiles(project.root, project.files);
+    inputForm = mountInputForm($('inputFields'), lambda, project.inputs, () => {
+      try {
+        const inputs = inputForm.read();
+        $('inputError').hidden = true;
+        $('inputs').value = pretty(inputs); rawInputsDirty = false;
+        if (!sameJSON(project.inputs, inputs)) replaceProject(editPlaygroundProject(project, { inputs }));
+      } catch (error) { $('inputError').textContent = error.message; $('inputError').hidden = false; }
+    });
+    $('inputError').hidden = true;
+  } catch {
+    inputForm = null;
+    $('inputFields').replaceChildren();
+    $('rawInputs').open = true;
+  }
+}
+function currentInputs() {
+  try {
+    const inputs = rawInputsDirty || !inputForm ? parseJSON($('inputs').value, 'Inputs', {}) : inputForm.read();
+    inputForm?.validate(inputs);
+    if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('Inputs must be an object');
+    $('inputs').value = pretty(inputs); rawInputsDirty = false;
+    $('inputError').hidden = true;
+    return inputs;
+  } catch (error) {
+    $('inputError').textContent = error.message; $('inputError').hidden = false;
+    throw error;
+  }
 }
 function renderRootSelect() {
   $('rootSelect').replaceChildren(...Object.keys(project.files).filter(path => path.endsWith('.nl') || path.endsWith('.ts'))
@@ -65,6 +163,7 @@ function renderProjectSelect() {
 function renderProjectHeader() {
   $('projectName').textContent = project.name;
   $('revisionInfo').textContent = `rev ${project.revision.slice(0, 8)}`;
+  renderExperience();
 }
 function renderFileList() {
   const filter = $('fileFilter').value.trim().toLowerCase();
@@ -145,6 +244,8 @@ function renderRunList() {
     button.innerHTML = `<span class="run-indicator ${escapeHTML(run.outcome.kind)}"></span><span>${escapeHTML(new Date(run.startedAt).toLocaleTimeString())} · ${escapeHTML(run.outcome.kind)} · ${run.durationMs} ms</span>`;
     button.onclick = () => selectRun(run); return button;
   }));
+  if (!visible.length) { const empty = document.createElement('p'); empty.className = 'run-history-empty';
+    empty.textContent = 'Your runs will appear here.'; $('runList').append(empty); }
 }
 function selectRun(run) {
   if (playTimer) { clearInterval(playTimer); playTimer = null; $('tracePlay').textContent = '▶'; }
@@ -216,10 +317,11 @@ function renderTrace() {
   $('traceEvents').querySelector('.active')?.scrollIntoView({ block: 'nearest' });
 }
 function selectPanel(name) {
-  for (const panel of ['result', 'trace', 'cases', 'jobs']) {
+  if (['cases', 'jobs'].includes(name)) setAdvanced(true);
+  for (const panel of ['result', 'trace', 'cases', 'jobs', 'preview']) {
     $(`${panel}Panel`).hidden = panel !== name;
     const tab = document.querySelector(`[data-panel="${panel}"]`);
-    tab.classList.toggle('selected', panel === name); tab.setAttribute('aria-selected', String(panel === name));
+    tab.classList.toggle('selected', panel === name); tab.setAttribute('aria-selected', String(panel === name)); tab.tabIndex = panel === name ? 0 : -1;
   }
   if (name === 'cases') renderCases();
   if (name === 'jobs') void refreshJobs();
@@ -258,7 +360,11 @@ async function refreshJobs() {
   } catch (error) { $('jobsAvailability').textContent = `Job service error: ${error.message}`; }
 }
 function renderModelChoices(selectedId = modelCatalog.defaultId) {
-  $('modelSelect').replaceChildren(...modelChoices.map((spec, index) => new Option(spec.label, String(index))));
+  $('modelSelect').replaceChildren(...(modelChoices.length ?
+    modelChoices.map((spec, index) => new Option(spec.label, String(index))) :
+    [new Option('No checkpoint installed — choose a GGUF file', '')]));
+  $('modelSelect').disabled = !modelChoices.length;
+  if (!modelChoices.length) $('modelDialog').querySelector('.model-options').open = true;
   const index = modelChoices.findIndex(spec => spec.id === selectedId);
   $('modelSelect').selectedIndex = index >= 0 ? index : 0;
 }
@@ -356,11 +462,8 @@ function renderExamples() {
   $('exampleList').replaceChildren(...visible.map(template => {
     const button = document.createElement('button'); button.type = 'button';
     button.className = 'example-card';
-    button.innerHTML = `<strong>${escapeHTML(template.name)}</strong><span class="example-meta">${escapeHTML(template.category)} · ${escapeHTML(template.level)} · ${template.modelRequired ? 'Local model required' : 'Runs without a model'} · ${Object.keys(template.files).length} file${Object.keys(template.files).length === 1 ? '' : 's'}</span><span>${escapeHTML(template.description)}</span><span class="example-concepts">${template.concepts.map(escapeHTML).join(' · ')}</span>`;
-    button.onclick = async () => { const next = newPlaygroundProject(template.name, template.root,
-      template.files, template.inputs, template.expected);
-      await storage.put('projects', next); projects.push(next); $('examplesDialog').close(); switchProject(next);
-      message(`Opened ${template.name} from the example library`); };
+    button.innerHTML = `<strong>${escapeHTML(template.name)}</strong><span class="example-meta">${escapeHTML(template.category)} · ${escapeHTML(template.level)}</span><span>${escapeHTML(template.description)}</span><span class="example-concepts">${template.concepts.map(escapeHTML).join(' · ')}</span>`;
+    button.onclick = () => void openExample(template).catch(error => message(error.message, true));
     return button;
   }));
   if (!visible.length) $('exampleList').textContent = 'No examples match these filters.';
@@ -412,18 +515,30 @@ function promptText(title, help, value = '') {
   });
 }
 function switchProject(next) {
+  clearTimeout(autoTimer); void live.close();
+  if (playTimer) { clearInterval(playTimer); playTimer = null; $('tracePlay').textContent = '▶'; }
+  try { localStorage.setItem('natlang-project', next.id); } catch {}
   project = next; selectedFile = next.root;
   selectedRun = runs.find(run => run.projectId === next.id) ?? null;
   renderProjectSelect(); renderProjectHeader(); renderFileList(); renderRootSelect(); renderEditor();
   $('inputs').value = pretty(next.inputs); $('expected').value = next.expected === undefined ? '' : pretty(next.expected);
+  rawInputsDirty = false; $('rawInputs').open = false; renderInputFields();
   renderRunList(); renderResult(); renderTrace(); check();
+  selectPanel(applicationSource(next) ? 'preview' : 'result');
 }
 
 async function run() {
   if (busy) return;
+  clearTimeout(autoTimer);
+  let inputs;
+  try { inputs = currentInputs(); }
+  catch (error) { $('inputError').textContent = error.message; $('inputError').hidden = false; message(error.message, true); return; }
+  const appSource = applicationSource(project);
+  if ((project.root.endsWith('.nl') || appSource?.reducer.endsWith('.nl')) && !model?.loaded) {
+    requireModel(() => run()); return;
+  }
+  if (appSource) return runLive();
   try {
-    const inputs = parseJSON($('inputs').value, 'Inputs', {});
-    if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('Inputs must be a JSON object');
     const expected = parseJSON($('expected').value, 'Expected value', undefined);
     if (!sameJSON(project.inputs, inputs) || !sameJSON(project.expected, expected))
       replaceProject(editPlaygroundProject(project, { inputs, expected }));
@@ -437,7 +552,7 @@ async function run() {
 }
 
 async function executeProject(snapshot) {
-    if (snapshot.root.endsWith('.nl') && !model?.loaded) { $('modelDialog').showModal(); throw new Error('Load a local model to run natural instructions'); }
+    if (snapshot.root.endsWith('.nl') && !model?.loaded) throw new Error('Load a local model to run natural instructions');
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
     message(`Running revision ${snapshot.revision.slice(0, 8)}…`);
@@ -451,6 +566,7 @@ async function runCase(item) {
     const snapshot = { ...project, id: item.projectId, name: item.name, root: item.source.root,
       files: structuredClone(item.source.files), inputs: structuredClone(item.inputs),
       expected: structuredClone(item.expected.value), revision: item.revision };
+    if (snapshot.root.endsWith('.nl') && !model?.loaded) { requireModel(() => runCase(item)); return; }
     const record = await executeProject(snapshot);
     runs.unshift(record); await storage.put('runs', record);
     Object.assign(item, { runId: record.id, trace: record.trace, observed: {
@@ -464,9 +580,19 @@ async function runCase(item) {
 
 async function refreshModelDiagnostics() {
   const spec = modelChoices[Number($('modelSelect').value)] ?? modelChoices[0];
-  const [gpu, disk] = await Promise.all([probeBrowserGpu(), checkModelStorage(spec)]);
-  $('modelDiagnostics').textContent = pretty({ gpu, model: spec.label,
-    downloadMB: Math.round(spec.bytes / 1_000_000), availableMB: disk.available === null ? null : Math.round(disk.available / 1_000_000),
+  const file = $('modelFile').files[0];
+  if (!spec && !file) {
+    $('modelSummary').textContent = model?.loaded ? `${modelSpec?.label ?? 'Local model'} is loaded.` :
+      'No checkpoint is installed in models/. Choose a local GGUF file below.';
+    $('modelDiagnostics').textContent = '';
+    return;
+  }
+  const choice = file ? { ...spec, label: file.name, bytes: file.size } : spec;
+  const [gpu, disk] = await Promise.all([probeBrowserGpu(), checkModelStorage(choice)]);
+  $('modelSummary').textContent = `${Math.round(choice.bytes / 1_000_000)} MB ${file ? 'local file' : 'download'} · ${gpu.usable ? 'GPU acceleration available' : 'CPU execution available'}. ${disk.available === null ? 'Storage availability could not be measured.' : `${Math.round(disk.available / 1_000_000)} MB of browser storage available.`}`;
+  $('modelDiagnostics').textContent = pretty({ gpu, model: choice.label,
+    downloadMB: file ? 0 : Math.round(choice.bytes / 1_000_000),
+    availableMB: disk.available === null ? null : Math.round(disk.available / 1_000_000),
     recommendedFreeMB: Math.round(disk.recommendedFree / 1_000_000), loaded: model?.diagnostics ?? null });
 }
 async function loadModel() {
@@ -476,6 +602,7 @@ async function loadModel() {
   const rawLayers = $('modelGpuLayers').value;
   const gpuLayers = rawLayers === '' ? undefined : Number(rawLayers);
   try {
+    if (!file && !spec) throw new Error('Choose a GGUF file to load.');
     if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
     if (gpuLayers !== undefined && (!Number.isInteger(gpuLayers) || gpuLayers < 0)) throw new Error('GPU layers must be nonnegative');
     const options = { contextTokens,
@@ -483,7 +610,7 @@ async function loadModel() {
       onProgress: ({ loaded, total }) => { $('modelProgress').textContent = total ?
         `Downloading ${Math.round(100 * loaded / total)}%` : 'Loading model…'; } };
     const status = await client.loadModel(file ? { kind: 'files', files: [file], id: `file:${file.name}`,
-      templateUrl: spec.templateUrl } : { kind: 'url', url: spec.url, id: spec.id,
+      templateUrl: spec?.templateUrl } : { kind: 'url', url: spec.url, id: spec.id,
       templateUrl: spec.templateUrl }, options);
     model = client.model;
     modelSpec = file ? { id: `file:${file.name}`, label: file.name } : spec;
@@ -492,9 +619,13 @@ async function loadModel() {
       (status.gpuFallbackReason ? ` (GPU load failed: ${status.gpuFallbackReason})` : '');
     $('runtimeStatus').textContent = model.diagnostics.gpuSelectionReason;
     await refreshModelDiagnostics();
+    renderExperience();
+    const resume = pendingExecution; pendingExecution = null;
+    if ($('modelDialog').open) $('modelDialog').close();
+    if (resume) queueMicrotask(() => void resume());
   } catch (error) { model = client.model;
     if (!model?.loaded) { modelSpec = null; $('modelButton').classList.remove('loaded');
-      $('modelLabel').textContent = 'No model loaded'; }
+      $('modelLabel').textContent = 'Set up a model'; }
     $('modelProgress').textContent = `Load failed: ${error.message}`; }
   finally { button.disabled = false; }
 }
@@ -565,7 +696,41 @@ async function readImport(file) {
   }
 }
 
+function setAdvanced(open) {
+  $('advancedButton').setAttribute('aria-expanded', String(open));
+  for (const name of ['cases', 'jobs']) document.querySelector(`[data-panel="${name}"]`).hidden = !open;
+}
 function bind() {
+  $('libraryNav').onclick = openLibrary;
+  const setExplorer = open => {
+    $('projectExplorer').hidden = !open;
+    $('explorerRail').hidden = open;
+    document.querySelector('.workspace').classList.toggle('explorer-open', open);
+    $('toggleExplorer').setAttribute('aria-expanded', String(open));
+  };
+  $('toggleExplorer').onclick = () => setExplorer(false);
+  $('reopenExplorer').onclick = () => setExplorer(true);
+  $('advancedButton').onclick = () => {
+    const open = $('advancedButton').getAttribute('aria-expanded') !== 'true'; setAdvanced(open);
+    if (!open && (!$('casesPanel').hidden || !$('jobsPanel').hidden)) selectPanel('result');
+  };
+  $('editLiveSource').onclick = () => { $('editor').focus(); $('editor').scrollIntoView({ block: 'center' }); };
+  $('inspectTrace').onclick = () => selectPanel('trace');
+  $('restartPreview').onclick = () => void runLive();
+  document.querySelector('.inspector-tabs').addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = [...document.querySelectorAll('[data-panel]')].filter(tab => !tab.hidden);
+    const index = tabs.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    selectPanel(tabs[next].dataset.panel); tabs[next].focus();
+  });
+  for (const tab of document.querySelectorAll('[data-panel]')) {
+    tab.id ||= `${tab.dataset.panel}Tab`;
+    tab.setAttribute('aria-controls', `${tab.dataset.panel}Panel`);
+    const panel = $(`${tab.dataset.panel}Panel`); panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', tab.id);
+  }
   $('projectSelect').onchange = () => { const next = projects.find(item => item.id === $('projectSelect').value); if (next) switchProject(next); };
   $('newProject').onclick = async () => {
     const name = await promptText('New project', 'Create a browser-local natlang workspace.', 'Untitled project');
@@ -612,6 +777,10 @@ function bind() {
   $('editor').oninput = () => {
     replaceProject(editPlaygroundProject(project, { files: { ...project.files, [selectedFile]: $('editor').value } }));
     updateHighlight(); updateCursor();
+    if (applicationSource(project)) {
+      live.stale(); clearTimeout(autoTimer);
+      if ($('autoPreview').checked && !$('autoPreview').disabled) autoTimer = setTimeout(() => { if (!busy) void runLive(true); }, 700);
+    }
   };
   $('editor').onscroll = updateHighlight;
   for (const event of ['click', 'keyup', 'select']) $('editor').addEventListener(event, updateCursor);
@@ -620,17 +789,22 @@ function bind() {
     const editor = $('editor'), start = editor.selectionStart, end = editor.selectionEnd;
     editor.setRangeText('  ', start, end, 'end'); editor.dispatchEvent(new Event('input'));
   };
-  $('inputs').onchange = () => { try { const inputs = parseJSON($('inputs').value, 'Inputs', {});
+  $('inputs').oninput = () => { rawInputsDirty = true; };
+  $('inputs').onchange = () => { try {
+    const inputs = parseJSON($('inputs').value, 'Inputs', {});
+    inputForm?.validate(inputs);
     if (!sameJSON(project.inputs, inputs)) replaceProject(editPlaygroundProject(project, { inputs }));
-  } catch (error) { message(error.message, true); } };
+    rawInputsDirty = false; renderInputFields(); $('inputError').hidden = true;
+  } catch (error) { $('inputError').textContent = error.message; $('inputError').hidden = false; message(error.message, true); } };
   $('expected').onchange = () => { try { const expected = parseJSON($('expected').value, 'Expected value', undefined);
     if (!sameJSON(project.expected, expected)) replaceProject(editPlaygroundProject(project, { expected }));
   } catch (error) { message(error.message, true); } };
   $('checkButton').onclick = check; $('runButton').onclick = run;
-  $('stopButton').onclick = () => { abort?.abort(); message('Stopping…'); };
+  $('stopButton').onclick = () => { abort?.abort(); live.cancel(); message('Stopping…'); };
   document.addEventListener('keydown', event => {
+    if (document.querySelector('dialog[open]')) return;
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void run(); }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); clearTimeout(saveTimer);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault();
       storage.put('projects', project).then(() => $('saveStatus').textContent = 'Saved locally'); }
   });
   $('clearRuns').onclick = async () => { if (!confirm('Delete this project’s local run history?')) return;
@@ -676,10 +850,11 @@ function bind() {
     try { await readImport(file); } catch (error) { message(`Import failed: ${error.message}`, true); }
     $('importInput').value = ''; };
   $('exportProject').onclick = () => download(`${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`, pretty(project));
-  $('modelButton').onclick = async () => { $('modelDialog').showModal(); await refreshModelDiagnostics(); };
+  $('modelButton').onclick = async () => { pendingExecution = null; $('modelDialog').showModal(); await refreshModelDiagnostics(); };
+  $('modelDialog').addEventListener('close', () => { pendingExecution = null; });
   $('modelSelect').onchange = () => { modelSelectionExplicit = true; void refreshModelDiagnostics(); };
+  $('modelFile').onchange = () => void refreshModelDiagnostics();
   $('loadModel').onclick = loadModel;
-  $('examplesButton').onclick = () => { renderExamples(); $('examplesDialog').showModal(); $('exampleSearch').focus(); };
   $('closeExamples').onclick = () => $('examplesDialog').close();
   $('exampleSearch').oninput = renderExamples;
   $('exampleCategory').onchange = renderExamples;
@@ -699,7 +874,10 @@ async function start() {
     try { modelCatalog = await loadBrowserModelCatalog(); modelChoices = [...modelCatalog.models]; }
     catch (error) { message(`Model catalog: ${error.message}`, true); }
     renderModelChoices();
-    bind(); switchProject(projects[0]);
+    bind();
+    let savedProject;
+    try { savedProject = localStorage.getItem('natlang-project'); } catch {}
+    switchProject(projects.find(item => item.id === savedProject) ?? projects[0]);
     const gpu = await probeBrowserGpu();
     $('runtimeStatus').textContent = gpu.usable ? 'WebGPU ready' : `CPU available · ${gpu.reason}`;
     void initJobs();

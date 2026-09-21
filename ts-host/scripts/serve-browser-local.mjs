@@ -22,6 +22,19 @@ const server = createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (!pathname.startsWith('/ts-host/') && !pathname.startsWith('/models/'))
       throw new Error('path is not a pilot asset');
+    if (pathname === '/models/browser-catalog.json' &&
+        !existsSync(resolve(root, 'models/browser-catalog.json'))) {
+      const { BROWSER_MODEL_CATALOG } = await import('../dist/browser/models.js');
+      const available = BROWSER_MODEL_CATALOG.filter(model =>
+        existsSync(resolve(root, '.' + model.url)) && existsSync(resolve(root, '.' + model.templateUrl)));
+      const catalog = { schema: 'natlang.browser-model-catalog/1',
+        defaultId: available[0]?.id ?? '', models: available };
+      const body = JSON.stringify(catalog);
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store',
+        'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' });
+      response.end(body); return;
+    }
     const file = resolve(root, '.' + decodeURIComponent(pathname), pathname.endsWith('/') ? 'index.html' : '');
     if (!file.startsWith(root + sep)) throw new Error('path outside root');
     const size = (await stat(file)).size;

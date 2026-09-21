@@ -50,6 +50,11 @@ test('browser catalog falls back only when no publication exists', async () => {
     async () => ({ status: 404 }));
   assert.equal(fallback.source, 'builtin');
   assert.equal(fallback.defaultId, fallback.models[0].id);
+  const empty = await loadBrowserModelCatalog('/models/browser-catalog.json', async () => ({
+    ok: true, json: async () => ({ schema: 'natlang.browser-model-catalog/1',
+      defaultId: '', models: [] }),
+  }));
+  assert.deepEqual(empty.models, []);
   await assert.rejects(loadBrowserModelCatalog('/models/browser-catalog.json',
     async () => ({ ok: true, json: async () => ({
       schema: 'natlang.browser-model-catalog/1', defaultId: 'bad', models: [null],

@@ -4,23 +4,14 @@ export type BrowserModelManifest = { id: string; label: string; trainingRun: str
   contextTokens: number; url: string };
 
 export const BROWSER_MODEL_CATALOG: readonly BrowserModelManifest[] = [{
-  id: 'natlang-v8-failures-pilot-q4', label: 'natlang 350M v8 failures pilot Q4_K_M (smaller)',
-  trainingRun: 'runs/lora-v8-failures-pilot',
-  file: 'natlang-350M-v8-failures-pilot-Q4_K_M.gguf',
-  templateUrl: '/models/templates/natlang-350M-v8-failures-pilot.jinja',
-  quant: 'Q4_K_M', bytes: 229314496,
-  sha256: 'a7fb96883bbe29a41c4f832b6d5c8fbfa6eebe0b2952814423cd9b1d14881cfd',
+  id: 'lfm2.5-350m-base-q8', label: 'LFM2.5-350M base · Q8_0',
+  trainingRun: 'base model',
+  file: 'LFM2.5-350M-Q8_0.gguf',
+  templateUrl: '/models/templates/LFM2.5-350M.jinja',
+  quant: 'Q8_0', bytes: 379217632,
+  sha256: 'be036a757295e550098b85e13f6af2735d0fa73b41e1156a40c7d8e8e32a5766',
   contextTokens: 8192,
-  url: '/models/natlang-350M-v8-failures-pilot-Q4_K_M.gguf',
-}, {
-  id: 'natlang-v8-failures-pilot', label: 'natlang 350M v8 failures pilot Q8_0',
-  trainingRun: 'runs/lora-v8-failures-pilot',
-  file: 'natlang-350M-v8-failures-pilot-Q8_0.gguf',
-  templateUrl: '/models/templates/natlang-350M-v8-failures-pilot.jinja',
-  quant: 'Q8_0', bytes: 379219904,
-  sha256: '374f65708cadaf761667b661efb0eebcdd5caa4f522c95235065c00a465a74f8',
-  contextTokens: 8192,
-  url: '/models/natlang-350M-v8-failures-pilot-Q8_0.gguf',
+  url: '/models/LFM2.5-350M-Q8_0.gguf',
 }];
 
 export type BrowserModelCatalog = { schema: 'natlang.browser-model-catalog/1';
@@ -37,7 +28,7 @@ export async function loadBrowserModelCatalog(
   if (!response.ok) throw new Error(`browser model catalog unavailable: HTTP ${response.status}`);
   const value = await response.json() as Partial<BrowserModelCatalog>;
   const models = value.models;
-  if (value.schema !== 'natlang.browser-model-catalog/1' || !Array.isArray(models) || !models.length ||
+  if (value.schema !== 'natlang.browser-model-catalog/1' || !Array.isArray(models) ||
       typeof value.defaultId !== 'string' ||
       models.some(model => !model || typeof model.id !== 'string' || !model.id ||
         typeof model.url !== 'string' || !model.url || typeof model.templateUrl !== 'string' ||
@@ -45,7 +36,7 @@ export async function loadBrowserModelCatalog(
         typeof model.file !== 'string' || !model.file || !Number.isSafeInteger(model.bytes) ||
         model.bytes < 1 || !/^[a-f0-9]{64}$/.test(model.sha256) ||
         !Number.isSafeInteger(model.contextTokens) || model.contextTokens < 512) ||
-      !models.some(model => model.id === value.defaultId) ||
+      (models.length ? !models.some(model => model.id === value.defaultId) : value.defaultId !== '') ||
       new Set(models.map(model => model.id)).size !== models.length)
     throw new Error('invalid published browser model catalog');
   return { schema: 'natlang.browser-model-catalog/1', defaultId: value.defaultId,

@@ -9,7 +9,7 @@ description: Produce one typed answer from natural instructions.
 returns: Num
 ---
 Write the number 7 to return.`, expected: 7 }),
-  natural({ id: 'feedback-tone', name: 'Feedback tone', level: 'Beginner',
+  natural({ id: 'feedback-tone', name: 'Feedback tone', category: 'Classification', level: 'Beginner',
     description: 'Classify a customer comment into a closed set of labels.',
     concepts: ['classification', 'enum'], root: 'feedback/tone.nl',
     source: `---
@@ -21,7 +21,7 @@ types:
 ---
 Read args/comment. Write the best matching tone to return.`,
     inputs: { comment: 'The setup was easy and the team was helpful.' }, expected: 'positive' }),
-  natural({ id: 'extract-contact', name: 'Extract contact', level: 'Beginner',
+  natural({ id: 'extract-contact', name: 'Extract contact', category: 'Extraction', level: 'Beginner',
     description: 'Extract a name and email into a typed record.',
     concepts: ['extraction', 'typed records'], root: 'contacts/extract.nl',
     source: `---
@@ -31,10 +31,12 @@ returns: Contact
 types:
   Contact: '{ name: Text, email: Text }'
 ---
-Extract the person's name and email from args/message. Copy the spelling exactly. Write both fields to return.`,
+Read args/message and find the person's full name and email address.
+Copy both exactly as written, without inventing missing details.
+Write a Contact record with name and email to return.`,
     inputs: { message: 'Please contact Maya Chen at maya@example.com.' },
     expected: { name: 'Maya Chen', email: 'maya@example.com' } }),
-  natural({ id: 'issue-fields', name: 'Issue fields', level: 'Intermediate',
+  natural({ id: 'issue-fields', name: 'Issue fields', category: 'Extraction', level: 'Intermediate',
     description: 'Read a support request and produce a structured issue record.',
     concepts: ['extraction', 'classification'], root: 'issues/fields.nl',
     source: `---
@@ -47,7 +49,7 @@ types:
 Read args/message. Extract the customer, affected area, and urgency. Use urgency "high" only for a current outage; otherwise use "normal". Write the record to return.`,
     inputs: { message: 'From Northwind: checkout is down for every customer right now.' },
     expected: { area: 'checkout', urgency: 'high', customer: 'Northwind' } }),
-  natural({ id: 'policy-decision', name: 'Policy decision', level: 'Intermediate',
+  natural({ id: 'policy-decision', name: 'Policy decision', category: 'Decisions', level: 'Intermediate',
     description: 'Choose a decision and cite the applicable rule in a typed output.',
     concepts: ['policy', 'explanation'], root: 'policy/decide.nl',
     source: `---
@@ -61,7 +63,7 @@ types:
 Apply args/rule to args/request. Write allowed and a brief reason grounded in the rule to return.`,
     inputs: { request: 'Refund a purchase made 10 days ago.', rule: 'Refunds are allowed within 30 days.' },
     expected: { allowed: true, reason: 'The purchase is within the 30-day refund window.' } }),
-  natural({ id: 'meeting-actions', name: 'Meeting actions', level: 'Intermediate',
+  natural({ id: 'meeting-actions', name: 'Meeting actions', category: 'Extraction', level: 'Intermediate',
     description: 'Extract ordered action items from meeting notes.',
     concepts: ['extraction', 'arrays'], root: 'meetings/actions.nl',
     source: `---
@@ -72,7 +74,7 @@ returns: Text[]
 List only the explicit next actions in args/notes, in the order they appear. Write the list to return.`,
     inputs: { notes: 'Maya will draft the proposal. We discussed pricing. Leo will send the test report.' },
     expected: ['Maya will draft the proposal.', 'Leo will send the test report.'] }),
-  natural({ id: 'sql-risk', name: 'SQL risk triage', level: 'Intermediate',
+  natural({ id: 'sql-risk', name: 'SQL risk triage', category: 'Classification', level: 'Intermediate',
     description: 'Classify a suspicious query fragment using a closed risk label.',
     concepts: ['security triage', 'classification'], root: 'security/sql_risk.nl',
     source: `---
@@ -84,7 +86,7 @@ types:
 ---
 Classify args/query as suspicious when it contains an attempt to change query meaning through injected SQL syntax. Otherwise classify it as safe. Write the label to return.`,
     inputs: { query: "' OR 1=1 --" }, expected: 'suspicious' }),
-  natural({ id: 'evidence-summary', name: 'Evidence summary', level: 'Intermediate',
+  natural({ id: 'evidence-summary', name: 'Evidence summary', category: 'Synthesis', level: 'Intermediate',
     description: 'Summarize a claim using supplied evidence only.',
     concepts: ['grounding', 'synthesis'], root: 'research/summarize.nl',
     source: `---

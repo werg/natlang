@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { examples, exampleCategories } from '../playground/examples.mjs';
+import { crispExamples } from '../playground/examples/crisp.mjs';
+import { interfaceExamples } from '../playground/examples/interfaces.mjs';
 
 async function api() {
   const process = globalThis.process;
@@ -10,7 +12,8 @@ async function api() {
 
 test('example library is diverse, self-contained, and valid for the browser loader', async () => {
   const { newPlaygroundProject, validatePlaygroundProject } = await api();
-  assert.ok(examples.length >= 30);
+  assert.ok(examples.length >= 10);
+  assert.ok(examples.every(item => item.modelRequired), 'the public gallery should demonstrate natlang');
   assert.equal(new Set(examples.map(item => item.id)).size, examples.length);
   assert.ok(exampleCategories.includes('Composed agents'));
   for (const item of examples) {
@@ -26,7 +29,7 @@ test('every crisp example executes to its advertised expected result', async () 
   const { BrowserNatlangHost, newPlaygroundProject, runPlaygroundProject } = await api();
   const host = new BrowserNatlangHost();
   try {
-    for (const item of examples.filter(item => !item.modelRequired)) {
+    for (const item of [...crispExamples, ...interfaceExamples.filter(item => !item.modelRequired)]) {
       const project = newPlaygroundProject(item.name, item.root, item.files, item.inputs, item.expected);
       const run = await runPlaygroundProject(host, project);
       assert.equal(run.outcome.kind, 'done', `${item.id}: ${run.outcome.detail}`);

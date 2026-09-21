@@ -171,7 +171,7 @@ test('browser model records token use and retries one malformed local tool call'
 test('natlang model manifest and storage headroom are explicit', async () => {
   const { BROWSER_MODEL_CATALOG, checkModelStorage } = await browserApi();
   const spec = BROWSER_MODEL_CATALOG[0];
-  assert.ok(spec.url.startsWith('/models/natlang-'));
+  assert.ok(spec.url.startsWith('/models/'));
   assert.ok(spec.url.endsWith(spec.file));
   assert.ok(spec.templateUrl.endsWith('.jinja'));
   assert.equal(spec.sha256.length, 64);
