@@ -6,7 +6,8 @@ import { GeneratedModuleRenderer } from '../shared/generated-module.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
-const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const obsoleteProgramFiles = ['reduce/read.ts'];
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 let selectedMethod = '';
@@ -54,6 +55,19 @@ async function bootstrap() {
         edits['evidence/reliability-observations.json'] = { kind: 'evidence', content: observations };
         edits['evidence/reliability-methods.txt'] = { kind: 'evidence', content: methods };
         head = await research.runtime.commit('', edits, { message: 'Initial research program and example evidence' });
+    } else {
+        const existing = new Set((await research.runtime.list(head.id)).map(row => row.path));
+        const missing = programFiles.filter(path => !existing.has(path));
+        const obsolete = obsoleteProgramFiles.filter(path => existing.has(path));
+        if (missing.length || obsolete.length) {
+            const edits = Object.fromEntries(await Promise.all(missing.map(async path => {
+                const response = await fetch(`./programs/${path}`);
+                if (!response.ok) throw new Error(`Missing research program ${path}`);
+                return [path, { kind: path === 'types.ts' ? 'schema' : 'source', content: await response.text() }];
+            })));
+            for (const path of obsolete) edits[path] = null;
+            head = await research.runtime.commit(head.id, edits, { message: 'Upgrade research controller sources' });
+        }
     }
     const saved = await store.get('states', 'research');
     generatedDrafts = await store.get('drafts', 'research-interaction') ?? {};
@@ -70,7 +84,7 @@ async function sourceAt(head) {
     const entries = (await research.runtime.list(head, ['source', 'schema'])).filter(row => /\.(nl|ts)$/.test(row.path));
     const files = Object.fromEntries(await Promise.all(entries.map(async row => [row.path, (await research.runtime.read(head, row.path)).content])));
     for (const path of programFiles) if (!files[path]) throw new Error(`Research controller is missing ${path}`);
-    return { files, reducer: 'reduce.nl', view: 'view.nl' };
+    return { files, reducer: 'reduce.nl', view: 'view.ts' };
 }
 async function mount() {
     if (app) await app.close();

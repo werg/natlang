@@ -16,7 +16,7 @@ try {
     page.on('pageerror', error => errors.push(String(error)));
     await page.goto(studio.url + 'research/');
     await page.getByText('reliability-observations.json').waitFor();
-    assert.match(await page.locator('#artifact-count').textContent(), /27 artifacts/);
+    assert.match(await page.locator('#artifact-count').textContent(), /28 artifacts/);
     await page.getByRole('button', { name: /reliability-observations/ }).click();
     await page.locator('#detail-body').getByText(/failures/).waitFor();
     assert.match(await page.locator('#detail-body').textContent(), /"failures": 72/);

@@ -6,7 +6,7 @@ import { ResearchRuntime } from '../studio/shared/research-runtime.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
 
 const root = new URL('../studio/research/programs/', import.meta.url);
-const paths = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const paths = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const files = Object.fromEntries(await Promise.all(paths.map(async path => [path, await readFile(new URL(path, root), 'utf8')])));
 async function api() { const process = globalThis.process; try {
     globalThis.process = undefined;
@@ -18,14 +18,11 @@ test('research reducer owns semantic state and actual source loads in the interp
     const client = new BrowserNatlangClient({ host: { research: {} } });
     const initial = { revision: 0, head: 'manifest', question: '', notice: '', active_view: '', selected: '', receipts: [] };
     let turns = 0;
-    const app = new BrowserNatlangApplication({ client, source: { files, reducer: 'reduce.nl', view: 'view.nl' }, initialState: initial,
+    const app = new BrowserNatlangApplication({ client, source: { files, reducer: 'reduce.nl', view: 'view.ts' }, initialState: initial,
         modelTurn: turn => {
             if (++turns > 12) throw new Error('Fixture exceeded expected interpreter turns');
             if (turn.messages.filter(row => row.role === 'assistant').length > 1)
                 return { calls: [], text: 'done', completion_tokens: 1 };
-            const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
-            if (prompt.includes('Present the current research workspace'))
-                return { calls: [['write', { path: 'return', value: { heading: 'Investigation', summary: 'One question', active_view: '', suggestions: [] } }]] };
             return { calls: [['write', { path: 'return', value: { ...initial, revision: 1, question: 'Which cohort improved?', notice: 'The question is open.' } }]] };
         } });
     try {
@@ -33,7 +30,7 @@ test('research reducer owns semantic state and actual source loads in the interp
         const result = await app.dispatch({ id: 'event-1', kind: 'question', value: 'Which cohort improved?' });
         assert.equal(result.state.question, 'Which cohort improved?');
         assert.equal(result.state.revision, 1);
-        assert.equal(result.view.heading, 'Investigation');
+        assert.equal(result.view.heading, 'Which cohort improved?');
         assert.ok(result.reducerRun.trace.length);
     } finally { await app.close(); await client.close(); }
 });

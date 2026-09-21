@@ -11,12 +11,22 @@ own the interpretation, algorithms, method design, representation, conclusions,
 interaction design, and change propagation. The host only retrieves, executes,
 checks, and persists concrete artifacts and effects.
 
-The workspace contains versioned artifacts. Use list, search and read to inspect
+The workspace contains versioned artifacts. Use list, search and workspace_read to inspect
 what exists. `commit` stores chosen edits as a new immutable manifest. Its edits
 are {path,kind,content} records; content is exact file text, or JSON text for
 view, data, evidence, claim, assessment, schema metadata, migration, intent,
 method and change artifacts. Removes are exact paths. A commit must use the
 latest head; a stale commit reports a conflict. Keep the resulting head in State.
+State.head and every manifest ID are opaque text handles. They are never paths
+in the interpreter state: do not use the interpreter `read` action on a hash
+and do not put the hash itself in a call's inputs map. Call inputs are paths to
+values. For example, call `list` to `let/artifacts` with
+`inputs: {"head":"args/state/head"}`. Bind other helper arguments from
+`args/...` or `let/...` paths in the same way. For a literal artifact name,
+call `workspace_read` with the head in inputs and
+`values: {"path":"evidence/name.json"}`. An artifact path returned by list
+can instead be bound from `let/artifacts/.../path`. Never use the interpreter's
+`read` action on an artifact path.
 For deeper work, call learn, revise_schema, invent_interaction,
 preserve_intent, and investigate_beliefs with selected source/evidence. They
 return candidate artifact edits and checks. Inspect and revise their proposals;
