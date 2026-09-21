@@ -77,7 +77,7 @@ async function runScenario({ scenario, server, model, seed }) {
             const child = new bindings.BrowserNatlangClient({ host: { research: { readNative: async id => (await store.get('native_values', id))?.value } } });
             try {
                 const result = await child.run({ source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) },
-                    inputs, modelTurn: driver, options: { seed: options.provenance.seed } });
+                    inputs, modelTurn: driver, validationFeedback: 'local', options: { seed: options.provenance.seed } });
                 if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
                 return { value: result.value, trace_id: `child-${++childIndex}` };
             } finally { await child.close(); }
@@ -94,6 +94,7 @@ async function runScenario({ scenario, server, model, seed }) {
     const client = new bindings.BrowserNatlangClient({ host: { research: research.api() }, mode: 'retained' });
     const app = new bindings.BrowserNatlangApplication({ client,
         source: { files: sources, reducer: 'reduce.nl', view: 'view.ts' }, initialState: state, seedRoot: seed, modelTurn: driver,
+        validationFeedback: 'local',
         onCommit: async commit => { await research.verifyCommit(state, commit.state); state = commit.state; },
     });
     let transition, failure = '';

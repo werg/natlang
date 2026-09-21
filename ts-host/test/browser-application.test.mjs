@@ -60,6 +60,23 @@ test('natlang can generate the view while the app contract remains independent o
   } finally { await app.close(); await client.close(); }
 });
 
+test('application forwards local validation feedback to reducer and view runs', async () => {
+  const { BrowserNatlangApplication } = await api();
+  const requests = [];
+  const client = { run: async request => {
+    requests.push(request);
+    return { value: request.source.root === 'view.ts' ? { tag: 'p', text: 'ready' } : { count: 1 },
+      outcome: { kind: 'done' }, trace: [], run_id: request.source.root };
+  } };
+  const app = new BrowserNatlangApplication({ client, source: { files, reducer: 'reduce.ts', view: 'view.ts' },
+    initialState: { count: 0 }, validationFeedback: 'local' });
+  try {
+    await app.start();
+    await app.dispatch({ id: 'one', kind: 'increment' });
+    assert.deepEqual(requests.map(request => request.validationFeedback), ['local', 'local', 'local']);
+  } finally { await app.close(); }
+});
+
 test('DOM renderer uses text nodes, emits typed events and rejects executable markup', async () => {
   const { BrowserDomRenderer } = await api();
   class Element {

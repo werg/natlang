@@ -20,6 +20,7 @@ export type BrowserAppOptions<S, V> = { client: Pick<BrowserNatlangClient, 'run'
   onFailure?: (failure: BrowserAppFailure) => void;
   seedRoot?: number;
   runOptions?: Omit<NonNullable<BrowserRunRequest['options']>, 'seed'>;
+  validationFeedback?: BrowserRunRequest['validationFeedback'];
   modelTurn?: BrowserRunRequest['modelTurn'] };
 
 function eventSeed(root: number, revision: number, id: string): number {
@@ -81,7 +82,8 @@ export class BrowserNatlangApplication<S, V> {
     try {
       return await this.client.run({
         source: { kind: 'files', root, files: this.source.files }, inputs,
-        modelTurn: this.options.modelTurn, signal: controller.signal,
+        modelTurn: this.options.modelTurn, validationFeedback: this.options.validationFeedback,
+        signal: controller.signal,
         options: { ...this.options.runOptions,
           ...(this.options.seedRoot === undefined ? {} : {
             seed: { mode: 'derived', root: eventSeed(this.options.seedRoot, revision, eventId) },

@@ -90,7 +90,7 @@ async function mount() {
     if (app) await app.close();
     controllerHead = state.head;
     app = new BrowserNatlangApplication({ client, source: await sourceAt(state.head), initialState: state,
-        initialRevision: state.revision, seedRoot: Number($('seed').value),
+        initialRevision: state.revision, seedRoot: Number($('seed').value), validationFeedback: 'local',
         onCommit: async commit => {
             await research.verifyCommit(state, commit.state);
             state = commit.state;
