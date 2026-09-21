@@ -8,6 +8,7 @@ const $ = id => document.getElementById(id);
 const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
+let selectedMethod = '';
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
 const research = new ResearchHost({ store, runContext: () => ({
@@ -91,6 +92,18 @@ async function paint(current, view, trace) {
     if (trace) $('trace').textContent = JSON.stringify(trace, null, 2);
     const entries = await research.runtime.list(current.head);
     $('artifact-count').textContent = `${entries.length} artifacts`;
+    const methods = $('methods'); methods.replaceChildren();
+    for (const row of entries.filter(row => row.kind === 'source' && !programFiles.includes(row.path) && /\.(nl|ts)$/.test(row.path))) {
+        const card = document.createElement('div'); card.className = 'method';
+        const text = document.createElement('div'), title = document.createElement('strong'), meta = document.createElement('small');
+        title.textContent = row.path; meta.textContent = `${row.path.endsWith('.nl') ? 'natlang' : 'crisp TypeScript'} · ${row.id.slice(0, 12)}`;
+        text.append(title, meta);
+        const run = document.createElement('button'); run.textContent = 'Run';
+        run.onclick = () => { selectedMethod = row.path; $('method-title').textContent = row.path;
+            $('method-result').textContent = ''; $('method-status').textContent = ''; $('method-runner').showModal(); };
+        card.append(text, run); methods.append(card);
+    }
+    if (!methods.children.length) methods.textContent = 'Natlang can develop, exercise, and retain a method during an investigation.';
     const root = $('artifacts'); root.replaceChildren();
     const icons = { source: '⌘', schema: '◇', method: '✧', evidence: '▤', claim: '❧', view: '◫', data: '▥', migration: '⇄', assessment: '◌', intent: '◈', change: '↗' };
     for (const row of entries.filter(row => !programFiles.includes(row.path))) {
@@ -234,6 +247,27 @@ $('question-form').onsubmit = async event => {
     catch (error) { status(error, true); }
 };
 $('cancel').onclick = () => { abort?.abort(); app?.cancel(); status('Stopping the investigation; recorded effects remain inspectable.'); };
+$('method-execute').onclick = async () => {
+    if (!selectedMethod || busy) return;
+    let inputs;
+    try { inputs = JSON.parse($('method-input').value); }
+    catch (error) { $('method-status').textContent = `Invalid JSON: ${error}`; return; }
+    try {
+        setBusy(true); abort = new AbortController(); $('method-execute').disabled = true;
+        $('method-status').textContent = 'Executing pinned source…';
+        const id = `manual-${crypto.randomUUID()}`;
+        const receipt = await research.runtime.execute(state.head, selectedMethod, inputs, id);
+        state = { ...state, revision: state.revision + 1, receipts: [...state.receipts, receipt.id],
+            notice: `${selectedMethod} ${receipt.status}; its receipt is preserved.` };
+        await store.commit('research', { state, revision: state.revision,
+            event: { id, kind: 'method-invocation', value: { root: selectedMethod, inputs } } });
+        $('method-result').textContent = JSON.stringify(receipt, null, 2);
+        $('method-status').textContent = receipt.status;
+        await paint(state);
+    }
+    catch (error) { $('method-status').textContent = String(error); }
+    finally { abort = null; setBusy(false); $('method-execute').disabled = false; }
+};
 $('source').onclick = async () => showDetail('Research program', (await sourceAt(state.head)).files);
 $('interaction-root').addEventListener('input', event => {
     if ((event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) && event.target.id) {
