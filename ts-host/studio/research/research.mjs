@@ -6,11 +6,12 @@ import { GeneratedModuleRenderer } from '../shared/generated-module.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
-const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 let selectedMethod = '';
 let reviewedCandidate = '';
+const selectedBranches = new Set();
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
 const research = new ResearchHost({ store, runContext: () => ({
@@ -138,19 +139,28 @@ async function paint(current, view, trace) {
     }
     if (!beliefs.children.length) beliefs.textContent = 'Conclusions and their evidence will appear here.';
     const branches = $('branches'); branches.replaceChildren();
-    for (const candidate of (await research.runtime.branches()).filter(row => row.kind === 'candidate')) {
-        const button = document.createElement('button'); button.className = 'branch';
+    const candidates = (await research.runtime.branches()).filter(row => row.kind === 'candidate');
+    const liveCandidates = new Set(candidates.map(row => row.id));
+    for (const id of [...selectedBranches]) if (!liveCandidates.has(id)) selectedBranches.delete(id);
+    for (const candidate of candidates) {
+        const card = document.createElement('div'); card.className = 'branch';
+        const select = document.createElement('input'); select.type = 'checkbox'; select.checked = selectedBranches.has(candidate.id);
+        select.setAttribute('aria-label', `Select ${candidate.message || candidate.id} for reconciliation`);
+        select.onchange = () => { select.checked ? selectedBranches.add(candidate.id) : selectedBranches.delete(candidate.id);
+            $('compare-branches').disabled = selectedBranches.size < 2; };
+        const button = document.createElement('button'); button.className = 'branch-open';
         const title = document.createElement('strong'), meta = document.createElement('small');
         title.textContent = candidate.message || 'Untitled candidate';
         meta.textContent = `${candidate.changed} changed artifacts · ${candidate.id.slice(0, 12)}`;
-        button.append(title, meta);
+        button.append(title, meta); card.append(select, button);
         button.onclick = async () => {
             const review = await research.runtime.reviewCandidate(candidate.id);
             showDetail(candidate.message || 'Candidate', review); reviewedCandidate = candidate.id;
             $('detail-activate').hidden = !review.can_activate;
         };
-        branches.append(button);
+        branches.append(card);
     }
+    $('compare-branches').disabled = selectedBranches.size < 2;
     if (!branches.children.length) branches.textContent = 'Proposed alternatives will appear here.';
     const receipts = $('receipts'); receipts.replaceChildren();
     for (const id of current.receipts.slice(-12).reverse()) {
@@ -216,6 +226,10 @@ $('detail-activate').onclick = async () => {
             event: { kind: 'activate-candidate', value: reviewedCandidate } });
         $('detail').close(); await paint(state); status(state.notice);
     }
+    catch (error) { status(error, true); }
+};
+$('compare-branches').onclick = async () => {
+    try { showDetail('Reconciliation review', await research.runtime.reviewReconciliation([...selectedBranches])); }
     catch (error) { status(error, true); }
 };
 async function onGenerated(pinned, event) {

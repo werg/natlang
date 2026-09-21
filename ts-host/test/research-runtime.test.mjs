@@ -141,3 +141,21 @@ test('migration audit reports exact coverage, multiplicity and preservation from
     assert.deepEqual(audit.unknown_output_sources, ['outside']);
     assert.deepEqual(audit.preserved_field_mismatches, []);
 });
+
+test('reconciliation review retains common base, branch intents and overlapping content', async () => {
+    const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(), runSource: async () => ({ value: null }) });
+    const base = await runtime.commit('', { 'answer.txt': { kind: 'claim', content: 'rate' } });
+    const units = await runtime.propose(base.id, {
+        'answer.txt': { kind: 'claim', content: 'rate per 100 requests' },
+        'intent/units.json': { kind: 'intent', content: { request: 'Fix units' } },
+    }, { message: 'Units' });
+    const cohorts = await runtime.propose(base.id, {
+        'answer.txt': { kind: 'claim', content: 'rate by cohort' },
+        'intent/cohorts.json': { kind: 'intent', content: { request: 'Show cohorts' } },
+    }, { message: 'Cohorts' });
+    const review = await runtime.reviewReconciliation([units.id, cohorts.id]);
+    assert.equal(review.base, base.id);
+    assert.deepEqual(review.branches.map(row => row.intents[0].content.request), ['Fix units', 'Show cohorts']);
+    assert.deepEqual(review.overlapping_paths.map(row => row.path), ['answer.txt']);
+    assert.equal(review.branches[0].changes.find(row => row.path === 'answer.txt').before.content, 'rate');
+});

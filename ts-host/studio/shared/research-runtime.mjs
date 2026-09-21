@@ -165,6 +165,35 @@ export class ResearchRuntime {
                 active: active.files[row.path] ? copy(snapshot.artifacts[active.files[row.path]]) : null })),
         };
     }
+    async reviewReconciliation(candidateIds) {
+        assert(Array.isArray(candidateIds) && candidateIds.length >= 2 && new Set(candidateIds).size === candidateIds.length,
+            'Reconciliation review needs at least two distinct candidates');
+        const snapshot = await this.workspace.snapshot();
+        const candidates = candidateIds.map(id => snapshot.manifests[id]);
+        assert(candidates.every(Boolean), 'Reconciliation review contains an unknown candidate');
+        const lineage = manifest => { const ids = [];
+            for (let id = manifest.id; id && snapshot.manifests[id]; id = snapshot.manifests[id].parent) ids.push(id);
+            return ids;
+        };
+        const lineages = candidates.map(lineage);
+        const baseId = lineages[0].find(id => lineages.slice(1).every(row => row.includes(id)));
+        assert(baseId, 'Candidates have no common base');
+        const changedByPath = new Map(), branches = [];
+        for (const candidate of candidates) {
+            const changes = await this.diff(baseId, candidate.id);
+            for (const change of changes) {
+                const list = changedByPath.get(change.path) ?? []; list.push(candidate.id); changedByPath.set(change.path, list);
+            }
+            const intents = Object.entries(candidate.files).flatMap(([path, id]) => snapshot.artifacts[id]?.kind === 'intent' ?
+                [{ path, content: copy(snapshot.artifacts[id].content) }] : []);
+            branches.push({ id: candidate.id, parent: candidate.parent, message: candidate.message, intents,
+                changes: changes.map(change => ({ path: change.path,
+                    before: change.before ? copy(snapshot.artifacts[change.before]) : null,
+                    after: change.after ? copy(snapshot.artifacts[change.after]) : null })) });
+        }
+        return { base: baseId, active: snapshot.head, branches,
+            overlapping_paths: [...changedByPath].filter(([, ids]) => ids.length > 1).map(([path, ids]) => ({ path, candidates: ids })) };
+    }
     async branches() {
         const snapshot = await this.workspace.snapshot();
         const lineage = new Set();

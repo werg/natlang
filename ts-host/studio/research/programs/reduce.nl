@@ -71,7 +71,9 @@ the active head. `diff` compares two candidate or active manifests. `activate`
 promotes a candidate whose parent is the current head. For concurrent branches,
 use `branches` to find alternatives. Keep the base, both intentions and unresolved alternatives; inspect both
 candidates and use review_candidate to inspect their full before, proposed and
-active artifact content, including overlapping paths. Write a reconciled
+active artifact content, including overlapping paths. Use review_reconciliation
+on two or more alternatives to inspect their common base, stated intent
+artifacts, full edits and paths changed by several branches. Write a reconciled
 candidate when needed. Do not assume a crisp
 convergence rule or activate a stale candidate as if it were rebased.
 

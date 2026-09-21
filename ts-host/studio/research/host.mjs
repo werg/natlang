@@ -56,6 +56,7 @@ export class ResearchHost {
         },
         diff: async (left, right) => JSON.stringify(await this.runtime.diff(left, right)),
         reviewCandidate: async id => JSON.stringify(await this.runtime.reviewCandidate(id)),
+        reviewReconciliation: async ids => JSON.stringify(await this.runtime.reviewReconciliation(ids)),
         branches: () => this.runtime.branches(),
         beliefGraph: async head => JSON.stringify(await this.runtime.beliefGraph(head)),
         affected: async (head, changed) => this.runtime.affected(head, changed),

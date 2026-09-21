@@ -16,7 +16,7 @@ try {
     page.on('pageerror', error => errors.push(String(error)));
     await page.goto(studio.url + 'research/');
     await page.getByText('reliability-observations.json').waitFor();
-    assert.match(await page.locator('#artifact-count').textContent(), /26 artifacts/);
+    assert.match(await page.locator('#artifact-count').textContent(), /27 artifacts/);
     await page.getByRole('button', { name: /reliability-observations/ }).click();
     await page.locator('#detail-body').getByText(/failures/).waitFor();
     assert.match(await page.locator('#detail-body').textContent(), /"failures": 72/);
@@ -83,6 +83,7 @@ try {
         await store.commit('research', { state, revision: state.revision, event: { kind: 'fixture-generated-view' } });
         await workspace.propose(manifest.id, {
             'claims/reviewed.json': { kind: 'claim', content: { text: 'Candidate remains reviewable before activation', status: 'reviewed' } },
+            'intent/custom-ui.json': { kind: 'intent', content: { request: 'Make cohort alternatives spatially explorable' } },
             'methods/choose.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  value: Text\n  context: Text\nreturns: Text\n---*/\nreturn `Compared ${args.value}`;' },
             'views/cohort.json': { kind: 'view', content: { module: {
                 title: 'Cohort constellation',
@@ -91,6 +92,10 @@ try {
                 script: "const output=document.getElementById('choice');output.textContent=natlang.drafts.cohort||'No cohort selected';document.getElementById('mobile').onclick=()=>{output.textContent='mobile';natlang.draft('cohort','mobile');natlang.emit('choose','mobile')}",
             }, bindings: { choose: { root: 'methods/choose.ts' } } } },
         }, { message: 'Reviewed candidate finding' });
+        await workspace.propose(manifest.id, {
+            'intent/table-ui.json': { kind: 'intent', content: { request: 'Keep cohort alternatives in a conventional table' } },
+            'views/cohort.json': { kind: 'view', content: (await workspace.at(manifest.id, 'views/cohort.json')).content },
+        }, { message: 'Conventional table alternative' });
         store.close();
     });
     await page.reload();
@@ -107,7 +112,14 @@ try {
     await page.locator('#method-status').getByText('complete').waitFor();
     assert.match(await page.locator('#method-result').textContent(), /"value": 42/);
     await page.locator('#method-runner').getByRole('button', { name: 'Close' }).click();
-    await page.locator('.branch').filter({ hasText: 'Reviewed candidate finding' }).click();
+    await page.getByLabel(/Select Reviewed candidate finding/).check();
+    await page.getByLabel(/Select Conventional table alternative/).check();
+    await page.getByRole('button', { name: 'Compare selected' }).click();
+    await page.locator('#detail-body').getByText(/Make cohort alternatives spatially explorable/).waitFor();
+    assert.match(await page.locator('#detail-body').textContent(), /Make cohort alternatives spatially explorable/);
+    assert.match(await page.locator('#detail-body').textContent(), /Keep cohort alternatives in a conventional table/);
+    await page.locator('#detail').getByRole('button', { name: 'Close' }).click();
+    await page.locator('.branch').filter({ hasText: 'Reviewed candidate finding' }).locator('.branch-open').click();
     await page.getByRole('button', { name: 'Activate reviewed candidate' }).click();
     await page.locator('#artifacts strong').filter({ hasText: 'claims/reviewed.json' }).waitFor();
     await page.frameLocator('.generated-module').getByRole('heading', { name: 'Cohort constellation' }).waitFor();
