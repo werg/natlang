@@ -204,6 +204,46 @@ export class ResearchRuntime {
         }
         return [...affected].filter(path => !changedPaths.includes(path)).sort();
     }
+    /** Compare a real migration result with immutable input records. The mapping keys
+     * are supplied by the authored migration; this reports mechanics, not meaning. */
+    async auditMigration(manifestId, sourcePath, receiptId, spec) {
+        const source = await this.read(manifestId, sourcePath);
+        const receipt = await this.adapter.readEffect(receiptId);
+        assert(receipt?.status === 'complete' && receipt.manifest === manifestId,
+            'Migration audit needs a completed receipt from this manifest');
+        const input = source.content, output = receipt.value;
+        assert(Array.isArray(input) && Array.isArray(output), 'Migration input and output must be record lists');
+        assert(spec && typeof spec === 'object' && !Array.isArray(spec), 'Migration audit needs a mapping specification');
+        const sourceKey = spec.source_key, outputKey = spec.output_source_key;
+        const preserved = spec.preserved_fields ?? [];
+        assert(typeof sourceKey === 'string' && sourceKey && typeof outputKey === 'string' && outputKey,
+            'Migration audit needs source_key and output_source_key');
+        assert(Array.isArray(preserved) && preserved.every(field => typeof field === 'string' && field),
+            'preserved_fields must be a list of field names');
+        const bySource = new Map(), duplicateInputs = [];
+        for (const record of input) {
+            assert(record && typeof record === 'object' && !Array.isArray(record), 'Migration input contains a non-record');
+            const key = record[sourceKey];
+            assert(['string', 'number'].includes(typeof key), `Input record lacks scalar ${sourceKey}`);
+            if (bySource.has(key)) duplicateInputs.push(key); else bySource.set(key, record);
+        }
+        const counts = new Map(), unknown = [], fieldMismatches = [];
+        for (const record of output) {
+            assert(record && typeof record === 'object' && !Array.isArray(record), 'Migration output contains a non-record');
+            const key = record[outputKey];
+            if (!bySource.has(key)) { unknown.push(key); continue; }
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+            const original = bySource.get(key);
+            for (const field of preserved) if (!sameValue(original[field], record[field]))
+                fieldMismatches.push({ key, field, before: copy(original[field]), after: copy(record[field]) });
+        }
+        const unmatched = [...bySource.keys()].filter(key => !counts.has(key));
+        const multiplied = [...counts].filter(([, count]) => count > 1).map(([key, count]) => ({ key, count }));
+        return { input_count: input.length, output_count: output.length,
+            matched_inputs: bySource.size - unmatched.length, unmatched, multiplied,
+            unknown_output_sources: unknown, duplicate_input_keys: duplicateInputs,
+            preserved_field_mismatches: fieldMismatches };
+    }
     async interaction(manifestId, path) {
         const artifact = await this.read(manifestId, path);
         assert(artifact.kind === 'view', 'Interaction path must contain a view');

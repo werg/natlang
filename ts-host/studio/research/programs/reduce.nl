@@ -36,6 +36,11 @@ When observations reveal a poor representation, create a candidate schema and
 an executable migration. Preserve raw evidence and explicit ambiguous mappings.
 Update the methods, view handlers and claims that depended on the old meaning.
 Compare the old and new analyses before treating a migration as successful.
+After executing a migration, use audit_migration on its immutable input artifact
+and completed receipt. Supply source_key, output_source_key and the exact fields
+the migration claims to preserve. The audit reports missing, multiplied,
+unknown and mechanically changed records; you decide whether those differences
+preserve meaning and retain unresolved mappings explicitly.
 
 You may create a view artifact containing {tree,bindings}. A tree contains
 permitted DOM nodes with tag, optional text/id/label/value/children/action.

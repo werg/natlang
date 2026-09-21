@@ -101,3 +101,28 @@ test('branch listing distinguishes live candidates from active history', async (
     assert.equal(review.changes[0].proposed.content, 'alternative');
     assert.equal(review.changes[0].active.content, 'current');
 });
+
+test('migration audit reports exact coverage, multiplicity and preservation from a real receipt', async () => {
+    const adapter = new MemoryResearchAdapter();
+    const runtime = new ResearchRuntime({ adapter, runSource: async () => ({ value: null }) });
+    const manifest = await runtime.commit('', {
+        'evidence/raw.json': { kind: 'evidence', content: [
+            { id: 'a', count: 4, label: 'mobile' }, { id: 'b', count: 7, label: 'desktop' },
+        ] },
+    });
+    await adapter.recordEffect({ id: 'migration-1', status: 'complete', manifest: manifest.id,
+        root: 'migration.ts', inputs: {}, value: [
+            { origin: 'a', count: 4, kind: 'profile' },
+            { origin: 'a', count: 4, kind: 'physical' },
+            { origin: 'outside', count: 1, kind: 'unknown' },
+        ] });
+    const audit = await runtime.auditMigration(manifest.id, 'evidence/raw.json', 'migration-1', {
+        source_key: 'id', output_source_key: 'origin', preserved_fields: ['count'],
+    });
+    assert.equal(audit.input_count, 2);
+    assert.equal(audit.output_count, 3);
+    assert.deepEqual(audit.unmatched, ['b']);
+    assert.deepEqual(audit.multiplied, [{ key: 'a', count: 2 }]);
+    assert.deepEqual(audit.unknown_output_sources, ['outside']);
+    assert.deepEqual(audit.preserved_field_mismatches, []);
+});

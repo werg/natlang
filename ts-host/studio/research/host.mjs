@@ -59,6 +59,8 @@ export class ResearchHost {
         branches: () => this.runtime.branches(),
         beliefGraph: async head => JSON.stringify(await this.runtime.beliefGraph(head)),
         affected: async (head, changed) => this.runtime.affected(head, changed),
+        auditMigration: async (head, source, receipt, spec) => JSON.stringify(
+            await this.runtime.auditMigration(head, source, receipt, JSON.parse(spec))),
         receipt: async id => {
             const receipt = await this.store.readEffect(id);
             if (!receipt?.root || !receipt.manifest) throw new Error('Unknown research receipt');
