@@ -1,7 +1,7 @@
 /** Browser-owned durable state and traces. A commit is one IndexedDB transaction. */
 export class StudioStore {
     static async open(name = 'natlang-studio-v1') {
-        const request = indexedDB.open(name, 3);
+        const request = indexedDB.open(name, 4);
         request.onupgradeneeded = () => {
             const db = request.result;
             if (!db.objectStoreNames.contains('states'))
@@ -15,6 +15,8 @@ export class StudioStore {
             if (!db.objectStoreNames.contains('native_values')) db.createObjectStore('native_values');
             if (!db.objectStoreNames.contains('child_runs'))
                 db.createObjectStore('child_runs');
+            if (!db.objectStoreNames.contains('research_workspaces'))
+                db.createObjectStore('research_workspaces');
         };
         const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
         return new StudioStore(db);
@@ -35,5 +37,31 @@ export class StudioStore {
         await this.transaction(['states', 'history'], tx => { tx.objectStore('states').put(record, app); tx.objectStore('history').add({ app, ...record }); });
     }
     async history(app) { return (await this.all('history')).filter(row => row.app === app); }
+    async readWorkspace(key) { return this.get('research_workspaces', key); }
+    async compareAndSwapWorkspace(key, expectedHead, next) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('research_workspaces', 'readwrite');
+            const values = tx.objectStore('research_workspaces');
+            const read = values.get(key);
+            read.onsuccess = () => {
+                if ((read.result?.head ?? '') !== expectedHead) {
+                    tx.abort();
+                    reject(new Error('Workspace changed; rebase the candidate'));
+                }
+                else values.put(next, key);
+            };
+            read.onerror = () => reject(read.error);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    async hasEffect(id) { return Boolean(await this.get('effects', id)); }
+    async readEffect(id) { return this.get('effects', id); }
+    async recordEffect(receipt) {
+        const prior = await this.get('effects', receipt.id);
+        if (prior && JSON.stringify(prior) !== JSON.stringify(receipt))
+            throw new Error('Effect ID has a different outcome');
+        await this.effect(receipt);
+    }
     close() { this.db.close(); }
 }
