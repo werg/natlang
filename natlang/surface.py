@@ -278,7 +278,9 @@ class ToolSurface:
                      "anyOf": shapes}              # explicit JSON shapes allow new locals and invalid proposals
 
         tools = [
-            tool("read", "Read a value from the workspace. Optional line or item range for long ones. "
+            tool("read", "Inspect a value only when you need its contents to make a decision. Workspace paths can be "
+                         "passed directly to `call` without reading them first; do not walk through collection items merely "
+                         "to pass the collection to a function. Optional line or item range for long values. "
                          "`codebase/<function>` shows the text of a function; `args@effects` shows the full effect journal.",
                  {"path": _enum_or_string((["args"] if lam.in_ else []) +
                                           (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
