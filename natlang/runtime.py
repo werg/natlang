@@ -987,6 +987,9 @@ class Session:
         v = v or {}
         inputs = dict(v.get("inputs") or {})
         values = dict(v.get("values") or {})
+        overlap = sorted(set(inputs) & set(values))
+        if overlap:
+            raise reject("values", "bad-call", "parameters bound once", ", ".join(overlap))
         later = []
         names = {n.rstrip("?"): t for n, t in fn.args.items()}
         for n in list(inputs) + list(values) + later:

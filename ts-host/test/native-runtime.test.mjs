@@ -241,6 +241,24 @@ test('native tool alternatives bind paths to their declared types and readable s
     alt.start?.enum.includes(0) && alt.end?.enum.includes(1)));
   assert.ok(parameters('call')['x-natlang-alternatives'].some(alt => alt.function?.const === 'identity' &&
     alt.inputs?.properties?.item?.enum.includes('args/number')));
+  assert.ok(parameters('call')['x-natlang-alternatives'].some(alt => alt.function?.const === 'identity' &&
+    alt.values?.properties?.item?.type === 'number'));
+});
+
+test('native calls accept typed literal values and reject double binding', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ item: Num }, Num>',
+    instructions: 'Return a selected value.', args: { item: 2 }, codebase: {
+      add: { args: { left: 'Num', right: 'Num' }, returns: 'Num', code: 'return args.left + args.right;' },
+    } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('call', { function: 'add', to: 'return',
+    inputs: { left: 'args/item' }, values: { right: 5 } });
+  assert.equal(result.kind, 'done');
+  assert.equal(lam.return, 7);
+  const overlap = await session.applyAsync('call', { function: 'add', to: 'let/nope',
+    inputs: { left: 'args/item' }, values: { left: 3, right: 4 } });
+  assert.equal(overlap.kind, 'rejected');
+  assert.ok(overlap.codes.includes('bad-call'));
 });
 
 test('native opening state distinguishes absent inputs, empty text, partial records, and pending tasks', () => {

@@ -114,6 +114,20 @@ def test_calls_are_checked_against_the_signature():
     assert r.kind == "rejected" and "u" not in s.lam.let_types
 
 
+def test_calls_accept_typed_literal_values_and_reject_double_binding():
+    s = _session()
+    args = {"function": "select_by_flags", "to": "let/selected",
+            "values": {"items": ["a", "b"], "flags": [True, False]}}
+    assert gbnf.accepts(call_grammar(S.tools(s)), native_text([("call", args)]))
+    result = S.apply(s, "call", args)
+    assert result.kind == "done", result.text
+    assert dump(s.lam.let["selected"]) == ["a"]
+    overlap = S.apply(s, "call", {"function": "select_by_flags", "to": "let/nope",
+                                   "inputs": {"items": "args/tickets"},
+                                   "values": {"items": ["a"], "flags": [True]}})
+    assert overlap.kind == "rejected" and "bad-call" in overlap.text
+
+
 def test_call_can_update_destination_from_its_previous_value():
     step = load_function(ROOT / "codebases" / "dependency_plan" / "plan.nl").codebase["step"]
     tasks = [{"id": "a", "needs": [], "description": "first"}]

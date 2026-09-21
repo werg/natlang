@@ -953,6 +953,8 @@ export class NativeSession {
       const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
       const inputPaths = (args.inputs ?? {}) as Record<string, string>;
       const values: Record<string, unknown> = { ...args.values as Record<string, unknown> ?? {} };
+      const overlap = Object.keys(inputPaths).filter(name => Object.hasOwn(values, name));
+      if (overlap.length) throw new Reject([{ path: 'values', code: 'bad-call', expected: 'parameters bound once', got: overlap.join(', ') }]);
       const named = Object.fromEntries(Object.entries(definition.types as Record<string, string> ?? {})
         .map(([name, text]) => [name, parseType(text)]));
       const callEnv = this.env.child(named);

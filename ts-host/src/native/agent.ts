@@ -282,6 +282,7 @@ export class NativeToolAgent {
     const callProperties: Record<string, unknown> = {
       function: { enum: names }, to: { type: 'string' },
       inputs: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, { type: 'string' }])), additionalProperties: false },
+      values: { type: 'object', properties: Object.fromEntries(inputNames.map(name => [name, writeValue])), additionalProperties: false },
       over: { type: 'string' },
       init: { anyOf: ['string', 'number', 'boolean', 'null', 'object', 'array'].map(type => ({ type })) },
       until: { type: 'string' }, max: { type: 'integer' },
@@ -304,11 +305,16 @@ export class NativeToolAgent {
           try { const paths = fitting(parseType(type)); return paths.length ? [[param, { enum: paths }]] : []; }
           catch { return []; }
         }));
+        const valueProperties = Object.fromEntries(namesAndTypes.map(([param, type]) =>
+          [param, schemaOf(parseType(type), session.env)]));
         const required = namesAndTypes.filter(([param, , optional]) => !optional && param in properties).map(([param]) => param);
         const allRequiredFit = namesAndTypes.every(([param, , optional]) => optional || param in properties);
         const inputs = { type: 'object', properties, required, additionalProperties: false };
         const base = { function: { const: name }, to: destinations };
         if (allRequiredFit) callAlternatives.push(namesAndTypes.length ? { ...base, inputs } : base);
+        if (namesAndTypes.length) callAlternatives.push({ ...base, inputs: { ...inputs, required: [] },
+          values: { type: 'object', properties: valueProperties, required: [], additionalProperties: false },
+          'x-optional': ['inputs', 'values'] });
         const lists = present.filter(slot => Array.isArray(slot.value)).map(slot => slot.path);
         if (lists.length && namesAndTypes.length) {
           callAlternatives.push({ ...base, over: { enum: lists }, inputs: { ...inputs, required: [] },
@@ -330,7 +336,7 @@ export class NativeToolAgent {
       for (const name of names) for (const slot of present.filter(slot => isPending(slot.value) &&
         ['unreduced', 'quiesced'].includes(slot.value.status)).slice(0, 4))
         callAlternatives.push({ function: { const: name }, to: { enum: [slot.path] } });
-      const call = tool('call', 'Call one of your functions and put its result at `to` (`return`, a part of it, or a local `let/<name>`). `inputs` maps each parameter to the path of its value. With `over`: call it once for every item of that list (the item goes to the one parameter you left out). Do not put the mapped item in inputs. The result is the list of results. With `over` and `init`, omit both item and acc from inputs: carry `acc` through the list. With `init`, `until`, `max`: repeat from the value at `init` until the function `until` says true, at most `max` times. Calling again with only `function` and `to` retries what did not finish.', callProperties, ['function', 'to']);
+      const call = tool('call', 'Call one of your functions and put its result at `to` (`return`, a part of it, or a local `let/<name>`). `inputs` maps parameters to workspace paths; `values` supplies typed literal parameters. Do not bind one parameter both ways. With `over`: call it once for every item of that list (the item goes to the one parameter you left out). Do not put the mapped item in inputs or values. The result is the list of results. With `over` and `init`, omit both item and acc from inputs and values: carry `acc` through the list. With `init`, `until`, `max`: repeat from the value at `init` until the function `until` says true, at most `max` times. Calling again with only `function` and `to` retries what did not finish.', callProperties, ['function', 'to']);
       (call.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = callAlternatives;
       tools.push(call);
     }

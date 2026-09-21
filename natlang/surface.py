@@ -31,7 +31,7 @@ from .slots import enumerate_slots
 from .nodes import MISSING, QUIESCED, RUNNING, UNREDUCED, Lambda, is_pending
 from .render import INLINE, PREVIEW_ITEMS, numbered, pending_line, scalar
 from .types import (DictT, FoldT, IterateT, LambdaT, ListT, Lit, MapT, Prim, Record, TypeEnv, UnionT,
-                    format_type, PENDING_TYPES)
+                    format_type, parse_type, PENDING_TYPES)
 from .values import problems
 
 MAX_PATHS = 48
@@ -210,10 +210,17 @@ class ToolSurface:
             in_props = {n: {"enum": fitting(t, f.types)} for n, t in names.items()}
             in_props = {n: sch for n, sch in in_props.items() if sch["enum"]}
             inputs_schema = {"type": "object", "properties": in_props, "required": [], "additionalProperties": False}
+            value_props = {n: schema_of(parse_type(t), TypeEnv({k: parse_type(v) for k, v in f.types.items()}))
+                           for n, t in names.items()}
+            values_schema = {"type": "object", "properties": value_props, "required": [],
+                             "additionalProperties": False}
             base = {"function": {"const": ref_name}, "to": to_schema}
             req_names = [n.rstrip("?") for n in f.required()]
             if all(n in in_props for n in req_names):                      # a plain call
                 call_alts.append({**base, **({"inputs": {**inputs_schema, "required": req_names}} if names else {})})
+            if names:                                                       # literal or mixed path/literal call
+                call_alts.append({**base, "inputs": inputs_schema, "values": values_schema,
+                                  "x-optional": ["inputs", "values"]})
             list_paths = [sl.path for sl in plain if isinstance(sl.value, list)]
             if list_paths and names:                                       # once per item of a list
                 call_alts.append({**base, "over": {"enum": list_paths}, "inputs": inputs_schema,
@@ -291,15 +298,18 @@ class ToolSurface:
         if functions:
             tools.append(
                 tool("call", "Call one of your functions and put its result at `to` (`return`, a part of it, or a "
-                             "local `let/<name>`). `inputs` maps each parameter to the path of its value. With "
+                             "local `let/<name>`). `inputs` maps parameters to workspace paths; `values` supplies "
+                             "typed literal parameters. Do not bind one parameter both ways. With "
                              "`over`: call it once for every item of that list (the item goes to the one parameter "
-                             "you left out). Do not put the mapped item in inputs. The result is the list of results. "
-                             "With `over` and `init`, omit both item and acc from inputs: carry `acc` "
+                             "you left out). Do not put the mapped item in inputs or values. The result is the list of results. "
+                             "With `over` and `init`, omit both item and acc from inputs and values: carry `acc` "
                              "through the list. With `init`, `until`, `max`: repeat from the value at `init` until "
                              "the function `until` says true, at most `max` times. Calling again with only "
                              "`function` and `to` retries what did not finish.",
                      {"function": {"enum": list(functions)}, "to": {"type": "string"},
                       "inputs": {"type": "object", "properties": {n.rstrip("?"): {"type": "string"}
+                          for f in functions.values() for n in f.args}, "additionalProperties": False},
+                      "values": {"type": "object", "properties": {n.rstrip("?"): any_value
                           for f in functions.values() for n in f.args}, "additionalProperties": False},
                       "over": {"type": "string"}, "init": {"anyOf": [{"type": t} for t in
                           ("string", "number", "boolean", "null", "object", "array")]}, "until": {"type": "string"},

@@ -15,6 +15,9 @@ A value:
 A function, once. Pseudocode: \`summary = summarize(urgent)\`
   [call(function="summarize", to="let/summary", inputs={"tickets": "let/urgent"})]
 
+A literal function argument uses \`values\`, while \`inputs\` always contains workspace paths:
+  [call(function="open_artifact", to="let/item", inputs={"head": "args/head"}, values={"path": "evidence/batch.json"})]
+
 A function for every item of a list. Pseudocode: \`grades = for each a in answers: grade(a, key)\`
   [call(function="grade", to="let/grades", over="args/answers", inputs={"key": "args/key"})]
 
