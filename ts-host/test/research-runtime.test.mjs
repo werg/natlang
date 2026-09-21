@@ -43,3 +43,15 @@ test('view validation rejects broken bindings and duplicate controls', () => {
     assert.throws(() => validateInteraction({ tag: 'section', children: [{ tag: 'input', id: 'x' }, { tag: 'input', id: 'x' }] }, {}), /Duplicate/);
     assert.throws(() => validateInteraction({ tag: 'script', text: 'bad' }, {}), /Unsupported/);
 });
+
+test('an interrupted execution keeps an unknown receipt and cannot silently replay', async () => {
+    const adapter = new MemoryResearchAdapter(); let runs = 0;
+    const runtime = new ResearchRuntime({ adapter, runSource: async () => { runs++; return { value: 1 }; } });
+    const manifest = await runtime.commit('', { 'methods/effect.ts': { kind: 'source', content: 'return 1;' } });
+    await adapter.beginEffect({ id: 'interrupted', manifest: manifest.id, root: 'methods/effect.ts', inputs: {} });
+    const outcome = await runtime.execute(manifest.id, 'methods/effect.ts', {}, 'interrupted');
+    assert.equal(outcome.status, 'unknown');
+    assert.equal(runs, 0);
+    assert.equal((await runtime.execute(manifest.id, 'methods/effect.ts', {}, 'interrupted')).status, 'unknown');
+    assert.equal(runs, 0);
+});

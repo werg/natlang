@@ -1,0 +1,6 @@
+Reliability study example. Each row counts requests and failures in a period.
+The user wants to know whether a deployment improved reliability and for whom.
+The share of desktop and mobile traffic changed sharply between periods.
+The label `cohort` was assigned from a client profile; a later source may reveal
+that these profiles do not always identify physical devices. Do not infer an
+individual's device identity from this aggregate table.

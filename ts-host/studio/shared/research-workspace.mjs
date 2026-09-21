@@ -94,6 +94,25 @@ export class ResearchWorkspace {
         return this.commit(expectedHead, await this.stage(expectedHead, edits, options));
     }
     async branch(baseId, edits, options) { return this.stage(baseId, edits, options); }
+    /** Persist a branch without moving the active pointer. */
+    async propose(baseId, edits, options) {
+        const staged = await this.stage(baseId, edits, options);
+        const before = await this.snapshot(), next = copy(before);
+        for (const [id, artifact] of Object.entries(staged.artifacts)) next.artifacts[id] = copy(artifact);
+        for (const effectId of staged.manifest.effects)
+            assert(await this.adapter.hasEffect(effectId), `Candidate references missing effect ${effectId}`);
+        next.manifests[staged.manifest.id] = copy(staged.manifest);
+        await this.adapter.compareAndSwapWorkspace(this.key, before.head, next);
+        return copy(staged.manifest);
+    }
+    async activate(expectedHead, candidateId) {
+        const before = await this.snapshot(), candidate = before.manifests[candidateId];
+        assert(candidate, `Unknown candidate ${candidateId}`);
+        assert(candidate.parent === expectedHead && before.head === expectedHead, 'Candidate needs semantic rebase before activation');
+        const next = copy(before); next.head = candidateId;
+        await this.adapter.compareAndSwapWorkspace(this.key, expectedHead, next);
+        return copy(candidate);
+    }
     async export() {
         const bundle = await this.snapshot();
         const effects = new Set(Object.values(bundle.manifests).flatMap(manifest => manifest.effects));
@@ -124,7 +143,7 @@ export class ResearchWorkspace {
                 assert(bundle.receipts?.[effectId]?.id === effectId, `Missing imported receipt ${effectId}`);
         }
         for (const receipt of Object.values(bundle.receipts ?? {}))
-            await this.adapter.recordEffect(receipt);
+            await this.adapter.recordEffect({ ...receipt, imported: true });
         const { receipts, ...snapshot } = bundle;
         await this.adapter.compareAndSwapWorkspace(this.key, expectedHead, copy(snapshot));
     }
@@ -138,8 +157,17 @@ export class MemoryResearchAdapter {
         assert((previous?.head ?? '') === expectedHead, 'Workspace changed; rebase the candidate');
         this.workspaces.set(key, copy(next));
     }
-    async hasEffect(id) { return this.effects.has(id); }
+    async hasEffect(id) { return this.effects.has(id) && this.effects.get(id).status !== 'running'; }
     async readEffect(id) { return copy(this.effects.get(id)); }
+    async beginEffect(receipt) {
+        assert(!this.effects.has(receipt.id), 'Effect ID already exists');
+        this.effects.set(receipt.id, copy({ ...receipt, status: 'running' }));
+    }
+    async finishEffect(id, receipt) {
+        assert(this.effects.get(id)?.status === 'running', 'Effect is not pending');
+        assert(receipt.id === id, 'Effect ID mismatch');
+        this.effects.set(id, copy(receipt));
+    }
     async recordEffect(receipt) {
         assert(receipt?.id && receipt.status, 'Effect receipt needs id and status');
         const prior = this.effects.get(receipt.id);

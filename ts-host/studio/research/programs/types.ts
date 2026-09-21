@@ -1,0 +1,10 @@
+export type State = { revision: Num; head: Text; question: Text; notice: Text; active_view: Text; selected: Text; receipts: Text[] };
+export type Event = { id: Text; kind: Text; value: Text };
+export type Entry = { path: Text; id: Text; kind: Text };
+export type Hit = { path: Text; id: Text; kind: Text; offset: Num; excerpt: Text };
+export type Edit = { path: Text; kind: Text; content: Text };
+export type Proposal = { purpose: Text; edits: Edit[]; removes: Text[]; checks: Text[]; unresolved: Text[]; reasoning: Text };
+export type CommitResult = { head: Text; detail: Text };
+export type CandidateResult = { id: Text; detail: Text };
+export type Receipt = { id: Text; status: Text; value: Text; detail: Text };
+export type View = { heading: Text; summary: Text; active_view: Text; suggestions: Text[] };

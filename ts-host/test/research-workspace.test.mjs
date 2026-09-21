@@ -52,3 +52,38 @@ test('candidates do not affect active state and clean bundles import', async () 
     broken.manifests[broken.head].message = 'changed';
     await assert.rejects(new ResearchWorkspace(new MemoryResearchAdapter()).import(broken), /Corrupt/);
 });
+
+test('export carries receipts as historical imported observations', async () => {
+    const source = new MemoryResearchAdapter(), workspace = new ResearchWorkspace(source);
+    await source.recordEffect({ id: 'effect-1', status: 'complete', value: 7 });
+    const original = await workspace.commitEdits('', { 'claims/answer.json': { kind: 'claim', content: { value: 7 } } }, { effects: ['effect-1'] });
+    const target = new MemoryResearchAdapter(), imported = new ResearchWorkspace(target, 'copy');
+    await imported.import(await workspace.export());
+    assert.equal((await imported.head()).id, original.id);
+    assert.equal((await target.readEffect('effect-1')).imported, true);
+});
+
+test('two durable candidates preserve both histories for semantic reconciliation', async () => {
+    const workspace = new ResearchWorkspace(new MemoryResearchAdapter());
+    const base = await workspace.commitEdits('', { 'analysis/answer.txt': { kind: 'claim', content: 'One global estimate' } });
+    const units = await workspace.propose(base.id, {
+        'analysis/answer.txt': { kind: 'claim', content: 'Rates are per 100 requests' },
+        'intent/units.json': { kind: 'intent', content: { request: 'Correct units' } },
+    }, { message: 'Units correction' });
+    const cohorts = await workspace.propose(base.id, {
+        'analysis/answer.txt': { kind: 'claim', content: 'Compare each cohort separately' },
+        'intent/cohorts.json': { kind: 'intent', content: { request: 'Expose cohorts' } },
+    }, { message: 'Cohort correction' });
+    assert.equal((await workspace.head()).id, base.id);
+    assert.equal((await workspace.at(units.id, 'intent/units.json')).content.request, 'Correct units');
+    assert.equal((await workspace.at(cohorts.id, 'intent/cohorts.json')).content.request, 'Expose cohorts');
+    const merged = await workspace.propose(base.id, {
+        'analysis/answer.txt': { kind: 'claim', content: 'Rates per 100 requests, compared by cohort' },
+        'intent/units.json': { kind: 'intent', content: (await workspace.at(units.id, 'intent/units.json')).content },
+        'intent/cohorts.json': { kind: 'intent', content: (await workspace.at(cohorts.id, 'intent/cohorts.json')).content },
+    }, { message: 'Semantic reconciliation of both purposes' });
+    await workspace.activate(base.id, merged.id);
+    assert.equal((await workspace.head()).id, merged.id);
+    await assert.rejects(workspace.activate(merged.id, units.id), /rebase/);
+    assert.equal((await workspace.at(units.id, 'analysis/answer.txt')).content, 'Rates are per 100 requests');
+});

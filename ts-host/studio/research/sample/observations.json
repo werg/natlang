@@ -1,0 +1,6 @@
+[
+  {"period":"before","cohort":"desktop","requests":900,"failures":18},
+  {"period":"before","cohort":"mobile","requests":100,"failures":10},
+  {"period":"after","cohort":"desktop","requests":100,"failures":1},
+  {"period":"after","cohort":"mobile","requests":900,"failures":72}
+]

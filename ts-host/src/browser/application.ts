@@ -191,6 +191,7 @@ export class BrowserDomRenderer {
       if (++count > 2000 || depth > 32) throw new Error('view exceeds renderer bounds');
       if (!item || !TAGS.has(item.tag)) throw new Error(`unsupported view tag: ${item?.tag}`);
       const element = document.createElement(item.tag);
+      if (item.id) element.id = item.id;
       if (item.text !== undefined) element.textContent = item.text;
       if (item.tag === 'input') {
         const input = element as HTMLInputElement;

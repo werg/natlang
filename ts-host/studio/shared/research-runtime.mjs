@@ -1,4 +1,5 @@
 import { ResearchWorkspace } from './research-workspace.mjs';
+import { sameValue } from './domain.mjs';
 
 function assert(test, message) { if (!test) throw new Error(message); }
 function copy(value) { return structuredClone(value); }
@@ -6,7 +7,7 @@ function sourceFiles(snapshot, manifest) {
     const files = {};
     for (const [path, id] of Object.entries(manifest.files)) {
         const artifact = snapshot.artifacts[id];
-        if (artifact?.kind === 'source' || artifact?.kind === 'schema') {
+        if ((artifact?.kind === 'source' || artifact?.kind === 'schema') && /\.(nl|ts)$/.test(path)) {
             assert(typeof artifact.content === 'string', `Source ${path} is not text`);
             files[path] = artifact.content;
         }
@@ -85,13 +86,19 @@ export class ResearchRuntime {
         assert(typeof callId === 'string' && callId, 'Execution needs a stable call ID');
         const prior = await this.adapter.readEffect(callId);
         if (prior) {
-            assert(prior.manifest === manifestId && prior.root === root && JSON.stringify(prior.inputs) === JSON.stringify(inputs), 'Call ID was reused for different inputs');
+            assert(prior.manifest === manifestId && prior.root === root && sameValue(prior.inputs, inputs), 'Call ID was reused for different inputs');
+            if (prior.status === 'running') {
+                const unknown = { ...prior, status: 'unknown', error: 'Execution was interrupted; inspect external effects before retrying with a new ID' };
+                await this.adapter.finishEffect(callId, unknown);
+                return copy(unknown);
+            }
             return copy(prior);
         }
         const snapshot = await this.workspace.snapshot(), manifest = snapshot.manifests[manifestId];
         assert(manifest, `Unknown manifest ${manifestId}`);
         const files = sourceFiles(snapshot, manifest);
         assert(Object.hasOwn(files, root), `Missing root source ${root}`);
+        await this.adapter.beginEffect({ id: callId, manifest: manifestId, root, inputs: copy(inputs) });
         // A loaded model and selected eval environment are supplied by the embedding.
         // This boundary stores the actual result, including failure, as an effect.
         let receipt;
@@ -101,14 +108,17 @@ export class ResearchRuntime {
                 value: copy(result.value), trace_id: result.trace_id ?? '' };
         }
         catch (error) {
-            receipt = { id: callId, status: 'failed', manifest: manifestId, root, inputs: copy(inputs), error: String(error) };
+            const detail = String(error);
+            receipt = { id: callId, status: /cancel|abort|terminat/i.test(detail) ? 'unknown' : 'failed',
+                manifest: manifestId, root, inputs: copy(inputs), error: detail };
         }
-        await this.adapter.recordEffect(receipt);
+        await this.adapter.finishEffect(callId, receipt);
         return copy(receipt);
     }
     async commit(base, edits, options) { return this.workspace.commitEdits(base, edits, options); }
     async stage(base, edits, options) { return this.workspace.stage(base, edits, options); }
-    async activate(base, candidate) { return this.workspace.commit(base, candidate); }
+    async propose(base, edits, options) { return this.workspace.propose(base, edits, options); }
+    async activate(base, candidateId) { return this.workspace.activate(base, candidateId); }
     async diff(leftId, rightId) {
         const snapshot = await this.workspace.snapshot(), left = snapshot.manifests[leftId], right = snapshot.manifests[rightId];
         assert(left && right, 'Both manifests must exist');

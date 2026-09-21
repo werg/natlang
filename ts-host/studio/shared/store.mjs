@@ -55,8 +55,34 @@ export class StudioStore {
             tx.onerror = () => reject(tx.error);
         });
     }
-    async hasEffect(id) { return Boolean(await this.get('effects', id)); }
+    async hasEffect(id) { const receipt = await this.get('effects', id); return Boolean(receipt && receipt.status !== 'running'); }
     async readEffect(id) { return this.get('effects', id); }
+    async beginEffect(receipt) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('effects', 'readwrite'), values = tx.objectStore('effects');
+            const read = values.get(receipt.id);
+            read.onsuccess = () => {
+                if (read.result) { tx.abort(); reject(new Error('Effect ID already exists')); }
+                else values.put({ ...receipt, status: 'running' });
+            };
+            read.onerror = () => reject(read.error);
+            tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+        });
+    }
+    async finishEffect(id, receipt) {
+        return new Promise((resolve, reject) => {
+            const tx = this.db.transaction('effects', 'readwrite'), values = tx.objectStore('effects');
+            const read = values.get(id);
+            read.onsuccess = () => {
+                if (read.result?.status !== 'running' || receipt.id !== id) {
+                    tx.abort(); reject(new Error('Effect is not pending or ID changed'));
+                }
+                else values.put(receipt);
+            };
+            read.onerror = () => reject(read.error);
+            tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+        });
+    }
     async recordEffect(receipt) {
         const prior = await this.get('effects', receipt.id);
         if (prior && JSON.stringify(prior) !== JSON.stringify(receipt))
