@@ -53,6 +53,10 @@ without a host operation.
   migrations, intentions and views are ordinary artifact kinds. Generated
   source and structural types are checked by the existing natlang loader when
   run. Other artifact meaning remains an application judgment.
+- A completed migration can be audited against its immutable source records.
+  The crisp audit reports unmatched, multiplied and unknown mappings plus
+  changes to fields the authored migration claimed to preserve. Natlang still
+  judges whether the representation and any intentional loss preserve meaning.
 - A generated view is a versioned tree of DOM data plus bindings from stable
   control IDs to actual natlang handler roots. The renderer supports text,
   lists, tables, details, inputs, selects and meters. Controls emit revisioned
