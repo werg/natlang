@@ -1,0 +1,4 @@
+interface:
+  display_name: "Natlang Authoring"
+  short_description: "Build typed semantic algorithms in natlang"
+  default_prompt: "Use $natlang-authoring to implement and validate this natlang codebase."

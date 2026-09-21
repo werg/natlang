@@ -1,0 +1,4 @@
+interface:
+  display_name: "Natlang Integration"
+  short_description: "Embed natlang in complete native applications"
+  default_prompt: "Use $natlang-integration to wire this application to the shared natlang runtime."
