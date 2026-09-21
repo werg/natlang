@@ -5,14 +5,14 @@ import { download } from '../shared/render.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
-const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
-const research = new ResearchHost({ store, runSource: async (files, root, inputs) => {
+const research = new ResearchHost({ store, runSource: async (files, root, inputs, options) => {
     const result = await runChild({ request: { source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) }, inputs,
-        options: { seed: { mode: 'derived', root: Number($('seed').value) } } } },
+        options: { seed: { mode: 'derived', root: Number($('seed').value) } } }, researchNative: options?.native_ids ?? [] },
     { model: client?.model, signal: abort?.signal, onProgress: status });
     const trace_id = crypto.randomUUID();
     await store.put('child_runs', trace_id, { ...result, files, root, inputs });
@@ -113,6 +113,10 @@ async function paint(current, view, trace) {
         const warning = document.createElement('div'); warning.className = 'belief';
         warning.textContent = `${graph.missing.length} evidence links point to missing artifacts.`; beliefs.append(warning);
     }
+    if (graph.invalid.length) {
+        const warning = document.createElement('div'); warning.className = 'belief';
+        warning.textContent = `${graph.invalid.length} belief links have an invalid shape. Inspect their artifacts.`; beliefs.append(warning);
+    }
     if (!beliefs.children.length) beliefs.textContent = 'Conclusions and their evidence will appear here.';
     const branches = $('branches'); branches.replaceChildren();
     for (const candidate of (await research.runtime.branches()).filter(row => row.kind === 'candidate')) {
@@ -121,9 +125,7 @@ async function paint(current, view, trace) {
         title.textContent = candidate.message || 'Untitled candidate';
         meta.textContent = `${candidate.changed} changed artifacts · ${candidate.id.slice(0, 12)}`;
         button.append(title, meta);
-        button.onclick = async () => showDetail(candidate.message || 'Candidate', {
-            ...candidate, changes: await research.runtime.diff(candidate.parent, candidate.id),
-        });
+        button.onclick = async () => showDetail(candidate.message || 'Candidate', await research.runtime.reviewCandidate(candidate.id));
         branches.append(button);
     }
     if (!branches.children.length) branches.textContent = 'Proposed alternatives will appear here.';

@@ -1,6 +1,7 @@
 /** User programs run off the UI thread. Model turns borrow the shared main-thread model. */
 import { simulateInventory } from '../apps/worlds.mjs';
 import { BrowserNatlangHost } from '../../dist/browser/natlang.js';
+import { StudioStore } from './store.mjs';
 const pending = new Map();
 let next = 0;
 self.onmessage = async ({ data }) => {
@@ -14,8 +15,19 @@ self.onmessage = async ({ data }) => {
     }
     if (data.kind !== 'run')
         return;
-    const host = new BrowserNatlangHost();
+    let host, nativeStore;
     try {
+        const allowed = new Set(data.researchNative ?? []);
+        nativeStore = allowed.size ? await StudioStore.open() : null;
+        const researchHost = nativeStore ? { research: {
+            readNative: async id => {
+                if (!allowed.has(id)) throw new Error('Native evidence is outside this manifest');
+                const record = await nativeStore.get('native_values', id);
+                if (!record) throw new Error('Native evidence is missing');
+                return record.value;
+            },
+        } } : {};
+        host = new BrowserNatlangHost({ host: researchHost });
         if(data.experiment){self.postMessage({kind:'result',result:{value:simulateInventory(data.experiment),trace:[]}});}
         else if (data.cell) {
             const result = await host.environment.executeAsync({ code: data.cell.source, body: true, path: `notebook/${data.cell.id}`, effectful: true, scope: { args: { deps: data.deps }, let: {} } });
@@ -33,6 +45,7 @@ self.onmessage = async ({ data }) => {
         self.postMessage({ kind: 'error', error: String(error) });
     }
     finally {
-        await host.close();
+        await host?.close();
+        nativeStore?.close();
     }
 };

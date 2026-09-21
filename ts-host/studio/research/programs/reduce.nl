@@ -58,12 +58,18 @@ Exercise the new behavior. `propose` saves a durable candidate without changing
 the active head. `diff` compares two candidate or active manifests. `activate`
 promotes a candidate whose parent is the current head. For concurrent branches,
 use `branches` to find alternatives. Keep the base, both intentions and unresolved alternatives; inspect both
-candidates and write a reconciled candidate when needed. Do not assume a crisp
+candidates and use review_candidate to inspect their full before, proposed and
+active artifact content, including overlapping paths. Write a reconciled
+candidate when needed. Do not assume a crisp
 convergence rule or activate a stale candidate as if it were rebased.
 
 Keep full data in artifacts or native values and read selectively. Use
 native_read and native_search for evidence artifacts with native_id; the
 artifact preview is only a preview, and search hits need full-context reading.
+An authored TypeScript method running in a pinned child manifest can also call
+`await host.research.readNative(id)` to process its full text. The ID must be
+referenced by an artifact in that manifest. The method shares selected host
+authority through its eval environment; treat external effects explicitly.
 continuation across a long investigation; productive algorithmic work need not
 fit into one short turn. On a concrete blocker, preserve the work and explain it.
 Return a State whose head matches the latest committed manifest and whose

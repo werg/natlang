@@ -62,11 +62,12 @@ test('new evidence identifies claims and assessments with recorded dependencies'
         'evidence/batch.json': { kind: 'evidence', content: { text: 'New mobile batch' } },
         'claims/reliability.json': { kind: 'claim', content: { text: 'Mobile improved', status: 'supported', supports: ['evidence/batch.json'], opposes: ['evidence/missing.json'] } },
         'assessment/summary.json': { kind: 'assessment', content: { text: 'Deployment improved reliability for mobile', depends_on: ['claims/reliability.json'] } },
-        'claims/unrelated.json': { kind: 'claim', content: { text: 'Documentation was updated' } },
+        'claims/unrelated.json': { kind: 'claim', content: { text: 'Documentation was updated', supports: 'evidence/batch.json' } },
     });
     const graph = await runtime.beliefGraph(manifest.id);
     assert.equal(graph.links.length, 2);
     assert.equal(graph.missing[0].to, 'evidence/missing.json');
+    assert.deepEqual(graph.invalid, [{ path: 'claims/unrelated.json', relation: 'supports', reason: 'Expected a list of artifact paths' }]);
     assert.deepEqual(await runtime.affected(manifest.id, ['evidence/batch.json']), ['assessment/summary.json', 'claims/reliability.json']);
 });
 
@@ -79,4 +80,10 @@ test('branch listing distinguishes live candidates from active history', async (
     assert.equal(branches.find(row => row.id === alternative.id).kind, 'candidate');
     assert.equal(branches.find(row => row.id === base.id).kind, 'history');
     assert.equal((await runtime.diff(base.id, current.id))[0].path, 'a.txt');
+    const review = await runtime.reviewCandidate(alternative.id);
+    assert.equal(review.can_activate, false);
+    assert.deepEqual(review.overlapping_paths, ['a.txt']);
+    assert.equal(review.changes[0].before.content, 'base');
+    assert.equal(review.changes[0].proposed.content, 'alternative');
+    assert.equal(review.changes[0].active.content, 'current');
 });

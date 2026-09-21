@@ -16,7 +16,7 @@ try {
     page.on('pageerror', error => errors.push(String(error)));
     await page.goto(studio.url + 'research/');
     await page.getByText('reliability-observations.json').waitFor();
-    assert.match(await page.locator('#artifact-count').textContent(), /24 artifacts/);
+    assert.match(await page.locator('#artifact-count').textContent(), /25 artifacts/);
     await page.getByRole('button', { name: /reliability-observations/ }).click();
     await page.locator('#detail-body').getByText(/failures/).waitFor();
     assert.match(await page.locator('#detail-body').textContent(), /"failures": 72/);
@@ -36,6 +36,29 @@ try {
     await full.saveAs(fullPath);
     assert.equal((await readFile(fullPath, 'utf8')).length, large.length);
     await page.getByRole('button', { name: 'Close' }).click();
+    const nativeExecution = await page.evaluate(async () => {
+        const { StudioStore } = await import('../shared/store.mjs');
+        const { runChild } = await import('../shared/child-runner.mjs');
+        const store = await StudioStore.open();
+        const state = (await store.get('states', 'research')).state;
+        const workspace = await store.get('research_workspaces', 'research');
+        const artifactPath = Object.keys(workspace.manifests[state.head].files).find(path => path.endsWith('-large.txt'));
+        const artifactId = workspace.manifests[state.head].files[artifactPath];
+        const id = workspace.artifacts[artifactId].content.native_id;
+        store.close();
+        const cell = { id: 'native-length', source: 'return (await host.research.readNative(args.deps.id)).length;' };
+        const allowed = await runChild({ cell, deps: { id }, researchNative: [id] });
+        const authored = await runChild({ request: {
+            source: { kind: 'files', root: 'methods/native_length.ts', files: {
+                'methods/native_length.ts': '/*---\nengine: typescript-host\nargs:\n  id: Text\nreturns: Num\n---*/\nreturn (await host.research.readNative(args.id)).length;',
+            } }, inputs: { id }, options: { seed: { mode: 'derived', root: 7 } },
+        }, researchNative: [id] });
+        let rejected = false;
+        try { await runChild({ cell, deps: { id }, researchNative: ['another-id'] }); }
+        catch (error) { rejected = String(error).includes('outside this manifest'); }
+        return { length: allowed.value, authoredLength: authored.value, rejected };
+    });
+    assert.deepEqual(nativeExecution, { length: large.length, authoredLength: large.length, rejected: true });
     await page.evaluate(async () => {
         const { StudioStore } = await import('../shared/store.mjs');
         const { ResearchWorkspace } = await import('../shared/research-workspace.mjs');

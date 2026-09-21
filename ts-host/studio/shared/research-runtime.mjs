@@ -104,7 +104,8 @@ export class ResearchRuntime {
         // This boundary stores the actual result, including failure, as an effect.
         let receipt;
         try {
-            const result = await this.runSource(Object.entries(files).map(([id, source]) => ({ id, source })), root, copy(inputs));
+            const native_ids = [...new Set(Object.values(manifest.files).map(id => snapshot.artifacts[id]?.content?.native_id).filter(Boolean))];
+            const result = await this.runSource(Object.entries(files).map(([id, source]) => ({ id, source })), root, copy(inputs), { native_ids });
             receipt = { id: callId, status: 'complete', manifest: manifestId, root, inputs: copy(inputs),
                 value: copy(result.value), trace_id: result.trace_id ?? '' };
         }
@@ -127,6 +128,26 @@ export class ResearchRuntime {
         return [...paths].sort().flatMap(path => left.files[path] === right.files[path] ? [] : [{ path,
             before: left.files[path] ?? '', after: right.files[path] ?? '' }]);
     }
+    /** Exact material for human and natlang review; overlapping edits require a semantic decision. */
+    async reviewCandidate(candidateId) {
+        const snapshot = await this.workspace.snapshot();
+        const candidate = snapshot.manifests[candidateId], active = snapshot.manifests[snapshot.head];
+        assert(candidate && active && candidate.parent, 'Candidate and active manifests must exist');
+        const base = snapshot.manifests[candidate.parent];
+        assert(base, 'Candidate base is missing');
+        const candidateChanges = await this.diff(base.id, candidate.id);
+        const activeChanges = await this.diff(base.id, active.id);
+        const activePaths = new Set(activeChanges.map(row => row.path));
+        return {
+            candidate: candidate.id, base: base.id, active: active.id,
+            message: candidate.message, can_activate: candidate.parent === active.id,
+            overlapping_paths: candidateChanges.filter(row => activePaths.has(row.path)).map(row => row.path),
+            changes: candidateChanges.map(row => ({ path: row.path,
+                before: row.before ? copy(snapshot.artifacts[row.before]) : null,
+                proposed: row.after ? copy(snapshot.artifacts[row.after]) : null,
+                active: active.files[row.path] ? copy(snapshot.artifacts[active.files[row.path]]) : null })),
+        };
+    }
     async branches() {
         const snapshot = await this.workspace.snapshot();
         const lineage = new Set();
@@ -143,7 +164,7 @@ export class ResearchRuntime {
     async beliefGraph(manifestId) {
         const snapshot = await this.workspace.snapshot(), manifest = snapshot.manifests[manifestId];
         assert(manifest, `Unknown manifest ${manifestId}`);
-        const nodes = [], links = [], missing = [];
+        const nodes = [], links = [], missing = [], invalid = [];
         for (const [path, id] of Object.entries(manifest.files)) {
             const artifact = snapshot.artifacts[id];
             if (!['claim', 'evidence', 'assessment'].includes(artifact.kind)) continue;
@@ -153,14 +174,18 @@ export class ResearchRuntime {
                 status: typeof content === 'object' ? String(content?.status ?? '') : '' });
             if (!content || typeof content !== 'object' || Array.isArray(content)) continue;
             for (const relation of ['supports', 'opposes', 'assumptions', 'questions', 'depends_on']) {
-                for (const target of content[relation] ?? []) {
-                    if (typeof target !== 'string') continue;
+                const targets = content[relation] ?? [];
+                if (!Array.isArray(targets)) { invalid.push({ path, relation, reason: 'Expected a list of artifact paths' }); continue; }
+                for (const target of targets) {
+                    if (typeof target !== 'string' || !target) {
+                        invalid.push({ path, relation, reason: 'Expected a nonempty artifact path' }); continue;
+                    }
                     const edge = { from: path, to: target, relation };
                     (manifest.files[target] ? links : missing).push(edge);
                 }
             }
         }
-        return { nodes, links, missing };
+        return { nodes, links, missing, invalid };
     }
     async affected(manifestId, changedPaths) {
         const { links } = await this.beliefGraph(manifestId);

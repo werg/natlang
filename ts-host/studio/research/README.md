@@ -34,6 +34,8 @@ useful, a source supports a claim, a migration preserves meaning, or two
 intentions should merge. Newly authored `.nl` and `.ts` files execute from an
 immutable manifest; a controller update takes effect on the next event, so a
 running lexical frame is not changed underneath itself.
+Candidate review includes the full base, proposed and active artifact versions
+and identifies paths edited on both branches. It does not choose a merge.
 
 The original Studio apps require final state to equal host-produced operation
 state. Inquiry Lab instead lets natlang construct semantic State directly.
@@ -64,6 +66,10 @@ without a host operation.
   and preview. Natlang can search it or read explicit windows. Users can
   download the complete original. Export includes full native values, source,
   candidate history, receipts, app history and referenced child traces.
+- Authored TypeScript methods can use `host.research.readNative(id)` inside a
+  child run to process complete host-owned text. The child sees only native IDs
+  referenced by its pinned manifest. This is shared eval authority, so methods
+  with external effects need the same receipt discipline as other child runs.
 - Imported receipts are marked as historical records in the new host. They
   document prior observations; external objects or services are not recreated
   by import.
@@ -112,7 +118,7 @@ NATLANG_CHROMIUM=/path/to/chrome node ts-host/scripts/research-smoke.mjs
 ```
 
 The browser smoke keeps hardware GPU disabled and uses no live model. It
-checks import, full large evidence, generated view controls, drafts, reload,
+checks import, full large evidence through a generated method, generated view controls, drafts, reload,
 export/import and mobile layout. Tests with scripted interpreter turns verify
 source loading and state ownership, while a real child run verifies crisp
 generated source. Live semantic quality and long teacher trajectories remain
