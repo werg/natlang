@@ -1,6 +1,6 @@
 # S01 — Programs that invent and retain abstractions
 
-Status: proposed. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
+Status: executable foundation in Inquiry Lab; held-out reuse by a live model is unmeasured. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
 
 ## Product and semantic ambition
 

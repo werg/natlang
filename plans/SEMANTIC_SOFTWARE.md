@@ -5,6 +5,14 @@ and host library now live in [Inquiry Lab](../ts-host/studio/research/README.md)
 The detailed plans retain the larger product and quality gates. Live-model
 semantic evaluation has not passed.
 
+Current mechanics cover immutable source and evidence, typed child execution,
+host-owned native evidence, generated view handlers, candidate review, effect
+receipts, export/import and browser persistence. Child receipts retain the
+selected model, root seed and evaluator for both success and failure. The next
+acceptance work is an actual model-driven run of the complete scenario, then
+held-out transfer and reuse in another application. Scripted turns and a
+structural audit do not establish those results.
+
 The objective is software in which natlang develops representations, algorithms
 and interactions appropriate to the task. A successful application should be
 able to acquire a useful capability that its author did not enumerate as an

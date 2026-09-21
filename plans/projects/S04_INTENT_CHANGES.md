@@ -1,6 +1,6 @@
 # S04 — Changes that preserve intent across artifacts
 
-Status: proposed. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
+Status: durable candidates, exact review, stale-base rejection and semantic merge source work in Inquiry Lab; multi-artifact intent preservation remains unverified. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
 
 ## Product and semantic ambition
 

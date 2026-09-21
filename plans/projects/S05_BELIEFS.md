@@ -1,6 +1,6 @@
 # S05 — Applications with explicit beliefs and investigations
 
-Status: proposed. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
+Status: evidence-linked claim graph, exact impact query and natlang investigation source work in Inquiry Lab; warranted belief revision remains unmeasured. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
 
 ## Product and semantic ambition
 

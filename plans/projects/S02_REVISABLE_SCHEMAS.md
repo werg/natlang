@@ -1,6 +1,6 @@
 # S02 — Schemas as revisable domain hypotheses
 
-Status: proposed. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
+Status: candidate schemas, executable source, branch review and activation work in Inquiry Lab; end-to-end migration and semantic fidelity remain unverified. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
 
 ## Product and semantic ambition
 

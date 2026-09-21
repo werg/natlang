@@ -1,6 +1,6 @@
 # S03 — Interfaces invented for the task
 
-Status: proposed. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
+Status: versioned generated DOM trees and natlang handler bindings run in Inquiry Lab; live-model interaction design remains unmeasured. Part of [the semantic software plan](../SEMANTIC_SOFTWARE.md).
 
 ## Product and semantic ambition
 
