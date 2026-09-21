@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
-  writePackageArchive } from '../dist/index.js';
+  satisfiesVersion, writePackageArchive } from '../dist/index.js';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'natlang-package-'));
@@ -41,4 +41,17 @@ test('immutable store installs, resolves, lists, and rejects version rebinding',
   assert.deepEqual(store.list().map(row => `${row.name}@${row.version}`), ['example@1.2.3']);
   writeFileSync(join(root, 'program', 'main.nl'), 'changed');
   assert.throws(() => store.install(createPackageArchive(manifest, root)), /already bound/);
+});
+
+test('dependency ranges are checked before a package is installed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-dependencies-'));
+  writeFileSync(join(root, 'main.nl'), 'return null');
+  const make = (name, version, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v1',
+    name, version, dependencies, include: ['main.nl'] }, root);
+  const store = new NatlangPackageStore(join(root, 'store'));
+  assert.throws(() => store.install(make('app', '1.0.0', { library: '^2.0.0' })), /needs library/);
+  store.installMany([make('app', '1.0.0', { library: '^2.0.0' }), make('library', '2.3.0')]);
+  assert.equal(store.resolve('library@2.3.0').version, '2.3.0');
+  assert.equal(satisfiesVersion('0.2.4', '^0.2.1'), true);
+  assert.equal(satisfiesVersion('0.3.0', '^0.2.1'), false);
 });

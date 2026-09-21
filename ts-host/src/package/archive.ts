@@ -70,7 +70,7 @@ export function parsePackageArchive(value: unknown): NatlangPackageArchive {
     if (bytes.byteLength !== file.size || sha256(bytes) !== file.sha256) throw new TypeError(`package file checksum mismatch: ${path}`);
     return { path, encoding: 'base64', content: file.content, sha256: file.sha256, size: file.size };
   });
-  const sorted = [...files].sort((a, b) => a.path.localeCompare(b.path));
+  const sorted = [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (files.some((file, index) => file.path !== sorted[index]!.path)) throw new TypeError('package files are not canonically ordered');
   const digest = sha256(canonicalJson({ schema: ARCHIVE_SCHEMA, manifest, files }));
   if (digest !== raw.digest) throw new TypeError('package archive digest mismatch');

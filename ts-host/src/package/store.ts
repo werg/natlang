@@ -5,6 +5,32 @@ import { canonicalJson, parsePackageArchive, readPackageArchive, type NatlangPac
 
 export type InstalledPackage = { name: string; version: string; digest: string; root: string };
 
+type Version = [number, number, number, string];
+function version(value: string): Version {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);
+  if (!match) throw new TypeError(`invalid semantic version: ${value}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3]), match[4] ?? ''];
+}
+function compare(left: Version, right: Version): number {
+  for (let index = 0; index < 3; index++) if (left[index] !== right[index]) return Number(left[index]) - Number(right[index]);
+  if (left[3] === right[3]) return 0;
+  if (!left[3]) return 1; if (!right[3]) return -1;
+  return left[3].localeCompare(right[3]);
+}
+export function satisfiesVersion(actual: string, range: string): boolean {
+  if (range === '*' || range === 'latest') return true;
+  const candidate = version(actual);
+  if (range.startsWith('^') || range.startsWith('~')) {
+    const base = version(range.slice(1));
+    if (compare(candidate, base) < 0) return false;
+    const ceiling: Version = range[0] === '~' ? [base[0], base[1] + 1, 0, ''] :
+      base[0] > 0 ? [base[0] + 1, 0, 0, ''] : base[1] > 0 ? [0, base[1] + 1, 0, ''] : [0, 0, base[2] + 1, ''];
+    return compare(candidate, ceiling) < 0;
+  }
+  if (range.startsWith('>=')) return compare(candidate, version(range.slice(2))) >= 0;
+  return compare(candidate, version(range)) === 0;
+}
+
 export function defaultNatlangDataDirectory(environment: NodeJS.ProcessEnv = process.env): string {
   if (environment.NATLANG_HOME) return resolve(environment.NATLANG_HOME);
   if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang');
@@ -33,6 +59,35 @@ export class NatlangPackageStore {
 
   install(value: NatlangPackageArchive | string): InstalledPackage {
     const archive = typeof value === 'string' ? readPackageArchive(value) : parsePackageArchive(value);
+    this.checkDependencies(archive, []);
+    return this.installChecked(archive);
+  }
+
+  installMany(values: Array<NatlangPackageArchive | string>): InstalledPackage[] {
+    const archives = values.map(value => typeof value === 'string' ? readPackageArchive(value) : parsePackageArchive(value));
+    const identities = new Set<string>();
+    for (const archive of archives) {
+      const identity = `${archive.manifest.name}@${archive.manifest.version}`;
+      if (identities.has(identity)) throw new Error(`duplicate package candidate: ${identity}`);
+      identities.add(identity);
+      const ref = this.refPath(archive.manifest.name, archive.manifest.version);
+      if (existsSync(ref) && this.resolve(identity).digest !== archive.digest)
+        throw new Error(`${identity} is already bound to another digest`);
+      this.checkDependencies(archive, archives);
+    }
+    return archives.map(archive => this.installChecked(archive));
+  }
+
+  private checkDependencies(archive: NatlangPackageArchive, candidates: NatlangPackageArchive[]): void {
+    for (const [name, range] of Object.entries(archive.manifest.dependencies ?? {})) {
+      const available = [...this.list().filter(item => item.name === name).map(item => item.version),
+        ...candidates.filter(item => item.manifest.name === name).map(item => item.manifest.version)];
+      if (!available.some(item => satisfiesVersion(item, range)))
+        throw new Error(`${archive.manifest.name}@${archive.manifest.version} needs ${name}@${range}`);
+    }
+  }
+
+  private installChecked(archive: NatlangPackageArchive): InstalledPackage {
     const ref = this.refPath(archive.manifest.name, archive.manifest.version);
     if (existsSync(ref)) {
       const current = JSON.parse(readFileSync(ref, 'utf8')) as { digest?: string };

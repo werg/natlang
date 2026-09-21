@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NatlangHost } from '../dist/index.js';
+import { NatlangHost, TypeScriptEnvironment } from '../dist/index.js';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +18,7 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
   ], { facts: [
     { category: 'alpha', amount: 2 }, { category: 'alpha', amount: 3 },
     { category: 'beta', amount: 4 },
-  ] });
+  ] }, { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
   const host = new NatlangHost({ host: { notebook,
     drainEvents: () => notebook.drainEvents() }, mode: 'retained' });
   let chosenCount = 0;

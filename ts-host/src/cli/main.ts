@@ -127,7 +127,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         name: archive.manifest.name, version: archive.manifest.version, files: archive.files.length }, json); return 0;
     }
     const store = new NatlangPackageStore(option(parsed, '--store'));
-    if (action === 'install' && argument) { output(store.install(resolve(argument)), json); return 0; }
+    if (action === 'install' && argument) {
+      const installed = store.installMany(parsed.words.slice(2).map(path => resolve(path)));
+      output(installed.length === 1 ? installed[0] : installed, json); return 0;
+    }
     if (action === 'list') { const rows = store.list(); output(json ? rows : rows.map(row => `${row.name}@${row.version} ${row.digest}`).join('\n'), json); return 0; }
     if (action === 'inspect' && argument) { const installed = store.resolve(argument);
       output({ ...installed, manifest: store.manifest(argument) }, json); return 0; }

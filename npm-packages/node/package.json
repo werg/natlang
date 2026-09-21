@@ -1,0 +1,17 @@
+{
+  "name": "@natlang/node",
+  "version": "0.1.0",
+  "description": "The Node.js host, runtime, terminal framework, and native package APIs for natlang.",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": { "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs node" },
+  "dependencies": { "@noble/hashes": "^2.4.0", "typescript": "^5.9.3", "yaml": "^2.9.1" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./terminal": { "types": "./dist/terminal/index.d.ts", "default": "./dist/terminal/index.js" },
+    "./model": { "types": "./dist/model/index.d.ts", "default": "./dist/model/index.js" },
+    "./package": { "types": "./dist/package/index.d.ts", "default": "./dist/package/index.js" },
+    "./cli": { "types": "./dist/cli/main.d.ts", "default": "./dist/cli/main.js" }
+  },
+  "files": ["dist", "prelude.js", "README.md"]
+}

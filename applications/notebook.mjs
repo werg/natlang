@@ -1,20 +1,17 @@
 /** Notebook cell store with explicit SQL/TypeScript engines and source revisions. */
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { TypeScriptEnvironment } from '../ts-host/dist/index.js';
 
 const idPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export class NotebookWorkspace {
-  constructor(cells, tables = {}) {
+  constructor(cells, tables = {}, { environment } = {}) {
     this.cells = new Map();
     this.outputs = new Map();
     this.events = [];
     this.db = new DatabaseSync(':memory:');
-    this.eval = new TypeScriptEnvironment({ mode: 'fresh', host: { notebook: {
-      query: sql => this.query(sql),
-    } } });
+    this.eval = environment ?? null;
     this.revision = 0;
     for (const cell of cells) {
       if (!idPattern.test(cell.id) || this.cells.has(cell.id) ||
@@ -77,6 +74,7 @@ export class NotebookWorkspace {
       if (cell.engine === 'sqlite') {
         value = this.query(cell.source);
       } else {
+        if (!this.eval) throw new Error('typescript-host cell needs an evaluator supplied by the host');
         value = (await this.eval.executeAsync({ code: cell.source, body: true,
           path: `cell/${id}`, effectful: false,
           scope: { args: { deps: dependencies }, let: {} } })).result;
@@ -118,5 +116,5 @@ export class NotebookWorkspace {
   }
 
   drainEvents() { return this.events.splice(0); }
-  close() { this.eval.close(); this.db.close(); }
+  close() { this.eval?.close(); this.db.close(); }
 }

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost, TerminalEventQueue, TerminalNatlangApplication, TerminalSessionStore,
-  openAICompatibleModelTurn, renderTerminalView } from '../dist/index.js';
+  TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView } from '../dist/index.js';
 import { RecipeTerminal } from '../../applications/semantic_terminal.mjs';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { CommandRecipeLibrary } from '../../applications/terminal_recipes.mjs';
@@ -134,7 +134,8 @@ test('notebook console keeps semantic goal selection and dependency traversal in
       source: 'SELECT SUM(value) AS total FROM numbers' },
     { id: 'report', engine: 'typescript-host', needs: ['facts'], description: 'final total report',
       source: 'return {total: args.deps.facts[0].total};' },
-  ], { numbers: [{ value: 2 }, { value: 5 }] });
+  ], { numbers: [{ value: 2 }, { value: 5 }] },
+  { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
   const host = new NatlangHost({ host: { notebook, drainEvents: () => notebook.drainEvents() }, mode: 'retained' });
   const source = name => fileURLToPath(new URL(`../../codebases/notebook_console/${name}`, import.meta.url));
   let choice = 0;

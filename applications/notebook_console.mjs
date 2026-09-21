@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { NatlangHost, TerminalNatlangApplication, TerminalSessionStore,
+import { NatlangHost, TypeScriptEnvironment, TerminalNatlangApplication, TerminalSessionStore,
   runTerminalShell } from '../ts-host/dist/index.js';
 import { NotebookWorkspace } from './notebook.mjs';
 import { cliFlag, modelTurnFromCli } from './natlang_cli.mjs';
@@ -13,7 +13,7 @@ export async function runNotebookConsole({ cells, tables = {}, workspace,
   modelTurn, sessionPath, traceDirectory, input, output, seedRoot = 17 } = {}) {
   if (!modelTurn || (!workspace && !Array.isArray(cells)))
     throw new Error('notebook console requires a workspace or cells and a modelTurn driver');
-  const notebook = workspace ?? new NotebookWorkspace(cells, tables);
+  const notebook = workspace ?? new NotebookWorkspace(cells, tables, { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
   const host = new NatlangHost({ host: { notebook, drainEvents: () => notebook.drainEvents() }, mode: 'retained' });
   const store = sessionPath ? new TerminalSessionStore(sessionPath) : null;
   const checkpoint = store?.load(empty()) ?? { revision: 0, state: empty(), seen_event_ids: [] };

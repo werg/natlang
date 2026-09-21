@@ -6,3 +6,4 @@ runs/
 models/
 vendor/
 data/
+*.tgz
