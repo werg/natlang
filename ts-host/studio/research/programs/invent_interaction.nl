@@ -17,5 +17,13 @@ views and what a control actually computes. If a static explanation serves the
 user better, propose that instead of an ornamental control.
 Available view tags include headings, text, lists, table elements, input,
 textarea, select/option, button, details/summary and meter/progress. Numeric
-meters use value/min/max. View content is data, so do not include raw HTML,
-JavaScript or style code. The browser renders and wires the controls.
+meters use value/min/max. View content is data and the browser renders and
+wires the controls.
+
+If linked spatial behavior, custom visualization, or another useful interaction
+cannot be expressed honestly as a tree, propose {module,bindings}. The module
+contains html, optional style, script and title. Its script uses
+natlang.emit(control,value) for declared controls and natlang.draft(id,value)
+with natlang.drafts for recoverable local work. It runs in an origin-isolated
+iframe without network access. Keep domain interpretation in the bound handler
+and generated methods instead of hiding conclusions in presentation script.

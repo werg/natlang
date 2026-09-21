@@ -83,6 +83,13 @@ try {
         await store.commit('research', { state, revision: state.revision, event: { kind: 'fixture-generated-view' } });
         await workspace.propose(manifest.id, {
             'claims/reviewed.json': { kind: 'claim', content: { text: 'Candidate remains reviewable before activation', status: 'reviewed' } },
+            'methods/choose.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  value: Text\n  context: Text\nreturns: Text\n---*/\nreturn `Compared ${args.value}`;' },
+            'views/cohort.json': { kind: 'view', content: { module: {
+                title: 'Cohort constellation',
+                html: '<main><h2>Cohort constellation</h2><p id="choice"></p><button id="mobile">Explore mobile</button></main>',
+                style: 'main{padding:24px;background:linear-gradient(135deg,#edf7ef,#fff6df);border-radius:18px}button{padding:10px 14px;border:1px solid #39755c;border-radius:20px;background:white}',
+                script: "const output=document.getElementById('choice');output.textContent=natlang.drafts.cohort||'No cohort selected';document.getElementById('mobile').onclick=()=>{output.textContent='mobile';natlang.draft('cohort','mobile');natlang.emit('choose','mobile')}",
+            }, bindings: { choose: { root: 'methods/choose.ts' } } } },
         }, { message: 'Reviewed candidate finding' });
         store.close();
     });
@@ -103,6 +110,9 @@ try {
     await page.locator('.branch').filter({ hasText: 'Reviewed candidate finding' }).click();
     await page.getByRole('button', { name: 'Activate reviewed candidate' }).click();
     await page.locator('#artifacts strong').filter({ hasText: 'claims/reviewed.json' }).waitFor();
+    await page.frameLocator('.generated-module').getByRole('heading', { name: 'Cohort constellation' }).waitFor();
+    await page.frameLocator('.generated-module').getByRole('button', { name: 'Explore mobile' }).click();
+    await page.getByText('Load the interpreter to investigate').waitFor();
     const exported = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const exportPath = join(temporary, 'research.json');
@@ -112,6 +122,8 @@ try {
     await page.reload();
     await page.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
     assert.match(await page.locator('#revision').textContent(), /Event 5/);
+    await page.frameLocator('.generated-module').getByRole('heading', { name: 'Cohort constellation' }).waitFor();
+    assert.equal(await page.frameLocator('.generated-module').locator('#choice').textContent(), 'mobile');
     const fresh = await browser.newContext({ viewport: { width: 390, height: 780 } });
     const imported = await fresh.newPage();
     imported.on('pageerror', error => errors.push(String(error)));
@@ -120,10 +132,7 @@ try {
     await imported.locator('#import-file').setInputFiles({ name: 'workspace.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
     await imported.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
     assert.match(await imported.locator('#revision').textContent(), /Event 5/);
-    await imported.getByRole('button', { name: 'Compare cohort' }).waitFor();
-    await imported.getByLabel('Cohort').fill('desktop');
-    await imported.getByRole('button', { name: 'Compare cohort' }).click();
-    await imported.getByText('Load the interpreter to investigate').waitFor();
+    await imported.frameLocator('.generated-module').getByRole('heading', { name: 'Cohort constellation' }).waitFor();
     const overflow = await imported.evaluate(() => ({width:innerWidth,scroll:document.documentElement.scrollWidth,
         offenders:[...document.querySelectorAll('*')].filter(el=>el.getBoundingClientRect().right>innerWidth+2).slice(0,8).map(el=>[el.tagName,el.className,Math.round(el.getBoundingClientRect().right)])}));
     assert.equal(overflow.scroll <= overflow.width + 2, true, JSON.stringify(overflow));

@@ -2,6 +2,7 @@ import { BrowserNatlangClient, BrowserNatlangApplication, BrowserDomRenderer, lo
 import { StudioStore } from '../shared/store.mjs';
 import { runChild } from '../shared/child-runner.mjs';
 import { download } from '../shared/render.mjs';
+import { GeneratedModuleRenderer } from '../shared/generated-module.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
@@ -166,11 +167,20 @@ async function paint(current, view, trace) {
         try {
             const pinned = await research.runtime.interaction(current.head, viewPath);
             const candidateRoot = document.createElement('div');
-            const candidate = new BrowserDomRenderer(candidateRoot, event => onGenerated(pinned, event), error => status(error, true));
-            candidate.render(pinned.tree);
-            for (const input of candidateRoot.querySelectorAll('input[id],select[id],textarea[id]'))
-                if (savedInputs.has(input.id)) input.value = savedInputs.get(input.id);
-                else if (Object.hasOwn(generatedDrafts, input.id)) input.value = generatedDrafts[input.id];
+            let candidate;
+            if (pinned.tree) {
+                candidate = new BrowserDomRenderer(candidateRoot, event => onGenerated(pinned, event), error => status(error, true));
+                candidate.render(pinned.tree);
+                for (const input of candidateRoot.querySelectorAll('input[id],select[id],textarea[id]'))
+                    if (savedInputs.has(input.id)) input.value = savedInputs.get(input.id);
+                    else if (Object.hasOwn(generatedDrafts, input.id)) input.value = generatedDrafts[input.id];
+            } else {
+                candidate = new GeneratedModuleRenderer(candidateRoot, event => onGenerated(pinned, event), (id, value) => {
+                    generatedDrafts[id] = value;
+                    void store.put('drafts', 'research-interaction', generatedDrafts).catch(error => status(error, true));
+                }, error => status(error, true));
+                candidate.render(pinned.module, pinned.bindings, generatedDrafts);
+            }
             renderer?.close();
             $('interaction-root').replaceChildren(...candidateRoot.childNodes);
             renderer = candidate;

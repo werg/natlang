@@ -58,6 +58,21 @@ test('view validation rejects broken bindings and duplicate controls', () => {
     validateInteraction(deep, {});
 });
 
+test('generated module interaction is pinned to declared executable handlers', async () => {
+    const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(), runSource: async () => ({ value: null }) });
+    const manifest = await runtime.commit('', {
+        'methods/choose.ts': { kind: 'source', content: 'return args.value;' },
+        'views/spatial.json': { kind: 'view', content: { module: {
+            title: 'Spatial comparison', html: '<button>Choose</button>', style: 'button{color:green}',
+            script: "document.querySelector('button').onclick=()=>natlang.emit('choose','A')",
+        }, bindings: { choose: { root: 'methods/choose.ts' } } } },
+    });
+    const interaction = await runtime.interaction(manifest.id, 'views/spatial.json');
+    assert.equal(interaction.revision, manifest.id);
+    assert.equal(interaction.module.title, 'Spatial comparison');
+    assert.equal(interaction.bindings.choose.root, 'methods/choose.ts');
+});
+
 test('an interrupted execution keeps an unknown receipt and cannot silently replay', async () => {
     const adapter = new MemoryResearchAdapter(); let runs = 0;
     const runtime = new ResearchRuntime({ adapter, runSource: async () => { runs++; return { value: 1 }; } });

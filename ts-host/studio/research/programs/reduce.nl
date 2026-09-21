@@ -49,6 +49,13 @@ read another input with `from`. Bindings map control ID to {root,from?}, where
 root is a .nl handler source in the same manifest. This lets you invent an
 interaction specific to the investigation. Put the view path in active_view.
 Generated handler results become later events and can guide further work.
+When a task needs an interaction the tree cannot express, create a view artifact
+with {module,bindings}. Module contains html, optional style, script and title.
+Its script uses `natlang.emit(control,value)` for a declared binding and may use
+`natlang.draft(id,value)` plus `natlang.drafts` to preserve local work. It runs
+in an origin-isolated presentation iframe with no network access. Bind the
+meaningful events to versioned .nl handlers; small exact handlers may be .ts.
+Do not put domain conclusions only in presentation script.
 
 Represent claims, assumptions, opposing evidence, open questions and actual
 observations as linked artifacts. Search is retrieval, not proof. Follow both

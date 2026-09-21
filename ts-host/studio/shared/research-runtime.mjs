@@ -52,6 +52,18 @@ export function validateInteraction(tree, bindings) {
     return { controls: [...controls], inputs: [...inputs] };
 }
 
+export function validateGeneratedModule(module, bindings) {
+    assert(module && typeof module === 'object' && !Array.isArray(module), 'Generated module must be a record');
+    assert(typeof module.html === 'string' && typeof module.script === 'string', 'Generated module needs html and script text');
+    assert(module.style === undefined || typeof module.style === 'string', 'Generated module style must be text');
+    assert(bindings && typeof bindings === 'object' && !Array.isArray(bindings), 'Bindings must be a record');
+    for (const [id, binding] of Object.entries(bindings)) {
+        assert(id && binding && typeof binding.root === 'string' && (binding.root.endsWith('.nl') || binding.root.endsWith('.ts')),
+            `Binding ${id} needs a natlang or crisp handler`);
+    }
+    return { controls: Object.keys(bindings) };
+}
+
 /** Application host capabilities. Meaning stays in natlang source and state. */
 export class ResearchRuntime {
     constructor({ adapter, runSource, runContext = () => ({}), key = 'research' }) {
@@ -247,11 +259,12 @@ export class ResearchRuntime {
     async interaction(manifestId, path) {
         const artifact = await this.read(manifestId, path);
         assert(artifact.kind === 'view', 'Interaction path must contain a view');
-        const { tree, bindings } = artifact.content;
-        validateInteraction(tree, bindings);
+        const { tree, module, bindings } = artifact.content;
+        assert(Boolean(tree) !== Boolean(module), 'Interaction needs exactly one tree or module');
+        if (tree) validateInteraction(tree, bindings); else validateGeneratedModule(module, bindings);
         const snapshot = await this.workspace.snapshot(), manifest = snapshot.manifests[manifestId];
         for (const binding of Object.values(bindings))
             assert(sourceFiles(snapshot, manifest)[binding.root], `Missing interaction handler ${binding.root}`);
-        return copy({ revision: manifestId, tree, bindings });
+        return copy({ revision: manifestId, ...(tree ? { tree } : { module }), bindings });
     }
 }
