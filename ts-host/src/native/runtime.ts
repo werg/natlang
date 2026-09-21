@@ -761,7 +761,6 @@ export class NativeSession {
           return { kind: 'ok', text: `${key}(${Object.entries(fn.args as Record<string, string> ?? {}).map(([n,t]) => `${n}: ${t}`).join(', ')}) -> ${fn.returns}\n${fn.description ?? ''}\n\n${fn.code ?? fn.instructions ?? ''}` };
         }
         const ref = this.resolve(path);
-        if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
         const value = ref.get();
         return { kind: 'ok', text: value === MISSING ? `${ref.path}: not supplied (missing value; not empty text)` :
           typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1), value };

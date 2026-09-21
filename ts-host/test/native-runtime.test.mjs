@@ -37,6 +37,15 @@ test('native episodes write through typed actions and reject wrong values', asyn
   assert.equal(actions[1].kind, 'ok');
 });
 
+test('native reads may inspect read-only inputs', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ state: { head: Text } }, Text>',
+    instructions: 'Inspect the state.', args: { state: { head: 'manifest-1' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = session.apply('read', { path: 'args/state' });
+  assert.equal(result.kind, 'ok');
+  assert.deepEqual(result.value, { head: 'manifest-1' });
+});
+
 test('explicit inference and action limits still apply', async () => {
   const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven.' } };
   const runtime = new NativeRuntime();
