@@ -68,12 +68,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("jobs", type=Path)
     parser.add_argument("out", type=Path)
+    parser.add_argument("--cases", type=Path,
+                        help="only admit results matching a case id and revision in this current snapshot")
     parser.add_argument("--include-eval", action="store_true")
     parser.add_argument("--replace", action="store_true")
     args = parser.parse_args()
     if args.out.exists() and not args.replace:
         parser.error("output already exists")
     rows, turns = 0, 0
+    current = None
+    if args.cases:
+        current = {(case["id"], case["source_revision"]) for case in
+                   map(json.loads, args.cases.read_text().splitlines())}
     staging = args.out.with_suffix(args.out.suffix + ".building")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     if staging.exists():
@@ -81,6 +87,8 @@ def main() -> None:
     with staging.open("x") as target:
         for path in sorted(args.jobs.glob("*.result.json")):
             row = json.loads(path.read_text())
+            if current is not None and (row["case"]["id"], row["case"]["source_revision"]) not in current:
+                continue
             if row["case"]["split"] != "train" and not args.include_eval:
                 continue
             samples = materialize(row)
