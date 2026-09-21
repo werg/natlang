@@ -81,6 +81,9 @@ try {
         }, { message: 'Generated comparison interaction' });
         const state = { ...current, head: manifest.id, revision: current.revision + 1, active_view: 'views/cohort.json' };
         await store.commit('research', { state, revision: state.revision, event: { kind: 'fixture-generated-view' } });
+        await workspace.propose(manifest.id, {
+            'claims/reviewed.json': { kind: 'claim', content: { text: 'Candidate remains reviewable before activation', status: 'reviewed' } },
+        }, { message: 'Reviewed candidate finding' });
         store.close();
     });
     await page.reload();
@@ -97,6 +100,9 @@ try {
     await page.locator('#method-status').getByText('complete').waitFor();
     assert.match(await page.locator('#method-result').textContent(), /"value": 42/);
     await page.locator('#method-runner').getByRole('button', { name: 'Close' }).click();
+    await page.locator('.branch').filter({ hasText: 'Reviewed candidate finding' }).click();
+    await page.getByRole('button', { name: 'Activate reviewed candidate' }).click();
+    await page.locator('#artifacts strong').filter({ hasText: 'claims/reviewed.json' }).waitFor();
     const exported = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const exportPath = join(temporary, 'research.json');
@@ -105,7 +111,7 @@ try {
     assert.equal(Object.keys(bundle.native_values).length, 1);
     await page.reload();
     await page.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
-    assert.match(await page.locator('#revision').textContent(), /Event 4/);
+    assert.match(await page.locator('#revision').textContent(), /Event 5/);
     const fresh = await browser.newContext({ viewport: { width: 390, height: 780 } });
     const imported = await fresh.newPage();
     imported.on('pageerror', error => errors.push(String(error)));
@@ -113,7 +119,7 @@ try {
     await imported.getByText('reliability-observations.json').waitFor();
     await imported.locator('#import-file').setInputFiles({ name: 'workspace.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bundle)) });
     await imported.locator('#artifacts strong').filter({ hasText: 'later.json' }).waitFor();
-    assert.match(await imported.locator('#revision').textContent(), /Event 4/);
+    assert.match(await imported.locator('#revision').textContent(), /Event 5/);
     await imported.getByRole('button', { name: 'Compare cohort' }).waitFor();
     await imported.getByLabel('Cohort').fill('desktop');
     await imported.getByRole('button', { name: 'Compare cohort' }).click();

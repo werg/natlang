@@ -9,6 +9,7 @@ const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'learn.nl', 'revise_sc
 const store = await StudioStore.open();
 let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 let selectedMethod = '';
+let reviewedCandidate = '';
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
 const research = new ResearchHost({ store, runContext: () => ({
@@ -142,7 +143,11 @@ async function paint(current, view, trace) {
         title.textContent = candidate.message || 'Untitled candidate';
         meta.textContent = `${candidate.changed} changed artifacts · ${candidate.id.slice(0, 12)}`;
         button.append(title, meta);
-        button.onclick = async () => showDetail(candidate.message || 'Candidate', await research.runtime.reviewCandidate(candidate.id));
+        button.onclick = async () => {
+            const review = await research.runtime.reviewCandidate(candidate.id);
+            showDetail(candidate.message || 'Candidate', review); reviewedCandidate = candidate.id;
+            $('detail-activate').hidden = !review.can_activate;
+        };
         branches.append(button);
     }
     if (!branches.children.length) branches.textContent = 'Proposed alternatives will appear here.';
@@ -178,10 +183,12 @@ async function paint(current, view, trace) {
         $('interaction-root').textContent = 'The program can develop an interaction for this investigation.'; }
 }
 function showDetail(title, value) {
+    reviewedCandidate = '';
     $('detail-title').textContent = title;
     $('detail-body').textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
     const reference = value && typeof value === 'object' && value.native_id ? value : null;
     $('detail-download').hidden = !reference;
+    $('detail-activate').hidden = true;
     $('detail-download').onclick = async () => {
         const record = await store.get('native_values', reference.native_id);
         if (!record) throw new Error('Full native evidence is missing');
@@ -189,6 +196,18 @@ function showDetail(title, value) {
     };
     $('detail').showModal();
 }
+$('detail-activate').onclick = async () => {
+    if (!reviewedCandidate || busy) return;
+    try {
+        const activated = await research.runtime.activate(state.head, reviewedCandidate);
+        state = { ...state, head: activated.id, revision: state.revision + 1,
+            notice: `Activated reviewed candidate ${activated.id.slice(0, 12)}.` };
+        await store.commit('research', { state, revision: state.revision,
+            event: { kind: 'activate-candidate', value: reviewedCandidate } });
+        $('detail').close(); await paint(state); status(state.notice);
+    }
+    catch (error) { status(error, true); }
+};
 async function onGenerated(pinned, event) {
     const binding = pinned.bindings[event.kind];
     if (!binding) throw new Error('Control has no natlang handler');
