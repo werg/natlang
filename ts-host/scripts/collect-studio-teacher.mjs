@@ -84,7 +84,10 @@ function teacherDriver({ server, exchanges }) {
       }
       return [name, args];
     });
-    exchanges.push({ request, response: body, duration_ms: Math.round(performance.now() - started) });
+    exchanges.push({ request, response: body, duration_ms: Math.round(performance.now() - started),
+      assistant: { content: String(message.content ?? '').trim(),
+        reasoning: message.reasoning_content ?? message.reasoning ?? message.thinking ?? null,
+        calls: calls.map(([tool, arguments_]) => ({ tool, arguments: arguments_ })) } });
     return { calls, text: String(message.content ?? '').trim(), raw_calls: message.tool_calls ?? [],
       completion_tokens: body.usage?.completion_tokens, prompt_tokens: body.usage?.prompt_tokens,
       raw_response: body };

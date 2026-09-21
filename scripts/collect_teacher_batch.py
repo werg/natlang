@@ -88,6 +88,45 @@ def merge_completed(records: list[tuple[int, dict]], jobs: Path, output: Path,
     return len(rows), missing
 
 
+def import_completed(paths: list[Path], records: list[tuple[int, dict]], jobs: Path,
+                     expected_for, *, segment_turns: int, segment_messages: int) -> tuple[int, int]:
+    """Adopt compatible older rows; reject pre-compaction conversations."""
+    by_digest = {digest(record): (index, record) for index, record in records}
+    imported = rejected = 0
+    for source in paths:
+        for raw in source.read_text().splitlines():
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            identity = row.get("provenance", {}).get("program_ir_sha256")
+            matched = by_digest.get(identity)
+            if not matched:
+                continue
+            index, record = matched
+            expected = expected_for(record)
+            provenance = row.get("provenance", {})
+            base = {key: value for key, value in expected.items()
+                    if key not in ("segment_turns", "segment_messages")}
+            checkpoints = [turn for turn in row.get("trajectory", [])
+                           if turn.get("phase") == "checkpoint"]
+            compact = max((len(turn.get("context") or []) for turn in row.get("trajectory", [])), default=0)
+            compatible = (all(provenance.get(key) == value for key, value in base.items()) and
+                compact <= segment_messages * 2 and
+                all(turn.get("segment_turns") == segment_turns and
+                    turn.get("segment_messages") == segment_messages for turn in checkpoints))
+            if not compatible:
+                rejected += 1
+                continue
+            row["provenance"].update({"segment_turns": segment_turns,
+                                      "segment_messages": segment_messages,
+                                      "imported_from": str(source)})
+            result = jobs / (job_key(index, record) + ".result.json")
+            if not result_matches(result, record, expected):
+                write_atomic(result, row)
+                imported += 1
+    return imported, rejected
+
+
 def decoder_for(args) -> LlamaServerDecoder:
     return LlamaServerDecoder(
         args.server,
@@ -142,6 +181,8 @@ def main() -> None:
     parser.add_argument("--request-timeout", type=float)
     parser.add_argument("--system-file", type=Path,
                         default=Path("natlang/prompts/tools_teacher_compact.md"))
+    parser.add_argument("--import-ir", type=Path, action="append", default=[],
+                        help="adopt matching compact trajectories from an older collector; may repeat")
     args = parser.parse_args()
     if (args.start < 0 or args.workers < 1 or args.segment_turns < 1 or
             args.segment_messages < 5 or args.thinking_tokens < 0 or
@@ -154,6 +195,11 @@ def main() -> None:
         record, model_id=args.model_id, root_seed=args.root_seed,
         system_prompt=system_prompt, segment_turns=args.segment_turns,
         segment_messages=args.segment_messages)
+    if args.import_ir:
+        imported, rejected = import_completed(args.import_ir, records, args.jobs, expected_for,
+            segment_turns=args.segment_turns, segment_messages=args.segment_messages)
+        print(f"import: {imported} compatible rows adopted; {rejected} legacy/incompatible rows rejected",
+              flush=True)
     pending = [(index, record) for index, record in records
                if not result_matches(args.jobs / (job_key(index, record) + ".result.json"),
                                      record, expected_for(record))]

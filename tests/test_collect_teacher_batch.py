@@ -1,7 +1,7 @@
 import json
 
 from scripts.collect_teacher_batch import (
-    expected_provenance, job_key, merge_completed, result_matches, write_atomic,
+    expected_provenance, import_completed, job_key, merge_completed, result_matches, write_atomic,
 )
 
 
@@ -48,3 +48,22 @@ def test_merge_is_source_ordered_and_reports_missing(tmp_path):
     (tmp_path / (job_key(2, rows[1][1]) + ".result.json")).unlink()
     count, missing = merge_completed(rows, tmp_path, out, expected)
     assert count == 1 and missing == [2]
+
+
+def test_import_adopts_compact_rows_and_rejects_full_conversation_legacy(tmp_path):
+    rows = [(0, record("compact")), (1, record("legacy"))]
+    expected = lambda row: expected_provenance(row, model_id="teacher", root_seed=4,
+        system_prompt="p", segment_turns=6, segment_messages=12)
+    source = tmp_path / "old.jsonl"
+    old = []
+    for index, row in rows:
+        provenance = {key: value for key, value in expected(row).items()
+                      if key not in ("segment_turns", "segment_messages")}
+        old.append({"task": {"program_ir": row}, "provenance": provenance,
+                    "trajectory": [{"context": [{}] * (8 if index == 0 else 40)}]})
+    source.write_text("".join(json.dumps(row) + "\n" for row in old))
+    imported, rejected = import_completed([source], rows, tmp_path, expected,
+        segment_turns=6, segment_messages=12)
+    assert (imported, rejected) == (1, 1)
+    assert result_matches(tmp_path / (job_key(0, rows[0][1]) + ".result.json"),
+                          rows[0][1], expected(rows[0][1]))
