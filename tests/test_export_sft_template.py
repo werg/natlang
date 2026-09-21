@@ -6,6 +6,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from natlang.native import CALL_CLOSE, CALL_OPEN
+
 
 class TemplateServer(BaseHTTPRequestHandler):
     def log_message(self, *_args):
@@ -23,7 +25,10 @@ class TemplateServer(BaseHTTPRequestHandler):
             if message.get("reasoning_content"):
                 body = "<think>" + message["reasoning_content"] + "</think>" + body
             if message.get("tool_calls"):
-                body += json.dumps(message["tool_calls"])
+                # Deliberately serialize a different call. Strict export must
+                # splice the grammar-verified IR bytes rather than trusting a
+                # model template to quote tool arguments correctly.
+                body += CALL_OPEN + "[run_code(code='template changed this')]" + CALL_CLOSE
             parts.append(f"<|im_start|>{message['role']}\n{body}<|im_end|>")
         prompt = "".join(parts)
         if request["messages"][-1]["role"] != "assistant":
@@ -110,6 +115,41 @@ def test_template_export_records_identity_and_rejects_changed_resume(tmp_path):
         assert reasoned.returncode == 0, reasoned.stderr
         assert "<think>Check the destination before writing.</think>" in json.loads(
             reasoning_dst.read_text())["completion"]
+
+        exact_src, exact_dst = tmp_path / "exact.jsonl", tmp_path / "exact-sft.jsonl"
+        native = CALL_OPEN + '''[run_code(code="locals.severities.includes('high')")]'''
+        exact = {**row, "id": "exact", "skill": "run_code",
+                 "tools": [{"type": "function", "function": {"name": "run_code",
+                            "parameters": {"type": "object", "properties": {
+                                "code": {"type": "string"}}, "required": ["code"],
+                                "additionalProperties": False}}}],
+                 "target": {"role": "assistant", "content": "", "tool_calls": [{
+                     "type": "function", "function": {"name": "run_code",
+                     "arguments": json.dumps({"code": "locals.severities.includes('high')"})}}]},
+                 "native_target": native}
+        exact_src.write_text(json.dumps(exact) + "\n")
+        exported = subprocess.run([base[0], base[1], str(exact_src), str(exact_dst), *base[4:],
+                                   "--require-native-roundtrip", "--synthetic-reasoning", "action"],
+                                  capture_output=True, text=True)
+        assert exported.returncode == 0, exported.stderr
+        completion = json.loads(exact_dst.read_text())["completion"]
+        assert native in completion
+        assert "template changed this" not in completion
+        assert "<think>" in completion
+
+        checkpoint_src, checkpoint_dst = tmp_path / "checkpoint.jsonl", tmp_path / "checkpoint-sft.jsonl"
+        checkpoint = {**row, "id": "checkpoint", "skill": "checkpoint", "tools": [],
+                      "native_target": None,
+                      "teacher_reasoning": "Only the unresolved dependency needs recording.",
+                      "target": {"role": "assistant", "content": "Next, use the verified subtotal."}}
+        checkpoint_src.write_text(json.dumps(checkpoint) + "\n")
+        exported = subprocess.run([base[0], base[1], str(checkpoint_src), str(checkpoint_dst),
+                                   *base[4:], "--require-native-roundtrip"],
+                                  capture_output=True, text=True)
+        assert exported.returncode == 0, exported.stderr
+        checkpoint_completion = json.loads(checkpoint_dst.read_text())["completion"]
+        assert "Only the unresolved dependency needs recording." in checkpoint_completion
+        assert "Next, use the verified subtotal." in checkpoint_completion
     finally:
         server.shutdown()
         thread.join()

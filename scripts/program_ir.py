@@ -109,7 +109,7 @@ def validate(record):
             raise ValueError("unsupported nested lambda graph operation")
     elif record["kind"] == "lambda_source":
         sem = record["semantics"]
-        if sem.get("operation") not in {"leaf", "blocked", "exact", "map", "map_count"}:
+        if sem.get("operation") not in {"leaf", "blocked", "exact", "algorithm", "map", "map_count"}:
             raise ValueError("unsupported lambda source operation")
         if not isinstance(sem.get("root"), dict) or not isinstance(sem.get("inputs"), dict):
             raise ValueError("lambda source needs root and inputs")
@@ -450,6 +450,8 @@ def lambda_source_program(record):
                        "max": "max(args.numbers)",
                        "mean_round_2": "Math.round(mean(args.numbers) * 100) / 100"}
         plans[body] = Plan("crisp", code=expressions[formula], note="Computed the result.")
+    elif operation == "algorithm":
+        plans[body] = Plan("crisp", code=sem["expression"], note="Executed the exact algorithm.")
     else:
         oracle = {canonical(row["input"]): row["output"] for row in sem["leaf_oracles"]}
         def answer(args):

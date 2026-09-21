@@ -10,7 +10,8 @@ from pathlib import Path
 
 
 RENDERER_FIELDS = ("template_sha256", "end_token", "terminal_tool_policy",
-                   "teacher_reasoning_policy")
+                   "teacher_reasoning_policy", "cache_stable_tools",
+                   "native_roundtrip", "native_target_policy", "invalid_action_policy")
 
 
 def combine(destination: Path, sources: list[Path]) -> dict:

@@ -13,7 +13,8 @@ from natlang.gen.policy import ReferenceAgent
 from natlang.gen.programs import BLOCKED, FAMILIES
 from natlang.gen.synth import SHAPES
 from natlang.gen.codebases import CODEBASES
-FAMILIES = {**FAMILIES, **SHAPES, **CODEBASES}
+from natlang.gen.algorithms import ALGORITHMS
+FAMILIES = {**FAMILIES, **SHAPES, **CODEBASES, **ALGORITHMS}
 from natlang.runtime import Runtime
 from natlang.corpus import digest, file_digest
 from natlang.types import TypeEnv
@@ -84,6 +85,8 @@ MIXES = {
 # Preserve v7's input sequence for existing teacher references; the architectural
 # mix is a separately named experiment, not a silent change to v7.
 MIXES["v7_arch"] = {**MIXES["v7"], "cb_reconciliation": 3, "cb_dependency_plan": 3, "cb_order_saga": 3}
+MIXES["v8_algorithmic"] = {**MIXES["v7_arch"], "array_kernel": 22, "staged_ranking": 10,
+                            "algorithm_pipeline": 12, "guarded_call": 5}
 
 
 def make_program(seed: int, i: int, families):

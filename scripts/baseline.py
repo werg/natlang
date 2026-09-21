@@ -50,8 +50,8 @@ ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="cal
 ap.add_argument("--write-constraints", choices=("typed", "runtime"), default="runtime")
 ap.add_argument("--cache-stable-tools", action="store_true",
                 help="present volatile runtime constraints as stable base schemas")
-ap.add_argument("--segment-turns", type=int, default=12)
-ap.add_argument("--segment-messages", type=int, default=24)
+ap.add_argument("--segment-turns", type=int, default=6)
+ap.add_argument("--segment-messages", type=int, default=12)
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 a.validation_feedback = a.validation_feedback or "caller"

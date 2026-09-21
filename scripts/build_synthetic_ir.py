@@ -22,7 +22,8 @@ SUPPORTED = {"judge", "classify", "extract", "crisp_scalar", "map_leaf", "map_th
              "tiny", "composed", "ticket_report", "review_digest", "expense_audit", "guarded_call",
              "nested_assessment", "per_item_condition", "fold_with_steps", "cb_reconciliation", "cb_dependency_plan",
              "cb_nlprolog", "cb_legal_move", "cb_moderation", "cb_highlighter", "cb_mail_rules",
-             "cb_order_saga", "cb_shopkeeper", "cb_webserver"}
+             "cb_order_saga", "cb_shopkeeper", "cb_webserver", "array_kernel", "staged_ranking",
+             "algorithm_pipeline"}
 EXACT = {"sum(args.numbers)": "sum",
          "count(args.numbers, x => x > 100)": "count_over_100",
          "max(args.numbers)": "max",
@@ -40,6 +41,44 @@ def generator_fingerprint(repo):
 
 def freeze(program, program_id, provenance):
     family = program.family
+    if family.startswith("algo_"):
+        body = program.root["$lambda"]["instructions"]
+        plan = program.plans[body]
+        sem = {"root": program.root, "inputs": program.inputs, "expected": program.expected}
+        if plan.kind == "crisp":
+            sem.update(operation="algorithm", expression=plan.code,
+                       algorithm=program.source_semantics["algorithm"])
+            kind = "lambda_source"
+        elif plan.kind == "calls":
+            operations = []
+            for step in plan.steps:
+                tool, args = step[0], step[1:]
+                if tool == "call":
+                    spec = args[0]
+                    op = {"op": "invoke", "function": spec["function"], "target": spec["to"]}
+                    if "inputs" in spec:
+                        op["arguments"] = spec["inputs"]
+                elif tool == "glue":
+                    expression, target, value_type = args
+                    op = {"op": "compute", "expression": expression, "target": target,
+                          "value_type": value_type}
+                elif tool == "write":
+                    spec = args[0]
+                    op = {"op": "assign", "target": spec["path"], "value_type": spec["type"]}
+                    op["from" if "source" in spec else "value"] = spec.get("source", spec.get("value"))
+                else:
+                    raise ValueError(f"unsupported algorithmic graph action: {tool}")
+                operations.append(op)
+            sem.update(operations=operations, source_lines=[], leaf_oracles={})
+            kind = "lambda_graph"
+        else:
+            raise ValueError(f"unsupported algorithmic plan: {plan.kind}")
+        return validate({"version": VERSION, "id": program_id, "kind": kind,
+                         "family": family, "source": "natlang-synthetic", "split": "train",
+                         "source_ids": [program_id], "source_groups": [program_id],
+                         "source_revisions": [provenance["sources"]], "license": "project-generated",
+                         "gold_sources": ["synthetic-generator"], "generation": provenance,
+                         "semantics": sem})
     if family in {"cb_reconciliation", "cb_dependency_plan", "cb_nlprolog", "cb_legal_move", "cb_moderation", "cb_highlighter", "cb_mail_rules", "cb_order_saga", "cb_shopkeeper", "cb_webserver"}:
         from natlang.codebase import load_function
         facts = program.source_semantics

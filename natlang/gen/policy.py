@@ -17,7 +17,7 @@ from ..native import CALL_OPEN, call_grammar
 from ..nodes import MISSING
 from ..render import INLINE, PREVIEW_ITEMS
 from ..surface import ToolSurface, is_previewed
-from ..tool_agent import TOOLS_PROMPT
+from ..tool_agent import CHECKPOINT_REQUEST, TOOLS_PROMPT
 from ..types import format_type
 from ..types import parse_type, TypeSyntaxError
 from ..diag import Reject
@@ -43,7 +43,7 @@ def native_text(calls) -> str:
 class ReferenceAgent:
     def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
                  recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT,
-                 segment_turns: Optional[int] = 12, segment_messages: Optional[int] = 24):
+                 segment_turns: Optional[int] = 6, segment_messages: Optional[int] = 12):
         self.system_prompt = system_prompt
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)
@@ -164,6 +164,15 @@ class ReferenceAgent:
                  (self.segment_messages is not None and len(messages) >= self.segment_messages))
                     and calls[-1][0] in ("write", "call", "edit", "mark_done")
                     and (s.missing(session) or s.pending(session))):
+                note = ("No hidden decision remains. Continue from the typed workspace and "
+                        "complete the remaining open instruction lines in order.")
+                checkpoint_messages = [*messages, {"role": "user", "content": CHECKPOINT_REQUEST}]
+                self.sink.append({"messages": [dict(m) for m in checkpoint_messages], "tools": [],
+                                  "target": {"role": "assistant", "content": note},
+                                  "native_target": "", "kind": self.plan.kind,
+                                  "recovery": self.recovered, "template": bool(self.plan.template),
+                                  "skill": "checkpoint"})
+                session.lam.continuation_note = note
                 messages = self._opening_messages(session)
                 segment_turns = 0
             sent = results[-1] if self.plan.kind == "script" else results[-1].value
@@ -182,7 +191,7 @@ class ReferenceAgent:
         target = ({"role": "assistant", "content": reply} if calls is None else
                   {"role": "assistant", "content": "", "tool_calls": [
                       {"type": "function", "function": {"name": n, "arguments": json.dumps(a)}} for n, a in calls]})
-        native = reply if calls is None else native_text(calls)
+        native = "" if calls is None else native_text(calls)
         if self.check and not gbnf.accepts(call_grammar(tools), native):
             raise AssertionError(f"the turn's grammar refuses the reference turn:\n{native}")
         self.sink.append({"messages": [dict(m) for m in messages], "tools": tools, "target": target,

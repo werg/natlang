@@ -2,7 +2,7 @@
 import keyword
 
 from natlang import gbnf
-from natlang.native import CALL_OPEN, call_grammar, parse_calls
+from natlang.native import CALL_OPEN, call_body_grammar, call_grammar, parse_calls
 from natlang.surface import ToolSurface
 
 from test_surface import _session
@@ -69,6 +69,16 @@ def test_parse_calls_and_argument_names():
             assert not keyword.iskeyword(arg), (t["function"]["name"], arg)
 
 
+def test_call_body_grammar_checks_every_visible_byte_after_marker():
+    _, session = _session("02-leaf-extraction.yaml")
+    grammar = call_body_grammar(S.tools(session))
+    good = "\n[write(path='return', type='{ customer: Text, order_id: Text, amount: Num, phone?: Text }', " \
+           "value={'customer': 'Dana Whitfield', 'order_id': '0077', 'amount': 42.5})]"
+    bad = good.replace("{'customer':", "{customer:")
+    assert gbnf.accepts(grammar, good)
+    assert not gbnf.accepts(grammar, bad)
+
+
 def test_probability_trace_keeps_ids_without_treating_empty_token_as_call(monkeypatch):
     from natlang.decoder import Generation
     from natlang.native import NativeCallDecoder
@@ -93,6 +103,8 @@ def test_reasoning_native_deliberates_before_guided_action(monkeypatch):
         generated.append((prompt, kwargs))
         if len(generated) == 1:
             return Generation('check the requested Boolean', stopped='</think>', completion_tokens=5)
+        if len(generated) == 2:
+            return Generation('\n', stopped=CALL_OPEN, completion_tokens=1)
         return Generation('[write(path="return", type="Bool", value=True)]', completion_tokens=7)
     monkeypatch.setattr(dec, 'generate', generate)
     _, session = _session('01-leaf-judgment.yaml')
@@ -100,7 +112,9 @@ def test_reasoning_native_deliberates_before_guided_action(monkeypatch):
     assert generated[0][0] == 'PROMPT<think>'
     assert generated[0][1]['grammar'] is None and generated[0][1]['stop'] == ['</think>']
     assert generated[1][0] == 'PROMPT<think>check the requested Boolean</think>'
-    assert generated[1][1]['grammar']
+    assert generated[1][1]['grammar'] is None and generated[1][1]['stop'] == [CALL_OPEN]
+    assert generated[2][0] == 'PROMPT<think>check the requested Boolean</think>\n' + CALL_OPEN
+    assert generated[2][1]['grammar']
     assert turn.calls == [('write', {'path':'return', 'type':'Bool', 'value':True})]
-    assert turn.completion_tokens == 12
+    assert turn.completion_tokens == 13
     assert turn.raw_response['choices'][0]['message']['reasoning_content'] == 'check the requested Boolean'

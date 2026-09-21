@@ -74,6 +74,18 @@ def restore_lfm_expert_quantization(model, model_dir):
     print(f"restored NF4 state for {restored} LFM expert tensors", flush=True)
 
 
+def directory_digest(path):
+    """Content identity for an adapter used to initialize a new phase."""
+    path = Path(path)
+    h = __import__("hashlib").sha256()
+    for item in sorted(p for p in path.rglob("*") if p.is_file()):
+        h.update(str(item.relative_to(path)).encode())
+        with item.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                h.update(block)
+    return h.hexdigest()
+
+
 def completion_loss(model, encoded):
     """Keep the preceding prompt position so the first completion token is trained.
 
@@ -155,7 +167,10 @@ def main():
     ap.add_argument("out", type=Path)
     ap.add_argument("--model", default="LiquidAI/LFM2.5-350M")
     ap.add_argument("--model-revision", help="immutable Hugging Face commit or tag for the base model")
-    ap.add_argument("--steps", type=int, default=300, help="optimizer steps in total (a resumed run continues up to this)")
+    schedule = ap.add_mutually_exclusive_group()
+    schedule.add_argument("--steps", type=int, help="optimizer steps in total (default: 300)")
+    schedule.add_argument("--epochs", type=float,
+                          help="corpus passes; each admitted training example is used once per epoch")
     ap.add_argument("--accum", type=int, default=16, help="sequences per optimizer step (unchanged by microbatch size)")
     ap.add_argument("--microbatch", type=int, default=1)
     ap.add_argument("--batch-tokens", type=int, default=8192, help="maximum padded tokens per microbatch; long examples run alone")
@@ -173,15 +188,23 @@ def main():
     ap.add_argument("--unsloth-compile", action="store_true",
                     help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
     ap.add_argument("--target-modules",
-                    help="comma-separated LoRA module suffixes; QLoRA defaults to q_proj,k_proj,v_proj,o_proj")
+                    help="comma-separated LoRA module suffixes; LFM uses its architecture-specific linear layers")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint every N optimizer steps")
+    ap.add_argument("--snapshot-every", type=int, default=0,
+                    help="also retain adapter-only snapshots every N steps for behavioral selection")
+    ap.add_argument("--init-adapter", type=Path,
+                    help="start a new training phase from this LoRA adapter with a fresh optimizer")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint and start over")
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
     a = ap.parse_args()
-    if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens) < 0:
+    if a.steps is not None and a.steps < 1:
+        ap.error("--steps must be positive")
+    if a.epochs is not None and a.epochs <= 0:
+        ap.error("--epochs must be positive")
+    if min(a.accum, a.microbatch, a.batch_tokens, a.save_every) < 1 or min(a.benchmark_steps, a.checkpoint_above_tokens, a.snapshot_every) < 0:
         ap.error("batch sizes and save interval must be positive; benchmark steps nonnegative")
     if a.full and a.load_in_4bit:
         ap.error("4-bit loading is for LoRA adapters, not full-weight training")
@@ -189,9 +212,13 @@ def main():
         ap.error("--unsloth-lfm-experts requires --load-in-4bit")
     if a.merge_only and a.load_in_4bit:
         ap.error("a QLoRA checkpoint is adapter-only; convert the adapter or merge it with a non-quantized base")
+    if a.init_adapter is not None and not a.init_adapter.is_dir():
+        ap.error("--init-adapter must be an adapter directory")
     targets = [x.strip() for x in a.target_modules.split(",") if x.strip()] if a.target_modules else None
     if a.target_modules and not targets:
         ap.error("--target-modules must name at least one module")
+    default_targets = (["q_proj", "k_proj", "v_proj", "out_proj", "in_proj", "w1", "w2", "w3"]
+                       if a.unsloth_lfm_experts else ["q_proj", "k_proj", "v_proj", "o_proj"])
     ckpt = a.out / "checkpoint"
     state_file = ckpt / "state.json"
     if a.fresh and ckpt.exists():
@@ -206,13 +233,22 @@ def main():
     if not a.merge_only:
         pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
+        target_examples = (max(1, math.ceil(len(train) * a.epochs))
+                           if a.epochs is not None else (a.steps or 300) * a.accum)
+        a.steps = math.ceil(target_examples / a.accum)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
-                    "model_revision": a.model_revision, "accum": a.accum}
+                    "model_revision": a.model_revision, "accum": a.accum,
+                    "target_examples": target_examples, "steps": a.steps, "lr": a.lr,
+                    "gradient_checkpointing": a.gradient_checkpointing,
+                    "checkpoint_above_tokens": a.checkpoint_above_tokens}
+        if a.init_adapter is not None:
+            identity["init_adapter"] = {"path": str(a.init_adapter),
+                                        "sha256": directory_digest(a.init_adapter)}
         if a.load_in_4bit:
             identity["qlora"] = {"load_in_4bit": True, "rank": a.rank, "quant_type": "nf4",
                                  "double_quant": True,
-                                 "target_modules": targets or ["q_proj", "k_proj", "v_proj", "o_proj"],
+                                 "target_modules": targets or default_targets,
                                  "unsloth_lfm_experts": a.unsloth_lfm_experts,
                                  "unsloth_compile": a.unsloth_compile}
         if resume and state.get("corpus") != identity:
@@ -222,7 +258,8 @@ def main():
         a.out.mkdir(parents=True, exist_ok=True)
         (a.out / "split.json").write_text(json.dumps(split, indent=2) + "\n")
         print(f"program split: {len(train)} training turns, {len(held)} held-out turns "
-              f"from {len(split['held_programs'])} programs", flush=True)
+              f"from {len(split['held_programs'])} programs; target {target_examples} examples "
+              f"({target_examples / len(train):.3g} epochs, {a.steps} optimizer steps)", flush=True)
     torch.manual_seed(a.seed)
     FastLanguageModel = None
     if a.unsloth_lfm_experts:  # Unsloth must patch Transformers before PEFT imports it.
@@ -265,10 +302,12 @@ def main():
             model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=a.gradient_checkpointing)
         if resume:
             model = PeftModel.from_pretrained(model, str(ckpt / "weights"), is_trainable=True)
+        elif a.init_adapter is not None:
+            model = PeftModel.from_pretrained(model, str(a.init_adapter), is_trainable=True)
         else:
             linear = targets
             if linear is None:
-                linear = (["q_proj", "k_proj", "v_proj", "o_proj"] if a.load_in_4bit else
+                linear = (default_targets if a.load_in_4bit else
                           sorted({n.split(".")[-1] for n, m in model.named_modules()
                                   if isinstance(m, torch.nn.Linear) and "lm_head" not in n}))
             if a.unsloth_lfm_experts:
@@ -365,6 +404,17 @@ def main():
             shutil.rmtree(old)
         else:
             os.rename(tmp, ckpt)
+        if a.snapshot_every and state["step"] % a.snapshot_every == 0:
+            snapshot = a.out / "snapshots" / f"step-{state['step']:04d}"
+            snapshot_tmp = snapshot.with_name(snapshot.name + ".tmp")
+            if snapshot_tmp.exists():
+                shutil.rmtree(snapshot_tmp)
+            snapshot_tmp.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(ckpt / "weights", snapshot_tmp / "weights")
+            shutil.copy2(ckpt / "state.json", snapshot_tmp / "state.json")
+            if snapshot.exists():
+                shutil.rmtree(snapshot)
+            os.rename(snapshot_tmp, snapshot)
 
     stop = {"now": False}
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -393,10 +443,12 @@ def main():
         tmp.replace(metrics_file)
 
     target_steps = a.benchmark_steps or a.steps
-    while state["step"] < target_steps and not stop["now"]:
+    target_examples = a.benchmark_steps * a.accum if a.benchmark_steps else state["corpus"]["target_examples"]
+    state.setdefault("trained_examples", state["step"] * a.accum)
+    while state["step"] < target_steps and state["trained_examples"] < target_examples and not stop["now"]:
         step_start = time.perf_counter()
         examples = []
-        for _ in range(a.accum):
+        for _ in range(min(a.accum, target_examples - state["trained_examples"])):
             e = None
             start_cursor = state["cursor"]
             while e is None:
@@ -417,7 +469,7 @@ def main():
                     model.gradient_checkpointing_enable()
                 else:
                     model.gradient_checkpointing_disable()
-            loss = batch_completion_loss(model, encoded) * (len(batch) / a.accum)
+            loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
             loss.backward()
             running += loss.detach()
             padded_tokens += encoded["input_ids"].numel()
@@ -425,6 +477,7 @@ def main():
         torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
         opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
         state["step"] += 1
+        state["trained_examples"] += len(examples)
         running = running.item()  # one synchronization per optimizer step, not per sequence
         if cache:
             cache.db.commit()
@@ -449,13 +502,19 @@ def main():
         return
     save_checkpoint()
     if stop["now"]:
-        print(f"stopped at step {state['step']} of {a.steps}; checkpoint written. Run the same command to continue, "
-              f"or --merge-only to export this state.", flush=True)
+        action = ("the checkpoint adapter can be converted or served directly"
+                  if a.load_in_4bit else "use --merge-only to export this state")
+        print(f"stopped at step {state['step']} of {a.steps}; checkpoint written. "
+              f"Run the same command to continue, or {action}.", flush=True)
         return
     state["heldout_after"] = heldout_loss()
-    print(f"held-out loss after: {state['heldout_after']}; pairs seen {state['cursor']}, too long {state['skipped']}", flush=True)
+    print(f"held-out loss after: {state['heldout_after']}; trained examples {state['trained_examples']}, "
+          f"source rows visited {state['cursor']}, too long {state['skipped']}", flush=True)
     save_checkpoint()
-    export_merged()
+    if a.load_in_4bit:
+        print(f"saved adapter {ckpt / 'weights'}; QLoRA checkpoints are not merged into their quantized base", flush=True)
+    else:
+        export_merged()
     if cache:
         cache.db.commit()
         cache.db.close()

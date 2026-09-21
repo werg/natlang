@@ -47,9 +47,12 @@ def matched_cases(seed, group):
                    n if convert else None, None if convert else 'error', failed_write=write(literal, 'Text')[1] if not convert else None)
     for supplied in (False, True):
         quote = f'{word.title()} shipment {n} arrived.'
+        document_name = f'{word}-manifest-{group}-{n}'
         yield case('evidence_present' if supplied else 'evidence_missing', 'Text',
-                   'Return an exact copy of the supplied document. If none was supplied, do not invent its contents.',
-                   [write(quote, 'Text')] if supplied else [('report_blocker', {'missing': 'The document to quote was not supplied.'})],
+                   f'Return an exact copy of the supplied document named {document_name}. '
+                   'If none was supplied, do not invent its contents.',
+                   [write(quote, 'Text')] if supplied else [('report_blocker', {
+                       'missing': f'The document {document_name} was not supplied.'})],
                    quote if supplied else None, None if supplied else 'blocked',
                    args={'document': quote} if supplied else {}, params='{ document?: Text }')
     for flag in (False, True):

@@ -149,10 +149,11 @@ class PyGrammar:
         body = self._fields(params.get("properties") or {}, params.get("required") or [], 0, key=kw)
         return self.fresh("call", f'{lit(fn["name"] + "(")} {body} ")"')
 
-    def text(self, tools: list, allow_reply: bool = True, single_call: bool = False) -> str:
+    def text(self, tools: list, allow_reply: bool = True, single_call: bool = False,
+             include_open: bool = True) -> str:
         calls = self.fresh("anycall", " | ".join(self.call(t) for t in tools))
         tail = '"]"' if single_call else f'( ", " {calls} )* "]"'
-        turn = f'{lit(CALL_OPEN + "[")} {calls} {tail}'
+        turn = f'{lit(CALL_OPEN + "[") if include_open else lit("[")} {calls} {tail}'
         root = f"{turn} | reply" if allow_reply else turn
         dyn = "\n".join(f"{k} ::= {v}" for k, v in self.rules.items())
         return f"root ::= {root}\n{dyn}\n{_STATIC.strip()}\n"
@@ -164,6 +165,21 @@ def call_grammar(tools: list, allow_reply: bool = True, *, single_call: bool = F
             raise ValueError("cannot require a tool call when no tools are available")
         return "root ::= reply\n" + _STATIC.strip() + "\n"
     return PyGrammar().text(tools, allow_reply, single_call)
+
+
+def call_body_grammar(tools: list, *, single_call: bool = False) -> str:
+    """Grammar after the native tool-call marker has already been committed.
+
+    Generating a special marker and ordinary syntax under one grammar lets some
+    tokenizers cross that boundary in a token whose visible bytes the grammar
+    did not validate. Commit the marker in a separate decoding phase, then
+    constrain the complete visible call body here.
+    """
+    if not tools:
+        raise ValueError("cannot generate a tool-call body when no tools are available")
+    grammar = PyGrammar().text(tools, allow_reply=False, single_call=single_call,
+                               include_open=False)
+    return grammar.replace("root ::= ", 'root ::= ws ', 1) + '\nws ::= [ \\t\\r\\n]*\n'
 
 
 
@@ -364,12 +380,28 @@ class ReasoningNativeCallDecoder(NativeCallDecoder):
         if thought.stopped != "</think>":
             self.stats["reasoning_overflows"] += 1
             raise ValueError("reasoning did not reach </think> before its diagnostic guard")
-        remaining = None if max_tokens is None else max(1, max_tokens - (thought.completion_tokens or 0))
-        action = self.generate(prompt + "<think>" + thought.text + "</think>",
-                               grammar=call_grammar(write_grammar_tools(tools, self.write_constraints),
-                                                    allow, single_call=single_call),
+        used = thought.completion_tokens or 0
+        remaining = None if max_tokens is None else max(1, max_tokens - used)
+        prefix = prompt + "<think>" + thought.text + "</think>"
+        if allow:
+            decision = self.generate(prefix, grammar=None, max_tokens=remaining,
+                                     temperature=temperature, seed=seed, stop=[CALL_OPEN], n_probs=6)
+            used += decision.completion_tokens or 0
+            if decision.stopped != CALL_OPEN:
+                decision.completion_tokens = used
+                return self._decode_turn(decision, reasoning=thought.text)
+            prefix += decision.text + CALL_OPEN
+            remaining = None if max_tokens is None else max(1, max_tokens - used)
+        else:
+            decision = None
+            prefix += CALL_OPEN
+        action = self.generate(prefix,
+                               grammar=call_body_grammar(write_grammar_tools(tools, self.write_constraints),
+                                                         single_call=single_call),
                                max_tokens=remaining, temperature=temperature, seed=seed, stop=[], n_probs=6)
-        action.completion_tokens = (thought.completion_tokens or 0) + (action.completion_tokens or 0)
+        action.completion_tokens = used + (action.completion_tokens or 0)
+        if decision is not None and decision.probs:
+            action.probs = decision.probs
         return self._decode_turn(action, reasoning=thought.text)
 
 

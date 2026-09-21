@@ -132,9 +132,12 @@ def test_synthetic_reference_actions_use_saved_state_after_boundary():
     outcome, value = Runtime(lambda lam: ReferenceAgent(Plan("calls", steps=steps), samples,
                                                         segment_turns=2)).run_root(root)
     assert (outcome.kind, value) == ("done", 6)
-    assert len(samples[2]["messages"]) == 4
-    assert "let/a (Num): 1" in samples[2]["messages"][3]["content"]
-    assert "let/b (Num): 2" in samples[2]["messages"][3]["content"]
+    assert samples[2]["skill"] == "checkpoint"
+    assert "fresh conversation" in samples[2]["messages"][-1]["content"]
+    assert len(samples[3]["messages"]) == 4
+    assert "Earlier working note" in samples[3]["messages"][3]["content"]
+    assert "let/a (Num): 1" in samples[3]["messages"][3]["content"]
+    assert "let/b (Num): 2" in samples[3]["messages"][3]["content"]
 
 
 def test_continuation_shows_recent_effects_and_can_read_full_journal():

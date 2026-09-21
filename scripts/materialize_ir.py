@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from generate import run_program
 from audit_trajectory_admission import audit_turns
 from natlang.native import _strip_private
+from natlang.native import call_grammar
+from natlang import gbnf
 from program_ir import read_jsonl, lower
 from natlang.trace import TraceReader, TraceRecorder
 from natlang.scenario import ScenarioContract, admit
@@ -76,13 +78,19 @@ def materialize_record(record, recovery_rate=0, trace_dir=None):
                    "source_groups", "source_revisions", "license", "gold_sources")}
     lines = []
     for turn, sample in enumerate(samples):
+        grammar = call_grammar(sample["tools"])
+        if not gbnf.accepts(grammar, sample["native_target"]):
+            raise ValueError(f"reference target stopped matching its live grammar: {record['id']}:{turn}")
         lines.append({"id": f"{record['id']}:{turn}",
                       "program_id": record.get("input_variant", {}).get("parent_id", record["id"]),
                       "family": record["kind"], "ir_version": record["version"],
                       "provisional_gold": bool(record["semantics"].get("contains_templates")),
                       "ir_digest": ir_digest,
                       **({"trace": {"file": str(trace_file), **admission}} if admission else {}),
-                      **provenance, **sample, "tools": _strip_private(sample["tools"])})
+                      **provenance, **sample,
+                      "native_grammar_sha256": hashlib.sha256(grammar.encode()).hexdigest(),
+                      "native_target_grammar_verified": True,
+                      "tools": _strip_private(sample["tools"])})
     return lines, episodes
 
 

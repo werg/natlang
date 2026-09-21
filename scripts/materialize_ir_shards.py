@@ -38,6 +38,24 @@ def run_shard(job):
     return first, dict(counts)
 
 
+def inventory(directory):
+    """Recompute complete resumable-build counts, including prior shards."""
+    counts = Counter()
+    programs = {}
+    for path in sorted(Path(directory).glob("part-*.jsonl.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            for line in stream:
+                row = json.loads(line)
+                counts["turns"] += 1
+                counts["provisional_turns" if row.get("provisional_gold") else "eligible_turns"] += 1
+                counts["skill:" + row["skill"]] += 1
+                programs[row["program_id"]] = bool(row.get("provisional_gold"))
+    counts["programs"] = len(programs)
+    counts["provisional_programs"] = sum(programs.values())
+    counts["eligible_programs"] = len(programs) - counts["provisional_programs"]
+    return counts
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("src", type=Path)
@@ -90,10 +108,13 @@ def main():
         for first, result in pool.imap_unordered(run_shard, jobs):
             counts.update(result)
             print(f"verified shard {first}: {result['programs']} programs, {result['turns']} turns", flush=True)
+    complete = inventory(args.dst)
     manifest.write_text(json.dumps({"identity": identity, "programs_in_ir": total,
-                                    "new_shards": len(jobs), "new_counts": dict(counts)}, indent=2) + "\n")
+                                    "shards": len(list(args.dst.glob('part-*.jsonl.gz'))),
+                                    "counts": dict(complete), "new_shards": len(jobs),
+                                    "new_counts": dict(counts)}, indent=2) + "\n")
     print(json.dumps({"output": str(args.dst), "programs_in_ir": total,
-                      "new_shards": len(jobs), "new_counts": dict(counts)}, indent=2))
+                      "new_shards": len(jobs), "counts": dict(complete)}, indent=2))
 
 
 if __name__ == "__main__":

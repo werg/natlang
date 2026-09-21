@@ -37,8 +37,8 @@ class ToolAgent:
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
                  review_prompt: str = "baseline", teacher_turns: Optional[list] = None,
-                 segment_turns: Optional[int] = 12,
-                 segment_messages: Optional[int] = 24):
+                 segment_turns: Optional[int] = 6,
+                 segment_messages: Optional[int] = 12):
         if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
             raise ValueError("unknown review prompt")
         self.review_prompt = review_prompt

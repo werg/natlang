@@ -23,8 +23,14 @@ if [ -n "$DRAFT_MODEL" ]; then
   [ -f "$ROOT/models/$DRAFT_MODEL" ] || { echo "missing models/$DRAFT_MODEL"; exit 1; }
   DRAFT=(-md "/models/$DRAFT_MODEL" --spec-type draft-dspark --spec-draft-n-max 10 --spec-draft-n-min 0)
 fi
+LORA_PATH="${NATLANG_LORA:-}"
+LORA=()
+if [ -n "$LORA_PATH" ]; then
+  [ -f "$ROOT/$LORA_PATH" ] || { echo "missing $LORA_PATH"; exit 1; }
+  LORA=(--lora "/work/$LORA_PATH")
+fi
 docker rm -f natlang-llama >/dev/null 2>&1 || true
 exec docker run --rm --name natlang-llama --gpus all \
-  -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" \
+  -v "$ROOT:/work:ro" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" \
   "$IMAGE" \
-  -m "/models/$MODEL" --host 0.0.0.0 --port 8080 --parallel "$SLOTS" -c "$CTX" -ngl 99 --cache-ram "$CACHE_RAM" --metrics --no-webui "${DRAFT[@]}" "${EXTRA[@]}"
+  -m "/models/$MODEL" --host 0.0.0.0 --port 8080 --parallel "$SLOTS" -c "$CTX" -ngl 99 --cache-ram "$CACHE_RAM" --metrics --no-webui "${DRAFT[@]}" "${LORA[@]}" "${EXTRA[@]}"

@@ -466,8 +466,8 @@ export class NativeToolAgent {
     };
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
-      const rollover = this.options.segmentTurns === undefined ? 12 : this.options.segmentTurns;
-      const itemLimit = this.options.segmentMessages === undefined ? 24 : this.options.segmentMessages;
+      const rollover = this.options.segmentTurns === undefined ? 6 : this.options.segmentTurns;
+      const itemLimit = this.options.segmentMessages === undefined ? 12 : this.options.segmentMessages;
       if (((rollover !== null && segmentTurns >= rollover) ||
            (itemLimit !== null && messages.length >= itemLimit)) && checkpointReady &&
           (this.missing(session) || this.openMarks(session).length)) {
