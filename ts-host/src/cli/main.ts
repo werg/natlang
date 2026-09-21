@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive, readPackageArchive,
   writePackageArchive, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/index.js';
+import { satisfiesVersion } from '../package/store.js';
 import type { PackageTargetContext, PackageTargetFactory } from '../package/target.js';
 import { openAICompatibleModelTurn } from '../model/index.js';
 import { NativeNatlangHost } from '../native/host.js';
@@ -87,6 +89,7 @@ async function runTarget(parsed: Parsed, specifier: string): Promise<number> {
   const packageSpecifier = specifier.slice(0, marker), targetName = specifier.slice(marker + 1);
   const store = new NatlangPackageStore(option(parsed, '--store'));
   const installed = store.resolve(packageSpecifier), manifest = store.manifest(packageSpecifier);
+  checkEngines(manifest.engines);
   const target = manifest.targets?.[targetName];
   if (!target) throw new Error(`unknown target ${targetName} in ${packageSpecifier}`);
   const stateDirectory = resolve(option(parsed, '--state') ?? join(defaultNatlangStateDirectory(),
@@ -107,6 +110,17 @@ async function runTarget(parsed: Parsed, specifier: string): Promise<number> {
   if (!executable || typeof executable.run !== 'function') throw new Error('target factory must return an executable with run()');
   try { return Number(await executable.run() ?? 0); }
   finally { await executable.close?.(); }
+}
+
+function checkEngines(engines: { node?: string; natlang?: string } | undefined): void {
+  if (engines?.node && !satisfiesVersion(process.versions.node, engines.node))
+    throw new Error(`package needs Node ${engines.node}; this process is ${process.versions.node}`);
+  if (engines?.natlang && !satisfiesVersion(NATLANG_CLI_VERSION, engines.natlang))
+    throw new Error(`package needs natlang ${engines.natlang}; this CLI is ${NATLANG_CLI_VERSION}`);
+}
+function commandAvailable(command: string): boolean {
+  const probe = spawnSync(process.platform === 'win32' ? 'where.exe' : 'which', [command], { stdio: 'ignore' });
+  return probe.status === 0;
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
@@ -139,10 +153,24 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (parsed.words[0] === 'run' && parsed.words[1]) return runTarget(parsed, parsed.words[1]);
   if (parsed.words[0] === 'doctor') {
     const selected = loadProfile(option(parsed, '--profile')), store = new NatlangPackageStore(option(parsed, '--store'));
-    const report = { ok: Boolean(selected.profile.endpoint && selected.profile.model), node: process.version,
+    let targetReport: Record<string, unknown> | null = null;
+    if (parsed.words[1]) {
+      const marker = parsed.words[1].lastIndexOf('#');
+      if (marker < 1) throw new Error('doctor target must be NAME@VERSION#TARGET');
+      const packageSpecifier = parsed.words[1].slice(0, marker), targetName = parsed.words[1].slice(marker + 1);
+      const manifest = store.manifest(packageSpecifier), target = manifest.targets?.[targetName];
+      if (!target) throw new Error(`unknown target ${targetName} in ${packageSpecifier}`);
+      let engineError: string | null = null;
+      try { checkEngines(manifest.engines); } catch (error) { engineError = error instanceof Error ? error.message : String(error); }
+      const commands = Object.fromEntries((target.commands ?? []).map(command => [command, commandAvailable(command)]));
+      targetReport = { package: packageSpecifier, target: targetName, authority: target.authority ?? [],
+        commands, engines: manifest.engines ?? {}, engineError };
+    }
+    const targetOkay = !targetReport || (!targetReport.engineError && Object.values(targetReport.commands as object).every(Boolean));
+    const report = { ok: Boolean(selected.profile.endpoint && selected.profile.model && targetOkay), node: process.version,
       packageStore: store.root, installedPackages: store.list().length, config: selected.configPath,
       profile: selected.name, endpoint: selected.profile.endpoint ?? null, model: selected.profile.model ?? null,
-      apiKey: Boolean(process.env[selected.profile.apiKeyEnv ?? 'NATLANG_API_KEY']) };
+      apiKey: Boolean(process.env[selected.profile.apiKeyEnv ?? 'NATLANG_API_KEY']), target: targetReport };
     output(report, json); return report.ok ? 0 : 1;
   }
   throw new Error('unknown command; run natlang --help');

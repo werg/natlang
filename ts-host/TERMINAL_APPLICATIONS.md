@@ -18,7 +18,7 @@ plan or interpret process output.
 
 ## Components
 
-Import the public API from `@natlang/typescript-host/terminal` or the package
+Import the public API from `@natlang/node/terminal` or the package
 root:
 
 - `TerminalNatlangApplication` runs a serial reducer/view lifecycle over any
@@ -42,7 +42,7 @@ root:
 
 ```ts
 import { NatlangHost, TerminalNatlangApplication, TerminalSessionStore,
-  runTerminalShell } from '@natlang/typescript-host';
+  runTerminalShell } from '@natlang/node';
 
 const native = { jobs, drainEvents: () => jobs.drainEvents() };
 const host = new NatlangHost({ host: native, mode: 'retained' });
@@ -116,6 +116,20 @@ remain separate native libraries. This keeps their binary/process authority out
 of the core framework while allowing natlang to compose them.
 
 ## Running the semantic terminal
+
+The native package works outside the source checkout:
+
+```bash
+natlang package pack packages/semantic-terminal.natlang.json --root . --out semantic-terminal.nlpkg
+natlang package install semantic-terminal.nlpkg
+natlang run @natlang/semantic-terminal@0.1.0#terminal --workspace .
+```
+
+See [native packages and executables](../NATIVE_PACKAGES.md) for manifests,
+model profiles, store semantics, and the executable adapter contract.
+
+For direct checkout development, build the TypeScript host and point the entry
+module at an already-running compatible model endpoint.
 
 Build the TypeScript host, then point the CLI at an already-running compatible
 model endpoint:

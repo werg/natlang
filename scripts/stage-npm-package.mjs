@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,15 +18,16 @@ if (kind === 'node') {
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
 } else {
   cpSync(join(root, 'ts-host', 'dist', 'browser'), destination, { recursive: true });
+  for (const name of readdirSync(destination).filter(name => name.endsWith('.js') &&
+      !['natlang.js', 'wllama-compat.js'].includes(name))) rmSync(join(destination, name));
   // The public declarations refer to shared interpreter declaration files.
   const nativeSource = join(root, 'ts-host', 'dist', 'native'), nativeDestination = join(destination, 'native');
   mkdirSync(nativeDestination, { recursive: true });
-  for (const name of ['agent.d.ts', 'codebase.d.ts', 'evaluator.d.ts', 'runtime.d.ts', 'scenario.d.ts',
-    'source.d.ts', 'types.d.ts', 'values.d.ts', 'workspace.d.ts'])
+  for (const name of readdirSync(nativeSource).filter(name => name.endsWith('.d.ts')))
     cpSync(join(nativeSource, name), join(nativeDestination, name));
   for (const name of ['contracts.d.ts']) cpSync(join(root, 'ts-host', 'dist', name), join(destination, name));
   // Rebase declaration paths because browser files now live at package dist root.
-  for (const name of ['index.d.ts', 'host.d.ts']) {
+  for (const name of readdirSync(destination).filter(name => name.endsWith('.d.ts'))) {
     const path = join(destination, name);
     writeFileSync(path, readFileSync(path, 'utf8').replaceAll("'../native/", "'./native/")
       .replaceAll("'../contracts.js'", "'./contracts.js'"));

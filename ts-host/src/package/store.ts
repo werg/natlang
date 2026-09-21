@@ -1,7 +1,8 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readdirSync,
+  renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { canonicalJson, parsePackageArchive, readPackageArchive, type NatlangPackageArchive } from './archive.js';
+import { canonicalJson, parsePackageArchive, readPackageArchive, sha256, type NatlangPackageArchive } from './archive.js';
 
 export type InstalledPackage = { name: string; version: string; digest: string; root: string };
 
@@ -48,6 +49,12 @@ export function defaultNatlangStateDirectory(environment: NodeJS.ProcessEnv = pr
   if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang', 'state');
   if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'natlang', 'state');
   return join(environment.XDG_STATE_HOME ?? join(homedir(), '.local', 'state'), 'natlang');
+}
+export function defaultNatlangCacheDirectory(environment: NodeJS.ProcessEnv = process.env): string {
+  if (environment.NATLANG_CACHE_HOME) return resolve(environment.NATLANG_CACHE_HOME);
+  if (platform() === 'win32') return join(environment.LOCALAPPDATA ?? homedir(), 'natlang', 'cache');
+  if (platform() === 'darwin') return join(homedir(), 'Library', 'Caches', 'natlang');
+  return join(environment.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'natlang');
 }
 
 function encodedName(name: string): string { return encodeURIComponent(name); }
@@ -120,7 +127,12 @@ export class NatlangPackageStore {
     const temporaryRef = `${ref}.${process.pid}.tmp`;
     writeFileSync(temporaryRef, canonicalJson({ name: archive.manifest.name, version: archive.manifest.version,
       digest: archive.digest }) + '\n');
-    renameSync(temporaryRef, ref);
+    try { linkSync(temporaryRef, ref); }
+    catch (error) {
+      if (!existsSync(ref)) throw error;
+      const current = JSON.parse(readFileSync(ref, 'utf8')) as { digest?: string };
+      if (current.digest !== archive.digest) throw new Error(`${archive.manifest.name}@${archive.manifest.version} was concurrently bound to another digest`);
+    } finally { unlinkSync(temporaryRef); }
     return this.resolve(`${archive.manifest.name}@${archive.manifest.version}`);
   }
 
@@ -136,6 +148,12 @@ export class NatlangPackageStore {
     const archive = readPackageArchive(join(root, 'archive.json'));
     if (archive.manifest.name !== name || archive.manifest.version !== version || archive.digest !== value.digest)
       throw new Error(`corrupt package reference: ${specifier}`);
+    for (const file of archive.files) {
+      const path = join(root, 'files', ...file.path.split('/'));
+      const status = lstatSync(path);
+      if (!status.isFile() || status.isSymbolicLink() || status.size !== file.size || sha256(readFileSync(path)) !== file.sha256)
+        throw new Error(`installed package content changed: ${file.path}`);
+    }
     return { name, version, digest: value.digest, root: join(root, 'files') };
   }
 

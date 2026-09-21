@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "The browser and WebGPU runtime for native natlang applications.",
   "type": "module",
-  "scripts": { "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs browser" },
+  "scripts": { "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs browser && node ../../scripts/check-staged-package.mjs dist" },
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/natlang.js" } },
   "files": ["dist", "README.md"]
 }

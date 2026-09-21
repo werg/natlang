@@ -21,5 +21,5 @@
       "commands": ["git", "npm", "python3", "rg"]
     }
   },
-  "engines": { "natlang": ">=0.1.0", "node": ">=22.13" }
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

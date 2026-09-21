@@ -5,7 +5,7 @@
 Use `BrowserNatlangClient` once per owned model lifecycle. Load the current published catalog via `loadDefaultModel()` or specify an explicit GGUF and matching tool template. Do not hard-code a historical checkpoint merely because a README example names it. Browser weights may need to be supplied separately from source checkout/package.
 
 ```ts
-import { BrowserNatlangClient, BrowserNatlangApplication } from '@natlang/typescript-host/browser';
+import { BrowserNatlangClient, BrowserNatlangApplication } from '@natlang/browser';
 
 // files contains types.ts, reduce.nl, view.nl and their lexical helpers.
 export async function mountApplication({ files, initialState, revision, journal, renderer, host }) {

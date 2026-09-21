@@ -27,7 +27,7 @@ uses:
 ---
 ```
 
-`uses` paths are relative to the source file; inspect the target layout before choosing one. In supplied definition graphs, `uses` targets are definition names instead of filesystem paths. Use aliases with legal identifiers. Do not assume a package manager or dependency resolver downloads missing links.
+`uses` paths are relative to the source file; inspect the target layout before choosing one. In supplied definition graphs, `uses` targets are definition names instead of filesystem paths. Use aliases with legal identifiers. Native packages resolve and install before a run; `uses` never downloads a missing source while a lambda is executing.
 
 A crisp file uses `/*---` through `---*/` frontmatter followed by a function body. Inputs are `args`, the body returns its value with `return`. Inline `run_code` instead returns its final expression. Exact portable JS bodies can omit `engine` for the compatibility loader behavior; select `engine: typescript-host` when using the native TS host. Python's default evaluator is `quickjs-isolated`; additional executor names exist only when the embedding registers them. Inline eval must supply the offered engine when the current schema requires it.
 

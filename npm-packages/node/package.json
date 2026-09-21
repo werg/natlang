@@ -4,7 +4,7 @@
   "description": "The Node.js host, runtime, terminal framework, and native package APIs for natlang.",
   "type": "module",
   "engines": { "node": ">=22.13" },
-  "scripts": { "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs node" },
+  "scripts": { "prepack": "npm --prefix ../../ts-host run build && node ../../scripts/stage-npm-package.mjs node && node ../../scripts/check-staged-package.mjs dist" },
   "dependencies": { "@noble/hashes": "^2.4.0", "typescript": "^5.9.3", "yaml": "^2.9.1" },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },

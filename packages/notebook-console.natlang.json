@@ -3,5 +3,5 @@
   "description": "A semantic notebook runner with explicit SQLite and TypeScript cells.",
   "include": ["applications/package_targets/notebook_console.mjs", "applications/package_targets/terminal_helpers.mjs", "applications/notebook.mjs", "codebases/notebook", "codebases/notebook_console"],
   "targets": { "notebook": { "kind": "terminal", "entry": "applications/package_targets/notebook_console.mjs", "reducer": "codebases/notebook_console/reduce.nl", "view": "codebases/notebook_console/view.ts", "authority": ["filesystem:notebook", "sqlite:memory", "typescript-host:evaluate"], "description": "Run and query a dependency aware notebook." } },
-  "engines": { "natlang": ">=0.1.0", "node": ">=22.13" }
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

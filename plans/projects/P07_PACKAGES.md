@@ -1,9 +1,12 @@
 # P07 — Natlang package manager
 
-Status: offline resolver and atomic installer implemented in
+Status: native archive, immutable store, executable targets and offline
+dependency installation implemented in [`ts-host/src/package`](../../ts-host/src/package),
+with the CLI and distribution contract in
+[`NATIVE_PACKAGES.md`](../../NATIVE_PACKAGES.md). The definition-level resolver is implemented in
 [`codebases/packages`](../../codebases/packages/README.md) and
 [`applications/package_registry.mjs`](../../applications/package_registry.mjs).
-Upgrade planning, archive/remote sources and live-model choice remain open.
+Semantic upgrade planning and a remote registry transport remain open.
 [Shared capabilities](README.md).
 
 ## Natlang prerequisites
@@ -30,15 +33,17 @@ Dependency graph traversal uses crisp worklists or bounded natlang combinators. 
 
 ## Delivery and checks
 
-The first implementation pins transitive package content, checks engine
-closure and source definitions, and publishes an immutable bundle by an atomic
-symlink creation. A loaded bundle reconstructs a checked source workspace and
-can execute the exported natlang function. Integration tests cover two root
+The definition-level implementation pins transitive package content, checks engine
+closure and source definitions, and publishes a checked source bundle. The
+native artifact layer packages real files and binary assets, verifies per-file
+and whole-archive SHA-256 identities, publishes portable JSON references into a
+content-addressed store, checks offline dependency ranges, and launches declared
+targets through a small host adapter contract. Integration tests cover two root
 versions, a transitive dependency, conflicts, cycles, missing engine, tampered
 lock, path traversal, existing install and modified installed content. The
-model chooses among exact solver results; it cannot alter their pins. Current
-constraint syntax is exact, wildcard and caret, rather than an implied full
-package-registry grammar.
+model chooses among exact solver results; it cannot alter their pins. Native
+constraint syntax is exact, wildcard, caret, tilde and lower bounds. Registry
+fetching is separate from the package and runtime contract.
 
 1. Package two existing helper libraries and resolve/install from an offline index.
 2. Reconstruct the same checked codebase from the lock in another directory/in-memory bundle. Gate: identical exported definitions and compatible engine closure.

@@ -16,10 +16,10 @@ Build `ts-host` with `npm ci && npm run build`. A web app needs the browser entr
 | `wllama-compat.js` | Safari/Firefox compatibility worker |
 | `wllama-compat.wasm` | Compatibility backend |
 
-When using the package export `@natlang/typescript-host/browser`, copy the three Wllama assets into your public directory and pass their deployed URLs to the client. This avoids assumptions about where a bundler emits JavaScript. Serve WASM with `application/wasm`. Use HTTPS in production or localhost during development. Cross-origin isolation headers (COOP/COEP) enable multi-threaded WASM CPU inference; the client chooses one CPU thread when those headers are absent. Serve GGUF downloads from the same origin when possible and support byte ranges for large files. Put the model's official tool-call template at a reachable URL or pass its text as `chatTemplate`.
+When using `@natlang/browser`, copy the three Wllama assets into your public directory and pass their deployed URLs to the client. This avoids assumptions about where a bundler emits JavaScript. Serve WASM with `application/wasm`. Use HTTPS in production or localhost during development. Cross-origin isolation headers (COOP/COEP) enable multi-threaded WASM CPU inference; the client chooses one CPU thread when those headers are absent. Serve GGUF downloads from the same origin when possible and support byte ranges for large files. Put the model's official tool-call template at a reachable URL or pass its text as `chatTemplate`.
 
 ```ts
-import { BrowserNatlangClient } from '@natlang/typescript-host/browser';
+import { BrowserNatlangClient } from '@natlang/browser';
 
 const appState = { count: 4 };
 const client = new BrowserNatlangClient({

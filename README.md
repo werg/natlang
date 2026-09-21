@@ -46,6 +46,7 @@ can copy them from the checkout. See the [installation and maintenance guide](sk
 
 | File | Contents |
 |------|----------|
+| [Native packages and executables](NATIVE_PACKAGES.md) | `.nlpkg` archives, immutable installs, executable targets, model profiles, and npm distributions |
 | `PLAN.md` | Thesis, language design, tool surface, runtime, data generation, phases, status and findings |
 | `plans/AMBITIOUS_ARCHITECTURE.md`, `plans/EMBEDDING_REFACTOR.md`, `plans/EXECUTION_INTERFACES.md`, `plans/AMBITIOUS_PROJECTS.md`, `plans/AMBITIOUS_ROADMAP.md` | Minimal-core architecture, embedding refactors, stream/evaluator/type/seed/trace interfaces, 20 application families and teacher/student training loop |
 | [Infrastructure implementation plan](plans/INFRASTRUCTURE_IMPLEMENTATION.md) | Prioritised cross-project infrastructure, 17 proposed patches, code touchpoints and acceptance gates |

@@ -8,6 +8,12 @@ multi-file example for both native hosts.
 
 ## Install and build
 
+Applications install `@natlang/node`; the `natlang` executable is distributed
+as `@natlang/cli`. Browser applications install `@natlang/browser`, keeping its
+model worker and WASM assets out of Node CLI installations. The historical
+`@natlang/typescript-host` name remains the monorepo build package. See
+[native packages and executables](../NATIVE_PACKAGES.md).
+
 From this repository:
 
 ```bash
@@ -33,7 +39,7 @@ The native run request can include `review` with a reviewer driver, confidence t
 ## Run a program
 
 ```ts
-import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/typescript-host';
+import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/node';
 
 const desktop = new DesktopBindings();
 const environment = new TypeScriptEnvironment({ mode: 'retained', host: desktop });
@@ -83,10 +89,10 @@ For new web applications, use the [reusable browser client](BROWSER_CLIENT.md) t
 
 The [interactive playground](playground/README.md) adds a browser-local multi-file editor, revisioned runs and trace inspection, reviewed cases, and a localhost training workbench. Start it with `npm run playground` after `npm ci`. Its case adapter sends exactly admitted natural-language leaf traces to the shared program IR and records explicit rejects for richer cases.
 
-`@natlang/typescript-host/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights can be cached in browser storage. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.
+`@natlang/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights can be cached in browser storage. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.
 
 ```ts
-import { BrowserNatlangHost, BrowserLocalModel } from '@natlang/typescript-host/browser';
+import { BrowserNatlangHost, BrowserLocalModel } from '@natlang/browser';
 
 const application = { count: 2 };
 const model = new BrowserLocalModel();

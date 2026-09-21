@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
   satisfiesVersion, writePackageArchive } from '../dist/index.js';
@@ -43,6 +44,13 @@ test('immutable store installs, resolves, lists, and rejects version rebinding',
   assert.throws(() => store.install(createPackageArchive(manifest, root)), /already bound/);
 });
 
+test('store resolution detects changed installed content', () => {
+  const { root, manifest } = fixture(), store = new NatlangPackageStore(join(root, 'store'));
+  const installed = store.install(createPackageArchive(manifest, root));
+  const path = join(installed.root, 'program', 'main.nl'); chmodSync(path, 0o644); writeFileSync(path, 'tampered');
+  assert.throws(() => store.resolve('example@1.2.3'), /content changed/);
+});
+
 test('dependency ranges are checked before a package is installed', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-dependencies-'));
   writeFileSync(join(root, 'main.nl'), 'return null');
@@ -54,4 +62,22 @@ test('dependency ranges are checked before a package is installed', () => {
   assert.equal(store.resolve('library@2.3.0').version, '2.3.0');
   assert.equal(satisfiesVersion('0.2.4', '^0.2.1'), true);
   assert.equal(satisfiesVersion('0.3.0', '^0.2.1'), false);
+});
+
+test('CLI packs, installs, and runs a target from the content store', () => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
+  writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
+    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',')); } };
+  }`);
+  writeFileSync(join(root, 'natlang.json'), JSON.stringify({ schema: 'natlang.package/v1',
+    name: 'cli-fixture', version: '1.0.0', include: ['target.mjs'], targets: {
+      hello: { kind: 'command', entry: 'target.mjs' },
+    } }));
+  const archive = join(root, 'fixture.nlpkg'), store = join(root, 'store');
+  const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
+  execFileSync(process.execPath, [cli, 'package', 'pack', join(root, 'natlang.json'), '--out', archive]);
+  execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
+  const result = execFileSync(process.execPath, [cli, 'run', 'cli-fixture@1.0.0#hello',
+    '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
+  assert.equal(result, 'cli-fixture:one,two');
 });

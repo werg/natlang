@@ -51,6 +51,8 @@ function stringMap(value: unknown, label: string): Record<string, string> | unde
 export function parsePackageManifest(value: unknown): NatlangPackageManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('package manifest must be an object');
   const raw = value as Record<string, unknown>;
+  const known = new Set(['schema', 'name', 'version', 'description', 'include', 'targets', 'exports', 'dependencies', 'engines']);
+  for (const key of Object.keys(raw)) if (!known.has(key)) throw new TypeError(`unknown package manifest field: ${key}`);
   if (raw.schema !== PACKAGE_SCHEMA) throw new TypeError(`package schema must be ${PACKAGE_SCHEMA}`);
   if (typeof raw.name !== 'string' || !PACKAGE_NAME.test(raw.name)) throw new TypeError('invalid package name');
   if (typeof raw.version !== 'string' || !VERSION.test(raw.version)) throw new TypeError('version must be semantic x.y.z');
@@ -63,7 +65,11 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
       if (!/^[a-z0-9][a-z0-9._-]*$/.test(name) || !item || typeof item !== 'object' || Array.isArray(item))
         throw new TypeError(`invalid target ${name}`);
       const target = item as Record<string, unknown>;
+      const targetKnown = new Set(['kind', 'entry', 'export', 'reducer', 'view', 'description', 'authority', 'commands']);
+      for (const key of Object.keys(target)) if (!targetKnown.has(key)) throw new TypeError(`unknown field in target ${name}: ${key}`);
       if (target.kind !== 'terminal' && target.kind !== 'command') throw new TypeError(`target ${name} has unsupported kind`);
+      if (target.kind === 'terminal' && (target.reducer === undefined || target.view === undefined))
+        throw new TypeError(`terminal target ${name} needs reducer and view paths`);
       const authority = target.authority === undefined ? undefined : requireStrings(target.authority, `target ${name} authority`);
       const commands = target.commands === undefined ? undefined : requireStrings(target.commands, `target ${name} commands`);
       targets[name] = { kind: target.kind, entry: packagePath(target.entry, `target ${name} entry`),
