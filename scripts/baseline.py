@@ -18,11 +18,13 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
 ap.add_argument("--decode", default="native", choices=("native", "server"),
                 help="native: our grammar over the model's native call text; server: the server's tool calling")
-ap.add_argument("--require-call", action="store_true", help="native only: no reply until a call was made")
+ap.add_argument("--require-call", action="store_true", help="require a tool call on every model turn")
 ap.add_argument("--verbose", action="store_true", help="print every action as it happens")
 ap.add_argument("--max-episodes", type=int, default=64)
 ap.add_argument("--server", default="http://127.0.0.1:8080")
 ap.add_argument("--thinking", type=int, default=None, help="thinking budget in tokens (reasoning teachers)")
+ap.add_argument("--reasoning-effort", choices=("low", "medium", "high"),
+                help="reasoning effort passed through the model's chat template")
 ap.add_argument("--timeout", type=float, default=600)
 ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--system-file", type=Path, default=None, help="system prompt for the tool surface (per-model opt-in)")
@@ -36,16 +38,29 @@ ap.add_argument("--state-view", action="store_true", help="experimental expanded
 ap.add_argument("--review-scope", choices=["values", "actions"], default="values")
 ap.add_argument("--withdrawal-policy", choices=["caller", "retry"], default="caller")
 ap.add_argument("--write-constraints", choices=("typed", "runtime"), default="runtime")
+ap.add_argument("--cache-stable-tools", action="store_true",
+                help="present volatile runtime constraints as stable base schemas")
+ap.add_argument("--segment-turns", type=int, default=12)
+ap.add_argument("--segment-messages", type=int, default=24)
 ap.add_argument("ids", nargs="*")
 a = ap.parse_args()
 a.validation_feedback = a.validation_feedback or "caller"
 root = Path(__file__).resolve().parent.parent
 files = sorted((root / "conformance" / "programs").glob("*.yaml"))
 files = [f for f in files if not a.ids or any(f.stem.startswith(i) for i in a.ids)]
-extra = {} if a.thinking is None else {"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20}
-dec = (NativeCallDecoder(a.server, timeout=a.timeout, write_constraints=a.write_constraints) if a.decode == "native"
+extra = {}
+if a.thinking is not None:
+    extra.update({"thinking_budget_tokens": a.thinking, "top_p": 0.95, "top_k": 20})
+if a.reasoning_effort:
+    extra.setdefault("chat_template_kwargs", {})["reasoning_effort"] = a.reasoning_effort
+if a.require_call:
+    extra["tool_choice"] = "required"
+dec = (NativeCallDecoder(a.server, timeout=a.timeout, write_constraints=a.write_constraints,
+                         cache_stable_tools=a.cache_stable_tools,
+                         allow_reply=not a.require_call) if a.decode == "native"
        else LlamaServerDecoder(a.server, timeout=a.timeout, chat_extra=extra,
-                               tool_aliases=dict(x.split("=", 1) for x in a.alias)))
+                               tool_aliases=dict(x.split("=", 1) for x in a.alias),
+                               cache_stable_tools=a.cache_stable_tools))
 from natlang.checks import grade, make_judge
 judge = None if a.judge_server == "none" else make_judge(
     LlamaServerDecoder(a.judge_server, timeout=a.timeout, chat_extra={"chat_template_kwargs": {"enable_thinking": False}}))
@@ -65,6 +80,7 @@ for f in files:
         print(f"  > {f.stem}", flush=True)
     make = lambda lam: ToolAgent(dec, temperature=a.temperature, log=log,
                                  validation_feedback=a.validation_feedback, careful_threshold=a.careful_threshold, surface=ToolSurface(state_view=a.state_view), review_scope=a.review_scope, withdrawal_policy=a.withdrawal_policy, review_prompt=a.review_prompt,
+                                 segment_turns=a.segment_turns, segment_messages=a.segment_messages,
                                  **({"system_prompt": a.system_file.read_text()} if a.system_file else {}))
     rt = Runtime(make, max_episodes=a.max_episodes)
     t = time.time()
@@ -105,6 +121,9 @@ result_path.write_text(json.dumps({"model": a.model_label, "server": a.server, "
                                   "decode": a.decode, "marks": os.environ.get("NATLANG_MARKS", "1"),
                                   "validation_feedback": a.validation_feedback, "careful_threshold": a.careful_threshold, "state_view": a.state_view, "review_scope": a.review_scope, "review_prompt": a.review_prompt, "withdrawal_policy": a.withdrawal_policy,
                                   "write_constraints": a.write_constraints,
+                                  "cache_stable_tools": a.cache_stable_tools,
+                                  "segment_turns": a.segment_turns, "segment_messages": a.segment_messages,
+                                  "reasoning_effort": a.reasoning_effort,
                                   "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                                   "counts": counts, "programs": records, "usage": dec.usage}, indent=2) + "\n")
 print(f"results: {result_path}")

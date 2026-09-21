@@ -180,8 +180,39 @@ def test_json_text_transport_does_not_mutate_tools_or_unwrap_values(monkeypatch)
         captured.append(json.loads(req.data));return Response()
     monkeypatch.setattr(urllib.request,'urlopen',open_)
     turn=LlamaServerDecoder(json_text_values=True).chat([],tools,temperature=0)
+    assert captured[0]['cache_prompt'] is True
     wire=next(t for t in captured[0]['tools'] if t['function']['name']=='write')
     assert wire['function']['parameters']['properties']['value']['type']=='string'
     assert json.dumps(tools)==before
     assert turn.calls[0][1]['value']=='{"size":7}'
     assert session.apply(*turn.calls[0]).kind=='ok' and root.ret=={'size':7}
+
+
+def test_cache_stable_tool_projection_removes_changing_runtime_enums():
+    import copy
+    from natlang.decoder import LlamaServerDecoder
+    base = [
+        {'type':'function','function':{'name':'read','description':'Read',
+            'parameters':{'type':'object','properties':{'path':{'enum':['args/a']}},
+                          'required':['path'],'additionalProperties':False}}},
+        {'type':'function','function':{'name':'write','description':'Write',
+            'parameters':{'type':'object','properties':{
+                'path':{'type':'string'},'type':{'type':'string'},'value':{},
+                'done':{'enum':[1,3]}},'required':['path','type'],
+                'anyOf':[{'required':['value']},{'properties':{'type':{'enum':['Function<f>']}},
+                                                   'required':['type']}],
+                'additionalProperties':False}}},
+        {'type':'function','function':{'name':'call','description':'Call',
+            'parameters':{'type':'object','properties':{
+                'function':{'enum':['f']},'inputs':{'type':'object','properties':{'x':{'type':'string'}}},
+                'values':{'type':'object','properties':{'x':{'type':'number'}}},
+                'done':{'enum':[1,3]}},'required':['function'],'additionalProperties':False}}},
+    ]
+    changed = copy.deepcopy(base)
+    changed[0]['function']['parameters']['properties']['path']['enum'] = ['let/b']
+    changed[1]['function']['parameters']['properties']['done']['enum'] = [5]
+    changed[2]['function']['parameters']['properties']['function']['enum'] = ['g']
+    changed[2]['function']['parameters']['properties']['inputs']['properties'] = {'y':{'type':'string'}}
+    dec = LlamaServerDecoder(cache_stable_tools=True, tool_aliases={'call':'call_function'})
+    assert dec.presented_tools(base) == dec.presented_tools(changed)
+    assert base[0]['function']['parameters']['properties']['path'] == {'enum':['args/a']}

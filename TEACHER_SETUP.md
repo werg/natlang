@@ -11,6 +11,17 @@ prompt/completion token usage and the offered tool-schema size. Inspect these
 before increasing context again: a large context should support long work, not
 hide repetitive prompts or oversized tool menus.
 
+The coverage driver uses two workers, cache-stable tool schemas, and 12-turn / 24-message
+continuation segments. The runtime still checks the exact current schemas; only the
+model-facing path, line-number, and function-name hints are stabilized so llama-server
+can reuse their common prompt prefix. The larger segment is deliberate: six-turn
+segments cut ordinary nested functions and caused the teacher to reconstruct an
+already-started repeat loop after continuation. The 12-turn setting completed the
+same dependency-planner case correctly in 5 minutes 19 seconds with 82% prompt-cache
+reuse; the previous run remained unfinished after 46 minutes. Continuations remain
+enabled for genuinely long work, and checkpoint notes identify an unfinished loop's
+accumulator and completed rounds.
+
 ## Keep the execution path simple
 
 - Use `natlang/prompts/tools_teacher_compact.md`, temperature 0, low reasoning

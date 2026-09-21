@@ -23,6 +23,7 @@ const newLocal = { type: 'string', 'x-natlang': 'new-local',
   description: 'let/<name>: a new local, created by this call' };
 const CHECKPOINT_REQUEST = 'Before continuing this same task in a fresh conversation, leave yourself a concise working note. ' +
   'State only unresolved decisions or facts that are not obvious from the program and workspace. ' +
+  'For an unfinished loop, name its current accumulator path and rounds completed; never restart from its initial value. ' +
   'The workspace, line marks, and effects will be shown again; do not restate them. ' +
   'Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters.';
 
@@ -465,8 +466,8 @@ export class NativeToolAgent {
     };
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
-      const rollover = this.options.segmentTurns === undefined ? 6 : this.options.segmentTurns;
-      const itemLimit = this.options.segmentMessages === undefined ? 12 : this.options.segmentMessages;
+      const rollover = this.options.segmentTurns === undefined ? 12 : this.options.segmentTurns;
+      const itemLimit = this.options.segmentMessages === undefined ? 24 : this.options.segmentMessages;
       if (((rollover !== null && segmentTurns >= rollover) ||
            (itemLimit !== null && messages.length >= itemLimit)) && checkpointReady &&
           (this.missing(session) || this.openMarks(session).length)) {

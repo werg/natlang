@@ -7,6 +7,8 @@ SERVER="${TEACHER_SERVER:-http://127.0.0.1:8081}"
 MODEL="${TEACHER_MODEL:-Ternary-Bonsai-2-27B-PTQ1_0}"
 SEED="${TEACHER_SEED:-909}"
 WORKERS="${TEACHER_WORKERS:-2}"
+SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-12}"
+SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-24}"
 SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
 PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-balanced-s909-pass3.jobs}"
 PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage.ir.jsonl}"
@@ -49,6 +51,8 @@ while true; do
     "$SELECTION" "$PROGRAM_JOBS" "$PROGRAM_OUT" \
     --server "$SERVER" --model-id "$MODEL" --root-seed "$SEED" \
     --limit "$(wc -l < "$SELECTION")" --workers "$WORKERS" \
+    --segment-turns "$SEGMENT_TURNS" --segment-messages "$SEGMENT_MESSAGES" \
+    --cache-stable-tools \
     "${IMPORTS[@]}"
   node ts-host/scripts/collect-studio-teacher.mjs "$STUDIO_CASES" "$STUDIO_JOBS" \
     --server "$SERVER" --model "$MODEL" --seed "$SEED" --workers "$WORKERS"

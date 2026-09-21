@@ -107,14 +107,15 @@ mistakes, and counts budget exhaustion separately from deliberate failure.
 Results and limitations are in TRAINING.md. `serve.sh` caps its host prompt cache
 at 256 MiB; override with `NATLANG_CACHE_RAM` if needed.
 
-Teacher (Ternary Bonsai 2 27B on an 8 GB GPU; about 1 GB of host RAM):
+Teacher (Ternary Bonsai 2 27B on an 8 GB GPU; the two-worker launch is capped at 5 GB of host RAM):
 
 ```
 docker build -t natlang-prism-runtime -f docker/prism.Dockerfile docker
 # binaries: PrismML-Eng/llama.cpp release, CUDA 12.8 tarball, unpacked into vendor/prism/bin
 # model:    prism-ml/Ternary-Bonsai-2-27B-gguf  Ternary-Bonsai-2-27B-PTQ1_0.gguf  -> models/
 # template: prism-ml/Ternary-Bonsai-2-27B-mlx-2bit chat_template.jinja -> models/templates/Ternary-Bonsai-2-27B.jinja
-scripts/serve_bonsai.sh 8081 &          # stop: docker stop natlang-bonsai;  scripts/watch_bonsai.sh keeps it up
+scripts/serve_bonsai.sh 8081 32768 99 2 & # stop: docker stop natlang-bonsai; scripts/watch_bonsai.sh keeps it up
+scripts/run_teacher_generation.sh        # resumable coverage generation; rescans sources between waves
 .venv/bin/python scripts/baseline.py --decode server --server http://127.0.0.1:8081 --thinking 512 --temperature 0.6 \
     --system-file natlang/prompts/tools_delegate.md --alias call=call_function --verbose 23
 .venv/bin/python scripts/paraphrase.py --server http://127.0.0.1:8081     # paraphrases, kept only after a round trip

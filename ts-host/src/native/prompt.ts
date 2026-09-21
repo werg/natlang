@@ -21,6 +21,10 @@ A literal function argument uses \`values\`, while \`inputs\` always contains wo
 A function for every item of a list. Pseudocode: \`grades = for each a in answers: grade(a, key)\`
   [call(function="grade", to="let/grades", over="args/answers", inputs={"key": "args/key"})]
 
+A repeated state transition. Pseudocode: \`state = repeat step(initial), until finished(state), at most 16 rounds\`
+  [call(function="step", to="let/state", init="let/initial", until="finished", max=16)]
+The runtime carries each result into the next round. Do not unroll the rounds or restart from \`initial\`.
+
 Exact work that no function covers, such as counting or arithmetic:
   [run_code(code="args.words.filter(w => w.length > 5).length")]
   -> 7

@@ -205,7 +205,12 @@ class ToolSurface:
                 functions[f"let/{name}"] = lam.fn_copies[name]
         literal_shapes = {}
         for f in functions.values():
-            literal_env = TypeEnv({k: parse_type(v) for k, v in f.types.items()})
+            # Inline functions can refer to types supplied by the enclosing
+            # lambda even when their serialized FunctionDef does not repeat
+            # those declarations. Keep the live lexical environment as the
+            # parent when deriving literal argument schemas.
+            literal_env = session.env.child({k: parse_type(v) for k, v in f.types.items()
+                                             if not _declared(session.env, k)})
             for raw_name, type_text in f.args.items():
                 name = raw_name.rstrip("?")
                 shape = schema_of(parse_type(type_text), literal_env)
@@ -221,7 +226,9 @@ class ToolSurface:
             in_props = {n: {"type": "string", "description": f"workspace path to {t}"}
                         for n, t in names.items()}
             inputs_schema = {"type": "object", "properties": in_props, "required": [], "additionalProperties": False}
-            value_props = {n: schema_of(parse_type(t), TypeEnv({k: parse_type(v) for k, v in f.types.items()}))
+            value_env = session.env.child({k: parse_type(v) for k, v in f.types.items()
+                                           if not _declared(session.env, k)})
+            value_props = {n: schema_of(parse_type(t), value_env)
                            for n, t in names.items()}
             values_schema = {"type": "object", "properties": value_props, "required": [],
                              "additionalProperties": False}

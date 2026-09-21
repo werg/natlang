@@ -8,7 +8,11 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${1:-8081}"; CTX="${2:-32768}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-1}}"
-if [ "$SLOTS" -gt 1 ]; then DEFAULT_CACHE_RAM=$((SLOTS * 768)); else DEFAULT_CACHE_RAM=1024; fi
+# A long Bonsai context occupies roughly 0.6-0.9 GiB in the host prompt cache.
+# Agent programs alternate between root and nested invocations, so one entry
+# per slot thrashes even with only two workers.  Keep about two contexts per
+# slot; BONSAI_CACHE_RAM remains available for memory-constrained machines.
+if [ "$SLOTS" -gt 1 ]; then DEFAULT_CACHE_RAM=$((SLOTS * 1536)); else DEFAULT_CACHE_RAM=1536; fi
 CACHE_RAM="${BONSAI_CACHE_RAM:-$DEFAULT_CACHE_RAM}"
 MODEL="Ternary-Bonsai-2-27B-PTQ1_0.gguf"
 [ -f "$ROOT/models/$MODEL" ] || { echo "missing models/$MODEL"; exit 1; }

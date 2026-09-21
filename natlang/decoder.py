@@ -87,6 +87,47 @@ def _compact_write_alternatives(alternatives: list) -> list:
     return list(grouped.values())
 
 
+def _cache_stable_tools(tools: list) -> list:
+    """Remove state-dependent schema hints while preserving the tool contract.
+
+    Bonsai's chat template renders tools before every other prompt token.  Path
+    enums and line-number enums change after almost every action, which makes a
+    growing conversation look like an unrelated prompt to the server cache.
+    The runtime already validates every submitted action, so these fields can
+    be presented as their underlying JSON types.  Function signatures remain
+    visible in the user request and workspace state.
+    """
+    tools = deepcopy(tools)
+    by_name = {tool["function"]["name"]: tool for tool in tools}
+
+    def prop(name: str, field: str, schema: dict) -> None:
+        tool = by_name.get(name)
+        if tool:
+            tool["function"]["parameters"].get("properties", {})[field] = schema
+
+    prop("read", "path", {"type": "string", "description": "workspace path to read"})
+    prop("edit", "path", {"type": "string", "description": "workspace text path to edit"})
+    prop("write", "done", {"anyOf": [{"type": "integer"}, {"type": "array",
+         "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}]})
+    write = by_name.get("write")
+    if write:
+        params = write["function"]["parameters"]
+        if "anyOf" in params:
+            params["anyOf"] = [{"required": ["value"]}, {"required": ["source"]},
+                               {"required": ["type"]}]
+    call = by_name.get("call") or by_name.get("call_function")
+    if call:
+        params = call["function"]["parameters"]
+        properties = params.get("properties", {})
+        properties["function"] = {"type": "string"}
+        properties["inputs"] = {"type": "object", "additionalProperties": {"type": "string"}}
+        properties["values"] = {"type": "object", "additionalProperties": True}
+        if "done" in properties:
+            properties["done"] = {"anyOf": [{"type": "integer"}, {"type": "array",
+                "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}]}
+    return tools
+
+
 class LlamaServerDecoder:
     """llama.cpp `llama-server`, native /completion endpoint.
 
@@ -98,7 +139,8 @@ class LlamaServerDecoder:
     def __init__(self, base_url: str = "http://127.0.0.1:8080", slot: Optional[int] = None,
                  timeout: Optional[float] = None,
                  chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None,
-                 json_text_values: bool = False, typed_alternatives: bool = False):
+                 json_text_values: bool = False, typed_alternatives: bool = False,
+                 cache_stable_tools: bool = False):
         if json_text_values and typed_alternatives:
             raise ValueError("typed alternatives and JSON-text values are different transports")
         self.base_url, self.slot, self.timeout = base_url.rstrip("/"), slot, timeout
@@ -106,12 +148,13 @@ class LlamaServerDecoder:
         self._request_deadline = ContextVar(f"decoder-deadline-{id(self)}", default=None)
         self.json_text_values = json_text_values
         self.typed_alternatives = typed_alternatives
+        self.cache_stable_tools = cache_stable_tools
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
         self.tool_aliases = tool_aliases or {}
         # extra fields for /v1/chat/completions, e.g. {"thinking_budget_tokens": 512, "top_p": 0.95, "top_k": 20}
         self.chat_extra = chat_extra or {}
-        self.usage = {"turns": 0, "completion_tokens": 0, "seconds": 0.0}
+        self.usage = {"turns": 0, "prompt_tokens": 0, "completion_tokens": 0, "seconds": 0.0}
 
     def request_timeout(self):
         deadline = self._request_deadline.get()
@@ -186,6 +229,8 @@ class LlamaServerDecoder:
         if self.tool_aliases:
             out_name = lambda n: self.tool_aliases.get(n, n)
             tools = [{**t, "function": {**t["function"], "name": out_name(t["function"]["name"])}} for t in tools]
+        if self.cache_stable_tools:
+            tools = _cache_stable_tools(tools)
         return tools, variant_names
 
     def presented_tools(self, tools: list) -> list:
@@ -206,6 +251,7 @@ class LlamaServerDecoder:
         tools, variant_names = self._chat_tools(tools)
         messages = self.presented_messages(messages)
         payload = {"messages": messages, "tools": tools, "tool_choice": "auto", "temperature": temperature,
+                   "cache_prompt": True,
                    "parallel_tool_calls": True}
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
@@ -228,7 +274,9 @@ class LlamaServerDecoder:
         msg = out["choices"][0]["message"]
         self.usage["turns"] += 1
         self.usage["seconds"] += time.time() - t0
-        tokens = (out.get("usage") or {}).get("completion_tokens", max_tokens or 0)
+        usage = out.get("usage") or {}
+        tokens = usage.get("completion_tokens", max_tokens or 0)
+        self.usage["prompt_tokens"] += usage.get("prompt_tokens") or 0
         self.usage["completion_tokens"] += tokens
         calls = []
         back = {v: k for k, v in self.tool_aliases.items()}
@@ -242,7 +290,7 @@ class LlamaServerDecoder:
                 args = {"__unparsed__": fn.get("arguments")}
             calls.append((name, args if isinstance(args, dict) else {"value": args}))
         return ChatTurn(calls, (msg.get("content") or "").strip(), msg.get("tool_calls") or [], tokens,
-                        prompt_tokens=(out.get("usage") or {}).get("prompt_tokens"),
+                        prompt_tokens=usage.get("prompt_tokens"),
                         raw_response=raw_response)
 
     def generate(self, prompt, *, grammar, max_tokens, temperature, seed, stop, n_probs=0) -> Generation:
@@ -262,6 +310,7 @@ class LlamaServerDecoder:
             out = json.loads(resp.read())
         tokens = out.get("tokens_predicted", max_tokens)
         self.usage["turns"] += 1
+        self.usage["prompt_tokens"] += out.get("tokens_evaluated") or 0
         self.usage["completion_tokens"] += tokens
         self.usage["seconds"] += time.monotonic() - started
         probs = []

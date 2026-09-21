@@ -21,6 +21,7 @@ FAILED = ("rejected", "refused", "error", "budget")
 CHECKPOINT_REQUEST = (
     "Before continuing this same task in a fresh conversation, leave yourself a concise working note. "
     "State only unresolved decisions or facts that are not obvious from the program and workspace. "
+    "For an unfinished loop, name its current accumulator path and rounds completed; never restart from its initial value. "
     "The workspace, line marks, and effects will be shown again; do not restate them. "
     "Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters."
 )
@@ -36,8 +37,8 @@ class ToolAgent:
                  proposals: Optional[list] = None, reviews: Optional[list] = None, review_order: str = "reason_first",
                  review_scope: str = "values", withdrawal_policy: str = "caller",
                  review_prompt: str = "baseline", teacher_turns: Optional[list] = None,
-                 segment_turns: Optional[int] = 6,
-                 segment_messages: Optional[int] = 12):
+                 segment_turns: Optional[int] = 12,
+                 segment_messages: Optional[int] = 24):
         if review_prompt not in ("baseline", "repeat_instructions", "checklist"):
             raise ValueError("unknown review prompt")
         self.review_prompt = review_prompt
@@ -153,6 +154,7 @@ class ToolAgent:
                     session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
                                         phase="start", purpose="checkpoint", turn=turns + 1,
                                         messages=len(checkpoint_messages))
+                    checkpoint_started = time.monotonic()
                     response = self.dec.chat(checkpoint_messages, [], temperature=temperature,
                                              seed=session.rt.options.seed.seed(
                                                  getattr(invocation, "path", ""),
@@ -160,6 +162,7 @@ class ToolAgent:
                                                  "checkpoint", turns), max_tokens=checkpoint_limit)
                     session.rt._observe("model_request", call_id=getattr(invocation, "call_id", None),
                                         phase="end", purpose="checkpoint", turn=turns + 1,
+                                        duration_ms=round((time.monotonic() - checkpoint_started) * 1000),
                                         prompt_tokens=getattr(response, "prompt_tokens", None),
                                         completion_tokens=getattr(response, "completion_tokens", None))
                     turns += 1

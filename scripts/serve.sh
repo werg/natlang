@@ -12,11 +12,18 @@ CACHE_RAM="${NATLANG_CACHE_RAM:-$((SLOTS * 256))}"
 [ -f "$ROOT/models/$MODEL" ] || { echo "missing models/$MODEL (see README)"; exit 1; }
 # The chat template embedded in LiquidAI's GGUF is a reduced one: it drops `tool_calls` from history
 # and has no tool-call tokens. If the official template is present, use it instead.
-TEMPLATE="$ROOT/models/templates/${MODEL%%-Q*}.jinja"
+MODEL_STEM="$(basename "${MODEL%%-Q*}")"
+TEMPLATE="$ROOT/models/templates/${MODEL_STEM}.jinja"
 EXTRA=()
 [ -f "$TEMPLATE" ] && EXTRA=(--jinja --chat-template-file "/models/templates/$(basename "$TEMPLATE")")
+DRAFT_MODEL="${NATLANG_DRAFT_MODEL:-}"
+DRAFT=()
+if [ -n "$DRAFT_MODEL" ]; then
+  [ -f "$ROOT/models/$DRAFT_MODEL" ] || { echo "missing models/$DRAFT_MODEL"; exit 1; }
+  DRAFT=(-md "/models/$DRAFT_MODEL" --spec-type draft-dspark --spec-draft-n-max 10 --spec-draft-n-min 0)
+fi
 docker rm -f natlang-llama >/dev/null 2>&1 || true
 exec docker run --rm --name natlang-llama --gpus all \
   -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" \
   ghcr.io/ggml-org/llama.cpp:server-cuda \
-  -m "/models/$MODEL" --host 0.0.0.0 --port 8080 --parallel "$SLOTS" -c "$CTX" -ngl 99 --cache-ram "$CACHE_RAM" --metrics --no-webui "${EXTRA[@]}"
+  -m "/models/$MODEL" --host 0.0.0.0 --port 8080 --parallel "$SLOTS" -c "$CTX" -ngl 99 --cache-ram "$CACHE_RAM" --metrics --no-webui "${DRAFT[@]}" "${EXTRA[@]}"

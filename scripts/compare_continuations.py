@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Small paired Bonsai probe; writes one audited result per invocation.
 
-Run each case with --segment-turns off and a small integer. This is a probe,
+Run each case with --segment-turns off or a turn/message pair. This is a probe,
 not a corpus collector, and never writes training data or reference values.
 """
 import argparse
@@ -46,6 +46,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", choices=("partial_record", "map_then_count"), required=True)
     parser.add_argument("--segment-turns", required=True, help="off or a positive integer")
+    parser.add_argument("--segment-messages", type=int,
+                        help="message boundary; defaults to twice --segment-turns")
+    parser.add_argument("--cache-stable-tools", action="store_true")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--server", default="http://127.0.0.1:8081")
     parser.add_argument("--seed", type=int, default=907)
@@ -55,6 +58,10 @@ def main():
     segment_turns = None if args.segment_turns == "off" else int(args.segment_turns)
     if segment_turns is not None and segment_turns < 1:
         parser.error("segment turns must be positive")
+    segment_messages = (None if segment_turns is None else
+                        (args.segment_messages if args.segment_messages is not None else segment_turns * 2))
+    if segment_messages is not None and segment_messages < 5:
+        parser.error("segment messages must be at least 5")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     root, expected = case(args.case)
     if args.case == "partial_record":
@@ -62,7 +69,8 @@ def main():
     decoder = LlamaServerDecoder(args.server,
         chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
-        tool_aliases={"call": "call_function"}, json_text_values=True)
+        tool_aliases={"call": "call_function"}, json_text_values=True,
+        cache_stable_tools=args.cache_stable_tools)
     captured = []
     recorder = TraceRecorder({"run_id": f"continuation-{args.case}-{args.segment_turns}",
                               "capture": "continuation-comparison"},
@@ -73,7 +81,7 @@ def main():
         outcome, value = Runtime(lambda lam: ToolAgent(
             decoder, system_prompt=PROMPT, temperature=0, validation_feedback="caller",
             segment_turns=segment_turns,
-            segment_messages=None if segment_turns is None else 12,
+            segment_messages=segment_messages,
             teacher_turns=captured, max_seconds=360),
             options=options, trace_sink=recorder).run_root(root)
         actual = dump(value) if outcome.kind == "done" else None
@@ -81,7 +89,8 @@ def main():
         checkpoints = [e for e in recorder.events if e["kind"] == "checkpoint"]
         actions = [e for e in recorder.events if e["kind"] == "action"]
         summary = {"case": args.case, "segment_turns": segment_turns,
-                   "segment_messages": None if segment_turns is None else 12, "seed": args.seed,
+                   "segment_messages": segment_messages, "seed": args.seed,
+                   "cache_stable_tools": args.cache_stable_tools,
                    "probe_deadline_seconds": 360,
                    "status": outcome.kind, "detail": outcome.detail, "expected": expected,
                    "actual": actual, "correct": outcome.kind == "done" and actual == expected,

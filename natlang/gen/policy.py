@@ -43,7 +43,7 @@ def native_text(calls) -> str:
 class ReferenceAgent:
     def __init__(self, plan, sink: list, *, surface: Optional[ToolSurface] = None, check_grammar: bool = True,
                  recovery_rng=None, recovery_rate: float = 0, system_prompt: str = TOOLS_PROMPT,
-                 segment_turns: Optional[int] = 6, segment_messages: Optional[int] = 12):
+                 segment_turns: Optional[int] = 12, segment_messages: Optional[int] = 24):
         self.system_prompt = system_prompt
         self.plan, self.sink, self.s, self.check = plan, sink, surface or ToolSurface(), check_grammar
         self.recovery_rng = recovery_rng or random.Random(0)

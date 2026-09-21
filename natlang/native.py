@@ -17,7 +17,7 @@ import math
 import json
 from typing import Optional
 
-from .decoder import ChatTurn, LlamaServerDecoder
+from .decoder import ChatTurn, LlamaServerDecoder, _cache_stable_tools
 
 def lit(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t")
@@ -277,7 +277,10 @@ class NativeCallDecoder(LlamaServerDecoder):
         self.stats = {"turns": 0, "calls": 0, "replies": 0, "p_call_first": []}
 
     def render(self, messages: list, tools: list) -> str:
-        body = json.dumps({"messages": messages, "tools": _strip_private(tools)}).encode()
+        shown = _strip_private(tools)
+        if self.cache_stable_tools:
+            shown = _cache_stable_tools(shown)
+        body = json.dumps({"messages": messages, "tools": shown}).encode()
         import urllib.request
         req = urllib.request.Request(self.base_url + "/apply-template", data=body,
                                      headers={"Content-Type": "application/json"})

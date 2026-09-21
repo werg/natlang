@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.decoder import LlamaServerDecoder
+from natlang.native import NativeCallDecoder
 from natlang.invocation import RunOptions, SeedPolicy
 from scripts.collect_scenario_teacher import collect
 from scripts.program_ir import digest, validate
@@ -49,11 +50,19 @@ def job_key(index: int, record: dict) -> str:
 
 def expected_provenance(record: dict, *, model_id: str, root_seed: int,
                         system_prompt: str, segment_turns: int,
-                        segment_messages: int) -> dict:
-    return {"program_ir_sha256": digest(record), "model": model_id,
-            "seed_policy": vars(SeedPolicy("derived", root_seed)),
-            "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
-            "segment_turns": segment_turns, "segment_messages": segment_messages}
+                        segment_messages: int, cache_stable_tools: bool = False,
+                        decode: str = "server", require_call: bool = False) -> dict:
+    provenance = {"program_ir_sha256": digest(record), "model": model_id,
+                  "seed_policy": vars(SeedPolicy("derived", root_seed)),
+                  "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
+                  "segment_turns": segment_turns, "segment_messages": segment_messages}
+    if cache_stable_tools:
+        provenance["cache_stable_tools"] = True
+    if decode != "server":
+        provenance["decode"] = decode
+    if require_call:
+        provenance["require_call"] = True
+    return provenance
 
 
 def result_matches(path: Path, record: dict, expected: dict) -> bool:
@@ -128,12 +137,23 @@ def import_completed(paths: list[Path], records: list[tuple[int, dict]], jobs: P
 
 
 def decoder_for(args) -> LlamaServerDecoder:
+    if args.decode == "native":
+        return NativeCallDecoder(
+            args.server, timeout=args.request_timeout,
+            write_constraints="runtime",
+            allow_reply=not args.require_call,
+            cache_stable_tools=getattr(args, "cache_stable_tools", False))
+    chat_extra = {"thinking_budget_tokens": args.thinking_tokens, "top_p": 0.95,
+                  "top_k": 20,
+                  "chat_template_kwargs": {"reasoning_effort": args.reasoning_effort}}
+    if args.require_call:
+        chat_extra["tool_choice"] = "required"
     return LlamaServerDecoder(
         args.server,
         timeout=args.request_timeout,
-        chat_extra={"thinking_budget_tokens": args.thinking_tokens, "top_p": 0.95,
-                    "top_k": 20, "chat_template_kwargs": {"reasoning_effort": "low"}},
-        tool_aliases={"call": "call_function"}, json_text_values=True)
+        chat_extra=chat_extra,
+        tool_aliases={"call": args.call_tool_name}, json_text_values=True,
+        cache_stable_tools=getattr(args, "cache_stable_tools", False))
 
 
 def run_job(index: int, record: dict, args, system_prompt: str,
@@ -160,6 +180,13 @@ def run_job(index: int, record: dict, args, system_prompt: str,
                      segment_messages=args.segment_messages)
     row["provenance"].update({"segment_turns": args.segment_turns,
                               "segment_messages": args.segment_messages})
+    if getattr(args, "cache_stable_tools", False):
+        row["provenance"]["cache_stable_tools"] = True
+    decode = getattr(args, "decode", "server")
+    if decode != "server":
+        row["provenance"]["decode"] = decode
+    if getattr(args, "require_call", False):
+        row["provenance"]["require_call"] = True
     write_atomic(result, row)
     (jobs / f"{index:06d}.error.json").unlink(missing_ok=True)
     return index, row
@@ -176,9 +203,16 @@ def main() -> None:
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--segment-turns", type=int, default=6)
-    parser.add_argument("--segment-messages", type=int, default=12)
+    parser.add_argument("--segment-turns", type=int, default=12)
+    parser.add_argument("--segment-messages", type=int, default=24)
     parser.add_argument("--thinking-tokens", type=int, default=256)
+    parser.add_argument("--decode", choices=("server", "native"), default="server")
+    parser.add_argument("--require-call", action="store_true")
+    parser.add_argument("--reasoning-effort", choices=("low", "medium", "high"), default="low")
+    parser.add_argument("--call-tool-name", default="call_function",
+                        help="server-native name for the runtime call tool")
+    parser.add_argument("--cache-stable-tools", action="store_true",
+                        help="present state-dependent path and line constraints as stable base types")
     parser.add_argument("--request-timeout", type=float)
     parser.add_argument("--system-file", type=Path,
                         default=Path("natlang/prompts/tools_teacher_compact.md"))
@@ -195,7 +229,8 @@ def main() -> None:
     expected_for = lambda record: expected_provenance(
         record, model_id=args.model_id, root_seed=args.root_seed,
         system_prompt=system_prompt, segment_turns=args.segment_turns,
-        segment_messages=args.segment_messages)
+        segment_messages=args.segment_messages, cache_stable_tools=args.cache_stable_tools,
+        decode=args.decode, require_call=args.require_call)
     if args.import_ir:
         imported, rejected = import_completed(args.import_ir, records, args.jobs, expected_for,
             segment_turns=args.segment_turns, segment_messages=args.segment_messages)
@@ -249,6 +284,9 @@ def main() -> None:
                 "source_sha256": hashlib.sha256(args.ir.read_bytes()).hexdigest(),
                 "range": {"start": args.start, "count": len(records)},
                 "model": args.model_id, "root_seed": args.root_seed,
+                "decode": args.decode, "cache_stable_tools": args.cache_stable_tools,
+                "require_call": args.require_call,
+                "segment_turns": args.segment_turns, "segment_messages": args.segment_messages,
                 "workers": args.workers, "completed": completed, "missing": missing,
                 "output_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest()}
     write_atomic(args.out.with_suffix(args.out.suffix + ".manifest.json"), manifest)
