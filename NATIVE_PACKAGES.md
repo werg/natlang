@@ -10,6 +10,7 @@ The distribution has three npm packages:
 | Package | Contents |
 |---|---|
 | `@natlang/cli` | The small `natlang` executable |
+| `@natlang/core` | Platform-neutral reduction, values, traces, agent, and crisp evaluator interface |
 | `@natlang/node` | Node host, evaluator, terminal framework, model transport, and package APIs |
 | `@natlang/browser` | Browser runtime, model client, worker, and WASM assets |
 

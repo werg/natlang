@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import YAML from 'yaml';
-import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeRuntime } from '../dist/index.js';
 import { NativeSession } from '../dist/native/runtime.js';
 import { loadFunctionFile } from '../dist/native/source.js';
 import { buildPending, coerce, dump } from '../dist/native/values.js';

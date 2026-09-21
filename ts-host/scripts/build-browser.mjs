@@ -9,7 +9,7 @@ await build({ entryPoints: [resolve(root, 'src/browser/index.ts')], bundle: true
   outfile: resolve(root, 'dist/browser/natlang.js'),
   plugins: [{ name: 'browser-eval', setup(build) {
     build.onResolve({ filter: /^\.\.\/environment\.js$/ }, args =>
-      ['/native/runtime.ts', '/native/workspace.ts'].some(file => args.importer.endsWith(file)) ?
+      args.importer.endsWith('/native/workspace.ts') ?
         { path: resolve(root, 'src/browser/environment.ts') } : null);
   } }],
   define: { __NATLANG_PRELUDE__: JSON.stringify(readFileSync(resolve(root, 'prelude.js'), 'utf8')) },

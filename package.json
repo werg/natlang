@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npm --workspace @natlang/typescript-host run build",
     "test": "npm --workspace @natlang/typescript-host test",
+    "pack:core": "npm pack --workspace @natlang/core",
     "pack:node": "npm pack --workspace @natlang/node",
     "pack:browser": "npm pack --workspace @natlang/browser",
     "pack:cli": "npm pack --workspace @natlang/cli"

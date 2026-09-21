@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeRuntime } from '../dist/index.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { readTrace } from '../../web/natlang_lite.mjs';

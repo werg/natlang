@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeRuntime } from '../dist/index.js';
 import { loadFunctionFile } from '../dist/native/source.js';
 import { coerce, dump } from '../dist/native/values.js';
 import { TypeEnv } from '../dist/native/types.js';

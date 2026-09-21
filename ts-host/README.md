@@ -14,6 +14,11 @@ model worker and WASM assets out of Node CLI installations. The historical
 `@natlang/typescript-host` name remains the monorepo build package. See
 [native packages and executables](../NATIVE_PACKAGES.md).
 
+Host implementers can use `@natlang/core`. Its `NativeRuntime` requires an
+explicit `EvalEnvironment`, so the reduction layer does not choose Node VM,
+browser eval, sandbox, filesystem, or process behavior. `@natlang/node`
+exports a convenience `NativeRuntime` that supplies the Node evaluator.
+
 From this repository:
 
 ```bash

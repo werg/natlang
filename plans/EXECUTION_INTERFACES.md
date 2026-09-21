@@ -1,6 +1,6 @@
 # Execution interfaces: streams, evaluators, types, randomness and traces
 
-Design proposal, 2026-09-19. Companion to the [architecture](AMBITIOUS_ARCHITECTURE.md), [refactor plan](EMBEDDING_REFACTOR.md) and [roadmap](AMBITIOUS_ROADMAP.md). Nothing in this document is implemented or normative yet. Examples show proposed interfaces, not commands accepted by the current runtime.
+Design begun 2026-09-19. Companion to the [architecture](AMBITIOUS_ARCHITECTURE.md), [refactor plan](EMBEDDING_REFACTOR.md) and [roadmap](AMBITIOUS_ROADMAP.md). The evaluator interface, required engine selection, explicit seeds, Node and browser shared-host environments, trace records, eventful Fold, bounded parallel Map, and native package targets are implemented. Remaining proposals are identified in their sections and are not normative merely because they appear here.
 
 Application consumers and staged acceptance gates are specified in [the project implementation plans](projects/README.md).
 

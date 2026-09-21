@@ -1,8 +1,8 @@
 # Refactoring the prototype for small embeddings
 
-Proposal, 2026-09-19. Scope: implementation boundaries with unchanged language behavior. This is part of the [minimal-core architecture](AMBITIOUS_ARCHITECTURE.md), not authorisation to implement every item immediately.
+Started 2026-09-19. Scope: implementation boundaries with unchanged language behavior. The Python executor and model seams, filesystem-independent definition graphs, TypeScript `EvalEnvironment`, platform-neutral native reducer, explicit seeds, trace data, streams, and host-specific Node/browser packages are implemented. Remaining work is recorded as such below.
 
-Planning decision: include the three primary refactors below in the roadmap. The user has requested that they be planned; this document does not report them as implemented.
+The sections retain the original rationale and acceptance criteria. Current distribution boundaries are `@natlang/core`, `@natlang/node`, `@natlang/browser`, and `@natlang/cli`; see [native packages](../NATIVE_PACKAGES.md).
 
 Follow-on design decisions are specified in [EXECUTION_INTERFACES.md](EXECUTION_INTERFACES.md): multiple engines, proposed required engine selection, shared-host environments, explicit seeds, streams and trace data. Keep the behavior-preserving extraction separate from those versioned changes.
 

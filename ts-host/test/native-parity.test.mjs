@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NativeRuntime } from '../dist/native/runtime.js';
+import { NativeRuntime } from '../dist/index.js';
 import { TypeEnv } from '../dist/index.js';
 import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';

@@ -1,5 +1,4 @@
 import YAML from 'yaml';
-import { TypeScriptEnvironment } from '../environment.js';
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { hexDigest } from './hash.js';
 import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from './types.js';
@@ -12,6 +11,14 @@ export type NativeResult = { kind: string; text: string; value?: Value; codes?: 
 export type NativeAgent = (session: NativeSession) => Promise<string | void> | string | void;
 export type NativePoll = { kind: 'item'; value: unknown } | { kind: 'empty' } | { kind: 'closed' } | { kind: 'failed'; detail: string };
 export interface NativeStream { poll(): Promise<NativePoll> | NativePoll }
+export type NativeRuntimeOptions = { environment: EvalEnvironment; agent?: NativeAgent;
+  capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
+  maxDepth?: number; maxActions?: number; maxToolCalls?: number;
+  runId?: string; stream?: NativeStream; signal?: AbortSignal; timeoutMs?: number;
+  sourceRevision?: string; parentCallId?: string;
+  sharedEpisodeBudget?: { limit?: number; used: number };
+  mapWorkers?: number; parallelModelSafe?: boolean;
+  seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } };
 
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
@@ -126,15 +133,7 @@ export class NativeRuntime {
   private readonly signal?: AbortSignal;
   private readonly deadline?: number;
 
-  constructor(options: { environment?: EvalEnvironment; host?: object; agent?: NativeAgent;
-    capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
-    maxDepth?: number; maxActions?: number; maxToolCalls?: number;
-    runId?: string; stream?: NativeStream;
-    signal?: AbortSignal; timeoutMs?: number;
-    sourceRevision?: string; parentCallId?: string;
-    sharedEpisodeBudget?: { limit?: number; used: number };
-    mapWorkers?: number; parallelModelSafe?: boolean;
-    seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } } = {}) {
+  constructor(options: NativeRuntimeOptions) {
     this.options = { maxEpisodes: options.maxEpisodes, maxDepth: options.maxDepth,
       maxActions: options.maxActions, maxToolCalls: options.maxToolCalls,
       runId: options.runId ?? 'native-run', mapWorkers: options.mapWorkers ?? 1,
@@ -159,7 +158,7 @@ export class NativeRuntime {
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
-    this.environment = options.environment ?? new TypeScriptEnvironment({ mode: 'fresh', host: options.host });
+    this.environment = options.environment;
     this.releaseEffect = this.environment.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
     this.stream = options.stream;
     this.signal = options.signal;
