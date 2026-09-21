@@ -9,10 +9,11 @@ LABEL="${2:-$(basename "$RUN")}"
 STATE="$RUN/checkpoint/state.json"
 ADAPTER="$RUN/checkpoint/weights"
 GGUF="$RUN/adapter-final-f16.gguf"
-PROBE="$RUN/readiness-applications.json"
-TURN_MANIFEST="$RUN/readiness-turns.manifest.json"
-TURN_RESULTS="$RUN/readiness-turns.json"
-READINESS="$RUN/readiness.json"
+RESULTS="runs/evaluations/$LABEL"
+PROBE="$RESULTS/applications.json"
+TURN_MANIFEST="$RESULTS/turns.manifest.json"
+TURN_RESULTS="$RESULTS/turns.json"
+READINESS="$RESULTS/readiness.json"
 BASE_CONFIG="runs/lfm25-8b-base-config"
 BASE_GGUF="candidates/lfm25-8b-a1b/LFM2.5-8B-A1B-Q4_K_M.gguf"
 
@@ -26,10 +27,13 @@ if s.get("step", 0) < s.get("corpus", {}).get("steps", 10**18) or "heldout_after
     raise SystemExit(f"training is not complete: step={s.get('step')}, heldout_after={s.get('heldout_after')}")
 PY
 
-docker run --rm -v "$ROOT:/work" -w /work \
-  -e PYTHONPATH=/work/vendor/llama.cpp/gguf-py --entrypoint python natlang-train \
-  vendor/llama.cpp/convert_lora_to_gguf.py "$ADAPTER" --base "$BASE_CONFIG" \
-  --outfile "$GGUF" --outtype f16
+mkdir -p "$RESULTS"
+if [ ! -f "$GGUF" ]; then
+  docker run --rm -v "$ROOT:/work" -w /work \
+    -e PYTHONPATH=/work/vendor/llama.cpp/gguf-py --entrypoint python natlang-train \
+    vendor/llama.cpp/convert_lora_to_gguf.py "$ADAPTER" --base "$BASE_CONFIG" \
+    --outfile "$GGUF" --outtype f16
+fi
 
 cleanup() {
   docker stop -t 20 natlang-llama >/dev/null 2>&1 || true
