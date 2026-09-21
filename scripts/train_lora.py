@@ -115,6 +115,11 @@ def collate_completions(examples, pad_id=0, device="cuda"):
 
 def batch_completion_loss(model, encoded):
     """Mean of per-example completion losses, matching single-example accumulation."""
+    if encoded["input_ids"].shape[0] == 1:
+        # Let Transformers use the model's fused causal-loss path.  The manual
+        # reduction below is needed only to give every item in a padded batch
+        # equal weight regardless of completion length.
+        return completion_loss(model, (encoded["input_ids"], encoded["labels"]))
     labels = encoded["labels"][:, 1:]
     logits = model(input_ids=encoded["input_ids"], attention_mask=encoded["attention_mask"],
                    logits_to_keep=encoded["labels"].shape[-1]).logits[:, :-1].float()
@@ -207,6 +212,8 @@ def main():
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--load-in-4bit", action="store_true",
                     help="QLoRA base loading for models that do not fit in bf16 (checkpoint stores the adapter)")
+    ap.add_argument("--unsloth", action="store_true",
+                    help="load and patch a dense model through Unsloth")
     ap.add_argument("--unsloth-lfm-experts", action="store_true",
                     help="load an LFM NF4 checkpoint with packed MoE experts through Unsloth")
     ap.add_argument("--unsloth-compile", action="store_true",
@@ -236,6 +243,8 @@ def main():
         ap.error("4-bit loading is for LoRA adapters, not full-weight training")
     if a.unsloth_lfm_experts and not a.load_in_4bit:
         ap.error("--unsloth-lfm-experts requires --load-in-4bit")
+    if a.unsloth and not a.load_in_4bit:
+        ap.error("--unsloth requires --load-in-4bit in this memory-constrained trainer")
     if a.merge_only and a.load_in_4bit:
         ap.error("a QLoRA checkpoint is adapter-only; convert the adapter or merge it with a non-quantized base")
     if a.init_adapter is not None and not a.init_adapter.is_dir():
@@ -279,6 +288,8 @@ def main():
                                  "target_modules": targets or default_targets,
                                  "unsloth_lfm_experts": a.unsloth_lfm_experts,
                                  "unsloth_compile": a.unsloth_compile}
+            if a.unsloth and not a.unsloth_lfm_experts:
+                identity["qlora"]["unsloth"] = True
         if resume and state.get("corpus") != identity:
             raise SystemExit("Checkpoint corpus/split/settings differ (or predate program splits). "
                              "Use --merge-only to export it, or a new output directory for this training run.")
@@ -290,7 +301,8 @@ def main():
               f"({target_examples / len(train):.3g} epochs, {a.steps} optimizer steps)", flush=True)
     torch.manual_seed(a.seed)
     FastLanguageModel = None
-    if a.unsloth_lfm_experts:  # Unsloth must patch Transformers before PEFT imports it.
+    use_unsloth = a.unsloth or a.unsloth_lfm_experts
+    if use_unsloth:  # Unsloth must patch Transformers before PEFT imports it.
         compile_root = Path(os.environ.get("HF_HOME", a.out / "hf-cache")) / "unsloth_compiled_cache"
         compile_root.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("UNSLOTH_COMPILE_LOCATION", str(compile_root))
@@ -302,14 +314,15 @@ def main():
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     base_src = str(ckpt / "weights") if (resume and a.full) else a.model
-    if a.unsloth_lfm_experts:
+    if use_unsloth:
         from huggingface_hub import snapshot_download
         model_path = Path(a.model)
         base_src = (str(model_path.resolve()) if model_path.is_dir() else
                     snapshot_download(a.model, revision=a.model_revision))
         model, tok = FastLanguageModel.from_pretrained(
             model_name=base_src, max_seq_length=a.max_len, load_in_4bit=True, device_map=0)
-        restore_lfm_expert_quantization(model, base_src)
+        if a.unsloth_lfm_experts:
+            restore_lfm_expert_quantization(model, base_src)
     else:
         tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision)
         load_options = {"dtype": torch.bfloat16}
@@ -338,7 +351,7 @@ def main():
                 linear = (default_targets if a.load_in_4bit else
                           sorted({n.split(".")[-1] for n, m in model.named_modules()
                                   if isinstance(m, torch.nn.Linear) and "lm_head" not in n}))
-            if a.unsloth_lfm_experts:
+            if use_unsloth:
                 model = FastLanguageModel.get_peft_model(
                     model, r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
                     target_modules=linear, use_gradient_checkpointing="unsloth", random_state=a.seed)

@@ -192,6 +192,8 @@ and checkpoints the intervening layers, allowing a measured memory/speed tradeof
 Larger batches and reducing checkpointing are opt-in: neither is reliably faster
 or memory-safe on the laptop. Per-step throughput is saved in
 `throughput.json`; `--benchmark-steps N` runs without saving a trained model.
+Use `--unsloth` for optimized dense-model QLoRA; `--unsloth-lfm-experts` adds
+the packed expert restoration required by the prequantized LFM MoE checkpoint.
 
 Build the optional CUDA convolution kernel against the existing training image:
 
