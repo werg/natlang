@@ -29,7 +29,14 @@ uses:
 
 `uses` paths are relative to the source file; inspect the target layout before choosing one. In supplied definition graphs, `uses` targets are definition names instead of filesystem paths. Use aliases with legal identifiers. Native packages resolve and install before a run; `uses` never downloads a missing source while a lambda is executing.
 
-A crisp file uses `/*---` through `---*/` frontmatter followed by a function body. Inputs are `args`, the body returns its value with `return`. Inline `run_code` instead returns its final expression. Exact portable JS bodies can omit `engine` for the compatibility loader behavior; select `engine: typescript-host` when using the native TS host. Python's default evaluator is `quickjs-isolated`; additional executor names exist only when the embedding registers them. Inline eval must supply the offered engine when the current schema requires it.
+A crisp file uses `/*---` through `---*/` frontmatter followed by a function
+body. Inputs are `args`, and the body returns its value with `return`. The
+model-facing `eval` scope instead exposes arguments and imports as ordinary
+lexical names and reports its final expression as an observation. Exact
+portable crisp bodies can omit `engine` for compatibility loader behavior;
+select `engine: typescript-host` when using the native TS host. Python's default
+crisp evaluator is `quickjs-isolated`; additional executor names exist only
+when the embedding registers them.
 
 ## Types
 
@@ -54,24 +61,24 @@ returns: Report
 ---
 ```
 
-The root lists at `args/files`; branches and leaves are read through ordinary
-paths such as `args/files/docs/design.md/text`. A filesystem adapter supplies
-the record at the leaf and leaves binary bytes outside model state. The host
+The root is the lexical `files` input. Inspect a branch or leaf with
+`read_value`, for example `files["docs"]["design.md"].text`. A filesystem
+adapter supplies the record at the leaf and leaves binary bytes outside model state. The host
 loads each observed directory or leaf at most once for that bound value, so a
 run sees a stable observation even when the backing store later changes.
 
-Treat this like any other argument. A helper that needs the mapping declares a
-compatible `Dict<ProjectFile>` parameter and receives it through
-`call.inputs`, for example `{"files":"args/files"}`. It is not ambient state
-and should not be copied leaf by leaf. Eager dictionaries continue to behave as
-before.
+Treat this like any other argument. A natlang helper that needs the mapping
+declares a compatible `Dict<ProjectFile>` parameter and receives it through an
+ordinary positional call such as `await inspectTree(files)`. It is not ambient
+state and should not be copied leaf by leaf. Eager dictionaries continue to
+behave as before.
 
 The lazy implementation is read-only and not a portable snapshot. Returning or
 persisting selected typed leaves is supported; process restart requires the
 host to bind the provider again. Crisp code that needs arbitrary filesystem or
 database access should use its real host API. A crisp function cannot receive a
-host-backed dictionary as an argument. Inline `run_code` remains usable for
-other values, but provider-backed fields are omitted from its portable scope.
+host-backed dictionary as an argument. `eval` remains usable for other values,
+but provider-backed fields are omitted from its portable execution view.
 Do not force the runtime to materialize a native provider merely to pass it
 into eval.
 

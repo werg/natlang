@@ -41,7 +41,7 @@ declare `files: Dict<ProjectFile>` and bind `textFileTree(files)` from
 `@natlang/browser` through
 `reducerInputs: () => ({files: textFileTree(currentFiles())})`.
 The `source.files` map loads natlang source; the `inputs.files` value is what the
-semantic program can browse at `args/files/...`. Keeping these roles explicit
+semantic program can browse through lexical `files` expressions. Keeping these roles explicit
 also lets the application provide only the data subtree it intends to expose.
 The per-run factory observes browser-side changes between events without
 changing a value during one reduction. Use `viewInputs` only when the view is

@@ -17,7 +17,8 @@ process/file/database calls and typed result checks.
 For a terminal application that reasons over its working tree, declare a
 `files: Dict<ProjectFile>` reducer argument and configure
 `reducerInputs: () => ({ files: new NodeFileTree(root) })`. The reducer can
-browse `args/files/...` lazily and pass the same dictionary to semantic helpers.
+browse `files` lazily with `read_value` expressions and pass the same dictionary
+positionally to compatible semantic helpers.
 The factory creates a fresh dictionary for each reduction, while observations
 within one run remain stable. Keep it out of a crisp view's inputs.
 

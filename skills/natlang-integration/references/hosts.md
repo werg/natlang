@@ -35,9 +35,10 @@ def inspect_project(decoder, root_path):
 ```
 
 `FilesystemFileTree` is a host representation of an ordinary, read-only
-`Dict<ProjectFile>` argument. Natlang reads it at `args/files/...`; it does not
-gain a special namespace. Pass the same argument explicitly to a child that
-needs it. `text_file_tree({"path": "text"})` supplies the corresponding
+`Dict<ProjectFile>` argument. Natlang inspects it with `read_value` expressions
+such as `files["docs"]["plan.md"]`; it does not gain a special namespace. Pass
+the same `files` value positionally to a compatible natlang child that needs
+it. `text_file_tree({"path": "text"})` supplies the corresponding
 in-memory adapter. Both resolve branches and leaves lazily and cache each
 observation for the lifetime of that value.
 
@@ -110,8 +111,8 @@ Provider rules:
   remain valid inputs for the same source.
 - Do not pass the whole provider-backed value into a crisp function. Select a
   portable leaf first, or let crisp code use the native host API directly.
-  Inline `run_code` omits provider-backed fields from its portable scope while
-  retaining the other arguments.
+  Model-facing `eval` omits provider-backed fields from its portable execution
+  view while retaining the other arguments.
 - Do not expect `dump_state` or trace data to serialize the provider. Persist
   selected results and enough provider identity to reconstruct the binding.
 
