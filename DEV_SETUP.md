@@ -69,8 +69,8 @@ natlang codebases/semantic_terminal
 Discover runnable source applications without installing them:
 
 ```bash
-natlang apps
-natlang apps codebases
+natlang --apps
+natlang --apps codebases
 ```
 
 There is no fixed or generated development application list. Each runnable
@@ -104,7 +104,7 @@ cat logs.jsonl | natlang codebases/log_investigator --plain
 Inspect a local application without installing it:
 
 ```bash
-natlang inspect codebases/semantic_terminal --json
+natlang --inspect codebases/semantic_terminal --json
 ```
 
 ## Model lifecycle
@@ -126,11 +126,11 @@ The first semantic model turn:
 5. terminates that owned process when the command closes or receives SIGINT or
    SIGTERM.
 
-Crisp only programs never start or download a model. `natlang setup` repeats
-runtime discovery and installation, `natlang runtime status --json` explains
-every candidate, and `natlang runtime install` explicitly installs the managed
+Crisp only programs never start or download a model. `natlang --setup` repeats
+runtime discovery and installation, `natlang --runtime status --json` explains
+every candidate, and `natlang --runtime install` explicitly installs the managed
 build. Point at a custom compatible binary with `NATLANG_LLAMA_SERVER`.
-`natlang doctor --json` reports whether the complete local runtime is ready.
+`natlang --doctor --json` reports whether the complete local runtime is ready.
 
 Useful local overrides are:
 
@@ -186,13 +186,13 @@ latest release.
 ## Installed applications and packages
 
 Paths are the normal development and local authoring interface. Native packages
-are optional distribution artifacts. `natlang apps` discovers source manifests;
-`natlang packages` reports archives installed into the content addressed package
+are optional distribution artifacts. `natlang --apps` discovers source manifests;
+`natlang --packages` reports archives installed into the content addressed package
 store. Installed users can run a package by its name or exact target:
 
 ```bash
-natlang package install application.nlpkg
-natlang packages
+natlang --package install application.nlpkg
+natlang --packages
 natlang application-name
 natlang package-name@1.0.0#target
 ```

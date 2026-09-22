@@ -81,7 +81,7 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
   npm --prefix "$ROOT/ts-host" run build
 
   echo "==> Checking the local model runtime"
-  RUNTIME_ARGS=(setup)
+  RUNTIME_ARGS=(--setup)
   if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
   NATLANG_RUNTIME_HOME="$ROOT/.natlang/runtime" node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
 
@@ -134,7 +134,7 @@ if [[ "$COMMAND_INSTALLED" -eq 1 ]]; then
   cat <<EOF
 
 Check the installation and run code from any directory:
-  natlang doctor --json
+  natlang --doctor --json
   natlang path/to/program.nl
   natlang path/to/application
 EOF

@@ -126,8 +126,8 @@ of the core framework while allowing natlang to compose them.
 The native package works outside the source checkout:
 
 ```bash
-natlang package pack codebases/semantic_terminal --out semantic-terminal.nlpkg
-natlang package install semantic-terminal.nlpkg
+natlang --package pack codebases/semantic_terminal --out semantic-terminal.nlpkg
+natlang --package install semantic-terminal.nlpkg
 natlang @natlang/semantic-terminal@0.2.1#terminal --workspace .
 ```
 

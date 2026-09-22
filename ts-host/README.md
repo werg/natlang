@@ -32,7 +32,7 @@ natlang codebases/semantic_terminal
 Setup installs `natlang` in the user command directory. It can be run from any
 working directory and recompiles Node output when TypeScript inputs change.
 `natlang SOURCE` accepts a program, application manifest, or application
-directory. `natlang apps` discovers source manifests without a built in
+directory. `natlang --apps` discovers source manifests without a built in
 application registry. The complete workflow, including PATH and
 alternate command directory setup, is in [DEV_SETUP.md](../DEV_SETUP.md).
 

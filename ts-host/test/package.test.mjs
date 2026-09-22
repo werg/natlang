@@ -89,6 +89,16 @@ args: {}
 returns: Num
 ---*/
 return 7`);
+  const administrativeNames = ['apps', 'inspect', 'packages', 'package', 'setup', 'runtime', 'doctor'];
+  for (const name of administrativeNames) {
+    mkdirSync(join(root, name));
+    writeFileSync(join(root, name, 'main.ts'), `/*---
+description: Prove administrative words remain valid source paths.
+args: {}
+returns: Text
+---*/
+return "source named ${name}"`);
+  }
   writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
     return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length); } };
   }`);
@@ -100,29 +110,33 @@ return 7`);
   const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
   const help = execFileSync(process.execPath, [cli], { encoding: 'utf8' });
   assert.match(help, /natlang SOURCE/); assert.doesNotMatch(help, /natlang app run/);
-  const empty = execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' });
+  const empty = execFileSync(process.execPath, [cli, '--packages', '--store', store], { encoding: 'utf8' });
   assert.match(empty, /No distribution packages are installed/);
   const direct = execFileSync(process.execPath, [cli, join(root, 'direct.ts')], { encoding: 'utf8' });
   assert.equal(direct, '7\n');
+  for (const name of administrativeNames) {
+    const collidingPath = execFileSync(process.execPath, [cli, name], { encoding: 'utf8', cwd: root });
+    assert.equal(collidingPath, `"source named ${name}"\n`);
+  }
   const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
   assert.equal(local, 'cli-fixture:local:0');
   const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],
     { encoding: 'utf8', cwd: tmpdir() });
   assert.equal(localManifest, 'cli-fixture:path:0');
-  const inspected = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', root, '--json'], { encoding: 'utf8' }));
+  const inspected = JSON.parse(execFileSync(process.execPath, [cli, '--inspect', root, '--json'], { encoding: 'utf8' }));
   assert.equal(inspected.target, 'hello');
-  const discovered = JSON.parse(execFileSync(process.execPath, [cli, 'apps', root, '--json'], { encoding: 'utf8' }));
+  const discovered = JSON.parse(execFileSync(process.execPath, [cli, '--apps', root, '--json'], { encoding: 'utf8' }));
   assert.equal(discovered[0].name, 'cli-fixture');
-  const ignored = spawnSync(process.execPath, [cli, 'apps', root, '--store', store], { encoding: 'utf8' });
+  const ignored = spawnSync(process.execPath, [cli, '--apps', root, '--store', store], { encoding: 'utf8' });
   assert.equal(ignored.status, 1); assert.match(ignored.stderr, /option --store is not valid here/);
   const emptyDirectory = join(root, 'not-an-app'); mkdirSync(emptyDirectory);
-  const invalidApp = spawnSync(process.execPath, [cli, 'package', 'pack', emptyDirectory], { encoding: 'utf8' });
+  const invalidApp = spawnSync(process.execPath, [cli, '--package', 'pack', emptyDirectory], { encoding: 'utf8' });
   assert.equal(invalidApp.status, 1);
   assert.match(invalidApp.stderr, /does not contain a valid natlang\.json/);
   assert.doesNotMatch(invalidApp.stderr, /EISDIR/);
-  execFileSync(process.execPath, [cli, 'package', 'pack', join(root, 'natlang.json'), '--out', archive]);
-  execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
-  const listing = execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' });
+  execFileSync(process.execPath, [cli, '--package', 'pack', join(root, 'natlang.json'), '--out', archive]);
+  execFileSync(process.execPath, [cli, '--package', 'install', archive, '--store', store]);
+  const listing = execFileSync(process.execPath, [cli, '--packages', '--store', store], { encoding: 'utf8' });
   assert.match(listing, /cli-fixture@1\.0\.0/);
   const result = execFileSync(process.execPath, [cli, 'cli-fixture@1.0.0#hello',
     '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });

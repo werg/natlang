@@ -4,21 +4,21 @@ The native natlang command line. It installs content addressed `.nlpkg` archives
 
 ```sh
 npm install --global @natlang/cli
-natlang setup
+natlang --setup
 natlang --help
 natlang path/to/program.nl
 natlang path/to/application
-natlang apps
+natlang --apps
 natlang semantic-terminal
 ```
 
-`natlang setup` validates an explicit or PATH `llama-server` and, when needed,
+`natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
 asks before installing natlang's pinned, hash checked runtime in the user data
-directory. It never replaces a system installation. Use `natlang setup --yes`
+directory. It never replaces a system installation. Use `natlang --setup --yes`
 in unattended environments. The first semantic run offers the same setup when
 it has an interactive terminal.
 
 Source paths require no package installation. If a semantic run has no model
 profile, the CLI lazily starts its selected local server with the release
-default model and stops it when the command exits. `natlang runtime status
+default model and stops it when the command exits. `natlang --runtime status
 --json` reports discovery and compatibility details.

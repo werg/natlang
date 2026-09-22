@@ -54,10 +54,10 @@ adapter, while `reducer` and `view` name the natlang application logic.
 Build, verify, install, inspect, and run it:
 
 ```bash
-natlang package pack natlang.json --root . --out reviewer-1.0.0.nlpkg
-natlang package verify reviewer-1.0.0.nlpkg --json
-natlang package install reviewer-1.0.0.nlpkg
-natlang inspect @example/reviewer@1.0.0#review --json
+natlang --package pack natlang.json --root . --out reviewer-1.0.0.nlpkg
+natlang --package verify reviewer-1.0.0.nlpkg --json
+natlang --package install reviewer-1.0.0.nlpkg
+natlang --inspect @example/reviewer@1.0.0#review --json
 natlang @example/reviewer@1.0.0#review --workspace . -- --application-option value
 ```
 
@@ -68,7 +68,7 @@ application directory directly:
 natlang path/to/main.nl
 natlang path/to/application
 natlang path/to/application/natlang.json
-natlang inspect path/to/application --json
+natlang --inspect path/to/application --json
 ```
 
 Local manifests are validated with the same archive rules before launch, but
@@ -80,9 +80,9 @@ For interactive use, discover applications and omit the exact version when it
 is useful to follow the highest installed semantic version:
 
 ```bash
-natlang packages
+natlang --packages
 natlang reviewer --workspace . -- --application-option value
-natlang inspect reviewer --json
+natlang --inspect reviewer --json
 ```
 
 `natlang SOURCE` accepts the full package name or an unambiguous final name component.
@@ -93,7 +93,7 @@ Install all archives in one command when packages depend on one another. The
 installer validates the whole candidate set before publishing new objects:
 
 ```bash
-natlang package install library-2.1.0.nlpkg app-1.0.0.nlpkg
+natlang --package install library-2.1.0.nlpkg app-1.0.0.nlpkg
 ```
 
 Version 1 accepts exact versions, `*`, `latest`, caret, tilde, and `>=` ranges.
@@ -132,7 +132,7 @@ arguments, terminal streams, an optional model driver, and the installed
 runtime API.
 
 Target adapters are trusted host code. The manifest’s `authority` and
-`commands` fields make native access inspectable and let `natlang doctor` check
+`commands` fields make native access inspectable and let `natlang --doctor` check
 engines and executable dependencies. They are declarations, not a sandbox.
 Natlang reducers own interpretation, planning, and decisions; adapters translate
 typed events and expose exact native operations.
@@ -142,8 +142,8 @@ llama.cpp executables against its tested version range. If none is compatible,
 an interactive run asks before installing the pinned official archive under the
 user data directory. Downloads are checked against a static byte length and
 SHA-256 digest, extracted atomically, and never alter a system installation.
-Use `natlang setup` to do this ahead of time, `natlang setup --yes` for an
-unattended install, and `natlang runtime status --json` to inspect resolution.
+Use `natlang --setup` to do this ahead of time, `natlang --setup --yes` for an
+unattended install, and `natlang --runtime status --json` to inspect resolution.
 
 On the first semantic turn the CLI starts the selected server and closes it
 with the command. Crisp only targets do not start it. Model profiles in the

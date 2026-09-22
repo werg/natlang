@@ -135,7 +135,7 @@ export function createManagedModelSession(profile: ModelProfile,
       if (!prerequisites.executable) {
         const explicit = prerequisites.runtime.candidates.find(candidate => candidate.source === 'explicit');
         if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
-        throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang setup or natlang runtime install`);
+        throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang --setup or natlang --runtime install`);
       }
       const modelPath = await ensureModel(environment, error), port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;

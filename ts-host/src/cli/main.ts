@@ -78,24 +78,24 @@ function help(): string { return `natlang ${NATLANG_CLI_VERSION}
 Usage:
   natlang SOURCE [OPTIONS]       Run a program file, application directory,
                                  manifest, or installed application.
-  natlang apps [DIRECTORY]       Find runnable source applications.
-  natlang inspect SOURCE         Explain how a source resolves without running it.
-  natlang packages               List installed distribution packages.
-  natlang package COMMAND        Pack, verify, or install a distribution archive.
-  natlang setup                  Prepare the local model runtime.
-  natlang runtime COMMAND        Inspect or install the model runtime.
-  natlang doctor                 Check this natlang installation.
+  natlang --apps [DIRECTORY]     Find runnable source applications.
+  natlang --inspect SOURCE       Explain how a source resolves without running it.
+  natlang --packages             List installed distribution packages.
+  natlang --package COMMAND      Pack, verify, or install a distribution archive.
+  natlang --setup                Prepare the local model runtime.
+  natlang --runtime COMMAND      Inspect or install the model runtime.
+  natlang --doctor               Check this natlang installation.
 
 Examples:
   natlang examples/triage/main.nl --inputs inputs.json
   natlang codebases/semantic_terminal
-  natlang apps codebases
-  natlang inspect codebases/semantic_terminal
+  natlang --apps codebases
+  natlang --inspect codebases/semantic_terminal
 
-Run natlang help COMMAND for focused usage and options.
+Run natlang --help COMMAND for focused usage and options.
 
 Semantic execution lazily starts and owns its configured local model server.
-Run natlang setup once to inspect or prepare it.`; }
+Run natlang --setup once to inspect or prepare it.`; }
 
 function topicHelp(topic: string): string {
   if (topic === 'source') return `Run source or an installed application:
@@ -123,31 +123,31 @@ Application options:
   --no-color          Disable terminal color.
   --yes               Permit a required managed runtime download.`;
   if (topic === 'apps') return `Discover source applications:
-  natlang apps [DIRECTORY] [--json]
+  natlang --apps [DIRECTORY] [--json]
 
 This recursively finds natlang.json manifests. It does not read the installed
 package store and does not require applications to be packaged first.`;
   if (topic === 'inspect') return `Resolve source without running it:
-  natlang inspect SOURCE [--target NAME] [--root DIR] [--store DIR] [--json]
+  natlang --inspect SOURCE [--target NAME] [--root DIR] [--store DIR] [--json]
 
 Programs report their function signature and implementation. Applications
 report their selected target, requested host authority, commands, and engines.`;
   if (topic === 'packages') return `List installed distribution packages:
-  natlang packages [--store DIR] [--json]
+  natlang --packages [--store DIR] [--json]
 
-This reads the content addressed package store. Use natlang apps to find local
+This reads the content addressed package store. Use natlang --apps to find local
 source applications.`;
   if (topic === 'package') return `Distribution packages are optional deployment artifacts:
-  natlang package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]
-  natlang package verify ARCHIVE [--json]
-  natlang package install ARCHIVE... [--store DIR] [--json]
-  natlang packages [--store DIR] [--json]
+  natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]
+  natlang --package verify ARCHIVE [--json]
+  natlang --package install ARCHIVE... [--store DIR] [--json]
+  natlang --packages [--store DIR] [--json]
 
 Source programs and applications do not need to be packaged before running.`;
   if (topic === 'runtime') return `Model runtime commands:
-  natlang setup [--yes] [--json]
-  natlang runtime status [--json]
-  natlang runtime install [--yes] [--json]
+  natlang --setup [--yes] [--json]
+  natlang --runtime status [--json]
+  natlang --runtime install [--yes] [--json]
 
 Setup reuses a compatible explicit, managed, or PATH llama-server. If none is
 compatible, interactive use asks before installing the verified managed build.
@@ -155,9 +155,9 @@ Profiles live in ~/.config/natlang/config.json. Environment overrides are
 NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH, NATLANG_LLAMA_SERVER,
 NATLANG_RUNTIME_HOME, and NATLANG_API_KEY.`;
   if (topic === 'doctor') return `Check the natlang installation and model configuration:
-  natlang doctor [--profile NAME] [--store DIR] [--json]
+  natlang --doctor [--profile NAME] [--store DIR] [--json]
 
-Use natlang inspect SOURCE for source and application checks.`;
+Use natlang --inspect SOURCE for source and application checks.`;
   throw new Error(`unknown help topic ${topic}; choose SOURCE, apps, inspect, packages, package, runtime, or doctor`);
 }
 
@@ -490,7 +490,13 @@ function applicationSpecifier(store: NatlangPackageStore, query: string, request
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
-  const parsed = parseArgs(argv), json = parsed.options.has('--json');
+  const administrativeCommands = new Map([
+    ['--apps', 'apps'], ['--inspect', 'inspect'], ['--packages', 'packages'],
+    ['--package', 'package'], ['--setup', 'setup'], ['--runtime', 'runtime'], ['--doctor', 'doctor'],
+  ]);
+  const administrativeCommand = administrativeCommands.get(argv[0] ?? '');
+  const parsed = parseArgs(administrativeCommand ? [administrativeCommand, ...argv.slice(1)] : argv);
+  const json = parsed.options.has('--json');
   if (parsed.options.has('--version')) { output(NATLANG_CLI_VERSION, false); return 0; }
   if (parsed.options.has('--help') || parsed.options.has('-h')) {
     const topic = parsed.words[0]?.toLowerCase();
@@ -499,22 +505,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       topic ? topicHelp('source') : help(), false); return 0;
   }
   if (!parsed.words.length) { acceptOptions(parsed, []); output(help(), false); return 0; }
-  if (parsed.words[0] === 'help') {
-    acceptOptions(parsed, []); noTrailingArguments(parsed);
-    if (parsed.words.length !== 2) throw new Error('usage: natlang help SOURCE|apps|inspect|packages|package|runtime|doctor');
-    const topic = parsed.words[1]!.toLowerCase();
-    output(topicHelp(topic === 'setup' ? 'runtime' : topic), false); return 0;
-  }
-  if (parsed.words[0] === 'run') throw new Error('`natlang run SOURCE` was replaced by `natlang SOURCE`');
-  if (parsed.words[0] === 'app') throw new Error('the `natlang app` namespace was replaced by `natlang apps`, `natlang inspect SOURCE`, and `natlang SOURCE`');
-  if (parsed.words[0] === 'setup' || parsed.words[0] === 'runtime') {
+  if (administrativeCommand && (parsed.words[0] === 'setup' || parsed.words[0] === 'runtime')) {
     const action = parsed.words[0] === 'setup' ? 'ensure' : parsed.words[1] ?? 'status';
     if (parsed.words[0] === 'setup') {
       acceptOptions(parsed, ['--yes', '--json', '--profile']);
-      if (parsed.words.length !== 1) throw new Error('usage: natlang setup [--yes] [--json]');
+      if (parsed.words.length !== 1) throw new Error('usage: natlang --setup [--yes] [--json]');
     } else {
       acceptOptions(parsed, action === 'install' ? ['--yes', '--json'] : ['--json']);
-      if (parsed.words.length > 2) throw new Error('usage: natlang runtime status|install');
+      if (parsed.words.length > 2) throw new Error('usage: natlang --runtime status|install');
     }
     noTrailingArguments(parsed);
     if (parsed.words[0] === 'setup') {
@@ -534,14 +532,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       const discovery = discoverLlamaRuntime();
       const selected = await ensureRuntime(discovery, parsed.options.has('--yes'), action === 'install');
       if (!selected && action === 'ensure') { outputRuntime(discovery, json); return 0; }
-      if (!selected) throw new Error('llama.cpp installation was declined; run natlang setup when ready');
+      if (!selected) throw new Error('llama.cpp installation was declined; run natlang --setup when ready');
       outputRuntime(discoverLlamaRuntime(), json); return 0;
     }
     throw new Error('unknown runtime command; run natlang --help');
   }
-  if (parsed.words[0] === 'apps') {
+  if (administrativeCommand === 'apps') {
     acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);
-    if (parsed.words.length > 2) throw new Error('usage: natlang apps [DIRECTORY] [--json]');
+    if (parsed.words.length > 2) throw new Error('usage: natlang --apps [DIRECTORY] [--json]');
     const root = parsed.words[1] ?? '.', rows = discoverLocalApplications(root).map(item => ({ ...item,
       path: relative(process.cwd(), item.path) || basename(item.path) }));
     output(json ? rows : rows.length ? rows.map(item =>
@@ -549,26 +547,26 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       `No natlang applications found under ${resolve(root)}. Applications contain a natlang.json manifest.`, json);
     return 0;
   }
-  if (parsed.words[0] === 'packages') {
+  if (administrativeCommand === 'packages') {
     acceptOptions(parsed, ['--store', '--json']); noTrailingArguments(parsed);
-    if (parsed.words.length !== 1) throw new Error('usage: natlang packages [--store DIR] [--json]');
+    if (parsed.words.length !== 1) throw new Error('usage: natlang --packages [--store DIR] [--json]');
     const store = new NatlangPackageStore(option(parsed, '--store')), rows = store.list();
     output(json ? rows : rows.length ? rows.map(row => `${row.name}@${row.version} ${row.digest}`).join('\n') :
       `No distribution packages are installed in ${store.root}. Source applications can run without installation.`, json);
     return 0;
   }
-  if (parsed.words[0] === 'inspect') {
-    if (parsed.words.length !== 2) throw new Error('usage: natlang inspect SOURCE [--json]');
+  if (administrativeCommand === 'inspect') {
+    if (parsed.words.length !== 2) throw new Error('usage: natlang --inspect SOURCE [--json]');
     output(inspectSource(parsed, parsed.words[1]!), json); return 0;
   }
-  if (parsed.words[0] === 'package') {
+  if (administrativeCommand === 'package') {
     const action = parsed.words[1], argument = parsed.words[2];
-    if (action === 'pack' && !argument) throw new Error('usage: natlang package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
-    if (action === 'verify' && !argument) throw new Error('usage: natlang package verify ARCHIVE [--json]');
-    if (action === 'install' && !argument) throw new Error('usage: natlang package install ARCHIVE... [--store DIR] [--json]');
+    if (action === 'pack' && !argument) throw new Error('usage: natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
+    if (action === 'verify' && !argument) throw new Error('usage: natlang --package verify ARCHIVE [--json]');
+    if (action === 'install' && !argument) throw new Error('usage: natlang --package install ARCHIVE... [--store DIR] [--json]');
     if (action === 'pack' && argument) {
       acceptOptions(parsed, ['--root', '--out', '--json']); noTrailingArguments(parsed);
-      if (parsed.words.length !== 3) throw new Error('usage: natlang package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
+      if (parsed.words.length !== 3) throw new Error('usage: natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
       const { archive } = loadLocalApplication(parsed, argument);
       const out = resolve(option(parsed, '--out') ?? `${archive.manifest.name.replace('/', '-')}-${archive.manifest.version}.nlpkg`);
       writePackageArchive(out, archive); output({ archive: out, digest: archive.digest,
@@ -576,7 +574,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (action === 'verify' && argument) {
       acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);
-      if (parsed.words.length !== 3) throw new Error('usage: natlang package verify ARCHIVE [--json]');
+      if (parsed.words.length !== 3) throw new Error('usage: natlang --package verify ARCHIVE [--json]');
       const archive = readPackageArchive(resolve(argument)); output({ valid: true, digest: archive.digest,
         name: archive.manifest.name, version: archive.manifest.version, files: archive.files.length }, json); return 0;
     }
@@ -586,13 +584,13 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       const installed = store.installMany(parsed.words.slice(2).map(path => resolve(path)));
       output(installed.length === 1 ? installed[0] : installed, json); return 0;
     }
-    if (action === 'list') throw new Error('`natlang package list` was replaced by `natlang packages`');
-    if (action === 'inspect') throw new Error('`natlang package inspect` was replaced by `natlang inspect SOURCE`');
+    if (action === 'list') throw new Error('use `natlang --packages`');
+    if (action === 'inspect') throw new Error('use `natlang --inspect SOURCE`');
     throw new Error('unknown package command; choose pack, verify, or install');
   }
-  if (parsed.words[0] === 'doctor') {
+  if (administrativeCommand === 'doctor') {
     acceptOptions(parsed, ['--store', '--profile', '--json']); noTrailingArguments(parsed);
-    if (parsed.words.length !== 1) throw new Error('use `natlang inspect SOURCE` to inspect a program or application');
+    if (parsed.words.length !== 1) throw new Error('use `natlang --inspect SOURCE` to inspect a program or application');
     const store = new NatlangPackageStore(option(parsed, '--store'));
     const { report, okay } = doctorReport(parsed, store);
     output(report, json); return okay ? 0 : 1;

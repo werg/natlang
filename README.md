@@ -30,10 +30,10 @@ changed TypeScript automatically. Applications are addressed by source path;
 there is no precompiled development app list:
 
 ```bash
-natlang doctor --json
+natlang --doctor --json
 natlang path/to/program.nl
 natlang codebases/semantic_terminal
-natlang apps codebases
+natlang --apps codebases
 ```
 
 The terminal applications open without fixture files and explain their own
