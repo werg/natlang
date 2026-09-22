@@ -4,9 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-RUN="${1:?usage: evaluate_lfm_teacher_adapter.sh RUN_DIR [LABEL] [CHECKPOINT_DIR]}"
+RUN="${1:?usage: evaluate_lfm_teacher_adapter.sh RUN_DIR [LABEL] [CHECKPOINT_DIR] [PROBE_SEED]}"
 LABEL="${2:-$(basename "$RUN")}"
 CHECKPOINT="${3:-$RUN/checkpoint}"
+PROBE_SEED="${4:-19}"
 STATE="$CHECKPOINT/state.json"
 ADAPTER="$CHECKPOINT/weights"
 GGUF="$CHECKPOINT/adapter-f16.gguf"
@@ -52,15 +53,16 @@ for _ in $(seq 1 90); do
 done
 curl -fsS http://127.0.0.1:8080/health >/dev/null
 
-.venv/bin/python scripts/application_probe.py --n 3 --workers 4 --seconds 120 \
+.venv/bin/python scripts/application_probe.py --seed "$PROBE_SEED" --n 3 --workers 4 --seconds 120 \
   --validation-feedback caller --write-constraints runtime --out "$PROBE"
 .venv/bin/python scripts/eval_turns.py data/ref-v8-failures.jsonl --per-cell 2 \
   --manifest "$TURN_MANIFEST" --out "$TURN_RESULTS" --model-label "$LABEL"
 
-python - "$PROBE" "$TURN_RESULTS" "$READINESS" "$LABEL" <<'PY'
+python - "$PROBE" "$TURN_RESULTS" "$READINESS" "$LABEL" "$PROBE_SEED" <<'PY'
 import json, pathlib, sys
 from collections import Counter
-probe_path, turns_path, out_path, label = map(pathlib.Path, sys.argv[1:])
+probe_path, turns_path, out_path, label = map(pathlib.Path, sys.argv[1:5])
+probe_seed = int(sys.argv[5])
 probe = json.loads(probe_path.read_text())
 turns = json.loads(turns_path.read_text())
 rows = probe["rows"]
@@ -74,6 +76,7 @@ ready = correct >= 7 and all(by_family[name] >= 2 for name in totals)
 result = {
     "schema": "natlang.teacher_readiness/1",
     "model": str(label),
+    "probe_seed": probe_seed,
     "ready_for_generation": ready,
     "whole_program": {"correct": correct, "total": len(rows),
                       "correct_by_family": dict(by_family), "total_by_family": dict(totals)},
