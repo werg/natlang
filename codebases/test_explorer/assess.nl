@@ -1,12 +1,12 @@
 ---
 description: Interpret independently checked dependency-plan observations.
 args:
-  question: Text
+  question: string
   observations: Observation[]
 returns: Assessment
 types:
-  Observation: '{ id: Text, source_revision: Text, status: Text, violations: Text[], minimized: Text[], trace_sha256: Text, detail: Text }'
-  Assessment: '{ confirmed_ids: Text[], unknown_ids: Text[], findings: Text[], unknowns: Text[], followups: Text[] }'
+  Observation: '{ id: string, source_revision: string, status: string, violations: string[], minimized: string[], trace_sha256: string, detail: string }'
+  Assessment: '{ confirmed_ids: string[], unknown_ids: string[], findings: string[], unknowns: string[], followups: string[] }'
 ---
 Explain confirmed contract violations, execution failures, and unresolved cases.
 Only an observation with status "violated" and a nonempty violations list is a

@@ -2,9 +2,9 @@
 description: Check that a semantic draft accounts for each normalized update once.
 args:
   updates: Update[]
-  applied: Text[]
+  applied: string[]
   alternatives: Alternative[]
-returns: Bool
+returns: boolean
 ---*/
 const ids = args.updates.map(u => u.id);
 const claimed = [...args.applied, ...args.alternatives.flatMap(a => a.update_ids)];

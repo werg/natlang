@@ -4,7 +4,7 @@ import { from_landlord } from "./handle_mail/from_landlord";
 ---
 description: Decide what to do with one email; dates from my landlord go into the calendar.
 args:
-  email: Text
+  email: string
 returns: Decision
 effects: [calendar.add]
 ---

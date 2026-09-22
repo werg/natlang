@@ -4,7 +4,7 @@ args:
   file: SourceFile
   parts: Parts
   roles: Role[]
-returns: Text
+returns: string
 ---*/
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 const fns = new Set(args.parts.functions)

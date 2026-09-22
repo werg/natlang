@@ -1,9 +1,9 @@
 ---
 description: Select the notebook goal cell that can answer a user request.
 args:
-  request: Text
+  request: string
   cells: Cell[]
-returns: Text
+returns: string
 ---
 Choose exactly one offered cell ID whose result best answers the request. Use
 descriptions and dependencies as evidence. Do not invent a cell. If several

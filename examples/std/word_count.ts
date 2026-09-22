@@ -1,7 +1,7 @@
 /*---
 description: Number of words in a text.
 args:
-  text: Text
-returns: Num
+  text: string
+returns: number
 ---*/
 return wordCount(args.text)

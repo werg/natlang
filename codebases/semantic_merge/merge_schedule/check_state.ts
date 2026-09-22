@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 const ids = args.state.events.map(event => event.id);
 const utc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;

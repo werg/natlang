@@ -1,8 +1,8 @@
 /*---
 engine: typescript-host
 args:
-  selected: Text[]
-  collection_revision: Text
+  selected: string[]
+  collection_revision: string
 returns: Passage[]
 ---*/
 return host.evidence.read(args.selected, args.collection_revision);

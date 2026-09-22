@@ -1,9 +1,9 @@
 ---
 description: The specific facts one rule yields, given what is known.
 args:
-  rule: Text
-  known: Text[]
-returns: Text[]
+  rule: string
+  known: string[]
+returns: string[]
 ---
 `args/rule` is a general rule and `args/known` is a list of facts.
 For every specific thing or person for which ALL conditions of the rule are among the known facts, write the rule's

@@ -7,12 +7,12 @@ import { group_count } from "../std/group_count";
 ---
 description: Triage a batch of support tickets into a report.
 args:
-  tickets: Text[]
-  rubric: Text
+  tickets: string[]
+  rubric: string
 returns: Report
 types:
   Label: '"billing" | "technical" | "spam"'
-  Report: '{ urgent: Num, by_label: Dict<Num>, summary: Text }'
+  Report: '{ urgent: number, by_label: Record<string, number>, summary: string }'
 uses:
   count_true: ../std/count_true
   select_by_flags: ../std/select_by_flags

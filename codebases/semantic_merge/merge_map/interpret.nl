@@ -3,7 +3,7 @@ description: Semantically reconcile edits to a keyed map.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret each update's intended change to `base.fields`. A key rename may preserve the

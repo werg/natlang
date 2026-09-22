@@ -1,10 +1,10 @@
 ---
 description: Pick one of the legal actions, by its code.
 args:
-  persona: Text
+  persona: string
   intent: Intent
   legal: Action[]
-returns: Text
+returns: string
 ---
 You are the shopkeeper described in `args/persona`. The customer's wish is `args/intent`. `args/legal` lists every
 action you are allowed to take right now; each has a `code`. Answer with the code of the one you take. You cannot take

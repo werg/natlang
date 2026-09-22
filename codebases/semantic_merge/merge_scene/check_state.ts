@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 const ids = args.state.objects.map(object => object.id);
 return Number.isSafeInteger(args.state.revision) && args.state.revision >= 0 &&

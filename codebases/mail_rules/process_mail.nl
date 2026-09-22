@@ -3,12 +3,12 @@ import { tally_actions } from "./process_mail/tally_actions";
 ---
 description: Personal mail rules - what my landlord dates go into the calendar, the rest is sorted.
 args:
-  emails: Text[]
+  emails: string[]
 returns: MailReport
 effects: [calendar.add]
 types:
-  Decision: '{ action: "calendar" | "reply_later" | "archive", date: Text }'
-  MailReport: '{ calendar: Num, reply_later: Num, archived: Num }'
+  Decision: '{ action: "calendar" | "reply_later" | "archive", date: string }'
+  MailReport: '{ calendar: number, reply_later: number, archived: number }'
 ---
 function process_mail(emails) -> MailReport
 

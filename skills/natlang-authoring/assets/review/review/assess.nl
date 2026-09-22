@@ -1,8 +1,8 @@
 ---
 description: Judge one observation against the caller's criterion, without inventing evidence.
 args:
-  observation: Text
-  criterion: Text
+  observation: string
+  criterion: string
 returns: Assessment
 ---
 Assess whether the observation supports or contradicts the criterion.

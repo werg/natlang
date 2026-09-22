@@ -2,7 +2,7 @@
 args:
   request: PackageRequest
   locks: Lock[]
-returns: Text
+returns: string
 ---
 Choose the ID of one offered lock that satisfies the user's purpose. Prefer
 the newest compatible root version unless the purpose gives a reason to retain

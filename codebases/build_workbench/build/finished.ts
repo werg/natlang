@@ -2,6 +2,6 @@
 engine: typescript-host
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 return args.state.status !== 'running';

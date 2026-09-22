@@ -5,10 +5,10 @@ args:
   files: SourceFile[]
 returns: Highlighted[]
 types:
-  SourceFile: '{ path: Text, text: Text }'
+  SourceFile: '{ path: string, text: string }'
   Role: '"signature" | "call" | "call_each" | "repeat" | "condition" | "exact" | "prose_step" | "return" | "comment" | "blank" | "leaf_text"'
-  Parts: '{ frontmatter: Text, lines: Text[], functions: Text[], is_code: Bool }'
-  Highlighted: '{ path: Text, roles: Role[], html: Text }'
+  Parts: '{ frontmatter: string, lines: string[], functions: string[], is_code: boolean }'
+  Highlighted: '{ path: string, roles: Role[], html: string }'
 ---
 function highlight(files) -> Highlighted[]
 

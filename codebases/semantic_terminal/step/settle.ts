@@ -3,7 +3,7 @@ engine: typescript-host
 args:
   acc: Session
   item: Event
-  message: Text
+  message: string
 returns: Session
 ---*/
 const a = args.acc, e = args.item;

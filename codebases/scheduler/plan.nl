@@ -6,7 +6,7 @@ import { rank } from "./plan/rank";
 ---
 description: Select a feasible workday schedule from exact host-generated alternatives.
 args:
-  request: Text
+  request: string
 returns: ScheduleResult
 ---
 function plan(request) -> ScheduleResult

@@ -7,15 +7,15 @@ description: Merge ordered task or paragraph lists with insert, move, split and 
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Item: '{ id: Text, text: Text }'
-  State: '{ revision: Num, items: Item[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Item: '{ id: string, text: string }'
+  State: '{ revision: number, items: Item[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_list(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

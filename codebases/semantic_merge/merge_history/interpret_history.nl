@@ -3,7 +3,7 @@ description: Decide how all causally presented changes affect the meaning of the
 args:
   base: Document
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Reconcile `args/updates` against `args/base/text` under `args/policy`. This is a semantic

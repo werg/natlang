@@ -4,7 +4,7 @@ args:
   base: Document
   current: MergeResult
   update: Update
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Consider `args/current/text`, every prior applied update and every unresolved alternative.

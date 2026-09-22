@@ -3,7 +3,7 @@ description: Semantically reconcile edits to a parent-linked tree.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Treat stable node IDs as identity. Interpret subtree moves, independent renames, deletion

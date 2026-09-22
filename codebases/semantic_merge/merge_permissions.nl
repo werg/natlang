@@ -7,15 +7,15 @@ description: Merge access policy edits while exposing conflicting grants and rev
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Rule: '{ subject: Text, resource: Text, action: Text, decision: "allow" | "deny" }'
-  State: '{ revision: Num, rules: Rule[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Rule: '{ subject: string, resource: string, action: string, decision: "allow" | "deny" }'
+  State: '{ revision: number, rules: Rule[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_permissions(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

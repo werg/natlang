@@ -5,7 +5,7 @@ args:
   plan: Plan
   receipt: Receipt
   inspection: Inspection
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: Assessment
 ---
 Assess whether this particular plan and inspected result meet the user's

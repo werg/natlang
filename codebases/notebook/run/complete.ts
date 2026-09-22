@@ -2,6 +2,6 @@
 engine: typescript-host
 args:
   state: NotebookState
-returns: Bool
+returns: boolean
 ---*/
 return args.state.status !== 'running';

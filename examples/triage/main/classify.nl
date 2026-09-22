@@ -1,8 +1,8 @@
 ---
 description: Label one ticket using the rubric.
 args:
-  ticket: Text
-  rubric: Text
+  ticket: string
+  rubric: string
 returns: Label
 ---
 Pick the label from `args/rubric` that fits `args/ticket`.

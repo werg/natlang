@@ -3,7 +3,7 @@ args:
   item: LogEvent
   observation: Observation
   evidence: Evidence[]
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: Judgement
 ---
 Judge this event using the supplied exact log evidence. If the event names a local runbook or log file, inspect only that args/files leaf before judging it. Choose action

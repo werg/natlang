@@ -3,7 +3,7 @@ description: Semantically reconcile operations on a measured count.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Read each update as an intent about the measured `base.value` and `base.unit`.

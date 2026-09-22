@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  revision: Text
+  revision: string
 returns: Validation
 ---*/
 return await host.repository.validate(args.revision);

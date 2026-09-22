@@ -7,14 +7,14 @@ description: Merge membership changes to a semantic collection, including add/re
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  State: '{ revision: Num, members: Text[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  State: '{ revision: number, members: string[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_set(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

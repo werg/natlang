@@ -7,15 +7,15 @@ description: Merge a nested outline or folder tree, including subtree moves and 
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Node: '{ id: Text, parent: Text, title: Text }'
-  State: '{ revision: Num, nodes: Node[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Node: '{ id: string, parent: string, title: string }'
+  State: '{ revision: number, nodes: Node[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_tree(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

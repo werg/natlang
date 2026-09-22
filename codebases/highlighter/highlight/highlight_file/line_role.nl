@@ -1,8 +1,8 @@
 ---
 description: What role does one line of a natlang function body play?
 args:
-  line: Text
-  functions: Text[]
+  line: string
+  functions: string[]
 returns: Role
 ---
 `args/line` is ONE LINE of source text from a program written in pseudocode. You are labelling it, not carrying it

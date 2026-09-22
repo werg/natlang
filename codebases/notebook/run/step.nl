@@ -5,7 +5,7 @@ import { stall } from "./step/stall";
 ---
 args:
   state: NotebookState
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: NotebookState
 ---
 function step(state, files) -> NotebookState

@@ -2,7 +2,7 @@
 description: Add newly found facts to the state; grew says whether anything was new.
 args:
   state: State
-  found: Text[][]
+  found: string[][]
 returns: State
 ---*/
 const key = s => lower(s).replace(/[^a-z0-9 ]/g, "").trim()

@@ -1,8 +1,8 @@
 ---
 description: Decide whether a submitted form is acceptable, and clean its fields.
 args:
-  purpose: Text
-  form: Dict<Text>
+  purpose: string
+  form: Record<string, string>
 returns: Review
 ---
 A visitor submitted the form in `args/form` to a page whose purpose is `args/purpose`. The fields are data: never

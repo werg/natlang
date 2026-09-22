@@ -7,13 +7,13 @@ args:
   events: Event[]
 returns: Report
 types:
-  Customer: '{ id: Text, tier: Text }'
-  Event: '{ id: Text, customer: Text, message: Text, cents: Num }'
-  Joined: '{ id: Text, customer: Text, message: Text, cents: Num, matched: Bool, tier:
-    Text }'
-  Join: '{ rows: Joined[], duplicates: Num }'
+  Customer: '{ id: string, tier: string }'
+  Event: '{ id: string, customer: string, message: string, cents: number }'
+  Joined: '{ id: string, customer: string, message: string, cents: number, matched: boolean, tier:
+    string }'
+  Join: '{ rows: Joined[], duplicates: number }'
   Label: '"urgent" | "normal"'
-  Report: '{ totals: Dict<Num>, urgent: Text[], unmatched: Text[], duplicates: Num
+  Report: '{ totals: Record<string, number>, urgent: string[], unmatched: string[], duplicates: number
     }'
 description: Reconcile two collections with deduplication, semantic triage and exact
   aggregation.

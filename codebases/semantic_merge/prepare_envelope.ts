@@ -1,7 +1,7 @@
 /*---
 description: Normalize a finite delivery set for typed semantic merge experiments.
 args:
-  revision: Num
+  revision: number
   updates: Update[]
 returns: Prepared
 ---*/

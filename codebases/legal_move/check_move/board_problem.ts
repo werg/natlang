@@ -3,7 +3,7 @@ description: Why this position cannot be played from by this player; "" if it ca
 args:
   cells: Cell[]
   player: Mark
-returns: Text
+returns: string
 ---*/
 const c = args.cells
 if (c.length !== 9) return `a board has 9 cells, this one has ${c.length}`

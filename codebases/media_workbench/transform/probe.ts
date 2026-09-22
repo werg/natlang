@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  input: Text
+  input: string
 returns: Clip
 ---*/
 return await host.media.probe(args.input);

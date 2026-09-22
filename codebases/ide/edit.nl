@@ -4,7 +4,7 @@ import { interpret } from "./edit/interpret";
 ---
 description: Interpret one editor request against a pinned source revision.
 args:
-  request: Text
+  request: string
 returns: EditReport
 ---
 function edit(request) -> EditReport

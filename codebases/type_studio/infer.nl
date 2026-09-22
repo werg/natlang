@@ -9,14 +9,14 @@ args:
 returns: Assessment
 effects: [types.check]
 types:
-  Target: '{ name: Text, body: Text, parameters: Text[], revision: Text }'
-  Obligation: '{ kind: "argument" | "return", parameter: Text, type: Text, source: Text }'
-  Signature: '{ name: Text, args: Dict<Text>, returns: Text }'
-  Witness: '{ id: Text, callee: Text, arg_types: Dict<Text>, source: Text }'
-  Context: '{ named_types: Dict<Text>, signatures: Signature[], obligations: Obligation[], required_effects: Text[], witnesses: Witness[] }'
-  Candidate: '{ args: Dict<Text>, returns: Text, effects: Text[], reason: Text, alternatives: Text[] }'
-  Diagnostic: '{ level: "exact" | "hypothesis" | "unknown", source: Text, message: Text }'
-  FitReport: '{ parseable: Bool, obligations_ok: Bool, checked: Num, diagnostics: Diagnostic[] }'
+  Target: '{ name: string, body: string, parameters: string[], revision: string }'
+  Obligation: '{ kind: "argument" | "return", parameter: string, type: string, source: string }'
+  Signature: '{ name: string, args: Record<string, string>, returns: string }'
+  Witness: '{ id: string, callee: string, arg_types: Record<string, string>, source: string }'
+  Context: '{ named_types: Record<string, string>, signatures: Signature[], obligations: Obligation[], required_effects: string[], witnesses: Witness[] }'
+  Candidate: '{ args: Record<string, string>, returns: string, effects: string[], reason: string, alternatives: string[] }'
+  Diagnostic: '{ level: "exact" | "hypothesis" | "unknown", source: string, message: string }'
+  FitReport: '{ parseable: boolean, obligations_ok: boolean, checked: number, diagnostics: Diagnostic[] }'
   Assessment: '{ candidate: Candidate, fit: FitReport, status: "consistent" | "uncertain" | "invalid" }'
 ---
 function infer(target, context) -> Assessment

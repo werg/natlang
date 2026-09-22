@@ -7,15 +7,15 @@ description: Merge collaborative calendar entries and booking requests with time
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Event: '{ id: Text, title: Text, start: Text, end: Text, place: Text }'
-  State: '{ revision: Num, events: Event[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Event: '{ id: string, title: string, start: string, end: string, place: string }'
+  State: '{ revision: number, events: Event[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_schedule(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

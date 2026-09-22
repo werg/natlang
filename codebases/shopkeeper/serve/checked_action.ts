@@ -1,7 +1,7 @@
 /*---
 description: The legal action with this code; anything else becomes decline.
 args:
-  wish: Text
+  wish: string
   legal: Action[]
 returns: Action
 ---*/

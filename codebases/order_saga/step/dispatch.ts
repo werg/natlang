@@ -1,7 +1,7 @@
 /*---
 args:
   commands: Command[]
-returns: Num
+returns: number
 effects:
 - queue.send
 ---*/

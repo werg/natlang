@@ -6,7 +6,7 @@ export const naturalExamples = [
     concepts: ['write', 'typed output'], root: 'tasks/answer.nl',
     source: `---
 description: Produce one typed answer from natural instructions.
-returns: Num
+returns: number
 ---
 Write the number 7 to return.`, expected: 7 }),
   natural({ id: 'feedback-tone', name: 'Feedback tone', category: 'Classification', level: 'Beginner',
@@ -14,7 +14,7 @@ Write the number 7 to return.`, expected: 7 }),
     concepts: ['classification', 'enum'], root: 'feedback/tone.nl',
     source: `---
 args:
-  comment: Text
+  comment: string
 returns: Tone
 types:
   Tone: '"positive" | "negative" | "neutral"'
@@ -26,10 +26,10 @@ Read args/comment. Write the best matching tone to return.`,
     concepts: ['extraction', 'typed records'], root: 'contacts/extract.nl',
     source: `---
 args:
-  message: Text
+  message: string
 returns: Contact
 types:
-  Contact: '{ name: Text, email: Text }'
+  Contact: '{ name: string, email: string }'
 ---
 Read args/message and find the person's full name and email address.
 Copy both exactly as written, without inventing missing details.
@@ -41,10 +41,10 @@ Write a Contact record with name and email to return.`,
     concepts: ['extraction', 'classification'], root: 'issues/fields.nl',
     source: `---
 args:
-  message: Text
+  message: string
 returns: Issue
 types:
-  Issue: '{ area: Text, urgency: Text, customer: Text }'
+  Issue: '{ area: string, urgency: string, customer: string }'
 ---
 Read args/message. Extract the customer, affected area, and urgency. Use urgency "high" only for a current outage; otherwise use "normal". Write the record to return.`,
     inputs: { message: 'From Northwind: checkout is down for every customer right now.' },
@@ -54,11 +54,11 @@ Read args/message. Extract the customer, affected area, and urgency. Use urgency
     concepts: ['policy', 'explanation'], root: 'policy/decide.nl',
     source: `---
 args:
-  request: Text
-  rule: Text
+  request: string
+  rule: string
 returns: Decision
 types:
-  Decision: '{ allowed: Bool, reason: Text }'
+  Decision: '{ allowed: boolean, reason: string }'
 ---
 Apply args/rule to args/request. Write allowed and a brief reason grounded in the rule to return.`,
     inputs: { request: 'Refund a purchase made 10 days ago.', rule: 'Refunds are allowed within 30 days.' },
@@ -68,8 +68,8 @@ Apply args/rule to args/request. Write allowed and a brief reason grounded in th
     concepts: ['extraction', 'arrays'], root: 'meetings/actions.nl',
     source: `---
 args:
-  notes: Text
-returns: Text[]
+  notes: string
+returns: string[]
 ---
 List only the explicit next actions in args/notes, in the order they appear. Write the list to return.`,
     inputs: { notes: 'Maya will draft the proposal. We discussed pricing. Leo will send the test report.' },
@@ -79,7 +79,7 @@ List only the explicit next actions in args/notes, in the order they appear. Wri
     concepts: ['security triage', 'classification'], root: 'security/sql_risk.nl',
     source: `---
 args:
-  query: Text
+  query: string
 returns: Risk
 types:
   Risk: '"safe" | "suspicious"'
@@ -91,9 +91,9 @@ Classify args/query as suspicious when it contains an attempt to change query me
     concepts: ['grounding', 'synthesis'], root: 'research/summarize.nl',
     source: `---
 args:
-  claim: Text
-  evidence: Text[]
-returns: Text
+  claim: string
+  evidence: string[]
+returns: string
 ---
 Answer args/claim using only args/evidence. If the evidence is insufficient, say so. Write one concise sentence to return.`,
     inputs: { claim: 'Did the service recover?', evidence: ['Errors fell to zero at 14:05 UTC.', 'The health check passed at 14:07 UTC.'] },
@@ -103,24 +103,24 @@ Answer args/claim using only args/evidence. If the evidence is insufficient, say
     concepts: ['child calls', 'classification', 'typed composition'], root: 'support/triage.nl',
     source: `---
 args:
-  ticket: Text
+  ticket: string
 returns: Triage
 types:
-  Triage: '{ team: Text, priority: Text }'
+  Triage: '{ team: string, priority: string }'
 ---
 First call classify on args/ticket to choose a team. Then call prioritize on the same ticket. Write the two results into return.`,
     files: {
       'support/triage/classify.nl': `---
 args:
-  ticket: Text
-returns: Text
+  ticket: string
+returns: string
 ---
 Choose "billing" for payment problems and "technical" for product failures. Write the team to return.
 `,
       'support/triage/prioritize.nl': `---
 args:
-  ticket: Text
-returns: Text
+  ticket: string
+returns: string
 ---
 Write "urgent" for a current outage; otherwise write "normal" to return.
 `,
@@ -132,16 +132,16 @@ Write "urgent" for a current outage; otherwise write "normal" to return.
     concepts: ['child calls', 'structured report'], root: 'incident/brief.nl',
     source: `---
 args:
-  log: Text
+  log: string
 returns: Brief
 types:
-  Brief: '{ severity: Text, headline: Text }'
+  Brief: '{ severity: string, headline: string }'
 ---
 Call severity on args/log. Write the severity and a short factual headline to return.`,
     files: { 'incident/brief/severity.nl': `---
 args:
-  log: Text
-returns: Text
+  log: string
+returns: string
 ---
 Return "critical" when the log says the service is unavailable to all users; otherwise return "minor".
 ` },
@@ -152,26 +152,26 @@ Return "critical" when the log says the service is unavailable to all users; oth
     concepts: ['crisp child', 'natural child', 'decision'], root: 'release/review.nl',
     source: `---
 args:
-  notes: Text
-  tests_passed: Bool
+  notes: string
+  tests_passed: boolean
 returns: ReleaseReview
 types:
-  ReleaseReview: '{ ship: Bool, summary: Text }'
+  ReleaseReview: '{ ship: boolean, summary: string }'
 ---
 Call gate with tests_passed. Call summarize with notes. Write both results to return without changing the gate decision.`,
     files: {
       'release/review/gate.ts': `/*---
 args:
-  tests_passed: Bool
-returns: Bool
+  tests_passed: boolean
+returns: boolean
 engine: typescript-host
 ---*/
 return args.tests_passed;
 `,
       'release/review/summarize.nl': `---
 args:
-  notes: Text
-returns: Text
+  notes: string
+returns: string
 ---
 Write a concise one-sentence summary of args/notes to return.
 `,
@@ -183,16 +183,16 @@ Write a concise one-sentence summary of args/notes to return.
     concepts: ['Map', 'aggregation', 'child calls'], root: 'survey/themes.nl',
     source: `---
 args:
-  comments: Text[]
+  comments: string[]
 returns: ThemeReport
 types:
-  ThemeReport: '{ labels: Text[], summary: Text }'
+  ThemeReport: '{ labels: string[], summary: string }'
 ---
 For each comment in args/comments call label. Write the ordered labels and one sentence about the most common issue to return.`,
     files: { 'survey/themes/label.nl': `---
 args:
-  comment: Text
-returns: Text
+  comment: string
+returns: string
 ---
 Use "speed" for performance complaints, "usability" for interface complaints, or "other". Write the label to return.
 ` },
@@ -204,15 +204,15 @@ Use "speed" for performance complaints, "usability" for interface complaints, or
     source: `---
 args:
   tasks: Task[]
-returns: Text[]
+returns: string[]
 types:
-  Task: '{ id: Text, needs: Text[] }'
+  Task: '{ id: string, needs: string[] }'
 ---
 Call order_tasks with args/tasks. Write the returned order to return. If dependencies are impossible, report an error rather than guessing.`,
     files: { 'migration/plan/order_tasks.ts': `/*---
 args:
   tasks: Task[]
-returns: Text[]
+returns: string[]
 engine: typescript-host
 ---*/
 const done = [], pending = new Map(args.tasks.map(task => [task.id, task.needs]));

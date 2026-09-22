@@ -5,7 +5,7 @@ import { invalid } from "./run/invalid";
 ---
 description: Check and run a pinned source revision as a child programme.
 args:
-  input: Text
+  input: string
 returns: RunReport
 ---
 function run(input) -> RunReport

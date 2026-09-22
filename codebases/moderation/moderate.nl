@@ -6,12 +6,12 @@ import { any_true } from "../std/any_true";
 ---
 description: Moderate one post against a written policy - allow, warn, remove, or escalate to a human.
 args:
-  post: Text
-  policy: Text
+  post: string
+  policy: string
 returns: Decision
 types:
   Severity: '"low" | "high"'
-  Decision: '{ action: "allow" | "warn" | "remove" | "escalate", rules: Text[], note: Text }'
+  Decision: '{ action: "allow" | "warn" | "remove" | "escalate", rules: string[], note: string }'
 uses:
   select_by_flags: ../std/select_by_flags
   any_true: ../std/any_true

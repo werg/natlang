@@ -1,10 +1,10 @@
 /*---
 description: Say the line to the customer.
 args:
-  to: Text
-  line: Text
+  to: string
+  line: string
   action: Action
-returns: Bool
+returns: boolean
 effects: [out.emit]
 ---*/
 fx.out.emit({ to: args.to, line: args.line, action: args.action.code })

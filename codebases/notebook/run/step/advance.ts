@@ -2,7 +2,7 @@
 engine: typescript-host
 args:
   state: NotebookState
-  chosen: Text
+  chosen: string
 returns: NotebookState
 ---*/
 const state = args.state, done = new Set(state.order);

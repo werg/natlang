@@ -1,12 +1,12 @@
 ---
 args:
-  brief: Text
+  brief: string
   outline: Outline
   passages: Passage[]
-  collection_revision: Text
-  table_ids: Text[]
-  asset_ids: Text[]
-  files?: Dict<File>
+  collection_revision: string
+  table_ids: string[]
+  asset_ids: string[]
+  files?: Record<string, File>
 returns: Document
 ---
 Compose one portable document from the outline. If the brief names local editorial context, inspect only that args/files leaf. For each factual claim write a

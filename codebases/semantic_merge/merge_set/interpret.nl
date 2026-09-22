@@ -3,7 +3,7 @@ description: Semantically reconcile membership of a set-like collection.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret adds, removals, renames and references to possibly synonymous members.

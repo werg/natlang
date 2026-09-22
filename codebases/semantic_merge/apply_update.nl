@@ -8,7 +8,7 @@ args:
   base: Document
   current: MergeResult
   update: Update
-  policy: Text
+  policy: string
 returns: MergeResult
 ---
 function apply_update(base, current, update, policy) -> MergeResult

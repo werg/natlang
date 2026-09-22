@@ -4,7 +4,7 @@ import { submit } from "./turn/submit";
 ---
 description: Choose a fighter tactic at a round boundary.
 args:
-  actor: Text
+  actor: string
 returns: CombatReceipt
 ---
 function turn(actor) -> CombatReceipt

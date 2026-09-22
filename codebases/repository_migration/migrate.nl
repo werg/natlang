@@ -7,8 +7,8 @@ import { validate } from "./migrate/validate";
 ---
 description: Plan an exact isolated repository edit and report declared checks from the pinned repository snapshot.
 args:
-  request: Text
-  query: Text
+  request: string
+  query: string
 returns: MigrationReport
 ---
 function migrate(request, query) -> MigrationReport

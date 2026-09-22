@@ -7,16 +7,16 @@ description: Merge a knowledge or dependency graph with semantic node identity a
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Node: '{ id: Text, label: Text }'
-  Edge: '{ from: Text, relation: Text, to: Text }'
-  State: '{ revision: Num, nodes: Node[], edges: Edge[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Node: '{ id: string, label: string }'
+  Edge: '{ from: string, relation: string, to: string }'
+  State: '{ revision: number, nodes: Node[], edges: Edge[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_graph(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

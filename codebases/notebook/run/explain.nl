@@ -1,9 +1,9 @@
 ---
 args:
-  question: Text
+  question: string
   state: NotebookState
-  files?: Dict<File>
-returns: Text
+  files?: Record<string, File>
+returns: string
 ---
 Answer the question using only the cell result samples and their status. If the question names a supporting note, inspect that exact args/files leaf and distinguish it from cell evidence. Cite
 cell IDs and revisions in prose. Distinguish SQL NULL from absent data and

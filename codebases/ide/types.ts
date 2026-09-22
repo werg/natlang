@@ -1,12 +1,12 @@
-export type EditorFile = { name: Text, kind: Text, source: Text, returns: Text };
-export type EditorSnapshot = { revision: Text, root: Text, files: EditorFile[] };
-export type EditPatch = { name: Text, start: Num, end: Num, text: Text,
-  expected_revision: Text };
-export type EditReport = { status: Text, revision: Text, detail: Text };
-export type CheckReport = { status: Text, revision: Text, source_revision: Text, detail: Text };
-export type RunReport = { status: Text, run_id: Text, revision: Text,
-  source_revision: Text, value_text: Text, trace_events: Num, detail: Text };
-export type TraceView = { run_id: Text, source_revision: Text,
-  index: Num, total: Num, event_json: Text };
-export type ViewPanel = { heading: Text, body: Text };
-export type EditorView = { title: Text, panels: ViewPanel[] };
+export type EditorFile = { name: string, kind: string, source: string, returns: string };
+export type EditorSnapshot = { revision: string, root: string, files: EditorFile[] };
+export type EditPatch = { name: string, start: number, end: number, text: string,
+  expected_revision: string };
+export type EditReport = { status: string, revision: string, detail: string };
+export type CheckReport = { status: string, revision: string, source_revision: string, detail: string };
+export type RunReport = { status: string, run_id: string, revision: string,
+  source_revision: string, value_text: string, trace_events: number, detail: string };
+export type TraceView = { run_id: string, source_revision: string,
+  index: number, total: number, event_json: string };
+export type ViewPanel = { heading: string, body: string };
+export type EditorView = { title: string, panels: ViewPanel[] };

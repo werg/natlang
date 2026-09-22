@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  target: Text
+  target: string
   checked: InstallCheck
 returns: InstallReport
 ---*/

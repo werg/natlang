@@ -1,8 +1,8 @@
 /*---
 engine: typescript-host
 args:
-  actor: Text
-  round: Num
+  actor: string
+  round: number
   plan: CombatPlan
 returns: CombatReceipt
 ---*/

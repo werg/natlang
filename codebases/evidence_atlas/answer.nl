@@ -7,7 +7,7 @@ import { verify } from "./answer/verify";
 ---
 description: Search a versioned collection, read exact passages, and compose a cited answer.
 args:
-  question: Text
+  question: string
 returns: EvidenceAnswer
 ---
 function answer(question) -> EvidenceAnswer

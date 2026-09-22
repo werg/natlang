@@ -4,7 +4,7 @@ import { observe } from "./react/observe";
 ---
 description: Respond to an NPC event using assigned memory and legal world actions.
 args:
-  actor: Text
+  actor: string
   event: NpcEvent
 returns: NpcResult
 ---

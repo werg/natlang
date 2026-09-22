@@ -1,6 +1,6 @@
 ---
 args:
-  request: Text
+  request: string
   snapshot: RepoSnapshot
   uses: SearchResult
 returns: Patch[]

@@ -4,7 +4,7 @@ description: Reduce one interactive terminal event through the semantic terminal
 args:
   state: Session
   event: Event
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: Session
 uses:
   step: ./step.nl

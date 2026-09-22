@@ -5,7 +5,7 @@ import { validate } from "./install/validate";
 description: Check a locked natlang bundle and publish it to an offline installation target.
 args:
   lock: Lock
-  target: Text
+  target: string
 returns: InstallReport
 ---
 function install(lock, target) -> InstallReport

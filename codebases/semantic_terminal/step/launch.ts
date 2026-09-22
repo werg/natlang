@@ -3,7 +3,7 @@ engine: typescript-host
 args:
   acc: Session
   item: Event
-  recipe: Text
+  recipe: string
 returns: Session
 ---*/
 const acc = args.acc, item = args.item;

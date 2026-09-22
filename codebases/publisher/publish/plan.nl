@@ -1,10 +1,10 @@
 ---
 args:
-  brief: Text
+  brief: string
   passages: Passage[]
-  table_ids: Text[]
-  asset_ids: Text[]
-  files?: Dict<File>
+  table_ids: string[]
+  asset_ids: string[]
+  files?: Record<string, File>
 returns: Outline
 ---
 Plan a short document for the brief. If the brief names local editorial context, inspect only that args/files leaf. Choose a title, section headings and which

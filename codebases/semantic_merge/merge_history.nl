@@ -8,7 +8,7 @@ description: Semantically reconcile an agreed base and a finite set of updates, 
 args:
   base: Document
   updates: Update[]
-  policy: Text
+  policy: string
 returns: MergeResult
 ---
 function merge_history(base, updates, policy) -> MergeResult

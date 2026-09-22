@@ -3,7 +3,7 @@ description: Semantically reconcile ordered items.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret item identity, order and wording together. A move is not a delete plus an

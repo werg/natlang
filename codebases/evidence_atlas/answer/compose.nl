@@ -1,8 +1,8 @@
 ---
 args:
-  question: Text
+  question: string
   passages: Passage[]
-  truncated: Bool
+  truncated: boolean
 returns: Draft
 ---
 Answer only what the passages establish. For every factual claim, include its

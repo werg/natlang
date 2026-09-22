@@ -7,12 +7,12 @@ import { any_true } from "../std/any_true";
 ---
 description: Can the goal be derived from a knowledge base of prose facts and rules? Forward chaining to a fixed point.
 args:
-  goal: Text
-  kb: Text[]
+  goal: string
+  kb: string[]
 returns: Answer
 types:
-  Answer: '{ verdict: "yes" | "unknown", derived: Text[] }'
-  State: '{ known: Text[], derived: Text[], grew: Bool }'
+  Answer: '{ verdict: "yes" | "unknown", derived: string[] }'
+  State: '{ known: string[], derived: string[], grew: boolean }'
 uses:
   select_by_flags: ../std/select_by_flags
   any_true: ../std/any_true

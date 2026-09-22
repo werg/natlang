@@ -1,5 +1,5 @@
-export type WorkflowEvent = { kind: Text, fault?: Text };
-export type Operation = { key: Text, action: Text, status: Text, detail: Text };
-export type WorkflowState = { order_id: Text, amount: Num, revision: Num,
-  phase: Text, pending: Text, obligations: Text[], history: Operation[] };
-export type Decision = { action: Text, reason: Text };
+export type WorkflowEvent = { kind: string, fault?: string };
+export type Operation = { key: string, action: string, status: string, detail: string };
+export type WorkflowState = { order_id: string, amount: number, revision: number,
+  phase: string, pending: string, obligations: string[], history: Operation[] };
+export type Decision = { action: string, reason: string };

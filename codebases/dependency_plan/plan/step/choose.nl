@@ -1,7 +1,7 @@
 ---
 args:
   ready: Task[]
-returns: Text
+returns: string
 ---
 Choose one of the ready tasks by its description: first active security remediation,
 then customer-facing work, then internal housekeeping. Within the same priority,

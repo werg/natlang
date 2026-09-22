@@ -9,13 +9,13 @@ args:
 returns: CheckReport
 effects: [types.calls]
 types:
-  Target: '{ name: Text, body: Text, parameters: Text[], revision: Text }'
-  Obligation: '{ kind: "argument" | "return", parameter: Text, type: Text, source: Text }'
-  Signature: '{ name: Text, args: Dict<Text>, returns: Text }'
-  Witness: '{ id: Text, callee: Text, arg_types: Dict<Text>, source: Text }'
-  Context: '{ named_types: Dict<Text>, signatures: Signature[], obligations: Obligation[], required_effects: Text[], witnesses: Witness[] }'
-  CallClaim: '{ callee: Text, arg_types: Dict<Text>, evidence_id: Text, rationale: Text }'
-  Diagnostic: '{ level: "exact" | "hypothesis" | "unknown", source: Text, message: Text }'
+  Target: '{ name: string, body: string, parameters: string[], revision: string }'
+  Obligation: '{ kind: "argument" | "return", parameter: string, type: string, source: string }'
+  Signature: '{ name: string, args: Record<string, string>, returns: string }'
+  Witness: '{ id: string, callee: string, arg_types: Record<string, string>, source: string }'
+  Context: '{ named_types: Record<string, string>, signatures: Signature[], obligations: Obligation[], required_effects: string[], witnesses: Witness[] }'
+  CallClaim: '{ callee: string, arg_types: Record<string, string>, evidence_id: string, rationale: string }'
+  Diagnostic: '{ level: "exact" | "hypothesis" | "unknown", source: string, message: string }'
   CheckReport: '{ claims: CallClaim[], diagnostics: Diagnostic[] }'
 ---
 function check(target, context) -> CheckReport

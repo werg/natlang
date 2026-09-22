@@ -1,8 +1,8 @@
 /*---
 engine: typescript-host
 args:
-  actor: Text
-  tick: Num
+  actor: string
+  tick: number
   intent: TradeIntent
 returns: TradeReceipt
 ---*/

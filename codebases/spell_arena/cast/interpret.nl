@@ -1,7 +1,7 @@
 ---
 description: Translate a player's spell into an ordered, typed effect plan or ask for clarification.
 args:
-  utterance: Text
+  utterance: string
   observation: World
   rules: Rules
 returns: Interpretation

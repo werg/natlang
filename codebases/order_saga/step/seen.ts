@@ -2,6 +2,6 @@
 args:
   acc: State
   item: Event
-returns: Bool
+returns: boolean
 ---*/
 return args.acc.seen.includes(args.item.id);

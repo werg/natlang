@@ -2,6 +2,6 @@
 description: Did the last round derive nothing new?
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 return !args.state.grew

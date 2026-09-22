@@ -1,7 +1,7 @@
-type Document = { revision: Num, text: Text };
-type Update = { id: Text, parents: Text[], base_revision: Num, author: Text, text: Text };
-type Alternative = { update_ids: Text[], proposal: Text, reason: Text };
-type Draft = { text: Text, applied: Text[], alternatives: Alternative[], explanation: Text };
-type Prepared = { valid: Bool, error: Text, updates: Update[], presentation: Text };
-type MergeResult = { status: "merged" | "unresolved" | "rejected", text: Text, applied: Text[], alternatives: Alternative[], explanation: Text, base_revision: Num, updates: Update[], presentation: Text };
-type Step = { kind: "new" | "duplicate" | "invalid", error: Text, updates: Update[], presentation: Text };
+type Document = { revision: number, text: string };
+type Update = { id: string, parents: string[], base_revision: number, author: string, text: string };
+type Alternative = { update_ids: string[], proposal: string, reason: string };
+type Draft = { text: string, applied: string[], alternatives: Alternative[], explanation: string };
+type Prepared = { valid: boolean, error: string, updates: Update[], presentation: string };
+type MergeResult = { status: "merged" | "unresolved" | "rejected", text: string, applied: string[], alternatives: Alternative[], explanation: string, base_revision: number, updates: Update[], presentation: string };
+type Step = { kind: "new" | "duplicate" | "invalid", error: string, updates: Update[], presentation: string };

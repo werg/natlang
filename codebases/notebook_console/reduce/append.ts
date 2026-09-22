@@ -2,7 +2,7 @@
 engine: typescript-host
 args:
   state: ConsoleState
-  request: Text
+  request: string
   result: NotebookState
 returns: ConsoleState
 ---*/

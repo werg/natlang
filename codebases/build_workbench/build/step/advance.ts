@@ -2,7 +2,7 @@
 engine: typescript-host
 args:
   state: State
-  chosen: Text
+  chosen: string
 returns: State
 ---*/
 const state = args.state;

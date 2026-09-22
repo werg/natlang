@@ -3,7 +3,7 @@ description: Semantically reconcile event times, locations and identity.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Read each author request in the event's context. A reschedule may refer to the same event

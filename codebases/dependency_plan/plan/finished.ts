@@ -1,6 +1,6 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 return args.state.finished;

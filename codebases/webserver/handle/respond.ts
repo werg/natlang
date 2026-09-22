@@ -1,9 +1,9 @@
 /*---
 description: Send the response for a request.
 args:
-  id: Text
+  id: string
   response: Response
-returns: Bool
+returns: boolean
 effects: [http.respond]
 ---*/
 fx.http.respond(args.id, args.response)

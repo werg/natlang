@@ -1,6 +1,6 @@
-export type Hit = { id: Text, source_id: Text, revision: Text, preview: Text, score: Num };
-export type SearchResult = { hits: Hit[], total: Num, truncated: Bool, collection_revision: Text };
-export type Passage = { id: Text, source_id: Text, revision: Text, start: Num, end: Num, text: Text };
-export type Claim = { text: Text, span_id: Text, revision: Text, quote: Text };
-export type Draft = { answer: Text, claims: Claim[], gaps: Text[] };
-export type EvidenceAnswer = { status: Text, answer: Text, claims: Claim[], gaps: Text[], collection_revision: Text, detail: Text };
+export type Hit = { id: string, source_id: string, revision: string, preview: string, score: number };
+export type SearchResult = { hits: Hit[], total: number, truncated: boolean, collection_revision: string };
+export type Passage = { id: string, source_id: string, revision: string, start: number, end: number, text: string };
+export type Claim = { text: string, span_id: string, revision: string, quote: string };
+export type Draft = { answer: string, claims: Claim[], gaps: string[] };
+export type EvidenceAnswer = { status: string, answer: string, claims: Claim[], gaps: string[], collection_revision: string, detail: string };

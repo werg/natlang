@@ -5,9 +5,9 @@ args:
   existing: Existing[]
 returns: Decision[]
 types:
-  Customer: '{ source_key: Text, email: Text, name: Text }'
-  Existing: '{ id: Text, email: Text, name: Text }'
-  Decision: '{ source_key: Text, action: "new" | "merge" | "review", target_email: Text, reason: Text }'
+  Customer: '{ source_key: string, email: string, name: string }'
+  Existing: '{ id: string, email: string, name: string }'
+  Decision: '{ source_key: string, action: "new" | "merge" | "review", target_email: string, reason: string }'
 ---
 Return one decision per source customer. Use `new` when there is no supported
 match, `merge` only for the same normalized email and the same display name,

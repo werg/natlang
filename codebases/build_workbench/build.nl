@@ -4,9 +4,9 @@ import { step } from "./build/step";
 ---
 description: Build a declared dependency graph, choosing each ready task by its purpose and retaining exact execution evidence. Use files to inspect declared workspace inputs before choosing a task.
 args:
-  goal: Text
+  goal: string
   tasks: Task[]
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: State
 ---
 function build(goal, tasks, files) -> State

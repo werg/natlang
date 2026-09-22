@@ -1,9 +1,9 @@
 import { crisp, natural } from './builders.mjs';
 
-const types = `type State = { count: Num, step: Num };
-type UiEvent = { id: Text, kind: Text, value?: Text };
-type Action = { kind: Text, value?: Text, from?: Text };
-type Node = { tag: Text, text?: Text, value?: Text, id?: Text, label?: Text, disabled?: Bool, action?: Action, children?: Node[] };`;
+const types = `type State = { count: number, step: number };
+type UiEvent = { id: string, kind: string, value?: string };
+type Action = { kind: string, value?: string, from?: string };
+type Node = { tag: string, text?: string, value?: string, id?: string, label?: string, disabled?: boolean, action?: Action, children?: Node[] };`;
 const reducer = `/*---
 args:
   state: State
@@ -55,10 +55,10 @@ Add a short paragraph explaining that each click changes the count by args/state
 Use only section, div, h2, p, output, and button tags.
 Do not emit HTML, CSS, or JavaScript. Return structured Node data.` });
 modelCounter.guide = 'The model writes the view; the exact reducer handles clicks. Try asking for a different heading or explanation in ui/view.nl, then Apply & run. Each interaction generates a fresh view.';
-const quoteTypes = `type State = { seats: Num, annual: Bool };
-type UiEvent = { id: Text, kind: Text, value?: Text };
-type Action = { kind: Text, value?: Text };
-type Node = { tag: Text, text?: Text, value?: Text, label?: Text, action?: Action, children?: Node[] };`;
+const quoteTypes = `type State = { seats: number, annual: boolean };
+type UiEvent = { id: string, kind: string, value?: string };
+type Action = { kind: string, value?: string };
+type Node = { tag: string, text?: string, value?: string, label?: string, action?: Action, children?: Node[] };`;
 const quoteView = state => {
   const price = state.annual ? 8 : 10;
   return { tag: 'section', children: [

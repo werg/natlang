@@ -11,7 +11,7 @@ description: Reduce one user or job event in a semantic terminal session. For a 
 args:
   acc: Session
   item: Event
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: Session
 ---
 function step(acc, item, files) -> Session

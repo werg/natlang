@@ -6,8 +6,8 @@ args:
   tasks: Task[]
 returns: State
 types:
-  Task: '{ id: Text, needs: Text[], description: Text }'
-  State: '{ tasks: Task[], order: Text[], blocked: Text[], finished: Bool }'
+  Task: '{ id: string, needs: string[], description: string }'
+  State: '{ tasks: Task[], order: string[], blocked: string[], finished: boolean }'
 description: Plan a dependency graph with a semantic priority choice; expose cycles
   and missing dependencies.
 ---

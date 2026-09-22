@@ -9,11 +9,11 @@ args:
   item: Event
 returns: State
 types:
-  Event: '{ id: Text, order: Text, text: Text }'
+  Event: '{ id: string, order: string, text: string }'
   Kind: '"start" | "paid" | "failed" | "sent" | "cancel"'
   Order: '"reserved" | "paid" | "done" | "cancelled"'
-  Command: '{ key: Text, order: Text, operation: Text }'
-  State: '{ seen: Text[], orders: Dict<Order>, outbox: Command[] }'
+  Command: '{ key: string, order: string, operation: string }'
+  State: '{ seen: string[], orders: Record<string, Order>, outbox: Command[] }'
 effects:
 - queue.send
 description: Process an event stream with duplicate suppression, an outbox, idempotent

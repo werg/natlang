@@ -6,11 +6,11 @@ import { trace } from "./view/trace";
 ---
 description: Compose an editor view from source, diagnostics and a trace event.
 args:
-  run_id: Text
-  index: Num
-returns: Text
+  run_id: string
+  index: number
+returns: string
 ---
-function view(run_id, index) -> Text
+function view(run_id, index) -> string
   snapshot = inspect()
   checked = check(snapshot.revision)
   event = trace(run_id, index)

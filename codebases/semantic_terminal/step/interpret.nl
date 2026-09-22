@@ -1,9 +1,9 @@
 ---
 args:
-  text: Text
+  text: string
   catalog: Recipe[]
-  files?: Dict<File>
-returns: Text
+  files?: Record<string, File>
+returns: string
 ---
 Choose one recipe ID from catalog whose description fits the user's request. If the request concerns repository contents, inspect only the named args/files leaf (for example args/files/README.md/text) before deciding.
 Use the exact ID. If none fits, return "unsupported". Do not compose shell

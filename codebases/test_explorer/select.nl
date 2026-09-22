@@ -1,13 +1,13 @@
 ---
 description: Choose bounded dependency-plan cases that challenge a stated graph invariant.
 args:
-  question: Text
+  question: string
   cases: Case[]
-  budget: Num
+  budget: number
 returns: Selection
 types:
-  Case: '{ id: Text, description: Text, group: Text }'
-  Selection: '{ ids: Text[], reason: Text }'
+  Case: '{ id: string, description: string, group: string }'
+  Selection: '{ ids: string[], reason: string }'
 ---
 Select at most budget distinct case IDs from cases. Prefer cases that test different
 graph structures and missing dependencies. Explain what each selection probes. Only

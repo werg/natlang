@@ -2,7 +2,7 @@
 description: The verdict on placing the player's mark in a cell.
 args:
   cells: Cell[]
-  target: Num
+  target: number
   player: Mark
 returns: Verdict
 ---*/

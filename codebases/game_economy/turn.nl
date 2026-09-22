@@ -4,7 +4,7 @@ import { submit } from "./turn/submit";
 ---
 description: Choose one merchant trade or pass from its permitted observation.
 args:
-  actor: Text
+  actor: string
 returns: TradeReceipt
 ---
 function turn(actor) -> TradeReceipt

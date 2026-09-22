@@ -1,15 +1,15 @@
-export type MergeProfile = { model: Text, source: Text, seed: Num };
-export type WikiBlock = { id: Text, kind: Text, text: Text,
-  language?: Text, returns?: Text };
-export type WikiPage = { id: Text, revision: Text, blocks: WikiBlock[],
+export type MergeProfile = { model: string, source: string, seed: number };
+export type WikiBlock = { id: string, kind: string, text: string,
+  language?: string, returns?: string };
+export type WikiPage = { id: string, revision: string, blocks: WikiBlock[],
   unresolved?: Conflict[] };
-export type WikiUpdate = { id: Text, block_id: Text, base_revision: Text,
-  author: Text, text: Text };
-export type Conflict = { update_id: Text, alternatives: Text[] };
-export type PreparedMerge = { valid: Bool, detail: Text,
-  updates: WikiUpdate[], presentation: Text };
-export type MergeDraft = { blocks: WikiBlock[], accounted: Text[],
+export type WikiUpdate = { id: string, block_id: string, base_revision: string,
+  author: string, text: string };
+export type Conflict = { update_id: string, alternatives: string[] };
+export type PreparedMerge = { valid: boolean, detail: string,
+  updates: WikiUpdate[], presentation: string };
+export type MergeDraft = { blocks: WikiBlock[], accounted: string[],
   unresolved: Conflict[] };
-export type MergeReport = { status: Text, page: WikiPage, detail: Text };
-export type CellResult = { status: Text, page_revision: Text,
-  source_revision: Text, value_text: Text, trace_events: Num };
+export type MergeReport = { status: string, page: WikiPage, detail: string };
+export type CellResult = { status: string, page_revision: string,
+  source_revision: string, value_text: string, trace_events: number };

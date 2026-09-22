@@ -1,7 +1,7 @@
 ---
 description: Explain a finite experiment while distinguishing exact measurements from semantic judgments.
 args:
-  question: Text
+  question: string
   plan: Plan
   metrics: Metric[]
   trials: Trial[]

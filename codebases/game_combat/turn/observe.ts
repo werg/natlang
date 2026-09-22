@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  actor: Text
+  actor: string
 returns: CombatObservation
 ---*/
 return host.combat.observe(args.actor);

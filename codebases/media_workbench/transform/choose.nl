@@ -2,7 +2,7 @@
 args:
   request: Request
   source: Clip
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: Plan
 ---
 Choose exactly one of trim, crop, scale, or transcode from the user's request. If the request names a sidecar note, inspect only that args/files leaf before choosing.

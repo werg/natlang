@@ -4,7 +4,7 @@ import { merge } from "./derive/merge";
 description: One round of forward chaining - apply every rule to what is known.
 args:
   state: State
-  rules: Text[]
+  rules: string[]
 returns: State
 ---
 function derive(state, rules) -> State

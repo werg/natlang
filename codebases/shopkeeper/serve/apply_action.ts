@@ -3,7 +3,7 @@ description: Update stock, coins and the ledger for an action.
 args:
   acc: Shop
   action: Action
-  customer: Text
+  customer: string
 returns: Shop
 ---*/
 const a = args.action

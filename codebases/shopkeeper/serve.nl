@@ -14,10 +14,10 @@ args:
 returns: Shop
 effects: [out.emit]
 types:
-  Message: '{ from: Text, text: Text }'
-  Shop: '{ stock: Dict<Num>, prices: Dict<Num>, coins: Num, persona: Text, ledger: Text[] }'
-  Intent: '{ kind: "buy" | "ask_price" | "haggle" | "chat", good: Text, qty: Num, offer: Num }'
-  Action: '{ code: Text, good: Text, qty: Num, price: Num }'
+  Message: '{ from: string, text: string }'
+  Shop: '{ stock: Record<string, number>, prices: Record<string, number>, coins: number, persona: string, ledger: string[] }'
+  Intent: '{ kind: "buy" | "ask_price" | "haggle" | "chat", good: string, qty: number, offer: number }'
+  Action: '{ code: string, good: string, qty: number, price: number }'
 ---
 function serve(acc, item) -> Shop
 

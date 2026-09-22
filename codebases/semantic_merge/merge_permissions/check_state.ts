@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 const keys = args.state.rules.map(r => JSON.stringify([r.subject, r.resource, r.action]));
 return Number.isSafeInteger(args.state.revision) && args.state.revision >= 0 &&

@@ -8,7 +8,7 @@ description: Investigate one log or source-gap event with exact evidence and sem
 args:
   acc: IncidentState
   item: LogEvent
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: IncidentState
 ---
 function step(acc, item, files) -> IncidentState

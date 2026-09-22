@@ -3,7 +3,7 @@ description: Put page content into the site layout, with headers and the session
 args:
   acc: Site
   route: Route
-  content: Text
+  content: string
   session: Session
 returns: Response
 ---*/

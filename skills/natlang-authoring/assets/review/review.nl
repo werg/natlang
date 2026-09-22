@@ -1,8 +1,8 @@
 ---
 description: Assess each observation and retain its reason alongside exact counts.
 args:
-  observations: Text[]
-  criterion: Text
+  observations: string[]
+  criterion: string
 returns: Report
 ---
 function review(observations, criterion) -> Report

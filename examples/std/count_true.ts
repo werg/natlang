@@ -1,7 +1,7 @@
 /*---
 description: How many flags are true.
 args:
-  flags: Bool[]
-returns: Num
+  flags: boolean[]
+returns: number
 ---*/
 return args.flags.filter(Boolean).length

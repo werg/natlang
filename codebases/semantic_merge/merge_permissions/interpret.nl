@@ -3,7 +3,7 @@ description: Semantically reconcile permission grants, denials and scope changes
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret the named subjects, resources and actions literally. A revocation may refer to

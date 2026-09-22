@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-  chosen: Text
+  chosen: string
 returns: State
 ---*/
 const task = args.state.tasks.find(t => t.id === args.chosen);

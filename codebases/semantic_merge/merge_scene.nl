@@ -7,15 +7,15 @@ description: Merge edits to a shared diagram or game scene with semantic object 
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  Object: '{ id: Text, label: Text, x: Num, y: Num, color: Text }'
-  State: '{ revision: Num, objects: Object[] }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  Object: '{ id: string, label: string, x: number, y: number, color: string }'
+  State: '{ revision: number, objects: Object[] }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_scene(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 return Number.isSafeInteger(args.state.revision) && args.state.revision >= 0 &&
        args.state.members.every(member => member.trim().length > 0) &&

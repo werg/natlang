@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  revision: Text
+  revision: string
   patch: Patch[]
 returns: RepoSnapshot
 ---*/

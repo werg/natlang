@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 const nodes = args.state.nodes;
 const ids = nodes.map(node => node.id);

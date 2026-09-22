@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  goal: Text
+  goal: string
   tasks: Task[]
 returns: State
 ---*/

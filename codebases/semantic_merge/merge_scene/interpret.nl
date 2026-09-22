@@ -3,7 +3,7 @@ description: Semantically reconcile scene object changes.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret object references and intent in the scene. Two authors may move one object,

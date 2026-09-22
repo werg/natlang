@@ -2,6 +2,6 @@
 engine: typescript-host
 args:
   page: EditorView
-returns: Text
+returns: string
 ---*/
 return host.ide.render(args.page);

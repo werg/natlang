@@ -1,7 +1,7 @@
 /*---
 description: Is the text at most 60 words?
 args:
-  text: Text
-returns: Bool
+  text: string
+returns: boolean
 ---*/
 return wordCount(args.text) <= 60

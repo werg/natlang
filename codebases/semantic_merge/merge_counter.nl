@@ -7,14 +7,14 @@ description: Merge numeric counter intentions, distinguishing increments, correc
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 uses:
   prepare_envelope: prepare_envelope.ts
   validate_claims: validate_claims.ts
 types:
-  State: '{ revision: Num, value: Num, unit: Text }'
-  Draft: '{ state: State, applied: Text[], alternatives: Alternative[], explanation: Text }'
+  State: '{ revision: number, value: number, unit: string }'
+  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_counter(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

@@ -9,7 +9,7 @@ import { source_failure } from "./transform/source_failure";
 description: Interpret a media request, run one exact transform, inspect the output, and report uncertainty honestly. Use files to inspect input and sidecar metadata when needed.
 args:
   request: Request
-  files?: Dict<File>
+  files?: Record<string, File>
 returns: MediaResult
 ---
 function transform(request, files) -> MediaResult

@@ -3,7 +3,7 @@ description: Semantically reconcile nodes and labelled edges.
 args:
   base: State
   updates: Update[]
-  policy: Text
+  policy: string
 returns: Draft
 ---
 Interpret whether two labels refer to one entity, whether an edge addition changes an

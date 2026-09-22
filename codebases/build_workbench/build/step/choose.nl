@@ -1,9 +1,9 @@
 ---
 args:
   ready: Task[]
-  goal: Text
-  files?: Dict<File>
-returns: Text
+  goal: string
+  files?: Record<string, File>
+returns: string
 ---
 Choose one ID from the supplied ready tasks. If a task description names a local input, inspect only that args/files leaf before choosing. Prefer work needed by the goal over
 unrelated work; among equally relevant tasks, prefer work whose description says

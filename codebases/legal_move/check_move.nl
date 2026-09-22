@@ -6,14 +6,14 @@ import { read_position } from "./check_move/read_position";
 ---
 description: Is this move legal in this tic-tac-toe position, both described in prose? Exact rules, fuzzy reading.
 args:
-  position: Text
-  move: Text
+  position: string
+  move: string
   player: Mark
 returns: Verdict
 types:
   Mark: '"X" | "O"'
   Cell: '"X" | "O" | "empty"'
-  Verdict: '{ legal: Bool, reason: Text, wins: Bool, board: Text }'
+  Verdict: '{ legal: boolean, reason: string, wins: boolean, board: string }'
 ---
 function check_move(position, move, player) -> Verdict
 

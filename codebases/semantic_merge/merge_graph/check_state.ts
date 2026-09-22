@@ -1,7 +1,7 @@
 /*---
 args:
   state: State
-returns: Bool
+returns: boolean
 ---*/
 const ids = args.state.nodes.map(node => node.id);
 const known = new Set(ids);

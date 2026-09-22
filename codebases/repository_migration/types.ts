@@ -1,11 +1,11 @@
-export type FileIdentity = { path: Text, sha256: Text, lines: Num };
-export type RepoSnapshot = { revision: Text, files: FileIdentity[] };
-export type SearchHit = { path: Text, offset: Num, line: Num, excerpt: Text };
-export type SearchResult = { revision: Text, hits: SearchHit[] };
-export type Patch = { path: Text, old: Text, new: Text };
-export type Check = { id: Text, status: Text, output: Text,
-  output_bytes: Num, truncated: Bool, detail?: Text };
-export type Validation = { revision: Text, status: Text, checks: Check[] };
-export type ChangedFile = { path: Text, before_sha256: Text, after_sha256: Text };
-export type MigrationReport = { status: Text, base: Text, revision: Text,
+export type FileIdentity = { path: string, sha256: string, lines: number };
+export type RepoSnapshot = { revision: string, files: FileIdentity[] };
+export type SearchHit = { path: string, offset: number, line: number, excerpt: string };
+export type SearchResult = { revision: string, hits: SearchHit[] };
+export type Patch = { path: string, old: string, new: string };
+export type Check = { id: string, status: string, output: string,
+  output_bytes: number, truncated: boolean, detail?: string };
+export type Validation = { revision: string, status: string, checks: Check[] };
+export type ChangedFile = { path: string, before_sha256: string, after_sha256: string };
+export type MigrationReport = { status: string, base: string, revision: string,
   changed: ChangedFile[], checks: Check[] };

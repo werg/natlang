@@ -1,8 +1,8 @@
 /*---
 engine: typescript-host
 args:
-  query: Text
-  revision: Text
+  query: string
+  revision: string
 returns: SearchResult
 ---*/
 return host.repository.search(args.query, args.revision);

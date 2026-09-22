@@ -1,6 +1,6 @@
 ---
 args:
-  request: Text
+  request: string
   snapshot: ScheduleSnapshot
   alternatives: Alternatives
 returns: Candidate

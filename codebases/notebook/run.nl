@@ -6,9 +6,9 @@ import { step } from "./run/step";
 ---
 description: Execute the declared notebook cell graph and interpret bounded results. If the question names a supporting note or schema, inspect that specific args/files leaf before answering.
 args:
-  goal: Text
-  question: Text
-  files?: Dict<File>
+  goal: string
+  question: string
+  files?: Record<string, File>
 returns: NotebookState
 ---
 function run(goal, question, files) -> NotebookState

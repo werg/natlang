@@ -1,16 +1,16 @@
 ---
 description: Map two source table shapes into customer and order fields.
 args:
-  source: Text
-  customer_columns: Text[]
-  order_columns: Text[]
+  source: string
+  customer_columns: string[]
+  order_columns: string[]
 returns: Mapping
 types:
-  Mapping: '{ customer_id: Text, email: Text, name: Text, order_id: Text, order_customer: Text, amount: Text, unit: Text, reason: Text }'
+  Mapping: '{ customer_id: string, email: string, name: string, order_id: string, order_customer: string, amount: string, unit: string, reason: string }'
 ---
 Choose actual column names using this exact result shape:
-`{customer_id: Text, email: Text, name: Text, order_id: Text,
-order_customer: Text, amount: Text, unit: Text, reason: Text}`.
+`{customer_id: string, email: string, name: string, order_id: string,
+order_customer: string, amount: string, unit: string, reason: string}`.
 The values are column names from the supplied customer_columns or order_columns.
 `customer_id`, `email`, and `name` refer to customer columns; the other four
 refer to order columns. Keep these result field names exactly: do not write

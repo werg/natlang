@@ -18,15 +18,15 @@ args:
 returns: Site
 effects: [http.respond]
 types:
-  Request: '{ id: Text, method: Text, path: Text, headers: Dict<Text>, body: Text }'
-  Parsed: '{ id: Text, method: Text, path: Text, query: Dict<Text>, form: Dict<Text>, session_id: Text }'
-  Route: '{ kind: "static" | "page" | "form" | "not_found" | "method_not_allowed", name: Text, purpose: Text, asset: Text }'
-  RouteDef: '{ path: Text, methods: Text[], kind: "static" | "page" | "form", purpose: Text, asset?: Text }'
-  Entry: '{ author: Text, message: Text }'
-  Session: '{ id: Text, visits: Num, name: Text }'
-  Site: '{ name: Text, about: Text, routes: RouteDef[], assets: Dict<Text>, entries: Entry[], sessions: Dict<Session>, log: Text[] }'
-  Review: '{ accept: Bool, reason: Text, author: Text, message: Text }'
-  Response: '{ status: Num, headers: Dict<Text>, body: Text }'
+  Request: '{ id: string, method: string, path: string, headers: Record<string, string>, body: string }'
+  Parsed: '{ id: string, method: string, path: string, query: Record<string, string>, form: Record<string, string>, session_id: string }'
+  Route: '{ kind: "static" | "page" | "form" | "not_found" | "method_not_allowed", name: string, purpose: string, asset: string }'
+  RouteDef: '{ path: string, methods: string[], kind: "static" | "page" | "form", purpose: string, asset?: string }'
+  Entry: '{ author: string, message: string }'
+  Session: '{ id: string, visits: number, name: string }'
+  Site: '{ name: string, about: string, routes: RouteDef[], assets: Record<string, string>, entries: Entry[], sessions: Record<string, Session>, log: string[] }'
+  Review: '{ accept: boolean, reason: string, author: string, message: string }'
+  Response: '{ status: number, headers: Record<string, string>, body: string }'
 ---
 function handle(acc, item) -> Site
 

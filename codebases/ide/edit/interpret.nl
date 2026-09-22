@@ -1,6 +1,6 @@
 ---
 args:
-  request: Text
+  request: string
   snapshot: EditorSnapshot
 returns: EditPatch
 ---

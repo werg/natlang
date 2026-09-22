@@ -2,7 +2,7 @@
 engine: typescript-host
 args:
   state: ConsoleState
-  question: Text
+  question: string
   answer: EvidenceAnswer
 returns: ConsoleState
 ---*/

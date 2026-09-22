@@ -3,7 +3,7 @@ engine: typescript-host
 args:
   request: PackageRequest
   locks: Lock[]
-  selected: Text
+  selected: string
 returns: Resolution
 ---*/
 const lock = args.locks.find(row => row.id === args.selected);

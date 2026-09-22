@@ -1,6 +1,6 @@
 ---
 args:
-  text: Text
+  text: string
 returns: Kind
 ---
 Read the order event. A customer placing a new order means start; confirmation of

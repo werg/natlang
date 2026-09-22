@@ -1,7 +1,7 @@
 /*---
 engine: typescript-host
 args:
-  actor: Text
+  actor: string
   event: NpcEvent
 returns: NpcObservation
 ---*/
