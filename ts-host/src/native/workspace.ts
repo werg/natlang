@@ -5,7 +5,6 @@ import { checkedDefinitions, type NativeDefinition } from './codebase.js';
 import { NativeRuntime } from './runtime.js';
 import { fitsType, formatType, parseType, TypeEnv } from './types.js';
 import { dump } from './values.js';
-import type { ReadonlyFileTree } from './files.js';
 
 export type NativeChildResult = { source_revision: string; parent_call_id: string | null;
   outcome: string; value: unknown; trace: Record<string, unknown>[] };
@@ -58,7 +57,6 @@ export class NativeSourceWorkspace {
     environment?: TypeScriptEnvironment;
     parentRuntime?: NativeRuntime;
     signal?: AbortSignal; timeoutMs?: number;
-    fileTree?: ReadonlyFileTree;
   } = {}): Promise<NativeChildResult> {
     const parent = options.parentRuntime ?? this.parentRuntime;
     const maxEpisodes = options.maxEpisodes ?? parent?.options.maxEpisodes;
@@ -76,8 +74,7 @@ export class NativeSourceWorkspace {
       sharedEpisodeBudget: parent?.episodeBudget,
       seedPolicy: options.seedPolicy ?? parent?.seedPolicy, sourceRevision: graph.revision,
       parentCallId: options.parentCallId ?? parent?.currentCallId,
-      runId: globalThis.crypto.randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs,
-      fileTree: options.fileTree ?? parent?.fileTree });
+      runId: globalThis.crypto.randomUUID(), signal: options.signal, timeoutMs: options.timeoutMs });
     try {
       const result = await runtime.runRoot(graph.instantiate(inputs));
       return { source_revision: graph.revision, parent_call_id: options.parentCallId ?? parent?.currentCallId ?? null,

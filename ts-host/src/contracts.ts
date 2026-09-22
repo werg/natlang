@@ -1,5 +1,3 @@
-import type { ReadonlyFileTree } from './native/files.js';
-
 /** Public requests and results for the native TypeScript host. */
 export type Source =
   | { kind: 'program'; program: Record<string, unknown> }
@@ -24,6 +22,6 @@ export type RunRequest = { source: Source; inputs?: Record<string, unknown>;
   modelTurn?: (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
   streams?: Record<string, AsyncIterable<unknown> | Iterable<unknown>>;
   capabilities?: Record<string, (args: unknown[]) => Promise<unknown> | unknown>;
-  fileTree?: ReadonlyFileTree; signal?: AbortSignal; timeoutMs?: number };
+  signal?: AbortSignal; timeoutMs?: number };
 export type RunResult = { outcome: { kind: string; path: string; detail: string };
   value: unknown; emitted: unknown[]; trace: Record<string, unknown>[] | null; run_id: string };

@@ -78,6 +78,18 @@ class Ref:
             raise reject(path, "no-such-path")
         rt = self.env.resolve(self.type)
         value = self.get()
+        from .host_tree import LazyDict
+        if isinstance(rt, DictT) and isinstance(value, LazyDict):
+            try:
+                child = value.child(seg)
+            except (KeyError, ValueError, OSError) as exc:
+                raise reject(path, "no-such-path", str(exc)) from None
+            child_type = rt if isinstance(child, LazyDict) else rt.elem
+            if not isinstance(child, LazyDict):
+                from .values import coerce
+                child = coerce(child, rt.elem, self.env, yaml=False, path=path)
+            return Ref(type=child_type, env=self.env, path=path,
+                       container={seg: child}, key=seg, deny=self.deny or "not-writable")
         if isinstance(rt, UnionT):
             rt = _pick_member(rt, value, seg, self.env) or rt
         if isinstance(rt, Record):

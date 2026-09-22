@@ -66,6 +66,9 @@ def coerce(raw: Any, t, env: TypeEnv, *, yaml: bool, path: str) -> Any:
         return node
 
     rt = env.resolve(t)
+    from .host_tree import LazyDict
+    if isinstance(rt, DictT) and isinstance(raw, LazyDict):
+        return raw
     if isinstance(rt, UnionT):
         last = None
         for m in rt.members:
@@ -389,6 +392,10 @@ _WITH_CODEBASE = False
 def dump(x: Any) -> Any:
     """Plain YAML-able form of a value or pending node (SPEC 11)."""
     from .streams import StreamBuffer
+    from .host_tree import LazyDict
+    if isinstance(x, LazyDict):
+        return {"$host": {"kind": "lazy-dict", "label": x.label,
+                           "path": "/".join(x.path)}}
     if isinstance(x, StreamBuffer):
         return {"$stream": {"position": x.position,
                             "admitted": x.current.kind if x.current else None,

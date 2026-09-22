@@ -23,6 +23,7 @@ type, and cannot choose a wrong one.
 from __future__ import annotations
 
 import os
+import re
 
 import json
 from typing import Any, Optional
@@ -175,12 +176,12 @@ class ToolSurface:
             pos = positions(sl.value)
             if pos:                                           # a range can only name positions that exist
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
-        has_files = session.rt.file_tree is not None
-        if has_files:
-            read_alts += [{"path": {"const": "files"}},
-                          {"path": {"type": "string", "pattern": "^files/.+"},
-                           "start": {"type": "integer"}, "end": {"type": "integer"},
-                           "x-optional": ["start", "end"]}]
+        from .host_tree import LazyDict
+        lazy_paths = [sl.path for sl in existing if isinstance(sl.value, LazyDict)]
+        for lazy_path in lazy_paths:
+            read_alts.append({"path": {"type": "string", "pattern": f"^{re.escape(lazy_path)}(?:/.+)?$"},
+                              "start": {"type": "integer"}, "end": {"type": "integer"},
+                              "x-optional": ["start", "end"]})
         NEW_LOCAL = {"type": "string", "x-natlang": "new-local",
                      "pattern": "^let/[a-z_][a-z0-9_]*$",
                      "description": "let/<name>: a new local, created by this call"}
@@ -287,13 +288,14 @@ class ToolSurface:
             tool("read", "Inspect a value only when you need its contents to make a decision. Workspace paths can be "
                          "passed directly to `call` without reading them first; do not walk through collection items merely "
                          "to pass the collection to a function. Optional line or item range for long values. "
-                         "`codebase/<function>` shows the text of a function; `files` lists host project files and "
-                         "`files/<path>` reads one lazily; `args@effects` shows the full effect journal.",
+                         "`codebase/<function>` shows the text of a function; host-backed Dict inputs list and read "
+                         "their entries through their normal `args/...` paths; `args@effects` shows the full effect journal.",
                  {"path": ({"anyOf": [_enum_or_string((["args"] if lam.in_ else []) +
                                           (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
-                                          [f"codebase/{n}" for n in lam.codebase] + ["files"], "what to read"),
-                                         {"type": "string", "pattern": "^files/.+"}]}
-                            if has_files else _enum_or_string((["args"] if lam.in_ else []) +
+                                          [f"codebase/{n}" for n in lam.codebase], "what to read"),
+                                         *[{"type": "string", "pattern": f"^{re.escape(path)}(?:/.+)?$"}
+                                           for path in lazy_paths]]}
+                            if lazy_paths else _enum_or_string((["args"] if lam.in_ else []) +
                                           (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
                                           [f"codebase/{n}" for n in lam.codebase], "what to read")),
                   "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
@@ -532,6 +534,9 @@ def is_previewed(v) -> bool:
 
 
 def _preview(v) -> str:
+    from .host_tree import LazyDict
+    if isinstance(v, LazyDict):
+        return f"[{v.label}; lazy read-only Dict]"
     if isinstance(v, str):
         t = v.rstrip()
         if not is_previewed(v):

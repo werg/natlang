@@ -9,7 +9,9 @@ from natlang.types import TypeEnv, parse_type
 
 from pathlib import Path
 from natlang.values import coerce, load_program
-from natlang.files import FilesystemFileTree, MemoryFileTree
+from natlang.files import (FILE_TREE_LEAF_TYPE, FilesystemFileTree, commit_file_writes,
+                           text_file_tree, validate_file_writes)
+from natlang.host_tree import lazy_dict
 
 PROGRAMS = Path(__file__).resolve().parent.parent / "conformance" / "programs"
 
@@ -25,20 +27,21 @@ S = ToolSurface()
 
 
 def test_host_files_are_read_only_lazy_surface():
-    rt = Runtime(None, file_tree=MemoryFileTree({"notes/todo.txt": "first\nsecond", "image.bin": b"\0x"}))
-    session = Session(rt, load_program({"$lambda": {"type": "Lambda<{}, Text>",
-                                                     "instructions": "Inspect files."}}), TypeEnv())
+    rt = Runtime(None)
+    tree = text_file_tree({"notes/todo.txt": "first\nsecond"})
+    doc = {"$lambda": {"type": "Lambda<{ files: Dict<File> }, Text>",
+                       "types": {"File": FILE_TREE_LEAF_TYPE}, "instructions": "Inspect files."}}
+    root = load_program(doc); root.in_["files"] = tree
+    session = Session(rt, root, TypeEnv())
     params = ToolSurface().tools(session)[0]["function"]["parameters"]
-    assert any(branch.get("pattern") == "^files/.+" for branch in params["properties"]["path"]["anyOf"])
-    assert session.apply("read", {"path": "files/notes/todo.txt", "start": 2}).text == "second"
-    assert session.apply("read", {"path": "files/image.bin"}).text == (
-        "image.bin: binary file, 2 bytes; content requires a host binary capability")
-    child = Session(rt, load_program({"$lambda": {"type": "Lambda<{}, Text>",
-                                                   "instructions": "Inspect files."}}),
-                    TypeEnv(), path="return/child")
+    assert any(branch.get("pattern") == "^args/files(?:/.+)?$"
+               for branch in params["properties"]["path"]["anyOf"])
+    assert session.apply("read", {"path": "args/files/notes/todo.txt/text", "start": 2}).text == "second"
+    child_root = load_program(doc); child_root.in_["files"] = tree
+    child = Session(rt, child_root, TypeEnv())
     child_params = ToolSurface().tools(child)[0]["function"]["parameters"]
     assert "anyOf" in child_params["properties"]["path"]
-    assert child.apply("read", {"path": "files/notes/todo.txt"}).text == "first\nsecond"
+    assert child.apply("read", {"path": "args/files/notes/todo.txt/text"}).text == "first\nsecond"
 
 
 def test_filesystem_file_tree_resolves_after_construction(tmp_path):
@@ -46,17 +49,53 @@ def test_filesystem_file_tree_resolves_after_construction(tmp_path):
     note.write_text("old")
     tree = FilesystemFileTree(tmp_path)
     note.write_text("new\nsecond\nthird")
-    assert tree.read("note.txt", 2, 2) == {"kind": "text", "path": "note.txt", "text": "second",
-                                                 "start": 2, "end": 2, "truncated": True, "bytes": 16}
+    assert tree.child("note.txt") == {"kind": "text", "text": "new\nsecond\nthird", "bytes": 16}
+    note.write_text("changed after observation")
+    assert tree.child("note.txt")["text"] == "new\nsecond\nthird"
     try:
         (tmp_path / "outside").symlink_to(tmp_path.parent, target_is_directory=True)
     except OSError:
         return
+    escaped = FilesystemFileTree(tmp_path)
     try:
-        tree.read("outside")
+        escaped.child("outside")
         assert False, "a symlink must not escape the file tree root"
     except ValueError as exc:
         assert "escapes its root" in str(exc)
+
+
+def test_lazy_dict_checks_observed_leaves_and_cannot_enter_crisp_eval():
+    natural = load_program({"$lambda": {"type": "Lambda<{ items: Dict<Num> }, Num>",
+                                        "instructions": "Inspect one item."}})
+    natural.in_["items"] = lazy_dict({"bad": "not a number"})
+    rejected = Session(Runtime(None), natural, TypeEnv()).apply("read", {"path": "args/items/bad"})
+    assert rejected.kind == "rejected" and "type-mismatch" in rejected.codes
+
+    crisp = load_program({"$lambda": {"type": "Lambda<{ items: Dict<Num> }, Num>",
+                                      "code": "return 1;"}})
+    crisp.in_["items"] = lazy_dict({"one": 1})
+    outcome, _ = Runtime(None).run_root(crisp)
+    assert outcome.kind == "quiesced"
+    assert "host-backed Dict cannot enter crisp eval" in outcome.detail
+
+
+def test_file_write_plans_are_checked_and_committed_beneath_root(tmp_path):
+    (tmp_path / "existing.txt").write_text("old")
+    plan = [{"path": "nested/new.txt", "text": "hello"},
+            {"path": "existing.txt", "text": "new"}]
+    assert validate_file_writes(plan) == plan
+    receipts = commit_file_writes(tmp_path, plan)
+    assert (tmp_path / "nested/new.txt").read_text() == "hello"
+    assert (tmp_path / "existing.txt").read_text() == "new"
+    assert receipts == [{"path": "nested/new.txt", "bytes": 5, "overwritten": False},
+                        {"path": "existing.txt", "bytes": 3, "overwritten": True}]
+    for invalid in ([{"path": "../outside", "text": "x"}],
+                    [{"path": "same", "text": "x"}, {"path": "same", "text": "y"}]):
+        try:
+            commit_file_writes(tmp_path, invalid)
+            assert False, "invalid plan should be rejected"
+        except ValueError:
+            pass
 
 
 def _session(name, rt=None):

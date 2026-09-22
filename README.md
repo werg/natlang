@@ -38,11 +38,13 @@ natlang --apps codebases
 ```
 
 Two or more words that do not name an existing path form an anonymous
-`Lambda<{}, Text>` instruction. Natlang uses the current directory as the
-codebase root and exposes its top-level `.nl` and `.ts` functions to the run.
-The program and its child lambdas can inspect every other project file through
-the inherited, read-only `files/...` namespace. Filesystem hosts load directory entries and file content
-only when Natlang reads them; binary files initially appear as metadata.
+`Lambda<{ files: Dict<ProjectFile> }, Text>` instruction. Natlang uses the
+current directory as the codebase root and passes its complete, read-only file
+tree as `args/files`. The program uses ordinary `Dict` paths such as
+`args/files/src/main.ts/text`; a child declares a compatible argument and
+receives `args/files` normally. Filesystem hosts load directory entries and
+file content only when Natlang reads them; binary files initially appear as
+metadata.
 
 The terminal applications open without fixture files and explain their own
 capabilities. Use `/help`; evidence and notebook include useful starter data,

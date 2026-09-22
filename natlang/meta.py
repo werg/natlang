@@ -49,7 +49,7 @@ class SourceWorkspace:
     def invoke(self, name: str, inputs: dict, *, agent_factory, options: RunOptions,
                executors: dict | None = None, capabilities: dict | None = None,
                parent_call_id: str | None = None, max_episodes: int | None = None,
-               parent_runtime: Runtime | None = None, file_tree=None) -> ChildResult:
+               parent_runtime: Runtime | None = None) -> ChildResult:
         max_episodes = options.max_episodes if max_episodes is None else max_episodes
         if ((max_episodes is not None and max_episodes < 1) or
                 (options.max_episodes is not None and max_episodes is not None and
@@ -67,9 +67,7 @@ class SourceWorkspace:
                           capabilities=capabilities, trace_sink=recorder,
                           _budget=parent_runtime._budget if parent_runtime else None,
                           _parent_path=parent_call_id,
-                          _call_prefix=f"{parent_call_id}/child" if parent_call_id else "",
-                          file_tree=file_tree if file_tree is not None else
-                          (parent_runtime.file_tree if parent_runtime else None))
+                          _call_prefix=f"{parent_call_id}/child" if parent_call_id else "")
         out, value = runtime.run_root(root)
         if parent_runtime is not None:
             parent_runtime.episodes_started = parent_runtime._budget.used

@@ -6,6 +6,7 @@ import type { NativeResult, NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { TOOLS_PROMPT } from './prompt.js';
+import { isLazyDict } from './host-tree.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
@@ -55,6 +56,7 @@ function pythonJson(value: unknown): string {
 type Slot = { path: string; type: Type; value: Value; writable: boolean };
 function slots(path: string, type: Type, value: Value, env: TypeEnv, writable: boolean, depth = 0): Slot[] {
   const out: Slot[] = [{ path, type, value, writable }];
+  if (isLazyDict(value)) return out;
   if (depth >= 3) return out;
   if (isPending(value)) {
     if (value.nodeKind === 'lambda' && value.type.kind === 'lambda') {
@@ -245,10 +247,10 @@ export class NativeToolAgent {
       }
     }
     for (const name of Object.keys(lam.codebase)) readAlternatives.push({ path: { const: `codebase/${name}` } });
-    const hasFiles = !!session.runtime.fileTree;
-    if (hasFiles) readAlternatives.push({ path: { const: 'files' } },
-      { path: { type: 'string', pattern: '^files/.+' }, start: { type: 'integer' }, end: { type: 'integer' },
-        'x-optional': ['start', 'end'] });
+    const lazyPaths = all.filter(slot => isLazyDict(slot.value)).map(slot => slot.path);
+    for (const lazyPath of lazyPaths) readAlternatives.push({
+      path: { type: 'string', pattern: `^${lazyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:/.+)?$` },
+      start: { type: 'integer' }, end: { type: 'integer' }, 'x-optional': ['start', 'end'] });
     const inputNames = [...new Set(names.flatMap(name => {
       const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
         Record<string, unknown> | undefined;
@@ -267,11 +269,11 @@ export class NativeToolAgent {
     };
     if (unmarked.length) writeProperties.done = done;
     const tools = [
-      tool('read', 'Inspect a value only when you need its contents to make a decision. Workspace paths can be passed directly to `call` without reading them first; do not walk through collection items merely to pass the collection to a function. Optional line or item range for long values. `codebase/<function>` shows the text of a function; `files` lists host project files and `files/<path>` reads one lazily; `args@effects` shows the full effect journal.', {
-        path: hasFiles ? { anyOf: [{ type: 'string', description: 'what to read', enum: [...new Set([
+      tool('read', 'Inspect a value only when you need its contents to make a decision. Workspace paths can be passed directly to `call` without reading them first; do not walk through collection items merely to pass the collection to a function. Optional line or item range for long values. `codebase/<function>` shows the text of a function; host-backed Dict inputs list and read their entries through their normal `args/...` paths; `args@effects` shows the full effect journal.', {
+        path: lazyPaths.length ? { anyOf: [{ type: 'string', description: 'what to read', enum: [...new Set([
           ...(lam.journal.length ? ['args@effects'] : []), ...readable,
-          ...Object.keys(lam.codebase).map(name => `codebase/${name}`), 'files'])] },
-          { type: 'string', pattern: '^files/.+' }] } : { type: 'string', description: 'what to read', enum: [...new Set([
+          ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
+          ...lazyPaths.map(path => ({ type: 'string', pattern: `^${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:/.+)?$` }))] } : { type: 'string', description: 'what to read', enum: [...new Set([
           ...(lam.journal.length ? ['args@effects'] : []), ...readable,
           ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
         start: { type: 'integer' }, end: { type: 'integer' } }, ['path']),

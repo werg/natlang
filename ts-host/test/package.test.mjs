@@ -133,7 +133,7 @@ return "source named ${name}"`);
   globalThis.fetch = async (_url, init) => {
     wire = JSON.parse(init.body);
     anonymousTurn++;
-    const call = anonymousTurn === 1 ? { name: 'read', arguments: JSON.stringify({ path: 'files/project-notes.txt' }) } :
+    const call = anonymousTurn === 1 ? { name: 'read', arguments: JSON.stringify({ path: 'args/files/project-notes.txt/text' }) } :
       anonymousTurn === 2 ? { name: 'write', arguments: JSON.stringify({
         path: 'return', type: 'Text', value: 'anonymous result', done: 1 }) } : undefined;
     return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{

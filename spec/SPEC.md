@@ -34,8 +34,7 @@ There are two families of node:
 A path is a sequence of segments separated by `/`. A segment is a record
 field name, a dict key, or a list index (0-based). Inside an episode, paths
 are **relative to the current lambda**, whose addressable parts are
-`instructions`, `args`, `let`, and `return`; `codebase/<name>` is readable. A
-host may also give a run a read-only `files` namespace.
+`instructions`, `args`, `let`, and `return`; `codebase/<name>` is readable.
 
 ```
 args/tickets/3/body
@@ -43,7 +42,7 @@ let/labels
 return/summary
 let/strict/instructions            # the text of an editable function copy (§5.3)
 codebase/classify                  # read-only: the text of a function
-files/docs/design.md               # read-only host project file
+args/files/docs/design.md/text     # leaf in a host-backed Dict<ProjectFile>
 ```
 
 - **Ranges** are inclusive at both ends and use the numbers the listing
@@ -88,7 +87,9 @@ Name     := an identifier declared in a `types` block
 
 - `Text` is Markdown text. `Num` is a finite number. Lists are `T[]`.
 - **`Dict<T>`** is the string-keyed container. (It was called "Map" in early
-  drafts; renamed so that `Map` means only the combinator.)
+  drafts; renamed so that `Map` means only the combinator.) A host may bind a
+  read-only lazy implementation. This does not add a model-facing type: source
+  still declares `Dict<T>` and uses ordinary `args/...` paths.
 - A union of literals is an enum. String literals name options
   (`"sell_pear" | "decline"`); **numeric literals** give small
   numeric ranges (`1 | 2 | 3`). Enum narrowing (§2.1) applies to both.
@@ -365,18 +366,31 @@ Returns the whole value at `path`, or the range `start..end`. Meta paths are
 read the same way. `codebase` lists the functions; `codebase/<name>` shows a
 signature, description and body.
 
-When the host supplies a file tree, `files` lists its root, `files/<directory>`
-lists that directory, and `files/<file>` reads text. Text defaults to its first
-200 lines and accepts inclusive, 1-based `start` and `end` ranges. Binary files
-return metadata; their bytes require an explicit host capability. Providers
-resolve entries on demand where their platform permits it. The namespace is
-read-only and belongs to the host rather than the serialized value tree. It is
-inherited by every lambda invoked within the run, including Map, Fold, Iterate,
-and codebase calls. File reads are recorded as ordinary tool actions in the
-execution trace. In-memory hosts must expose the same observable listing,
-range, and binary-metadata behavior.
+A host-backed `Dict<T>` lists its entries through its ordinary argument path.
+For example, `args/files` lists a filesystem dictionary,
+`args/files/docs` lists that branch, and
+`args/files/docs/design.md/text` reads the text field of a typed leaf. Text
+defaults to its first 200 lines and accepts inclusive, 1-based `start` and
+`end` ranges. A standard project-file leaf is either
+`{ kind: "text", text: Text, bytes: Num }` or
+`{ kind: "binary", bytes: Num }`; binary bytes require an explicit host
+capability.
+
+Providers resolve observations on demand and cache every observed branch or
+leaf for the lifetime of the bound dictionary. The value is read-only. A child
+receives it through a normal compatible parameter binding; it is not ambient
+or automatically inherited. The provider is host-owned and cannot be recreated
+from serialized interpreter state. Reads remain ordinary tool actions in the
+execution trace, and leaf values are checked against `T` when observed.
 
 ### 5.2 write
+
+`write` changes the lambda's typed value tree; it never writes a host file. An
+application can expose a declared filesystem effect, let trusted crisp code use
+its host filesystem surface, or have natlang return a typed change plan such as
+`{ path: Text, text: Text }[]` for the owning host to validate and commit. The
+standard host libraries provide path-contained plan validators and Node/Python
+commit helpers; these are library facilities rather than language primitives.
 
 `write(path, type, value)` creates or replaces the node at `path`, which is
 `return`, a part of it, or a local. `type` must fit the slot; for an existing

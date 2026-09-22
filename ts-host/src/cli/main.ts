@@ -13,7 +13,7 @@ import { createManagedModelSession, DEFAULT_LOCAL_MODEL, describeLlamaRuntime, d
   type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/index.js';
 import { NativeNatlangHost } from '../native/host.js';
 import { loadAnonymousInstruction, loadFunctionFile } from '../native/source.js';
-import { NodeFileTree } from '../native/node-files.js';
+import { FILE_TREE_LEAF_TYPE, NodeFileTree } from '../native/node-files.js';
 import { formatType } from '../native/types.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { TerminalNatlangApplication } from '../terminal/application.js';
@@ -395,9 +395,12 @@ async function runAnonymousInstruction(parsed: Parsed, instruction: string): Pro
   const host = new NativeNatlangHost();
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
-    const result = await host.run({ source: { kind: 'program',
-      program: loadAnonymousInstruction(process.cwd(), instruction) },
-      fileTree: new NodeFileTree(process.cwd()),
+    const program = loadAnonymousInstruction(process.cwd(), instruction);
+    const body = program.$lambda as Record<string, unknown>;
+    body.type = 'Lambda<{ files: Dict<ProjectFile> }, Text>';
+    body.types = { ...body.types as Record<string, string> ?? {}, ProjectFile: FILE_TREE_LEAF_TYPE };
+    const result = await host.run({ source: { kind: 'program', program },
+      inputs: { files: new NodeFileTree(process.cwd()) },
       modelTurn: request => model.turn(request),
       tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
       timeoutMs,

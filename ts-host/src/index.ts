@@ -17,9 +17,12 @@ export { checkedDefinitions } from './native/codebase.js';
 export { loadAnonymousInstruction, loadCodebaseDirectory, loadFunctionFile } from './native/source.js';
 export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from './native/values.js';
 export { NativeSourceWorkspace } from './native/workspace.js';
-export { MemoryFileTree, formatFileTreeRead } from './native/files.js';
-export type { ReadonlyFileTree, FileTreeEntry, FileTreeRead } from './native/files.js';
-export { NodeFileTree } from './native/node-files.js';
+export { LazyDict, MemoryTreeProvider, lazyDict } from './native/host-tree.js';
+export type { TreeEntry, TreeProvider } from './native/host-tree.js';
+export { textFileTree, validateFileWrites, FILE_TREE_LEAF_TYPE, FILE_WRITE_TYPE } from './native/file-tree.js';
+export type { FileTreeLeaf, FileWrite } from './native/file-tree.js';
+export { NodeFileTree, commitFileWrites } from './native/node-files.js';
+export type { FileWriteReceipt } from './native/node-files.js';
 export { admitNativeTrace } from './native/scenario.js';
 export type { NativeScenarioContract } from './native/scenario.js';
 export { TerminalNatlangApplication, createTerminalHost, TerminalSessionStore,

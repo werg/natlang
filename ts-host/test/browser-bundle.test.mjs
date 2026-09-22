@@ -71,16 +71,17 @@ test('browser virtual projects expose non-source files through the shared file-t
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
   const files = {
-    'main.nl': '---\nreturns: Text\n---\nRead the project note and return it.',
+    'main.nl': '---\nargs:\n  files: Dict<File>\ntypes:\n  File: \'{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }\'\nreturns: Text\n---\nRead the project note and return it.',
     'notes/context.md': 'browser project context',
   };
   let turn = 0, observed = '';
   const host = new api.BrowserNatlangHost();
   try {
-    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files }, modelTurn: request => {
+    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
+      inputs: { files: api.textFileTree(files) }, modelTurn: request => {
       observed = JSON.stringify(request);
       turn++;
-      if (turn === 1) return { calls: [['read', { path: 'files/notes/context.md' }]] };
+      if (turn === 1) return { calls: [['read', { path: 'args/files/notes/context.md/text' }]] };
       if (turn === 2) return { calls: [['write', { path: 'return', type: 'Text', value: 'browser project context' }]] };
       return { calls: [] };
     } });

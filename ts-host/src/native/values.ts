@@ -1,9 +1,10 @@
 import { fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
+import { isLazyDict, type LazyDict } from './host-tree.js';
 
 export const MISSING = Symbol('natlang-missing');
 export type Missing = typeof MISSING;
-export type Value = null | boolean | number | string | Value[] | { [key: string]: Value } | Pending | Missing;
+export type Value = null | boolean | number | string | Value[] | { [key: string]: Value } | Pending | Missing | LazyDict;
 export type Status = 'unreduced' | 'running' | 'quiesced' | 'waiting' | 'done';
 
 type Base = { type: Type; types: Record<string, Type>; typesSrc: Record<string, string>;
@@ -56,6 +57,7 @@ export const isPending = (value: unknown): value is Pending => plain(value) &&
   ['lambda', 'map', 'fold', 'iterate'].includes(String(value.nodeKind));
 
 export function cloneValue<T extends Value>(value: T): T {
+  if (isLazyDict(value)) return value;
   if (value === MISSING || value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(x => cloneValue(x)) as T;
   if (isPending(value)) {
@@ -85,6 +87,7 @@ function preview(value: unknown): string {
 
 export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): Value {
   const wanted = env.resolve(type);
+  if (wanted.kind === 'dict' && isLazyDict(raw)) return raw;
   if (wanted.kind === 'lambda') {
     let value = raw;
     if (!isPending(value)) {
@@ -307,6 +310,7 @@ export function unboundParts(node: Pending, env: TypeEnv, path: string): Diagnos
 
 export function dump(value: Value, full = false): unknown {
   if (value === MISSING) return null;
+  if (isLazyDict(value)) return { $host: { kind: 'lazy-dict', label: value.label, path: value.path.join('/') } };
   if (Array.isArray(value)) return value.map(item => dump(item, full));
   if (value && typeof value === 'object' && !isPending(value))
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, dump(child, full)]));

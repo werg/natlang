@@ -5,7 +5,7 @@ import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from 
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
-import { formatFileTreeRead, type ReadonlyFileTree } from './files.js';
+import { isLazyDict } from './host-tree.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -16,7 +16,6 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; agent?: Nativ
   capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
   maxDepth?: number; maxActions?: number; maxToolCalls?: number;
   runId?: string; stream?: NativeStream; signal?: AbortSignal; timeoutMs?: number;
-  fileTree?: ReadonlyFileTree;
   sourceRevision?: string; parentCallId?: string;
   sharedEpisodeBudget?: { limit?: number; used: number };
   mapWorkers?: number; parallelModelSafe?: boolean;
@@ -27,6 +26,7 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
 const pending = (value: Value): value is Pending => isPending(value);
 const hash = (value: unknown) => hexDigest(JSON.stringify(value));
 function oneLine(value: unknown): string {
+  if (isLazyDict(value)) return `[${value.label}; lazy read-only Dict]`;
   if (Array.isArray(value)) return `${value.length} items`;
   if (value && typeof value === 'object') return `{ ${Object.entries(value).slice(0, 4)
     .map(([key, item]) => `${key}: ${item && typeof item === 'object' ? '…' : oneLine(item)}`).join(', ')} }`;
@@ -97,6 +97,7 @@ function programListing(body: string, marks: Record<number, string>, window = 3)
 }
 function jsView(value: Value): unknown {
   if (value === MISSING) return null;
+  if (isLazyDict(value)) throw new TypeError('a host-backed Dict cannot enter crisp eval; read a leaf or use the crisp host API');
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
   if (Array.isArray(value)) return value.map(jsView);
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, jsView(v)]));
@@ -119,7 +120,6 @@ export class NativeRuntime {
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
-  readonly fileTree?: ReadonlyFileTree;
   readonly episodeBudget: { limit?: number; used: number };
   private releaseEffect: () => void;
   private stack: string[] = [];
@@ -161,7 +161,6 @@ export class NativeRuntime {
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
-    this.fileTree = options.fileTree;
     this.environment = options.environment;
     this.releaseEffect = this.environment.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
     this.stream = options.stream;
@@ -453,7 +452,6 @@ export class NativeRuntime {
           maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls,
           seedPolicy: this.seedPolicy, sharedEpisodeBudget: this.episodeBudget,
           runId: this.options.runId, capabilities: {}, signal,
-          fileTree: this.fileTree,
           timeoutMs: this.deadline === undefined ? undefined : Math.max(1, this.deadline - Date.now()) });
         child.depth = this.depth; child.stack = [...this.stack];
         try {
@@ -730,17 +728,6 @@ export class NativeSession {
       }
       if (name === 'read') {
         const path = String(args.path ?? '');
-        if (path === 'files' || path.startsWith('files/')) {
-          if (!this.runtime.fileTree) throw new Reject([{ path, code: 'no-such-path' }]);
-          let result;
-          try { result = this.runtime.fileTree.read(path === 'files' ? '' : path.slice(6),
-            args.start === undefined ? undefined : typeof args.start === 'number' ? args.start : Number.NaN,
-            args.end === undefined ? undefined : typeof args.end === 'number' ? args.end : Number.NaN); }
-          catch (error) { throw new Reject([{ path, code: 'no-such-path',
-            expected: error instanceof Error ? error.message : String(error) }]); }
-          return { kind: 'ok', text: formatFileTreeRead(result),
-            ...(result.kind === 'text' ? { value: result.text } : {}) };
-        }
         const meta = /^(.+)@(status|note|effects|problems|origin|dist)$/.exec(path);
         if (meta) {
           const ref = this.resolve(meta[1]!); const value = ref.get();
@@ -778,6 +765,8 @@ export class NativeSession {
         }
         const ref = this.resolve(path);
         const value = ref.get();
+        if (isLazyDict(value)) return { kind: 'ok', text: value.entries().map(entry =>
+          `${entry.kind === 'branch' ? 'dir ' : 'leaf'}  ${entry.name}`).join('\n') || '(empty)' };
         return { kind: 'ok', text: value === MISSING ? `${ref.path}: not supplied (missing value; not empty text)` :
           typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1), value };
       }
@@ -1096,7 +1085,30 @@ export class NativeSession {
         ref = this.pendingChild(ref, current, part);
         continue;
       }
-      const type = ref.env.resolve(ref.type!);
+      let type = ref.env.resolve(ref.type!);
+      if (type.kind === 'union') {
+        const selected = type.members.map(member => ref.env.resolve(member)).find(member =>
+          member.kind === 'record' ? member.fields.some(field => field.name === part) :
+            member.kind === 'dict' ? current !== null && typeof current === 'object' && !Array.isArray(current) :
+              member.kind === 'list' ? Array.isArray(current) : false);
+        if (selected) type = selected;
+      }
+      if (type.kind === 'dict' && isLazyDict(current)) {
+        let child: Value;
+        try {
+          const raw = current.child(part);
+          child = isLazyDict(raw) ? raw : coerce(raw, type.element, ref.env, `${ref.path}/${part}`);
+        } catch (error) {
+          throw new Reject([{ path: `${ref.path}/${part}`, code: 'no-such-path',
+            expected: error instanceof Error ? error.message : String(error) }]);
+        }
+        const childType = isLazyDict(child) ? type : type.element;
+        const parent = ref;
+        ref = { path: `${parent.path}/${part}`, type: childType, env: parent.env,
+          deny: parent.deny || deny || 'not-writable', get: () => child,
+          set: () => { throw new Reject([{ path: `${parent.path}/${part}`, code: 'not-writable' }]); }, del: () => {} };
+        continue;
+      }
       let childType: Type;
       if (type.kind === 'record') {
         const field = type.fields.find(f => f.name === part);

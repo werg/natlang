@@ -17,6 +17,9 @@ def numbered(text: str) -> str:
 
 
 def scalar(x: Any) -> str:
+    from .host_tree import LazyDict
+    if isinstance(x, LazyDict):
+        return f"[{x.label}; read this path to list entries]"
     if x is None:
         return "null"
     if isinstance(x, bool):
@@ -52,6 +55,9 @@ def render(value: Any, t, env: TypeEnv, indent: int = 0, depth: int = 0) -> list
         return [f"{pad}·"]
     if is_pending(value):
         return [f"{pad}{pending_line(value)}"]
+    from .host_tree import LazyDict
+    if isinstance(value, LazyDict):
+        return [f"{pad}[{value.label}; lazy read-only Dict]"]
     rt = env.resolve(t) if t is not None else None
     if isinstance(rt, UnionT):
         rt = next((env.resolve(m) for m in rt.members
@@ -87,6 +93,9 @@ def _entry(name, x, t, env, indent, depth):
     tt = format_type(t) if t is not None else ""
     if is_pending(x):
         return [f"{pad}{name}  {pending_line(x)}"]
+    from .host_tree import LazyDict
+    if isinstance(x, LazyDict):
+        return [f"{pad}{name}  {tt}  [{x.label}; lazy read-only Dict]"]
     if isinstance(x, list):
         open_mark = "open, " if getattr(x, "is_open", False) else ""
         head = f"{pad}{name}  {tt}  {open_mark}{len(x)} {'so far' if open_mark else 'items'}"

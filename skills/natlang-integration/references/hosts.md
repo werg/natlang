@@ -104,8 +104,14 @@ Provider rules:
   selected results and enough provider identity to reconstruct the binding.
 
 For writes, give crisp code a scoped filesystem/database operation or let
-natlang return a typed change plan that the top-level host validates and
-commits. Do not make a read-only dictionary secretly mutate its backing store.
+natlang return a `{ path: Text, text: Text }[]` change plan. Python provides
+`validate_file_writes` and `commit_file_writes` in `natlang.files`; Node exports
+`validateFileWrites` and `commitFileWrites`; browsers export validation so the
+owning application can choose its persistence mechanism. Commit helpers reject
+absolute, parent, backslash, duplicate, and root-escaping paths and replace each
+file atomically. A multi-file plan is not a transaction: report its receipts
+and preserve partial-failure information. Do not make a read-only dictionary
+secretly mutate its backing store.
 
 Supply `host: applicationObjects` and `mode:'retained'` when their identity/lifetime is needed. If constructing and supplying a `TypeScriptEnvironment` yourself, retain ownership and close it yourself. Close native bindings/jobs separately according to their API; closing an interpreter is not guaranteed to terminate host-owned work.
 

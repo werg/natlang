@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { MemoryFileTree, NativeRuntime } from '../dist/index.js';
+import { lazyDict, NativeRuntime, validateFileWrites } from '../dist/index.js';
 import { TypeEnv } from '../dist/index.js';
 import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
@@ -796,29 +796,54 @@ test('native ranged reads match Python line and item numbering', { skip: !python
 });
 
 test('host file trees have the same observable surface in Python and TypeScript', { skip: !python }, () => {
-  const doc = { $lambda: { type: 'Lambda<{}, Text>', instructions: 'Inspect the project.' } };
+  const fileType = '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }';
+  const doc = { $lambda: { type: 'Lambda<{ files: Dict<File> }, Text>', types: { File: fileType },
+    instructions: 'Inspect the project.' } };
   const files = { 'README.md': 'one\ntwo\nthree', 'assets/pixel.bin': [0, 1, 2], 'src/main.txt': 'hello' };
   const calls = [
-    ['read', { path: 'files' }],
-    ['read', { path: 'files/README.md', start: 2, end: 2 }],
-    ['read', { path: 'files/assets' }],
-    ['read', { path: 'files/assets/pixel.bin' }],
+    ['read', { path: 'args/files' }],
+    ['read', { path: 'args/files/README.md/text', start: 2, end: 2 }],
+    ['read', { path: 'args/files/assets' }],
+    ['read', { path: 'args/files/assets/pixel.bin' }],
   ];
-  const script = `import json,sys\nfrom natlang.files import MemoryFileTree\nfrom natlang.runtime import Runtime,Session\nfrom natlang.surface import ToolSurface\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,files,calls=json.load(sys.stdin)\nfiles={k:(bytes(v) if isinstance(v,list) else v) for k,v in files.items()}\nrt=Runtime(None,file_tree=MemoryFileTree(files)); s=Session(rt,load_program(doc),TypeEnv())\ntools=ToolSurface().tools(s); params=tools[0]['function']['parameters']\nchild=Session(rt,load_program(doc),TypeEnv(),path='return/child'); child_params=ToolSurface().tools(child)[0]['function']['parameters']\nchild_read=child.apply('read',{'path':'files/src/main.txt'})\nprint(json.dumps({'results':[{'kind':r.kind,'text':r.text,'value':r.value} for n,a in calls for r in [s.apply(n,a)]], 'path':params['properties']['path'], 'alternatives':params['x-natlang-alternatives'][-2:], 'child':{'path':child_params['properties']['path'],'kind':child_read.kind,'text':child_read.text}}))`;
+  const script = `import json,sys\nfrom natlang.host_tree import lazy_dict\nfrom natlang.runtime import Runtime,Session\nfrom natlang.surface import ToolSurface\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,files,calls=json.load(sys.stdin)\nleaves={k:({'kind':'binary','bytes':len(v)} if isinstance(v,list) else {'kind':'text','text':v,'bytes':len(v.encode())}) for k,v in files.items()}\ntree=lazy_dict(leaves); rt=Runtime(None); root=load_program(doc); root.in_['files']=tree; s=Session(rt,root,TypeEnv())\ntools=ToolSurface().tools(s); params=tools[0]['function']['parameters']\nchild_root=load_program(doc); child_root.in_['files']=tree; child=Session(rt,child_root,TypeEnv()); child_params=ToolSurface().tools(child)[0]['function']['parameters']\nchild_read=child.apply('read',{'path':'args/files/src/main.txt/text'})\nprint(json.dumps({'results':[{'kind':r.kind,'text':r.text,'value':r.value} for n,a in calls for r in [s.apply(n,a)]], 'path':params['properties']['path'], 'alternatives':params['x-natlang-alternatives'][-1:], 'child':{'path':child_params['properties']['path'],'kind':child_read.kind,'text':child_read.text}}))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, files, calls]), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
-  const tree = new MemoryFileTree(Object.fromEntries(Object.entries(files).map(([name, value]) =>
-    [name, Array.isArray(value) ? new Uint8Array(value) : value])));
-  const session = new NativeSession(new NativeRuntime({ fileTree: tree }), buildPending(doc), new TypeEnv());
+  const tree = lazyDict(Object.fromEntries(Object.entries(files).map(([name, value]) => [name,
+    Array.isArray(value) ? { kind: 'binary', bytes: value.length } :
+      { kind: 'text', text: value, bytes: new TextEncoder().encode(value).byteLength }] )));
+  const rootNode = buildPending(doc); rootNode.args.files = tree;
+  const session = new NativeSession(new NativeRuntime(), rootNode, new TypeEnv());
   const read = new NativeToolAgent(() => ({ calls: [] })).tools(session)[0].function.parameters;
   assert.deepEqual(calls.map(([name, args]) => {
     const result = session.apply(name, args); return { kind: result.kind, text: result.text, value: result.value ?? null };
   }), expected.results);
   assert.deepEqual(read.properties.path, expected.path);
-  assert.deepEqual(read['x-natlang-alternatives'].slice(-2), expected.alternatives);
-  const child = new NativeSession(new NativeRuntime({ fileTree: tree }), buildPending(doc), new TypeEnv(), 'return/child');
+  assert.deepEqual(read['x-natlang-alternatives'].slice(-1), expected.alternatives);
+  const childNode = buildPending(doc); childNode.args.files = tree;
+  const child = new NativeSession(new NativeRuntime(), childNode, new TypeEnv(), 'return/child');
   const childRead = new NativeToolAgent(() => ({ calls: [] })).tools(child)[0].function.parameters;
-  const childResult = child.apply('read', { path: 'files/src/main.txt' });
+  const childResult = child.apply('read', { path: 'args/files/src/main.txt/text' });
   assert.deepEqual({ path: childRead.properties.path, kind: childResult.kind, text: childResult.text }, expected.child);
+});
+
+test('portable file-write plan validation agrees in Python and TypeScript', { skip: !python }, () => {
+  const cases = [
+    [{ path: 'docs/note.txt', text: 'hello' }],
+    [{ path: '/absolute', text: 'x' }],
+    [{ path: '../outside', text: 'x' }],
+    [{ path: 'windows\\path', text: 'x' }],
+    [{ path: 'same', text: 'x' }, { path: 'same', text: 'y' }],
+    [{ path: 'extra', text: 'x', mode: 'surprise' }],
+  ];
+  const script = `import json,sys\nfrom natlang.files import validate_file_writes\nout=[]\nfor case in json.load(sys.stdin):\n try: out.append({'ok':True,'value':validate_file_writes(case)})\n except (TypeError,ValueError) as exc: out.append({'ok':False,'kind':type(exc).__name__})\nprint(json.dumps(out))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(cases), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const actual = cases.map(value => {
+    try { return { ok: true, value: validateFileWrites(value) }; }
+    catch (error) { return { ok: false, kind: error instanceof TypeError ? 'TypeError' : 'ValueError' }; }
+  });
+  assert.deepEqual(actual, expected);
 });

@@ -84,7 +84,6 @@ export class NativeNatlangHost {
         maxActions: request.options?.max_actions, maxToolCalls: request.options?.max_tool_calls,
         mapWorkers: request.mapWorkers, parallelModelSafe: request.parallelMapSafe,
         runId: request.options?.run_id ?? randomUUID(), signal: request.signal, timeoutMs: request.timeoutMs,
-        fileTree: request.fileTree,
         seedPolicy: request.options?.seed?.mode ? {
         mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
       for (const value of Object.values(this.environment.host))

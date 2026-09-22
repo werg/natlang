@@ -44,4 +44,4 @@ asset metadata, build inputs, trace archives, or database-shaped records. Keep
 queries that require indexing or full-text search in crisp code and return a
 small typed result; a lazy dictionary is navigation and observation, not an
 index. Keep writes as explicit host operations or return a typed change plan
-for the host to validate and commit.
+such as `{ path: Text, text: Text }[]` for the host to validate and commit.
