@@ -106,8 +106,8 @@ function topicHelp(topic: string): string {
 SOURCE may be a .nl, .ts, .json, or .yaml program, an application directory
 containing natlang.json, a manifest file, NAME, or NAME@VERSION#TARGET.
 Two or more words, or one quoted multiword argument, which do not form an
-existing path become an anonymous Lambda<{}, Text> instruction over the current
-directory's top-level functions.
+existing path become an anonymous Lambda<{ files: Dict<ProjectFile> }, Text>
+instruction over the current directory's top-level functions and lazy file tree.
 
 Program options:
   --inputs FILE       JSON object containing function inputs.

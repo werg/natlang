@@ -14,7 +14,8 @@ natlang semantic-terminal
 ```
 
 Multiple words that do not resolve to a path execute as an anonymous
-`Lambda<{}, Text>` over the current directory's top-level natlang functions.
+`Lambda<{ files: Dict<ProjectFile> }, Text>` over the current directory's
+top-level natlang functions and lazy file tree.
 
 `natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
 asks before installing natlang's pinned, hash checked runtime in the user data
