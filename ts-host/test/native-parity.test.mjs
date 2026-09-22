@@ -34,6 +34,11 @@ function assertTraceParity(actual, expected) {
 test('native tools-v3 compatibility prompt stays aligned with Python tool agent', { skip: !python }, async () => {
   const reference = readFileSync(new URL('../../natlang/prompts/tools_small.md', import.meta.url), 'utf8');
   assert.equal(TOOLS_PROMPT, reference);
+  for (const tool of ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'])
+    assert.match(TOOLS_PROMPT, new RegExp(tool));
+  assert.match(TOOLS_PROMPT, /only filesystem interfaces/);
+  assert.match(TOOLS_PROMPT, /Never import `fs`/);
+  assert.match(TOOLS_PROMPT, /never create, delete, rename, or move codebase files/);
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
     return { calls: [], text: '', completion_tokens: 1 }; }, { toolSchema: 'tools-v3' });
@@ -45,6 +50,11 @@ test('native tools-v3 compatibility prompt stays aligned with Python tool agent'
 test('native default tools-v4 prompt stays aligned with Python explicit tool agent', async () => {
   const reference = readFileSync(new URL('../../natlang/prompts/tools_explicit.md', import.meta.url), 'utf8');
   assert.equal(EXPLICIT_TOOLS_PROMPT, reference);
+  for (const tool of ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'])
+    assert.match(EXPLICIT_TOOLS_PROMPT, new RegExp(tool));
+  assert.match(EXPLICIT_TOOLS_PROMPT, /only filesystem interfaces/);
+  assert.match(EXPLICIT_TOOLS_PROMPT, /Never import `fs`/);
+  assert.match(EXPLICIT_TOOLS_PROMPT, /may not create, delete, rename, or move codebase files/);
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
     return { calls: [], text: '', completion_tokens: 1 }; });

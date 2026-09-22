@@ -500,8 +500,19 @@ class Folder:
             if count == 1:
                 self.write_text(path, original)
                 return {"path": _path(path), "changed": True, "digest": _digest(original.encode())}
+        if count == 0:
+            if fuzzy:
+                raise ValueError(
+                    "edit found no matching span, even with fuzzy: true; inspect the current file contents"
+                )
+            raise ValueError(
+                "edit found no matching span; retry with fuzzy: true for whitespace-tolerant matching "
+                "or inspect the current file contents"
+            )
         if count != 1:
-            raise ValueError("edit requires exactly one matching span")
+            raise ValueError(
+                f"edit found {count} matching spans; make find more specific so it matches exactly one span"
+            )
         updated = original.replace(find, replace_with, 1)
         self.write_text(path, updated)
         return {"path": _path(path), "changed": True, "digest": _digest(updated.encode())}

@@ -40,6 +40,16 @@ test('fuzzy edits and path safety are aligned with the Python surface', async ()
   assert.throws(() => folder.writeText('/absolute', 'bad'));
 });
 
+test('edit diagnostics distinguish missing and ambiguous spans', async () => {
+  const folder = Folder.fromFiles({ 'a.txt': 'alpha\nalpha\nbeta\n' });
+  await assert.rejects(folder.file('a.txt').editText('missing', 'changed'),
+    /no matching span; retry with fuzzy: true/);
+  await assert.rejects(folder.file('a.txt').editText('alpha', 'changed'),
+    /found 2 matching spans; make find more specific/);
+  await assert.rejects(folder.file('a.txt').editText('missing', 'changed', true),
+    /no matching span, even with fuzzy: true/);
+});
+
 test('selected installs are atomic and writer locks exclude competing writers', async () => {
   const folder = Folder.fromFiles({ a: 'a', b: 'b' });
   const child = folder.fork();

@@ -227,7 +227,12 @@ export class Folder {
   async editText(path: string, find: string, replaceWith: string, fuzzy = false): Promise<Record<string, unknown>> {
     let original = await this.readText(path), count = original.split(find).length - 1;
     if (count !== 1 && fuzzy) { const wanted = find.replace(/\s+/g, ' ').trim(); const candidates = [...original.matchAll(/[^\n]*(?:\n|$)/g)].filter(match => match[0].replace(/\s+/g, ' ').trim() === wanted); count = candidates.length; if (count === 1) { const match = candidates[0]!; const newline = match[0].endsWith('\n') ? '\n' : ''; original = original.slice(0, match.index!) + replaceWith + newline + original.slice(match.index! + match[0].length); this.writeText(path, original); return { path: cleanPath(path), changed: true, digest: hexDigest(new TextEncoder().encode(original)) }; } }
-    if (count !== 1) throw new Error('edit requires exactly one matching span'); original = original.replace(find, replaceWith); this.writeText(path, original); return { path: cleanPath(path), changed: true, digest: hexDigest(new TextEncoder().encode(original)) };
+    if (count === 0) {
+      if (fuzzy) throw new Error('edit found no matching span, even with fuzzy: true; inspect the current file contents');
+      throw new Error('edit found no matching span; retry with fuzzy: true for whitespace-tolerant matching or inspect the current file contents');
+    }
+    if (count !== 1) throw new Error(`edit found ${count} matching spans; make find more specific so it matches exactly one span`);
+    original = original.replace(find, replaceWith); this.writeText(path, original); return { path: cleanPath(path), changed: true, digest: hexDigest(new TextEncoder().encode(original)) };
   }
   async search(query: string, path = '', patternText?: string, regex = false): Promise<SearchMatch[]> {
     if (!query) throw new RangeError('search query must be nonempty'); const expression = regex ? new RegExp(query) : undefined, result: SearchMatch[] = [];

@@ -48,6 +48,16 @@ def test_fuzzy_edit_is_unambiguous_and_path_validation_is_strict():
         folder.write_text("/absolute", "bad")
 
 
+def test_edit_diagnostics_distinguish_missing_and_ambiguous_spans():
+    folder = Folder.from_files({"a.txt": "alpha\nalpha\nbeta\n"})
+    with pytest.raises(ValueError, match=r"no matching span; retry with fuzzy: true"):
+        folder.file("a.txt").edit_text("missing", "changed")
+    with pytest.raises(ValueError, match=r"found 2 matching spans; make find more specific"):
+        folder.file("a.txt").edit_text("alpha", "changed")
+    with pytest.raises(ValueError, match=r"no matching span, even with fuzzy: true"):
+        folder.file("a.txt").edit_text("missing", "changed", fuzzy=True)
+
+
 def test_selected_install_is_atomic_and_detects_conflict():
     folder = Folder.from_files({"a": "a", "b": "b"})
     child = folder.fork()
