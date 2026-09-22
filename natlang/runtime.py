@@ -1007,8 +1007,13 @@ class Session:
             if sequence is None:
                 raise reject(path, "bad-range", "a list or text value")
             lo, hi = int(args.get("start", 0)), int(args.get("end", len(sequence)))
-            if lo < 0 or hi < lo or hi > len(sequence):
-                raise reject(path, "bad-range", f"a zero-based half-open slice within 0..{len(sequence)}")
+            if lo < 0 or hi < 0:
+                raise reject(path, "bad-range", "non-negative JavaScript slice offsets")
+            # JavaScript slice clamps oversized offsets and returns an empty
+            # value when the end precedes the start.  The schema explicitly
+            # advertises that contract, so paging reads must do the same.
+            lo, hi = min(lo, len(sequence)), min(hi, len(sequence))
+            if hi < lo: hi = lo
             selected = sequence[lo:hi]
             if isinstance(value, str):
                 text = selected

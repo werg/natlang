@@ -117,8 +117,9 @@ test('scope read_value slices Text by zero-based characters and lists by items',
   const text = session.apply('read_value', { expression: 'text', start: 4, end: 8 });
   assert.equal(text.kind, 'ok'); assert.equal(text.value, 'a\nbe'); assert.equal(text.text, 'a\nbe');
   assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
-  const rejected = session.apply('read_value', { expression: 'text', start: 0, end: 11 });
-  assert.equal(rejected.kind, 'rejected'); assert.match(rejected.text, /0\.\.10/);
+  const clamped = session.apply('read_value', { expression: 'text', start: 0, end: 2000 });
+  assert.equal(clamped.kind, 'ok'); assert.equal(clamped.value, 'alpha\nbeta');
+  assert.equal(session.apply('read_value', { expression: 'text', start: 2000, end: 3000 }).value, '');
 });
 
 test('scope return_value reports every still-open instruction line', () => {

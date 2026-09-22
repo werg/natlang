@@ -41,8 +41,9 @@ def test_read_value_slices_text_by_zero_based_character_offsets():
     assert result.kind == "ok"
     assert result.value == "a\nbe"
     assert result.text == "a\nbe"
-    rejected = active.apply("read_value", {"expression": "text", "start": 0, "end": 11})
-    assert rejected.kind == "rejected" and "0..10" in rejected.text
+    clamped = active.apply("read_value", {"expression": "text", "start": 0, "end": 2000})
+    assert clamped.kind == "ok" and clamped.value == "alpha\nbeta"
+    assert active.apply("read_value", {"expression": "text", "start": 2000, "end": 3000}).value == ""
 
 
 def test_scope_eval_preserves_static_type_when_copying_an_ambiguous_value():

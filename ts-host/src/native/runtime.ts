@@ -752,9 +752,11 @@ export class NativeSession {
           // ``(N chars)`` preview.  Lists continue to use item ranges.
           const sequence = Array.isArray(value) || typeof value === 'string' ? value : null;
           if (!sequence) throw new Reject([{ path, code: 'bad-range', expected: 'a list or text value' }]);
-          const start = Number(args.start ?? 0), end = Number(args.end ?? sequence.length);
-          if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > sequence.length)
-            throw new Reject([{ path, code: 'bad-range', expected: `a zero-based half-open slice within 0..${sequence.length}` }]);
+          let start = Number(args.start ?? 0), end = Number(args.end ?? sequence.length);
+          if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < 0)
+            throw new Reject([{ path, code: 'bad-range', expected: 'non-negative JavaScript slice offsets' }]);
+          start = Math.min(start, sequence.length); end = Math.min(end, sequence.length);
+          if (end < start) end = start;
           const slice = sequence.slice(start, end);
           if (typeof value === 'string') {
             return { kind: 'ok', text: slice as string, value: slice as string };
