@@ -1287,7 +1287,8 @@ export class NativeSession {
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
     const statements = this.splitScopeStatements(code), imported = Object.keys(this.lam.codebase);
-    if (statements.length > 1 && imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
+    if (statements.length > 1 && !/\bfor\s*\(/.test(code) &&
+        imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
       let last: NativeResult = { kind: 'ok', text: 'null', value: null };
       for (let statement of statements) {
         if (statement.includes('.map(') && !statement.includes('Promise.all') &&
@@ -1304,6 +1305,43 @@ export class NativeSession {
     if (applied) try {
       return await this.callDirectory(applied[1]!, applied[2], applied[4]!, this.scopeFolder(applied[3]!),
         applied[5] ? this.splitCallArgs(applied[5]) : [], 'apply');
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    const folded = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+([^\)]+)\)\s*\{\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*,\s*\4\s*\)\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
+    if (folded && Object.hasOwn(this.lam.codebase, folded[6]!)) try {
+      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[folded[6]!]!);
+      const definition = this.lam.codebase[folded[6]!] as Record<string, unknown>,
+        signature = definition.args as Record<string, string>, declared = Object.keys(signature);
+      if (declared.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a two-parameter accumulator function' }]);
+      const evaluate = (expression: string) => this.runtime.evalFor(this.lam,
+        `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result;
+      const initial = evaluate(folded[3]!), items = evaluate(folded[5]!), hidden = `__items_${this.actions}`;
+      this.lam.letTypes[hidden] = parseType(`(${signature[declared[1]!]})[]`);
+      this.lam.let[hidden] = coerce(items, this.lam.letTypes[hidden]!, this.env, `let/${hidden}`);
+      try {
+        const result = await this.applyAsync('call', { function: folded[6], to: `let/${folded[1]}`,
+          over: `let/${hidden}`, init: initial });
+        if (result.kind === 'done') {
+          result.value = dump(this.lam.let[folded[1]!]!) as Value; result.text = JSON.stringify(result.value);
+        }
+        return result;
+      } finally { delete this.lam.let[hidden]; delete this.lam.letTypes[hidden]; }
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    const repeated = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*for\s*\(\s*let\s+[A-Za-z_$][\w$]*\s*=\s*0\s*;\s*[A-Za-z_$][\w$]*\s*<\s*(\d+)\s*;[^\)]*\)\s*\{\s*if\s*\(\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*\)\s*break\s*;\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
+    if (repeated && Object.hasOwn(this.lam.codebase, repeated[5]!) && Object.hasOwn(this.lam.codebase, repeated[6]!)) try {
+      const initial = this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${repeated[3]}); })()`,
+        false, 'eval', this.scopeView()).result;
+      const result = await this.applyAsync('call', { function: repeated[6], to: `let/${repeated[1]}`,
+        init: initial, until: repeated[5], max: Number(repeated[4]) });
+      if (result.kind === 'done') {
+        result.value = dump(this.lam.let[repeated[1]!]!) as Value; result.text = JSON.stringify(result.value);
+      }
+      return result;
     } catch (error) {
       if (error instanceof Reject) return rejected(error);
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };

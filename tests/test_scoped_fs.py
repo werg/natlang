@@ -32,7 +32,7 @@ def test_folder_handles_overlay_and_safe_paths():
     assert folder.file("src/archive/b.ts").read_text() == "two\n"
     assert folder.file("README.md").read_text() == "guide"
     assert coerce(folder, parse_type("Folder"), TypeEnv(), yaml=False, path="args/folder") is folder
-    assert coerce(folder.file("README.md"), parse_type("File"), TypeEnv(), yaml=False,
+    assert coerce(folder.file("README.md"), parse_type("FileHandle"), TypeEnv(), yaml=False,
                   path="args/file").relative_path == "README.md"
 
 

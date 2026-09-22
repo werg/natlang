@@ -108,6 +108,22 @@ test('native injected fs and file tools share the codebase overlay', async () =>
   assert.match((await session.applyAsync('read_file', { path: 'codebase/label.ts' })).value, /new/);
 });
 
+test('scope eval lowers ordinary accumulation and bounded repeat', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ values: Num[] }, Num>', instructions: 'Accumulate.',
+    args: { values: [2, 3] }, codebase: {
+      add: { args: { acc: 'Num', item: 'Num' }, returns: 'Num', code: 'return args.acc + args.item;' },
+      step: { args: { state: 'Num' }, returns: 'Num', code: 'return args.state + 1;' },
+      finished: { args: { state: 'Num' }, returns: 'Bool', code: 'return args.state >= 3;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const folded = await session.applyAsync('eval', { code:
+    'let total: Num = 1; for (const item of values) { total = await add(total, item); } total' });
+  assert.equal(folded.kind, 'done'); assert.equal(folded.value, 6);
+  const repeated = await session.applyAsync('eval', { code:
+    'let current: Num = 0; for (let attempt = 0; attempt < 8; attempt++) { ' +
+    'if (await finished(current)) break; current = await step(current); } current' });
+  assert.equal(repeated.kind, 'done'); assert.equal(repeated.value, 3);
+});
+
 test('checked directory reducer metadata survives graph instantiation', () => {
   const graph = checkedDefinitions({ inspect: { kind: 'directory-reducer', args: { request: 'Text' },
     returns: 'Text', instructions: 'Inspect project/ and return a report.' } }, 'inspect');

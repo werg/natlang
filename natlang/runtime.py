@@ -1404,7 +1404,8 @@ class Session:
             return handle_result
         statements = self._split_scope_statements(code)
         imported = tuple(self.lam.codebase)
-        if len(statements) > 1 and any(re.search(rf"\b{re.escape(name)}\s*\(", code) for name in imported):
+        if (len(statements) > 1 and not re.search(r"\bfor\s*\(", code) and
+                any(re.search(rf"\b{re.escape(name)}\s*\(", code) for name in imported)):
             last = Result("ok", "null", value=None)
             for statement in statements:
                 # Awaiting an ordinary value is valid.  Accept the familiar
@@ -1429,6 +1430,46 @@ class Session:
             folder = self._scope_folder(folder_name)
             args = self._split_call_args(raw_args or "")
             return self._call_directory(local, annotation, function, folder, args, "apply")
+        folded = re.fullmatch(
+            r"\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*"
+            r"for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+([^\)]+)\)\s*\{\s*"
+            r"\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*,\s*\4\s*\)\s*;?\s*\}\s*"
+            r"\1\s*;?\s*", code, re.S)
+        if folded and folded.group(6) in self.lam.codebase:
+            local, annotation, initial_expr, _, items_expr, function = folded.groups()
+            fn = self._function(function); declared = list(fn.args)
+            if len(declared) != 2:
+                raise reject("code", "bad-call", "a two-parameter accumulator function")
+            initial, items = self._eval_scope_expression(initial_expr), self._eval_scope_expression(items_expr)
+            hidden = f"__items_{self.actions}"
+            self._local_type(f"let/{hidden}", f"({fn.args[declared[1]]})[]", fn.types)
+            try:
+                self._set_value(f"let/{hidden}", parse_type(f"({fn.args[declared[1]]})[]"), items, yaml=False)
+                result = self._op_call({"function": function, "to": f"let/{local}",
+                                        "over": f"let/{hidden}", "init": initial})
+            finally:
+                self.lam.let.pop(hidden, None); self.lam.let_types.pop(hidden, None)
+            if annotation and not fits(parse_type(fn.args[declared[0]]), parse_type(annotation.strip()), self.env):
+                raise reject(local, "type-does-not-fit-slot", annotation.strip(), fn.args[declared[0]])
+            if result.kind == "done":
+                result.value = dump(self.lam.let[local]); result.text = json.dumps(result.value, ensure_ascii=False)
+            return result
+        repeated = re.fullmatch(
+            r"\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*"
+            r"for\s*\(\s*let\s+[A-Za-z_$][\w$]*\s*=\s*0\s*;\s*[A-Za-z_$][\w$]*\s*<\s*(\d+)\s*;[^\)]*\)\s*\{\s*"
+            r"if\s*\(\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*\)\s*break\s*;\s*"
+            r"\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;?\s*\}\s*\1\s*;?\s*",
+            code, re.S)
+        if repeated and repeated.group(5) in self.lam.codebase and repeated.group(6) in self.lam.codebase:
+            local, annotation, initial_expr, maximum, check, step = repeated.groups()
+            fn = self._function(step); initial = self._eval_scope_expression(initial_expr)
+            result = self._op_call({"function": step, "to": f"let/{local}", "init": initial,
+                                    "until": check, "max": int(maximum)})
+            if annotation and not fits(parse_type(fn.returns), parse_type(annotation.strip()), self.env):
+                raise reject(local, "type-does-not-fit-slot", annotation.strip(), fn.returns)
+            if result.kind == "done":
+                result.value = dump(self.lam.let[local]); result.text = json.dumps(result.value, ensure_ascii=False)
+            return result
         mapped = re.fullmatch(
             r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*"
             r"(.+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*"

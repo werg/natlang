@@ -57,6 +57,25 @@ def test_scope_eval_sequences_multiple_imported_calls_in_one_snippet():
     assert root.let["counts"] == [1, 0, 1] and root.let["result"] == 2
 
 
+def test_scope_eval_lowers_ordinary_accumulation_and_bounded_repeat():
+    root = load_program({"$lambda": {"type": "Lambda<{ values: Num[] }, Num>",
+        "instructions": "Accumulate and advance.", "args": {"values": [2, 3]},
+        "codebase": {
+            "add": {"args": {"acc": "Num", "item": "Num"}, "returns": "Num",
+                    "code": "return args.acc + args.item;"},
+            "step": {"args": {"state": "Num"}, "returns": "Num", "code": "return args.state + 1;"},
+            "finished": {"args": {"state": "Num"}, "returns": "Bool", "code": "return args.state >= 3;"},
+        }}})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    folded = active.apply("eval", {"code":
+        "let total: Num = 1; for (const item of values) { total = await add(total, item); } total"})
+    assert folded.kind == "done" and folded.value == 6
+    repeated = active.apply("eval", {"code":
+        "let current: Num = 0; for (let attempt = 0; attempt < 8; attempt++) { "
+        "if (await finished(current)) break; current = await step(current); } current"})
+    assert repeated.kind == "done" and repeated.value == 3
+
+
 def test_scope_surface_is_stable_and_completion_ignores_blank_lines():
     root, active = session()
     tools = ScopeEvalSurface().tools(active)

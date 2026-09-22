@@ -4,4 +4,6 @@ Tools: eval(code), read_value(expression, start?, end?), write_value(name, value
 
 Call imported natlang and crisp helpers normally: const summary = await summarize(urgent); const grades = await Promise.all(answers.map(answer => grade(answer, key))). Do not use the legacy path or call-combinator protocol.
 
+Inspect `codebase/` proactively to understand the instructions and helper behavior. Edit the instructions or crisp code in an existing codebase file whenever that will make the program clearer, more correct, reusable, or executable; validated edits become live at the next call boundary. The codebase file set is fixed, so place every edit in an existing file.
+
 Close each substantive line with mark_lines only after success; mark untaken branches skipped. Use report_blocker only for missing information and report_error for invalid requirements or failed validation. Keep scope values separate from files: codebase file tools edit existing files in the fixed codebase/ file set and cannot create, delete, or move them. A directory reducer gets project/, where normal file creation, editing, moving, and deletion are allowed, plus commit; folder.apply(reducer, ...args) retains its changes, while a direct call discards them. End without prose after return_value.
