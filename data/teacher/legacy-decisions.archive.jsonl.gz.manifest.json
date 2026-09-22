@@ -1,0 +1,242 @@
+{
+  "version": "natlang.teacher_decision_archive_manifest/1",
+  "archive": "data/teacher/legacy-decisions.archive.jsonl.gz",
+  "archive_sha256": "5166a55899275c0e9141942484dd36dcc00a8a53dff95bc046582241971643a2",
+  "root": "runs",
+  "recovered_programs": "data/teacher/legacy-decisions.archive.programs.jsonl",
+  "recovered_programs_sha256": "66f601ad20f7ba55a2ac8fc77891c555f56ac9f5a53e22eb8b21d2b4b548c15a",
+  "counts": {
+    "source_rows": 1921,
+    "duplicate_rows": 208,
+    "archived_rows": 1713,
+    "decisions": 6426,
+    "recovered_program_revisions": 50
+  },
+  "source_files": [
+    {
+      "file": "runs/benchmark-bonsai-repeatfix-12x24.ir.jsonl",
+      "sha256": "733ce0b7531e05f3c998bd15bc39a3f5f04a12226d13fcbe4b1c83134c35dd90",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/continuation-map-then-count.teacher.ir.jsonl",
+      "sha256": "dda2c9e81dee9681dbc9c85b52786abc7c4b789aea2fdbf4be203ad0127f932e",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-behavior-reply-only-s886.trajectory-v2.ir.jsonl",
+      "sha256": "022c01f76ec63005301de204cee84dd17eade664088881abfae775f4a00d158c",
+      "unique_rows": 21
+    },
+    {
+      "file": "runs/teacher-behavior-reply-only-s886.trajectory.ir.jsonl",
+      "sha256": "bdb47b9154cfa43b31d72374822b9b753499d918ef50b5cc1cc134659611b6e8",
+      "unique_rows": 21
+    },
+    {
+      "file": "runs/teacher-fold-reply-clarified-s886.trajectory.ir.jsonl",
+      "sha256": "7a40cd621da5d407a0041128fb5da7eabf90c1d0858cc5deb3c35e885ebd445d",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-batch1-20260919.trajectory-migrated.ir.jsonl",
+      "sha256": "b21e55d458f163ad8625443e1841034c1bf6e556d47c92c1ce7f0b5ba16813d9",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-extended-20260919.trajectory.ir.jsonl",
+      "sha256": "f568c206e332b6a1e135512900f20f490aa3a4388aeb19daecc2a754e7715268",
+      "unique_rows": 387
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-full-20260919.trajectory.ir.jsonl",
+      "sha256": "1ab43a1728e7c347236276963a88f3609e2ef69767da10ce994ba03902bb9944",
+      "unique_rows": 14
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-full-first-modern.trajectory.ir.jsonl",
+      "sha256": "57704b754dfad100cbcedf0492734b30ca8f2172248ed265a8efcd987b58c5f0",
+      "unique_rows": 2
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-thinking0-20260919.trajectory-migrated.ir.jsonl",
+      "sha256": "a14b846acdaf744d90dd25bfd8ca534d74dfb7ada45e22cd55df05c4b19ff7b3",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-leaves-frozen-s73-uncapped-retry-20260919.trajectory.ir.jsonl",
+      "sha256": "0fc390f490f1e1340087f6df5ece45babdd0fb4e45b5a0252dece0178f0c7bf7",
+      "unique_rows": 88
+    },
+    {
+      "file": "runs/teacher-leaves-ir-backfill-s73-first8.trajectory-v2.ir.jsonl",
+      "sha256": "8a34c431c0615b7e31fd861f3f99e7efdf26349faab66f35778107ae23e91005",
+      "unique_rows": 8
+    },
+    {
+      "file": "runs/teacher-leaves-ir-backfill-s73-first8.trajectory-v3.ir.jsonl",
+      "sha256": "e3b87f7cab083901e9882801980ebcf80bd0ae3079cd1deb478aadbacde58e25",
+      "unique_rows": 8
+    },
+    {
+      "file": "runs/teacher-leaves-ir-backfill-s73-first8.trajectory-v4.ir.jsonl",
+      "sha256": "d7331115e79185c6e43a65cf50db5ddae1745b96dadba76ced491a4f24791800",
+      "unique_rows": 8
+    },
+    {
+      "file": "runs/teacher-leaves-ir-backfill-s73-first8.trajectory.ir.jsonl",
+      "sha256": "088924a579e93705f81586e5aeef21e20dc108e712ee6b9b81af12b588e9bc84",
+      "unique_rows": 8
+    },
+    {
+      "file": "runs/teacher-leaves-pruned-s73-20260921-snapshot10.trajectory.ir.jsonl",
+      "sha256": "465ba966e21c102648625ca5c6ab617a769bd906831f7959a65ba1de410d05f2",
+      "unique_rows": 10
+    },
+    {
+      "file": "runs/teacher-leaves-pruned-s73-20260921-snapshot69.trajectory.ir.jsonl",
+      "sha256": "c4fbca2d440f528c6c4034bd4d2c03a5812b885a8c8cd254a7996f2cb7879a2c",
+      "unique_rows": 69
+    },
+    {
+      "file": "runs/teacher-leaves-pruned-s74-20260921-snapshot1.trajectory.ir.jsonl",
+      "sha256": "7270ae4d3bf9344e9a06a33d0e3594a4870233187cc5e2fbe5e7bcd5371a268b",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-leaves-reply-only-s73-first4.trajectory-migrated.ir.jsonl",
+      "sha256": "e72e1dd12a2d88cc07c9be76c48f239f4ff18bc4e77f066aadf5b254e6aee428",
+      "unique_rows": 4
+    },
+    {
+      "file": "runs/teacher-leaves-reply-only-s73-first4.trajectory-v2.ir.jsonl",
+      "sha256": "0d779af6931e373b1922107507a709432b4dabd835331aaa97ec1f9e81e6966e",
+      "unique_rows": 4
+    },
+    {
+      "file": "runs/teacher-leaves-s74-pages-20260920.trajectory.ir.jsonl",
+      "sha256": "6a44ef80a485db0eeecc9551ceda0008aeda4e44f5ffcf65b4f3558b267a257f",
+      "unique_rows": 110
+    },
+    {
+      "file": "runs/teacher-leaves-s74-pages-retry-20260921.trajectory.ir.jsonl",
+      "sha256": "b4967b3ee1b138a4ccea38e9157b6fd81657fdef3e285406bb2fe2024e2aed8e",
+      "unique_rows": 10
+    },
+    {
+      "file": "runs/teacher-leaves-s74-pages-retry2-20260921.trajectory.ir.jsonl",
+      "sha256": "3ac19c013cd6ed1f9298bcf9513b7c5d3e77ab4f1c5adde6f4a75c8288376605",
+      "unique_rows": 2
+    },
+    {
+      "file": "runs/teacher-leaves-s74-pass1.trajectory.ir.jsonl",
+      "sha256": "8b405be90e4456e88affb49b0e86c509fb953eddace6ed8bca561f795d0811cf",
+      "unique_rows": 4
+    },
+    {
+      "file": "runs/teacher-leaves-s74-resume-20260920.trajectory.ir.jsonl",
+      "sha256": "3ef9580c8ec12c3de9300fbc1efccd8f94083a40dc4af9b07f0f98ffd0b1fac1",
+      "unique_rows": 3
+    },
+    {
+      "file": "runs/teacher-leaves-s74-say-20260920.trajectory.ir.jsonl",
+      "sha256": "2c27daadba8741ba02adf22a25ea6f70343c608616bb630df294f6479c1bdd34",
+      "unique_rows": 76
+    },
+    {
+      "file": "runs/teacher-leaves-s74-say-after-prune-20260921.trajectory.ir.jsonl",
+      "sha256": "52d66c5cbc2a1e8e3c2c5c0e479b2f8f38f52bbe373d1be6796efe257ca05221",
+      "unique_rows": 36
+    },
+    {
+      "file": "runs/teacher-leaves-s74-say-reviewed.trajectory.ir.jsonl",
+      "sha256": "922ff6eb03ef98e24d838f1ce38e1485a3da331cce2a607080090684146842b3",
+      "unique_rows": 40
+    },
+    {
+      "file": "runs/teacher-leaves-s74-say-reviewed10b.trajectory.ir.jsonl",
+      "sha256": "9c97dee5acb47adf33c91da62eda1fe9c95887a0bdf064a9d5c30d526fcbb927",
+      "unique_rows": 9
+    },
+    {
+      "file": "runs/teacher-leaves-s74-say-reviewed26.trajectory.ir.jsonl",
+      "sha256": "47179e743155089a406a4627dc38c1722b11a6909495142a1a25359c7a8fb684",
+      "unique_rows": 24
+    },
+    {
+      "file": "runs/teacher-leaves-say-final2-20260920.trajectory.ir.jsonl",
+      "sha256": "0f937cef25fcc338678640a4fd144cdc9d3dd40f87ca06e4e58f7e698c0ed3ed",
+      "unique_rows": 2
+    },
+    {
+      "file": "runs/teacher-leaves-say-last-20260920.trajectory.ir.jsonl",
+      "sha256": "688937e5a39a624a497129a0679bdfbc6f57b0505f44f448eb530de3131d838c",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-leaves-say-retry-20260920.trajectory.ir.jsonl",
+      "sha256": "249acdce216d2125a41dbec29abb4020fa5476f39a697b5426c6a1291aa8c59d",
+      "unique_rows": 2
+    },
+    {
+      "file": "runs/teacher-leaves-say-retry-v3-20260920.trajectory.ir.jsonl",
+      "sha256": "3b2c23b04965418c288ba725611ce432bb4bdeeb7f78877707be43866fbf352c",
+      "unique_rows": 47
+    },
+    {
+      "file": "runs/teacher-leaves-simple-s886.trajectory-migrated.ir.jsonl",
+      "sha256": "d7114a9e4ce49873490e8671276ae3f2b7a358ad7c29b93dcd6c96bd061a16e4",
+      "unique_rows": 4
+    },
+    {
+      "file": "runs/teacher-leaves-uncapped-retry-20260920.trajectory.ir.jsonl",
+      "sha256": "8dd70f59062f02a5f09a8ed09003b3291c7f714978d55a9a0aed600efac1d2ce",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-legacy-recoverable-scope.ir.jsonl",
+      "sha256": "2c42edad28213bd8189ce29acf84144a7a8aa540c131bdf96cf2a08282cd653d",
+      "unique_rows": 631
+    },
+    {
+      "file": "runs/teacher-page-token-cap-retry.trajectory.ir.jsonl",
+      "sha256": "7a6a0b16c1e8091739f815b726b5b18e6433e342987beac953731590aae3f01d",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-program-balanced-s909-pass1.ir.jsonl",
+      "sha256": "68e09c953d5a2db09e406cb4d46df0e836157077638877c25d17b54fe135ac6c",
+      "unique_rows": 15
+    },
+    {
+      "file": "runs/teacher-program-balanced-s909-pass2.ir.jsonl",
+      "sha256": "9ded9d072d0c45f0bf7b25096849f6ac279efc59a6f25aa96a5664e93ac13e21",
+      "unique_rows": 9
+    },
+    {
+      "file": "runs/teacher-program-bridge-pilot.ir.jsonl",
+      "sha256": "f6aee48b854ae077da5120a852bc763725f41a88973a3f279d8da095c7541b42",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-program-coverage.ir.jsonl",
+      "sha256": "7e728259536b753d254ef355bcbc409b782e7e083423dd4e6f69035916a5c2e6",
+      "unique_rows": 10
+    },
+    {
+      "file": "runs/teacher-program-focused-pass4.ir.jsonl",
+      "sha256": "8227f8c6912acc04565bac1c5dce9a191fd74294b42f7f1f86cd24328ab64ad5",
+      "unique_rows": 1
+    },
+    {
+      "file": "runs/teacher-program-simple-s73-remaining.ir.jsonl",
+      "sha256": "c32b3ff96b891d670d503db3cec834737542e7c7e0510779cafe22c5d5c887dc",
+      "unique_rows": 15
+    },
+    {
+      "file": "runs/teacher-webserver-dry-s886.trajectory-migrated.ir.jsonl",
+      "sha256": "5ce9c3fde95b0fcea15189a64664ae69fe2ecf5da52fd62188eadc84839900e5",
+      "unique_rows": 1
+    }
+  ]
+}
