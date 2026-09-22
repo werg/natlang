@@ -14,7 +14,7 @@ Implementation branch: `infrastructure-implementation`. The sequence in [INFRAST
 | 10 | Eval-selectable source/type/run operations and bounded child invocations | `natlang/meta.py`; `tests/test_meta.py` |
 | 11 | Scoped SQL engine with bound scalar parameters and transactions | `hosts/sqlite_host.py`; `tests/test_sqlite_host.py` |
 | 12 | Four-state stream Fold, waiting/resume, bounded consumption and job completion events | `natlang/streams.py`, `hosts/job_stream.py`; `tests/test_stream_fold.py`, `tests/test_job_stream.py` |
-| 13 | Whole-run scenario admission and template-neutral teacher collection/replay linked to program IR | `natlang/scenario.py`, `scripts/collect_scenario_teacher.py`, `scripts/materialize_ir.py`, `scripts/materialize_teacher_trajectory_ir.py`; `tests/test_whole_program_teacher.py` |
+| 13 | Whole-run scenario admission and template-neutral teacher collection linked to program IR | `ts-host/src/teacher/collector.ts`, `ts-host/src/teacher/native-materializer.ts`, `ts-host/src/teacher/studio-materializer.ts`; native collector/materializer tests |
 | 14 | Optional exact search, measured model help and typed two-format rendering | `hosts/search.py`, `hosts/model_help.py`, `hosts/rendering.py`; `tests/test_optional_libraries.py` |
 | 15 | Opt-in bounded parallel finite Map and honest windowed stream composition | `natlang/runtime.py`, `natlang/streams.py`; `tests/test_parallel_map.py` |
 | 16 | Lightweight browser/JS source, recorded-decision, seed, combinator and trace subset | `web/natlang_lite.mjs`, `web/inspector.html`; `tests/test_portable_embedding.py` |
@@ -36,7 +36,7 @@ For current public APIs see [the TS host](../ts-host/README.md),
 - The paired real-model surface probe is implemented in `scripts/probe_engine_surface.py`. Its recorded-driver test passes. It has not been run against the local Bonsai server because the prior teacher backfill is actively using its single model slot. Model reproducibility and student success are measured properties of a selected backend, not consequences of the seed API alone.
 - The TypeScript host runs without Python and directly receives application-owned Node objects. Its Node integration suite covers checked sources, model turns, Map, Fold, declared capabilities, traces, files, processes, retained identity, and failure effects. `plans/NATIVE_TYPESCRIPT_PORT.md` records its design and authority limits.
 - The original `web/natlang_lite.mjs` browser subset supports the declared portable fixtures. It has since been complemented by the full native TS/browser interpreter and local GGUF client in `ts-host/src/browser/`. Neither promises arbitrary native-state checkpointing; shell operations require an explicit compatible host.
-- Whole-program teacher collection and materialization round trip nested Map and correct blocker fixtures. Large teacher shards and template-rendered student pilots should be collected only after the paired live-model probe and the desired student surface are selected.
+- Native whole-program teacher collection and materialization preserve exact requests, reasoning, decisions, ordered outcomes, checkpoints and final admission. Broad collection may resume after the focused live Bonsai gate succeeds.
 - The implementation plan's empirical gates remain open: the paired live-model tools-v2/tools-v3 comparison, selected student pilot, and named P01/P03/P04/P10/P13/P18 application demonstrations. The delivered fixtures show the required mechanisms but do not measure those applications or student behavior. The one-slot Bonsai server remains occupied by the teacher backfill.
 
 ## Typical commands
@@ -46,7 +46,7 @@ For current public APIs see [the TS host](../ts-host/README.md),
 uv build --out-dir /tmp/natlang-infrastructure-dist
 .venv/bin/python scripts/materialize_ir.py data/programs.ir.jsonl data/turns.jsonl --trace-dir data/traces
 node ts-host/scripts/teacher-collector.mjs data/programs.ir.jsonl runs/teacher.jobs data/teacher.jsonl --model-id MODEL --root-seed 43 --limit 1
-.venv/bin/python scripts/materialize_teacher_trajectory_ir.py data/teacher.jsonl data/teacher-turns.jsonl
+node ts-host/scripts/materialize-native-teacher.mjs data/teacher.jsonl data/teacher-turns.jsonl --replace
 .venv/bin/python scripts/probe_engine_surface.py --model-id MODEL --out runs/engine-surface-pilot.json
 ```
 

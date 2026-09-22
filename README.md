@@ -200,8 +200,10 @@ scripts/run_teacher_generation.sh        # Node runtime; resumable coverage gene
 .venv/bin/python scripts/baseline.py --decode server --server http://127.0.0.1:8081 --thinking 512 --temperature 0.6 \
     --system-file natlang/prompts/tools_delegate.md --alias call=call_function --verbose 23
 .venv/bin/python scripts/paraphrase.py --server http://127.0.0.1:8081     # paraphrases, kept only after a round trip
-.venv/bin/python scripts/teacher_leaves.py --server http://127.0.0.1:8081  # references for leaves that generate text, kept only if checks pass
 ```
+
+`baseline.py`, `paraphrase.py`, and `teacher_leaves.py` are legacy analysis or
+migration utilities. They are not part of the active teacher collection path.
 
 
 Training now holds out complete programs and saves the split in `runs/<run>/split.json`.

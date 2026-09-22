@@ -1,5 +1,35 @@
 # Teacher trajectory IR
 
+## Canonical native pipeline
+
+New collection and materialization run entirely in Node on the canonical
+TypeScript host:
+
+```bash
+node ts-host/scripts/teacher-collector.mjs \
+  data/teacher/coverage-selection-s909.ir.jsonl runs/teacher.jobs \
+  runs/teacher.native.jsonl --model-id MODEL --root-seed 909 \
+  --limit 96 --workers 1 --segment-turns 24 --segment-messages 48
+node ts-host/scripts/materialize-native-teacher.mjs \
+  runs/teacher.native.jsonl data/teacher-native-turns.jsonl --replace
+```
+
+The collector stores the exact request, exposed reasoning, normalized model
+choice, offered tools, action outcomes, trace identity, continuation boundaries,
+and final exact admission verdict. The materializer accepts only admitted rows,
+links every call to its ordered action ledger event, and emits both lossless
+semantic decisions and standard `messages`/`tools`/`target` training fields.
+It never replays a decision through the retired Python runtime. Checkpointed
+segments reopen from durable typed state and a short note; earlier dialogue is
+not copied into the next segment.
+
+`scripts/run_teacher_generation.sh` performs this flow for every current
+coverage program and Studio application, rescans for new sources between waves,
+and resumes per-case atomic jobs after interruption. See
+`ts-host/TEACHER_MATERIALIZATION.md` for the native record contract.
+
+## Legacy trajectory migration
+
 The teacher's decisions are durable source data. `scripts/teacher_leaves.py --ir`
 records the complete server replies, exposed reasoning, pre-action message
 context, offered tool schemas, proposed calls, self-reviews, attempted calls and tool results in its
@@ -72,7 +102,7 @@ ordered effects, line marks, and errors; then render accepted structured turns
 with the student's template. Keep rejected and failed trajectories for
 contrastive analysis rather than treating them as successful demonstrations.
 
-`scripts/materialize_teacher_trajectory_ir.py` performs that replay for
+The legacy `scripts/materialize_teacher_trajectory_ir.py` performed that replay for
 accepted, completed leaves. It reconstructs the exact frozen leaf request,
 runs the selected decisions through the current harness, requires the same
 final value, and compares recorded tool outcomes when present. It emits

@@ -792,26 +792,16 @@ embedding provides an engine registry; authored functions can declare `engine`.
 The canonical runtime uses `typescript-host` for crisp functions and model eval,
 including shared native host objects. Historical Python traces may declare
 `quickjs-isolated`; that compatibility label does not select the canonical executor.
-Fresh or retained globals describe lifetime, not isolation. Shared-host evaluators are
-trusted execution and can mutate native objects before validation fails. Their
-portable results still cross the typed tree boundary; traces cannot replay
-arbitrary native memory. The following limits describe the QuickJS binding only.
-
-QuickJS executes JavaScript and the erasable TypeScript subset. Type annotations
-are stripped with Node.js `module.stripTypeScriptTypes` (Node >=22.13 required
-only for TypeScript syntax); enums and other syntax requiring code generation
-are rejected. Stripping is not static type checking: the current runtime checks
-values at the typed tree boundary and crisp function returns, not arbitrary
-intermediate JavaScript expressions. The scope declarations below describe the
-API; no declaration file or static checker is currently generated.
-
-Pure execution has a 2-second QuickJS time limit. Effectful execution runs in a
-killable worker with a 2-second wall-clock deadline, including host-effect waits.
-Both use a 64 MB QuickJS heap limit. TypeScript parsing has a separate 5-second
-limit and cached results. Capabilities run in the trusted Python host so their
-state is preserved. A host callback that times out can still complete; its
-outcome is uncertain, and hosts must supply cancellation or idempotency for
-external effects. The interpreter never automatically retries failed effects.
+Fresh or retained globals describe lifetime, not isolation. The canonical Node
+host transpiles with the TypeScript compiler API and executes both authored
+crisp functions and model `eval` snippets in the same Node VM environment.
+Shared-host evaluation is trusted execution and can mutate native objects before
+validation fails. Portable results still cross the typed tree boundary; traces
+cannot replay arbitrary native memory. Natlang validates declared inputs and
+returns but does not run the full TypeScript semantic type checker on generated
+snippets. A VM timeout bounds synchronous execution; cancellation cannot undo a
+native asynchronous operation already in progress. External effects therefore
+still require receipts, cancellation or idempotency where appropriate.
 
 ### 9.2 run_code scope
 

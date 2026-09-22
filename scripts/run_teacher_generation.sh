@@ -16,6 +16,7 @@ SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-48}"
 SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
 PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-balanced-s909-pass3.jobs}"
 PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage.ir.jsonl}"
+PROGRAM_TURNS="${TEACHER_PROGRAM_TURNS:-data/teacher-program-coverage.turns.jsonl}"
 STUDIO_CASES="${TEACHER_STUDIO_CASES:-data/teacher/studio-cases-v1.jsonl}"
 STUDIO_JOBS="${TEACHER_STUDIO_JOBS:-runs/teacher-studio-coverage.jobs}"
 STUDIO_TURNS="${TEACHER_STUDIO_TURNS:-data/teacher-studio-coverage.turns.jsonl}"
@@ -23,7 +24,7 @@ exec 9>runs/teacher-generation.lock
 flock -n 9 || { echo "another teacher generation pipeline holds runs/teacher-generation.lock" >&2; exit 3; }
 settle="${TEACHER_SETTLE_SECONDS:-5}"
 snapshot() {
-  python scripts/build_teacher_coverage_selection.py "$SELECTION" --seed "$SEED"
+  node ts-host/scripts/build-teacher-coverage-selection.mjs "$SELECTION" --seed "$SEED"
   node ts-host/scripts/freeze-studio-teacher-cases.mjs "$STUDIO_CASES" 6
 }
 fingerprint() {
@@ -38,7 +39,7 @@ while true; do
   snapshot
   # A newly discovered codebase without a provider is a pending coverage gap.
   # Keep rescanning so a concurrently added provider/corpus joins this run.
-  while ! python scripts/audit_teacher_coverage.py \
+  while ! node ts-host/scripts/audit-teacher-coverage.mjs \
       --studio-cases "$STUDIO_CASES" --program-ir "$SELECTION"; do
     echo "coverage incomplete; rescanning in ${settle}s" >&2
     sleep "$settle"
@@ -51,10 +52,12 @@ while true; do
     --limit "$(wc -l < "$SELECTION")" --workers "$WORKERS" \
     --segment-turns "$SEGMENT_TURNS" --segment-messages "$SEGMENT_MESSAGES" \
     --cache-stable-tools
+  node ts-host/scripts/materialize-native-teacher.mjs \
+    "$PROGRAM_OUT" "$PROGRAM_TURNS" --replace
   node ts-host/scripts/collect-studio-teacher.mjs "$STUDIO_CASES" "$STUDIO_JOBS" \
     --server "$SERVER" --model "$MODEL" --seed "$SEED" --workers "$WORKERS"
-  PYTHONPATH=. .venv/bin/python scripts/materialize_studio_teacher.py \
-    "$STUDIO_JOBS" "$STUDIO_TURNS" --cases "$STUDIO_CASES" --replace
+  node ts-host/scripts/materialize-studio-teacher.mjs \
+    "$STUDIO_JOBS" "$STUDIO_TURNS" --cases "$STUDIO_CASES"
   # Refreeze after all slow work. Any source/corpus that arrived during this
   # wave changes the fingerprint and is processed in the next wave.
   snapshot

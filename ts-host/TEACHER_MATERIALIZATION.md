@@ -12,7 +12,12 @@ npm run build:node
 node scripts/materialize-native-teacher.mjs runs/teacher/merged.jsonl data/teacher-native-turns.jsonl
 ```
 
-The output contains one record for each teacher action or checkpoint response.
+Pass `--replace` when rebuilding a derived view from resumable source jobs.
+
+The output contains one record for each teacher decision (which can contain one
+or more actions) or checkpoint response. In addition to the lossless semantic
+`decision` object, each record has the standard template-neutral
+`messages`/`tools`/`target` fields consumed by `scripts/export_sft.py`.
 Every record retains the source task, program IR, provenance, raw response hash,
 teacher text and exposed reasoning. Offered function schemas are normalized to
 `{name, description, parameters}`. Assistant calls retain their source tool name

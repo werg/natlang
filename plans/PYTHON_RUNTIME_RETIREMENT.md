@@ -6,8 +6,9 @@ delegates to the compiled native collector at `ts-host/dist/teacher/cli.js` and
 fails closed instead of falling back to Python.
 
 This inventory covers executable paths that import `natlang.runtime.Runtime` or
-`Session`, and commands that start those paths. Python data transforms that do
-not execute a natlang program can move later without blocking runtime retirement.
+`Session`, and commands that start those paths. Python data transforms are also
+being replaced so the active corpus and teacher pipeline has one implementation
+language and cannot silently re-enter the incompatible runtime.
 
 ## Active teacher generation
 
@@ -16,7 +17,7 @@ not execute a natlang program can move later without blocking runtime retirement
 | Coverage pipeline | `scripts/run_teacher_generation.sh` | Starts the stable Node collector command. |
 | Playground teacher job | `ts-host/scripts/playground-jobs.mjs` | Starts the stable Node collector command with a durable jobs directory. |
 | Whole-program collectors | `scripts/collect_scenario_teacher.py`, `scripts/collect_teacher_batch.py` | Kept for imports and historical tests; their CLIs refuse new `scope-eval-v1` runs. |
-| Generative leaf collector | `scripts/teacher_leaves.py` | Still executes Python `Runtime`; port its reference checks and audit capture. |
+| Generative leaf collector | `scripts/teacher_leaves.py` | Legacy only; native coverage collection replaces new reference generation. |
 | Specialized collector | `scripts/collect_semantic_merge_teacher.py` | Still executes Python `Runtime`; replace with Node scenarios. |
 | Teacher probes | `scripts/teacher_behavior_probe.py`, `scripts/confidence_probe.py`, `scripts/marking_probe.py`, `scripts/validation_probe.py`, `scripts/application_probe.py`, `scripts/probe_engine_surface.py`, `scripts/compare_continuations.py`, `scripts/baseline.py`, `scripts/paraphrase.py` | Still execute or construct Python runtime sessions; port only probes still used as release evidence. |
 | Backfill launcher | `scripts/finalize_synthetic_backfill.py` | Starts `teacher_leaves.py` for missing references. |

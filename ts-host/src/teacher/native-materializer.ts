@@ -68,6 +68,23 @@ function toolSchemas(value: unknown, label: string): Dict[] {
   });
 }
 
+function publicValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(publicValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Dict)
+    .filter(([key]) => !key.startsWith('x-'))
+    .map(([key, child]) => [key, publicValue(child)]));
+}
+
+function trainingTarget(assistant: Dict, calls: Dict[], decisionIndex: number): Dict {
+  const target: Dict = { role: 'assistant', content: assistant.content ?? '' };
+  if (calls.length) target.tool_calls = calls.map((call, index) => ({
+    id: `teacher_${decisionIndex}_${index}`, type: 'function',
+    function: { name: call.source_tool, arguments: JSON.stringify(call.arguments ?? {}) },
+  }));
+  return target;
+}
+
 function callMatches(call: Dict, event: Dict): boolean {
   return call.source_tool === event.name && canonical(call.arguments) === canonical(event.arguments);
 }
@@ -131,12 +148,34 @@ export function materializeNativeRows(input: unknown[]): {
       // Every decision owns the exact request snapshot, normalized to roles and semantic
       // calls. This preserves within-segment evidence while preventing cross-segment stitching.
       const context = contextSource.map(normalizeContextMessage);
+      const programId = record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null;
+      const target = trainingTarget(assistant, calls, index);
+      const skill = phase === 'checkpoint' ? 'checkpoint' :
+        (calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply');
       turns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
-        source: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
-          program_ir_id: record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null },
+        source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
+          program_ir_id: programId },
         provenance: structuredClone(row.provenance),
         task: structuredClone(row.task),
+        program_id: programId,
+        family: 'teacher_program',
+        skill,
+        provisional_gold: false,
+        source_program_ids: programId === null ? [] : [programId],
+        source_groups: programId === null ? [] : [programId],
+        source: 'teacher-native',
+        gold_sources: ['checked-teacher-trajectory', 'exact-runtime-oracle'],
+        license: 'project-generated',
+        messages: publicValue(contextSource),
+        tools: publicValue(source.tools_offered ?? []),
+        target,
+        teacher_reasoning: assistant.reasoning ?? null,
+        teacher_trajectory_id: row.id,
+        teacher_trajectory_digest: nativeRowDigest(row),
+        training_admission: { kind: 'exact-native-runtime-oracle', approved: true },
+        trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
+          final_outcome_sha256: nativeRowDigest(row.outcome) },
         decision: { index, segment, phase,
           context, durable_opening: segmentOpening.map(normalizeContextMessage),
           tool_schemas: offered,

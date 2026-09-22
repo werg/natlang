@@ -53,8 +53,21 @@ test('accepted native rows become linked template neutral decisions with checkpo
   assert.match(afterCheckpoint.context[1].content, /Note: The value is 6/);
   assert.equal(afterCheckpoint.context.some(message => message.content?.includes('stored value')), false,
     'the earlier segment transcript must not be pasted into the next segment');
-  assert.equal(actionTurn.source.trajectory_id, 'teacher-1');
+  assert.equal(actionTurn.source_ref.trajectory_id, 'teacher-1');
   assert.deepEqual(actionTurn.provenance, accepted.provenance);
+  assert.deepEqual(actionTurn.messages, [system, opening]);
+  assert.deepEqual(actionTurn.tools, schema);
+  assert.equal(actionTurn.skill, 'write');
+  assert.equal(actionTurn.teacher_reasoning, 'The result is twice n.');
+  assert.deepEqual(actionTurn.target, { role: 'assistant', content: '', tool_calls: [{
+    id: 'teacher_0_0', type: 'function', function: {
+      name: 'write', arguments: JSON.stringify(firstCall.arguments),
+    },
+  }] });
+  assert.equal(checkpointTurn.skill, 'checkpoint');
+  assert.deepEqual(checkpointTurn.target, { role: 'assistant',
+    content: 'The value is 6; the line remains to be marked.' });
+  assert.equal(afterCheckpointTurn.messages.some(message => message.content?.includes('stored value')), false);
 });
 
 test('accepted rows with an unlinked or reordered action outcome are rejected', () => {

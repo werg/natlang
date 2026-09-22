@@ -1,5 +1,10 @@
 # Teacher execution setup
 
+> **Current path:** use `scripts/run_teacher_generation.sh`. It collects and
+> materializes with the native Node/TypeScript runtime and resumes atomic jobs.
+> The Python commands below document historical probes and completed backfills;
+> do not use them for new teacher data.
+
 The teacher is Ternary Bonsai 2 27B PTQ1_0, served by llama-server on port
 8081. The probes record the actual `/v1/models` response, program, prompt,
 tool transcript, runtime outcome, effects, and audit results. Teacher probes
@@ -11,8 +16,10 @@ prompt/completion token usage and the offered tool-schema size. Inspect these
 before increasing context again: a large context should support long work, not
 hide repetitive prompts or oversized tool menus.
 
-The coverage driver uses two workers, cache-stable tool schemas, and 12-turn / 24-message
-continuation segments. The runtime still checks the exact current schemas; only the
+The native coverage driver defaults to one worker, cache-stable tool schemas,
+and 24-turn / 48-message continuation segments. One Bonsai decode saturates the
+GPU, while two long contexts exceeded the server's 5 GiB host-memory cgroup in
+earlier runs. The runtime still checks the exact current schemas; only the
 model-facing path, line-number, and function-name hints are stabilized so llama-server
 can reuse their common prompt prefix. The larger segment is deliberate: six-turn
 segments cut ordinary nested functions and caused the teacher to reconstruct an
