@@ -10,7 +10,7 @@ import sys
 import time
 import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path as FilePath
 from typing import Any, Callable, Optional
 
@@ -1082,10 +1082,20 @@ class Session:
         from .scoped_fs import Folder
         if self.lam.codebase_folder is None:
             files, paths = {}, {}
-            for name, fn in self.lam.codebase.items():
-                ext = ".ts" if fn.kind == "code" else ".nl"
-                paths[name] = name + ext
-                files[paths[name]] = fn.to_source()
+
+            def add(definitions, prefix=(), ancestors=frozenset()):
+                for name, fn in definitions.items():
+                    key = "/".join((*prefix, name))
+                    ext = ".ts" if fn.kind == "code" else ".nl"
+                    path = "/".join((*prefix, name + ext))
+                    paths[key] = path
+                    files[path] = fn.to_source()
+                    # A recursive import still gets a visible source file, but
+                    # do not expand the same lexical definition forever.
+                    if id(fn) not in ancestors:
+                        add(fn.codebase, (*prefix, name), ancestors | {id(fn)})
+
+            add(self.lam.codebase)
             self.lam.codebase_folder = Folder.from_files(files, access="overlay")
             self.lam.codebase_paths = paths
         return self.lam.codebase_folder
@@ -1095,10 +1105,22 @@ class Session:
         matches = [name for name, path in self.lam.codebase_paths.items() if path == relative]
         if not matches:
             raise reject("codebase/" + relative, "no-such-path", "an imported function source")
-        name = matches[0]
-        previous = self.lam.codebase[name]
-        self.lam.codebase[name] = parse_function_source(name, self.lam.codebase_folder.read_text(relative),
-                                                        previous=previous, path="codebase/" + relative)
+        binding = matches[0]
+        parts = binding.split("/")
+
+        def update(definitions, depth=0):
+            name = parts[depth]
+            previous = definitions[name]
+            if depth + 1 == len(parts):
+                changed = parse_function_source(name, self.lam.codebase_folder.read_text(relative),
+                                                previous=previous, path="codebase/" + relative)
+            else:
+                changed = replace(previous, codebase=update(previous.codebase, depth + 1))
+            return {**definitions, name: changed}
+
+        # Rebuild the lexical ancestors so an edit is private to this frame;
+        # FunctionDef instances may be shared by other running invocations.
+        self.lam.codebase = update(self.lam.codebase)
 
     def _op_list_files(self, args):
         root, folder, path = self._project_file(args.get("path"))

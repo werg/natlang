@@ -1126,11 +1126,18 @@ export class NativeSession {
   private editableCodebase(): Folder {
     if (!this.lam.codebaseFolder) {
       const files: Record<string, string> = {};
-      for (const [name, raw] of Object.entries(this.lam.codebase)) {
-        const definition = raw as Record<string, unknown>, extension = Object.hasOwn(definition, 'code') ? '.ts' : '.nl';
-        const path = `${name}${extension}`; this.lam.codebasePaths[name] = path;
-        files[path] = this.editableDefinitionSource(definition);
-      }
+      const add = (definitions: Record<string, unknown>, prefix: string[] = [], ancestors = new Set<object>()): void => {
+        for (const [name, raw] of Object.entries(definitions)) {
+          const definition = raw as Record<string, unknown>, extension = Object.hasOwn(definition, 'code') ? '.ts' : '.nl';
+          const key = [...prefix, name].join('/'), path = [...prefix, `${name}${extension}`].join('/');
+          this.lam.codebasePaths[key] = path; files[path] = this.editableDefinitionSource(definition);
+          if (!ancestors.has(definition)) {
+            const nested = definition.codebase as Record<string, unknown> | undefined;
+            if (nested) add(nested, [...prefix, name], new Set([...ancestors, definition]));
+          }
+        }
+      };
+      add(this.lam.codebase);
       this.lam.codebaseFolder = Folder.fromFiles(files, 'overlay');
     }
     return this.lam.codebaseFolder;
@@ -1139,7 +1146,9 @@ export class NativeSession {
   private refreshCodebaseFile(path: string): void {
     const entry = Object.entries(this.lam.codebasePaths).find(([, source]) => source === path);
     if (!entry) throw new Reject([{ path: `codebase/${path}`, code: 'no-such-path', expected: 'an imported function source' }]);
-    const [name] = entry, previous = this.lam.codebase[name] as Record<string, unknown>;
+    const [binding] = entry, parts = binding.split('/');
+    let previous = this.lam.codebase[parts[0]!] as Record<string, unknown>;
+    for (const name of parts.slice(1)) previous = (previous.codebase as Record<string, unknown>)[name] as Record<string, unknown>;
     const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
     const isCode = source.trimStart().startsWith('/*---');
     const match = (isCode ? /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/ :
@@ -1160,7 +1169,13 @@ export class NativeSession {
       .map(([key, value]) => [key, parseType(value)])));
     env.checkNames(parseType(`Lambda<{ ${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
       `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${updated.returns}>`));
-    this.lam.codebase[name] = updated;
+    const install = (definitions: Record<string, unknown>, depth = 0): Record<string, unknown> => {
+      const name = parts[depth]!, prior = definitions[name] as Record<string, unknown>;
+      const changed = depth + 1 === parts.length ? updated :
+        { ...prior, codebase: install(prior.codebase as Record<string, unknown>, depth + 1) };
+      return { ...definitions, [name]: changed };
+    };
+    this.lam.codebase = install(this.lam.codebase);
   }
 
   private async scopeFsCall(code: string): Promise<NativeResult | undefined> {

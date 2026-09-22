@@ -123,6 +123,19 @@ def test_codebase_existing_source_is_live_editable_but_file_set_is_fixed():
     assert rejected.kind == "rejected"
 
 
+def test_codebase_folder_exposes_and_live_edits_nested_lexical_sources():
+    root = load_program({"$lambda": {"type": "Lambda<{}, Text>", "instructions": "Inspect helpers.",
+        "codebase": {"outer": {"args": {}, "returns": "Text", "instructions": "Call inner.",
+            "codebase": {"inner": {"args": {}, "returns": "Text", "code": 'return "old";'}}}}}})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    listed = active.apply("list_files", {}).value
+    assert [item["path"] for item in listed] == ["codebase/outer.nl", "codebase/outer/inner.ts"]
+    edited = active.apply("edit_file", {"path": "codebase/outer/inner.ts", "find": 'return "old";',
+                                         "replace_with": 'return "new";'})
+    assert edited.kind == "ok"
+    assert root.codebase["outer"].codebase["inner"].body == 'return "new";\n'
+
+
 def test_injected_fs_and_file_tools_share_the_live_codebase_overlay():
     root = load_program({"$lambda": {"type": "Lambda<{}, Text>", "instructions": "Inspect label.",
         "codebase": {"label": {"args": {}, "returns": "Text", "code": 'return "old";'}}}})
