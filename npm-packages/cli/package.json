@@ -1,7 +1,7 @@
 {
   "name": "@natlang/cli",
   "version": "0.1.0",
-  "description": "Install, inspect, and run native natlang packages and executable targets.",
+  "description": "Run natlang source programs and applications, and manage optional distribution packages.",
   "type": "module",
   "engines": { "node": ">=22.13" },
   "bin": { "natlang": "bin/natlang.mjs" },

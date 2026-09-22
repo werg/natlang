@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
   satisfiesVersion, writePackageArchive } from '../dist/index.js';
@@ -98,25 +98,36 @@ return 7`);
     } }));
   const archive = join(root, 'fixture.nlpkg'), store = join(root, 'store');
   const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
-  const direct = execFileSync(process.execPath, [cli, 'run', join(root, 'direct.ts')], { encoding: 'utf8' });
+  const help = execFileSync(process.execPath, [cli], { encoding: 'utf8' });
+  assert.match(help, /natlang SOURCE/); assert.doesNotMatch(help, /natlang app run/);
+  const empty = execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' });
+  assert.match(empty, /No distribution packages are installed/);
+  const direct = execFileSync(process.execPath, [cli, join(root, 'direct.ts')], { encoding: 'utf8' });
   assert.equal(direct, '7\n');
-  const local = execFileSync(process.execPath, [cli, 'app', 'run', root, '--', 'local'], { encoding: 'utf8' });
+  const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
   assert.equal(local, 'cli-fixture:local:0');
-  const localManifest = execFileSync(process.execPath, [cli, 'run', join(root, 'natlang.json'), '--', 'path'],
+  const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],
     { encoding: 'utf8', cwd: tmpdir() });
   assert.equal(localManifest, 'cli-fixture:path:0');
-  const doctor = JSON.parse(execFileSync(process.execPath, [cli, 'app', 'doctor', root, '--json'], {
-    encoding: 'utf8', env: { ...process.env, NATLANG_SERVER: 'http://model.test', NATLANG_MODEL: 'fixture' },
-  }));
-  assert.equal(doctor.target.target, 'hello');
+  const inspected = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', root, '--json'], { encoding: 'utf8' }));
+  assert.equal(inspected.target, 'hello');
+  const discovered = JSON.parse(execFileSync(process.execPath, [cli, 'apps', root, '--json'], { encoding: 'utf8' }));
+  assert.equal(discovered[0].name, 'cli-fixture');
+  const ignored = spawnSync(process.execPath, [cli, 'apps', root, '--store', store], { encoding: 'utf8' });
+  assert.equal(ignored.status, 1); assert.match(ignored.stderr, /option --store is not valid here/);
+  const emptyDirectory = join(root, 'not-an-app'); mkdirSync(emptyDirectory);
+  const invalidApp = spawnSync(process.execPath, [cli, 'package', 'pack', emptyDirectory], { encoding: 'utf8' });
+  assert.equal(invalidApp.status, 1);
+  assert.match(invalidApp.stderr, /does not contain a valid natlang\.json/);
+  assert.doesNotMatch(invalidApp.stderr, /EISDIR/);
   execFileSync(process.execPath, [cli, 'package', 'pack', join(root, 'natlang.json'), '--out', archive]);
   execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
-  const listing = execFileSync(process.execPath, [cli, 'app', 'list', '--store', store], { encoding: 'utf8' });
-  assert.match(listing, /cli-fixture\s+hello\s+1\.0\.0/);
-  const result = execFileSync(process.execPath, [cli, 'run', 'cli-fixture@1.0.0#hello',
+  const listing = execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' });
+  assert.match(listing, /cli-fixture@1\.0\.0/);
+  const result = execFileSync(process.execPath, [cli, 'cli-fixture@1.0.0#hello',
     '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
   assert.equal(result, 'cli-fixture:one,two:0');
-  const convenient = execFileSync(process.execPath, [cli, 'app', 'run', 'cli-fixture',
+  const convenient = execFileSync(process.execPath, [cli, 'cli-fixture',
     '--store', store, '--', 'three'], { encoding: 'utf8' });
   assert.equal(convenient, 'cli-fixture:three:0');
 });

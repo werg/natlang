@@ -53,32 +53,39 @@ program paths are resolved from that directory.
 Run a `.nl`, `.ts`, YAML, or JSON program directly:
 
 ```bash
-natlang run path/to/main.nl
-natlang run path/to/main.nl --inputs inputs.json --trace run.jsonl --json
+natlang path/to/main.nl
+natlang path/to/main.nl --inputs inputs.json --trace run.jsonl --json
 ```
 
 Run an application by giving its manifest or a directory containing
 `natlang.json`:
 
 ```bash
-natlang app run path/to/application
-natlang app run path/to/application/natlang.json
-natlang app run packages/semantic-terminal.natlang.json
+natlang path/to/application
+natlang path/to/application/natlang.json
+natlang codebases/semantic_terminal
 ```
 
-There is no fixed or generated list of development applications. A manifest
-beside its source normally resolves from its own directory. A
-manifest kept separately, such as those in this repository's `packages/`
-directory, searches parent directories for the source root. `--root DIR`
-overrides that inference.
+Discover runnable source applications without installing them:
+
+```bash
+natlang apps
+natlang apps codebases
+```
+
+There is no fixed or generated development application list. Each runnable
+application directory contains `natlang.json`. The CLI searches the manifest's
+directory and its ancestors for the complete source root, since an application
+may combine a natlang codebase with host adapters elsewhere in the repository.
+`--root DIR` overrides that inference.
 
 Arguments before `--` belong to natlang. Arguments after it belong to the
 application:
 
 ```bash
-natlang app run packages/evidence-console.natlang.json
-natlang app run packages/notebook-console.natlang.json
-natlang app run packages/log-console.natlang.json
+natlang codebases/evidence_console
+natlang codebases/notebook_console
+natlang codebases/log_investigator
 ```
 
 These open with useful starter state and describe possible next actions. Use
@@ -89,15 +96,15 @@ The corresponding `--documents`, `--notebook`, and piped JSONL forms remain
 available for automation and direct imports:
 
 ```bash
-natlang app run packages/evidence-console.natlang.json -- --documents evidence.json
-natlang app run packages/notebook-console.natlang.json -- --notebook notebook.json
-cat logs.jsonl | natlang app run packages/log-console.natlang.json --plain
+natlang codebases/evidence_console -- --documents evidence.json
+natlang codebases/notebook_console -- --notebook notebook.json
+cat logs.jsonl | natlang codebases/log_investigator --plain
 ```
 
 Inspect a local application without installing it:
 
 ```bash
-natlang app doctor packages/semantic-terminal.natlang.json --json
+natlang inspect codebases/semantic_terminal --json
 ```
 
 ## Model lifecycle
@@ -179,14 +186,15 @@ latest release.
 ## Installed applications and packages
 
 Paths are the normal development and local authoring interface. Native packages
-are optional distribution artifacts. Installed users can still discover and
-run them:
+are optional distribution artifacts. `natlang apps` discovers source manifests;
+`natlang packages` reports archives installed into the content addressed package
+store. Installed users can run a package by its name or exact target:
 
 ```bash
 natlang package install application.nlpkg
-natlang app list
-natlang app run application-name
-natlang run package-name@1.0.0#target
+natlang packages
+natlang application-name
+natlang package-name@1.0.0#target
 ```
 
 See [Native packages and executables](NATIVE_PACKAGES.md) for archive and

@@ -126,9 +126,9 @@ of the core framework while allowing natlang to compose them.
 The native package works outside the source checkout:
 
 ```bash
-natlang package pack packages/semantic-terminal.natlang.json --root . --out semantic-terminal.nlpkg
+natlang package pack codebases/semantic_terminal --out semantic-terminal.nlpkg
 natlang package install semantic-terminal.nlpkg
-natlang run @natlang/semantic-terminal@0.2.0#terminal --workspace .
+natlang @natlang/semantic-terminal@0.2.1#terminal --workspace .
 ```
 
 See [native packages and executables](../NATIVE_PACKAGES.md) for manifests,
@@ -140,7 +140,7 @@ application path. It rebuilds changed TypeScript and lazily manages the default
 local model:
 
 ```bash
-natlang app run packages/semantic-terminal.natlang.json
+natlang codebases/semantic_terminal
 ```
 
 `NATLANG_SERVER`, `NATLANG_MODEL`, and optional `NATLANG_API_KEY` select an
@@ -152,9 +152,9 @@ trajectory or token limits; deployment options can supply explicit budgets.
 The other included applications use the same path launcher:
 
 ```bash
-natlang app run packages/evidence-console.natlang.json
-natlang app run packages/notebook-console.natlang.json
-natlang app run packages/log-console.natlang.json
+natlang codebases/evidence_console
+natlang codebases/notebook_console
+natlang codebases/log_investigator
 ```
 
 Each application starts with guided content. `/help` lists shared and app
@@ -163,9 +163,9 @@ commands. Evidence uses `/sources` and `/load PATH`; notebook uses `/cells` and
 `/recipes`. Optional startup imports retain the original formats:
 
 ```bash
-natlang app run packages/evidence-console.natlang.json -- --documents evidence.json
-natlang app run packages/notebook-console.natlang.json -- --notebook notebook.json
-cat logs.jsonl | natlang app run packages/log-console.natlang.json --plain
+natlang codebases/evidence_console -- --documents evidence.json
+natlang codebases/notebook_console -- --notebook notebook.json
+cat logs.jsonl | natlang codebases/log_investigator --plain
 ```
 
 `evidence.json` is an array of `{id,text}` documents. `notebook.json` contains

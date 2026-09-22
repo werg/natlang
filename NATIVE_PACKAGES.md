@@ -57,19 +57,18 @@ Build, verify, install, inspect, and run it:
 natlang package pack natlang.json --root . --out reviewer-1.0.0.nlpkg
 natlang package verify reviewer-1.0.0.nlpkg --json
 natlang package install reviewer-1.0.0.nlpkg
-natlang package inspect @example/reviewer@1.0.0 --json
-natlang doctor @example/reviewer@1.0.0#review
-natlang run @example/reviewer@1.0.0#review --workspace . -- --application-option value
+natlang inspect @example/reviewer@1.0.0#review --json
+natlang @example/reviewer@1.0.0#review --workspace . -- --application-option value
 ```
 
 Packaging is unnecessary during authoring. Run a program, manifest, or
 application directory directly:
 
 ```bash
-natlang run path/to/main.nl
-natlang app run path/to/application
-natlang app run path/to/application/natlang.json
-natlang app doctor path/to/application --json
+natlang path/to/main.nl
+natlang path/to/application
+natlang path/to/application/natlang.json
+natlang inspect path/to/application --json
 ```
 
 Local manifests are validated with the same archive rules before launch, but
@@ -81,14 +80,14 @@ For interactive use, discover applications and omit the exact version when it
 is useful to follow the highest installed semantic version:
 
 ```bash
-natlang app list
-natlang app run reviewer --workspace . -- --application-option value
-natlang app doctor reviewer --json
+natlang packages
+natlang reviewer --workspace . -- --application-option value
+natlang inspect reviewer --json
 ```
 
-`app run` accepts the full package name or an unambiguous final name component.
+`natlang SOURCE` accepts the full package name or an unambiguous final name component.
 It selects a sole target automatically; packages with several targets require
-`--target`. Automation should continue to use the exact `run` form.
+`--target`. Automation should use the exact `NAME@VERSION#TARGET` form.
 
 Install all archives in one command when packages depend on one another. The
 installer validates the whole candidate set before publishing new objects:
@@ -171,7 +170,8 @@ token caps.
 
 ## Included packages
 
-The manifests in `packages/` build four complete applications:
+The `natlang.json` manifests in the corresponding `codebases/` directories
+build four complete applications:
 
 - `@natlang/semantic-terminal`: semantic recipe selection and asynchronous job outcomes;
 - `@natlang/evidence-console`: citation checked answers over local documents;

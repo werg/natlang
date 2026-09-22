@@ -6,10 +6,10 @@ The native natlang command line. It installs content addressed `.nlpkg` archives
 npm install --global @natlang/cli
 natlang setup
 natlang --help
-natlang run path/to/program.nl
-natlang app run path/to/application
-natlang app list
-natlang app run semantic-terminal
+natlang path/to/program.nl
+natlang path/to/application
+natlang apps
+natlang semantic-terminal
 ```
 
 `natlang setup` validates an explicit or PATH `llama-server` and, when needed,

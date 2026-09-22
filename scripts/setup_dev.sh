@@ -135,16 +135,16 @@ if [[ "$COMMAND_INSTALLED" -eq 1 ]]; then
 
 Check the installation and run code from any directory:
   natlang doctor --json
-  natlang run path/to/program.nl
-  natlang app run path/to/application
+  natlang path/to/program.nl
+  natlang path/to/application
 EOF
 else
   cat <<EOF
 
 Run through the checkout wrapper:
   $COMMAND_TARGET doctor --json
-  $COMMAND_TARGET run path/to/program.nl
-  $COMMAND_TARGET app run path/to/application
+  $COMMAND_TARGET path/to/program.nl
+  $COMMAND_TARGET path/to/application
 EOF
 fi
 

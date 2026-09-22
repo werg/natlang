@@ -835,10 +835,13 @@ A **program** is a code base with an entry function (`main.nl` plus `main/`,
 the entry function's parameters and receives its value. A reactive program is
 an entry function applied as a `Fold` step over an open list of events.
 
+The reference Python host exposes this boundary directly (the installed native
+`natlang` command instead accepts a single JSON object with `--inputs`):
+
 ```
-natlang run triage/main.nl --in tickets=./tickets/ --in rubric=./rubric.md \
-                           --out ./result.yaml
-natlang run shop/main.nl   --stream events=stdin:jsonl
+python -m natlang run triage/main.nl --in tickets=./tickets/ --in rubric=./rubric.md \
+                                      --out ./result.yaml
+python -m natlang run shop/main.nl   --stream events=stdin:jsonl
 ```
 
 Import is type-directed against the declared parameter type:

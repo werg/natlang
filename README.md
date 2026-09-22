@@ -31,8 +31,9 @@ there is no precompiled development app list:
 
 ```bash
 natlang doctor --json
-natlang run path/to/program.nl
-natlang app run packages/semantic-terminal.natlang.json
+natlang path/to/program.nl
+natlang codebases/semantic_terminal
+natlang apps codebases
 ```
 
 The terminal applications open without fixture files and explain their own

@@ -1,5 +1,7 @@
 {
-  "schema": "natlang.package/v1", "name": "@natlang/notebook-console", "version": "0.2.0",
+  "schema": "natlang.package/v1",
+  "name": "@natlang/notebook-console",
+  "version": "0.2.1",
   "description": "A guided semantic notebook with a starter graph and live SQLite and TypeScript imports.",
   "include": ["applications/package_targets/notebook_console.mjs", "applications/package_targets/terminal_helpers.mjs", "applications/notebook.mjs", "codebases/notebook", "codebases/notebook_console"],
   "targets": { "notebook": { "kind": "terminal", "entry": "applications/package_targets/notebook_console.mjs", "reducer": "codebases/notebook_console/reduce.nl", "view": "codebases/notebook_console/view.ts", "authority": ["filesystem:notebook", "sqlite:memory", "typescript-host:evaluate"], "description": "Explore, import, run, and query a dependency aware notebook." } },
