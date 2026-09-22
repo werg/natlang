@@ -1,5 +1,25 @@
 # Agent-facing surface and observed failures
 
+> **Current interface (`scope-eval-v1`, 2026-09-22).** The model uses a
+> persistent TypeScript-like evaluation scope. `eval(code)` supports
+> declarations, assignments, control flow, exact work, and ordinary awaited
+> positional calls to imported natlang or crisp functions. The auxiliary
+> actions are `read_value`, `write_value`, `return_value`, `mark_lines`,
+> `report_blocker`, and `report_error`, plus `list_files`, `search_files`,
+> `read_file`, `write_file`, `edit_file`, and `diff_files` for files. Directory
+> reducers additionally receive `commit`.
+>
+> Scope values and files are separate. The recursive `codebase/` overlay has a
+> fixed manifest: existing file contents may be edited and imports relinked;
+> creating, moving, and deleting codebase files is forbidden. Directory
+> reducers use writable `project/` semantics, where normal file creation,
+> editing, moving, and deletion are allowed; `commit` selects changes and
+> `folder.apply` retains them.
+>
+> The remainder of this file is historical inventory material from the
+> pre-`scope-eval-v1` protocol. Its slash-path names and eight-tool lists
+> describe old traces and are not the current agent interface.
+
 This document inventories the surface presented to a natlang interpreter model as of
 2026-09-22. It distinguishes what the model literally receives from harness behavior that
 shapes the episode without appearing as a tool.

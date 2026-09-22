@@ -5,10 +5,14 @@ The normative language definition is `spec/SPEC.md` (v0.2-draft).
 Training, use cases, and datasets are covered in depth in `TRAINING.md`.
 Detailed designs for the synthesized datasets are in `SYNTHETIC_DATA.md`.
 The type system, validation, and validation feedback are specified in `TYPES.md`.
-The proposed model-facing replacement for workspace paths and call combinators is
-specified in `docs/SCOPE_EVAL_ARCHITECTURE_PLAN.md`: a persistent typed scope,
-line-oriented `eval`, required explicit line closure, normal static imports, and
-separate execution-value and developer-file tools.
+The current model-facing interface is `scope-eval-v1`: a persistent
+TypeScript-like scope, line-oriented `eval`, ordinary awaited positional
+imports, explicit line closure, and separate value and file tools. The fixed
+`codebase/` manifest permits content edits and import relinking but forbids
+creating, moving, or deleting codebase files. Directory reducers use an
+isolated writable `project/` tree and `commit`/`folder.apply` for retention.
+The older workspace-path and call-combinator protocol is historical material
+only; it is retained below where it explains earlier experiments.
 
 ## 1. Thesis
 
@@ -50,7 +54,10 @@ long-lived reactive programs. What it does not favor: leaves that need
 knowledge or synthesis beyond the model (structure cannot shrink a leaf below
 the model's knowledge floor).
 
-## 2. The language
+## 2. The language (historical object-tree design)
+
+This section records the pre-`scope-eval-v1` object-tree model. The current
+scope, import, and file rules are stated at the top of this plan.
 
 ### 2.1 The object tree and its types
 
@@ -199,7 +206,11 @@ intermediate results go into the locals the pseudocode names; a value that
 already exists is written with `source`, never re-emitted; when the inputs do
 not determine the result, `report_blocker`.
 
-## 3. The agent interface
+## 3. Historical agent interface (superseded)
+
+The following eight-tool description records the pre-`scope-eval-v1` design and
+old traces. It is retained for experiment history; current prompts and runtime
+use the surface described at the top of this document.
 
 ### 3.1 Tools (eight)
 

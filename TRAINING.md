@@ -4,6 +4,22 @@ Companion to `PLAN.md`. Covers target use cases, the skill taxonomy, data
 sources (synthetic, existing datasets, teacher distillation), the training
 recipe, and evaluation. Status: draft, 2026-09-19.
 
+The training target is the current `scope-eval-v1` surface. Each episode has
+a persistent TypeScript-like scope and uses `eval` for declarations,
+assignments, control flow, exact work, and awaited positional calls to
+imported natlang or crisp functions. The model-facing actions are
+`read_value`, `write_value`, `return_value`, `mark_lines`, `report_blocker`,
+`report_error`, and the `list_files`, `search_files`, `read_file`, `write_file`,
+`edit_file`, and `diff_files` file actions. Codebase files use the fixed
+writable `codebase/` manifest: existing content and imports may change, while
+file creation, movement, and deletion are forbidden. Directory reducers
+receive a writable `project/` tree and may retain selected changes with
+`commit` or `folder.apply`.
+
+Some experiment notes below preserve slash-path, `call`-combinator, and
+eight-tool traces as historical training data. They are not the current agent
+interface.
+
 ## 0. What the base model tells us
 
 Facts from the LFM2.5 model cards and Liquid's release post (fetched
@@ -21,7 +37,7 @@ Facts from the LFM2.5 model cards and Liquid's release post (fetched
 
 ### 0.1 Consequence for exact work
 
-TypeScript on QuickJS is the language of crisp functions and `run_code`
+TypeScript on QuickJS is the language of crisp functions and current `eval`
 (decided). The model card says the model is weak at code, so the design keeps
 model-written code tiny:
 
@@ -29,10 +45,10 @@ model-written code tiny:
   arithmetic are crisp `.ts` functions in the code base or the linkable `std/`
   library; the interpreter calls them like any other function and writes no
   code at all.
-- **`run_code` is for glue the author did not name**: one expression over
-  `args` and `locals` using the standard library (`locals.labels.map(l => l
-  !== "spam")`). Train this surface explicitly (skill K6), always as short
-  expressions.
+- **`eval` is for glue the author did not name**: one TypeScript-like
+  expression over the persistent scope using the standard library
+  (`labels.map(l => l !== "spam")`). Train this surface explicitly (skill K6),
+  always as short expressions.
 - Measure a Python-shaped expression surface in Phase 2 as the fallback.
   Switch only if the per-skill numbers clearly demand it.
 
@@ -191,7 +207,10 @@ Every training example is one agent turn: `(request + workspace + short
 episode prefix, the turn's tools → next turn)`, with cold-restart twins that
 drop the prefix. Track data volume and accuracy per skill, not per dataset.
 
-**Interpreting (K): carrying out structure the author stated**
+**Interpreting (K): carrying out structure the author stated.** Current
+examples compile these behaviors to `eval`, ordinary imports, and the current
+value and file tools; older tool names in this table identify historical
+traces.
 
 | # | Skill | Oracle |
 |---|-------|--------|

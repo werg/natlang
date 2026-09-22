@@ -8,16 +8,43 @@ A natlang program is a **pseudocode algorithm**: functions with typed
 signatures, subroutine calls, loops, conditions, local variables, organised as
 a **code base** of files. The author states the structure. The interpreter, a
 small language model, carries it out: it reads the pseudocode, decides the next
-step, and performs it with eight tools. The harness provides memory, typing,
+step, and performs it through the current `scope-eval-v1` surface. The harness provides memory, typing,
 pluggable crisp execution and I/O. It parses no instructions, holds no cursor and owns no
 control flow; every constraint it imposes is type-level and applies at write
 time.
 
 Key words: **must**, **must not**, **may** are used in their plain sense.
 
+### Current agent surface: `scope-eval-v1`
+
+The model receives a persistent TypeScript-like evaluation scope. `eval(code)`
+handles declarations, assignments, control flow, exact expressions, and
+ordinary awaited positional calls to imported natlang and crisp functions;
+bindings remain available on later turns. The auxiliary actions are
+`read_value(expression, start?, end?)`, `write_value(name, value, as_type?)`,
+`return_value(variable)`, `mark_lines(start, end?, skipped?)`,
+`report_blocker(missing)`, and `report_error(message)`. File access uses
+`list_files`, `search_files`, `read_file`, `write_file`, `edit_file`, and
+`diff_files`. Directory reducers additionally receive `commit`.
+
+Execution values and files are separate. The recursive `codebase/` overlay has
+a fixed file manifest: existing file contents may be edited and imports may be
+relinked, but codebase files may not be created, moved, or deleted. A directory
+reducer additionally receives writable `project/` semantics, where normal file
+creation, editing, movement, and deletion are allowed; `commit` selects
+changes and `folder.apply` retains them. These rules are normative for the
+current runtime.
+
+The slash-path `read`/`write`/`edit`/`run_code`/`call`/`mark_done` protocol
+described in the historical section below is retained for trace compatibility
+and design history only.
+
 ---
 
-## 1. The object tree
+## 1. The object tree (historical v0.2 model)
+
+The object-tree and slash-path sections below document the superseded protocol
+for old traces. They do not override the current `scope-eval-v1` surface above.
 
 A program, its state, its inputs, and its results are one tree of typed
 nodes. Every node has a type, fixed when the node is created.
@@ -29,7 +56,7 @@ There are two families of node:
   stands where a value will be. Reducing it replaces it with that value.
   Pending nodes come into existence only through `call` (§5.5).
 
-### 1.1 Paths
+### 1.1 Historical paths
 
 A path is a sequence of segments separated by `/`. A segment is a record
 field name, a dict key, or a list index (0-based). Inside an episode, paths
@@ -330,15 +357,16 @@ server) and `codebases/shopkeeper` are such programs.
 ---
 ---
 
-## 5. Tools
+## 5. Historical v0.2 tool protocol
 
-The model works through native tool calls. The opening user message is the
+The following is historical material, retained to document earlier traces. It
+is not the current agent interface. The model worked through native tool calls. The opening user message was the
 lambda's `instructions`, the line "Write the result to `return` (T).", and the
 listing of its functions. **Data never shares a channel with instructions**:
 the harness performs the first step on the interpreter's behalf,
 `read(path="args")`, and the workspace arrives as a tool result (§8).
 
-Eight standard tools; `call` and `mark_done` are present only when the lambda has
+The historical eight standard tools; `call` and `mark_done` were present only when the lambda had
 functions. Their argument schemas are regenerated from the tree and the types
 every turn.
 
@@ -943,7 +971,7 @@ retention guarantee. Configure storage and pruning for long-lived runs.
 | 3.1 | The lambda holds every zone of state: type, body, `args`, `let`, `return`, `codebase` |
 | 3.2 | Typed locals created by the first write; private; no fixed count limit |
 | 3.4 | `.nl` / `.ts` files with frontmatter, companion folders, lexical scope, `uses` links, immutable and shared by reference; no recursion |
-| 5 | Eight tools: `read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`; instructions and data in different channels; the reply ends the episode and is never the result |
+| 5 (historical) | Eight tools: `read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`; retained for old traces only |
 | 5.3 | Changing a function = copy into a local, edit, call the copy |
 | 5.5 | `call` places and runs in one action; calling again resumes; Map / Fold / Iterate are reached only through `call` |
 | 4.1, 4.3 | Combinators bind the author's parameter names; Iterate's check is a Bool function of the code base |

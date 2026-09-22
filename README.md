@@ -8,8 +8,12 @@ signatures, subroutine calls, `for each`, `repeat until`, `if`/`else`, local
 variables, organised as a **code base** of `.nl` files (frontmatter plus a
 pseudocode body; `somefun.nl` with an optional companion folder `somefun/`;
 `.ts` files for exact functions; reuse through `uses` links). The author
-states the structure. The model carries it out one small step at a time with
-eight tools (`read`, `write`, `edit`, `run_code`, `call`, `mark_done`, `report_blocker`, `report_error`);
+states the structure. The model carries it out through the current
+`scope-eval-v1` surface: a persistent TypeScript-like scope, ordinary awaited
+positional imports, value actions (`read_value`, `write_value`,
+`return_value`), file actions (`list_files`, `search_files`, `read_file`,
+`write_file`, `edit_file`, `diff_files`), and explicit `mark_lines`,
+`report_blocker`, and `report_error` actions;
 every function instance is a fresh short episode over a typed object tree.
 Prompt-like tasks (judge, classify, extract, rewrite) are the leaves. The
 harness provides memory, typing, pluggable crisp execution and I/O; it parses no instructions
@@ -38,13 +42,11 @@ natlang --apps codebases
 ```
 
 Two or more words that do not name an existing path form an anonymous
-`Lambda<{ files: Dict<ProjectFile> }, Text>` instruction. Natlang uses the
-current directory as the codebase root and passes its complete, read-only file
-tree as `args/files`. The program uses ordinary `Dict` paths such as
-`args/files/src/main.ts/text`; a child declares a compatible argument and
-receives `args/files` normally. Filesystem hosts load directory entries and
-file content only when Natlang reads them; binary files initially appear as
-metadata.
+instruction. Natlang uses the current directory as the codebase root. The
+fixed writable `codebase/` manifest permits content edits and import relinking
+but forbids creating, moving, or deleting codebase files. Directory reducers
+use an isolated writable `project/` tree; they may create, move, edit, and
+delete there, then select retained changes with `commit` or `folder.apply`.
 
 The terminal applications open without fixture files and explain their own
 capabilities. Use `/help`; evidence and notebook include useful starter data,
@@ -99,7 +101,7 @@ can copy them from the checkout. See the [installation and maintenance guide](sk
 | [Infrastructure implementation plan](plans/INFRASTRUCTURE_IMPLEMENTATION.md) | Prioritised cross-project infrastructure, 17 proposed patches, code touchpoints and acceptance gates |
 | [Terminal application framework](ts-host/TERMINAL_APPLICATIONS.md) | Shared natlang CLI lifecycle, event queues, durable sessions, views, model transport and runnable applications |
 | [Individual project plans](plans/projects/README.md) | Concrete natlang feature dependencies, eval/host boundaries, delivery gates and teacher/trace requirements for all 20 projects |
-| `spec/SPEC.md` | The normative language specification (v0.2-draft); `spec/CODEBASES.md` gives the rationale for code bases and `call` |
+| `spec/SPEC.md` | The normative language specification, including the current `scope-eval-v1` surface and a labeled historical v0.2 protocol |
 | `TYPES.md` | Type system, validation, write-time typing, how validation feedback reaches the model |
 | `TRAINING.md` | Use cases, skill taxonomy, datasets, the teacher's roles, training recipe, evaluation |
 | `SYNTHETIC_DATA.md` | Detailed designs and prior art for the fifteen synthesized datasets |
