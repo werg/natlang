@@ -3,6 +3,7 @@ description: Interpret a notebook terminal request, execute its dependency graph
 args:
   state: ConsoleState
   event: ConsoleEvent
+  files?: Dict<File>
 returns: ConsoleState
 uses:
   run_notebook: ../notebook/run.nl

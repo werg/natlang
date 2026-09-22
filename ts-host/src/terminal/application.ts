@@ -21,6 +21,8 @@ export type TerminalRunner = { run(request: NativeRunRequest): Promise<RunResult
 export type TerminalApplicationOptions<S, V, E extends TerminalEvent = TerminalEvent> = {
   runner: TerminalRunner;
   source: TerminalSource;
+  /** Stable host inputs shared by reducer and view runs (for example files). */
+  inputs?: Record<string, unknown>;
   initialState: S;
   initialRevision?: number;
   seenEventIds?: Iterable<string>;
@@ -100,7 +102,8 @@ export class TerminalNatlangApplication<S, V, E extends TerminalEvent = Terminal
         `${String(revision).padStart(8, '0')}-${safeTraceName(eventId)}-${stage}-${sequence}.jsonl`);
     }
     try {
-      return await this.options.runner.run({ source: { kind: 'file', path }, inputs,
+      return await this.options.runner.run({ source: { kind: 'file', path },
+        inputs: { ...this.options.inputs, ...inputs },
         modelTurn: this.options.modelTurn,
         validationFeedback: this.options.validationFeedback ?? 'local',
         signal: controller.signal, tracePath,

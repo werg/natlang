@@ -17,7 +17,7 @@
       "reducer": "codebases/semantic_terminal/reduce.nl",
       "view": "codebases/semantic_terminal/view.ts",
       "description": "Run the natlang semantic workspace terminal.",
-      "authority": ["filesystem:workspace", "process:recipes"],
+      "authority": ["filesystem:workspace", "filesystem:files", "process:recipes"],
       "commands": ["git", "npm", "python3", "rg"]
     }
   },

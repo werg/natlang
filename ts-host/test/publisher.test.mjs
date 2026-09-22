@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, readlink, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NatlangHost } from '../dist/index.js';
+import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { EvidenceCollection } from '../../applications/evidence_atlas.mjs';
 import { DocumentPublisher } from '../../applications/publisher.mjs';
 
@@ -12,6 +12,7 @@ const path = fileURLToPath(new URL('../../codebases/publisher/publish.nl', impor
 
 test('natlang composes pinned evidence and prepares identical-source Markdown and HTML', async () => {
   const root = await mkdtemp(join(tmpdir(), 'natlang-publish-'));
+  await writeFile(join(root, 'editorial.md'), 'Keep the summary concise.');
   const evidence = new EvidenceCollection([{ id: 'study', text: 'The count is 12.\n\nFurther work is needed.' }]);
   const publisher = new DocumentPublisher(root, { evidence,
     tables: { counts: { columns: ['Kind', 'Count'], rows: [['Samples', 12]] } },
@@ -22,6 +23,7 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
       return { calls: [], text: 'done', completion_tokens: 1 };
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
     if (prompt.includes('function publish(')) return { calls: [
+      ['read', { path: 'args/files/editorial.md/text' }],
       ['call', { function: 'read', to: 'let/passages', inputs: {
         span_ids: 'args/span_ids', collection_revision: 'args/collection_revision' } }],
       ['call', { function: 'plan', to: 'let/outline', inputs: {
@@ -51,7 +53,7 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { brief: 'Summarize', span_ids: ['study#p0'],
         collection_revision: evidence.revision(), table_ids: ['counts'],
-        asset_ids: ['graph'], target: 'report' }, modelTurn,
+        asset_ids: ['graph'], target: 'report', files: new NodeFileTree(root) }, modelTurn,
       options: { model: { segment_turns: 2 } } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'prepared');

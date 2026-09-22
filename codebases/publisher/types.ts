@@ -1,3 +1,4 @@
+export type File = { kind: Text, text?: Text, bytes: Num };
 export type Passage = { id: Text, source_id: Text, revision: Text,
   start: Num, end: Num, text: Text };
 export type Claim = { text: Text, span_id: Text, revision: Text, quote: Text };

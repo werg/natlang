@@ -2,6 +2,7 @@
 engine: typescript-host
 args:
   state: ConsoleState
+  files?: Dict<File>
 returns: TerminalView
 ---*/
 const state = args.state, run = state.runs.at(-1), request = state.requests.at(-1);

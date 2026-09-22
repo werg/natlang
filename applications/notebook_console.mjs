@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { NatlangHost, TypeScriptEnvironment, TerminalNatlangApplication, TerminalSessionStore,
-  runTerminalShell } from '../ts-host/dist/index.js';
+  NodeFileTree, runTerminalShell } from '../ts-host/dist/index.js';
 import { NotebookWorkspace } from './notebook.mjs';
 import { STARTER_NOTEBOOK } from './package_targets/notebook_console.mjs';
 import { cliFlag, modelTurnFromCli } from './natlang_cli.mjs';
@@ -21,6 +21,7 @@ export async function runNotebookConsole({ cells = STARTER_NOTEBOOK.cells, table
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
+    inputs: { files: new NodeFileTree(process.cwd()) },
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, modelTurn, traceDirectory, seedRoot,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });

@@ -1,8 +1,9 @@
 ---
-description: Build a declared dependency graph, choosing each ready task by its purpose and retaining exact execution evidence.
+description: Build a declared dependency graph, choosing each ready task by its purpose and retaining exact execution evidence. Use files to inspect declared workspace inputs before choosing a task.
 args:
   goal: Text
   tasks: Task[]
+  files?: Dict<File>
 returns: State
 ---
 function build(goal, tasks) -> State

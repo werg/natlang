@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NatlangHost } from '../dist/index.js';
+import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { BuildWorkspace } from '../../applications/build_workbench.mjs';
 
 const source = fileURLToPath(new URL('../../codebases/build_workbench/build.nl', import.meta.url));
@@ -21,12 +21,13 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
     const tracePath = join(folder, 'build.trace.jsonl');
     const cyclic = tasks.every(task => task.needs.length);
     const result = await host.run({ source: { kind: 'file', path: source },
-      inputs: { tasks, goal }, tracePath, options: { model: { segment_turns: 2 } },
+      inputs: { tasks, goal, files: new NodeFileTree(folder) }, tracePath, options: { model: { segment_turns: 2 } },
       modelTurn: request => {
         if (request.messages.filter(m => m.role === 'assistant').length > 1)
           return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function build(')) return { calls: [
+          ['read', { path: 'args/files/input.txt/text' }],
           ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal', tasks: 'args/tasks' } }],
           ['call', { function: 'step', to: 'return', until: 'finished', init: 'let/initial', max: Math.max(1, tasks.length) }],
         ], completion_tokens: 1 };
@@ -67,6 +68,8 @@ test('natlang builds the goal through a real serial process and records outputs'
     assert.ok(result.value.results.every(row => row.status === 'ok' &&
       row.input_sha256.length === 64 && row.output_sha256.length === 64));
     assert.equal(trace.filter(e => e.kind === 'host' && e.event?.operation === 'build.execute').length, 2);
+    assert.ok(trace.some(e => e.kind === 'action' && e.name === 'read' &&
+      e.arguments?.path === 'args/files/input.txt/text'));
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 

@@ -1,11 +1,13 @@
 ---
-description: Propose a TS-style natlang signature from bounded source and caller evidence.
+description: Propose a TS-style natlang signature from bounded source and caller evidence. Read files for source context when the bounded snapshot leaves a question open.
 args:
   target: Target
   context: Context
+  files?: Dict<File>
 returns: Assessment
 effects: [types.check]
 types:
+  File: '{ kind: Text, text?: Text, bytes: Num }'
   Target: '{ name: Text, body: Text, parameters: Text[], revision: Text }'
   Obligation: '{ kind: "argument" | "return", parameter: Text, type: Text, source: Text }'
   Signature: '{ name: Text, args: Dict<Text>, returns: Text }'

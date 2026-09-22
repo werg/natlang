@@ -45,6 +45,7 @@ export function createTarget(context) {
   const documents = path ? readEvidencePath(path, context.workspace) : STARTER_EVIDENCE;
   const evidence = new EvidenceCollection(documents);
   return terminalExecutable(context, { hostObject: { evidence, drainEvents: () => evidence.drainEvents() },
+    inputs: { files: new context.runtime.NodeFileTree(context.workspace) },
     initialState: () => ({ questions: [], answers: [], status: 'idle' }),
     event: (value, id) => ({ id, kind: 'question', value }),
     commands: {

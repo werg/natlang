@@ -1,11 +1,13 @@
 ---
-description: Explore possible calls in a natlang body and separate witnessed mismatches from hypotheses.
+description: Explore possible calls in a natlang body and separate witnessed mismatches from hypotheses. Read files for source context when the bounded snapshot leaves a question open.
 args:
   target: Target
   context: Context
+  files?: Dict<File>
 returns: CheckReport
 effects: [types.calls]
 types:
+  File: '{ kind: Text, text?: Text, bytes: Num }'
   Target: '{ name: Text, body: Text, parameters: Text[], revision: Text }'
   Obligation: '{ kind: "argument" | "return", parameter: Text, type: Text, source: Text }'
   Signature: '{ name: Text, args: Dict<Text>, returns: Text }'

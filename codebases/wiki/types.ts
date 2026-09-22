@@ -1,4 +1,5 @@
 export type MergeProfile = { model: Text, source: Text, seed: Num };
+export type File = { kind: Text, text?: Text, bytes: Num };
 export type WikiBlock = { id: Text, kind: Text, text: Text,
   language?: Text, returns?: Text };
 export type WikiPage = { id: Text, revision: Text, blocks: WikiBlock[],

@@ -22,6 +22,7 @@ export function createTarget(context) {
   const notebook = new NotebookWorkspace(config.cells, config.tables ?? {},
     { environment: new Environment({ mode: 'fresh' }) });
   return terminalExecutable(context, { hostObject: { notebook, drainEvents: () => notebook.drainEvents() },
+    inputs: { files: new context.runtime.NodeFileTree(context.workspace) },
     initialState: () => ({ requests: [], runs: [], status: 'idle' }),
     event: (value, id) => ({ id, kind: 'request', value }),
     commands: {

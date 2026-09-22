@@ -1,7 +1,8 @@
 ---
-description: Search a versioned collection, read exact passages, and compose a cited answer.
+description: Search a versioned collection, read exact passages, and compose a cited answer. Use files for additional source material or context when the collection does not contain enough evidence.
 args:
   question: Text
+  files?: Dict<File>
 returns: EvidenceAnswer
 ---
 function answer(question) -> EvidenceAnswer

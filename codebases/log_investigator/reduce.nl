@@ -3,6 +3,7 @@ description: Reduce one log stream event through the semantic incident investiga
 args:
   state: IncidentState
   event: LogEvent
+  files?: Dict<File>
 returns: IncidentState
 uses:
   step: ./step.nl

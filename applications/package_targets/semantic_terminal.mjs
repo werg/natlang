@@ -8,7 +8,7 @@ const empty = () => ({ revision: 0, active_request: '', active_job: '', status: 
 export async function createTarget(context) {
   if (!context.modelTurn) throw new Error('semantic terminal needs a configured model profile');
   const { NativeNatlangHost, TerminalEventQueue, TerminalNatlangApplication,
-    TerminalSessionStore, runTerminalShell } = context.runtime;
+    NodeFileTree, TerminalSessionStore, runTerminalShell } = context.runtime;
   const library = natlangWorkspaceRecipes(context.workspace);
   const terminal = new RecipeTerminal(library.recipes());
   const completions = new TerminalEventQueue();
@@ -24,6 +24,7 @@ export async function createTarget(context) {
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: join(context.package.root, ...context.target.reducer.split('/')),
       view: join(context.package.root, ...context.target.view.split('/')) },
+    inputs: { files: new NodeFileTree(context.workspace) },
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, seedRoot: 17, traceDirectory: context.traceDirectory,
     modelTurn: context.modelTurn, onCommit: commit => store.commit(commit, app.seenEventIds) });

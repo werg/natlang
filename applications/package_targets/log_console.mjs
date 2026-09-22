@@ -6,7 +6,7 @@ import { LogWorkspace } from '../log_investigator.mjs';
 export function createTarget(context) {
   if (!context.modelTurn) throw new Error('log console needs a configured model profile');
   const { NativeNatlangHost, TerminalNatlangApplication, TerminalSessionStore,
-    renderTerminalView, runTerminalShell } = context.runtime;
+    NodeFileTree, renderTerminalView, runTerminalShell } = context.runtime;
   const logs = new LogWorkspace(), host = new NativeNatlangHost({ host: { logs,
     drainEvents: () => logs.drainEvents() }, mode: 'retained' });
   const empty = () => ({ cursor: -1, observed: 0, alerts: [], unknowns: [], status: 'idle' });
@@ -16,6 +16,7 @@ export function createTarget(context) {
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: join(context.package.root, ...context.target.reducer.split('/')),
       view: join(context.package.root, ...context.target.view.split('/')) }, initialState: checkpoint.state,
+    inputs: { files: new NodeFileTree(context.workspace) },
     initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
     modelTurn: context.modelTurn, seedRoot: 17, traceDirectory: context.traceDirectory,
     onCommit: commit => store.commit(commit, app.seenEventIds) });

@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { NatlangHost, TerminalNatlangApplication, TerminalSessionStore,
-  renderTerminalView } from '../ts-host/dist/index.js';
+  NodeFileTree, renderTerminalView } from '../ts-host/dist/index.js';
 import { LogWorkspace } from './log_investigator.mjs';
 import { cliFlag, modelTurnFromCli } from './natlang_cli.mjs';
 
@@ -20,6 +20,7 @@ export async function runLogConsole({ events, modelTurn, sessionPath, traceDirec
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
+    inputs: { files: new NodeFileTree(process.cwd()) },
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, modelTurn, seedRoot, traceDirectory,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });

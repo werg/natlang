@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost, TerminalEventQueue, TerminalNatlangApplication, TerminalSessionStore,
-  runTerminalShell } from '../ts-host/dist/index.js';
+  NodeFileTree, runTerminalShell } from '../ts-host/dist/index.js';
 import { RecipeTerminal } from './semantic_terminal.mjs';
 import { natlangWorkspaceRecipes } from './terminal_recipes.mjs';
 import { cliFlag, modelTurnFromCli } from './natlang_cli.mjs';
@@ -30,6 +30,7 @@ export async function runSemanticTerminal({ root = resolve(here, '..'), sessionP
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
+    inputs: { files: new NodeFileTree(root) },
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, seedRoot, traceDirectory, modelTurn,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });
