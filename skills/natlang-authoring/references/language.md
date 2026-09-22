@@ -37,6 +37,41 @@ Use `Text`, `Num`, `Bool`, `Null`, records, `T[]`, `Dict<T>`, named aliases, and
 
 This is a structural subset, not the TypeScript compiler's type system. Do not assume `any`, interfaces, imported types, generics, methods, branded host objects, or automatic inference. Even when a type name such as `Blob` exists, check the target's representation before using it. Host buffers, processes, database connections, and DOM nodes normally remain host-owned and are accessed by portable IDs or crisp environment code.
 
+### Host-backed dictionaries
+
+An embedding can bind a lazy, read-only implementation of the existing
+`Dict<T>` type. Natlang source does not declare `LazyDict`, `Tree`, a provider,
+or a special namespace. This is useful when enumerating or materializing the
+whole input would be expensive. A project-aware function can declare:
+
+```yaml
+---
+args:
+  files: Dict<ProjectFile>
+types:
+  ProjectFile: '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }'
+returns: Report
+---
+```
+
+The root lists at `args/files`; branches and leaves are read through ordinary
+paths such as `args/files/docs/design.md/text`. A filesystem adapter supplies
+the record at the leaf and leaves binary bytes outside model state. The host
+loads each observed directory or leaf at most once for that bound value, so a
+run sees a stable observation even when the backing store later changes.
+
+Treat this like any other argument. A helper that needs the mapping declares a
+compatible `Dict<ProjectFile>` parameter and receives it through
+`call.inputs`, for example `{"files":"args/files"}`. It is not ambient state
+and should not be copied leaf by leaf. Eager dictionaries continue to behave as
+before.
+
+The lazy implementation is read-only and not a portable snapshot. Returning or
+persisting selected typed leaves is supported; process restart requires the
+host to bind the provider again. Crisp code that needs arbitrary filesystem or
+database access should use its real host API. Do not force the runtime to
+materialize a native provider merely to pass it into eval.
+
 Partial return records can be built incrementally; completion requires a complete result of the declared type. Wrongly typed fields are rejected. A validated record can still be semantically false. Exact count checks, semantic rubrics, and external effect receipts address different claims.
 
 ## Calls, values, and reuse
@@ -56,7 +91,7 @@ call(function="workspace_read", to="let/evidence",
      values={"path":"evidence/observations.json"})
 ```
 
-The callee must actually exist with those parameters. `read(path="args/state")` reads interpreter state; it does not retrieve an application artifact. To reuse a computed value, use `write` with `source` or bind a path to a call rather than regenerating the value as tokens. Use full/ranged reads when the state listing says a value is only a preview.
+The callee must actually exist with those parameters. `read(path="args/state")` reads interpreter state; it does not retrieve an application artifact. To reuse a computed value, use `write` with `source` or bind a path to a call rather than regenerating the value as tokens. Use full/ranged reads when the state listing says a value is only a preview. For a host-backed dictionary, pass the dictionary path directly to a compatible callee and read only the branches or leaves needed for the decision. Directory listings discover names without loading every leaf.
 
 To vary a function, copy `Function<helper>` into a local, edit that copy's instructions, and call `let/copy`. The checked original remains immutable. For larger generated programs, use the application's versioned source loader and child execution API; validate and execute the new artifact before claiming it works.
 

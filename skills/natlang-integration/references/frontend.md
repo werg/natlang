@@ -36,6 +36,13 @@ export async function mountApplication({ files, initialState, revision, journal,
 
 `journal` and `renderer` are application interfaces to implement, not natlang exports. A supplied `modelTurn` permits another backend or a clearly labelled fixture. The reducer signature is `(state: State, event: Event) -> State`; the view takes `state` and returns the chosen UI type. `BrowserAppEvent` has `id`, `kind`, and optional Text `value`; encode richer payloads deliberately or use a typed application layer.
 
+If a browser program should inspect a virtual project or document collection,
+declare `files: Dict<ProjectFile>` and bind `textFileTree(files)` from
+`@natlang/browser` in `inputs`.
+The `source.files` map loads natlang source; the `inputs.files` value is what the
+semantic program can browse at `args/files/...`. Keeping these roles explicit
+also lets the application provide only the data subtree it intends to expose.
+
 `dispatch` queues events. Stable IDs suppress duplicate events for the current application instance; durable exactly-once behavior needs a persistent event/operation journal. Supply recovered `initialRevision` as well as state. `onCommit` is awaited before view computation. `refresh()` retries presentation without rerunning the reducer. Persist traces intentionally rather than accumulating them forever in memory. Failed reductions can still have host effects; a preserved previous State does not imply rollback.
 
 `cancel()` aborts the active application run. Incoming events normally wait; they do not mutate a running lambda. One client rejects simultaneous runs/model replacement while busy. Separate clients and isolated environments are needed for genuinely independent ownership.

@@ -27,6 +27,12 @@ This loads and binds; it does not execute inference. For a fixture run use a scr
 
 Use scenarios tied to desired behavior rather than only a happy-path demo. Cover ambiguity, conflicting evidence, missing information, zero/one/many items, order-sensitive updates, and interruptions where applicable. Include a case requiring multiple inspected operations. For stateful systems verify actual receipts and committed state; a model's prose about a completed effect is insufficient.
 
+For a host-backed `Dict<T>`, verify that an ordinary eager dictionary still
+works, directory reads do not fetch leaves, a selected leaf is fetched once,
+the leaf is checked against `T`, traversal cannot escape the provider root, and
+the same value can be passed to a typed child. Test provider reconstruction
+separately from portable runtime-state restoration.
+
 For stochastic behavior pin source, model/template, seeds, sampling, and ordered inputs, and report how many trials were run. Keep model sampling randomness separate from game/world randomness. Classify failures: source/loader, schema/transport, runtime, continuation, host/effect, model semantics, environment capacity.
 
 In a checkout, useful checks are `.venv/bin/python -m pytest -q tests/test_codebase.py tests/test_surface.py`, `npm --prefix ts-host run build`, and the applicable files under `ts-host/test/`. Run only tests relevant to the change plus required project gates. A Python/TS contract change usually needs a paired case in `ts-host/test/native-parity.test.mjs`.

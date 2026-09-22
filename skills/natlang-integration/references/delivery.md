@@ -22,6 +22,7 @@ Use relevant existing suites rather than blanket testing after every prose chang
 - Resume after a conversation rollover with a partially completed loop. Does it continue from the accumulator rather than restart?
 - Generate an unfamiliar interaction. Are the visible controls bound to actual versioned handlers and included in export/import?
 - Run the same scenario under two supported hosts. Do their value/error/effect contracts agree? If portability is intentionally limited, is the limitation explicit?
+- Replace a small eager `Dict<T>` fixture with the production lazy provider. Can natlang browse only the needed branches, pass the dictionary to a child, and reject a wrongly typed leaf without materializing the collection?
 
 ## Deliverable evidence
 

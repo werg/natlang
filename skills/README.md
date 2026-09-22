@@ -5,7 +5,7 @@ Use these skills when building with natlang. They are for capable authors and in
 | Skill | Use it for |
 |---|---|
 | [natlang-authoring](natlang-authoring/SKILL.md) | Typed `.nl` codebases, crisp helpers, semantic algorithms, explicit control flow, long-run state, tests and training evidence |
-| [natlang-integration](natlang-integration/SKILL.md) | Python/Node/browser embedding, model adapters, native frontend reducers, host authority, effects, streams, persistence and recovery |
+| [natlang-integration](natlang-integration/SKILL.md) | Python/Node/browser embedding, model adapters, lazy host-backed dictionaries, native frontend reducers, host authority, effects, streams, persistence and recovery |
 
 Each skill includes its own references and can be installed alone. Authoring includes a runnable multi-file review example. Core instructions are short; load detailed references only as needed. The format follows the portable [Agent Skills specification](https://agentskills.io/specification); optional `agents/openai.yaml` supplies discovery UI metadata.
 

@@ -19,7 +19,7 @@ Read [language and authoring](references/language.md) when creating or restructu
 
 1. Express the required behavior as typed inputs, results, and observable scenarios. Include ambiguous evidence, empty inputs, and partial failure when relevant. Structural types cannot establish semantic correctness.
 2. Write the main algorithm in `.nl`: explicit helper calls, order dependencies, branches, iteration state, completion conditions, and what happens when evidence is insufficient. Use prose for semantic judgments whose criteria cannot be reduced to exact rules.
-3. Give each helper one coherent responsibility and a precise signature. Bind its lexical dependencies through companion files or `uses`. Keep intermediate data in typed locals; use host-owned references for large/native data when the chosen embedding provides them.
+3. Give each helper one coherent responsibility and a precise signature. Bind its lexical dependencies through companion files or `uses`. Keep intermediate data in typed locals. For a large, sparse, read-only namespace such as project files or an artifact catalog, accept an ordinary `Dict<T>` and let the host bind a lazy implementation. Pass that argument explicitly to helpers that need it.
 4. Implement crisp `.ts` helpers where exactness, I/O, presentation, or native libraries help. Check the selected executor; a `.ts` extension does not imply Node, npm imports, SQL, shell, or a sandbox. Prefer portable helpers when they suffice.
 5. Exercise the actual source through the runtime. Distinguish loader/type tests, scripted interpreter wiring, live model execution, and semantic evaluation. Fix framework defects in the framework when they are the cause.
 
@@ -27,6 +27,7 @@ Read [language and authoring](references/language.md) when creating or restructu
 
 - `args` are readable and immutable. Write results to `return`, intermediates to `let`. Each callee has private state and its own lexical codebase.
 - `call.inputs` contains workspace paths; `call.values` contains literals. An artifact ID or filename is data unless it actually names a path in the interpreter tree. Never bind a parameter in both maps.
+- Host-backed lazy dictionaries are model-facing `Dict<T>` values, not a separate tree type or namespace. Read and pass them through normal `args/...` paths. Their provider and unobserved contents remain host-owned.
 - Functions can call checked named helpers and edited copies. There is no arbitrary anonymous-lambda creation through `write`; cycles in the function graph are rejected. Use explicit Map, Fold, or iterative state for repeated work.
 - A model turn can propose an ordered, non-atomic batch. Dependent actions wait for observations. A rejection does not undo successful actions or external effects.
 - Long productive runs are intended. Do not add arbitrary codebase, nesting, local, turn, or token limits to make a test finish. Explicit deployment budgets are a host policy. Conversation rollover is compatible with long runs: preserve progress in program state.

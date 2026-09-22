@@ -21,23 +21,25 @@ from natlang.tool_agent import ToolAgent
 from natlang.invocation import RunOptions, SeedPolicy
 
 # decoder is supplied by the embedding and implements natlang's chat contract.
-def run_review(decoder, observations, criterion):
-    root = load(Path("review/review.nl"), {
-        "observations": observations, "criterion": criterion,
+def inspect_project(decoder, root_path):
+    # inspect.nl declares: files: Dict<ProjectFile>
+    root = load(Path("inspect.nl"), {
+        "files": FilesystemFileTree(root_path),
     })
     runtime = Runtime(
         lambda lam: ToolAgent(decoder, validation_feedback="local"),
         options=RunOptions(seed=SeedPolicy("derived", 17)),
-        file_tree=FilesystemFileTree(Path.cwd()),
     )
     outcome, value = runtime.run_root(root)
     return outcome, value
 ```
 
-Import `FilesystemFileTree` or `MemoryFileTree` from `natlang.files`. Every
-lambda in the run then sees the inherited, read-only `files/...` namespace. Filesystem providers resolve
-content lazily; memory providers give browsers and embedded hosts the same tool
-semantics.
+`FilesystemFileTree` is a host representation of an ordinary, read-only
+`Dict<ProjectFile>` argument. Natlang reads it at `args/files/...`; it does not
+gain a special namespace. Pass the same argument explicitly to a child that
+needs it. `text_file_tree({"path": "text"})` supplies the corresponding
+in-memory adapter. Both resolve branches and leaves lazily and cache each
+observation for the lifetime of that value.
 
 Inspect `outcome.kind` before using the value as completed. `load()` can interpret existing short string paths as files; use `load_definitions(entries, root_name, inputs)` for explicit in-memory values when that ambiguity matters. Checked definition entries use `args`, `returns`, exactly one of `instructions` or `code`, and optional `types`, `uses`, `effects`, `engine`.
 
@@ -48,15 +50,15 @@ Inspect `outcome.kind` before using the value as completed. `load()` can interpr
 ```ts
 import { NatlangHost, NodeFileTree } from '@natlang/typescript-host';
 
-export async function runReview(modelTurn, observations, criterion) {
+export async function inspectProject(modelTurn, rootPath) {
   const host = new NatlangHost();
   try {
     const result = await host.run({
-      source: { kind: 'file', path: 'review/review.nl' },
-      inputs: { observations, criterion },
+      // inspect.nl declares: files: Dict<ProjectFile>
+      source: { kind: 'file', path: 'inspect.nl' },
+      inputs: { files: new NodeFileTree(rootPath) },
       modelTurn,
       validationFeedback: 'local',
-      fileTree: new NodeFileTree(process.cwd()),
       options: { seed: { mode: 'derived', root: 17 } },
     });
     if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
@@ -67,7 +69,43 @@ export async function runReview(modelTurn, observations, criterion) {
 }
 ```
 
-Node also accepts `source: {kind:'definitions', entries, root}` and `source: {kind:'program', program}`. Browser source files use a separate `kind:'files'` contract. For host project data, browsers and portable embeddings pass `fileTree: new MemoryFileTree(files)`; Node can pass `NodeFileTree`. Both expose the same read-only namespace.
+Node also accepts `source: {kind:'definitions', entries, root}` and
+`source: {kind:'program', program}`. Browser source files use a separate
+`kind:'files'` contract. That source map defines the codebase; it is not
+automatically a semantic argument. For host project data, pass
+`textFileTree(files)` as a declared input in browsers and portable embeddings,
+or `NodeFileTree(root)` in Node.
+
+## Lazy `Dict<T>` providers
+
+Use `LazyDict` with a `TreeProvider<T>` for other large keyed spaces. The
+provider's `list(path)` returns immediate `{name, kind}` entries and
+`read(path)` returns one typed leaf. The runtime presents this as the declared
+`Dict<T>` and validates a leaf against `T` when it is observed. It never exposes
+`LazyDict`, `TreeProvider`, or branch metadata as natlang types.
+
+Good uses include repositories, document collections, asset metadata, build
+inputs, trace collections, and read-only database projections where semantic
+code needs to browse a few entries. Use crisp search or an indexed host query
+when selection requires scanning the whole collection. Keep binary payloads in
+the host and expose typed metadata plus targeted operations.
+
+Provider rules:
+
+- Return stable, unique immediate names with `branch` or `leaf` kind. Reject
+  traversal and symlink escapes in filesystem adapters.
+- Assume each observed listing or leaf is cached once. Construct a new value
+  when a run must see newer backing data.
+- Bind it only to a compatible `Dict<T>` parameter. Normal eager dictionaries
+  remain valid inputs for the same source.
+- Do not pass the whole provider-backed value into crisp eval. Select a portable
+  leaf first, or let crisp code use the native host API directly.
+- Do not expect `dump_state` or trace data to serialize the provider. Persist
+  selected results and enough provider identity to reconstruct the binding.
+
+For writes, give crisp code a scoped filesystem/database operation or let
+natlang return a typed change plan that the top-level host validates and
+commits. Do not make a read-only dictionary secretly mutate its backing store.
 
 Supply `host: applicationObjects` and `mode:'retained'` when their identity/lifetime is needed. If constructing and supplying a `TypeScriptEnvironment` yourself, retain ownership and close it yourself. Close native bindings/jobs separately according to their API; closing an interpreter is not guaranteed to terminate host-owned work.
 

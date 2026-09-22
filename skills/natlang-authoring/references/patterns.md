@@ -37,3 +37,11 @@ Schema changes need executable migrations and evidence preservation. Test missin
 Before adding a runtime feature, try the existing typed values, named functions, Map/Fold/Iterate, crisp evaluator, and host-owned objects. Search, SQL, shell commands, binary assets, stronger-model calls, and native jobs can often be host libraries callable from crisp code. This does not mean inventing a special workaround around a broken runtime contract.
 
 When a general capability is missing, identify its semantic contract and implement it at the shared layer. Wire it through relevant Python, native TS, and browser paths or document the unsupported targets. Check all application callers; a broadly useful correction should not be activated only in the motivating demo. Keep portability and weak-interpreter cognitive cost explicit.
+
+Use a host-backed `Dict<T>` when the semantic program needs selective,
+read-only access to a large keyed space: repository files, document corpora,
+asset metadata, build inputs, trace archives, or database-shaped records. Keep
+queries that require indexing or full-text search in crisp code and return a
+small typed result; a lazy dictionary is navigation and observation, not an
+index. Keep writes as explicit host operations or return a typed change plan
+for the host to validate and commit.
