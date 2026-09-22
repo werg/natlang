@@ -16,7 +16,7 @@ export type BrowserModelTurn = { calls?: [string, Record<string, unknown>][]; te
 export type BrowserRunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backend'; root?: number;
   version?: string }; model?: { temperature?: number; max_turns?: number; max_tokens?: number;
   max_seconds?: number; turn_tokens?: number; segment_turns?: number | null;
-  segment_messages?: number | null }; world_seed?: number;
+  segment_messages?: number | null; tool_schema?: 'tools-v3' | 'tools-v4' }; world_seed?: number;
   max_episodes?: number; max_depth?: number; max_actions?: number;
   max_tool_calls?: number; run_id?: string };
 export type BrowserReviewOptions = { driver?: (request: BrowserModelTurnRequest) =>
@@ -99,7 +99,7 @@ export class BrowserNatlangHost {
         segmentTurns: request.options?.model?.segment_turns,
         segmentMessages: request.options?.model?.segment_messages,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
-        review: request.review }) : undefined;
+        review: request.review, toolSchema: request.options?.model?.tool_schema }) : undefined;
       const runId = request.options?.run_id ?? globalThis.crypto?.randomUUID?.() ?? String(Date.now());
       runtime = new NativeRuntime({ environment: this.environment as never, stream,
         agent: agent ? session => agent.run(session) : undefined,

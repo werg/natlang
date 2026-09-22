@@ -5,7 +5,7 @@ import type { Value } from './values.js';
 import type { NativeResult, NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { TOOLS_PROMPT } from './prompt.js';
+import { EXPLICIT_TOOLS_PROMPT, TOOLS_PROMPT } from './prompt.js';
 import { isLazyDict } from './host-tree.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
@@ -22,6 +22,10 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 const newLocal = { type: 'string', 'x-natlang': 'new-local',
   pattern: '^let/[a-z_][a-z0-9_]*$',
   description: 'let/<name>: a new local, created by this call' };
+const explicitNewLocal = { type: 'string', 'x-natlang': 'new-local',
+  pattern: '^let/[a-z_][a-z0-9_]*$', description: 'a new local destination' };
+const futureLocal = { type: 'string', pattern: '^let/[a-z_][a-z0-9_]*$',
+  description: 'a local produced by another call in this batch' };
 const CHECKPOINT_REQUEST = 'Before continuing this same task in a fresh conversation, leave yourself a concise working note. ' +
   'State only unresolved decisions or facts that are not obvious from the program and workspace. ' +
   'For an unfinished loop, name its current accumulator path and rounds completed; never restart from its initial value. ' +
@@ -44,6 +48,25 @@ function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> 
     properties: Object.fromEntries(resolved.fields.map(field => [field.name, schemaOf(field.type, env, depth + 1)])),
     required: resolved.fields.filter(field => !field.optional).map(field => field.name), additionalProperties: false };
   return {};
+}
+
+function textSpans(text: string, maximum = 96): string[] {
+  const lines = text.match(/.*(?:\r?\n|$)/g)?.filter(Boolean) ?? [], out: string[] = [];
+  for (let width = 1; width <= 3; width++) for (let start = 0; start + width <= lines.length; start++) {
+    const span = lines.slice(start, start + width).join('');
+    if (span.trim() && span.length <= 600 && text.split(span).length === 2) {
+      out.push(span);
+      const trimmed = span.replace(/[\r\n]+$/, '');
+      if (trimmed && trimmed !== span && text.split(trimmed).length === 2) out.push(trimmed);
+    }
+  }
+  return [...new Set(out)].sort((a, b) => a.length - b.length || text.indexOf(a) - text.indexOf(b)).slice(0, maximum);
+}
+
+function mergedSchemas(values: unknown[], fallback: Record<string, unknown> = {}): Record<string, unknown> {
+  const unique = [...new Map(values.filter(value => value && typeof value === 'object')
+    .map(value => [JSON.stringify(value), value as Record<string, unknown>])).values()];
+  return unique.length === 1 ? structuredClone(unique[0]!) : unique.length ? { anyOf: structuredClone(unique) } : fallback;
 }
 
 function pythonJson(value: unknown): string {
@@ -138,7 +161,8 @@ export class NativeToolAgent {
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
       validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
-      segmentTurns?: number | null; segmentMessages?: number | null } = {}) {
+      segmentTurns?: number | null; segmentMessages?: number | null;
+      toolSchema?: 'tools-v3' | 'tools-v4' } = {}) {
     if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
         (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
       throw new RangeError('segmentTurns must be positive or null');
@@ -185,7 +209,7 @@ export class NativeToolAgent {
       });
   }
 
-  tools(session: NativeSession): unknown[] {
+  private toolsV3(session: NativeSession): any[] {
     const names = [...Object.keys(session.lam.codebase), ...Object.keys(session.lam.fnCopies).map(name => `let/${name}`)];
     const lam = session.lam;
     const all: Slot[] = [];
@@ -388,6 +412,163 @@ export class NativeToolAgent {
     return tools;
   }
 
+  /** Model-facing tools-v4: one operation per tool and positional, path-only calls. */
+  private toolsV4(session: NativeSession): any[] {
+    const legacy = this.toolsV3(session);
+    const byName = Object.fromEntries(legacy.map(entry => [entry.function.name, entry]));
+    const lam = session.lam, all: Slot[] = [];
+    if (lam.type.kind === 'lambda') {
+      all.push(...slots('args', lam.type.params, lam.args as Value, session.env, false));
+      all.push(...slots('return', lam.type.returns, lam.return, session.env, true));
+    }
+    for (const [name, type] of Object.entries(lam.letTypes))
+      all.push(...slots(`let/${name}`, type, lam.let[name] ?? MISSING, session.env, true));
+    const definitions: Record<string, Record<string, unknown>> = {};
+    for (const [name, definition] of Object.entries(lam.codebase)) definitions[name] = definition as Record<string, unknown>;
+    for (const [name, definition] of Object.entries(lam.fnCopies)) definitions[`let/${name}`] = definition as Record<string, unknown>;
+    const envFor = (definition: Record<string, unknown>) => session.env.child(Object.fromEntries(
+      Object.entries(definition.types as Record<string, string> ?? {}).filter(([name]) => !session.env.lookup(name))
+        .map(([name, value]) => [name, parseType(value)])));
+    const references = (typeText: string, definition: Record<string, unknown>) => {
+      const target = parseType(typeText), env = envFor(definition), paths: string[] = [];
+      for (const slot of all) if (slot.value !== MISSING && !isPending(slot.value)) {
+        try { if (fitsType(slot.type, target, env)) paths.push(slot.path); } catch { /* incompatible alias */ }
+      }
+      const existing = [...new Set(paths)].slice(0, 48);
+      return existing.length ? { anyOf: [{ enum: existing }, futureLocal] } : structuredClone(futureLocal);
+    };
+    const destinations = () => {
+      const existing = [...new Set(all.filter(slot => slot.writable && !slot.path.startsWith('args')).map(slot => slot.path))].slice(0, 48);
+      return { anyOf: [...(existing.length ? [{ enum: existing }] : []), structuredClone(explicitNewLocal)] };
+    };
+    const positionalInputs = (definition: Record<string, unknown>, skip: number) => {
+      const ordered = Object.entries(definition.args as Record<string, string> ?? {}).slice(skip);
+      let optional = false;
+      for (const [raw] of ordered) { if (raw.endsWith('?')) optional = true; else if (optional) return null; }
+      return { type: 'array', prefixItems: ordered.map(([, type]) => references(type, definition)), items: {},
+        minItems: ordered.filter(([raw]) => !raw.endsWith('?')).length, maxItems: ordered.length };
+    };
+    const result = [structuredClone(byName.read)];
+    const code = byName.run_code.function;
+    result.push(tool('run_code', code.description, { engine: structuredClone(code.parameters.properties.engine),
+      code: structuredClone(code.parameters.properties.code) }, ['engine', 'code']));
+
+    const valueAlternatives: Record<string, unknown>[] = [], copyAlternatives: Record<string, unknown>[] = [];
+    const functionAlternatives: Record<string, unknown>[] = [];
+    for (const alternative of byName.write.function.parameters['x-natlang-alternatives'] ?? []) {
+      if (alternative.value !== undefined && alternative.path?.['x-natlang'] !== 'new-local')
+        valueAlternatives.push({ destination: alternative.path, type: alternative.type, value: alternative.value });
+      else if (alternative.source !== undefined)
+        copyAlternatives.push({ source: alternative.source, destination: alternative.path });
+      else if (String(alternative.type?.const ?? '').startsWith('Function<'))
+        functionAlternatives.push({ function: { const: String(alternative.type.const).slice(9, -1) }, save_as: alternative.path });
+    }
+    const localTypes: [string, Record<string, unknown>][] = ['Num', 'Text', 'Bool', 'Null', 'Num[]', 'Text[]',
+      'Bool[]', 'Dict<Num>', 'Dict<Text>', 'Dict<Bool>'].map(name => [name, schemaOf(parseType(name), session.env)]);
+    for (const slot of all) { const shape = schemaOf(slot.type, session.env); if (Object.keys(shape).length) localTypes.push([formatType(slot.type), shape]); }
+    for (const definition of Object.values(definitions)) {
+      const env = envFor(definition);
+      for (const typeText of [...Object.values(definition.args as Record<string, string> ?? {}), String(definition.returns)]) {
+        const shape = schemaOf(parseType(typeText), env); if (Object.keys(shape).length) localTypes.push([typeText, shape]);
+      }
+    }
+    const seen = new Set<string>();
+    for (const [typeText, shape] of localTypes) {
+      const key = `${typeText}\0${JSON.stringify(shape)}`; if (seen.has(key)) continue; seen.add(key);
+      valueAlternatives.push({ destination: structuredClone(explicitNewLocal), type: { const: typeText }, value: shape });
+      if (seen.size >= 32) break;
+    }
+    for (const slot of all) if (slot.value !== MISSING && !isPending(slot.value))
+      copyAlternatives.push({ source: { const: slot.path }, destination: structuredClone(explicitNewLocal) });
+    const explicitTool = (name: string, description: string, properties: Record<string, unknown>, required: string[], alternatives: unknown[]) => {
+      const entry = tool(name, description, properties, required);
+      if (alternatives.length) (entry.function.parameters as Record<string, unknown>)['x-natlang-alternatives'] = alternatives;
+      return entry;
+    };
+    result.push(explicitTool('write_value', 'Write one literal value. Choose its destination and type before generating the value.',
+      { destination: { type: 'string' }, type: { type: 'string' }, value: {} },
+      ['destination', 'type', 'value'], valueAlternatives));
+    if (copyAlternatives.length) result.push(explicitTool('copy_value', 'Copy a value between workspace paths.',
+      { source: { type: 'string' }, destination: { type: 'string' } }, ['source', 'destination'], copyAlternatives));
+    if (functionAlternatives.length) result.push(explicitTool('copy_function', 'Make an editable local copy of a named function.',
+      { function: { enum: Object.keys(lam.codebase) }, save_as: structuredClone(explicitNewLocal) }, ['function', 'save_as'], functionAlternatives));
+
+    const offered = byName.edit?.function.parameters.properties.path.enum ?? [];
+    if (byName.edit) {
+      const alternatives: Record<string, unknown>[] = [];
+      for (const slot of all) if (offered.includes(slot.path) && typeof slot.value === 'string') {
+        const spans = textSpans(slot.value);
+        if (spans.length) alternatives.push({ path: { const: slot.path }, find: { enum: spans }, replace_with: { type: 'string' } });
+        alternatives.push({ path: { const: slot.path }, find: { type: 'string' }, fuzzy: { const: true }, replace_with: { type: 'string' } });
+      }
+      result.push(explicitTool('edit_text', 'Replace existing text. Use fuzzy only for one unambiguous inexact selection.',
+        { path: { enum: offered }, find: { type: 'string' }, fuzzy: { type: 'boolean' }, replace_with: { type: 'string' } },
+        ['path', 'find', 'replace_with'], alternatives));
+    }
+
+    const calls: Record<string, unknown>[] = [], maps: Record<string, unknown>[] = [];
+    const folds: Record<string, unknown>[] = [], repeats: Record<string, unknown>[] = [];
+    const checks = Object.entries(definitions).filter(([, definition]) => definition.returns === 'Bool' &&
+      Object.keys(definition.args as object ?? {}).length > 0);
+    for (const [name, definition] of Object.entries(definitions)) {
+      const args = Object.entries(definition.args as Record<string, string> ?? {}), metadata = {
+        function: { const: name }, 'x-natlang-parameters': args.map(([raw]) => raw.replace(/\?$/, '')),
+        'x-natlang-types': args.map(([, type]) => type) };
+      const direct = positionalInputs(definition, 0);
+      if (direct) calls.push({ ...metadata, ...(direct.maxItems ? { inputs: direct } : {}),
+        ...(direct.maxItems && direct.minItems === 0 ? { 'x-optional': ['inputs'] } : {}), save_as: destinations() });
+      if (args.length) {
+        const extra = positionalInputs(definition, 1);
+        if (extra) maps.push({ ...metadata, items: references(`(${args[0]![1]})[]`, definition),
+          ...(extra.maxItems ? { inputs: extra } : {}),
+          ...(extra.maxItems && extra.minItems === 0 ? { 'x-optional': ['inputs'] } : {}), save_as: destinations() });
+      }
+      if (args.length >= 2) {
+        const env = envFor(definition), extra = positionalInputs(definition, 2);
+        let valid = false; try { valid = fitsType(parseType(String(definition.returns)), parseType(args[0]![1]), env); } catch { /* no fold */ }
+        if (valid && extra) folds.push({ ...metadata, items: references(`(${args[1]![1]})[]`, definition),
+          initial: references(args[0]![1], definition), ...(extra.maxItems ? { inputs: extra } : {}),
+          ...(extra.maxItems && extra.minItems === 0 ? { 'x-optional': ['inputs'] } : {}), save_as: destinations() });
+      }
+      if (args.length) {
+        const env = envFor(definition), extra = positionalInputs(definition, 1);
+        let state = false; try { state = fitsType(parseType(String(definition.returns)), parseType(args[0]![1]), env); } catch { /* no repeat */ }
+        const until = checks.flatMap(([check, checkDefinition]) => {
+          const first = Object.values(checkDefinition.args as Record<string, string> ?? {})[0];
+          try { return first && Object.keys(checkDefinition.args as object).filter(raw => !raw.endsWith('?')).length === 1 &&
+            fitsType(parseType(args[0]![1]), parseType(first), envFor(checkDefinition)) ? [check] : []; } catch { return []; }
+        });
+        if (state && extra && until.length) repeats.push({ ...metadata, initial: references(args[0]![1], definition),
+          ...(extra.maxItems ? { inputs: extra } : {}), ...(extra.maxItems && extra.minItems === 0 ? { 'x-optional': ['inputs'] } : {}),
+          until: { enum: until }, at_most: { type: 'integer' }, save_as: destinations() });
+      }
+    }
+    const addMode = (name: string, description: string, alternatives: Record<string, unknown>[], fields: string[]) => {
+      if (!alternatives.length) return;
+      const properties = Object.fromEntries(fields.map(field => [field, mergedSchemas(alternatives.map(alt => alt[field]),
+        field === 'inputs' ? { type: 'array', items: { type: 'string' } } : {})]));
+      result.push(explicitTool(name, description, properties, fields.filter(field => field !== 'inputs'), alternatives));
+    };
+    addMode('run_function', 'Run a function once. `inputs` lists workspace paths in parameter order.', calls,
+      ['function', 'inputs', 'save_as']);
+    addMode('for_each', 'Run a function for every item in `items`. The item fills parameter 1; `inputs` fills the rest.', maps,
+      ['function', 'items', 'inputs', 'save_as']);
+    addMode('fold', 'Fold `items`. Accumulator fills parameter 1, item parameter 2, and `inputs` fills the rest.', folds,
+      ['function', 'items', 'initial', 'inputs', 'save_as']);
+    addMode('repeat', 'Repeat a state transition. State fills parameter 1 and `inputs` fills the rest.', repeats,
+      ['function', 'initial', 'inputs', 'until', 'at_most', 'save_as']);
+    const pending = all.filter(slot => isPending(slot.value) && ['unreduced', 'quiesced'].includes(slot.value.status)).map(slot => slot.path);
+    if (pending.length) result.push(explicitTool('resume', 'Continue a pending computation with its retained inputs and progress.',
+      { computation: { enum: pending } }, ['computation'], pending.map(path => ({ computation: { const: path } }))));
+    if (byName.mark_done) { const mark = structuredClone(byName.mark_done); mark.function.name = 'mark_lines'; result.push(mark); }
+    result.push(structuredClone(byName.report_blocker), structuredClone(byName.report_error));
+    return result;
+  }
+
+  tools(session: NativeSession): unknown[] {
+    return this.options.toolSchema === 'tools-v4' ? this.toolsV4(session) : this.toolsV3(session);
+  }
+
   opening(session: NativeSession): string {
     const lam = session.lam, type = lam.type;
     if (type.kind !== 'lambda') return 'Workspace:';
@@ -447,7 +628,8 @@ export class NativeToolAgent {
         lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`.trimEnd();
     }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
     const messages: Record<string, unknown>[] = [
-      { role: 'system', content: (this.options.systemPrompt ?? TOOLS_PROMPT) +
+      { role: 'system', content: (this.options.systemPrompt ??
+        (this.options.toolSchema === 'tools-v4' ? EXPLICIT_TOOLS_PROMPT : TOOLS_PROMPT)) +
         '\nFor run_code, always name an engine offered in its current tool schema.' },
       { role: 'user', content: `${program}\n\nWrite the result to \`return\` (${output}).` +
         (functions.length ? `\n\nFunctions you can call:\n${functions.join('\n')}` : '') },

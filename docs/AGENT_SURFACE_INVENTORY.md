@@ -236,10 +236,10 @@ by default because they reset conversation context without failing the underlyin
 
 ## 6. Python and TypeScript parity
 
-Both runtimes expose the same workspace model and execute the explicit tools-v4 operations.
-Python currently constructs the teacher-facing tools-v4 schemas; TypeScript accepts the same
-actions and positional ABI while its default model surface remains tools-v3 pending a schema
-presentation migration. Both runtimes retain tools-v2/v3 execution paths for trajectory replay.
+Both runtimes expose the same workspace model, construct the explicit tools-v4 schemas, and
+execute the same operations. TypeScript selects it with `options.model.tool_schema: "tools-v4"`;
+its default remains tools-v3 for existing callers. Both runtimes retain tools-v2/v3 execution
+paths for trajectory replay.
 
 The tools-v4 call ABI follows ordinary positional function calls. A declaration such as
 `replace(text, old, new)` is invoked with `inputs=["args/text", "args/old", "args/new"]`.

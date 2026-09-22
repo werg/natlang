@@ -61,6 +61,7 @@ class ExplicitToolSurface(ToolSurface):
         legacy = super().tools(session)
         by_name = {item["function"]["name"]: item for item in legacy}
         lam, slots = session.lam, self.slots(session)
+        is_body = lambda slot: slot.ref.holder is not None and slot.ref.attr == "body"
         definitions = dict(lam.codebase)
         definitions.update({f"let/{name}": definition for name, definition in lam.fn_copies.items()})
 
@@ -72,7 +73,8 @@ class ExplicitToolSurface(ToolSurface):
         def references(type_text, definition):
             expected, env, paths = parse_type(type_text), env_for(definition), []
             for slot in slots:
-                if slot.value is MISSING or is_pending(slot.value) or slot.ref.type is None:
+                if (slot.value is MISSING or is_pending(slot.value) or slot.ref.type is None
+                        or is_body(slot)):
                     continue
                 try:
                     if fits(slot.ref.type, expected, env):
@@ -85,7 +87,8 @@ class ExplicitToolSurface(ToolSurface):
         def destinations(type_text, definition):
             paths = []
             for slot in slots:
-                if slot.path.startswith("args") or slot.ref.deny or slot.ref.type is None:
+                if (slot.path.startswith("args") or slot.ref.deny or slot.ref.type is None
+                        or is_body(slot)):
                     continue
                 paths.append(slot.path)
             existing = [{"enum": list(dict.fromkeys(paths))[:48]}] if paths else []
@@ -129,7 +132,7 @@ class ExplicitToolSurface(ToolSurface):
                        "Dict<Num>", "Dict<Text>", "Dict<Bool>")
         local_shapes = [(name, schema_of(parse_type(name), session.env)) for name in basic_types]
         for slot in slots:
-            if slot.ref.type is not None:
+            if slot.ref.type is not None and not is_body(slot):
                 shape = schema_of(slot.ref.type, slot.ref.env)
                 if shape:
                     local_shapes.append((format_type(slot.ref.type), shape))
@@ -149,7 +152,8 @@ class ExplicitToolSurface(ToolSurface):
             if len(seen_shapes) >= 32:
                 break
         for slot in slots:
-            if slot.value is not MISSING and not is_pending(slot.value) and slot.ref.type is not None:
+            if (slot.value is not MISSING and not is_pending(slot.value)
+                    and slot.ref.type is not None and not is_body(slot)):
                 copy_alts.append({"source": {"const": slot.path}, "destination": NEW_LOCAL})
 
         result.append(_tool("write_value", "Write one literal value. Choose its destination and type before generating the value.",

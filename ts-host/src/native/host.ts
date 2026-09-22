@@ -77,7 +77,7 @@ export class NativeNatlangHost {
         segmentTurns: request.options?.model?.segment_turns,
         segmentMessages: request.options?.model?.segment_messages,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
-        review: request.review }) : undefined;
+        review: request.review, toolSchema: request.options?.model?.tool_schema }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,

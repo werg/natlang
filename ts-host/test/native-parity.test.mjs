@@ -12,7 +12,7 @@ import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { loadFunctionFile } from '../dist/native/source.js';
 import { dumpState } from '../dist/native/values.js';
-import { TOOLS_PROMPT } from '../dist/native/prompt.js';
+import { EXPLICIT_TOOLS_PROMPT, TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const checkoutPython = fileURLToPath(new URL('../../.venv/bin/python', import.meta.url));
@@ -37,6 +37,17 @@ test('native default system prompt stays aligned with Python tool agent', { skip
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
     return { calls: [], text: '', completion_tokens: 1 }; });
+  await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: 'Lambda<{}, Num>', instructions: 'Write one.' } });
+  assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
+});
+
+test('native tools-v4 system prompt stays aligned with Python explicit tool agent', async () => {
+  const reference = readFileSync(new URL('../../natlang/prompts/tools_explicit.md', import.meta.url), 'utf8');
+  assert.equal(EXPLICIT_TOOLS_PROMPT, reference);
+  let seen;
+  const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
+    return { calls: [], text: '', completion_tokens: 1 }; }, { toolSchema: 'tools-v4' });
   await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
     type: 'Lambda<{}, Num>', instructions: 'Write one.' } });
   assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
@@ -405,6 +416,23 @@ test('native complete checked-call and completion-mark schema equals Python tool
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
   const agent = new NativeToolAgent(() => ({ calls: [] }));
   assert.deepEqual(agent.tools(session), expected);
+});
+
+test('native positional split schema equals Python tools-v4', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ text: Text, old: Text, replacement: Text, items: Num[] }, Text>',
+    instructions: '1. Replace text.\n2. Total the numbers.', args: {
+      text: 'alpha beta', old: 'beta', replacement: 'gamma', items: [2, 3] }, codebase: {
+      replace: { args: { text: 'Text', old: 'Text', replacement: 'Text' }, returns: 'Text',
+        code: 'return args.text.replace(args.old, args.replacement);' },
+      add: { args: { total: 'Num', item: 'Num' }, returns: 'Num', code: 'return args.total + args.item;' },
+    } } };
+  const script = `import json,sys\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nfrom natlang.explicit_surface import ExplicitToolSurface\ns=Session(Runtime(None,executors={'typescript-host':object()},engine_selection=True),load_program(json.load(sys.stdin)),TypeEnv())\nprint(json.dumps(ExplicitToolSurface().tools(s)))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
+  const actual = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v4' }).tools(session);
+  assert.deepEqual(actual, expected);
 });
 
 test('native checked-call rejection codes agree with Python for malformed bindings', { skip: !python }, async () => {

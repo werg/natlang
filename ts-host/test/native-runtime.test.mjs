@@ -268,6 +268,31 @@ test('native tool alternatives bind paths to their declared types and readable s
     alt.values?.properties?.item?.type === 'number'));
 });
 
+test('tools-v4 presents split operations and positional path-only function inputs', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ text: Text, old: Text, replacement: Text, nums: Num[] }, Text>',
+    instructions: 'Replace text and total the numbers.', args: { text: 'alpha beta', old: 'beta', replacement: 'gamma', nums: [2, 3] },
+    codebase: {
+      replace: { args: { text: 'Text', old: 'Text', replacement: 'Text' }, returns: 'Text',
+        code: 'return args.text.replace(args.old, args.replacement);' },
+      add: { args: { total: 'Num', number: 'Num' }, returns: 'Num', code: 'return args.total + args.number;' },
+    } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const tools = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v4' }).tools(session);
+  const names = tools.map(item => item.function.name);
+  assert.ok(names.includes('write_value')); assert.ok(names.includes('copy_value'));
+  assert.ok(names.includes('run_function')); assert.ok(names.includes('for_each')); assert.ok(names.includes('fold'));
+  assert.ok(names.includes('mark_lines')); assert.ok(!names.includes('write')); assert.ok(!names.includes('call'));
+  const run = tools.find(item => item.function.name === 'run_function').function.parameters;
+  const replace = run['x-natlang-alternatives'].find(alt => alt.function.const === 'replace');
+  assert.deepEqual(replace['x-natlang-parameters'], ['text', 'old', 'replacement']);
+  assert.equal(replace.inputs.type, 'array'); assert.equal(replace.inputs.minItems, 3);
+  assert.equal(replace.inputs.maxItems, 3); assert.equal(replace.inputs.prefixItems.length, 3);
+  const fold = tools.find(item => item.function.name === 'fold').function.parameters;
+  const add = fold['x-natlang-alternatives'].find(alt => alt.function.const === 'add');
+  assert.deepEqual(add['x-natlang-parameters'], ['total', 'number']);
+  assert.equal(add.inputs, undefined); assert.ok(add.items); assert.ok(add.initial);
+});
+
 test('native calls accept typed literal values and reject double binding', async () => {
   const lam = buildPending({ $lambda: { type: 'Lambda<{ item: Num }, Num>',
     instructions: 'Return a selected value.', args: { item: 2 }, codebase: {

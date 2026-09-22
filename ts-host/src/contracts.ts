@@ -7,7 +7,7 @@ export type Source =
 export type RunOptions = { seed?: { mode?: 'compatibility' | 'derived' | 'backend'; root?: number;
   version?: string }; model?: { temperature?: number; max_turns?: number; max_tokens?: number;
   max_seconds?: number; turn_tokens?: number; segment_turns?: number | null;
-  segment_messages?: number | null }; world_seed?: number;
+  segment_messages?: number | null; tool_schema?: 'tools-v3' | 'tools-v4' }; world_seed?: number;
   max_episodes?: number; max_depth?: number; max_actions?: number;
   max_tool_calls?: number; run_id?: string };
 export type ModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;

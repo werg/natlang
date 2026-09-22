@@ -46,6 +46,15 @@ inputs:
     fold_tool = next(tool for tool in tools if tool["function"]["name"] == "fold")
     grammar = call_grammar([fold_tool])
     assert "item_param" not in grammar and "accumulator_param" not in grammar
+    # Program text remains an instruction channel. It is editable only through
+    # edit_text where allowed, never offered as call data or an output slot.
+    for name in ("run_function", "for_each", "fold", "repeat"):
+        tool = next(item for item in tools if item["function"]["name"] == name)
+        for alternative in tool["function"]["parameters"]["x-natlang-alternatives"]:
+            assert "instructions" not in repr(alternative.get("inputs", {}))
+            assert "instructions" not in repr(alternative.get("items", {}))
+            assert "instructions" not in repr(alternative.get("initial", {}))
+            assert "instructions" not in repr(alternative.get("save_as", {}))
 
     assert session.apply("write_value", {"destination": "let/zero", "type": "Num", "value": 0}).kind == "ok"
     result = session.apply("fold", {"function": "add", "save_as": "return", "items": "args/lines",

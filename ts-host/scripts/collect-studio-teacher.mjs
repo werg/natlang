@@ -49,19 +49,30 @@ function decodeArguments(raw) {
   catch { return { __unparsed__: raw }; }
 }
 
+function portableSchema(value) {
+  if (Array.isArray(value)) return value.map(portableSchema);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, child] of Object.entries(value)) if (!key.startsWith('x-')) out[key] = portableSchema(child);
+  if (Array.isArray(value.prefixItems)) {
+    // llama-server's tool renderer does not preserve tuple item schemas. The
+    // runtime still validates arity, ordering, path existence, and types.
+    out.items = { type: 'string' };
+    delete out.prefixItems;
+  }
+  return out;
+}
+
 function teacherDriver({ server, exchanges }) {
   return async request => {
-    const tools = structuredClone(request.tools);
+    const tools = portableSchema(request.tools);
     for (const tool of tools) {
       if (tool.function.name === 'call') tool.function.name = 'call_function';
-      if (tool.function.name === 'write') {
+      if (tool.function.name === 'write' || tool.function.name === 'write_value') {
         const properties = tool.function.parameters?.properties;
         if (properties?.value) properties.value = { type: 'string', description:
           'For Text use plain text. For every other type use JSON text of the value itself.' };
       }
-      if (tool.function.parameters)
-        for (const key of Object.keys(tool.function.parameters))
-          if (key.startsWith('x-')) delete tool.function.parameters[key];
     }
     const messages = structuredClone(request.messages);
     for (const message of messages) for (const call of message.tool_calls ?? [])
@@ -79,7 +90,7 @@ function teacherDriver({ server, exchanges }) {
     const calls = (message.tool_calls ?? []).map(call => {
       const name = call.function?.name === 'call_function' ? 'call' : call.function?.name;
       const args = decodeArguments(call.function?.arguments);
-      if (name === 'write' && typeof args.value === 'string' && args.type !== 'Text') {
+      if ((name === 'write' || name === 'write_value') && typeof args.value === 'string' && args.type !== 'Text') {
         try { args.value = JSON.parse(args.value); } catch { /* runtime may coerce a simple scalar string */ }
       }
       return [name, args];
@@ -110,6 +121,7 @@ async function runCase(frozen, options, bindings) {
   let app;
   app = new bindings.BrowserNatlangApplication({ client, source: await sourceFor(spec),
     initialState: frozen.initial_state, seedRoot: options.seed,
+    runOptions: { model: { tool_schema: 'tools-v4' } },
     modelTurn: teacherDriver({ server: options.server, exchanges }) });
   try {
     await app.start();
@@ -119,7 +131,7 @@ async function runCase(frozen, options, bindings) {
     const accepted = isDeepStrictEqual(actual.state, frozen.expected.state) && actual.ok === frozen.expected.ok;
     return { schema: 'natlang.studio_teacher_trajectory/1', id: `teacher:${frozen.id}:${options.seed}`,
       case: frozen, provenance: { model: options.model, seed: options.seed,
-        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1' },
+        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'tools-v4' },
       outcome: { accepted, expected: frozen.expected, actual },
       runs: { reducer: transition.reducerRun, view: transition.viewRun }, exchanges };
   } finally { await app.close(); await client.close(); }
@@ -134,7 +146,8 @@ async function writeAtomic(path, value) {
 async function validResult(path, frozen, options) {
   try { const row = JSON.parse(await readFile(path, 'utf8'));
     return row.case.id === frozen.id && row.case.source_revision === frozen.source_revision &&
-      row.provenance.model === options.model && row.provenance.seed === options.seed;
+      row.provenance.model === options.model && row.provenance.seed === options.seed &&
+      row.provenance.tool_schema === 'tools-v4';
   } catch { return false; }
 }
 
