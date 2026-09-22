@@ -1291,6 +1291,66 @@ class Session:
         executor = self.rt._executor("quickjs-isolated")
         return portable(executor.run(CrispRequest(code, scope, False, "eval", False), self.rt._fx(self.lam)))
 
+    def _scope_initializer_type(self, expression: str, locals_: dict[str, Any]):
+        """Recover the static type carried by common JavaScript collection expressions.
+
+        Runtime-value inference is deliberately only a fallback: an empty list nested
+        in a selected record does not erase the record's declared type.
+        """
+        source = expression.strip()
+        collection = re.fullmatch(r"(.+)\.(find|filter|slice)\s*\(.*\)", source, re.S)
+        projected = re.fullmatch(
+            r"(.+)\.map\s*\(\s*(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*"
+            r"\2((?:\.[A-Za-z_$][\w$]*|\[(?:\d+|\"[^\"]+\"|'[^']+')\])+)\s*\)", source, re.S)
+        receiver = collection.group(1).strip() if collection else projected.group(1).strip() if projected else source
+        try:
+            root = re.match(r"[A-Za-z_$][\w$]*", receiver).group(0)
+            if root in locals_:
+                type_ = locals_[root]
+                tail = receiver[len(root):]
+                while tail:
+                    member = re.match(r"^\.([A-Za-z_$][\w$]*)(.*)$", tail, re.S)
+                    index = re.match(r'^\[(?:"([^"\\]+)"|\'(?:([^\'\\]+))\'|(\d+))\](.*)$', tail, re.S)
+                    resolved = self.env.resolve(type_)
+                    if member and isinstance(resolved, Record):
+                        field = resolved.get(member.group(1))
+                        if field is None: return None
+                        type_, tail = field[0], member.group(2)
+                    elif index and isinstance(resolved, ListT):
+                        type_, tail = resolved.elem, index.group(4)
+                    elif index and isinstance(resolved, (Record, DictT)):
+                        key = next(part for part in index.groups()[:3] if part is not None)
+                        field = resolved.get(key) if isinstance(resolved, Record) else None
+                        type_, tail = (field[0] if field else resolved.elem if isinstance(resolved, DictT) else None), index.group(4)
+                        if type_ is None: return None
+                    else: return None
+            else:
+                _, ref = self.resolve(self._scope_path(receiver))
+                type_ = ref.type
+            resolved = self.env.resolve(type_)
+            if collection:
+                if not isinstance(resolved, ListT): return None
+                return resolved.elem if collection.group(2) == "find" else type_
+            if projected:
+                if not isinstance(resolved, ListT): return None
+                type_ = resolved.elem
+                tail = projected.group(3)
+                while tail:
+                    member = re.match(r"^\.([A-Za-z_$][\w$]*)(.*)$", tail, re.S)
+                    index = re.match(r'^\[(?:"([^"\\]+)"|\'(?:([^\'\\]+))\'|(\d+))\](.*)$', tail, re.S)
+                    resolved = self.env.resolve(type_)
+                    if member and isinstance(resolved, Record):
+                        field = resolved.get(member.group(1))
+                        if field is None: return None
+                        type_, tail = field[0], member.group(2)
+                    elif index and isinstance(resolved, ListT):
+                        type_, tail = resolved.elem, index.group(4)
+                    else: return None
+                return ListT(type_)
+            return type_
+        except (AttributeError, Reject, Refuse, TypeSyntaxError):
+            return None
+
     @staticmethod
     def _split_call_args(source: str) -> list[str]:
         out, start, depth, quote, escaped = [], 0, 0, "", False
@@ -1326,6 +1386,50 @@ class Session:
         tail = source[start:].strip()
         if tail: out.append(tail)
         return out
+
+    @staticmethod
+    def _scope_conditional(source: str):
+        """Parse one top-level if/else-if/else chain without pretending to parse JS."""
+        text, at, branches = source.strip(), 0, []
+        def space(pos):
+            while pos < len(text) and text[pos].isspace(): pos += 1
+            return pos
+        def balanced(pos, opening, closing):
+            if pos >= len(text) or text[pos] != opening: return None
+            depth, quote, escaped = 0, "", False
+            for i in range(pos, len(text)):
+                char = text[i]
+                if quote:
+                    if escaped: escaped = False
+                    elif char == "\\": escaped = True
+                    elif char == quote: quote = ""
+                elif char in "\"'`": quote = char
+                elif char == opening: depth += 1
+                elif char == closing:
+                    depth -= 1
+                    if depth == 0: return text[pos + 1:i], i + 1
+            return None
+        at = space(at)
+        while True:
+            condition = None
+            if text.startswith("if", at) and (at + 2 == len(text) or not (text[at + 2].isalnum() or text[at + 2] in "_$")):
+                at = space(at + 2); found = balanced(at, "(", ")")
+                if not found: return None
+                condition, at = found; at = space(at)
+            elif text.startswith("else", at) and (at + 4 == len(text) or not (text[at + 4].isalnum() or text[at + 4] in "_$")):
+                at = space(at + 4)
+                if text.startswith("if", at) and (at + 2 == len(text) or not (text[at + 2].isalnum() or text[at + 2] in "_$")):
+                    at = space(at + 2); found = balanced(at, "(", ")")
+                    if not found: return None
+                    condition, at = found; at = space(at)
+                else:
+                    condition = None
+            else: return None
+            found = balanced(at, "{", "}")
+            if not found: return None
+            body, at = found; branches.append((condition, body)); at = space(at)
+            if at == len(text): return branches
+            if not text.startswith("else", at): return None
 
     def _scope_fs_call(self, code: str):
         assigned = re.fullmatch(
@@ -1468,6 +1572,28 @@ class Session:
         handle_result = self._scope_handle_call(code)
         if handle_result is not None:
             return handle_result
+        conditional = self._scope_conditional(code)
+        if conditional is not None:
+            for condition, body in conditional:
+                if condition is None or bool(self._eval_scope_expression(condition)):
+                    return self._scope_eval(body) if body.strip() else Result("ok", "null", value=None)
+            return Result("ok", "null", value=None)
+        retried = re.fullmatch(
+            r"\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        if retried:
+            local = retried.group(1)
+            try:
+                _, ref = self.resolve(f"let/{local}")
+                node = ref.get()
+            except Reject:
+                node = None
+            if not is_pending(node) or node.status != QUIESCED:
+                raise reject(local, "no-such-path", "a quiesced local computation")
+            result = self._do_reduce(Action("reduce", paths=[f"let/{local}"]))
+            if result.kind == "done":
+                result.value = dump(self.lam.let[local])
+                result.text = json.dumps(result.value, ensure_ascii=False)
+            return result
         while_repeated = re.fullmatch(
             r"\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*"
             r"let\s+([A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*"
@@ -1503,6 +1629,15 @@ class Session:
                 if last.kind not in ("ok", "done"):
                     return last
             return last
+
+        uninitialized = re.fullmatch(
+            r"\s*(?:let|const)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*;?\s*", code, re.S)
+        if uninitialized:
+            # A later checked imported call can establish the value and its type.
+            # Typed declarations retain their type without manufacturing a value.
+            if uninitialized.group(2):
+                self.lam.let_types[uninitialized.group(1)] = parse_type(uninitialized.group(2).strip())
+            return Result("ok", "null", value=None)
 
         applied = re.fullmatch(
             r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+"
@@ -1592,7 +1727,7 @@ class Session:
         # A direct natural-language/crisp call.  Calls are reduced by the normal
         # checked runtime, then their typed result becomes a lexical local.
         direct = re.fullmatch(
-            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+"
+            r"\s*(?:(?:const|let)\s+)?([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(?:await\s+)?"
             r"([A-Za-z_$][\w$]*)\s*\((.*)\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
         if direct and direct.group(3) in self.lam.codebase:
             local, annotation, function, raw_args = direct.groups()
@@ -1617,6 +1752,23 @@ class Session:
                 result.value = dump(self.lam.let[local])
             return result
 
+        bare_call = re.fullmatch(
+            r"\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\((.*)\)\s*;?\s*", code, re.S)
+        if bare_call and bare_call.group(1) in self.lam.codebase:
+            function, raw_args = bare_call.groups(); fn = self._function(function)
+            args = self._split_call_args(raw_args); declared = list(fn.args)
+            required = sum(not raw.endswith("?") for raw in declared)
+            if not required <= len(args) <= len(declared):
+                raise reject("code", "bad-call", fn.signature, f"{len(args)} positional arguments")
+            hidden = f"__discarded_{self.actions}"
+            values = {raw.rstrip("?"): self._eval_scope_expression(expr)
+                      for raw, expr in zip(declared, args)}
+            result = self._op_call({"function": function, "to": f"let/{hidden}", "values": values})
+            if result.kind == "done":
+                self.lam.let.pop(hidden, None); self.lam.let_types.pop(hidden, None)
+                return Result("ok", "null", value=None)
+            return result
+
         # Pure snippets are executed atomically.  We capture top-level declared
         # locals and an optional terminal expression, then validate every binding
         # before installing any of them.
@@ -1630,7 +1782,13 @@ class Session:
             terminal = pieces[-1]; code = code[:code.rfind(pieces[-1])] + f"const __natlangResult = ({terminal});"
         elif pieces and pieces[-1].startswith("return "):
             terminal = pieces[-1][7:].strip(); code = code[:code.rfind(pieces[-1])] + f"const __natlangResult = ({terminal});"
-        capture_names = list(dict.fromkeys([*self.lam.let, *names, "result"]))
+        # A quiesced child is still a computation, not the JavaScript value
+        # ``null``.  Pending bindings are deliberately absent from the pure JS
+        # scope; excluding them from capture also prevents an unrelated eval
+        # from replacing their original failure and diagnostic with Null.
+        capture_names = list(dict.fromkeys([
+            *(name for name, value in self.lam.let.items() if not is_pending(value)),
+            *names, "result"]))
         captures = ", ".join(f"{json.dumps(name)}: (typeof {name} === 'undefined' ? null : {name})"
                              for name in capture_names)
         declares_result = any(match.group(1) == "result" for match in declarations)
@@ -1642,6 +1800,7 @@ class Session:
         executor = self.rt._executor("quickjs-isolated")
         out = portable(executor.run(CrispRequest(body, scope, True, "eval", False), self.rt._fx(self.lam)))
         staged = []
+        inferred = dict(self.lam.let_types)
         annotations = {match.group(1): match.group(2) for match in declarations}
         initializers = {match.group(1): match.group(3).strip() for match in declarations}
         for name in capture_names:
@@ -1656,14 +1815,11 @@ class Session:
             else:
                 stated = parse_type(annotation.strip()) if annotation else None
                 if stated is None and name in initializers:
-                    try:
-                        _, source = self.resolve(self._scope_path(initializers[name]))
-                        stated = source.type
-                    except (Reject, Refuse):
-                        pass
+                    stated = self._scope_initializer_type(initializers[name], inferred)
                 if stated is None:
                     stated = parse_type(self._infer_scope_type(value))
             staged.append((name, stated, coerce(value, stated, self.env, yaml=False, path=f"let/{name}")))
+            inferred[name] = stated
         for name, stated, value in staged:
             self.lam.let_types[name], self.lam.let[name] = stated, value
         value = out.get("result")
@@ -1969,6 +2125,21 @@ class Session:
                 and not any(args.get(k) is not None for k in ("inputs", "values", "over", "init", "until", "max")):
             return self._do_reduce(Action("reduce", paths=[path]))
         v = {k: args[k] for k in ("inputs", "values", "over", "init", "until", "max") if args.get(k) is not None}
+        # Replacing a failed child with an identical fresh instance resets its
+        # attempt counter and therefore repeats the same deterministic model
+        # sample.  Keep the original node and its diagnostic.  An intentional
+        # retry is the argument-free form above (scope eval exposes retry(local)),
+        # which increments the attempt and derives a new, reproducible seed.
+        if isinstance(node, Lambda) and node.status == QUIESCED and not any(
+                v.get(k) is not None for k in ("over", "init", "until", "max")):
+            fn = self._function(fn_ref)
+            requested = copy.deepcopy(v.get("values") or {})
+            for name, source in (v.get("inputs") or {}).items():
+                requested[name] = self._snapshot_copy(source)[0]
+            same_source = fn.body == (node.original_body or node.body)
+            if node.fn_name == fn.name and same_source and dump(requested) == dump(node.in_):
+                raise reject(path, "unchanged-retry",
+                             "change the function source, inputs, or state; or explicitly retry the pending local")
         self._place_call(path, str(args.get("function") or ""), v)
         return self._do_reduce(Action("reduce", paths=[path]))
 
@@ -2339,6 +2510,7 @@ _HINTS = {
     "no-origin": "Only a result that a sub-task produced can be retried. Write the value again instead.",
     "too-large": "Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.",
     "stuck-dependency": "An input of this sub-task could not be produced: read its note, fix it, run it again.",
+    "unchanged-retry": "Edit the function or change its inputs first. To deliberately sample another reproducible attempt, evaluate `await retry(local); local`.",
 }
 
 

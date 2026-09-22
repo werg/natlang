@@ -89,6 +89,7 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
   'no-origin': 'Only a result that a sub-task produced can be retried. Write the value again instead.',
   'too-large': 'Read a part of it with `from` and `to`, or define a Map over it so that each sub-task sees one item.',
   'stuck-dependency': 'An input of this sub-task could not be produced: read its note, fix it, run it again.',
+  'unchanged-retry': 'Edit the function or change its inputs first. To deliberately sample another reproducible attempt, evaluate `await retry(local); local`.',
 };
 function rejected(error: Reject): NativeResult {
   const hint = error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
@@ -1044,6 +1045,41 @@ export class NativeSession {
         .map(([name]) => `let ${name} = self.locals[${JSON.stringify(name)}];`)].join('\n');
   }
 
+  private scopeInitializerType(expression: string, locals: Record<string, Type>): Type | undefined {
+    const source = expression.trim();
+    const collection = /^(.*)\.(find|filter|slice)\s*\(.*\)$/s.exec(source);
+    const projected = /^(.*)\.map\s*\(\s*(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*\2((?:\.[A-Za-z_$][\w$]*|\[(?:\d+|"[^"]+"|'[^']+')\])+)\s*\)$/s.exec(source);
+    const receiver = (collection?.[1] ?? projected?.[1] ?? source).trim();
+    const selected = (base: Type, tail: string): Type | undefined => {
+      let type = base;
+      while (tail) {
+        const member = /^\.([A-Za-z_$][\w$]*)(.*)$/s.exec(tail);
+        const index = /^\[(?:"([^"\\]+)"|'([^'\\]+)'|(\d+))\](.*)$/s.exec(tail);
+        const resolved = this.env.resolve(type);
+        if (member && resolved.kind === 'record') {
+          const field = resolved.fields.find(item => item.name === member[1]); if (!field) return;
+          type = field.type; tail = member[2]!;
+        } else if (index && resolved.kind === 'list') { type = resolved.element; tail = index[4]!; }
+        else if (index && resolved.kind === 'dict') { type = resolved.element; tail = index[4]!; }
+        else if (index && resolved.kind === 'record') {
+          const field = resolved.fields.find(item => item.name === (index[1] ?? index[2] ?? index[3])); if (!field) return;
+          type = field.type; tail = index[4]!;
+        } else return;
+      }
+      return type;
+    };
+    try {
+      const root = /^[A-Za-z_$][\w$]*/.exec(receiver)?.[0]; if (!root) return;
+      const type = root in locals ? selected(locals[root]!, receiver.slice(root.length)) : this.resolve(this.scopePath(receiver)).type;
+      if (!type) return;
+      const resolved = this.env.resolve(type);
+      if (collection) return resolved.kind === 'list' ? (collection[2] === 'find' ? resolved.element : type) : undefined;
+      if (projected) return resolved.kind === 'list' ?
+        (() => { const item = selected(resolved.element, projected[3]!); return item ? { kind: 'list', element: item } as Type : undefined; })() : undefined;
+      return type;
+    } catch { return; }
+  }
+
   private scopeView(): Record<string, unknown> {
     return { args: inlineEvalView(this.lam.args as Value), inputs: inlineEvalView(this.lam.args as Value), locals: inlineEvalView(Object.fromEntries(
       Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
@@ -1075,6 +1111,36 @@ export class NativeSession {
       }
     }
     const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
+  }
+
+  private scopeConditional(source: string): { condition?: string; body: string }[] | undefined {
+    const text = source.trim(), branches: { condition?: string; body: string }[] = []; let at = 0;
+    const space = () => { while (at < text.length && /\s/.test(text[at]!)) at++; };
+    const balanced = (opening: string, closing: string): string | undefined => {
+      if (text[at] !== opening) return;
+      const start = at++; let depth = 1, quote = '', escaped = false;
+      for (; at < text.length; at++) {
+        const char = text[at]!;
+        if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
+        else if ('"\'`'.includes(char)) quote = char;
+        else if (char === opening) depth++;
+        else if (char === closing && --depth === 0) { const value = text.slice(start + 1, at); at++; return value; }
+      }
+      return;
+    };
+    space();
+    for (;;) {
+      let condition: string | undefined;
+      if (/^if\b/.test(text.slice(at))) { at += 2; space(); condition = balanced('(', ')'); if (condition === undefined) return; space(); }
+      else if (/^else\b/.test(text.slice(at))) {
+        at += 4; space();
+        if (/^if\b/.test(text.slice(at))) { at += 2; space(); condition = balanced('(', ')'); if (condition === undefined) return; space(); }
+      } else return;
+      const body = balanced('{', '}'); if (body === undefined) return;
+      branches.push({ condition, body }); space();
+      if (at === text.length) return branches;
+      if (!/^else\b/.test(text.slice(at))) return;
+    }
   }
 
   private scopeFolder(expression: string): Folder | FolderHandle {
@@ -1354,6 +1420,32 @@ export class NativeSession {
       if (error instanceof Reject) return rejected(error);
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
+    const conditional = this.scopeConditional(code);
+    if (conditional) try {
+      for (const branch of conditional) if (branch.condition === undefined || Boolean(this.runtime.evalFor(this.lam,
+        `(() => { ${this.scopePrefix()} return (${branch.condition}); })()`, false, 'eval', this.scopeView()).result))
+        return branch.body.trim() ? await this.scopeEval(branch.body) : { kind: 'ok', text: 'null', value: null };
+      return { kind: 'ok', text: 'null', value: null };
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    const retried = /^\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/s.exec(code);
+    if (retried) try {
+      const local = retried[1]!, ref = this.resolve(`let/${local}`), node = ref.get();
+      if (!pending(node) || node.status !== 'quiesced')
+        throw new Reject([{ path: local, code: 'no-such-path', expected: 'a quiesced local computation' }]);
+      const outcome = await this.runtime.trigger(ref);
+      const result: NativeResult = { kind: outcome.kind,
+        text: `${ref.path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value };
+      if (outcome.kind === 'done') {
+        result.value = dump(this.lam.let[local]!) as Value; result.text = JSON.stringify(result.value);
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
     const whileRepeated = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*let\s+([A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*while\s*\(\s*!\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*&&\s*\4\s*<\s*(\d+)\s*\)\s*\{\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;\s*\4\s*\+\+\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
     if (whileRepeated && Object.hasOwn(this.lam.codebase, whileRepeated[5]!) &&
         Object.hasOwn(this.lam.codebase, whileRepeated[7]!)) try {
@@ -1384,6 +1476,11 @@ export class NativeSession {
         if (!['ok', 'done'].includes(last.kind)) return last;
       }
       return last;
+    }
+    const uninitialized = /^\s*(?:let|const)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*;?\s*$/s.exec(code);
+    if (uninitialized) {
+      if (uninitialized[2]) this.lam.letTypes[uninitialized[1]!] = parseType(uninitialized[2].trim());
+      return { kind: 'ok', text: 'null', value: null };
     }
     const applied = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\.apply\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*([\s\S]*?))?\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
     if (applied) try {
@@ -1473,7 +1570,7 @@ export class NativeSession {
         return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
       }
     }
-    const direct = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    const direct = /^\s*(?:(?:const|let)\s+)?([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
     if (direct && Object.hasOwn(this.lam.codebase, direct[3]!)) {
       if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[direct[3]!]!);
       const definition = this.lam.codebase[direct[3]!] as Record<string, unknown>;
@@ -1495,6 +1592,29 @@ export class NativeSession {
       }
       return result;
     }
+    const bareCall = /^\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*$/.exec(code);
+    if (bareCall && Object.hasOwn(this.lam.codebase, bareCall[1]!)) {
+      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[bareCall[1]!]!);
+      const definition = this.lam.codebase[bareCall[1]!] as Record<string, unknown>;
+      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
+      const expressions = this.splitCallArgs(bareCall[2]!);
+      const required = declared.filter(name => !name.endsWith('?')).length;
+      if (expressions.length < required || expressions.length > declared.length)
+        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]));
+      const values: Record<string, unknown> = {};
+      try {
+        for (let i = 0; i < expressions.length; i++) values[declared[i]!.replace(/\?$/, '')] =
+          this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[i]}); })()`,
+            false, 'eval', this.scopeView()).result;
+      } catch (error) { return { kind: 'error', text: error instanceof Error ? error.message : String(error) }; }
+      const hidden = `__discarded_${this.actions}`;
+      const result = await this.applyAsync('call', { function: bareCall[1], to: `let/${hidden}`, values });
+      if (result.kind === 'done') {
+        delete this.lam.let[hidden]; delete this.lam.letTypes[hidden];
+        return { kind: 'ok', text: 'null', value: null };
+      }
+      return result;
+    }
     try {
       const declarationPattern = /(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=\s*([^;\n]+)/g;
       const declarations = [...code.matchAll(declarationPattern)], names = declarations.map(match => match[1]!);
@@ -1505,13 +1625,19 @@ export class NativeSession {
         terminal = last.startsWith('return ') ? last.slice(7).trim() : last;
         rewritten = code.slice(0, code.lastIndexOf(last)) + `const __natlangResult = (${terminal});`;
       }
-      const captureNames = [...new Set([...Object.keys(this.lam.let), ...names, 'result'])];
+      // Pending locals are computations, not JavaScript nulls.  They are not
+      // injected into pure eval, so they must not be captured back as null and
+      // overwrite the useful quiescence note either.
+      const captureNames = [...new Set([
+        ...Object.entries(this.lam.let).filter(([, value]) => !pending(value)).map(([name]) => name),
+        ...names, 'result'])];
       const captures = captureNames.map(name => `${JSON.stringify(name)}: (typeof ${name} === 'undefined' ? null : ${name})`).join(', ');
       const body = `${this.scopePrefix(!names.includes('result'))}\n${rewritten}\nreturn { bindings: {${captures}}, result: ${terminal ? '__natlangResult' : 'null'} };`;
       const output = this.runtime.evalFor(this.lam, body, true, 'eval', this.scopeView()).result as
         { bindings: Record<string, unknown>; result: unknown };
       const annotations = new Map(declarations.map(match => [match[1]!, match[2]?.trim()]));
       const initializers = new Map(declarations.map(match => [match[1]!, match[3]!.trim()]));
+      const inferred: Record<string, Type> = { ...this.lam.letTypes };
       const staged: [string, Type, Value][] = captureNames.flatMap(name => {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
@@ -1519,8 +1645,9 @@ export class NativeSession {
         if (name === 'result' && value === null && !Object.hasOwn(this.lam.let, name) && !annotations.has(name)) return [];
         let type = this.lam.letTypes[name] && !annotations.get(name) ? this.lam.letTypes[name]! : undefined;
         if (!type && annotations.get(name)) type = parseType(annotations.get(name)!);
-        if (!type && initializers.has(name)) try { type = this.resolve(this.scopePath(initializers.get(name)!)).type; } catch {}
+        if (!type && initializers.has(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
         if (!type) type = parseType(this.inferScopeType(value));
+        inferred[name] = type;
         return [[name, type, coerce(value, type, this.env, `let/${name}`)]];
       });
       for (const [name, type, value] of staged) { this.lam.letTypes[name] = type; this.lam.let[name] = value; }
@@ -1775,6 +1902,23 @@ export class NativeSession {
         const itemType = signature[init === undefined ? later[0]! : later[1]!];
         if (itemType && !fitsType(overRef.type, parseType(`${itemType}[]`), callEnv))
           throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: `${itemType}[]` }]);
+      }
+      if (over === undefined && init === undefined && args.until === undefined && args.max === undefined) {
+        try {
+          const existing = this.resolve(path).get();
+          const source = String(definition[kind] ?? '').replace(/\n+$/, '') + '\n';
+          if (pending(existing) && existing.nodeKind === 'lambda' && existing.status === 'quiesced' &&
+              existing.functionName === functionName && source === (existing.originalBody ?? existing.body) &&
+              JSON.stringify(dump(existing.args as Value)) === JSON.stringify(dump(values as Value))) {
+            throw new Reject([{ path, code: 'unchanged-retry',
+              expected: 'change the function source, inputs, or state; or explicitly retry the pending local' }]);
+          }
+        } catch (error) {
+          // A missing destination is the normal first-call case.  Preserve the
+          // intentional unchanged-retry rejection.
+          if (error instanceof Reject && error.diagnostics.some(diagnostic => diagnostic.code === 'unchanged-retry')) throw error;
+          if (!(error instanceof Reject)) throw error;
+        }
       }
       const leaf = { type: typeText, [kind]: definition[kind],
         ...(kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated' ?

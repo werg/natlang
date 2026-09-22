@@ -1,7 +1,7 @@
 from natlang.nodes import MISSING
 from natlang.runtime import Runtime, Session
 from natlang.scope_surface import ScopeEvalSurface
-from natlang.types import TypeEnv
+from natlang.types import TypeEnv, format_type
 from natlang.values import load_program
 
 
@@ -57,6 +57,29 @@ def test_scope_eval_preserves_static_type_when_copying_an_ambiguous_value():
     assert root.let_types["state"] is not None
 
 
+def test_scope_eval_preserves_collection_types_through_find_filter_slice_and_map():
+    root = load_program({"$lambda": {
+        "type": "Lambda<{ tasks: Task[] }, Text>",
+        "types": {"Task": "{ id: Text, needs: Text[] }"},
+        "instructions": "Choose a task.",
+        "args": {"tasks": [{"id": "a", "needs": []}, {"id": "b", "needs": ["a"]}]},
+    }})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    result = active.apply("eval", {"code":
+        "const copy = tasks;\n"
+        "const first = copy.find(task => task.id === 'a');\n"
+        "const filtered = copy.filter(task => task.needs.length === 0);\n"
+        "const sliced = copy.slice(0, 1);\n"
+        "const ids = copy.map(task => task.id);\n"
+        "const result: Text = first.id;\nresult"})
+    assert result.kind == "ok" and result.value == "a"
+    assert root.let["first"] == {"id": "a", "needs": []}
+    assert format_type(root.let_types["first"]) == "Task"
+    assert format_type(root.let_types["filtered"]) == "Task[]"
+    assert format_type(root.let_types["sliced"]) == "Task[]"
+    assert format_type(root.let_types["ids"]) == "Text[]"
+
+
 def test_scope_eval_calls_imports_positionally_and_stages_named_result():
     root, active = session()
     surface = ScopeEvalSurface()
@@ -65,6 +88,46 @@ def test_scope_eval_calls_imports_positionally_and_stages_named_result():
     assert root.let["count"] == 2 and root.let_types["count"] is not None
     assert surface.apply(active, "return_value", {"variable": "count"}).kind == "ok"
     assert root.ret == 2
+
+
+def test_failed_scope_child_keeps_its_diagnostic_and_requires_an_explicit_retry():
+    root = load_program({"$lambda": {
+        "type": "Lambda<{ value: Num }, Num>",
+        "instructions": "Ask the helper.", "args": {"value": 4},
+        "codebase": {"inspect": {"args": {"value": "Num"}, "returns": "Num",
+                                  "instructions": "Inspect the value."}},
+    }})
+    attempts = []
+
+    class Failing:
+        def __init__(self, lam):
+            self.lam = lam
+
+        def run(self, _session):
+            attempts.append(self.lam.attempts)
+            return f"original child failure, attempt {self.lam.attempts}"
+
+    active = Session(Runtime(Failing), root, TypeEnv())
+    first = active.apply("eval", {"code": "const answer = await inspect(value); answer"})
+    assert first.kind == "quiesced"
+    child = root.let["answer"]
+    assert child.note == "original child failure, attempt 1"
+
+    # An unrelated pure eval must not capture the absent JS binding as null.
+    pure = active.apply("eval", {"code": "const other = value + 1; other"})
+    assert pure.kind == "ok" and pure.value == 5
+    assert root.let["answer"] is child and child.note == "original child failure, attempt 1"
+
+    unchanged = active.apply("eval", {"code": "const answer = await inspect(value); answer"})
+    assert unchanged.kind == "rejected"
+    assert unchanged.codes == ["unchanged-retry"]
+    assert "await retry(local)" in unchanged.text and attempts == [1]
+
+    retried = active.apply("eval", {"code": "await retry(answer); answer"})
+    assert retried.kind == "quiesced"
+    assert attempts == [1, 2]
+    assert root.let["answer"] is child
+    assert child.note == "original child failure, attempt 2"
 
 
 def test_return_value_reports_each_still_open_program_line():
@@ -91,6 +154,24 @@ def test_scope_eval_sequences_multiple_imported_calls_in_one_snippet():
         "const result: Num = await count_true(flags);\nresult"})
     assert result.kind == "ok" and result.value == 2
     assert root.let["counts"] == [1, 0, 1] and root.let["result"] == 2
+
+
+def test_scope_eval_imports_are_callable_synchronously_in_branches_and_as_effects():
+    root = load_program({"$lambda": {"type": "Lambda<{ flag: Bool }, Num>",
+        "instructions": "Choose and record a number.", "args": {"flag": False},
+        "codebase": {
+            "one": {"args": {}, "returns": "Num", "code": "return 1;"},
+            "two": {"args": {}, "returns": "Num", "code": "return 2;"},
+            "observe": {"args": {"value": "Num"}, "returns": "Bool", "code": "return args.value > 0;"},
+        }}})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    result = active.apply("eval", {"code":
+        "let chosen: Num;\n"
+        "if (flag) { chosen = one(); } else { chosen = await two(); }\n"
+        "await observe(chosen);\n"
+        "chosen"})
+    assert result.kind == "ok" and result.value == 2
+    assert root.let["chosen"] == 2
 
 
 def test_scope_eval_lowers_ordinary_accumulation_and_bounded_repeat():

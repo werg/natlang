@@ -82,6 +82,34 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
 });
 
+test('failed scope child retains its cause and only reruns through explicit retry', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ value: Num }, Num>',
+    instructions: 'Ask the helper.', args: { value: 4 },
+    codebase: { inspect: { args: { value: 'Num' }, returns: 'Num', instructions: 'Inspect the value.' } } } });
+  const attempts = [];
+  const runtime = new NativeRuntime({ seedPolicy: { mode: 'derived', root: 17 }, agent: session => {
+    attempts.push(session.lam.attempts);
+    return `original child failure, attempt ${session.lam.attempts}`;
+  } });
+  const session = new NativeSession(runtime, lam, new TypeEnv());
+  const first = await session.applyAsync('eval', { code: 'const answer = await inspect(value); answer' });
+  assert.equal(first.kind, 'quiesced');
+  const child = lam.let.answer;
+  assert.equal(child.note, 'original child failure, attempt 1');
+
+  const pure = await session.applyAsync('eval', { code: 'const other = value + 1; other' });
+  assert.equal(pure.kind, 'ok'); assert.equal(pure.value, 5);
+  assert.equal(lam.let.answer, child); assert.equal(child.note, 'original child failure, attempt 1');
+
+  const unchanged = await session.applyAsync('eval', { code: 'const answer = await inspect(value); answer' });
+  assert.equal(unchanged.kind, 'rejected'); assert.deepEqual(unchanged.codes, ['unchanged-retry']);
+  assert.match(unchanged.text, /await retry\(local\)/); assert.deepEqual(attempts, [1]);
+
+  const retried = await session.applyAsync('eval', { code: 'await retry(answer); answer' });
+  assert.equal(retried.kind, 'quiesced'); assert.deepEqual(attempts, [1, 2]);
+  assert.equal(lam.let.answer, child); assert.equal(child.note, 'original child failure, attempt 2');
+});
+
 test('scope read_value slices Text by zero-based characters and lists by items', () => {
   const lam = buildPending({ $lambda: { type: 'Lambda<{ text: Text, flags: Bool[] }, Text>',
     instructions: 'Return part of the text.', args: { text: 'alpha\nbeta', flags: [true, false, true] } } });
@@ -112,6 +140,39 @@ test('scope eval preserves static type when copying an ambiguous value', async (
   const result = await session.applyAsync('eval', { code: 'let state = initial; state' });
   assert.equal(result.kind, 'ok'); assert.equal(JSON.stringify(result.value), '{"blocked":[],"done":false}');
   assert.ok(lam.letTypes.state);
+});
+
+test('scope eval preserves collection types through find, filter, slice and map', async () => {
+  const lam = buildPending({ $lambda: {
+    type: 'Lambda<{ tasks: Task[] }, Text>', types: { Task: '{ id: Text, needs: Text[] }' },
+    instructions: 'Choose a task.', args: { tasks: [{ id: 'a', needs: [] }, { id: 'b', needs: ['a'] }] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code:
+    "const copy = tasks;\n" +
+    "const first = copy.find(task => task.id === 'a');\n" +
+    'const filtered = copy.filter(task => task.needs.length === 0);\n' +
+    'const sliced = copy.slice(0, 1);\n' +
+    'const ids = copy.map(task => task.id);\n' +
+    'const result: Text = first.id;\nresult' });
+  assert.equal(result.kind, 'ok'); assert.equal(result.value, 'a');
+  assert.deepEqual(lam.let.first, { id: 'a', needs: [] });
+  assert.equal(lam.letTypes.first.kind, 'name'); assert.equal(lam.letTypes.first.name, 'Task');
+  for (const name of ['filtered', 'sliced', 'ids']) assert.equal(lam.letTypes[name].kind, 'list');
+});
+
+test('scope imports are callable synchronously in branches and as effects', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ flag: Bool }, Num>',
+    instructions: 'Choose and record a number.', args: { flag: false }, codebase: {
+      one: { args: {}, returns: 'Num', code: 'return 1;' },
+      two: { args: {}, returns: 'Num', code: 'return 2;' },
+      observe: { args: { value: 'Num' }, returns: 'Bool', code: 'return args.value > 0;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code:
+    'let chosen: Num;\n' +
+    'if (flag) { chosen = one(); } else { chosen = await two(); }\n' +
+    'await observe(chosen);\n' +
+    'chosen' });
+  assert.equal(result.kind, 'ok'); assert.equal(result.value, 2); assert.equal(lam.let.chosen, 2);
 });
 
 test('native codebase edits are live while the codebase file set stays fixed', async () => {
