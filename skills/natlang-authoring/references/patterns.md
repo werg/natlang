@@ -40,7 +40,7 @@ Search, SQL, shell commands, binary assets, stronger-model calls, and native
 jobs can often be host libraries callable from crisp code. This does not mean
 inventing a special workaround around a broken runtime contract.
 
-When a general capability is missing, identify its semantic contract and implement it at the shared layer. Wire it through relevant Python, native TS, and browser paths or document the unsupported targets. Check all application callers; a broadly useful correction should not be activated only in the motivating demo. Keep portability and weak-interpreter cognitive cost explicit.
+When a general capability is missing, identify its semantic contract and implement it in the shared TypeScript runtime and browser path. Check all application callers; a broadly useful correction should not be activated only in the motivating demo. Keep portability and small-model cognitive cost explicit.
 
 Use `Record<string, T>` when a keyed collection is an ordinary typed input.
 Keep indexed searches and native database queries in crisp helpers that return

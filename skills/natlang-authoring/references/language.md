@@ -64,7 +64,7 @@ Partial return records can be built incrementally; completion requires a complet
 In source, write `const assessment = await assess(observation, criterion)` using ordinary positional calls:
 
 ```text
-const assessment = await assess(args.observations[0], args.criterion);
+const assessment = await assess(observations[0], criterion);
 ```
 
 File names remain ordinary values:
@@ -73,9 +73,9 @@ File names remain ordinary values:
 const evidence = await workspaceRead(args.state.head, "evidence/observations.json");
 ```
 
-The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_function` to inspect an imported function. `edit_function` and `diff_functions` are the function editing tools for normal lambdas. Directory reducers alone receive file tools and `folder.fs`; file paths are relative to that reducer's input folder, without `project/` or `codebase/` prefixes. Reuse computed values by variable reference.
+The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_function` to inspect an imported function. Use `edit_function` and `diff_functions` to inspect and improve existing codebase functions when that would help the task. Directory reducers alone receive file tools and `folder.fs`; paths are relative to the reducer's explicit input folder. Reuse computed values by variable reference.
 
-Imported functions have stable names and signatures. The function tools inspect or edit their source; the fixed function set cannot be created, deleted, moved, or renamed. A directory reducer can create, edit, move, and remove files within its input folder. Its direct call `await reducer(folder, ...args)` returns only the typed value and discards file changes. Use `await folder.apply(reducer, ...args)` when selected file changes should be retained in the folder. For generated programs, validate and execute the new artifact before claiming it works.
+Imported functions have stable names and signatures. The function tools inspect or edit existing source; the fixed function set cannot be created, deleted, moved, or renamed. A directory reducer's first parameter is an explicit `Folder` value. It can create, edit, move, and remove files within that folder. A direct call `await reducer(folder, ...args)` returns only the typed value and discards file changes. Use `await folder.apply(reducer, ...args)` when selected file changes should be retained in the folder; `folder.dir(path)` selects a subfolder. For generated programs, validate and execute the new artifact before claiming it works.
 
 ## Combinators and completion
 

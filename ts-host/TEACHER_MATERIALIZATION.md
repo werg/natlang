@@ -3,7 +3,8 @@
 `src/teacher/native-materializer.ts` converts accepted
 `natlang.teacher_trajectory.native/1` collector rows into JSONL decision records
 using `natlang.teacher_training_turn.native/1`. It runs entirely in Node and
-does not replay examples through the legacy Python runtime.
+preserves the captured teacher choices, reasoning, tool calls, and observations
+in the native training records.
 
 Build the TypeScript host, then materialize a collector merge:
 

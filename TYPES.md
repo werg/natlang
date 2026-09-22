@@ -49,14 +49,15 @@ control flow such as `for...of`, array methods, and `Promise.all`.
 
 Normal lambdas have function tools for inspecting and editing imported
 functions. The fixed function set cannot be created, deleted, moved, or renamed
-by those tools. There is no slash-path value binding or call-combinator API.
+by those tools. Inspect and improve existing function source when it helps the
+task.
 
 ## Files and reducers
 
 Filesystem access is limited to directory reducers. A reducer operates on a
 writable copy of its input folder, and every file path is relative to that
-folder without a `project/` or `codebase/` prefix. It can create, edit, move,
-and remove files through its file tools and folder filesystem API.
+folder. It can create, edit, move, and remove files through its file tools and
+folder filesystem API.
 
 Calling `await reducer(folder, ...args)` returns the typed value and discards
 file changes. Calling `await folder.apply(reducer, ...args)` retains the

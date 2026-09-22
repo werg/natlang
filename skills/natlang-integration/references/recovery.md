@@ -21,9 +21,7 @@ A timeout can mean the operation is still executing. A rejected return can follo
 
 ## Streams and parallelism
 
-Python `load_fold(step_file, init, source)` expects `acc` and `item` parameters with the accumulator type matching the return. The source can be an iterable or a polling stream source. A waiting source is distinct from closed or failed; preserve its accumulator and position.
-
-Native hosts support a root Fold with `streams:{over: asyncIterable}`. Waiting for the next event need not consume a model turn. Browser `run()` returns when that stream completes; for a view after every event use `BrowserNatlangApplication`'s per-event reduction queue.
+Native hosts can bind an async iterable as a stream input. Waiting for the next event need not consume a model turn. Browser `run()` returns when that stream completes; for a view after every event use `BrowserNatlangApplication`'s per-event reduction queue.
 
 Map can exploit independent work subject to target host constraints. Node's public options include `mapWorkers` and `parallelMapSafe`; shared native objects/retained environments constrain safety. Do not assert parallel safety merely to obtain speed. Effectful/stateful ordering remains part of the program contract. A single threaded target is a valid embedding.
 
@@ -31,9 +29,9 @@ Multiple calls in one model response are an ordered non-atomic batch, not proof 
 
 ## Continuation versus durable restart
 
-Both main agents support conversation rollover through `segment_turns` and `segment_messages`. Defaults at the inspected revision are six work turns and twelve messages; either can trigger a checkpoint. Setting one to null does not disable the other. Python uses `None`. A short note plus serialized typed scope, pending calls, and line marks continues the same task. Model-run budgets default to unbounded, while the checkpoint note itself has a separate allowance. Inspect truncation/finish reason if a note loses necessary information.
+The agent supports conversation rollover through `segment_turns` and `segment_messages`. A short note plus serialized typed scope, pending calls, and line marks continues the same task. Model-run budgets are separate from conversation segmentation. Inspect truncation and finish reasons if a note loses necessary information.
 
-In-memory continuation is not process restart recovery. Persist the actual source identity, state/pending nodes when supported, effect observations, invocation seed policy, and ownership metadata. Reconstruct native resources through an application recovery contract. `dump_state` / `load_program` in Python and native state serialization support runtime state; they do not snapshot arbitrary host objects or provider sessions.
+In-memory continuation is not process restart recovery. Persist the actual source identity, state/pending nodes when supported, effect observations, invocation seed policy, and ownership metadata. Reconstruct native resources through an application recovery contract. Runtime state serialization does not snapshot arbitrary host objects or provider sessions.
 
 This includes typed `Record<string, T>` inputs. Their observed values can inform
 portable results and traces, but the provider itself remains native. Record the
@@ -43,7 +41,7 @@ working directory when deterministic resumption matters.
 
 ## Trace and reproducibility
 
-Retain a run ID, source revision, parent/call identity, actual model/template/settings, seed policy, engine mode/authority, observations, outcomes, and continuation boundaries. Node can write `tracePath`; browsers return traces in memory for explicit persistence/export. Python has `TraceRecorder`/`TraceReader`; shared readers can inspect portable reduction events.
+Retain a run ID, source revision, parent/call identity, actual model/template/settings, seed policy, engine mode/authority, observations, outcomes, and continuation boundaries. Node can write `tracePath`; browsers return traces in memory for explicit persistence/export. Shared readers can inspect portable reduction events.
 
 Distinguish inspecting a trace, reconstructing a portable value, resuming a pending node, and replaying external effects. Only promise what is implemented for that operation/engine. Time travel UI can inspect historical state without executing old effects.
 

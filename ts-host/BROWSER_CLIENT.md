@@ -3,7 +3,7 @@
 For natlang-driven event reducers and view plans, see
 [Frontend applications](FRONTEND_APPLICATIONS.md).
 
-`BrowserNatlangClient` is the application-level browser API. It owns one local GGUF model, loads its tool-call template, probes and selects WebGPU, optionally retries loading on CPU, runs native natlang programs, captures per-run model metrics, and closes resources. The lower-level `BrowserLocalModel` and `BrowserNatlangHost` remain available when an application needs custom inference or runtime wiring. Neither API uses the Python interpreter or a remote inference service.
+`BrowserNatlangClient` is the application-level browser API. It owns one local GGUF model, loads its tool-call template, probes and selects WebGPU, optionally retries loading on CPU, runs natlang programs, captures per-run model metrics, and closes resources. The lower-level `BrowserLocalModel` and `BrowserNatlangHost` remain available when an application needs custom inference or runtime wiring.
 
 ## Build and serve assets
 
@@ -41,7 +41,7 @@ console.log(loaded.diagnostics.gpuSelectionReason, loaded.gpuFallbackReason);
 const controller = new AbortController();
 const result = await client.run({
   source: { kind: 'files', root: 'main.nl', files: {
-    'main.nl': '---\nreturns: Num\n---\nWrite the number 7 to return.\n',
+    'main.nl': '---\nargs: {}\nreturns: number\n---\nSet the result to 7.\n',
   } },
   signal: controller.signal,
   options: { seed: { mode: 'compatibility' } },

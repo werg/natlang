@@ -123,8 +123,8 @@ the requested operation.
 
 - `applications/semantic_terminal_cli.mjs` is a persistent interactive
   terminal. Natlang selects recipes, launches jobs, explains actual outcomes and
-  handles recovery. The supplied workspace recipes inspect Git/files, run the
-  Python suite and build the TypeScript host.
+  handles recovery. The supplied workspace recipes inspect Git/files and run
+  the TypeScript build and test suites.
 - `applications/log_console.mjs` consumes an async stream of typed log events.
   Natlang searches exact retained evidence and decides whether to ignore,
   investigate or escalate; the framework persists and renders each reduction.

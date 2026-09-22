@@ -1,205 +1,95 @@
-# TypeScript application host for natlang
+# TypeScript runtime for natlang
 
-`NatlangHost` is the Python-free TypeScript interpreter. `NativeNatlangHost` is an alias for it. Crisp TypeScript can run in a context that directly references application objects.
+The Node and browser runtimes share a TypeScript implementation of source
+loading, typed function calls, model tools, and directory reducer behavior.
+Node applications import `NatlangHost` from `@natlang/node`; browser
+applications use `@natlang/browser`. See [native packages and
+executables](../NATIVE_PACKAGES.md) and [development setup](../DEV_SETUP.md).
 
-For agent-assisted development, install the [bundled authoring and integration
-skills](../skills/README.md). They include portable references and a checked
-multi-file example for both native hosts.
+## Build
 
-## Install and build
-
-Applications install `@natlang/node`; the `natlang` executable is distributed
-as `@natlang/cli`. Browser applications install `@natlang/browser`, keeping its
-model worker and WASM assets out of Node CLI installations. The historical
-`@natlang/typescript-host` name remains the monorepo build package. See
-[native packages and executables](../NATIVE_PACKAGES.md).
-
-Host implementers can use `@natlang/core`. Its `NativeRuntime` requires an
-explicit `EvalEnvironment`, so the reduction layer does not choose Node VM,
-browser eval, sandbox, filesystem, or process behavior. `@natlang/node`
-exports a convenience `NativeRuntime` that supplies the Node evaluator.
-
-For checkout development, use the repository workflow rather than managing the
-build and development package store manually:
-
-```bash
-scripts/setup_dev.sh --node-only
-natlang --help
-natlang path/to/program.nl
-natlang codebases/semantic_terminal
-natlang summarize the available codebase functions
-```
-
-Setup installs `natlang` in the user command directory. It can be run from any
-working directory and recompiles Node output when TypeScript inputs change.
-`natlang SOURCE` accepts a program, application manifest, or application
-directory. `natlang --apps` discovers source manifests without a built in
-application registry. The complete workflow, including PATH and
-alternate command directory setup, is in [DEV_SETUP.md](../DEV_SETUP.md).
-
-From this repository:
-
-```bash
+```sh
 cd ts-host
 npm ci
 npm run build
 npm test
 ```
 
-The paired differential tests automatically use the checkout's
-`.venv/bin/python` when full development setup has created it.
-`NATLANG_PYTHON=/path/to/python npm test` overrides that interpreter. Without
-either one, the Python parity cases are skipped; the production package does
-not use Python. The package uses TypeScript's compiler API for transpilation
-and Node 22.13 or newer. It does not statically type-check arbitrary
-model-generated snippets; natlang checks values at the tree boundary. The
-package can be installed from this directory with `npm install
-/path/to/natlang/ts-host` after building it. The native conformance checks run
-with `npm run test:conformance` and do not require Python.
+Node 22.13 or newer is required. The runtime uses TypeScript's compiler API to
+transpile crisp modules and eval snippets. Eval snippets are checked against
+the shared runtime value model at transaction and function boundaries; the
+runtime does not promise full TypeScript type checking for model-generated
+snippets.
 
-Import `NatlangHost` for runs. The declared conformance and paired trace coverage is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
+## Source files
 
-For native CLIs and terminal dashboards, use the [terminal application
-framework](TERMINAL_APPLICATIONS.md). It provides a queued natlang reducer/view
-lifecycle, concurrent event sources, durable local sessions, structured terminal
-views and a configurable model driver. The semantic terminal, log console,
-evidence console and notebook console are executable integrations rather than
-separate harnesses.
-
-The native run request can include `review` with a reviewer driver, confidence threshold, action scope, and withdrawal policy. Reviews see proposed batches before any operation executes; a withdrawn batch can be retried once from the unchanged workspace. `validationFeedback` defaults to `caller`, matching the Python agent's behavior. The higher-level `BrowserNatlangApplication` and `TerminalNatlangApplication` default to `local`; for low-level runs use `local` to let the model repair missing results or rejected actions within its current episode.
-
-## Run a program
+A crisp module is ordinary TypeScript with one default-exported function:
 
 ```ts
-import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/node';
+export default function countWords(text: string): number {
+  return text.trim().split(/\\s+/).filter(Boolean).length;
+}
+```
 
-const desktop = new DesktopBindings();
-const environment = new TypeScriptEnvironment({ mode: 'retained', host: desktop });
-const host = new NatlangHost({ environment });
+Natural-language functions use typed frontmatter and instruction lines in a
+`.nl` file. Both kinds of function use standard TypeScript types, positional
+parameters, imports, and `await` calls. Refer to [the specification](../spec/SPEC.md)
+for source, type, and completion rules.
 
+## Run
+
+```ts
+import { NatlangHost } from '@natlang/node';
+
+const host = new NatlangHost();
 try {
   const result = await host.run({
-    source: { kind: 'program', program: {
-      $lambda: {
-        type: 'Lambda<{ file: Text }, Num>',
-        engine: 'typescript-host',
-        code: 'return host.readText(args.file).length;',
-      },
-    } },
-    inputs: { file: '/tmp/example.txt' },
-    tracePath: '/tmp/example.trace.jsonl',
+    source: { kind: 'file', path: 'inspect.nl' },
+    inputs: { text: 'The trial improved response times.' },
+    modelTurn,
   });
   console.log(result.outcome, result.value);
 } finally {
   host.close();
-  desktop.close();
 }
 ```
 
-For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The model receives the `scope-eval-v1` tools for persistent TypeScript evaluation, inspection, line marking, blocker/error reports, and any relevant file access. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. The host loads `.nl`, `.ts`, YAML, and JSON sources. `options` accepts seed and model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but the shared engine serializes those calls unless the host is configured for safe parallel execution.
+The model receives `eval`, `read_value`, and `mark_lines`, plus blocker/error
+reporting and function inspection/editing tools. Parameters, imported
+functions, and persistent locals are lexical names in eval. Imported natural
+language and TypeScript functions are called normally.
 
-For selective access to a working tree, declare an ordinary
-`files: Dict<ProjectFile>` input and bind it explicitly:
+## Codebase editing and directory reducers
 
-```ts
-import { NodeFileTree } from '@natlang/node';
+Models are encouraged to inspect and improve existing imported instructions
+and TypeScript helpers through the function editing tools. The set of
+codebase functions stays fixed during a run: those tools edit existing source
+but do not add, delete, move, or rename functions.
 
-await host.run({
-  source: { kind: 'file', path: 'inspect.nl' },
-  inputs: { files: new NodeFileTree(process.cwd()) },
-  modelTurn,
-});
-```
+Only directory reducers receive model-facing filesystem tools. The reducer's
+first parameter is an explicit `Folder`; inside the reducer it is available as
+`folder`. Paths are relative to that folder, with no root prefix. A direct
+`await reducer(folder, ...args)` returns its typed value and discards edits.
+`await folder.apply(reducer, ...args)` retains committed edits. To delegate a
+subdirectory, use `await folder.dir('subdirectory').apply(reducer, ...args)`.
+The child receives that subdirectory as its own `folder` root. Reducers may
+also be called directly when only their typed return is needed.
 
-Natlang reads this value at `args/files/...`. `NodeFileTree` resolves disk
-directories and leaves only when read; `textFileTree` supplies the same
-read-only `Dict<T>` behavior for browsers and in-memory embeddings. Browser
-`{ kind: 'files' }` sources load virtual source files and do not automatically
-turn them into semantic inputs. Binary leaves return metadata until an
-application supplies a specific binary capability. Pass the dictionary through
-a normal typed argument when a child needs it. Provider observations appear in
-the ordinary action trace but the provider itself is not portable serialized
-state.
+The detailed file API and reducer call behavior are in the reducer-specific
+prompt at `natlang/prompts/tools_directory_reducer.md`. Normal lambdas do not
+receive that API.
 
-For a returned `{ path: Text, text: Text }[]` plan, use
-`validateFileWrites` in any TypeScript target. Node applications can call
-`commitFileWrites(root, plan)` to reject unsafe or duplicate paths and replace
-each file atomically beneath the selected root. The batch is ordered but is not
-a multi-file transaction; applications should retain the returned receipts and
-surface partial failures.
+## Browser
 
-`capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
+Use [`BROWSER_CLIENT.md`](BROWSER_CLIENT.md) for local model loading, WebGPU,
+asset hosting, and browser lifecycle. Use
+[`TERMINAL_APPLICATIONS.md`](TERMINAL_APPLICATIONS.md) for Node CLI and
+terminal application patterns.
 
-The native host runs Map slots serially by default. For independent pure work, pass `mapWorkers` and `parallelMapSafe: true`; parallel execution requires a fresh eval environment with no shared host object. Nested `NativeSourceWorkspace` invocations share the parent episode budget when the workspace is exposed directly on that host object.
+## Trust and host effects
 
-The native host accepts declared capability callbacks that return values or promises. Authored crisp functions can `await` asynchronous application methods exposed through `host` and declared `fx` calls. `run_code` accepts an awaited expression. `NativeSourceWorkspace` provides versioned source description, type checking, and isolated child invocation through the shared host route.
-
-## Eval environment and authority
-
-`mode: 'fresh'` creates fresh TypeScript globals for each crisp eval. `mode: 'retained'` preserves globals across evals. In both modes, the supplied `host` object is passed by identity into the Node VM context. A retained environment can therefore share buffers, jobs, database clients, DOM-like objects, or application objects with authored crisp functions and `run_code` calls. `self`, `args`, and `locals` are frozen portable snapshots; they cannot modify natlang state directly. Results must be exact portable JSON values and are then checked against the destination's natlang type.
-
-The shared engine is **trusted code**, not a sandbox. It can mutate exposed host objects before returning an invalid result or throwing. The VM's synchronous CPU timeout does not cancel a native operation or bound all memory use. Authored crisp functions and native `run_code` may await promises, but interruption cannot undo a native operation already in progress. Direct host access does not enter natlang's declared `fx` journal; declared `fx` calls do. The TypeScript host supports the `typescript-host` engine; the separate Python interpreter supports isolated QuickJS. Traces record the engine and host events but cannot reconstruct arbitrary native state or replay external effects.
-
-An application host may expose `drainEvents()` returning portable observation
-records. The runtime writes these as `host` trace events for successful and
-failed crisp evals. They describe observed native operations; they do not make
-those operations replayable or undo them.
-
-## Browser host
-
-For new web applications, use the [reusable browser client](BROWSER_CLIENT.md) to load local or hosted GGUFs and run natlang with one lifecycle API. It handles model templates, WebGPU selection, CPU fallback, asset URLs, model replacement, and per-run metrics. The lower-level host and model APIs below remain available for custom integrations.
-
-The [interactive playground](playground/README.md) adds a browser-local multi-file editor, revisioned runs and trace inspection, reviewed cases, and a localhost training workbench. Start it with `npm run playground` after `npm ci`. Its case adapter sends exactly admitted natural-language leaf traces to the shared program IR and records explicit rejects for richer cases.
-
-`@natlang/browser` exports `BrowserNatlangHost` and `BrowserLocalModel`. The browser bundle contains the same typed reducer, source parser, and model tool agent as the Node host. `BrowserLocalModel` runs a GGUF model locally through Wllama's browser worker; its weights can be cached in browser storage. No inference server or Python runtime is needed. Build with `npm run build:browser`; serve `dist/browser/natlang.js`, `wllama.wasm`, `wllama-compat.js`, and `wllama-compat.wasm` from the same directory. The compatibility assets keep Safari's GPU path self-hosted. Use HTTPS in deployment (localhost works for development) so WebGPU is available, and serve WASM as `application/wasm`. The compiled browser JavaScript is about 11 MB; the main and compatibility assets add about 23 MB, and model weights require additional browser storage and memory.
-
-```ts
-import { BrowserNatlangHost, BrowserLocalModel } from '@natlang/browser';
-
-const application = { count: 2 };
-const model = new BrowserLocalModel();
-const template = await fetch('/models/templates/natlang-350M-v8-failures-pilot.jinja').then(r => r.text());
-await model.loadFromUrl('/models/natlang-350M-v8-failures-pilot-Q8_0.gguf',
-  { contextTokens: 8192, chatTemplate: template,
-    onProgress: ({ loaded, total }) => console.log(loaded, total) });
-const host = new BrowserNatlangHost({ host: application, model });
-try {
-  const result = await host.run({ source: { kind: 'program', program: {
-    $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return the current count plus one.' },
-  } }, options: { model: { max_turns: 12, turn_tokens: 512 } } });
-  console.log(result.outcome, result.value, result.trace);
-} finally {
-  host.close();
-  await model.close();
-}
-```
-
-`model.loadFromUrl(url)` and `model.loadFiles([file])` also accept a hosted GGUF or a user-selected `File`; pass `wasmUrl`, `compatWorkerUrl`, and `compatWasmUrl` to the constructor when assets have different paths. By default the adapter probes the high-performance WebGPU adapter and requests **all model layers on GPU** when it supports `shader-f16`; otherwise it selects CPU. `model.diagnostics` reports the probe, selection reason, requested layers, and context, but Wllama does not expose the actual number of offloaded layers. Set `gpuLayers: 0` to request CPU, or a positive count when a model exceeds VRAM. The optional `firefoxGpuCompatibility: true` enables Wllama's slower Firefox compatibility path. You can still supply `modelTurn` per run to use another model backend. The host accepts `program`, checked `definitions`, and `files` sources. For `files`, pass `{ kind: 'files', root: 'tasks/main.nl', files: { 'tasks/main.nl': sourceText, ... } }`; the shared loader resolves companion files, `types.ts`, and `uses`.
-
-The [browser pilot](examples/browser-local/index.html), playground, and browser board read the same `/models/browser-catalog.json` and select its published default. Training or checkpoint publication produces Q4_K_M by default for a smaller download and memory footprint; `Q8_0` can be published for comparison. Before the first publication, the built-in catalog points at the natlang v8 pilot Q4 and Q8 GGUFs and their official tool-call template. Those exact files are available as [private repository release assets](https://github.com/werg/natlang/releases/tag/natlang-v8-browser-pilot), rather than Git blobs. Run `gh release download natlang-v8-browser-pilot --dir models` from the repository root to install them. The browser pilot shows model size and storage headroom, automatically retries on CPU if GPU loading fails, allows a local file, and exports task traces and per-turn timing/token/schema metrics. The browser adapter keeps the `scope-eval-v1` tool names intact, enables prompt caching, serializes model turns, and retries one malformed tool call with corrective feedback. A context-full error asks for a smaller prompt or a larger loaded context.
-
-Run `npm run test:browser` for a real Chromium interpreter smoke after installing the browser with `npx playwright-core install chromium`. Run `npm run test:browser -- --model --cpu --output=/tmp/browser-pilot.json` to exercise the local natlang GGUF on one inference task. The pilot page can run three tasks and export the results. The live-model command is separate from the normal suite because inference is substantially slower. Set `NATLANG_CHROMIUM` to a Chromium executable when using an existing browser installation.
-
-Use `--suite` for all three pilot tasks, or `--task=record` / `--task=nested-map` to run one structured case. Structured cases use a 4,096-token context by default in the CLI; `--context=8192` overrides it. `--gpu` launches Chromium with Linux Vulkan and NVIDIA f16 flags; `--cpu` requests no model layers on GPU, and `--quant=Q8_0` selects the larger checkpoint. `--probe=plain`, `--probe=tool`, and `--probe=natlang` isolate base generation, a simple tool, and the exact natlang request; `--probe-tokens=N` changes the probe limit. The model manifest pins each local v8 GGUF SHA-256 digest, while the page reports storage estimates and lets a user select a GGUF file.
-
-For an interactive browser, run `npm run build` and then `npm run serve:browser -- --open-gpu` in `ts-host`. The server binds to localhost, serves COOP/COEP and byte ranges, and opens a separate Chromium profile with Vulkan and Dawn's NVIDIA f16 toggle on Linux. Use `npm run serve:browser` to print a URL for an existing browser. On macOS and Windows, `--open-gpu` leaves browser GPU selection to the platform. A normal Linux Chromium session needs the same launch flags and a full browser restart; the page cannot enable Dawn's f16 toggle itself. Check the page's GPU diagnostics and the pilot backend logs, not merely `navigator.gpu`, to establish offload.
-
-The TypeScript agent checkpoints an unfinished lambda after the configured number of durable work turns or messages. It asks for a short working note with no tools, stores the note on the lambda, and opens a fresh conversation from program and workspace state without copying the preceding dialogue. Set `options.model.segment_turns` and `segment_messages` to tune rollover; their defaults are six turns and twelve messages. Set both to `null` to disable both triggers. The checkpoint is a conversation boundary, not an episode limit.
-
-The local pilot server sends COOP/COEP headers and supports byte ranges for the GGUF; the page lets Wllama select its default WASM thread count when isolated. The adapter converts prior tool-call arguments from JSON strings into objects for the official LFM template. In a headless Q8 CPU trial, v8 loaded in 2.5 seconds and completed the leaf task in 72.7 seconds with two turns, 2,927 prompt tokens, 25 completion tokens, one valid action, and the correct value 7. With local validation feedback, the structured record task completed with an incorrect sum (5 instead of 8), and a nested Map completed with the input list unchanged ([2, 3] instead of [4, 6]). A Q4 GPU suite reproduced the same outcomes: 1/3 correct; its leaf, record, and nested Map tasks took 3.0, 8.4, and 7.4 seconds. These are model-quality failures on the pilot checkpoint. The Q4 leaf task completed correctly in 33.2 seconds on CPU and 2.7 seconds with WebGPU on this RTX 4060 host, both at 4,096 context tokens. Wllama's native logs reported 17/17 layers offloaded and a 216.41 MiB WebGPU model buffer. Timings are individual pilot runs under varying host load, not general speed guarantees. The browser API does not report the actual offload count; the pilot captures Wllama's native logs for that evidence.
-
-Inference quality depends on the chosen model, available memory, and its tool calling support. More capable models need more storage and RAM. Multiple WASM CPU threads require cross origin isolation (COOP and COEP headers); WebGPU itself does not require those headers. The browser host returns the complete trace in memory; applications can save it with `new Blob([JSON.stringify(result.trace)], { type: 'application/json' })`. Browser capabilities use application callbacks, including DOM or network access when supplied by the application. Eval uses `Function` and direct `eval`, so the page's CSP must permit dynamic code execution. The shared eval environment is trusted application code, not an isolation boundary. Browser code does not expose Node process bindings, a disk trace writer, or a Node VM CPU timeout.
-
-`DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` disposes its owned TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.
-# Native synthetic Program IR generation
-
-The TypeScript host includes a deterministic synthetic source generator for the algorithmic families used by the current teacher corpus. It writes `natlang.program/1` JSONL directly and does not import or invoke the Python generator.
-
-```sh
-npm --prefix ts-host run build:node
-node ts-host/scripts/generate-synthetic-ir.mjs \
-  --out data/native-algorithms.ir.jsonl --seed 902 --start-index 0 --n 120 \
-  --families array_kernel,staged_ranking,algorithm_pipeline
-```
-
-Each program is derived from `(seed, index)`, so ranges can be generated separately and reproduced. The output has an adjacent `.manifest.json` containing the generator source hash and output hash. Supported families are `array_kernel`, `staged_ranking`, and `algorithm_pipeline`; the CLI rejects other family names instead of silently changing their semantics. The existing Python-only program and codebase families remain outside this first native generator slice.
+The TypeScript evaluator executes trusted application code and is not a
+sandbox. Host objects passed into the environment remain accessible by
+identity. A failed eval, validation error, or cancellation cannot undo a native
+operation that already occurred. Keep effect identity and observations in the
+application when retrying external operations.
