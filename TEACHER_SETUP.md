@@ -33,35 +33,19 @@ accumulator and completed rounds.
 
 - Use `natlang/prompts/tools_explicit.md`, temperature 0, low reasoning
   effort, and a 256-token thinking budget.
-- Teacher generation uses tools-v4. Calls are explicit by mode and bind an ordered
-  list of workspace paths to the function declaration. The chat adapter expands
-  typed alternatives only for `write_value`; expanding every function alternative
-  needlessly enlarged prompts. Tuple path schemas are simplified to string arrays
-  for remote servers because Bonsai's template converter rendered `prefixItems`
-  constants as objects. The native grammar retains exact per-position guidance,
-  and the runtime checks every path against its declared position.
-- A 20 September typed-chat probe (`scripts/probe_typed_chat.py`) found that
-  this server preserved a nested `{id, label, tags}` record under one exact
-  tool schema and under two separately named exact tools. A single tool with
-  `oneOf` alternatives instead returned empty argument objects. These probes
-  are narrow. A full type-study report replay later passed its exact metric and
-  output assertions with typed tools and the 32,768-token server context.
-  Its peak prompt was 14,949 tokens; tool menus reached about 40 KB. Preserve
-  exact source/destination pairs when grouping alternatives, and measure prompt
-  and schema costs on each application run.
+- Teacher generation uses persistent typed scope through `eval`. Compute and
+  update values directly in TypeScript, call helpers with ordinary awaited
+  positional arguments, and use `mark_lines` after completing each instruction.
+  The final eval expression that matches the declared return type completes the
+  function. Use blocker and error actions to report missing information or invalid work.
 - Keep compact state and no self-review. The established leaf collector uses
   caller validation feedback. The application evaluation harness uses local
   validation feedback so rejected writes remain visible to the model for
   repair; rejected and corrected turns are retained in raw audits.
 - A normal assistant reply signals successful completion. The harness checks
-  return validity and closed numbered lines at that boundary. `report_error`
-  and `report_blocker` remain failure signals.
-- Existing values can be copied with `copy_value(source=..., destination=...)`. The runtime preserves
-  types, permits one incidental JSON quoting layer when necessary, and never
-  unwraps a `{ "value": ... }` object. Fold/iterate literal initializers follow
-  the same quote rule; source references retain their existing behavior.
+  the final result and completed line marks at that boundary.
 - Missing optional inputs are explicitly identified both in the opening state
-  and on direct reads. An actual empty string remains a valid supplied value.
+  and during scope inspection. An actual empty string remains a valid supplied value.
 
 These are interface clarifications and validation rules, not a deterministic
 interpreter for the program's instructions. The model still chooses its actions.
@@ -239,10 +223,10 @@ All 70 `say` keys were filled after manual review and targeted retries. The
 final reference bank has 437 distinct keys, with no duplicates, and the
 original frozen IR has zero missing generative-leaf keys. `teacher_leaves.py`
 now records `say` results for review by default; `--admit-say` is an explicit
-override. Normal tool and legacy inference have no default episode token,
-turn-count, or wall-clock cutoff. The teacher collector likewise leaves each
-leaf's wall-clock time and response length open unless `--max-seconds` or
-`--turn-tokens` is supplied.
+override. Runtime inference has no default episode token, turn-count, or
+wall-clock cutoff. The teacher collector likewise leaves each leaf's wall-clock
+time and response length open unless `--max-seconds` or `--turn-tokens` is
+supplied.
 
 The complete reference bank has SHA-256 prefix `702a03e8`. Applying it to the
 frozen seed-73 IR with `--require-complete` produced
@@ -413,9 +397,3 @@ reference trajectories now target an empty final assistant message: the
 end-of-turn token alone signals successful completion after the runtime checks.
 The native grammar accepts this empty turn; SFT export renders it as only the
 assistant end token. Error and blocker reports retain their diagnostic text.
-
-For legacy student trajectories, run `scripts/normalize_terminal_done.py SRC DST`
-before `scripts/export_sft.py`. The normalizer removes the obsolete tool from
-each turn, changes a standalone terminal target to an empty final turn, and retains
-`done=N` line marks. It refuses mixed batches rather than guessing how to
-split a turn. The source corpus is left intact.

@@ -25,11 +25,11 @@ Read [language and authoring](references/language.md) when creating or restructu
 
 ## Preserve the execution model
 
-- `args` are readable and immutable. Use the persistent typed eval scope for ordinary locals, then stage the completed value with `return_value`. Each callee has private state and its own lexical codebase.
+- `args` are readable and immutable. Use the persistent typed eval scope for ordinary locals. The final eval expression that matches the declared return type completes the function. Each callee has private state and its own lexical codebase.
 - Imported natlang functions and crisp helpers use ordinary awaited positional calls. Values are passed as values; file names and scope variables are never conflated.
-- Host-backed lazy dictionaries are model-facing `Dict<T>` values, not a separate tree type or namespace. Inspect them with `read_value` expressions and pass them as ordinary positional arguments to compatible natlang helpers. Their provider and unobserved contents remain host-owned.
+- Host-backed lazy dictionaries are model-facing `Dict<T>` values, not a separate tree type or namespace. Inspect them with scope expressions and pass them as ordinary positional arguments to compatible natlang helpers. Their provider and unobserved contents remain host-owned.
 - Functions can call checked named helpers through normal imports. Use ordinary loops, array methods, and `Promise.all` for repeated work; crisp helpers own exact operations.
-- `eval` state persists across turns and returns observations without completing the enclosing lambda. Close every substantive instruction line explicitly with `mark_lines`; use `report_blocker` for missing information and `report_error` for invalid work.
+- `eval` runs TypeScript in a persistent scope across turns. An expression matching the declared return type completes the function. Close each substantive instruction line with `mark_lines`; use `report_blocker` for missing information and `report_error` for invalid work.
 - Scope values and files are separate. Authorized agents edit the contents of existing files in the fixed `codebase/` overlay with file tools; they cannot create, delete, or move codebase files. Directory reducers receive `project/`, where normal file creation, editing, moving, and deletion are allowed, and retain selected edits through `commit` or `folder.apply`.
 - Long productive runs are intended. Do not add arbitrary codebase, nesting, local, turn, or token limits to make a test finish. Explicit deployment budgets are a host policy. Conversation rollover is compatible with long runs: preserve progress in program state.
 - Report real blockers and unresolved semantics. Do not return invented success, manufacture receipts, weaken assertions, or turn unknown effect outcomes into failures that are safe to retry.

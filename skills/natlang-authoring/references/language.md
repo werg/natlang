@@ -1,6 +1,6 @@
 # Language and source contracts
 
-This guide describes the scope-eval-v1 model-facing architecture. Resolve implementation differences using the actual loader, runtime, and tests.
+This guide describes natlang's scope-eval model-facing architecture. Resolve implementation details using the actual loader, runtime, and tests.
 
 ## Source layout
 
@@ -31,11 +31,9 @@ uses:
 
 A crisp file uses `/*---` through `---*/` frontmatter followed by a function
 body. Inputs are `args`, and the body returns its value with `return`. The
-model-facing `eval` scope instead exposes arguments and imports as ordinary
-lexical names and reports its final expression as an observation. Exact
-portable crisp bodies omit `engine` and use the canonical `typescript-host`,
-the same host used by model eval. Historical Python sources may explicitly
-name `quickjs-isolated`; new sources should not.
+model-facing `eval` scope exposes arguments and imports as ordinary lexical
+names; its final expression can complete the function. Exact portable crisp
+bodies use the canonical `typescript-host`, the same host used by model eval.
 
 ## Types
 
@@ -61,7 +59,7 @@ returns: Report
 ```
 
 The root is the lexical `files` input. Inspect a branch or leaf with
-`read_value`, for example `files["docs"]["design.md"].text`. A filesystem
+scope evaluation, for example `files["docs"]["design.md"].text`. A filesystem
 adapter supplies the record at the leaf and leaves binary bytes outside model state. The host
 loads each observed directory or leaf at most once for that bound value, so a
 run sees a stable observation even when the backing store later changes.
@@ -97,7 +95,7 @@ File names remain ordinary values:
 const evidence = await workspaceRead(args.state.head, "evidence/observations.json");
 ```
 
-The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_file` for source or data files. Reuse computed values by variable reference. For a host-backed dictionary, pass the dictionary value to a compatible callee and read only the branches or leaves needed for the decision.
+The callee must actually exist with those parameters. Use scope evaluation for scope inspection and `read_file` for source or data files. Reuse computed values by variable reference. For a host-backed dictionary, pass the dictionary value to a compatible callee and read only the branches or leaves needed for the decision.
 
 To change a function, edit the contents of its existing writable codebase source and use the normal import/reload path. The codebase file set is fixed during a run: do not create, delete, or move codebase files. Directory-reducer project folders have the broader file lifecycle when a task needs generated files or structural refactoring. For generated programs, validate and execute the new artifact before claiming it works.
 
@@ -105,7 +103,7 @@ To change a function, edit the contents of its existing writable codebase source
 
 - Repeated work uses ordinary control flow, for example `await Promise.all(items.map(item => assess(item, criterion)))`, or an explicit loop when order matters.
 - A natural-language loop keeps its state in ordinary scope variables and closes each source line with `mark_lines`. Continuation is represented by the persistent scope and line marks, with no separate model command.
-- The interpreter finishes by writing the typed return and ending its tool episode. Chat prose alone is not a return value. `report_blocker` and `report_error` terminate without a completed return.
+- The final eval expression that matches the declared return type completes the function. Chat prose does not set the result. `report_blocker` and `report_error` terminate the episode with a diagnostic.
 
 Completion marks denote executed or skipped program lines. Mark actual work only after success; a range is inclusive, not a pair of isolated line numbers. Avoid using line marks as proof that a semantic result is correct.
 
