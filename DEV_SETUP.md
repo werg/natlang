@@ -12,33 +12,52 @@ needs `uv` and Python 3.12.
 
 Setup installs the pinned TypeScript dependencies and builds the Node and
 browser outputs. Full setup also creates `.venv` and installs the Python project
-with its development extras. It does not maintain an application catalog:
-source applications and programs run directly from paths.
+with its development extras. It also installs `natlang` in `~/.local/bin` as a
+symlink to this checkout's source wrapper. If that directory is missing from
+`PATH`, setup prints the exact export to add to your shell profile.
+
+The install is safe to repeat and will not replace a `natlang` command owned by
+another checkout or package installation. Use a different directory when you
+want commands for multiple checkouts, or omit command installation:
+
+```bash
+scripts/setup_dev.sh --command-dir "$HOME/.local/dev-bin"
+scripts/setup_dev.sh --no-command
+```
+
+To restore only the command without reinstalling dependencies, run
+`scripts/setup_dev.sh --command-only`. `NATLANG_DEV_BIN_DIR` is the environment
+equivalent of `--command-dir`. To disconnect this checkout, remove its symlink
+from the selected command directory, for example with
+`unlink "$HOME/.local/bin/natlang"` for the default. No shell alias is required.
 
 ## Run from source
 
-`scripts/natlang` is the checkout CLI. It rebuilds Node output whenever its
-TypeScript inputs are newer than the compiled CLI.
+The installed `natlang` command points at `scripts/natlang`. That checkout
+wrapper rebuilds Node output whenever its TypeScript inputs are newer than the
+compiled CLI, so source edits need no manual build step. It also keeps packages,
+application state, caches, and traces under this checkout's `.natlang/` directory.
+Commands can be invoked from any working directory; relative application and
+program paths are resolved from that directory.
 
 Run a `.nl`, `.ts`, YAML, or JSON program directly:
 
 ```bash
-scripts/natlang run path/to/main.nl
-scripts/natlang run path/to/main.nl --inputs inputs.json --trace run.jsonl --json
+natlang run path/to/main.nl
+natlang run path/to/main.nl --inputs inputs.json --trace run.jsonl --json
 ```
 
 Run an application by giving its manifest or a directory containing
 `natlang.json`:
 
 ```bash
-scripts/natlang app run path/to/application
-scripts/natlang app run path/to/application/natlang.json
-scripts/natlang app run packages/semantic-terminal.natlang.json
+natlang app run path/to/application
+natlang app run path/to/application/natlang.json
+natlang app run packages/semantic-terminal.natlang.json
 ```
 
-`scripts/natlang-app PATH` is a short spelling of `scripts/natlang app run
-PATH`. There is no fixed or generated list of development applications. A
-manifest beside its source normally resolves from its own directory. A
+There is no fixed or generated list of development applications. A manifest
+beside its source normally resolves from its own directory. A
 manifest kept separately, such as those in this repository's `packages/`
 directory, searches parent directories for the source root. `--root DIR`
 overrides that inference.
@@ -47,9 +66,9 @@ Arguments before `--` belong to natlang. Arguments after it belong to the
 application:
 
 ```bash
-scripts/natlang-app packages/evidence-console.natlang.json
-scripts/natlang-app packages/notebook-console.natlang.json
-scripts/natlang-app packages/log-console.natlang.json
+natlang app run packages/evidence-console.natlang.json
+natlang app run packages/notebook-console.natlang.json
+natlang app run packages/log-console.natlang.json
 ```
 
 These open with useful starter state and describe possible next actions. Use
@@ -60,15 +79,15 @@ The corresponding `--documents`, `--notebook`, and piped JSONL forms remain
 available for automation and direct imports:
 
 ```bash
-scripts/natlang-app packages/evidence-console.natlang.json -- --documents evidence.json
-scripts/natlang-app packages/notebook-console.natlang.json -- --notebook notebook.json
-cat logs.jsonl | scripts/natlang-app packages/log-console.natlang.json --plain
+natlang app run packages/evidence-console.natlang.json -- --documents evidence.json
+natlang app run packages/notebook-console.natlang.json -- --notebook notebook.json
+cat logs.jsonl | natlang app run packages/log-console.natlang.json --plain
 ```
 
 Inspect a local application without installing it:
 
 ```bash
-scripts/natlang app doctor packages/semantic-terminal.natlang.json --json
+natlang app doctor packages/semantic-terminal.natlang.json --json
 ```
 
 ## Model lifecycle
@@ -87,7 +106,7 @@ The first semantic model turn:
 Crisp only programs never start or download a model. `llama-server` must be on
 `PATH`; the official llama.cpp packages provide it (`brew install llama.cpp`,
 `conda install -c conda-forge llama.cpp`, or another platform package). Point
-at another binary with `NATLANG_LLAMA_SERVER`. `scripts/natlang doctor --json`
+at another binary with `NATLANG_LLAMA_SERVER`. `natlang doctor --json`
 reports whether the managed local runtime is ready.
 
 Useful local overrides are:

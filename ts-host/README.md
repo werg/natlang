@@ -24,15 +24,16 @@ build and development package store manually:
 
 ```bash
 scripts/setup_dev.sh --node-only
-scripts/natlang --help
-scripts/natlang run path/to/program.nl
-scripts/natlang-app packages/semantic-terminal.natlang.json
+natlang --help
+natlang run path/to/program.nl
+natlang app run packages/semantic-terminal.natlang.json
 ```
 
-Run those commands from the repository root. `scripts/natlang` recompiles the
-Node output when TypeScript inputs change. `scripts/natlang-app` accepts any
-application manifest or directory; it has no built in application registry.
-The complete workflow is in [DEV_SETUP.md](../DEV_SETUP.md).
+Setup installs `natlang` in the user command directory. It can be run from any
+working directory and recompiles Node output when TypeScript inputs change.
+`natlang app run` accepts any application manifest or directory; it has no
+built in application registry. The complete workflow, including PATH and
+alternate command directory setup, is in [DEV_SETUP.md](../DEV_SETUP.md).
 
 From this repository:
 

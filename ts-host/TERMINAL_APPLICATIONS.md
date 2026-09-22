@@ -134,11 +134,13 @@ natlang run @natlang/semantic-terminal@0.2.0#terminal --workspace .
 See [native packages and executables](../NATIVE_PACKAGES.md) for manifests,
 model profiles, store semantics, and the executable adapter contract.
 
-For direct checkout development, use the path launcher. It rebuilds changed
-TypeScript and lazily manages the default local model:
+For direct checkout development, run the setup described in
+[Development setup](../DEV_SETUP.md), then give the installed command an
+application path. It rebuilds changed TypeScript and lazily manages the default
+local model:
 
 ```bash
-scripts/natlang-app packages/semantic-terminal.natlang.json
+natlang app run packages/semantic-terminal.natlang.json
 ```
 
 `NATLANG_SERVER`, `NATLANG_MODEL`, and optional `NATLANG_API_KEY` select an
@@ -150,9 +152,9 @@ trajectory or token limits; deployment options can supply explicit budgets.
 The other included applications use the same path launcher:
 
 ```bash
-scripts/natlang-app packages/evidence-console.natlang.json
-scripts/natlang-app packages/notebook-console.natlang.json
-scripts/natlang-app packages/log-console.natlang.json
+natlang app run packages/evidence-console.natlang.json
+natlang app run packages/notebook-console.natlang.json
+natlang app run packages/log-console.natlang.json
 ```
 
 Each application starts with guided content. `/help` lists shared and app
@@ -161,9 +163,9 @@ commands. Evidence uses `/sources` and `/load PATH`; notebook uses `/cells` and
 `/recipes`. Optional startup imports retain the original formats:
 
 ```bash
-scripts/natlang-app packages/evidence-console.natlang.json -- --documents evidence.json
-scripts/natlang-app packages/notebook-console.natlang.json -- --notebook notebook.json
-cat logs.jsonl | scripts/natlang-app packages/log-console.natlang.json --plain
+natlang app run packages/evidence-console.natlang.json -- --documents evidence.json
+natlang app run packages/notebook-console.natlang.json -- --notebook notebook.json
+cat logs.jsonl | natlang app run packages/log-console.natlang.json --plain
 ```
 
 `evidence.json` is an array of `{id,text}` documents. `notebook.json` contains
