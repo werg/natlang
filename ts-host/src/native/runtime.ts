@@ -1130,9 +1130,14 @@ export class NativeSession {
         for (const [name, raw] of Object.entries(definitions)) {
           const definition = raw as Record<string, unknown>, extension = Object.hasOwn(definition, 'code') ? '.ts' : '.nl';
           const key = [...prefix, name].join('/'), path = [...prefix, `${name}${extension}`].join('/');
-          this.lam.codebasePaths[key] = path; files[path] = this.editableDefinitionSource(definition);
+          const nested = definition.codebase as Record<string, unknown> | undefined;
+          const imports = Object.entries(nested ?? {}).map(([childName, childRaw]) => {
+            const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
+            return `import { ${childName} } from "./${name}/${childName}${childExtension}";`;
+          });
+          this.lam.codebasePaths[key] = path;
+          files[path] = `${imports.length ? `${imports.join('\n')}\n\n` : ''}${this.editableDefinitionSource(definition)}`;
           if (!ancestors.has(definition)) {
-            const nested = definition.codebase as Record<string, unknown> | undefined;
             if (nested) add(nested, [...prefix, name], new Set([...ancestors, definition]));
           }
         }
@@ -1150,9 +1155,17 @@ export class NativeSession {
     let previous = this.lam.codebase[parts[0]!] as Record<string, unknown>;
     for (const name of parts.slice(1)) previous = (previous.codebase as Record<string, unknown>)[name] as Record<string, unknown>;
     const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
-    const isCode = source.trimStart().startsWith('/*---');
+    let moduleSource = source;
+    const importLine = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["'][^"']+["'];?\s*\r?\n/;
+    while (moduleSource.startsWith('import')) {
+      const imported = importLine.exec(moduleSource);
+      if (!imported) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'one named static import per line' }]);
+      moduleSource = moduleSource.slice(imported[0].length);
+    }
+    moduleSource = moduleSource.replace(/^\r?\n/, '');
+    const isCode = moduleSource.trimStart().startsWith('/*---');
     const match = (isCode ? /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/ :
-      /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/).exec(source);
+      /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/).exec(moduleSource);
     if (!match) throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
     const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
     if (typeof meta.returns !== 'string') throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'returns' }]);

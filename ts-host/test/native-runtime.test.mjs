@@ -102,6 +102,8 @@ test('native codebase folder exposes and live edits nested lexical sources', asy
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
   const listed = (await session.applyAsync('list_files', {})).value;
   assert.deepEqual(listed.map(item => item.path), ['codebase/outer.nl', 'codebase/outer/inner.ts']);
+  assert.match((await session.applyAsync('read_file', { path: 'codebase/outer.nl' })).value,
+    /import \{ inner \} from "\.\/outer\/inner\.ts";/);
   assert.equal((await session.applyAsync('edit_file', { path: 'codebase/outer/inner.ts', find: 'return "old";',
     replace_with: 'return "new";' })).kind, 'ok');
   assert.equal(lam.codebase.outer.codebase.inner.code, 'return "new";\n');

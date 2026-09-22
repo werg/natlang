@@ -130,6 +130,8 @@ def test_codebase_folder_exposes_and_live_edits_nested_lexical_sources():
     active = Session(Runtime(lambda lam: None), root, TypeEnv())
     listed = active.apply("list_files", {}).value
     assert [item["path"] for item in listed] == ["codebase/outer.nl", "codebase/outer/inner.ts"]
+    assert 'import { inner } from "./outer/inner.ts";' in active.apply(
+        "read_file", {"path": "codebase/outer.nl"}).value
     edited = active.apply("edit_file", {"path": "codebase/outer/inner.ts", "find": 'return "old";',
                                          "replace_with": 'return "new";'})
     assert edited.kind == "ok"

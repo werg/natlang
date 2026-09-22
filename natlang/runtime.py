@@ -1089,7 +1089,11 @@ class Session:
                     ext = ".ts" if fn.kind == "code" else ".nl"
                     path = "/".join((*prefix, name + ext))
                     paths[key] = path
-                    files[path] = fn.to_source()
+                    imports = []
+                    for child_name, child in fn.codebase.items():
+                        child_ext = ".ts" if child.kind == "code" else ".nl"
+                        imports.append(f'import {{ {child_name} }} from "./{name}/{child_name}{child_ext}";')
+                    files[path] = (("\n".join(imports) + "\n\n") if imports else "") + fn.to_source()
                     # A recursive import still gets a visible source file, but
                     # do not expand the same lexical definition forever.
                     if id(fn) not in ancestors:
