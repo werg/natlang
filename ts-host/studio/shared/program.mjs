@@ -12,23 +12,20 @@ export async function loadProgram(spec, read = path => fetch(path).then(response
 /** Explicit controls only: this exercises the interpreter, never imitates semantic inference. */
 export function fixtureTurn(spec, getState, getEvent) {
     return turn => {
-        if (turn.messages.filter(row => row.role === 'assistant').length > 1)
-            return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
+        const lines = [...prompt.matchAll(/^\s*(\d+) \[ \]/gm)].map(match => Number(match[1]));
+        const mark = ['mark_lines', { start: 1, end: Math.max(1, ...lines) }];
+        const evaluate = code => ({ calls: [['eval', { code }], mark], completion_tokens: 1 });
         if (prompt.includes(`Drive the ${spec.title} interaction to completion.`))
-            return { calls: [
-                    ['call', { function: 'choose', to: 'let/decision', inputs: { state: 'args/state', event: 'args/event' } }],
-                    ['call', { function: 'apply', to: 'let/step', inputs: { state: 'args/state', event: 'args/event', decision: 'let/decision' } }],
-                    ['call', { function: 'finish', to: 'return', inputs: { step: 'let/step' } }],
-                ], completion_tokens: 1 };
+            return evaluate('const decision = await choose(state, event); const step = await apply(state, event, decision); await finish(step)');
         if (prompt.includes(spec.instructions)) {
             const event = getEvent();
             if (event.kind === 'command')
                 throw new Error('Free-form commands require a loaded model. Use the explicit controls in fixture mode.');
-            return { calls: [['write', { path: 'return', value: controlDecision(spec,event) }]], completion_tokens: 1 };
+            return evaluate(`(${JSON.stringify(controlDecision(spec,event))})`);
         }
         const state = getState();
-        return { calls: [['write', { path: 'return', value: { heading: spec.title,
-                            summary: state.notice, focus: spec.panelIds, suggestions: [] } }]], completion_tokens: 1 };
+        return evaluate(`(${JSON.stringify({ heading: spec.title,
+            summary: state.notice, focus: spec.panelIds, suggestions: [] })})`);
     };
 }
