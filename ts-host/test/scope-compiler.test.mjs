@@ -30,9 +30,11 @@ test('scope compiler injects async checked-helper placeholders with ordinary cal
   });
   const calls = [];
   const run = load(compiled);
-  assert.deepEqual(await run({ value: 7 }, {}, { double: async value => { calls.push(value); return value * 2; } }),
+  assert.deepEqual(await run({ value: 7 }, {}, async (name, args) => {
+    calls.push([name, args]); return args[0] * 2;
+  }),
     { result: 14, bindings: { answer: 14 } });
-  assert.deepEqual(calls, [7]);
+  assert.deepEqual(calls, [['double', [7]]]);
 });
 
 test('scope compiler preserves explicit return statements', async () => {

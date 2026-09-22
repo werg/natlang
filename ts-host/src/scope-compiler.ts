@@ -8,6 +8,7 @@ export type ScopeBinding = {
   kind: 'const' | 'let' | 'var' | 'function';
   mutable: boolean;
   annotation?: string;
+  initializer?: string;
   start: number;
   end: number;
 };
@@ -30,7 +31,7 @@ export type ScopeCompileOptions = {
   inputBindings?: readonly string[];
   /** Existing persistent locals copied into the transaction before execution. */
   localBindings?: readonly ScopeExistingBinding[];
-  /** Checked async callables supplied by the runtime in __helpers. */
+  /** Checked async callables generated over the runtime's host dispatcher. */
   helperBindings?: readonly string[];
 };
 
@@ -45,12 +46,15 @@ export type ScopeCompileResult = {
   diagnostics: ScopeCompileDiagnostic[];
   /** TypeScript body after applying final-expression REPL semantics. */
   body?: string;
-  /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }. */
+  /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
+   * Its third argument is a host dispatcher `(name, positionalArgs) => value | Promise<value>`;
+   * helper function objects never enter the portable scope snapshot.
+   */
   program?: string;
 };
 
 const ENTRYPOINT = '__natlang_scope' as const;
-const PREFIX = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, __locals: Readonly<Record<string, unknown>>, __helpers: Readonly<Record<string, (...args: unknown[]) => unknown>>) {\n`;
+const PREFIX = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, __locals: Readonly<Record<string, unknown>>, __invoke: (name: string, args: unknown[]) => unknown) {\n`;
 const SUFFIX = '\n}\n';
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FORBIDDEN_AMBIENTS = new Set([
@@ -119,6 +123,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const location = file.getLineAndCharacterOfPosition(Math.max(PREFIX.length, absolute));
     return { start: rawStart, end: rawEnd, line: Math.max(1, location.line), column: location.character + 1 };
   };
+  const rawSpan = (start: number, end = start): ScopeSourceSpan => {
+    const location = file.getLineAndCharacterOfPosition(PREFIX.length + start);
+    return { start, end, line: Math.max(1, location.line), column: location.character + 1 };
+  };
   const add = (code: ScopeCompileDiagnostic['code'], message: string, node: ts.Node): void => {
     diagnostics.push({ code, message, ...span(node) });
   };
@@ -139,6 +147,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(declaration.type ? { annotation: declaration.type.getText(file) } : {}),
+          ...(declaration.initializer ? { initializer: declaration.initializer.getText(file) } : {}),
           start: span(name).start, end: span(name).end });
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {
@@ -162,11 +171,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const binding of bindings) {
     if (topLevelNames.has(binding.name))
       diagnostics.push({ code: 'invalid-binding', message: `Top-level binding ${JSON.stringify(binding.name)} is declared more than once.`,
-        start: binding.start, end: binding.end, line: 1, column: 1 });
+        ...rawSpan(binding.start, binding.end) });
     topLevelNames.add(binding.name);
     if (binding.kind === 'var')
       diagnostics.push({ code: 'forbidden-control', message: 'Persistent eval bindings must use const or let, not var.',
-        start: binding.start, end: binding.end, line: 1, column: 1 });
+        ...rawSpan(binding.start, binding.end) });
   }
 
   const visit = (node: ts.Node): void => {
@@ -209,7 +218,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const seen = new Set<string>();
   for (const name of injected) {
     if (!IDENTIFIER.test(name) || name === ENTRYPOINT || name === '__inputs' || name === '__locals' ||
-        name === '__helpers' || name === '__natlang_finish') {
+        name === '__invoke' || name === '__natlang_finish') {
       diagnostics.push({ code: 'invalid-binding', message: `Invalid injected binding ${JSON.stringify(name)}.`,
         start: 0, end: 0, line: 1, column: 1 });
     } else if (seen.has(name)) {
@@ -220,9 +229,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   }
   const declared = new Set(bindings.map(binding => binding.name));
   for (const name of injected) if (declared.has(name))
-    diagnostics.push({ code: 'invalid-binding', message: `Top-level binding ${JSON.stringify(name)} redeclares an injected binding.`,
-      start: bindings.find(binding => binding.name === name)?.start ?? 0,
-      end: bindings.find(binding => binding.name === name)?.end ?? 0, line: 1, column: 1 });
+    {
+      const binding = bindings.find(item => item.name === name)!;
+      diagnostics.push({ code: 'invalid-binding', message: `Top-level binding ${JSON.stringify(name)} redeclares an injected binding.`,
+        ...rawSpan(binding.start, binding.end) });
+    }
 
   const statements = [...fn.body.statements];
   let finalExpression: ScopeSourceSpan | undefined;
@@ -263,12 +274,12 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const prologue = [inputNames.length ? `const { ${inputNames.join(', ')} } = __inputs;` : '',
     ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
-    helperNames.length ? `const { ${helperNames.join(', ')} } = __helpers;` : '',
+    ...helperNames.map(name => `const ${name} = (...args: unknown[]) => __invoke(${JSON.stringify(name)}, args);`),
     `const __natlang_finish = (result: unknown) => ({ result, bindings: ${capture} });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +
     `__locals: Readonly<Record<string, unknown>>, ` +
-    `__helpers: Readonly<Record<string, (...args: unknown[]) => unknown>>) {\n${prologue}\n${body}\n` +
+    `__invoke: (name: string, args: unknown[]) => unknown) {\n${prologue}\n${body}\n` +
     `return __natlang_finish(null);\n}\n`;
   const emitted = ts.transpileModule(typescript, { fileName: 'natlang-scope.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, isolatedModules: true,
