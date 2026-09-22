@@ -121,7 +121,7 @@ async function runCase(frozen, options, bindings) {
   let app;
   app = new bindings.BrowserNatlangApplication({ client, source: await sourceFor(spec),
     initialState: frozen.initial_state, seedRoot: options.seed,
-    runOptions: { model: { tool_schema: 'tools-v4' } },
+    runOptions: { model: { tool_schema: 'scope-eval-v1' } },
     modelTurn: teacherDriver({ server: options.server, exchanges }) });
   try {
     await app.start();
@@ -131,7 +131,7 @@ async function runCase(frozen, options, bindings) {
     const accepted = isDeepStrictEqual(actual.state, frozen.expected.state) && actual.ok === frozen.expected.ok;
     return { schema: 'natlang.studio_teacher_trajectory/1', id: `teacher:${frozen.id}:${options.seed}`,
       case: frozen, provenance: { model: options.model, seed: options.seed,
-        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'tools-v4',
+        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'scope-eval-v1',
         tool_surface_sha256: options.toolSurfaceRevision },
       outcome: { accepted, expected: frozen.expected, actual },
       runs: { reducer: transition.reducerRun, view: transition.viewRun }, exchanges };
@@ -148,7 +148,7 @@ async function validResult(path, frozen, options) {
   try { const row = JSON.parse(await readFile(path, 'utf8'));
     return row.case.id === frozen.id && row.case.source_revision === frozen.source_revision &&
       row.provenance.model === options.model && row.provenance.seed === options.seed &&
-      row.provenance.tool_schema === 'tools-v4' &&
+      row.provenance.tool_schema === 'scope-eval-v1' &&
       row.provenance.tool_surface_sha256 === options.toolSurfaceRevision;
   } catch { return false; }
 }
@@ -186,7 +186,7 @@ async function main() {
   }
   await writeAtomic(resolve(jobs, 'manifest.json'), { schema: 'natlang.studio_teacher_batch/1',
     cases_sha256: digest(await readFile(casesPath)), model: options.model, seed: options.seed,
-    tool_schema: 'tools-v4', tool_surface_sha256: options.toolSurfaceRevision,
+    tool_schema: 'scope-eval-v1', tool_surface_sha256: options.toolSurfaceRevision,
     completed: cases.length - missing.length, missing });
   if (missing.length) process.exitCode = 2;
 }

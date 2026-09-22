@@ -30,7 +30,10 @@ teacher text and exposed reasoning. Offered function schemas are normalized to
 `{name, description, parameters}`. Assistant calls retain their source tool name
 and arguments, and each executed call links to the exact ordered action-ledger
 event, including its trace sequence, result text, outcome, and diagnostics.
-Materialization fails closed if an accepted call cannot be linked to the ledger.
+Unexecuted trailing calls and failed proposals remain visible in semantic IR but
+receive `training_admission.approved: false`; the SFT exporter skips them. This
+preserves teacher choices without teaching a rejected action as positive gold.
+Materialization fails closed if action-ledger events remain unlinked.
 Rows without `outcome.accepted === true` are counted and skipped.
 
 Each decision copies the messages from its captured native request and normalizes

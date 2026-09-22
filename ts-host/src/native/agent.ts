@@ -679,7 +679,8 @@ export class NativeToolAgent {
     const locals = Object.entries(lam.let).map(([name, value]) =>
       `  ${name}: ${formatType(lam.letTypes[name]!)} = ${previewValue(value)}`);
     return ['Execute the natural-language function line by line.', '', 'Program:', program, '', 'Scope:',
-      ' inputs (immutable)', ...(inputs.length ? inputs : ['  (none)']),
+      ' parameters (immutable lexical bindings; there is no inputs or args object)',
+      ...(inputs.length ? inputs : ['  (none)']),
       ' imports (immutable live bindings)', ...(imports.length ? imports : ['  (none)']),
       ' locals', ...(locals.length ? locals : ['  (none)']),
       ` result: ${formatType(lam.type.returns)} — ${lam.return === MISSING ? 'not staged' : 'staged'}`].join('\n');

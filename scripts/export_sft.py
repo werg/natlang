@@ -264,6 +264,8 @@ def main():
         terminals = 0
         for line in lines():
             s = json.loads(line)
+            if s.get("training_admission", {}).get("approved") is False:
+                continue
             if (s.get("provisional_gold") or s.get("template")) and not a.include_template:
                 continue
             if eligible % a.every:

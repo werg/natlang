@@ -135,13 +135,15 @@ export function materializeNativeRows(input: unknown[]): {
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
         if (phase !== 'action') throw new Error(`${row.id}: checkpoint decision unexpectedly contains a tool call`);
         const event = ledger[actionIndex];
-        if (!event || !callMatches(normalized, event))
-          throw new Error(`${row.id}: cannot link decision ${index} call ${callIndex} to the next action outcome`);
-        normalized.outcome = { event_index: actionIndex, trace_seq: event.seq ?? null,
-          name: event.name, arguments: structuredClone(event.arguments ?? {}),
-          status: event.outcome ?? null, result: event.result_text ?? null,
-          diagnostics: structuredClone(event.diagnostics ?? []) };
-        actionIndex++;
+        if (event && callMatches(normalized, event)) {
+          normalized.outcome = { event_index: actionIndex, trace_seq: event.seq ?? null,
+            name: event.name, arguments: structuredClone(event.arguments ?? {}),
+            status: event.outcome ?? null, result: event.result_text ?? null,
+            diagnostics: structuredClone(event.diagnostics ?? []) };
+          actionIndex++;
+        } else normalized.outcome = { event_index: null, trace_seq: null,
+          name: normalized.source_tool, arguments: structuredClone(normalized.arguments),
+          status: 'not_executed', result: null, diagnostics: [] };
         return normalized;
       }) : [];
 
@@ -152,6 +154,9 @@ export function materializeNativeRows(input: unknown[]): {
       const target = trainingTarget(assistant, calls, index);
       const skill = phase === 'checkpoint' ? 'checkpoint' :
         (calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply');
+      const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed']);
+      const decisionApproved = calls.every(call =>
+        !badStatuses.has(String(record(call.outcome, 'call outcome').status)));
       turns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
@@ -173,7 +178,8 @@ export function materializeNativeRows(input: unknown[]): {
         teacher_reasoning: assistant.reasoning ?? null,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: nativeRowDigest(row),
-        training_admission: { kind: 'exact-native-runtime-oracle', approved: true },
+        training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
+          ...(decisionApproved ? {} : { reason: 'decision contains a failed or unexecuted proposal' }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: nativeRowDigest(row.outcome) },
         decision: { index, segment, phase,
@@ -181,6 +187,7 @@ export function materializeNativeRows(input: unknown[]): {
           tool_schemas: offered,
           assistant: { content: assistant.content ?? '', reasoning: assistant.reasoning ?? null,
             calls, checkpoint_note: phase === 'checkpoint' ? assistant.content ?? '' : null },
+          training_approved: decisionApproved,
           source_raw_response_sha256: source.raw_response_sha256 ?? null,
           source_tools_offered: structuredClone(source.tools_offered ?? []) },
         outcome: structuredClone(row.outcome),

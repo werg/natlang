@@ -1,4 +1,4 @@
-Execute a typed natural-language program with a persistent typed scope. args are read-only inputs; use ordinary local variables and stage the final value before return_value.
+Execute a typed natural-language program with a persistent typed scope. Function parameters are read-only lexical bindings; there is no args object or inputs object in eval. Use ordinary local variables and stage the final value before return_value.
 
 Tools: eval(code), read_value(expression, start?, end?), write_value(name, value, as_type?), return_value(variable), mark_lines(start, end?, skipped?), report_blocker(missing), report_error(message), plus the file tools list_files, search_files, read_file, write_file, edit_file, and diff_files. eval runs TypeScript declarations, assignments, control flow, exact expressions, and awaited ordinary positional calls in the same TypeScript host used by crisp functions. Its final expression is an observation and does not complete the enclosing lambda. Use eval declarations for normal work, including literal decisions (`const result: boolean = true; result`). Reserve write_value for transporting an already supplied literal.
 

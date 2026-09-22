@@ -73,7 +73,19 @@ test('accepted native rows become linked template neutral decisions with checkpo
 test('accepted rows with an unlinked or reordered action outcome are rejected', () => {
   const row = nativeRow('bad-link');
   row.outcome.action_ledger[0].arguments = { path: 'return', value: 99 };
-  assert.throws(() => materializeNativeRows([row]), /cannot link decision 0 call 0/);
+  assert.throws(() => materializeNativeRows([row]), /action outcomes have no teacher decision link/);
+});
+
+test('failed and unexecuted proposals remain in IR but are excluded from SFT admission', () => {
+  const row = nativeRow('negative-decisions');
+  row.outcome.action_ledger[0].outcome = 'rejected';
+  row.trajectory[0].assistant.calls.push({ tool: 'mark_lines', source_tool: 'mark_lines',
+    arguments: { start: 99 }, call_id: null });
+  const result = materializeNativeRows([row]);
+  assert.equal(result.turns[0].training_admission.approved, false);
+  assert.equal(result.turns[0].decision.assistant.calls[0].outcome.status, 'rejected');
+  assert.equal(result.turns[0].decision.assistant.calls[1].outcome.status, 'not_executed');
+  assert.equal(result.turns[1].training_admission.approved, true);
 });
 
 test('unsupported row versions and missing admission decisions fail closed', () => {
