@@ -1583,6 +1583,17 @@ class Session:
                 if condition is None or bool(self._eval_scope_expression(condition)):
                     return self._scope_eval(body) if body.strip() else Result("ok", "null", value=None)
             return Result("ok", "null", value=None)
+        collected = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*\[\s*\]\s*;\s*"
+            r"for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+(.+?)\s*\)\s*\{\s*"
+            r"(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\((.*?)\)\s*;\s*"
+            r"\1\.push\(\s*\5\s*\)\s*;?\s*\}\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        if collected and collected.group(6) in self.lam.codebase:
+            local, annotation, item, items, _, function, raw_args = collected.groups()
+            declared = f"const {local}" + (f": {annotation.strip()}" if annotation else "")
+            return self._scope_eval(
+                f"{declared} = await Promise.all(({items.strip()}).map({item} => "
+                f"{function}({raw_args}))); {local}")
         retried = re.fullmatch(
             r"\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
         if retried:

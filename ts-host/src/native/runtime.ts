@@ -1432,6 +1432,12 @@ export class NativeSession {
       if (error instanceof Reject) return rejected(error);
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
+    const collected = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*\[\s*\]\s*;\s*for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+([\s\S]+?)\s*\)\s*\{\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*;\s*\1\.push\(\s*\5\s*\)\s*;?\s*\}\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (collected && Object.hasOwn(this.lam.codebase, collected[6]!)) {
+      const declared = `const ${collected[1]}${collected[2] ? `: ${collected[2]!.trim()}` : ''}`;
+      return this.scopeEval(`${declared} = await Promise.all((${collected[4]!.trim()}).map(${collected[3]} => ` +
+        `${collected[6]}(${collected[7]}))); ${collected[1]}`);
+    }
     const retried = /^\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/s.exec(code);
     if (retried) try {
       const local = retried[1]!, ref = this.resolve(`let/${local}`), node = ref.get();

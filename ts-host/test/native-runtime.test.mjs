@@ -64,6 +64,10 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   const mapped = await session.applyAsync('eval', {
     code: 'const counts = await Promise.all(flags.map(flag => as_num(flag)));\ncounts' });
   assert.equal(mapped.kind, 'ok'); assert.deepEqual(mapped.value, [1, 0, 1]);
+  const loopMapped = await session.applyAsync('eval', { code:
+    'const loopCounts = [];\nfor (const flag of flags) {\n' +
+    '  const count = await as_num(flag);\n  loopCounts.push(count);\n}\nloopCounts' });
+  assert.equal(loopMapped.kind, 'ok'); assert.deepEqual(loopMapped.value, [1, 0, 1]);
   const sequenced = await session.applyAsync('eval', { code:
     'const again: Num[] = flags.map(flag => as_num(flag));\n' +
     'const finalCount: Num = await count_true(flags);\nfinalCount' });

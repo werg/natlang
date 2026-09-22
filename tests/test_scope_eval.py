@@ -148,6 +148,18 @@ def test_scope_eval_lowers_promise_all_map_to_checked_child_calls():
     assert root.let["counts"] == [1, 0, 1]
 
 
+def test_scope_eval_lowers_ordinary_for_of_collection_to_checked_child_calls():
+    root, active = session()
+    result = active.apply("eval", {"code":
+        "const counts = [];\n"
+        "for (const flag of flags) {\n"
+        "  const count = await as_num(flag);\n"
+        "  counts.push(count);\n"
+        "}\ncounts"})
+    assert result.kind == "ok" and result.value == [1, 0, 1]
+    assert root.let["counts"] == [1, 0, 1]
+
+
 def test_scope_eval_sequences_multiple_imported_calls_in_one_snippet():
     root, active = session()
     result = active.apply("eval", {"code":
