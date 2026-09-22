@@ -6,7 +6,9 @@ cd "$ROOT"
 SERVER="${TEACHER_SERVER:-http://127.0.0.1:8081}"
 MODEL="${TEACHER_MODEL:-Ternary-Bonsai-2-27B-PTQ1_0}"
 SEED="${TEACHER_SEED:-909}"
-WORKERS="${TEACHER_WORKERS:-2}"
+# Bonsai already saturates this 8 GiB GPU with one decode. Two full agent
+# contexts exceed the server's 5 GiB host-memory cgroup on complex programs.
+WORKERS="${TEACHER_WORKERS:-1}"
 SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-12}"
 SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-24}"
 SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
