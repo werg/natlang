@@ -160,6 +160,16 @@ def test_scope_eval_lowers_ordinary_for_of_collection_to_checked_child_calls():
     assert root.let["counts"] == [1, 0, 1]
 
 
+def test_scope_eval_lowers_plain_map_and_repairs_redundant_callback_await():
+    for code in (
+        "const counts = flags.map(flag => as_num(flag)); counts",
+        "const counts = flags.map(flag => await as_num(flag)); counts",
+    ):
+        root, active = session()
+        result = active.apply("eval", {"code": code})
+        assert result.kind == "ok" and result.value == [1, 0, 1]
+
+
 def test_scope_eval_sequences_multiple_imported_calls_in_one_snippet():
     root, active = session()
     result = active.apply("eval", {"code":

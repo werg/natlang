@@ -1594,6 +1594,17 @@ class Session:
             return self._scope_eval(
                 f"{declared} = await Promise.all(({items.strip()}).map({item} => "
                 f"{function}({raw_args}))); {local}")
+        ordinary_mapped = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*"
+            r"(.+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*"
+            r"(?:await\s+)?([A-Za-z_$][\w$]*)\s*\((.*?)\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        if (ordinary_mapped and "Promise.all" not in code and
+                ordinary_mapped.group(5) in self.lam.codebase):
+            local, annotation, items, item, function, raw_args = ordinary_mapped.groups()
+            declared = f"const {local}" + (f": {annotation.strip()}" if annotation else "")
+            return self._scope_eval(
+                f"{declared} = await Promise.all(({items.strip()}).map({item} => "
+                f"{function}({raw_args}))); {local}")
         retried = re.fullmatch(
             r"\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
         if retried:

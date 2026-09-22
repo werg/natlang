@@ -1438,6 +1438,12 @@ export class NativeSession {
       return this.scopeEval(`${declared} = await Promise.all((${collected[4]!.trim()}).map(${collected[3]} => ` +
         `${collected[6]}(${collected[7]}))); ${collected[1]}`);
     }
+    const ordinaryMapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (ordinaryMapped && !code.includes('Promise.all') && Object.hasOwn(this.lam.codebase, ordinaryMapped[5]!)) {
+      const declared = `const ${ordinaryMapped[1]}${ordinaryMapped[2] ? `: ${ordinaryMapped[2]!.trim()}` : ''}`;
+      return this.scopeEval(`${declared} = await Promise.all((${ordinaryMapped[3]!.trim()}).map(${ordinaryMapped[4]} => ` +
+        `${ordinaryMapped[5]}(${ordinaryMapped[6]}))); ${ordinaryMapped[1]}`);
+    }
     const retried = /^\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/s.exec(code);
     if (retried) try {
       const local = retried[1]!, ref = this.resolve(`let/${local}`), node = ref.get();
