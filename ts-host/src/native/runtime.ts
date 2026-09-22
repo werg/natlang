@@ -5,6 +5,7 @@ import { TypeEnv, fitsType, formatType, parseType, resultType, type Type } from 
 import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isPending, loadProgram,
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
+import { formatFileTreeRead, type ReadonlyFileTree } from './files.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -15,6 +16,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; agent?: Nativ
   capabilities?: Record<string, (args: unknown[]) => unknown>; maxEpisodes?: number;
   maxDepth?: number; maxActions?: number; maxToolCalls?: number;
   runId?: string; stream?: NativeStream; signal?: AbortSignal; timeoutMs?: number;
+  fileTree?: ReadonlyFileTree;
   sourceRevision?: string; parentCallId?: string;
   sharedEpisodeBudget?: { limit?: number; used: number };
   mapWorkers?: number; parallelModelSafe?: boolean;
@@ -117,6 +119,7 @@ export class NativeRuntime {
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
   readonly capabilities: Record<string, (args: unknown[]) => unknown>;
+  readonly fileTree?: ReadonlyFileTree;
   readonly episodeBudget: { limit?: number; used: number };
   private releaseEffect: () => void;
   private stack: string[] = [];
@@ -158,6 +161,7 @@ export class NativeRuntime {
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects' });
     this.agent = options.agent;
     this.capabilities = options.capabilities ?? {};
+    this.fileTree = options.fileTree;
     this.environment = options.environment;
     this.releaseEffect = this.environment.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
     this.stream = options.stream;
@@ -449,6 +453,7 @@ export class NativeRuntime {
           maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls,
           seedPolicy: this.seedPolicy, sharedEpisodeBudget: this.episodeBudget,
           runId: this.options.runId, capabilities: {}, signal,
+          fileTree: this.fileTree,
           timeoutMs: this.deadline === undefined ? undefined : Math.max(1, this.deadline - Date.now()) });
         child.depth = this.depth; child.stack = [...this.stack];
         try {
@@ -725,6 +730,17 @@ export class NativeSession {
       }
       if (name === 'read') {
         const path = String(args.path ?? '');
+        if (path === 'files' || path.startsWith('files/')) {
+          if (this.path || !this.runtime.fileTree) throw new Reject([{ path, code: 'no-such-path' }]);
+          let result;
+          try { result = this.runtime.fileTree.read(path === 'files' ? '' : path.slice(6),
+            args.start === undefined ? undefined : typeof args.start === 'number' ? args.start : Number.NaN,
+            args.end === undefined ? undefined : typeof args.end === 'number' ? args.end : Number.NaN); }
+          catch (error) { throw new Reject([{ path, code: 'no-such-path',
+            expected: error instanceof Error ? error.message : String(error) }]); }
+          return { kind: 'ok', text: formatFileTreeRead(result),
+            ...(result.kind === 'text' ? { value: result.text } : {}) };
+        }
         const meta = /^(.+)@(status|note|effects|problems|origin|dist)$/.exec(path);
         if (meta) {
           const ref = this.resolve(meta[1]!); const value = ref.get();

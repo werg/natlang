@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NativeRuntime } from '../dist/index.js';
+import { MemoryFileTree, NativeRuntime } from '../dist/index.js';
 import { TypeEnv } from '../dist/index.js';
 import { buildPending } from '../dist/native/values.js';
 import { NativeSession } from '../dist/native/runtime.js';
@@ -792,4 +792,28 @@ test('native ranged reads match Python line and item numbering', { skip: !python
   assert.deepEqual(calls.map(([name, args]) => {
     const result = session.apply(name, args); return { kind: result.kind, text: result.text };
   }), expected);
+});
+
+test('host file trees have the same observable surface in Python and TypeScript', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{}, Text>', instructions: 'Inspect the project.' } };
+  const files = { 'README.md': 'one\ntwo\nthree', 'assets/pixel.bin': [0, 1, 2], 'src/main.txt': 'hello' };
+  const calls = [
+    ['read', { path: 'files' }],
+    ['read', { path: 'files/README.md', start: 2, end: 2 }],
+    ['read', { path: 'files/assets' }],
+    ['read', { path: 'files/assets/pixel.bin' }],
+  ];
+  const script = `import json,sys\nfrom natlang.files import MemoryFileTree\nfrom natlang.runtime import Runtime,Session\nfrom natlang.surface import ToolSurface\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,files,calls=json.load(sys.stdin)\nfiles={k:(bytes(v) if isinstance(v,list) else v) for k,v in files.items()}\ns=Session(Runtime(None,file_tree=MemoryFileTree(files)),load_program(doc),TypeEnv())\ntools=ToolSurface().tools(s); params=tools[0]['function']['parameters']\nprint(json.dumps({'results':[{'kind':r.kind,'text':r.text,'value':r.value} for n,a in calls for r in [s.apply(n,a)]], 'path':params['properties']['path'], 'alternatives':params['x-natlang-alternatives'][-2:]}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, files, calls]), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const expected = JSON.parse(py.stdout);
+  const tree = new MemoryFileTree(Object.fromEntries(Object.entries(files).map(([name, value]) =>
+    [name, Array.isArray(value) ? new Uint8Array(value) : value])));
+  const session = new NativeSession(new NativeRuntime({ fileTree: tree }), buildPending(doc), new TypeEnv());
+  const read = new NativeToolAgent(() => ({ calls: [] })).tools(session)[0].function.parameters;
+  assert.deepEqual(calls.map(([name, args]) => {
+    const result = session.apply(name, args); return { kind: result.kind, text: result.text, value: result.value ?? null };
+  }), expected.results);
+  assert.deepEqual(read.properties.path, expected.path);
+  assert.deepEqual(read['x-natlang-alternatives'].slice(-2), expected.alternatives);
 });

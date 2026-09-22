@@ -6,6 +6,7 @@ import { buildPending, coerce, dump, type Pending } from '../native/values.js';
 import { TypeEnv } from '../native/types.js';
 import type { BrowserLocalModel } from './local-model.js';
 import { loadFunctionFiles } from './source.js';
+import { MemoryFileTree, type ReadonlyFileTree } from '../native/files.js';
 
 export type BrowserModelTurnRequest = { messages: unknown[]; tools: unknown[]; temperature: number;
   seed: number | null; max_tokens: number | null };
@@ -40,6 +41,8 @@ export type BrowserRunRequest = {
   parallelMapSafe?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Optional host-owned project files, resolved only when the program reads `files/...`. */
+  fileTree?: ReadonlyFileTree;
 };
 
 /** Browser host for natlang programs, using the same reducer and tool agent as Node. */
@@ -107,7 +110,10 @@ export class BrowserNatlangHost {
         maxDepth: request.options?.max_depth, maxActions: request.options?.max_actions,
         maxToolCalls: request.options?.max_tool_calls, mapWorkers: request.mapWorkers,
         parallelModelSafe: request.parallelMapSafe, runId, signal: request.signal,
-        timeoutMs: request.timeoutMs, seedPolicy: request.options?.seed?.mode ?
+        timeoutMs: request.timeoutMs, fileTree: request.fileTree ?? (request.source.kind === 'files' ?
+          new MemoryFileTree(Object.fromEntries(Object.entries(request.source.files)
+            .map(([path, value]) => [path.replace(/^[/\\]+/, ''), value]))) : undefined),
+        seedPolicy: request.options?.seed?.mode ?
           { mode: request.options.seed.mode, root: request.options.seed.root } : undefined });
       let timer: ReturnType<typeof setTimeout> | undefined;
       let abortListener: (() => void) | undefined;

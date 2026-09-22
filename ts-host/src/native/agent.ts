@@ -245,6 +245,10 @@ export class NativeToolAgent {
       }
     }
     for (const name of Object.keys(lam.codebase)) readAlternatives.push({ path: { const: `codebase/${name}` } });
+    const hasFiles = !session.path && !!session.runtime.fileTree;
+    if (hasFiles) readAlternatives.push({ path: { const: 'files' } },
+      { path: { type: 'string', pattern: '^files/.+' }, start: { type: 'integer' }, end: { type: 'integer' },
+        'x-optional': ['start', 'end'] });
     const inputNames = [...new Set(names.flatMap(name => {
       const definition = (name.startsWith('let/') ? lam.fnCopies[name.slice(4)] : lam.codebase[name]) as
         Record<string, unknown> | undefined;
@@ -263,8 +267,11 @@ export class NativeToolAgent {
     };
     if (unmarked.length) writeProperties.done = done;
     const tools = [
-      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function; `args@effects` shows the full effect journal.', {
-        path: { type: 'string', description: 'what to read', enum: [...new Set([
+      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function; `files` lists host project files and `files/<path>` reads one lazily; `args@effects` shows the full effect journal.', {
+        path: hasFiles ? { anyOf: [{ type: 'string', description: 'what to read', enum: [...new Set([
+          ...(lam.journal.length ? ['args@effects'] : []), ...readable,
+          ...Object.keys(lam.codebase).map(name => `codebase/${name}`), 'files'])] },
+          { type: 'string', pattern: '^files/.+' }] } : { type: 'string', description: 'what to read', enum: [...new Set([
           ...(lam.journal.length ? ['args@effects'] : []), ...readable,
           ...Object.keys(lam.codebase).map(name => `codebase/${name}`)])] },
         start: { type: 'integer' }, end: { type: 'integer' } }, ['path']),

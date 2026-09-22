@@ -97,6 +97,7 @@ returns: Text
 ---*/
 return "local helper"`);
   writeFileSync(join(root, 'ordinary.ts'), 'export const ordinaryHostCode = true;\n');
+  writeFileSync(join(root, 'project-notes.txt'), 'non-source project context');
   const administrativeNames = ['apps', 'inspect', 'packages', 'package', 'setup', 'runtime', 'doctor'];
   for (const name of administrativeNames) {
     mkdirSync(join(root, name));
@@ -128,15 +129,15 @@ return "source named ${name}"`);
   }
   const originalFetch = globalThis.fetch, originalWrite = process.stdout.write, originalCwd = process.cwd();
   const previousServer = process.env.NATLANG_SERVER, previousModel = process.env.NATLANG_MODEL;
-  let wire, anonymousOutput = '';
+  let wire, anonymousOutput = '', anonymousTurn = 0;
   globalThis.fetch = async (_url, init) => {
     wire = JSON.parse(init.body);
-    const finished = wire.messages.at(-1)?.role === 'tool';
-    return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: finished ? [] : [{
-      id: 'anonymous-1', type: 'function', function: { name: 'write', arguments: JSON.stringify({
-        path: 'return', type: 'Text', value: 'anonymous result', done: 1,
-      }) },
-    }] } }], usage: { completion_tokens: 1 } }), { status: 200,
+    anonymousTurn++;
+    const call = anonymousTurn === 1 ? { name: 'read', arguments: JSON.stringify({ path: 'files/project-notes.txt' }) } :
+      anonymousTurn === 2 ? { name: 'write', arguments: JSON.stringify({
+        path: 'return', type: 'Text', value: 'anonymous result', done: 1 }) } : undefined;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{
+      id: `anonymous-${anonymousTurn}`, type: 'function', function: call }] : [] } }], usage: { completion_tokens: 1 } }), { status: 200,
       headers: { 'content-type': 'application/json' } });
   };
   process.env.NATLANG_SERVER = 'http://model.test'; process.env.NATLANG_MODEL = 'fixture';
@@ -151,6 +152,7 @@ return "source named ${name}"`);
   assert.equal(anonymousOutput, 'anonymous result\n');
   assert.match(JSON.stringify(wire), /answer from this codebase/);
   assert.match(JSON.stringify(wire), /helper/);
+  assert.match(JSON.stringify(wire), /non-source project context/);
   const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
   assert.equal(local, 'cli-fixture:local:0');
   const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],

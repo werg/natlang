@@ -62,7 +62,7 @@ The native run request can include `review` with a reviewer driver, confidence t
 ## Run a program
 
 ```ts
-import { NatlangHost, TypeScriptEnvironment, DesktopBindings } from '@natlang/node';
+import { NatlangHost, TypeScriptEnvironment, DesktopBindings, NodeFileTree } from '@natlang/node';
 
 const desktop = new DesktopBindings();
 const environment = new TypeScriptEnvironment({ mode: 'retained', host: desktop });
@@ -78,6 +78,7 @@ try {
       },
     } },
     inputs: { file: '/tmp/example.txt' },
+    fileTree: new NodeFileTree(process.cwd()),
     tracePath: '/tmp/example.trace.jsonl',
   });
   console.log(result.outcome, result.value);
@@ -88,6 +89,13 @@ try {
 ```
 
 For a natural-language lambda, pass `modelTurn: async ({ messages, tools, temperature, seed, max_tokens }) => ...`. Return `{ calls: [[toolName, arguments], ...], text, completion_tokens }`; an empty `calls` array ends the episode. The callback receives the existing tools-v3 schema, including an explicit `engine` argument for `run_code`. You can instead pass `{ kind: 'definitions', entries, root }` or `{ kind: 'file', path }` as the source. The host loads `.nl`, `.ts`, YAML, and JSON sources. `options` accepts seed and model budgets. `streams: { over: asyncIterable }` binds a live root Fold input; the iterator's `next()` may await events without consuming model turns. `mapWorkers` requests parallel Map, but the shared engine serializes those calls unless the host is configured for safe parallel execution.
+
+`fileTree` gives the root semantic episode a read-only `files/...` namespace.
+`NodeFileTree` resolves disk directories and text ranges only when read.
+`MemoryFileTree` provides the identical contract for browsers and embeddings;
+browser `{ kind: 'files' }` sources expose their virtual map automatically.
+Binary reads return metadata until an application supplies a specific binary
+capability. File observations appear in the ordinary action trace.
 
 `capabilities: { 'service.operation': async (args) => value }` registers application callbacks for declared `fx` calls. The runtime enforces the lambda's `effects` list and records the request and outcome in its effect journal. A returned value must be portable JSON.
 

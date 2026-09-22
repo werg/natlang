@@ -40,6 +40,9 @@ natlang --apps codebases
 Two or more words that do not name an existing path form an anonymous
 `Lambda<{}, Text>` instruction. Natlang uses the current directory as the
 codebase root and exposes its top-level `.nl` and `.ts` functions to the run.
+The root program can inspect every other project file through the read-only
+`files/...` namespace. Filesystem hosts load directory entries and file content
+only when Natlang reads them; binary files initially appear as metadata.
 
 The terminal applications open without fixture files and explain their own
 capabilities. Use `/help`; evidence and notebook include useful starter data,

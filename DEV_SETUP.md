@@ -69,7 +69,9 @@ an existing path, the CLI wraps them in an anonymous `Lambda<{}, Text>`. The
 working directory is its codebase root: every top-level `.nl` and natlang
 frontmatter `.ts` function is available by name, and those functions retain
 their declared companions. Ordinary host `.ts` files are ignored. Instruction
-runs accept `--profile`, `--trace`, `--seed`, `--timeout`, and `--json`.
+runs accept `--profile`, `--trace`, `--seed`, `--timeout`, and `--json`. Other
+files remain available to the root instruction under `files/...`; the Node
+provider reads them on demand and exposes binary files as metadata.
 
 Run an application by giving its manifest or a directory containing
 `natlang.json`:

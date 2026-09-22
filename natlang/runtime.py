@@ -108,7 +108,7 @@ class Runtime:
                  trace_path: Optional[FilePath] = None, executors: Optional[dict] = None,
                  engine_selection: bool = False, map_workers: int = 1,
                  parallel_model_safe: bool = False, _budget: Optional[EpisodeBudget] = None,
-                 _parent_path: Optional[str] = None, _call_prefix: str = ""):
+                 _parent_path: Optional[str] = None, _call_prefix: str = "", file_tree=None):
         self.agent_factory = agent_factory
         self.options = options or RunOptions.compatibility(max_episodes=max_episodes, max_depth=max_depth)
         self.max_episodes, self.max_depth = self.options.max_episodes, self.options.max_depth
@@ -121,6 +121,7 @@ class Runtime:
         self._budget = _budget or EpisodeBudget(self.max_episodes)
         self._parent_path = _parent_path
         self._call_prefix = _call_prefix
+        self.file_tree = file_tree
         self.trace_sink = trace_sink
         self.trace_path = trace_path
         self.deadline = None
@@ -315,7 +316,7 @@ class Runtime:
         if not self._budget.reserve():
             return self._quiesce(node, ref, f"run budget: more than {self.max_episodes} episodes")
         self.episodes_started = self._budget.used
-        session = Session(self, node, ref.env, cold=cold)
+        session = Session(self, node, ref.env, cold=cold, path=ref.path)
         session.invocation = invocation
         self._observe("invocation", phase="start", call_id=invocation.call_id,
                       path=invocation.path, attempt=invocation.attempt, parent_path=parent)
@@ -381,7 +382,8 @@ class Runtime:
             child = Runtime(self.agent_factory, capabilities={}, options=self.options,
                             executors=self.executors, engine_selection=self.engine_selection,
                             trace_sink=self.trace_sink, _budget=self._budget,
-                            _parent_path=ref.path, _call_prefix=self._call_prefix, map_workers=1)
+                            _parent_path=ref.path, _call_prefix=self._call_prefix, map_workers=1,
+                            file_tree=self.file_tree)
             child.deadline = self.deadline
             child._depth = self._depth
             child._stack = list(self._stack)
@@ -593,8 +595,9 @@ def _one_line(value) -> str:
 class Session:
     """One episode on one natural-language lambda (SPEC 6)."""
 
-    def __init__(self, runtime: Runtime, lam: Lambda, outer_env: TypeEnv, *, cold: bool = False):
+    def __init__(self, runtime: Runtime, lam: Lambda, outer_env: TypeEnv, *, cold: bool = False, path: str = ""):
         self.rt, self.lam, self.outer_env = runtime, lam, outer_env
+        self.path = path
         self.env = lam.env(outer_env)
         self.cold = cold
         self.completed = False
@@ -702,6 +705,17 @@ class Session:
 
     def _op_read(self, args):
         path = args["path"]
+        if path == "files" or path.startswith("files/"):
+            if self.path or self.rt.file_tree is None:
+                raise reject(path, "no-such-path")
+            from .files import format_file_tree_read
+            try:
+                item = self.rt.file_tree.read(path[6:] if path.startswith("files/") else "",
+                                              args.get("start"), args.get("end"))
+            except (ValueError, OSError) as exc:
+                raise reject(path, "no-such-path", str(exc)) from None
+            return Result("ok", format_file_tree_read(item),
+                          value=item["text"] if item["kind"] == "text" else None)
         if path == "codebase" or path.startswith("codebase/"):      # the code base is read-only text
             from .codebase import listing
             name = path[9:]

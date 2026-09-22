@@ -15,6 +15,7 @@ The inspected TS package is private and built from the repository. Do not promis
 ```python
 from pathlib import Path
 from natlang.host import load
+from natlang.files import FilesystemFileTree
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
 from natlang.invocation import RunOptions, SeedPolicy
@@ -27,10 +28,16 @@ def run_review(decoder, observations, criterion):
     runtime = Runtime(
         lambda lam: ToolAgent(decoder, validation_feedback="local"),
         options=RunOptions(seed=SeedPolicy("derived", 17)),
+        file_tree=FilesystemFileTree(Path.cwd()),
     )
     outcome, value = runtime.run_root(root)
     return outcome, value
 ```
+
+Import `FilesystemFileTree` or `MemoryFileTree` from `natlang.files`. The root
+episode then sees a read-only `files/...` namespace. Filesystem providers resolve
+content lazily; memory providers give browsers and embedded hosts the same tool
+semantics.
 
 Inspect `outcome.kind` before using the value as completed. `load()` can interpret existing short string paths as files; use `load_definitions(entries, root_name, inputs)` for explicit in-memory values when that ambiguity matters. Checked definition entries use `args`, `returns`, exactly one of `instructions` or `code`, and optional `types`, `uses`, `effects`, `engine`.
 
@@ -39,7 +46,7 @@ Inspect `outcome.kind` before using the value as completed. `load()` can interpr
 ## Node
 
 ```ts
-import { NatlangHost } from '@natlang/typescript-host';
+import { NatlangHost, NodeFileTree } from '@natlang/typescript-host';
 
 export async function runReview(modelTurn, observations, criterion) {
   const host = new NatlangHost();
@@ -49,6 +56,7 @@ export async function runReview(modelTurn, observations, criterion) {
       inputs: { observations, criterion },
       modelTurn,
       validationFeedback: 'local',
+      fileTree: new NodeFileTree(process.cwd()),
       options: { seed: { mode: 'derived', root: 17 } },
     });
     if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
@@ -59,7 +67,7 @@ export async function runReview(modelTurn, observations, criterion) {
 }
 ```
 
-Node also accepts `source: {kind:'definitions', entries, root}` and `source: {kind:'program', program}`. Browser virtual files use a separate `kind:'files'` contract. Do not assume the Node file loader is present in a browser.
+Node also accepts `source: {kind:'definitions', entries, root}` and `source: {kind:'program', program}`. Browser source files use a separate `kind:'files'` contract. For host project data, browsers and portable embeddings pass `fileTree: new MemoryFileTree(files)`; Node can pass `NodeFileTree`. Both expose the same read-only namespace.
 
 Supply `host: applicationObjects` and `mode:'retained'` when their identity/lifetime is needed. If constructing and supplying a `TypeScriptEnvironment` yourself, retain ownership and close it yourself. Close native bindings/jobs separately according to their API; closing an interpreter is not guaranteed to terminate host-owned work.
 

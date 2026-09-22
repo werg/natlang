@@ -175,6 +175,12 @@ class ToolSurface:
             pos = positions(sl.value)
             if pos:                                           # a range can only name positions that exist
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
+        has_files = not session.path and session.rt.file_tree is not None
+        if has_files:
+            read_alts += [{"path": {"const": "files"}},
+                          {"path": {"type": "string", "pattern": "^files/.+"},
+                           "start": {"type": "integer"}, "end": {"type": "integer"},
+                           "x-optional": ["start", "end"]}]
         NEW_LOCAL = {"type": "string", "x-natlang": "new-local",
                      "pattern": "^let/[a-z_][a-z0-9_]*$",
                      "description": "let/<name>: a new local, created by this call"}
@@ -281,10 +287,15 @@ class ToolSurface:
             tool("read", "Inspect a value only when you need its contents to make a decision. Workspace paths can be "
                          "passed directly to `call` without reading them first; do not walk through collection items merely "
                          "to pass the collection to a function. Optional line or item range for long values. "
-                         "`codebase/<function>` shows the text of a function; `args@effects` shows the full effect journal.",
-                 {"path": _enum_or_string((["args"] if lam.in_ else []) +
+                         "`codebase/<function>` shows the text of a function; `files` lists host project files and "
+                         "`files/<path>` reads one lazily; `args@effects` shows the full effect journal.",
+                 {"path": ({"anyOf": [_enum_or_string((["args"] if lam.in_ else []) +
                                           (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
-                                          [f"codebase/{n}" for n in lam.codebase], "what to read"),
+                                          [f"codebase/{n}" for n in lam.codebase] + ["files"], "what to read"),
+                                         {"type": "string", "pattern": "^files/.+"}]}
+                            if has_files else _enum_or_string((["args"] if lam.in_ else []) +
+                                          (["args@effects"] if lam.journal else []) + [s.path for s in readable] +
+                                          [f"codebase/{n}" for n in lam.codebase], "what to read")),
                   "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"],
                  alternatives=read_alts + [{"path": {"const": f"codebase/{n}"}} for n in lam.codebase]),
             tool("write", "Write a value into the workspace: into `return`, or into a local `let/<name>` (a new name "

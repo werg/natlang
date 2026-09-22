@@ -9,6 +9,7 @@ from natlang.types import TypeEnv, parse_type
 
 from pathlib import Path
 from natlang.values import coerce, load_program
+from natlang.files import FilesystemFileTree, MemoryFileTree
 
 PROGRAMS = Path(__file__).resolve().parent.parent / "conformance" / "programs"
 
@@ -21,6 +22,35 @@ def _root(doc):
     return root
 
 S = ToolSurface()
+
+
+def test_host_files_are_read_only_lazy_surface():
+    rt = Runtime(None, file_tree=MemoryFileTree({"notes/todo.txt": "first\nsecond", "image.bin": b"\0x"}))
+    session = Session(rt, load_program({"$lambda": {"type": "Lambda<{}, Text>",
+                                                     "instructions": "Inspect files."}}), TypeEnv())
+    params = ToolSurface().tools(session)[0]["function"]["parameters"]
+    assert any(branch.get("pattern") == "^files/.+" for branch in params["properties"]["path"]["anyOf"])
+    assert session.apply("read", {"path": "files/notes/todo.txt", "start": 2}).text == "second"
+    assert session.apply("read", {"path": "files/image.bin"}).text == (
+        "image.bin: binary file, 2 bytes; content requires a host binary capability")
+
+
+def test_filesystem_file_tree_resolves_after_construction(tmp_path):
+    note = tmp_path / "note.txt"
+    note.write_text("old")
+    tree = FilesystemFileTree(tmp_path)
+    note.write_text("new\nsecond\nthird")
+    assert tree.read("note.txt", 2, 2) == {"kind": "text", "path": "note.txt", "text": "second",
+                                                 "start": 2, "end": 2, "truncated": True, "bytes": 16}
+    try:
+        (tmp_path / "outside").symlink_to(tmp_path.parent, target_is_directory=True)
+    except OSError:
+        return
+    try:
+        tree.read("outside")
+        assert False, "a symlink must not escape the file tree root"
+    except ValueError as exc:
+        assert "escapes its root" in str(exc)
 
 
 def _session(name, rt=None):

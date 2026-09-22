@@ -34,7 +34,8 @@ There are two families of node:
 A path is a sequence of segments separated by `/`. A segment is a record
 field name, a dict key, or a list index (0-based). Inside an episode, paths
 are **relative to the current lambda**, whose addressable parts are
-`instructions`, `args`, `let`, and `return`; `codebase/<name>` is readable.
+`instructions`, `args`, `let`, and `return`; `codebase/<name>` is readable. A
+host may also give the root episode a read-only `files` namespace.
 
 ```
 args/tickets/3/body
@@ -42,6 +43,7 @@ let/labels
 return/summary
 let/strict/instructions            # the text of an editable function copy (§5.3)
 codebase/classify                  # read-only: the text of a function
+files/docs/design.md               # read-only host project file
 ```
 
 - **Ranges** are inclusive at both ends and use the numbers the listing
@@ -341,7 +343,7 @@ every turn.
 
 | Tool | Arguments | Purpose |
 |------|-----------|---------|
-| `read` | `path`, `start?`, `end?` | show a value, a range of it, or `codebase/<name>` |
+| `read` | `path`, `start?`, `end?` | show a value, a range of it, `codebase/<name>`, or a host file |
 | `write` | `path`, `type`, `value` \| `source` | put a plain value into `return` or a local; or copy a function (§5.3) |
 | `edit` | `path`, `old`, `new` | replace text |
 | `run_code` | `code`, `engine` in engine-selecting surfaces | exact work in the selected executor; the result comes back |
@@ -362,6 +364,16 @@ rolls back external effects.
 Returns the whole value at `path`, or the range `start..end`. Meta paths are
 read the same way. `codebase` lists the functions; `codebase/<name>` shows a
 signature, description and body.
+
+When the host supplies a file tree, `files` lists its root, `files/<directory>`
+lists that directory, and `files/<file>` reads text. Text defaults to its first
+200 lines and accepts inclusive, 1-based `start` and `end` ranges. Binary files
+return metadata; their bytes require an explicit host capability. Providers
+resolve entries on demand where their platform permits it. The namespace is
+read-only, belongs to the host rather than the serialized value tree, and is
+available only in the root episode. File reads are recorded as ordinary tool
+actions in the execution trace. In-memory hosts must expose the same observable
+listing, range, and binary-metadata behavior.
 
 ### 5.2 write
 

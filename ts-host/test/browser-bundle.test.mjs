@@ -65,6 +65,30 @@ test('browser loads file source, lexical types, companions, and inputs from virt
   } finally { host.close(); }
 });
 
+test('browser virtual projects expose non-source files through the shared file-tree contract', async () => {
+  const nodeProcess = globalThis.process;
+  let api;
+  try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
+  finally { globalThis.process = nodeProcess; }
+  const files = {
+    'main.nl': '---\nreturns: Text\n---\nRead the project note and return it.',
+    'notes/context.md': 'browser project context',
+  };
+  let turn = 0, observed = '';
+  const host = new api.BrowserNatlangHost();
+  try {
+    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files }, modelTurn: request => {
+      observed = JSON.stringify(request);
+      turn++;
+      if (turn === 1) return { calls: [['read', { path: 'files/notes/context.md' }]] };
+      if (turn === 2) return { calls: [['write', { path: 'return', type: 'Text', value: 'browser project context' }]] };
+      return { calls: [] };
+    } });
+    assert.equal(result.value, 'browser project context');
+    assert.match(observed, /browser project context/);
+  } finally { host.close(); }
+});
+
 test('browser accepts a large lexical codebase and more than sixteen locals', async () => {
   const nodeProcess = globalThis.process;
   let api;
