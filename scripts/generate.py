@@ -144,7 +144,7 @@ def main():
     ap.add_argument("--shard", type=int, default=250, help="programs per shard")
     ap.add_argument("--recovery-rate", type=float, default=0, help="chance to add verified error/correction history before exact work")
     ap.add_argument("--system-file", type=Path,
-                    default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_small.md",
+                    default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_explicit.md",
                     help="system prompt embedded in every generated trajectory")
     a = ap.parse_args()
     if a.start_index < 0 or a.n < 0:
