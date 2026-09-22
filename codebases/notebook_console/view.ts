@@ -12,6 +12,7 @@ const blocks = run ? [
   { kind: 'table', columns: ['Cell', 'Status', 'Revision', 'Sample'], rows:
       run.results.map(result => [result.id, result.status, String(result.revision), result.sample || result.detail]) },
   ...(run.blocked.length ? [{ kind: 'list', items: run.blocked.map(id => `Blocked: ${id}`) }] : []),
-] : [{ kind: 'text', text: 'Ask the notebook to compute or explain a result.', tone: 'muted' }];
+] : [{ kind: 'text', text: 'A starter notebook is ready. Ask for a result, inspect /cells, or import your own notebook with /load FILE.', tone: 'muted' },
+  { kind: 'list', items: ['Try: Which region has the largest total, and what is that total?', 'Use /help to discover setup and navigation commands.'] }];
 return { title: 'Natlang Notebook Console', subtitle: `${state.runs.length} runs`, blocks,
-  prompt: 'notebook> ', help: ['/refresh redraw', '/quit exit'] };
+  prompt: 'notebook> ', help: ['/help commands', '/cells catalog', '/load FILE import notebook', '/quit exit'] };

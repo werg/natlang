@@ -47,6 +47,19 @@ Arguments before `--` belong to natlang. Arguments after it belong to the
 application:
 
 ```bash
+scripts/natlang-app packages/evidence-console.natlang.json
+scripts/natlang-app packages/notebook-console.natlang.json
+scripts/natlang-app packages/log-console.natlang.json
+```
+
+These open with useful starter state and describe possible next actions. Use
+`/help` inside every interactive app. Evidence provides `/sources` and `/load
+PATH`; notebook provides `/cells` and `/load FILE`; the log investigator
+provides `/demo` and `/load FILE`; the semantic terminal provides `/recipes`.
+The corresponding `--documents`, `--notebook`, and piped JSONL forms remain
+available for automation and direct imports:
+
+```bash
 scripts/natlang-app packages/evidence-console.natlang.json -- --documents evidence.json
 scripts/natlang-app packages/notebook-console.natlang.json -- --notebook notebook.json
 cat logs.jsonl | scripts/natlang-app packages/log-console.natlang.json --plain

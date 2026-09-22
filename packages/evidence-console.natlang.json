@@ -1,7 +1,7 @@
 {
-  "schema": "natlang.package/v1", "name": "@natlang/evidence-console", "version": "0.1.0",
-  "description": "Citation checked semantic question answering over local documents.",
+  "schema": "natlang.package/v1", "name": "@natlang/evidence-console", "version": "0.2.0",
+  "description": "Guided citation checked question answering with built-in evidence and live source imports.",
   "include": ["applications/package_targets/evidence_console.mjs", "applications/package_targets/terminal_helpers.mjs", "applications/evidence_atlas.mjs", "codebases/evidence_console"],
-  "targets": { "console": { "kind": "terminal", "entry": "applications/package_targets/evidence_console.mjs", "reducer": "codebases/evidence_console/reduce.nl", "view": "codebases/evidence_console/view.ts", "authority": ["filesystem:documents"], "description": "Ask questions over an evidence collection." } },
+  "targets": { "console": { "kind": "terminal", "entry": "applications/package_targets/evidence_console.mjs", "reducer": "codebases/evidence_console/reduce.nl", "view": "codebases/evidence_console/view.ts", "authority": ["filesystem:documents"], "description": "Explore starter evidence, import sources, and ask citation checked questions." } },
   "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
 }

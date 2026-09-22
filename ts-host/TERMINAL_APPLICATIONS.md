@@ -32,9 +32,12 @@ root:
 - `renderTerminalView` renders checked headings, text, status, lists, tables and
   code. View-provided control characters are stripped. Natlang chooses the
   content; the renderer owns terminal mechanics.
-- `runTerminalShell` turns lines into typed events while `/refresh`, `/cancel`,
-  `/interrupt` and `/quit` control the application lifecycle. Applications can map `/cancel`
-  to a semantic cancellation event for a native job.
+- `runTerminalShell` turns lines into typed events while `/help`, `/refresh`,
+  `/cancel`, `/interrupt` and `/quit` control the application lifecycle.
+  Applications register discoverable exact setup and inspection commands such
+  as `/load` or `/recipes`; commands can print observations or enqueue typed
+  events. Applications can map `/cancel` to a semantic cancellation event for
+  a native job.
 - `openAICompatibleModelTurn` is a separate model transport. Endpoint-specific
   tool aliases and request fields are configuration, not source-language rules.
 
@@ -64,6 +67,9 @@ app = new TerminalNatlangApplication({
 
 await runTerminalShell(app, {
   event: (value, id) => ({ id, kind: 'request', value }),
+  commands: {
+    sources: { description: 'list loaded sources', run: () => listSources() },
+  },
 });
 host.close();
 ```
@@ -122,46 +128,47 @@ The native package works outside the source checkout:
 ```bash
 natlang package pack packages/semantic-terminal.natlang.json --root . --out semantic-terminal.nlpkg
 natlang package install semantic-terminal.nlpkg
-natlang run @natlang/semantic-terminal@0.1.0#terminal --workspace .
+natlang run @natlang/semantic-terminal@0.2.0#terminal --workspace .
 ```
 
 See [native packages and executables](../NATIVE_PACKAGES.md) for manifests,
 model profiles, store semantics, and the executable adapter contract.
 
-For direct checkout development, build the TypeScript host and point the entry
-module at an already-running compatible model endpoint.
-
-Build the TypeScript host, then point the CLI at an already-running compatible
-model endpoint:
+For direct checkout development, use the path launcher. It rebuilds changed
+TypeScript and lazily manages the default local model:
 
 ```bash
-npm --prefix ts-host run build
-node applications/semantic_terminal_cli.mjs \
-  --server http://127.0.0.1:8081 --model MODEL_ID \
-  --root . --session .natlang/terminal-session.json \
-  --traces .natlang/traces
+scripts/natlang-app packages/semantic-terminal.natlang.json
 ```
 
-The equivalent environment variables are `NATLANG_SERVER`, `NATLANG_MODEL` and
-optional `NATLANG_API_KEY`. The CLI does not start or reconfigure a model
-server. There are no framework-imposed trajectory or token limits; deployment
-options can supply explicit budgets.
+`NATLANG_SERVER`, `NATLANG_MODEL`, and optional `NATLANG_API_KEY` select an
+externally owned service when desired. The lower-level
+`applications/*_console.mjs` entry modules remain available to embedders that
+supply their own `modelTurn` lifecycle. There are no framework-imposed
+trajectory or token limits; deployment options can supply explicit budgets.
 
-The other included CLIs use the same model flags:
+The other included applications use the same path launcher:
 
 ```bash
-node applications/evidence_console.mjs --documents evidence.json \
-  --server http://127.0.0.1:8081 --model MODEL_ID
-node applications/notebook_console.mjs --notebook notebook.json \
-  --server http://127.0.0.1:8081 --model MODEL_ID
-cat logs.jsonl | node applications/log_console.mjs \
-  --server http://127.0.0.1:8081 --model MODEL_ID
+scripts/natlang-app packages/evidence-console.natlang.json
+scripts/natlang-app packages/notebook-console.natlang.json
+scripts/natlang-app packages/log-console.natlang.json
+```
+
+Each application starts with guided content. `/help` lists shared and app
+commands. Evidence uses `/sources` and `/load PATH`; notebook uses `/cells` and
+`/load FILE`; logs uses `/demo` and `/load FILE`; the semantic terminal uses
+`/recipes`. Optional startup imports retain the original formats:
+
+```bash
+scripts/natlang-app packages/evidence-console.natlang.json -- --documents evidence.json
+scripts/natlang-app packages/notebook-console.natlang.json -- --notebook notebook.json
+cat logs.jsonl | scripts/natlang-app packages/log-console.natlang.json --plain
 ```
 
 `evidence.json` is an array of `{id,text}` documents. `notebook.json` contains
 `{cells,tables}` using the `NotebookWorkspace` contract. Each log line is one
-typed `LogEvent`. Add `--exchanges PATH` to retain the exact model transport
-exchanges separately from reduction traces.
+typed `LogEvent`.
 
 ## Verification
 

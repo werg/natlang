@@ -4,11 +4,44 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PassThrough, Writable } from 'node:stream';
 import { NatlangHost, TerminalEventQueue, TerminalNatlangApplication, TerminalSessionStore,
-  TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView } from '../dist/index.js';
+  TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView, runTerminalShell } from '../dist/index.js';
 import { RecipeTerminal } from '../../applications/semantic_terminal.mjs';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { CommandRecipeLibrary } from '../../applications/terminal_recipes.mjs';
+import { readEvidencePath, STARTER_EVIDENCE } from '../../applications/package_targets/evidence_console.mjs';
+
+test('terminal shell exposes built-in and application discovery commands', async () => {
+  let text = '';
+  const output = new Writable({ write(chunk, _encoding, done) { text += String(chunk); done(); } });
+  output.isTTY = false; output.columns = 80;
+  const view = { title: 'Guided app', blocks: [], prompt: 'guide> ', help: ['/sources collection'] };
+  const app = { view, async start() { return { view }; }, async refresh() { return { view }; },
+    async consume(events) { for await (const _event of events) {} }, cancel() {}, async close() {} };
+  const input = new PassThrough();
+  setTimeout(() => input.write('/help\n'), 5);
+  setTimeout(() => input.write('/sources\n'), 15);
+  setTimeout(() => input.end('/quit\n'), 25);
+  await runTerminalShell(app, { input, output,
+    event: (value, id) => ({ id, value }), commands: {
+      sources: { description: 'list loaded sources', run: () => 'welcome\nworkflow' },
+    } });
+  assert.match(text, /\/help show commands/);
+  assert.match(text, /\/sources list loaded sources/);
+  assert.match(text, /welcome\nworkflow/);
+});
+
+test('evidence console has starter material and can discover a source directory', () => {
+  assert.ok(STARTER_EVIDENCE.length >= 3);
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-evidence-onboarding-'));
+  try {
+    writeFileSync(join(folder, 'guide.md'), 'A useful guide.');
+    writeFileSync(join(folder, 'package.json'), '{"name":"not-evidence"}');
+    const documents = readEvidencePath('.', folder);
+    assert.deepEqual(documents.map(row => row.id), ['guide']);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
 
 test('terminal application serializes events, persists state, and restores duplicate suppression', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-app-'));
@@ -176,4 +209,20 @@ test('notebook console keeps semantic goal selection and dependency traversal in
     assert.deepEqual(Array.from(app.state.runs[0].order), ['facts', 'report']);
     assert.match(app.state.runs[0].answer, /total 7/);
   } finally { await app.close(); host.close(); notebook.close(); }
+});
+
+test('notebook can import cells and tables after startup without a fixture restart', async () => {
+  const notebook = new NotebookWorkspace([], {},
+    { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
+  try {
+    const loaded = notebook.importConfig({ tables: { measurements: [{ amount: 2 }, { amount: 5 }] }, cells: [
+      { id: 'total', engine: 'sqlite', needs: [], description: 'sum values',
+        source: 'SELECT SUM(amount) AS total FROM measurements' },
+    ] });
+    assert.deepEqual(loaded.tables, ['measurements']);
+    assert.equal(notebook.catalog()[0].id, 'total');
+    assert.match((await notebook.execute('total')).sample, /7/);
+    notebook.importConfig({ tables: { measurements: [{ amount: 11 }] }, cells: [] });
+    assert.match((await notebook.execute('total')).sample, /11/);
+  } finally { notebook.close(); }
 });

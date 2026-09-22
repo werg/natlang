@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 /** Common lifecycle for packaged natlang terminal reducers. Domain objects stay application owned. */
-export function terminalExecutable(context, { hostObject, initialState, event, events, cancelEvent, close }) {
+export function terminalExecutable(context, { hostObject, initialState, event, events, cancelEvent, commands, close }) {
   if (!context.modelTurn) throw new Error(`${context.package.name} needs a configured model profile`);
   const { NativeNatlangHost, TerminalNatlangApplication, TerminalSessionStore, runTerminalShell } = context.runtime;
   const host = new NativeNatlangHost({ host: hostObject, mode: 'retained' });
@@ -15,7 +15,8 @@ export function terminalExecutable(context, { hostObject, initialState, event, e
     seenEventIds: checkpoint.seen_event_ids, seedRoot: 17, traceDirectory: context.traceDirectory,
     modelTurn: context.modelTurn, onCommit: commit => store.commit(commit, app.seenEventIds) });
   return { async run() { await runTerminalShell(app, { input: context.io.input, output: context.io.output,
-      color: context.io.color, event, events, cancelEvent }); return 0; },
+      color: context.io.color, event, events, cancelEvent,
+      commands: typeof commands === 'function' ? commands(app) : commands }); return 0; },
     async close() { await app.close(); host.close(); await close?.(); } };
 }
 

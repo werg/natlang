@@ -33,7 +33,16 @@ export async function createTarget(context) {
         color: context.io.color,
         event: (text, id) => ({ kind: 'request', id, request_id: '', job_id: '', text, status: '', detail: '' }),
         cancelEvent: id => ({ kind: 'cancel', id, request_id: app.state.active_request,
-          job_id: app.state.active_job, text: '', status: '', detail: '' }) });
+          job_id: app.state.active_job, text: '', status: '', detail: '' }),
+        commands: {
+          recipes: { description: 'list exact operations natlang can choose', run: () => library.recipes()
+            .map(recipe => `${recipe.id}  ${recipe.description}`).join('\n') },
+          example: { description: 'show example requests', run: () => [
+            'Inspect the repository status and summarize what changed.',
+            'Run the TypeScript test suite and explain any failure.',
+            'Find references to TerminalNatlangApplication in this workspace.',
+          ].join('\n') },
+        } });
       return 0;
     },
     async close() { unsubscribe(); completions.close(); terminal.close(); await app.close(); host.close(); },

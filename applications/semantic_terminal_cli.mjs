@@ -38,7 +38,13 @@ export async function runSemanticTerminal({ root = resolve(here, '..'), sessionP
       event: (text, id) => ({ kind: 'request', id, request_id: '', job_id: '', text,
         status: '', detail: '' }),
       cancelEvent: id => ({ kind: 'cancel', id, request_id: app.state.active_request,
-        job_id: app.state.active_job, text: '', status: '', detail: '' }) });
+        job_id: app.state.active_job, text: '', status: '', detail: '' }),
+      commands: {
+        recipes: { description: 'list exact operations natlang can choose', run: () => library.recipes()
+          .map(recipe => `${recipe.id}  ${recipe.description}`).join('\n') },
+        example: { description: 'show example requests', run: () =>
+          'Inspect the repository status and summarize what changed.\nRun the TypeScript test suite and explain any failure.' },
+      } });
   } finally { unsubscribe(); completions.close(); terminal.close(); host.close(); }
 }
 

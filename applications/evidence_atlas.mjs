@@ -31,6 +31,12 @@ export class EvidenceCollection {
     return hash(JSON.stringify([...this.docs.values()].map(row => [row.id, row.revision]).sort()));
   }
 
+  catalog() {
+    return [...this.docs.values()].map(document => ({ id: document.id,
+      paragraphs: document.spans.length, characters: document.text.length,
+      revision: document.revision })).sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   search(queries) {
     if (!Array.isArray(queries) || queries.some(query => typeof query !== 'string'))
       throw new Error('queries must be text');

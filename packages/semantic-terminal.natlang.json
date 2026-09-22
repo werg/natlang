@@ -1,7 +1,7 @@
 {
   "schema": "natlang.package/v1",
   "name": "@natlang/semantic-terminal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A semantic terminal whose event reducer and view are natlang programs.",
   "include": [
     "applications/package_targets/semantic_terminal.mjs",

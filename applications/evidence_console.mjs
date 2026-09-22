@@ -1,17 +1,17 @@
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { NatlangHost, TerminalNatlangApplication, TerminalSessionStore,
   runTerminalShell } from '../ts-host/dist/index.js';
 import { EvidenceCollection } from './evidence_atlas.mjs';
+import { readEvidencePath, STARTER_EVIDENCE } from './package_targets/evidence_console.mjs';
 import { cliFlag, modelTurnFromCli } from './natlang_cli.mjs';
 
 const source = name => fileURLToPath(new URL(`../codebases/evidence_console/${name}`, import.meta.url));
 const empty = () => ({ questions: [], answers: [], status: 'idle' });
 
-export async function runEvidenceConsole({ documents, modelTurn, sessionPath,
+export async function runEvidenceConsole({ documents = STARTER_EVIDENCE, workspace = process.cwd(), modelTurn, sessionPath,
   traceDirectory, input, output, seedRoot = 17 } = {}) {
-  if (!modelTurn || !Array.isArray(documents)) throw new Error('evidence console requires documents and modelTurn');
+  if (!modelTurn || !Array.isArray(documents)) throw new Error('evidence console needs a modelTurn driver and a valid document collection');
   const evidence = new EvidenceCollection(documents);
   const host = new NatlangHost({ host: { evidence, drainEvents: () => evidence.drainEvents() }, mode: 'retained' });
   const store = sessionPath ? new TerminalSessionStore(sessionPath) : null;
@@ -24,15 +24,24 @@ export async function runEvidenceConsole({ documents, modelTurn, sessionPath,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });
   try {
     await runTerminalShell(app, { input, output,
-      event: (value, id) => ({ id, kind: 'question', value }) });
+      event: (value, id) => ({ id, kind: 'question', value }), commands: {
+        sources: { description: 'list loaded evidence sources', run: () => evidence.catalog()
+          .map(row => `${row.id}  ${row.paragraphs} paragraphs  ${row.characters} characters`).join('\n') },
+        load: { description: 'PATH add a file, JSON collection, or directory', run: value => {
+          if (!value) throw new Error('provide a path');
+          const loaded = readEvidencePath(value, workspace);
+          for (const document of loaded) evidence.update(document.id, document.text);
+          return `Loaded ${loaded.length} sources: ${loaded.map(row => row.id).join(', ')}`;
+        } },
+      } });
   } finally { host.close(); }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2), path = cliFlag(args, '--documents');
-  if (!path) throw new Error('use --documents FILE containing [{id,text}, ...]');
-  const documents = JSON.parse(readFileSync(resolve(path), 'utf8'));
+  const workspace = process.cwd(), documents = path ? readEvidencePath(path, workspace) : STARTER_EVIDENCE;
   await runEvidenceConsole({ documents, modelTurn: modelTurnFromCli(args),
+    workspace,
     sessionPath: resolve(cliFlag(args, '--session', '.natlang/evidence-session.json')),
     traceDirectory: resolve(cliFlag(args, '--traces', '.natlang/evidence-traces')) });
 }

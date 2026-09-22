@@ -173,3 +173,10 @@ The manifests in `packages/` build four complete applications:
 Each application loads its reducer and view from its installed package object.
 Adapters receive host classes from `@natlang/node` and have no repository
 relative runtime import.
+
+All four applications open without fixture files. Their initial views explain
+what the program can do, `/help` discovers commands, and built-in examples make
+semantic behavior testable immediately. Evidence and notebook data can be
+loaded from inside the running application; the log monitor can generate a
+demonstration incident or ingest JSONL interactively. File flags and stdin stay
+available for scripted use.

@@ -13,15 +13,37 @@ export class NotebookWorkspace {
     this.db = new DatabaseSync(':memory:');
     this.eval = environment ?? null;
     this.revision = 0;
-    for (const cell of cells) {
-      if (!idPattern.test(cell.id) || this.cells.has(cell.id) ||
-          !['sqlite', 'typescript-host'].includes(cell.engine) ||
-          !Array.isArray(cell.needs) || typeof cell.source !== 'string')
-        throw new Error('invalid notebook cell');
-      this.cells.set(cell.id, { ...structuredClone(cell), revision: 0 });
-    }
+    this.ready = false; this.tableNames = new Set();
+    for (const cell of cells) this.putCell(cell, false);
     for (const [name, rows] of Object.entries(tables)) this.loadTable(name, rows);
     this.db.exec('PRAGMA query_only=ON');
+    this.ready = true;
+  }
+
+  putCell(cell, replacing = true) {
+    if (!cell || !idPattern.test(cell.id) || !['sqlite', 'typescript-host'].includes(cell.engine) ||
+        !Array.isArray(cell.needs) || cell.needs.some(need => !idPattern.test(need)) ||
+        typeof cell.source !== 'string') throw new Error('invalid notebook cell');
+    const existing = this.cells.get(cell.id);
+    if (existing && !replacing) throw new Error(`duplicate notebook cell: ${cell.id}`);
+    const revision = existing ? ++this.revision : 0;
+    this.cells.set(cell.id, { ...structuredClone(cell), revision });
+    if (existing) {
+      const affected = this.invalidate(cell.id);
+      this.events.push({ operation: 'notebook.edit', id: cell.id, revision, invalidated: affected });
+    }
+    return { id: cell.id, revision, replaced: Boolean(existing) };
+  }
+
+  invalidate(id) {
+    const affected = new Set([id]); let changed = true;
+    while (changed) {
+      changed = false;
+      for (const row of this.cells.values()) if (!affected.has(row.id) &&
+          row.needs.some(need => affected.has(need))) { affected.add(row.id); changed = true; }
+    }
+    for (const name of affected) this.outputs.delete(name);
+    return [...affected].sort();
   }
 
   loadTable(name, rows) {
@@ -32,10 +54,16 @@ export class NotebookWorkspace {
       throw new Error('inconsistent table columns');
     const type = value => value === null ? 'TEXT' : typeof value === 'number' ? 'REAL' :
       typeof value === 'boolean' ? 'INTEGER' : 'TEXT';
-    this.db.exec(`CREATE TABLE "${name}" (${columns.map(column =>
-      `"${column}" ${type(rows.find(row => row[column] !== null)?.[column] ?? null)}`).join(', ')})`);
-    const stmt = this.db.prepare(`INSERT INTO "${name}" (${columns.map(column => `"${column}"`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
-    for (const row of rows) stmt.run(...columns.map(column => row[column]));
+    if (this.ready) this.db.exec('PRAGMA query_only=OFF');
+    try {
+      if (this.tableNames.has(name)) this.db.exec(`DROP TABLE "${name}"`);
+      this.db.exec(`CREATE TABLE "${name}" (${columns.map(column =>
+        `"${column}" ${type(rows.find(row => row[column] !== null)?.[column] ?? null)}`).join(', ')})`);
+      const stmt = this.db.prepare(`INSERT INTO "${name}" (${columns.map(column => `"${column}"`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
+      for (const row of rows) stmt.run(...columns.map(column => row[column]));
+      this.tableNames.add(name);
+      if (this.ready) this.outputs.clear();
+    } finally { if (this.ready) this.db.exec('PRAGMA query_only=ON'); }
     this.events.push({ operation: 'notebook.table', name, rows: rows.length, columns });
   }
 
@@ -102,17 +130,19 @@ export class NotebookWorkspace {
     const cell = this.cells.get(id);
     if (!cell || typeof source !== 'string') throw new Error('invalid cell edit');
     cell.source = source; cell.revision = ++this.revision;
-    const affected = new Set([id]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const row of this.cells.values()) if (!affected.has(row.id) &&
-          row.needs.some(need => affected.has(need))) { affected.add(row.id); changed = true; }
-    }
-    for (const name of affected) this.outputs.delete(name);
+    const affected = this.invalidate(id);
     this.events.push({ operation: 'notebook.edit', id, revision: cell.revision,
-      invalidated: [...affected].sort() });
-    return { revision: cell.revision, invalidated: [...affected].sort() };
+      invalidated: affected });
+    return { revision: cell.revision, invalidated: affected };
+  }
+
+  importConfig(config) {
+    if (!config || !Array.isArray(config.cells) || (config.tables !== undefined &&
+        (!config.tables || typeof config.tables !== 'object' || Array.isArray(config.tables))))
+      throw new Error('notebook config needs cells and optional tables');
+    const tables = Object.entries(config.tables ?? {}).map(([name, rows]) => { this.loadTable(name, rows); return name; });
+    const cells = config.cells.map(cell => this.putCell(cell));
+    return { tables, cells };
   }
 
   drainEvents() { return this.events.splice(0); }
