@@ -5,6 +5,10 @@ The normative language definition is `spec/SPEC.md` (v0.2-draft).
 Training, use cases, and datasets are covered in depth in `TRAINING.md`.
 Detailed designs for the synthesized datasets are in `SYNTHETIC_DATA.md`.
 The type system, validation, and validation feedback are specified in `TYPES.md`.
+The proposed model-facing replacement for workspace paths and call combinators is
+specified in `docs/SCOPE_EVAL_ARCHITECTURE_PLAN.md`: a persistent typed scope,
+line-oriented `eval`, required explicit line closure, normal static imports, and
+separate execution-value and developer-file tools.
 
 ## 1. Thesis
 
