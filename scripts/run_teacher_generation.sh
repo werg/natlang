@@ -9,8 +9,10 @@ SEED="${TEACHER_SEED:-909}"
 # Bonsai already saturates this 8 GiB GPU with one decode. Two full agent
 # contexts exceed the server's 5 GiB host-memory cgroup on complex programs.
 WORKERS="${TEACHER_WORKERS:-1}"
-SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-12}"
-SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-24}"
+# A typical nested algorithm episode needs 12-20 tool turns.  Keep it in one
+# conversation when possible; longer work still checkpoints into durable state.
+SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-24}"
+SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-48}"
 SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
 PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-balanced-s909-pass3.jobs}"
 PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage.ir.jsonl}"
