@@ -14,6 +14,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
+FAILURE_OR_REPAIR = {"report_error", "report_blocker", "edit", "edit_file", "write_file"}
+READ_SKILLS = {"read", "read_value", "read_file", "search_files", "list_files", "diff_files"}
+WRITE_SKILLS = {"write", "write_value"}
+RETURN_SKILLS = {"return_value", "commit"}
+
+
 def digest(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as stream:
@@ -36,29 +42,29 @@ def difficulty(row: dict) -> tuple[int, tuple[str, ...]]:
     context_items = int(row.get("context_items") or 0)
     features = []
     score = 0
-    if parts & {"report_error", "report_blocker", "edit"}:
+    if parts & FAILURE_OR_REPAIR:
         score += 100; features.append("failure_or_repair")
-    if any(marker in target for marker in ("over=", "init=", "until=")):
+    if any(marker in target for marker in ("over=", "init=", "until=", "Promise.all", ".map(", "for (", "for(")):
         score += 80; features.append("iteration")
     if "call" in parts and "inputs=" in target and "'let/" in target:
         score += 60; features.append("dependent_call")
     if "+" in skill:
         score += 45; features.append("multi_action")
-    if "run_code" in parts:
+    if parts & {"run_code", "eval"}:
         score += 40; features.append("algorithmic_glue")
     if "call" in parts and "to='let/" in target:
         score += 25; features.append("local_result")
-    if context_items >= 8 and parts & {"call", "write", "mark_done", "read"}:
+    if context_items >= 8 and parts & ({"call", "mark_done", "mark_lines"} | WRITE_SKILLS | READ_SKILLS):
         score += min(30, 10 + context_items); features.append("later_state")
     return score, tuple(features)
 
 
 def rank(row: dict) -> tuple:
     parts = set((row.get("skill") or "unknown").split("+"))
-    priority = (0 if parts & {"report_error", "report_blocker", "edit"} else
-                1 if "run_code" in parts else 2 if parts & {"read", "checkpoint"} else
+    priority = (0 if parts & FAILURE_OR_REPAIR else
+                1 if parts & {"run_code", "eval"} else 2 if parts & (READ_SKILLS | {"checkpoint"}) else
                 3 if "call" in parts else 4 if "mark_done" in parts else
-                5 if "write" in parts else 6 if "reply" in parts else 4)
+                5 if parts & WRITE_SKILLS else 6 if parts & (RETURN_SKILLS | {"reply"}) else 4)
     stable = hashlib.sha256(row["id"].encode()).hexdigest()
     score, _ = difficulty(row)
     return -score, priority, stable
@@ -72,11 +78,11 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
     dropped = Counter()
     for program in sorted(by_program):
         bucket = by_program[program]
-        writes = sorted((r for r in bucket if "write" in (r.get("skill") or "").split("+")), key=rank)
+        writes = sorted((r for r in bucket if set((r.get("skill") or "").split("+")) & WRITE_SKILLS), key=rank)
         terminals = sorted((r for r in bucket if r.get("skill") == "reply"), key=rank)
-        reads = sorted((r for r in bucket if "read" in (r.get("skill") or "").split("+")), key=rank)
+        reads = sorted((r for r in bucket if set((r.get("skill") or "").split("+")) & READ_SKILLS), key=rank)
         rare = [r for r in bucket if
-                set((r.get("skill") or "").split("+")) & {"report_error", "report_blocker", "edit"}
+                set((r.get("skill") or "").split("+")) & FAILURE_OR_REPAIR
                 or (r.get("family") or "").startswith("failure_")]
         # Preserve the minimum contrast and state-access examples even when a
         # program has more hard transitions than its ordinary cap.  In that
@@ -86,7 +92,7 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
                      {r["id"] for r in reads[:1]} |
                      {r["id"] for r in rare})
         allowed = mandatory
-        candidates = [r for r in bucket if ("write" not in (r.get("skill") or "").split("+")
+        candidates = [r for r in bucket if (not set((r.get("skill") or "").split("+")) & WRITE_SKILLS
                                              and r.get("skill") != "reply") or r["id"] in allowed]
         required = [r for r in bucket if r["id"] in mandatory]
         optional = [r for r in sorted(candidates, key=rank) if r["id"] not in mandatory]

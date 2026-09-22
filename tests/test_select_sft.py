@@ -70,6 +70,19 @@ def test_selection_keeps_all_failure_contrasts():
     assert kept == rows
 
 
+def test_scope_eval_skills_receive_current_curriculum_weights():
+    loop = row("loop", "p", "eval")
+    loop["native_target"] = "eval(code='const ys = await Promise.all(xs.map(x => f(x))); ys')"
+    literal = row("literal", "p", "write_value")
+    read = row("inspect", "p", "read_file")
+    repair = row("repair", "p", "edit_file")
+    kept, _ = select([loop, literal, read, repair], max_per_program=2,
+                     max_writes=1, max_terminals=1)
+    assert {item["id"] for item in kept} >= {"repair", "inspect", "literal"}
+    score, features = difficulty(loop)
+    assert score >= 120 and {"iteration", "algorithmic_glue"} <= set(features)
+
+
 def test_target_balance_caps_common_and_replicates_rare_without_split_leakage():
     rows = [row(f"common-{i}", f"p{i}", "call") for i in range(5)]
     for item in rows:
