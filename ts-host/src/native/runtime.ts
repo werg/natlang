@@ -991,6 +991,8 @@ export class NativeSession {
   }
 
   private inferScopeType(value: unknown): string {
+    if (value instanceof Folder || value instanceof FolderHandle) return 'Folder';
+    if (value instanceof FileHandle) return 'FileHandle';
     if (value === null) return 'Null';
     if (typeof value === 'boolean') return 'Bool';
     if (typeof value === 'number' && Number.isFinite(value)) return 'Num';
@@ -1077,6 +1079,8 @@ export class NativeSession {
 
   private async callDirectory(local: string, annotation: string | undefined, functionName: string,
     folder: Folder | FolderHandle, expressions: string[], mode: 'apply' | 'direct'): Promise<NativeResult> {
+    if (this.lam.codebaseFolder && this.lam.codebasePaths[functionName])
+      this.refreshCodebaseFile(this.lam.codebasePaths[functionName]!);
     const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
     if (!definition || definition.subtype !== 'directory-reducer')
       throw new Reject([{ path: 'code', code: 'bad-call', expected: `${functionName} declared kind: directory-reducer` }]);
@@ -1107,10 +1111,181 @@ export class NativeSession {
     } catch (error) { if (tx.open) tx.abort(); throw error; }
   }
 
+  private editableDefinitionSource(definition: Record<string, unknown>): string {
+    const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
+    const meta: Record<string, unknown> = { description: definition.description ?? '',
+      args: definition.args ?? {}, returns: definition.returns };
+    if (definition.types && Object.keys(definition.types as object).length) meta.types = definition.types;
+    if (Array.isArray(definition.effects) && definition.effects.length) meta.effects = definition.effects;
+    if (definition.subtype === 'directory-reducer') meta.kind = definition.subtype;
+    if (kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated') meta.engine = definition.engine;
+    const front = YAML.stringify(meta).trimEnd(), body = String(definition[kind] ?? '').replace(/^\n+|\n+$/g, '') + '\n';
+    return kind === 'code' ? `/*---\n${front}\n---*/\n${body}` : `---\n${front}\n---\n${body}`;
+  }
+
+  private editableCodebase(): Folder {
+    if (!this.lam.codebaseFolder) {
+      const files: Record<string, string> = {};
+      for (const [name, raw] of Object.entries(this.lam.codebase)) {
+        const definition = raw as Record<string, unknown>, extension = Object.hasOwn(definition, 'code') ? '.ts' : '.nl';
+        const path = `${name}${extension}`; this.lam.codebasePaths[name] = path;
+        files[path] = this.editableDefinitionSource(definition);
+      }
+      this.lam.codebaseFolder = Folder.fromFiles(files, 'overlay');
+    }
+    return this.lam.codebaseFolder;
+  }
+
+  private refreshCodebaseFile(path: string): void {
+    const entry = Object.entries(this.lam.codebasePaths).find(([, source]) => source === path);
+    if (!entry) throw new Reject([{ path: `codebase/${path}`, code: 'no-such-path', expected: 'an imported function source' }]);
+    const [name] = entry, previous = this.lam.codebase[name] as Record<string, unknown>;
+    const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
+    const isCode = source.trimStart().startsWith('/*---');
+    const match = (isCode ? /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/ :
+      /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/).exec(source);
+    if (!match) throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
+    const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
+    if (typeof meta.returns !== 'string') throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'returns' }]);
+    const subtype = String(meta.kind ?? 'function');
+    if (!['function', 'directory-reducer'].includes(subtype))
+      throw new Reject([{ path: `codebase/${path}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer' }]);
+    const updated: Record<string, unknown> = { description: String(meta.description ?? ''),
+      args: meta.args ?? {}, returns: meta.returns, [isCode ? 'code' : 'instructions']:
+        match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types: meta.types ?? previous.types ?? {},
+      effects: meta.effects ?? [], subtype, codebase: previous.codebase ?? {} };
+    if (isCode) updated.engine = String(meta.engine ?? 'quickjs-isolated');
+    // Parse all declared types before making the edited binding live.
+    const env = this.env.child(Object.fromEntries(Object.entries(updated.types as Record<string, string>)
+      .map(([key, value]) => [key, parseType(value)])));
+    env.checkNames(parseType(`Lambda<{ ${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
+      `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${updated.returns}>`));
+    this.lam.codebase[name] = updated;
+  }
+
+  private async scopeFsCall(code: string): Promise<NativeResult | undefined> {
+    const assigned = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+fs\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    const bare = /^\s*await\s+fs\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*$/.exec(code);
+    if (!assigned && !bare) return;
+    const local = assigned?.[1], annotation = assigned?.[2], method = assigned?.[3] ?? bare![1], raw = assigned?.[4] ?? bare![2]!;
+    const expressions = this.splitCallArgs(raw), values = expressions.map(expression => this.runtime.evalFor(this.lam,
+      `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result);
+    if (!values.length || typeof values[0] !== 'string')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, ...)` }]);
+    const rawPath = values[0], root = rawPath === 'project' || rawPath.startsWith('project/') ? 'project' :
+      rawPath === 'codebase' || rawPath.startsWith('codebase/') ? 'codebase' : '';
+    if (!root) throw new Reject([{ path: rawPath, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
+    const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
+    if (!folder) throw new Reject([{ path: rawPath, code: 'bad-action', expected: 'a directory reducer project' }]);
+    const path = rawPath === root ? '' : rawPath.slice(root.length + 1);
+    let value: unknown;
+    if (method === 'exists') value = await folder.exists(path);
+    else if (method === 'list') {
+      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
+      value = folder.listFiles(path, options.pattern === undefined ? undefined : String(options.pattern))
+        .map(item => ({ ...item, path: `${root}/${item.path}` }));
+    } else if (method === 'readText' || method === 'readJson') {
+      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
+      const content = await folder.readText(path, options.startLine === undefined ? undefined : Number(options.startLine),
+        options.endLine === undefined ? undefined : Number(options.endLine));
+      value = method === 'readJson' ? JSON.parse(content) : content;
+    } else if (method === 'writeText' || method === 'writeJson') {
+      if (values.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, value)` }]);
+      if (root === 'codebase' && !folder.isFile(path)) throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'an existing codebase file' }]);
+      const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
+      folder.writeText(path, method === 'writeText' ? String(values[1]) : `${JSON.stringify(values[1], null, 2)}\n`);
+      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+      catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
+      value = null;
+    } else if (method === 'editText') {
+      if (values.length !== 2 || !values[1] || typeof values[1] !== 'object')
+        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.editText(path, { find, replaceWith, fuzzy? })' }]);
+      const options = values[1] as Record<string, unknown>, before = folder.readBytesSync(path);
+      value = await folder.editText(path, String(options.find ?? ''), String(options.replaceWith ?? ''), options.fuzzy === true);
+      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+      catch (error) { folder.writeBytes(path, before); throw error; }
+    } else if (method === 'diff') value = folder.diffSync(path).changes.map(change =>
+      ({ path: `${root}/${change.path}`, kind: change.kind }));
+    else if (method === 'remove') {
+      if (root === 'codebase') throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'codebase files cannot be deleted' }]);
+      folder.remove(path); value = null;
+    } else if (method === 'move') {
+      if (values.length !== 2 || typeof values[1] !== 'string')
+        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.move(source, destination)' }]);
+      if (root !== 'project' || !(values[1] === 'project' || values[1].startsWith('project/')))
+        throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved' }]);
+      folder.move(path, values[1].slice(8)); value = null;
+    } else throw new Reject([{ path: 'code', code: 'bad-call', expected: 'an fs method', got: method }]);
+    if (local) {
+      const type = parseType(annotation?.trim() || this.inferScopeType(value));
+      const created = !this.lam.letTypes[local]; if (created) this.lam.letTypes[local] = type;
+      try { this.lam.let[local] = coerce(value, type, this.env, `let/${local}`); }
+      catch (error) { if (created) delete this.lam.letTypes[local]; throw error; }
+    }
+    return { kind: 'ok', text: JSON.stringify(value), value: value as Value };
+  }
+
+  private async scopeHandleCall(code: string): Promise<NativeResult | undefined> {
+    const assigned = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(await\s+)?([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    const bare = /^\s*await\s+([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*$/.exec(code);
+    if (!assigned && !bare) return;
+    const local = assigned?.[1], annotation = assigned?.[2], receiverName = (assigned?.[4] ?? bare![1])!,
+      method = (assigned?.[5] ?? bare![2])!, raw = (assigned?.[6] ?? bare![3])!;
+    if (method === 'apply') return;
+    if (!['project', 'codebase'].includes(receiverName) && !Object.hasOwn(this.lam.args, receiverName) &&
+        !Object.hasOwn(this.lam.let, receiverName)) return;
+    const receiver = receiverName === 'project' && this.lam.projectTransaction ? this.lam.projectTransaction.folder.root() :
+      receiverName === 'codebase' ? this.editableCodebase().root() :
+      Object.hasOwn(this.lam.let, receiverName) ? this.lam.let[receiverName] : this.lam.args[receiverName];
+    if (!(receiver instanceof Folder) && !(receiver instanceof FolderHandle) && !(receiver instanceof FileHandle)) return;
+    const values = this.splitCallArgs(raw).map(expression => this.runtime.evalFor(this.lam,
+      `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result);
+    const owner = receiver instanceof Folder ? receiver : receiver.folder;
+    if (['remove', 'moveTo'].includes(method) && owner === this.editableCodebase())
+      throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved or deleted' }]);
+    const callable = (receiver as unknown as Record<string, unknown>)[method];
+    if (typeof callable !== 'function')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a Folder or FileHandle method', got: method }]);
+    const codebaseReceiver = receiver instanceof FileHandle && owner === this.editableCodebase();
+    if (codebaseReceiver && method.startsWith('write') && !owner.isFile(receiver.path))
+      throw new Reject([{ path: `codebase/${receiver.path}`, code: 'not-writable', expected: 'an existing codebase file' }]);
+    const before = codebaseReceiver && ['writeText', 'writeBytes', 'writeJson', 'editText'].includes(method) ?
+      owner.readBytesSync(receiver.path) : undefined;
+    let value: unknown;
+    if (method === 'editText' && values.length === 1 && values[0] && typeof values[0] === 'object') {
+      const options = values[0] as Record<string, unknown>;
+      value = await (callable as Function).call(receiver, String(options.find ?? ''),
+        String(options.replaceWith ?? ''), options.fuzzy === true);
+    } else value = await (callable as Function).apply(receiver, values);
+    if (before && receiver instanceof FileHandle) try { this.refreshCodebaseFile(receiver.path); }
+    catch (error) { owner.writeBytes(receiver.path, before); throw error; }
+    if (local) {
+      const type = parseType(annotation?.trim() || this.inferScopeType(value));
+      const created = !this.lam.letTypes[local]; if (created) this.lam.letTypes[local] = type;
+      try { this.lam.let[local] = coerce(value, type, this.env, `let/${local}`); }
+      catch (error) { if (created) delete this.lam.letTypes[local]; throw error; }
+    }
+    const display = value instanceof FileHandle || value instanceof FolderHandle ?
+      { handle: value instanceof FileHandle ? 'file' : 'folder', path: value.path } : value;
+    return { kind: 'ok', text: JSON.stringify(display), value: value as Value };
+  }
+
   private async scopeEval(code: string): Promise<NativeResult> {
     if (!code.trim()) return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript-like statement or expression' }]));
     if (/\b(?:eval|Function|import|process|globalThis|require)\b/.test(code))
       return rejected(new Reject([{ path: 'code', code: 'eval-forbidden', expected: 'the restricted typed scope language' }]));
+    if (code.includes('fs.')) try {
+      const result = await this.scopeFsCall(code); if (result) return result;
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    try {
+      const handleResult = await this.scopeHandleCall(code); if (handleResult) return handleResult;
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
     const statements = this.splitScopeStatements(code), imported = Object.keys(this.lam.codebase);
     if (statements.length > 1 && imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
       let last: NativeResult = { kind: 'ok', text: 'null', value: null };
@@ -1143,6 +1318,7 @@ export class NativeSession {
     }
     const mapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
     if (mapped && Object.hasOwn(this.lam.codebase, mapped[5]!)) {
+      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[mapped[5]!]!);
       const definition = this.lam.codebase[mapped[5]!] as Record<string, unknown>;
       const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
       const expressions = this.splitCallArgs(mapped[6]!);
@@ -1177,6 +1353,7 @@ export class NativeSession {
     }
     const direct = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
     if (direct && Object.hasOwn(this.lam.codebase, direct[3]!)) {
+      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[direct[3]!]!);
       const definition = this.lam.codebase[direct[3]!] as Record<string, unknown>;
       const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
       const expressions = this.splitCallArgs(direct[4]!);
@@ -1254,26 +1431,41 @@ export class NativeSession {
       if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
       try {
-        const tx = this.lam.projectTransaction;
-        if (!tx) throw new Reject([{ path: 'path', code: 'bad-action', expected: 'a directory reducer project' }]);
-        const raw = String(args.path ?? 'project');
-        const path = raw === 'project' ? '' : raw.startsWith('project/') ? raw.slice(8) :
-          (() => { throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a path rooted at project/' }]); })();
+        const fallback = this.lam.projectTransaction ? 'project' : 'codebase';
+        const raw = String(args.path ?? fallback);
+        const root = raw === 'project' || raw.startsWith('project/') ? 'project' :
+          raw === 'codebase' || raw.startsWith('codebase/') ? 'codebase' : '';
+        if (!root) throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
+        const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
+        if (!folder) throw new Reject([{ path: raw, code: 'bad-action', expected: 'a directory reducer project' }]);
+        const path = raw === root ? '' : raw.slice(root.length + 1);
         if (['read_file', 'write_file', 'edit_file'].includes(name) && !path)
-          throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a project file' }]);
+          throw new Reject([{ path: raw, code: 'no-such-path', expected: `a ${root} file` }]);
         let value: unknown;
-        if (name === 'list_files') value = tx.folder.listFiles(path, args.pattern === undefined ? undefined : String(args.pattern))
-          .map(item => ({ ...item, path: `project/${item.path}` }));
-        else if (name === 'search_files') value = (await tx.folder.search(String(args.query ?? ''), path,
+        if (name === 'list_files') value = folder.listFiles(path, args.pattern === undefined ? undefined : String(args.pattern))
+          .map(item => ({ ...item, path: `${root}/${item.path}` }));
+        else if (name === 'search_files') value = (await folder.search(String(args.query ?? ''), path,
           args.pattern === undefined ? undefined : String(args.pattern), args.regex === true))
-          .map(item => ({ ...item, path: `project/${item.path}` }));
-        else if (name === 'read_file') value = await tx.folder.readText(path,
+          .map(item => ({ ...item, path: `${root}/${item.path}` }));
+        else if (name === 'read_file') value = await folder.readText(path,
           args.start_line === undefined ? undefined : Number(args.start_line),
           args.end_line === undefined ? undefined : Number(args.end_line));
-        else if (name === 'write_file') { tx.folder.writeText(path, String(args.content ?? '')); value = { path: raw, changed: true }; }
-        else if (name === 'edit_file') value = await tx.folder.editText(path, String(args.find ?? ''),
-          String(args.replace_with ?? ''), args.fuzzy === true);
-        else value = tx.folder.diffSync(path);
+        else if (name === 'write_file') {
+          if (root === 'codebase' && !folder.isFile(path)) throw new Reject([{ path: raw, code: 'not-writable',
+            expected: 'an existing codebase file; codebase files cannot be added, moved, or deleted' }]);
+          const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
+          folder.writeText(path, String(args.content ?? ''));
+          try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+          catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
+          value = { path: raw, changed: true };
+        }
+        else if (name === 'edit_file') {
+          const before = folder.readBytesSync(path);
+          value = await folder.editText(path, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
+          try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+          catch (error) { folder.writeBytes(path, before); throw error; }
+        }
+        else value = folder.diffSync(path);
         const text = typeof value === 'string' ? value : JSON.stringify(value, null, 1);
         return this.record(name, args, { kind: 'ok', text, value: value as Value });
       } catch (error) {
@@ -1399,6 +1591,8 @@ export class NativeSession {
       const copyName = /^let\/([A-Za-z_][A-Za-z0-9_]*)$/.exec(label)?.[1];
       const template = copyName ? this.lam.let[copyName] : undefined;
       const original = copyName ? this.lam.fnCopies[copyName] as Record<string, unknown> | undefined : undefined;
+      if (!copyName && this.lam.codebaseFolder && this.lam.codebasePaths[label])
+        this.refreshCodebaseFile(this.lam.codebasePaths[label]!);
       const definition = copyName && template !== undefined && pending(template) && template.nodeKind === 'lambda' && original ?
         { ...original, [template.kind]: template.body, codebase: template.codebase } :
         this.lam.codebase[label] as Record<string, unknown> | undefined;

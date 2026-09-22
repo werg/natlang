@@ -52,3 +52,14 @@ def test_direct_directory_reducer_call_returns_value_and_discards_patch():
     result = session.apply("eval", {"code": 'const report = await rewrite(folder, "hi"); report'})
     assert result.kind == "ok" and result.value == "changed"
     assert folder.read_text("message.txt") == "hello\n"
+
+
+def test_folder_and_file_handles_persist_as_typed_scope_values():
+    folder = Folder.from_files({"notes/a.txt": "alpha\n"})
+    root, session = root_session(folder)
+    made_dir = session.apply("eval", {"code": 'const notes: Folder = folder.dir("notes"); notes'})
+    assert made_dir.kind == "ok" and root.let["notes"].path == "notes"
+    made_file = session.apply("eval", {"code": 'const note: FileHandle = notes.file("a.txt"); note'})
+    assert made_file.kind == "ok" and root.let["note"].path == "notes/a.txt"
+    read = session.apply("eval", {"code": "const text: Text = await note.readText(); text"})
+    assert read.kind == "ok" and read.value == "alpha\n"

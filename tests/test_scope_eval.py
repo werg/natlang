@@ -61,7 +61,8 @@ def test_scope_surface_is_stable_and_completion_ignores_blank_lines():
     root, active = session()
     tools = ScopeEvalSurface().tools(active)
     assert [entry["function"]["name"] for entry in tools] == [
-        "eval", "read_value", "write_value", "return_value", "mark_lines",
+        "eval", "read_value", "write_value", "return_value", "list_files", "search_files",
+        "read_file", "write_file", "edit_file", "diff_files", "mark_lines",
         "report_blocker", "report_error"]
     assert active.apply("write_value", {"name": "answer", "value": 2}).kind == "ok"
     assert active.apply("return_value", {"variable": "answer"}).kind == "ok"
@@ -86,3 +87,30 @@ def test_scope_writes_require_types_only_for_ambiguous_values():
     assert active.apply("write_value", {"name": "empty", "value": []}).kind == "rejected"
     assert active.apply("write_value", {"name": "empty", "value": [], "as_type": "Text[]"}).kind == "ok"
     assert root.ret is MISSING
+
+
+def test_codebase_existing_source_is_live_editable_but_file_set_is_fixed():
+    root = load_program({"$lambda": {"type": "Lambda<{}, Text>", "instructions": "Call label.",
+        "codebase": {"label": {"args": {}, "returns": "Text", "code": 'return "old";'}}}})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    surface = ScopeEvalSurface()
+    source = surface.apply(active, "read_file", {"path": "codebase/label.ts"}).value
+    assert 'return "old";' in source
+    assert surface.apply(active, "edit_file", {"path": "codebase/label.ts", "find": 'return "old";',
+                                                 "replace_with": 'return "new";'}).kind == "ok"
+    called = surface.apply(active, "eval", {"code": "const answer = await label(); answer"})
+    assert called.kind == "ok" and called.value == "new"
+    rejected = surface.apply(active, "write_file", {"path": "codebase/extra.nl", "content": source})
+    assert rejected.kind == "rejected"
+
+
+def test_injected_fs_and_file_tools_share_the_live_codebase_overlay():
+    root = load_program({"$lambda": {"type": "Lambda<{}, Text>", "instructions": "Inspect label.",
+        "codebase": {"label": {"args": {}, "returns": "Text", "code": 'return "old";'}}}})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    read = active.apply("eval", {"code": 'const source: Text = await fs.readText("codebase/label.ts"); source'})
+    assert read.kind == "ok" and 'return "old";' in read.value
+    edited = active.apply("eval", {"code":
+        'const receipt = await fs.editText("codebase/label.ts", { find: "old", replaceWith: "new" }); receipt'})
+    assert edited.kind == "ok"
+    assert "new" in active.apply("read_file", {"path": "codebase/label.ts"}).value

@@ -109,6 +109,47 @@ class FunctionDef:
             doc["subtype"] = self.subtype
         return doc
 
+    def to_source(self) -> str:
+        """Render an editable standalone module without changing its lexical children."""
+        meta = {"description": self.description, "args": dict(self.args), "returns": self.returns}
+        if self.types:
+            meta["types"] = dict(self.types)
+        if self.effects:
+            meta["effects"] = list(self.effects)
+        if self.kind == "code" and self.engine != "quickjs-isolated":
+            meta["engine"] = self.engine
+        if self.subtype != "function":
+            meta["kind"] = self.subtype
+        front = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).rstrip()
+        if self.kind == "code":
+            return f"/*---\n{front}\n---*/\n{self.body}"
+        return f"---\n{front}\n---\n{self.body}"
+
+
+def parse_function_source(name: str, source: str, *, inherited: Optional[dict] = None,
+                          previous: Optional[FunctionDef] = None, path: str = "codebase") -> FunctionDef:
+    """Parse one editable module while retaining its already linked imports.
+
+    Relinking import declarations is performed by a source workspace.  An
+    executing frame stays pinned to its binding table, while the edited body and
+    signature are loaded at the next call boundary.
+    """
+    imports, text = _split_imports(source)
+    is_ts = text.lstrip().startswith("/*---")
+    match = (_FRONT_TS if is_ts else _FRONT).match(text)
+    if not match:
+        raise reject(path, "type-mismatch", "frontmatter between --- lines")
+    meta = yaml.safe_load(match.group(1)) or {}
+    fn = _make(name, meta, match.group(2), "code" if is_ts else "instructions",
+               inherited or (previous.types if previous else {}), path)
+    fn.codebase = previous.codebase if previous else {}
+    # Existing static imports remain valid live bindings.  Changing the import
+    # graph itself is validated by the developer workspace before a new run.
+    if imports and previous is None:
+        raise reject(path, "bad-import", "imports linked by a source workspace")
+    check(fn)
+    return fn
+
 
 def _make(name: str, meta: dict, body: str, kind: str, inherited: dict, source: str) -> FunctionDef:
     meta = meta or {}

@@ -17,7 +17,8 @@ export type LambdaNode = Base & { nodeKind: 'lambda'; kind: 'instructions' | 'co
   letTypes: Record<string, Type>; codebase: Record<string, unknown>; functionName: string;
   marks: Record<number, string>; fnCopies: Record<string, unknown>;
   subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
-  reducerMode: '' | 'apply' | 'direct'; commitInclude?: string[]; commitExclude?: string[] };
+  reducerMode: '' | 'apply' | 'direct'; commitInclude?: string[]; commitExclude?: string[];
+  codebaseFolder?: Folder; codebasePaths: Record<string, string> };
 export type MapNode = Base & { nodeKind: 'map'; over: Value; fn: Value; slots?: Value[]; itemName: string };
 export type FoldNode = Base & { nodeKind: 'fold'; over: Value; init: Value; step: Value;
   acc: Value; at: number; current: Value | null; accName: string; itemName: string };
@@ -127,7 +128,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
     if (wanted.name === 'Bool' && typeof raw === 'boolean') return raw;
     if (wanted.name === 'Null' && raw === null) return null;
     if (wanted.name === 'Folder' && (raw instanceof Folder || raw instanceof FolderHandle)) return raw;
-    if (wanted.name === 'File' && raw instanceof FileHandle) return raw;
+    if (wanted.name === 'FileHandle' && raw instanceof FileHandle) return raw;
     return reject(path, 'type-mismatch', wanted.name, preview(raw));
   }
   if (wanted.kind === 'lit') {
@@ -234,7 +235,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       continuationNote: String(body.continuation_note ?? ''),
       let: {}, letTypes: {}, codebase: inlineCodebase(body.codebase, typesSrc),
       functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {},
-      subtype: subtype as LambdaNode['subtype'], reducerMode: '' };
+      subtype: subtype as LambdaNode['subtype'], reducerMode: '', codebasePaths: {} };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
       if (!field) return reject(`${path}/args/${name}`, 'unknown-field');

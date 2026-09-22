@@ -12,7 +12,7 @@ class TypeSyntaxError(ValueError):
 
 @dataclass(frozen=True)
 class Prim:
-    name: str  # Text | Num | Bool | Null | Blob | Folder | File
+    name: str  # Text | Num | Bool | Null | Blob | Folder | FileHandle
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ Type = U[Prim, Lit, Record, ListT, DictT, UnionT, Name, LambdaT, MapT, FoldT, It
 PENDING_TYPES = (LambdaT, MapT, FoldT, IterateT)
 
 TEXT, NUM, BOOL, NULL, BLOB, FOLDER, FILE = (
-    Prim(n) for n in ("Text", "Num", "Bool", "Null", "Blob", "Folder", "File"))
+    Prim(n) for n in ("Text", "Num", "Bool", "Null", "Blob", "Folder", "FileHandle"))
 _PRIMS = {t.name: t for t in (TEXT, NUM, BOOL, NULL, BLOB, FOLDER, FILE)}
 
 _TOKEN = re.compile(

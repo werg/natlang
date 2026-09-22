@@ -212,6 +212,7 @@ export class Folder {
     return [...candidates].filter(item => item !== clean && under(item, clean) && matches(item)).sort().map(item => this.statSync(item));
   }
   async readBytes(path: string): Promise<Uint8Array> { return this.read(path).slice(); }
+  readBytesSync(path: string): Uint8Array { return this.read(path).slice(); }
   async readText(path: string, startLine?: number, endLine?: number): Promise<string> {
     const value = text(this.read(path)); if (startLine === undefined && endLine === undefined) return value;
     const start = startLine ?? 1, end = endLine ?? start; if (start < 1 || end < start) throw new RangeError('invalid line range');

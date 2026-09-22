@@ -4,7 +4,7 @@ import { TypeEnv, parseType, formatType, fitsType, resultType } from '../dist/in
 
 test('native type parser handles the complete structural grammar', () => {
   for (const [source, canonical] of [
-    ['Text', 'Text'], ['Folder', 'Folder'], ['File', 'File'],
+    ['Text', 'Text'], ['Folder', 'Folder'], ['FileHandle', 'FileHandle'],
     ['{x: Num, note?: Text}', '{ x: Num, note?: Text }'],
     ['(Text | Num)[]', '(Text | Num)[]'],
     ['Dict<{key: Text, size: Num}>', 'Dict<{ key: Text, size: Num }>'],

@@ -30,7 +30,7 @@ Read [language and authoring](references/language.md) when creating or restructu
 - Host-backed lazy dictionaries are model-facing `Dict<T>` values, not a separate tree type or namespace. Read and pass them through normal `args/...` paths. Their provider and unobserved contents remain host-owned.
 - Functions can call checked named helpers through normal imports. Use ordinary loops, array methods, and `Promise.all` for repeated work; crisp helpers own exact operations.
 - `eval` state persists across turns and returns observations without completing the enclosing lambda. Close every substantive instruction line explicitly with `mark_lines`; use `report_blocker` for missing information and `report_error` for invalid work.
-- Scope values and files are separate. Authorized agents edit the writable `codebase/` overlay with file tools. Directory reducers receive `project/` and retain selected edits through `commit` or `folder.apply`.
+- Scope values and files are separate. Authorized agents edit the contents of existing files in the fixed `codebase/` overlay with file tools; they cannot create, delete, or move codebase files. Directory reducers receive `project/`, where normal file creation, editing, moving, and deletion are allowed, and retain selected edits through `commit` or `folder.apply`.
 - Long productive runs are intended. Do not add arbitrary codebase, nesting, local, turn, or token limits to make a test finish. Explicit deployment budgets are a host policy. Conversation rollover is compatible with long runs: preserve progress in program state.
 - Report real blockers and unresolved semantics. Do not return invented success, manufacture receipts, weaken assertions, or turn unknown effect outcomes into failures that are safe to retry.
 

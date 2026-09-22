@@ -1061,60 +1061,106 @@ class Session:
         return result
 
     def _project_file(self, raw: str, *, allow_root: bool = True):
-        tx = self.lam.project_transaction
-        if tx is None:
-            raise reject("path", "bad-action", "a directory reducer project")
-        path = str(raw or "project")
-        if path == "project":
-            relative = ""
-        elif path.startswith("project/"):
-            relative = path[8:]
+        from .scoped_fs import Folder
+        path = str(raw or ("project" if self.lam.project_transaction is not None else "codebase"))
+        if path == "project" or path.startswith("project/"):
+            tx = self.lam.project_transaction
+            if tx is None:
+                raise reject(path, "bad-action", "a directory reducer project")
+            root, folder = "project", tx.folder
+            relative = "" if path == root else path[len(root) + 1:]
+        elif path == "codebase" or path.startswith("codebase/"):
+            root, folder = "codebase", self._codebase_folder()
+            relative = "" if path == root else path[len(root) + 1:]
         else:
-            raise reject(path, "no-such-path", "a path rooted at project/")
+            raise reject(path, "no-such-path", "a path rooted at codebase/ or project/")
         if not allow_root and not relative:
-            raise reject(path, "no-such-path", "a project file")
-        return tx.folder, relative
+            raise reject(path, "no-such-path", f"a {root} file")
+        return root, folder, relative
+
+    def _codebase_folder(self):
+        from .scoped_fs import Folder
+        if self.lam.codebase_folder is None:
+            files, paths = {}, {}
+            for name, fn in self.lam.codebase.items():
+                ext = ".ts" if fn.kind == "code" else ".nl"
+                paths[name] = name + ext
+                files[paths[name]] = fn.to_source()
+            self.lam.codebase_folder = Folder.from_files(files, access="overlay")
+            self.lam.codebase_paths = paths
+        return self.lam.codebase_folder
+
+    def _refresh_codebase_file(self, relative: str):
+        from .codebase import parse_function_source
+        matches = [name for name, path in self.lam.codebase_paths.items() if path == relative]
+        if not matches:
+            raise reject("codebase/" + relative, "no-such-path", "an imported function source")
+        name = matches[0]
+        previous = self.lam.codebase[name]
+        self.lam.codebase[name] = parse_function_source(name, self.lam.codebase_folder.read_text(relative),
+                                                        previous=previous, path="codebase/" + relative)
 
     def _op_list_files(self, args):
-        folder, path = self._project_file(args.get("path") or "project")
-        rows = [{"path": "project/" + item.path, "kind": item.kind,
+        root, folder, path = self._project_file(args.get("path"))
+        rows = [{"path": root + "/" + item.path, "kind": item.kind,
                  "bytes": item.bytes, "digest": item.digest}
                 for item in folder.list_files(path, pattern=args.get("pattern"))]
         return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
 
     def _op_search_files(self, args):
-        folder, path = self._project_file(args.get("path") or "project")
-        rows = [{"path": "project/" + item.path, "line": item.line, "text": item.text}
+        root, folder, path = self._project_file(args.get("path"))
+        rows = [{"path": root + "/" + item.path, "line": item.line, "text": item.text}
                 for item in folder.search(str(args.get("query") or ""), path,
                                           pattern=args.get("pattern"), regex=args.get("regex") is True)]
         return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
 
     def _op_read_file(self, args):
-        folder, path = self._project_file(args.get("path"), allow_root=False)
+        _, folder, path = self._project_file(args.get("path"), allow_root=False)
         text = folder.read_text(path, args.get("start_line"), args.get("end_line"))
         return Result("ok", text, value=text)
 
     def _op_write_file(self, args):
-        folder, path = self._project_file(args.get("path"), allow_root=False)
+        root, folder, path = self._project_file(args.get("path"), allow_root=False)
+        if root == "codebase" and not folder.is_file(path):
+            raise reject("codebase/" + path, "not-writable",
+                         "an existing codebase file; codebase files cannot be added, moved, or deleted")
+        before = folder.read_bytes(path) if folder.is_file(path) else None
         folder.write_text(path, str(args.get("content") or ""))
-        return Result("ok", "ok   project/" + path)
+        try:
+            if root == "codebase": self._refresh_codebase_file(path)
+        except BaseException:
+            if before is None: folder.remove(path)
+            else: folder.write_bytes(path, before)
+            raise
+        return Result("ok", f"ok   {root}/{path}")
 
     def _op_edit_file(self, args):
-        folder, path = self._project_file(args.get("path"), allow_root=False)
+        root, folder, path = self._project_file(args.get("path"), allow_root=False)
+        before = folder.read_bytes(path)
         receipt = folder.edit_text(path, str(args.get("find") or ""),
                                    str(args.get("replace_with") or ""), fuzzy=args.get("fuzzy") is True)
+        try:
+            if root == "codebase": self._refresh_codebase_file(path)
+        except BaseException:
+            folder.write_bytes(path, before)
+            raise
         return Result("ok", json.dumps(receipt, ensure_ascii=False), value=receipt)
 
     def _op_diff_files(self, args):
-        folder, path = self._project_file(args.get("path") or "project")
+        root, folder, path = self._project_file(args.get("path"))
         delta = folder.diff(path)
-        rows = [{"path": "project/" + item.path, "kind": item.kind,
+        rows = [{"path": root + "/" + item.path, "kind": item.kind,
                  "before": item.before_digest, "after": item.after_digest}
                 for item in delta.changes]
         return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
 
     @staticmethod
     def _infer_scope_type(value):
+        from .scoped_fs import FileHandle, Folder, FolderHandle
+        if isinstance(value, (Folder, FolderHandle)):
+            return "Folder"
+        if isinstance(value, FileHandle):
+            return "FileHandle"
         if value is None:
             return "Null"
         if isinstance(value, bool):
@@ -1215,11 +1261,147 @@ class Session:
         if tail: out.append(tail)
         return out
 
+    def _scope_fs_call(self, code: str):
+        assigned = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+"
+            r"fs\.([A-Za-z_$][\w$]*)\((.*)\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        bare = re.fullmatch(r"\s*await\s+fs\.([A-Za-z_$][\w$]*)\((.*)\)\s*;?\s*", code, re.S)
+        if not assigned and not bare:
+            return None
+        local, annotation, method, raw = ((assigned.group(1), assigned.group(2), assigned.group(3), assigned.group(4))
+                                          if assigned else (None, None, bare.group(1), bare.group(2)))
+        expressions = self._split_call_args(raw)
+        values = [self._eval_scope_expression(expr) for expr in expressions]
+        if not values or not isinstance(values[0], str):
+            raise reject("code", "bad-call", f"fs.{method}(path, ...)")
+        root, folder, path = self._project_file(values[0], allow_root=method in ("list", "diff", "exists"))
+        if method == "exists": value = folder.exists(path)
+        elif method == "list":
+            options = values[1] if len(values) > 1 and isinstance(values[1], dict) else {}
+            value = [{"path": root + "/" + item.path, "kind": item.kind,
+                      "bytes": item.bytes, "digest": item.digest}
+                     for item in folder.list_files(path, pattern=options.get("pattern"))]
+        elif method in ("readText", "readJson"):
+            options = values[1] if len(values) > 1 and isinstance(values[1], dict) else {}
+            text = folder.read_text(path, options.get("startLine"), options.get("endLine"))
+            value = json.loads(text) if method == "readJson" else text
+        elif method in ("writeText", "writeJson"):
+            if len(values) != 2: raise reject("code", "bad-call", f"fs.{method}(path, value)")
+            if root == "codebase" and not folder.is_file(path):
+                raise reject(values[0], "not-writable", "an existing codebase file")
+            before = folder.read_bytes(path) if folder.is_file(path) else None
+            folder.write_text(path, str(values[1]) if method == "writeText" else
+                              json.dumps(values[1], ensure_ascii=False, indent=2) + "\n")
+            try:
+                if root == "codebase": self._refresh_codebase_file(path)
+            except BaseException:
+                if before is None: folder.remove(path)
+                else: folder.write_bytes(path, before)
+                raise
+            value = None
+        elif method == "editText":
+            if len(values) != 2 or not isinstance(values[1], dict):
+                raise reject("code", "bad-call", "fs.editText(path, { find, replaceWith, fuzzy? })")
+            before = folder.read_bytes(path); options = values[1]
+            value = folder.edit_text(path, str(options.get("find") or ""),
+                                     str(options.get("replaceWith") or ""), fuzzy=options.get("fuzzy") is True)
+            try:
+                if root == "codebase": self._refresh_codebase_file(path)
+            except BaseException:
+                folder.write_bytes(path, before); raise
+        elif method == "diff":
+            value = [{"path": root + "/" + item.path, "kind": item.kind}
+                     for item in folder.diff(path).changes]
+        elif method == "remove":
+            if root == "codebase": raise reject(values[0], "not-writable", "codebase files cannot be deleted")
+            folder.remove(path); value = None
+        elif method == "move":
+            if len(values) != 2 or not isinstance(values[1], str):
+                raise reject("code", "bad-call", "fs.move(source, destination)")
+            to_root, _, destination = self._project_file(values[1], allow_root=False)
+            if root != "project" or to_root != "project":
+                raise reject("code", "not-writable", "codebase files cannot be moved")
+            folder.move(path, destination); value = None
+        else:
+            raise reject("code", "bad-call", "an fs method", method)
+        if local is not None:
+            type_text = annotation.strip() if annotation else self._infer_scope_type(value)
+            undo = self._local_type(f"let/{local}", type_text, {})
+            try: self._set_value(f"let/{local}", parse_type(type_text), value, yaml=False)
+            except BaseException:
+                if undo: undo()
+                raise
+        text = json.dumps(value, ensure_ascii=False)
+        return Result("ok", text, value=value)
+
+    def _scope_handle_call(self, code: str):
+        match = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(await\s+)?"
+            r"([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\((.*)\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        bare = re.fullmatch(r"\s*await\s+([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\((.*)\)\s*;?\s*", code, re.S)
+        if not match and not bare:
+            return None
+        if match:
+            local, annotation, _, receiver_name, method, raw = match.groups()
+        else:
+            local = annotation = None; receiver_name, method, raw = bare.groups()
+        if method == "apply":
+            return None
+        if receiver_name not in ("project", "codebase") and receiver_name not in self.lam.in_ and receiver_name not in self.lam.let:
+            return None
+        from .scoped_fs import FileHandle, Folder, FolderHandle
+        if receiver_name == "project" and self.lam.project_transaction is not None:
+            receiver = self.lam.project_transaction.folder.root()
+        elif receiver_name == "codebase":
+            receiver = self._codebase_folder().root()
+        else:
+            receiver = self._eval_scope_expression(receiver_name)
+        if not isinstance(receiver, (Folder, FolderHandle, FileHandle)):
+            return None
+        values = [self._eval_scope_expression(expr) for expr in self._split_call_args(raw)]
+        snake = re.sub(r"(?<!^)(?=[A-Z])", "_", method).lower()
+        if snake in ("remove", "move_to") and (getattr(receiver, "folder", receiver) is self._codebase_folder()):
+            raise reject("code", "not-writable", "codebase files cannot be moved or deleted")
+        function = getattr(receiver, snake, None)
+        if function is None:
+            raise reject("code", "bad-call", "a Folder or FileHandle method", method)
+        codebase_receiver = isinstance(receiver, FileHandle) and receiver.folder is self._codebase_folder()
+        if codebase_receiver and snake.startswith("write_") and not receiver.folder.is_file(receiver.path):
+            raise reject("codebase/" + receiver.path, "not-writable", "an existing codebase file")
+        before = receiver.folder.read_bytes(receiver.path) if codebase_receiver and snake in (
+            "write_text", "write_bytes", "write_json", "edit_text") else None
+        if snake == "edit_text" and len(values) == 2 and isinstance(values[1], dict):
+            value = function(str(values[1].get("find") or ""), str(values[1].get("replaceWith") or ""),
+                             fuzzy=values[1].get("fuzzy") is True)
+        else:
+            value = function(*values)
+        if before is not None:
+            try: self._refresh_codebase_file(receiver.path)
+            except BaseException:
+                receiver.folder.write_bytes(receiver.path, before); raise
+        if local is not None:
+            type_text = annotation.strip() if annotation else self._infer_scope_type(value)
+            undo = self._local_type(f"let/{local}", type_text, {})
+            try: self._set_value(f"let/{local}", parse_type(type_text), value, yaml=False)
+            except BaseException:
+                if undo: undo()
+                raise
+        display = {"handle": "file" if isinstance(value, FileHandle) else "folder",
+                   "path": value.path} if isinstance(value, (FileHandle, FolderHandle)) else value
+        return Result("ok", json.dumps(display, ensure_ascii=False), value=value)
+
     def _scope_eval(self, code: str) -> Result:
         if not code.strip():
             raise reject("code", "bad-action", "a TypeScript-like statement or expression")
         if re.search(r"\b(?:eval|Function|import|process|globalThis|require)\b", code):
             raise reject("code", "eval-forbidden", "the restricted typed scope language")
+        if "fs." in code:
+            fs_result = self._scope_fs_call(code)
+            if fs_result is not None:
+                return fs_result
+        handle_result = self._scope_handle_call(code)
+        if handle_result is not None:
+            return handle_result
         statements = self._split_scope_statements(code)
         imported = tuple(self.lam.codebase)
         if len(statements) > 1 and any(re.search(rf"\b{re.escape(name)}\s*\(", code) for name in imported):
@@ -1508,6 +1690,8 @@ class Session:
         from .codebase import FunctionDef
         cb = self.lam.codebase
         if ref_text in cb:
+            if self.lam.codebase_folder is not None:
+                self._refresh_codebase_file(self.lam.codebase_paths[ref_text])
             return cb[ref_text]
         if ref_text.startswith("let/"):
             tpl = self.lam.let.get(ref_text[4:])

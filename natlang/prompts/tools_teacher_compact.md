@@ -4,4 +4,4 @@ Use one eval snippet per substantive line when practical. eval supports declarat
 
 Use ordinary calls such as const result = await helper(input, criterion) and Promise.all(items.map(item => helper(item))). Mark every substantive line with mark_lines after success; mark untaken branches skipped. Use report_blocker for missing information and report_error for invalid requirements or failed validation.
 
-Keep scope separate from files. File tools use the writable codebase/ overlay. Directory reducers use project/ and commit; folder.apply(reducer, ...args) retains changes and a direct call discards them. Use the current eval and ordinary-call protocol. End after return_value.
+Keep scope separate from files. Codebase file tools edit existing files in the fixed codebase/ file set; they cannot create, delete, or move codebase files. Directory reducers use project/, where normal file creation, editing, moving, and deletion are allowed; commit selects changes, folder.apply(reducer, ...args) retains them, and a direct call discards them. Use the current eval and ordinary-call protocol. End after return_value.

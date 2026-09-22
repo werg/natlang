@@ -73,7 +73,7 @@ def test_correct_blocker_is_admitted_as_whole_program_gold():
     assert len(samples) == 1 and samples[0]["skill"] == "report_blocker"
 
 
-def test_resume_verifies_completed_rows_and_discards_interrupted_trace(tmp_path):
+def test_resume_verifies_completed_rows_and_reuses_canonical_trace_path(tmp_path):
     record = program_ir()
     output = tmp_path / "teacher.ir.jsonl"
     row = {"task": {"program_ir": {"id": record["id"]}},
@@ -88,4 +88,4 @@ def test_resume_verifies_completed_rows_and_discards_interrupted_trace(tmp_path)
     first_trace.write_text("interrupted\n")
     retry_trace = _trace_path(output, 15)
     assert retry_trace == first_trace
-    assert not retry_trace.exists()
+    assert retry_trace.read_text() == "interrupted\n"

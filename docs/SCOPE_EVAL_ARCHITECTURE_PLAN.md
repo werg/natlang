@@ -31,9 +31,10 @@ The design must:
 7. Preserve explicit `report_blocker` and `report_error` exits and caller-level validation
    failure by default.
 8. Keep scope value operations and codebase file operations unmistakably separate.
-9. Give authorized developer agents a complete, familiar file editing workflow: discovery,
-   search, reading, creation, exact or fuzzy editing, patches, moves, deletion, validation,
-   and test execution.
+9. Give authorized agents a clear file workflow: discovery, search, reading, and exact or fuzzy
+   editing of existing codebase files. Keep the codebase file set fixed for a run: codebase
+   operations cannot create, delete, or move codebase files. Directory-reducer `project/` folders
+   retain the complete create, edit, move, and delete workflow, including validation and tests.
 10. Use static import declarations with live, revisioned module bindings. The current executing
     frame remains stable, while a later call through an imported binding loads the newest compatible
     revision visible in the invocation's `codebase/` overlay.
@@ -42,7 +43,9 @@ The design must:
 12. Keep Python and TypeScript behavior conformant while allowing each implementation to follow
     its language's internal naming conventions.
 13. Give every lambda a scoped, writable `codebase/` overlay for its associated module files, with
-    compatible edits observed by later imported calls.
+    compatible content edits to existing files observed by later imported calls. The overlay's
+    file manifest is fixed at invocation start: adding, deleting, or moving codebase files is
+    rejected.
 14. Define a distinct directory-reducer lambda subtype. It otherwise executes like an ordinary
     lambda, additionally receives an automatically isolated folder at `project/`, and alone receives
     the `commit` tool for selecting `project/` changes.
@@ -139,7 +142,9 @@ commit(value, include?, exclude?)
 
 Every lambda receives its scoped `codebase` handle. The reducer additionally receives an implicit
 `project` handle because it has a directory transaction. Both roots are readable and locally
-editable. Only `project/` changes are eligible for `commit`; `codebase/` edits are invocation-local
+editable, with different file-set rules. `project/` supports normal file creation, editing, moving,
+and deletion. `codebase/` permits content edits to existing files only; its file set is fixed and
+its edits are invocation-local. Only `project/` changes are eligible for `commit`; `codebase/` edits are invocation-local
 and retained in the audit trace. File tools and the injected code-side filesystem API remain
 authority capabilities shared with ordinary lambdas. The reducer is not otherwise restricted or
 given special effect semantics.
@@ -472,7 +477,8 @@ Import rules:
   capability.
 - All callables may be awaited. Crisp calls may resolve immediately; natural-language calls may
   suspend into child interpreter episodes.
-- A source edit under the writable `codebase/` overlay creates a new module revision and invalidates
+- A content edit to an existing source file under the writable `codebase/` overlay creates a new
+  module revision and invalidates
   the affected module graph. The currently executing frame retains the instructions and code with
   which it began. A later call through an imported binding resolves against the newest compatible,
   validated revision visible in that overlay. An incompatible edit produces a call-time validation
@@ -536,17 +542,17 @@ Inside the reducer, the filesystem has exactly two standard roots:
 
 ```text
 project/    the automatically isolated input folder
-codebase/   the reducer's writable, revisioned module and associated files
+codebase/   the reducer's writable, revisioned module and associated files (existing contents only)
 ```
 
-Both roots can be read and edited through file tools and the injected `fs` library. Their commit
-semantics differ:
+Both roots can be read and edited through file tools and the injected `fs` library. Their file-set
+and commit semantics differ:
 
 - `project/` is the reducer's transactional output. Selected changes are installed in the `Folder`
   receiver only when the invocation ends successfully in apply mode.
-- `codebase/` is a writable invocation-local overlay over the reducer's module tree. Changes can
-  support analysis, adaptation, generation, and developer workflows, but cannot be included in the
-  reducer's project patch.
+- `codebase/` is a writable invocation-local overlay over the reducer's module tree. Existing file
+  contents can support analysis, adaptation, generation, and developer workflows, but codebase
+  files cannot be created, deleted, or moved and cannot be included in the reducer's project patch.
 - An executing frame remains stable. Compatible edits under `codebase/` are type checked and become
   visible when a subsequent imported function call resolves its module. Calls already in flight
   finish against their starting revision.
@@ -572,7 +578,7 @@ reducer. Their finalization differs.
 1. Acquire the receiver's exclusive reduction semaphore. Depending on host policy, another writer
    either waits for this invocation to finish or fails immediately with a busy error.
 2. Fork a private project overlay.
-3. Mount the reducer's source at `codebase/` with a writable, revisioned local overlay and live
+3. Mount the reducer's fixed source file set at `codebase/` with a writable, revisioned local overlay and live
    call-boundary import resolution.
 4. Run the reducer line by line with its ordinary arguments and implicit folder context.
 5. Require explicit marks for every substantive instruction line.
@@ -781,11 +787,12 @@ files.
 Every directory-reducer invocation owns a `ScopedFileSystem` for each mounted root, with three
 logical layers:
 
-1. **Local overlay.** New files, replacements, moves, and tombstones created by the running
-   program or agent.
+1. **Local overlay.** Existing-file replacements and edits created by the running program or
+   agent. For `project/`, this layer may also contain new files, moves, and tombstones. For
+   `codebase/`, those structural operations are rejected because its file manifest is fixed.
 2. **Inherited overlay.** The immutable view inherited from the caller or parent execution.
 3. **Backing snapshot.** The applied `Folder` for a reducer's `project/`, or the lambda's base module
-   tree for `codebase/`, read lazily from the host, package archive, browser virtual filesystem, or
+   tree for `codebase/` (with a file manifest fixed at invocation start), read lazily from the host, package archive, browser virtual filesystem, or
    another configured provider.
 
 Resolution is copy-on-write:
@@ -807,8 +814,9 @@ capabilities and cannot silently participate in a project commit.
 
 ### 9.2 Lambda and child-call scoping
 
-Every lambda receives the scoped `codebase/` view for its associated module tree. A directory
-reducer adds `project/`; an ordinary lambda can also receive explicit `Folder` values as normal
+Every lambda receives the scoped `codebase/` view for its associated module tree. The view exposes
+the files present when the invocation starts and permits content edits to those files only. A
+directory reducer adds `project/`; an ordinary lambda can also receive explicit `Folder` values as normal
 typed inputs. Crisp functions may use the caller's injected `fs` capability only when it is passed
 or declared in their effect contract; they do not gain arbitrary host access.
 
@@ -872,8 +880,10 @@ root are rejected.
 
 ### 9.5 Writing and editing
 
-`write_file(path, content)` creates a file or replaces the entire current file. For replacement it
-accepts an optional expected revision internally, so a host can reject stale writes.
+`write_file(path, content)` replaces the entire content of an existing file. In a `codebase/`
+mount, an absent path is rejected and the operation cannot change the file set. In `project/`, it
+may create a new file or replace an existing one. For replacement it accepts an optional expected
+revision internally, so a host can reject stale writes.
 
 `edit_file(path, find, replace_with, fuzzy?)` performs one replacement:
 
@@ -882,12 +892,12 @@ accepts an optional expected revision internally, so a host can reject stale wri
 - the result reports the changed line range and new revision;
 - ambiguous or absent selections fail without modifying the file.
 
-`apply_patch(patch)` accepts a standard unified diff, validates all hunks first, and applies it
-atomically across files. It is the preferred operation for coordinated developer changes.
+`apply_patch(patch)` is available for coordinated changes to a mutable project/workspace. A
+codebase-scoped agent uses content edits against existing codebase files; patches that add, delete,
+or rename a codebase file are rejected.
 
-`move_file` and `delete_file` provide complete refactoring capability. Hosts may require a stronger
-write authority for deletion, but deletion is part of the developer surface rather than simulated
-with empty writes.
+`move_file` and `delete_file` provide complete refactoring capability for mutable project/workspace
+trees. They are unavailable for the scoped codebase mount, whose file set is fixed for the run.
 
 ### 9.6 Diffs, validation, execution, and backing commits
 
@@ -1162,7 +1172,8 @@ behavior.
   `await reducer(folder, ...args)` for a discarded fork and
   `await folder.apply(reducer, ...args)` for an applied commit.
 - Present imported signatures and compact values in the opening state.
-- Implement stable executing frames and call-boundary loading from writable codebase overlays.
+- Implement stable executing frames and call-boundary loading from writable codebase overlays, with
+  content edits only against the fixed codebase file set.
 - Implement lazy captured backing snapshots and durable copy-on-write overlays.
 
 ### Phase 2: eval compiler and runtime

@@ -93,7 +93,7 @@ const evidence = await workspaceRead(args.state.head, "evidence/observations.jso
 
 The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_file` for source or data files. Reuse computed values by variable reference. For a host-backed dictionary, pass the dictionary value to a compatible callee and read only the branches or leaves needed for the decision.
 
-To change a function, edit its writable codebase source and use the normal import/reload path. For generated programs, validate and execute the new artifact before claiming it works.
+To change a function, edit the contents of its existing writable codebase source and use the normal import/reload path. The codebase file set is fixed during a run: do not create, delete, or move codebase files. Directory-reducer project folders have the broader file lifecycle when a task needs generated files or structural refactoring. For generated programs, validate and execute the new artifact before claiming it works.
 
 ## Combinators and completion
 

@@ -70,6 +70,8 @@ class Lambda(Pending):
     reducer_mode: str = ""                          # apply | direct
     commit_include: Optional[list] = None
     commit_exclude: Optional[list] = None
+    codebase_folder: Any = None                       # editable source overlay for this frame
+    codebase_paths: dict = field(default_factory=dict) # binding -> relative source path
 
     @property
     def is_crisp(self) -> bool:

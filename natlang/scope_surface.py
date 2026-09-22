@@ -59,27 +59,29 @@ class ScopeEvalSurface(ToolSurface):
             _tool("report_error", "End without a result because the instructions require an invalid or contradictory operation.",
                   {"message": {"type": "string"}}, ["message"]),
         ]
-        if session.lam.project_transaction is not None:
+        if session.lam.codebase or session.lam.project_transaction is not None:
+            roots = "codebase/" + (" or project/" if session.lam.project_transaction is not None else "")
             file_tools = [
-                _tool("list_files", "List files beneath project/. Paths are sorted and stay inside the reducer project.",
+                _tool("list_files", f"List files beneath {roots}. Codebase file identity is fixed during a run.",
                       {"path": {"type": "string"}, "pattern": {"type": "string"}}, []),
-                _tool("search_files", "Search project text files and return matching file, line, and context.",
+                _tool("search_files", f"Search text files beneath {roots} and return matching file, line, and context.",
                       {"query": {"type": "string"}, "path": {"type": "string"},
                        "pattern": {"type": "string"}, "regex": {"type": "boolean"}}, ["query"]),
-                _tool("read_file", "Read a project file, optionally by one-based inclusive line range.",
+                _tool("read_file", f"Read a file beneath {roots}, optionally by one-based inclusive line range.",
                       {"path": {"type": "string"}, "start_line": {"type": "integer"},
                        "end_line": {"type": "integer"}}, ["path"]),
-                _tool("write_file", "Create or replace one project text file in the private overlay.",
+                _tool("write_file", "Replace a text file. project/ may create files; codebase/ is limited to existing files.",
                       {"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
-                _tool("edit_file", "Replace one exact or uniquely fuzzy span in a project text file.",
+                _tool("edit_file", f"Replace one exact or uniquely fuzzy span in a file beneath {roots}.",
                       {"path": {"type": "string"}, "find": {"type": "string"},
                        "replace_with": {"type": "string"}, "fuzzy": {"type": "boolean"}},
                       ["path", "find", "replace_with"]),
-                _tool("diff_files", "Inspect the current private project delta without committing it.",
+                _tool("diff_files", f"Inspect the current overlay delta beneath {roots}.",
                       {"path": {"type": "string"}}, []),
             ]
             tools[4:4] = file_tools
-            tools.insert(4, _tool("commit", "Stage an existing typed variable and select project changes. Patterns are relative to project/.",
+            if session.lam.project_transaction is not None:
+                tools.insert(4, _tool("commit", "Stage an existing typed variable and select project changes. Patterns are relative to project/.",
                                   {"value": {"type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"},
                                    "include": {"type": "array", "items": {"type": "string"}},
                                    "exclude": {"type": "array", "items": {"type": "string"}}}, ["value"]))

@@ -156,7 +156,7 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
         from .scoped_fs import Folder, FolderHandle
         if isinstance(raw, (Folder, FolderHandle)):
             return raw
-    elif rt.name == "File":
+    elif rt.name == "FileHandle":
         from .scoped_fs import FileHandle
         if isinstance(raw, FileHandle):
             return raw

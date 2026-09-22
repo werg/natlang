@@ -43,7 +43,7 @@ The model refers to data through slash-separated paths:
 | `args@effects` | Complete external-effect journal | Read-only |
 | `let/<name>` | Model-created intermediate value | Writable |
 | `return` or `return/<field>` | Required result and its fields | Writable |
-| `codebase/<function>` | Function instructions | Read-only |
+| `codebase/<function>` | Function instructions and associated source files | Existing-file content editable; file set fixed |
 | `let/<copy>/instructions` | Instructions of a copied function | Editable |
 
 The opening workspace view previews small values and names long values for later `read`. It also

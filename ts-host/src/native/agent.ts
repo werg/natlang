@@ -37,8 +37,8 @@ function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> 
   if (depth > 5) return {};
   const resolved = env.resolve(type);
   if (resolved.kind === 'prim') return { type: { Text: 'string', Blob: 'string', Num: 'number',
-    Bool: 'boolean', Null: 'null', Folder: 'object', File: 'object' }[resolved.name],
-    ...(['Folder', 'File'].includes(resolved.name) ? { 'x-natlang': `${resolved.name.toLowerCase()}-handle` } : {}) };
+    Bool: 'boolean', Null: 'null', Folder: 'object', FileHandle: 'object' }[resolved.name],
+    ...(['Folder', 'FileHandle'].includes(resolved.name) ? { 'x-natlang': `${resolved.name.toLowerCase()}-handle` } : {}) };
   if (resolved.kind === 'lit') return { const: resolved.value };
   if (resolved.kind === 'union') return resolved.members.every(part => env.resolve(part).kind === 'lit') ?
     { enum: resolved.members.map(part => (env.resolve(part) as Extract<Type, { kind: 'lit' }>).value) } :
@@ -600,24 +600,29 @@ export class NativeToolAgent {
       tool('report_error', 'End without a result because the instructions require an invalid or contradictory operation.',
         { message: { type: 'string' } }, ['message']),
     ];
-    if (session.lam.projectTransaction) tools.splice(4, 0,
-      tool('commit', 'Stage an existing typed variable and select project changes. Patterns are relative to project/.',
-        { value: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' },
-          include: { type: 'array', items: { type: 'string' } },
-          exclude: { type: 'array', items: { type: 'string' } } }, ['value']),
-      tool('list_files', 'List files beneath project/. Paths are sorted and stay inside the reducer project.',
+    if (Object.keys(session.lam.codebase).length || session.lam.projectTransaction) {
+      const roots = `codebase/${session.lam.projectTransaction ? ' or project/' : ''}`;
+      const fileTools = [
+      tool('list_files', `List files beneath ${roots}. Codebase file identity is fixed during a run.`,
         { path: { type: 'string' }, pattern: { type: 'string' } }, []),
-      tool('search_files', 'Search project text files and return matching file, line, and context.',
+      tool('search_files', `Search text files beneath ${roots} and return matching file, line, and context.`,
         { query: { type: 'string' }, path: { type: 'string' }, pattern: { type: 'string' }, regex: { type: 'boolean' } }, ['query']),
-      tool('read_file', 'Read a project file, optionally by one-based inclusive line range.',
+      tool('read_file', `Read a file beneath ${roots}, optionally by one-based inclusive line range.`,
         { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
-      tool('write_file', 'Create or replace one project text file in the private overlay.',
+      tool('write_file', 'Replace a text file. project/ may create files; codebase/ is limited to existing files.',
         { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
-      tool('edit_file', 'Replace one exact or uniquely fuzzy span in a project text file.',
+      tool('edit_file', `Replace one exact or uniquely fuzzy span in a file beneath ${roots}.`,
         { path: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['path', 'find', 'replace_with']),
-      tool('diff_files', 'Inspect the current private project delta without committing it.',
-        { path: { type: 'string' } }, []));
+      tool('diff_files', `Inspect the current overlay delta beneath ${roots}.`,
+        { path: { type: 'string' } }, [])];
+      if (session.lam.projectTransaction) fileTools.unshift(
+        tool('commit', 'Stage an existing typed variable and select project changes. Patterns are relative to project/.',
+        { value: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' },
+          include: { type: 'array', items: { type: 'string' } },
+          exclude: { type: 'array', items: { type: 'string' } } }, ['value']));
+      tools.splice(4, 0, ...fileTools);
+    }
     return tools;
   }
 

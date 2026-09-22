@@ -19,7 +19,7 @@ const results = await Promise.all(items.map(item => classify(item)));
 
 Use ordinary `if`, loops, array methods, and local staging. Do not invent path-based destinations or orchestration operations. Exact counting, filtering, sorting, arithmetic, and file processing belong in crisp code or exact TypeScript in `eval`; semantic judgments belong in natlang calls.
 
-Keep execution scope and files separate. Authorized file tools operate on the writable `codebase/` overlay with `list_files`, `search_files`, `read_file`, `write_file`, `edit_file`, and `diff_files`; developer tasks may additionally use `apply_patch`, `move_file`, `delete_file`, `validate_codebase`, and `run_program`.
+Keep execution scope and files separate. Authorized file tools operate on the writable `codebase/` overlay with `list_files`, `search_files`, `read_file`, `write_file`, `edit_file`, and `diff_files`. The codebase file set is fixed for the run: edit the contents of existing files, but do not create, delete, or move codebase files. Developer tasks and directory-reducer `project/` folders may additionally use `apply_patch`, `move_file`, `delete_file`, `validate_codebase`, and `run_program` where their host authority allows it.
 
 A directory reducer also receives an isolated `project/` folder and may use `commit(value, include?, exclude?)` to select project changes. A direct `await reducer(folder, ...args)` returns only its typed value and discards its private project fork. `await folder.apply(reducer, ...args)` retains the reducer's project changes.
 

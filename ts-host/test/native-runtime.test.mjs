@@ -70,7 +70,8 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.equal(sequenced.kind, 'ok'); assert.equal(sequenced.value, 2);
   const names = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' })
     .tools(session).map(entry => entry.function.name);
-  assert.deepEqual(names, ['eval', 'read_value', 'write_value', 'return_value', 'mark_lines',
+  assert.deepEqual(names, ['eval', 'read_value', 'write_value', 'return_value', 'list_files', 'search_files',
+    'read_file', 'write_file', 'edit_file', 'diff_files', 'mark_lines',
     'report_blocker', 'report_error']);
   const nullLam = buildPending({ $lambda: { type: 'Lambda<{}, Null>', instructions: 'Return null.' } });
   const nullSession = new NativeSession(new NativeRuntime(), nullLam, new TypeEnv());
@@ -79,6 +80,32 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.equal(nullSession.apply('return_value', { variable: 'result' }).kind, 'ok');
   nullSession.apply('mark_lines', { start: 1 });
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
+});
+
+test('native codebase edits are live while the codebase file set stays fixed', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Text>', instructions: 'Call label.',
+    codebase: { label: { args: {}, returns: 'Text', code: 'return "old";' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const source = (await session.applyAsync('read_file', { path: 'codebase/label.ts' })).value;
+  assert.match(source, /return "old";/);
+  assert.equal((await session.applyAsync('edit_file', { path: 'codebase/label.ts', find: 'return "old";',
+    replace_with: 'return "new";' })).kind, 'ok');
+  const called = await session.applyAsync('eval', { code: 'const answer = await label(); answer' });
+  assert.equal(called.kind, 'ok'); assert.equal(called.value, 'new');
+  assert.equal((await session.applyAsync('write_file', { path: 'codebase/extra.nl', content: source })).kind, 'rejected');
+});
+
+test('native injected fs and file tools share the codebase overlay', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Text>', instructions: 'Inspect label.',
+    codebase: { label: { args: {}, returns: 'Text', code: 'return "old";' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const read = await session.applyAsync('eval', { code:
+    'const source: Text = await fs.readText("codebase/label.ts"); source' });
+  assert.equal(read.kind, 'ok'); assert.match(read.value, /return "old";/);
+  const edited = await session.applyAsync('eval', { code:
+    'const receipt = await fs.editText("codebase/label.ts", { find: "old", replaceWith: "new" }); receipt' });
+  assert.equal(edited.kind, 'ok');
+  assert.match((await session.applyAsync('read_file', { path: 'codebase/label.ts' })).value, /new/);
 });
 
 test('checked directory reducer metadata survives graph instantiation', () => {
@@ -121,6 +148,18 @@ test('native direct directory reducer call discards its private changes', async 
   const result = await session.applyAsync('eval', { code: 'const report = await rewrite(folder, "hi"); report' });
   assert.equal(result.kind, 'ok'); assert.equal(result.value, 'changed');
   assert.equal(await folder.readText('message.txt'), 'hello\n');
+});
+
+test('native folder and file handles persist as typed scope values', async () => {
+  const folder = Folder.fromFiles({ 'notes/a.txt': 'alpha\n' });
+  const root = buildPending(directoryProgram(folder));
+  const session = new NativeSession(new NativeRuntime(), root, new TypeEnv());
+  const madeDir = await session.applyAsync('eval', { code: 'const notes: Folder = folder.dir("notes"); notes' });
+  assert.equal(madeDir.kind, 'ok'); assert.equal(root.let.notes.path, 'notes');
+  const madeFile = await session.applyAsync('eval', { code: 'const note: FileHandle = notes.file("a.txt"); note' });
+  assert.equal(madeFile.kind, 'ok'); assert.equal(root.let.note.path, 'notes/a.txt');
+  const read = await session.applyAsync('eval', { code: 'const text: Text = await note.readText(); text' });
+  assert.equal(read.kind, 'ok'); assert.equal(read.value, 'alpha\n');
 });
 
 test('explicit inference and action limits still apply', async () => {

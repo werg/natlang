@@ -69,7 +69,7 @@ def test_import_adopts_compact_rows_and_rejects_full_conversation_legacy(tmp_pat
                           rows[0][1], expected(rows[0][1]))
 
 
-def test_retry_removes_non_resumable_trace_before_collection(tmp_path, monkeypatch):
+def test_retry_reuses_canonical_trace_and_defers_obsolete_cleanup(tmp_path, monkeypatch):
     row = record()
     key = job_key(2, row)
     (tmp_path / f"{key}.trace.jsonl").write_text("old")
@@ -77,7 +77,7 @@ def test_retry_removes_non_resumable_trace_before_collection(tmp_path, monkeypat
     observed = {}
     def fake_collect(record, decoder, **kwargs):
         observed["trace"] = kwargs["trace_path"]
-        assert not (tmp_path / f"{key}.retry1.trace.jsonl").exists()
+        assert (tmp_path / f"{key}.retry1.trace.jsonl").exists()
         return ({"task": {"program_ir": record}, "provenance": {},
                  "outcome": {"status": "done", "accepted": True}}, None)
     monkeypatch.setattr("scripts.collect_teacher_batch.collect", fake_collect)

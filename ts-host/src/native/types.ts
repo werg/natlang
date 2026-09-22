@@ -1,6 +1,6 @@
 /** Native port of natlang's structural type grammar and fit relation. */
 export type Type =
-  | { kind: 'prim'; name: 'Text' | 'Num' | 'Bool' | 'Null' | 'Blob' | 'Folder' | 'File' }
+  | { kind: 'prim'; name: 'Text' | 'Num' | 'Bool' | 'Null' | 'Blob' | 'Folder' | 'FileHandle' }
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
   | { kind: 'list'; element: Type }
@@ -15,7 +15,7 @@ export type Type =
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
 const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,;:?()]))/y;
-const PRIMS = new Set(['Text', 'Num', 'Bool', 'Null', 'Blob', 'Folder', 'File']);
+const PRIMS = new Set(['Text', 'Num', 'Bool', 'Null', 'Blob', 'Folder', 'FileHandle']);
 const pendingKinds = new Set(['lambda', 'map', 'fold', 'iterate']);
 
 function tokenize(source: string): Token[] {
