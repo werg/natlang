@@ -27,6 +27,7 @@ scripts/setup_dev.sh --node-only
 natlang --help
 natlang path/to/program.nl
 natlang codebases/semantic_terminal
+natlang summarize the available codebase functions
 ```
 
 Setup installs `natlang` in the user command directory. It can be run from any

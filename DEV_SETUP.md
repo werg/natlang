@@ -57,6 +57,20 @@ natlang path/to/main.nl
 natlang path/to/main.nl --inputs inputs.json --trace run.jsonl --json
 ```
 
+Run a one-off natural-language instruction from a natlang codebase directory:
+
+```bash
+cd path/to/codebase
+natlang summarize the available functions and when to call them
+```
+
+When two or more positional words, or one quoted multiword argument, do not form
+an existing path, the CLI wraps them in an anonymous `Lambda<{}, Text>`. The
+working directory is its codebase root: every top-level `.nl` and natlang
+frontmatter `.ts` function is available by name, and those functions retain
+their declared companions. Ordinary host `.ts` files are ignored. Instruction
+runs accept `--profile`, `--trace`, `--seed`, `--timeout`, and `--json`.
+
 Run an application by giving its manifest or a directory containing
 `natlang.json`:
 

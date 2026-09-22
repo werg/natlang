@@ -8,9 +8,13 @@ natlang --setup
 natlang --help
 natlang path/to/program.nl
 natlang path/to/application
+natlang summarize the available codebase functions
 natlang --apps
 natlang semantic-terminal
 ```
+
+Multiple words that do not resolve to a path execute as an anonymous
+`Lambda<{}, Text>` over the current directory's top-level natlang functions.
 
 `natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
 asks before installing natlang's pinned, hash checked runtime in the user data

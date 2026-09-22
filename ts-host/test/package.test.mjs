@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
   satisfiesVersion, writePackageArchive } from '../dist/index.js';
+import { main as cliMain } from '../dist/cli/main.js';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'natlang-package-'));
@@ -81,7 +82,7 @@ test('dependency locks choose a stable version and cycles are rejected', () => {
     make('b', '1.0.0', { a: '*' })]), /dependency cycle/);
 });
 
-test('CLI packs, installs, and runs a target from the content store', () => {
+test('CLI packs, installs, and runs a target from the content store', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
   writeFileSync(join(root, 'direct.ts'), `/*---
 description: Return a fixture number.
@@ -89,6 +90,13 @@ args: {}
 returns: Num
 ---*/
 return 7`);
+  writeFileSync(join(root, 'helper.ts'), `/*---
+description: Return text from the local codebase.
+args: {}
+returns: Text
+---*/
+return "local helper"`);
+  writeFileSync(join(root, 'ordinary.ts'), 'export const ordinaryHostCode = true;\n');
   const administrativeNames = ['apps', 'inspect', 'packages', 'package', 'setup', 'runtime', 'doctor'];
   for (const name of administrativeNames) {
     mkdirSync(join(root, name));
@@ -118,6 +126,31 @@ return "source named ${name}"`);
     const collidingPath = execFileSync(process.execPath, [cli, name], { encoding: 'utf8', cwd: root });
     assert.equal(collidingPath, `"source named ${name}"\n`);
   }
+  const originalFetch = globalThis.fetch, originalWrite = process.stdout.write, originalCwd = process.cwd();
+  const previousServer = process.env.NATLANG_SERVER, previousModel = process.env.NATLANG_MODEL;
+  let wire, anonymousOutput = '';
+  globalThis.fetch = async (_url, init) => {
+    wire = JSON.parse(init.body);
+    const finished = wire.messages.at(-1)?.role === 'tool';
+    return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: finished ? [] : [{
+      id: 'anonymous-1', type: 'function', function: { name: 'write', arguments: JSON.stringify({
+        path: 'return', type: 'Text', value: 'anonymous result', done: 1,
+      }) },
+    }] } }], usage: { completion_tokens: 1 } }), { status: 200,
+      headers: { 'content-type': 'application/json' } });
+  };
+  process.env.NATLANG_SERVER = 'http://model.test'; process.env.NATLANG_MODEL = 'fixture';
+  process.stdout.write = chunk => { anonymousOutput += String(chunk); return true; };
+  process.chdir(root);
+  try { assert.equal(await cliMain(['answer from this codebase', '--timeout', '5000']), 0); }
+  finally {
+    process.chdir(originalCwd); process.stdout.write = originalWrite; globalThis.fetch = originalFetch;
+    if (previousServer === undefined) delete process.env.NATLANG_SERVER; else process.env.NATLANG_SERVER = previousServer;
+    if (previousModel === undefined) delete process.env.NATLANG_MODEL; else process.env.NATLANG_MODEL = previousModel;
+  }
+  assert.equal(anonymousOutput, 'anonymous result\n');
+  assert.match(JSON.stringify(wire), /answer from this codebase/);
+  assert.match(JSON.stringify(wire), /helper/);
   const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
   assert.equal(local, 'cli-fixture:local:0');
   const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],

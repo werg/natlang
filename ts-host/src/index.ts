@@ -14,7 +14,7 @@ export type { NativeRuntimeOptions } from './native/runtime.js';
 export type { NodeNativeRuntimeOptions } from './node-runtime.js';
 export { NativeToolAgent } from './native/agent.js';
 export { checkedDefinitions } from './native/codebase.js';
-export { loadFunctionFile } from './native/source.js';
+export { loadAnonymousInstruction, loadCodebaseDirectory, loadFunctionFile } from './native/source.js';
 export { dumpState as dumpNativeState, loadProgram as loadNativeProgram } from './native/values.js';
 export { NativeSourceWorkspace } from './native/workspace.js';
 export { admitNativeTrace } from './native/scenario.js';

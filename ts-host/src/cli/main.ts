@@ -12,7 +12,7 @@ import { createManagedModelSession, DEFAULT_LOCAL_MODEL, describeLlamaRuntime, d
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
   type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/index.js';
 import { NativeNatlangHost } from '../native/host.js';
-import { loadFunctionFile } from '../native/source.js';
+import { loadAnonymousInstruction, loadFunctionFile } from '../native/source.js';
 import { formatType } from '../native/types.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { TerminalNatlangApplication } from '../terminal/application.js';
@@ -89,6 +89,7 @@ Usage:
 Examples:
   natlang examples/triage/main.nl --inputs inputs.json
   natlang codebases/semantic_terminal
+  natlang summarize the available codebase functions
   natlang --apps codebases
   natlang --inspect codebases/semantic_terminal
 
@@ -103,6 +104,9 @@ function topicHelp(topic: string): string {
 
 SOURCE may be a .nl, .ts, .json, or .yaml program, an application directory
 containing natlang.json, a manifest file, NAME, or NAME@VERSION#TARGET.
+Two or more words, or one quoted multiword argument, which do not form an
+existing path become an anonymous Lambda<{}, Text> instruction over the current
+directory's top-level functions.
 
 Program options:
   --inputs FILE       JSON object containing function inputs.
@@ -383,6 +387,27 @@ async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   } finally { host.close(); await model.close(); }
 }
 
+async function runAnonymousInstruction(parsed: Parsed, instruction: string): Promise<number> {
+  acceptOptions(parsed, ['--profile', '--trace', '--json', '--timeout', '--seed', '--yes']);
+  noTrailingArguments(parsed);
+  const timeoutMs = numericOption(parsed, '--timeout', 1), seed = numericOption(parsed, '--seed', 0);
+  const host = new NativeNatlangHost();
+  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  try {
+    const result = await host.run({ source: { kind: 'program',
+      program: loadAnonymousInstruction(process.cwd(), instruction) },
+      modelTurn: request => model.turn(request),
+      tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
+      timeoutMs,
+      options: seed === undefined ? undefined : { seed: { mode: 'derived', root: seed } } });
+    if (parsed.options.has('--json')) output(result, true);
+    else if (typeof result.value === 'string') process.stdout.write(result.value + (result.value.endsWith('\n') ? '' : '\n'));
+    else process.stdout.write(JSON.stringify(result.value, null, 2) + '\n');
+    if (result.outcome.kind !== 'done') process.stderr.write(`natlang: ${result.outcome.kind}: ${result.outcome.detail}\n`);
+    return result.outcome.kind === 'done' ? 0 : 1;
+  } finally { host.close(); await model.close(); }
+}
+
 const programOptions = ['--inputs', '--profile', '--trace', '--json', '--timeout', '--seed', '--yes'];
 const applicationOptions = ['--root', '--target', '--profile', '--workspace', '--state', '--traces',
   '--store', '--plain', '--no-color', '--yes'];
@@ -595,7 +620,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const { report, okay } = doctorReport(parsed, store);
     output(report, json); return okay ? 0 : 1;
   }
-  if (parsed.words.length !== 1) throw new Error('expected one SOURCE; put application arguments after --');
+  if (parsed.words.length > 1 || /\s/.test(parsed.words[0]!)) {
+    const value = parsed.words.join(' ');
+    if (existsSync(resolve(value))) return runSource(parsed, value);
+    return runAnonymousInstruction(parsed, value);
+  }
   return runSource(parsed, parsed.words[0]!);
 }
 

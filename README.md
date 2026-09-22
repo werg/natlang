@@ -33,8 +33,13 @@ there is no precompiled development app list:
 natlang --doctor --json
 natlang path/to/program.nl
 natlang codebases/semantic_terminal
+natlang summarize the functions in this codebase
 natlang --apps codebases
 ```
+
+Two or more words that do not name an existing path form an anonymous
+`Lambda<{}, Text>` instruction. Natlang uses the current directory as the
+codebase root and exposes its top-level `.nl` and `.ts` functions to the run.
 
 The terminal applications open without fixture files and explain their own
 capabilities. Use `/help`; evidence and notebook include useful starter data,

@@ -1,6 +1,7 @@
 import { readTypeAliases } from './type-aliases.js';
 import YAML from 'yaml';
 import { Reject, buildPending, type LambdaNode } from './values.js';
+import { formatType } from './types.js';
 
 export type SourceFiles = {
   resolve(path: string): string;
@@ -93,4 +94,49 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
   node.codebase = Object.fromEntries(Object.entries(definition.codebase)
     .map(([name, child]) => [name, inline(child)]));
   return node;
+}
+
+function sourceDefinition(node: LambdaNode): Record<string, unknown> {
+  if (node.type.kind !== 'lambda') throw new Error('function source does not have a lambda type');
+  const definition: Record<string, unknown> = {
+    args: Object.fromEntries(node.type.params.fields.map(field =>
+      [field.name + (field.optional ? '?' : ''), formatType(field.type)])),
+    returns: formatType(node.type.returns),
+    [node.kind]: node.body,
+  };
+  if (Object.keys(node.typesSrc).length) definition.types = node.typesSrc;
+  if (node.effects.length) definition.effects = node.effects;
+  if (node.kind === 'code' && node.engine !== 'quickjs-isolated') definition.engine = node.engine;
+  if (Object.keys(node.codebase).length) definition.codebase = node.codebase;
+  return definition;
+}
+
+/** Load every top-level function in a directory as an anonymous program's codebase. */
+export function loadCodebaseSource(path: string, files: SourceFiles): Record<string, unknown> {
+  const root = files.resolve(path);
+  if (!files.isDirectory(root))
+    throw new Reject([{ path: root, code: 'no-such-path', expected: 'a codebase directory' }]);
+  const entries: Record<string, unknown> = {};
+  for (const name of files.list(root).sort()) {
+    const extension = files.extname(name);
+    if (!['.nl', '.ts'].includes(extension) || name === 'types.ts') continue;
+    const file = files.join(root, name);
+    // A natlang TypeScript function is explicitly marked by frontmatter. Ordinary
+    // host TypeScript may coexist at an application or repository root.
+    if (extension === '.ts' && !frontTs.test(files.read(file))) continue;
+    const functionName = files.basename(name, extension);
+    if (Object.hasOwn(entries, functionName))
+      throw new Reject([{ path: file, code: 'duplicate-path', got: functionName }]);
+    entries[functionName] = sourceDefinition(loadFunctionSource(file, files));
+  }
+  return entries;
+}
+
+/** Construct a zero-argument, Text-returning instruction over a directory codebase. */
+export function loadAnonymousInstructionSource(path: string, instructions: string,
+  files: SourceFiles): Record<string, unknown> {
+  const body = instructions.trim();
+  if (!body) throw new TypeError('anonymous instructions cannot be empty');
+  return { $lambda: { type: 'Lambda<{}, Text>', instructions: body,
+    function: 'anonymous', codebase: loadCodebaseSource(path, files) } };
 }
