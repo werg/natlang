@@ -23,6 +23,9 @@ export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } 
 export type { BrowserRunRequest, BrowserModelTurn, BrowserModelTurnRequest,
   BrowserRunOptions, BrowserReviewOptions } from './host.js';
 export { TypeScriptEnvironment } from './environment.js';
+export { compileScopeSnippet, SCOPE_COMPILE_VERSION } from '../scope-compiler.js';
+export type { ScopeBinding, ScopeCompileDiagnostic, ScopeCompileOptions,
+  ScopeCompileResult, ScopeExistingBinding, ScopeSourceSpan } from '../scope-compiler.js';
 export { checkedDefinitions } from '../native/codebase.js';
 export { NativeRuntime, NativeSession } from '../native/runtime.js';
 export { NativeToolAgent } from '../native/agent.js';

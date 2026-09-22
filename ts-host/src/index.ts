@@ -1,5 +1,8 @@
 export { TypeScriptEnvironment, portable } from './environment.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './environment.js';
+export { compileScopeSnippet, SCOPE_COMPILE_VERSION } from './scope-compiler.js';
+export type { ScopeBinding, ScopeCompileDiagnostic, ScopeCompileOptions,
+  ScopeCompileResult, ScopeExistingBinding, ScopeSourceSpan } from './scope-compiler.js';
 export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './contracts.js';
 export { resolveApplicationInputs } from './application-inputs.js';
 export type { ApplicationInputs } from './application-inputs.js';
