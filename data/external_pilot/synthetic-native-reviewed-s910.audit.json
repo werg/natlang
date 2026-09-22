@@ -1,0 +1,23 @@
+{
+  "programs": 300,
+  "groups": 300,
+  "mix": [
+    {
+      "source": "natlang-synthetic-native",
+      "split": "train",
+      "kind": "lambda_graph",
+      "programs": 200
+    },
+    {
+      "source": "natlang-synthetic-native",
+      "split": "train",
+      "kind": "lambda_source",
+      "programs": 100
+    }
+  ],
+  "operators": {
+    "algorithm": 100,
+    "compute": 100,
+    "invoke": 500
+  }
+}
