@@ -2,7 +2,7 @@
 /** Run frozen Studio cases through an HTTP teacher with atomic, resumable jobs. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { apps } from '../studio/apps/index.mjs';
@@ -63,7 +63,8 @@ function portableSchema(value) {
   return out;
 }
 
-function teacherDriver({ server, exchanges }) {
+function teacherDriver({ server, exchanges, partial, partialPath }) {
+  let replayIndex = 0;
   return async request => {
     const tools = portableSchema(request.tools);
     for (const tool of tools) {
@@ -81,11 +82,22 @@ function teacherDriver({ server, exchanges }) {
       temperature: request.temperature, seed: request.seed, thinking_budget_tokens: 256,
       top_p: 0.95, top_k: 20, chat_template_kwargs: { reasoning_effort: 'low' } };
     if (request.max_tokens !== null) payload.max_tokens = request.max_tokens;
-    const started = performance.now();
-    const response = await fetch(server + '/v1/chat/completions', { method: 'POST',
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-    const body = await response.json();
-    if (!response.ok) throw new Error(`teacher HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`);
+    const started = performance.now(), requestSha256 = digest(request);
+    const recorded = partial.turns[replayIndex];
+    let body;
+    if (recorded) {
+      if (recorded.request_sha256 !== requestSha256)
+        throw new Error(`partial Studio teacher replay diverged at model turn ${replayIndex}`);
+      body = structuredClone(recorded.response);
+    } else {
+      const response = await fetch(server + '/v1/chat/completions', { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+      body = await response.json();
+      if (!response.ok) throw new Error(`teacher HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`);
+      partial.turns.push({ request_sha256: requestSha256, response: structuredClone(body) });
+      await writeAtomic(partialPath, partial);
+    }
+    replayIndex++;
     const message = body.choices?.[0]?.message ?? {};
     const calls = (message.tool_calls ?? []).map(call => {
       const name = call.function?.name === 'call_function' ? 'call' : call.function?.name;
@@ -109,7 +121,7 @@ async function sourceFor(spec) {
   return loadProgram(spec, path => readFile(resolve(here, '../studio', path.replace('./', '')), 'utf8'));
 }
 
-async function runCase(frozen, options, bindings) {
+async function runCase(frozen, options, bindings, partial, partialPath) {
   const spec = apps.find(item => `studio:${item.id}` === frozen.target);
   if (!spec) throw new Error(`Unknown target ${frozen.target}`);
   const exchanges = [];
@@ -122,7 +134,7 @@ async function runCase(frozen, options, bindings) {
   app = new bindings.BrowserNatlangApplication({ client, source: await sourceFor(spec),
     initialState: frozen.initial_state, seedRoot: options.seed,
     runOptions: { model: { tool_schema: 'scope-eval-v1' } },
-    modelTurn: teacherDriver({ server: options.server, exchanges }) });
+    modelTurn: teacherDriver({ server: options.server, exchanges, partial, partialPath }) });
   try {
     await app.start();
     const transition = await app.dispatch(event);
@@ -153,6 +165,19 @@ async function validResult(path, frozen, options) {
   } catch { return false; }
 }
 
+async function partialFor(path, frozen, options) {
+  try {
+    const row = JSON.parse(await readFile(path, 'utf8'));
+    if (row.schema === 'natlang.studio_teacher_partial/1' && row.case_id === frozen.id &&
+        row.source_revision === frozen.source_revision && row.model === options.model &&
+        row.seed === options.seed && row.tool_schema === 'scope-eval-v1' &&
+        row.tool_surface_sha256 === options.toolSurfaceRevision && Array.isArray(row.turns)) return row;
+  } catch { /* missing or stale partial */ }
+  return { schema: 'natlang.studio_teacher_partial/1', case_id: frozen.id,
+    source_revision: frozen.source_revision, model: options.model, seed: options.seed,
+    tool_schema: 'scope-eval-v1', tool_surface_sha256: options.toolSurfaceRevision, turns: [] };
+}
+
 async function main() {
   const args = process.argv.slice(2), take = flag => { const at = args.indexOf(flag); return at < 0 ? null : args[at + 1]; };
   const positional = args.filter((value, index) => !value.startsWith('--') && !args[index - 1]?.startsWith('--'));
@@ -169,9 +194,16 @@ async function main() {
   let cursor = 0, completed = 0;
   async function worker() {
     while (cursor < cases.length) {
-      const index = cursor++, frozen = cases[index], path = resolve(jobs, `${String(index).padStart(6,'0')}-${digest(frozen).slice(0,16)}.result.json`);
-      if (await validResult(path, frozen, options)) { completed++; continue; }
-      try { const result = await runCase(frozen, options, bindings); await writeAtomic(path, result); completed++;
+      const index = cursor++, frozen = cases[index], stem = `${String(index).padStart(6,'0')}-${digest(frozen).slice(0,16)}`,
+        path = resolve(jobs, `${stem}.result.json`), partialPath = resolve(jobs, `${stem}.partial.json`);
+      if (await validResult(path, frozen, options)) {
+        try { await unlink(partialPath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+        completed++; continue;
+      }
+      try { const partial = await partialFor(partialPath, frozen, options);
+        const result = await runCase(frozen, options, bindings, partial, partialPath); await writeAtomic(path, result);
+        try { await unlink(partialPath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+        completed++;
         console.log(`${index} ${frozen.id}: accepted=${result.outcome.accepted} (${completed}/${cases.length})`); }
       catch (error) { await writeAtomic(resolve(jobs, `${String(index).padStart(6,'0')}.error.json`),
         { case: frozen.id, error: String(error), stack: error?.stack });

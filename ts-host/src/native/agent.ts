@@ -674,7 +674,7 @@ export class NativeToolAgent {
     const imports = Object.entries(lam.codebase).map(([name, raw]) => {
       const fn = raw as Record<string, unknown>;
       return `  ${name}(${Object.entries(fn.args as Record<string, string> ?? {})
-        .map(([key, value]) => `${key.replace(/\?$/, '')}: ${value}`).join(', ')}): ${fn.returns}`;
+        .map(([key, value]) => `${key.replace(/\?$/, '')}: ${value}`).join(', ')}): Promise<${fn.returns}>`;
     });
     const locals = Object.entries(lam.let).map(([name, value]) =>
       `  ${name}: ${formatType(lam.letTypes[name]!)} = ${previewValue(value)}`);

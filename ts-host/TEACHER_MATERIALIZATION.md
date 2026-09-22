@@ -20,6 +20,8 @@ replays those decisions through the fresh deterministic fixture runtime and
 continues at the first request that was never answered. A request digest mismatch
 fails closed. The journal is deleted when the job publishes its final accepted
 or rejected row; only final rows enter materialization.
+The Studio collector uses the same response-before-action journal and removes it
+after publishing a case result.
 
 The output contains one record for each teacher decision (which can contain one
 or more actions) or checkpoint response. In addition to the lossless semantic
