@@ -35,6 +35,10 @@ event, including its trace sequence, result text, outcome, and diagnostics.
 Unexecuted trailing calls and failed proposals remain visible in semantic IR but
 receive `training_admission.approved: false`; the SFT exporter skips them. This
 preserves teacher choices without teaching a rejected action as positive gold.
+The runtime also tolerates the narrow, semantics-free `const x = x` self-alias
+mistake for an injected binding so the enclosing program can continue, records
+`coerced-redundant-self-alias` on that action, and denies that decision positive
+SFT admission.
 Materialization fails closed if action-ledger events remain unlinked.
 Rows without `outcome.accepted === true` are counted and skipped.
 

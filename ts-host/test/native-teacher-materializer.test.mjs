@@ -88,6 +88,13 @@ test('failed and unexecuted proposals remain in IR but are excluded from SFT adm
   assert.equal(result.turns[1].training_admission.approved, true);
 });
 
+test('coerced proposals are retained but denied positive SFT admission', () => {
+  const row = nativeRow('coerced-decision');
+  row.outcome.action_ledger[0].diagnostics = ['coerced-redundant-self-alias'];
+  const result = materializeNativeRows([row]);
+  assert.equal(result.turns[0].training_admission.approved, false);
+});
+
 test('unsupported row versions and missing admission decisions fail closed', () => {
   const row = nativeRow('bad-version');
   row.version = 'natlang.teacher_trajectory/1';

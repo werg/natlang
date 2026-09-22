@@ -44,6 +44,7 @@ export type ScopeCompileResult = {
   bindings: ScopeBinding[];
   finalExpression?: ScopeSourceSpan;
   diagnostics: ScopeCompileDiagnostic[];
+  repairs: ScopeCompileDiagnostic[];
   /** TypeScript body after applying final-expression REPL semantics. */
   body?: string;
   /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
@@ -158,6 +159,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const fn = file.statements.find(ts.isFunctionDeclaration);
   if (!fn?.body) throw new Error('internal scope compiler wrapper failure');
   const diagnostics: ScopeCompileDiagnostic[] = [];
+  const repairs: ScopeCompileDiagnostic[] = [];
 
   const span = (nodeOrStart: ts.Node | number, length?: number): ScopeSourceSpan => {
     const absolute = typeof nodeOrStart === 'number' ? nodeOrStart : nodeOrStart.getStart(file);
@@ -183,9 +185,29 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       ...span(diagnostic.start, diagnostic.length) });
   }
 
+  const inputNames = options.inputBindings ?? [];
+  const localOptions = options.localBindings ?? [];
+  const localNames = localOptions.map(binding => binding.name);
+  const helperNames = options.helperBindings ?? [];
+  const injectedNames = new Set([...inputNames, ...localNames, ...helperNames]);
+  const redundantAliases: ScopeSourceSpan[] = [];
   const bindings: ScopeBinding[] = [];
   for (const statement of fn.body.statements) {
     if (ts.isVariableStatement(statement)) {
+      const declarations = statement.declarationList.declarations;
+      if (declarations.length === 1) {
+        const declaration = declarations[0]!;
+        if (ts.isIdentifier(declaration.name) && declaration.initializer &&
+            ts.isIdentifier(declaration.initializer) && declaration.name.text === declaration.initializer.text &&
+            injectedNames.has(declaration.name.text)) {
+          const location = span(statement);
+          redundantAliases.push(location);
+          repairs.push({ code: 'invalid-binding',
+            message: `Removed redundant self-alias for injected binding ${JSON.stringify(declaration.name.text)}.`,
+            ...location });
+          continue;
+        }
+      }
       const flags = statement.declarationList.flags;
       const kind: ScopeBinding['kind'] = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : 'var';
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
@@ -204,10 +226,6 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     }
   }
 
-  const inputNames = options.inputBindings ?? [];
-  const localOptions = options.localBindings ?? [];
-  const localNames = localOptions.map(binding => binding.name);
-  const helperNames = options.helperBindings ?? [];
   const immutable = new Set([...inputNames, ...helperNames,
     ...localOptions.filter(binding => !binding.mutable).map(binding => binding.name),
     ...bindings.filter(binding => !binding.mutable).map(binding => binding.name)]);
@@ -310,12 +328,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   });
   if (finalExpression) edits.push({ start: finalExpression.start, end: finalExpression.end,
     text: `return __natlang_finish(${source.slice(finalExpression.start, finalExpression.end)});` });
+  for (const repair of redundantAliases) edits.push({ start: repair.start, end: repair.end, text: '' });
   for (const edit of edits.sort((a, b) => b.start - a.start))
     body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
 
   diagnostics.sort((a, b) => a.start - b.start || a.code.localeCompare(b.code));
   const result: ScopeCompileResult = { version: SCOPE_COMPILE_VERSION, ok: diagnostics.length === 0,
-    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics };
+    entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
   if (diagnostics.length) return result;
   const prologue = [inputNames.length ? `const { ${inputNames.join(', ')} } = __inputs;` : '',
     ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +

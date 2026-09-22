@@ -156,7 +156,9 @@ export function materializeNativeRows(input: unknown[]): {
         (calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply');
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed']);
       const decisionApproved = calls.every(call =>
-        !badStatuses.has(String(record(call.outcome, 'call outcome').status)));
+        !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
+        !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
+          .some(code => String(code).startsWith('coerced-')));
       turns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),

@@ -1360,7 +1360,8 @@ export class NativeSession {
       }
       const text = JSON.stringify(output.result ?? null);
       return { kind: 'ok', text: text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`,
-        value: (output.result ?? null) as Value };
+        value: (output.result ?? null) as Value,
+        ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
       if (error instanceof Reject) return rejected(error);
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };

@@ -81,6 +81,14 @@ test('scope compiler reports syntax errors and injected-binding collisions', () 
   assert.ok(collision.diagnostics.some(item => item.code === 'invalid-binding'));
 });
 
+test('scope compiler removes a redundant injected self-alias and records the repair', async () => {
+  const compiled = compileScopeSnippet('const ready = ready;\nready.length', { inputBindings: ['ready'] });
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.equal(compiled.repairs.length, 1);
+  assert.match(compiled.repairs[0].message, /redundant self-alias/);
+  assert.deepEqual(await load(compiled)({ ready: [1, 2] }, {}, {}), { result: 2, bindings: {} });
+});
+
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {
   const compiled = compileScopeSnippet('count += step;\nconst doubled = count * 2;\ndoubled', {
     inputBindings: ['step'], localBindings: [{ name: 'count', mutable: true }],

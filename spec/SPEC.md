@@ -803,6 +803,12 @@ snippets. A VM timeout bounds synchronous execution; cancellation cannot undo a
 native asynchronous operation already in progress. External effects therefore
 still require receipts, cancellation or idempotency where appropriate.
 
+One narrow source repair removes a top-level `const x = x` declaration when
+`x` is already an injected parameter, local, or helper. It is a semantic no-op
+that avoids shadowing the real binding. The action trace records
+`coerced-redundant-self-alias`; teacher materialization retains the proposal but
+does not admit it as positive SFT gold.
+
 ### 9.2 run_code scope
 
 ```ts
