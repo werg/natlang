@@ -23,6 +23,21 @@ GOLD = {"classify": lambda a: "spam" if "WATCHES" in a["ticket"] else "billing" 
         "shorten": lambda a: " ".join(a["text"].split()[: max(5, len(a["text"].split()) // 2)])}
 
 
+def test_directory_reducer_source_subtype_survives_instantiation(tmp_path):
+    source = tmp_path / "reduce.nl"
+    source.write_text("""---
+kind: directory-reducer
+args:
+  request: Text
+returns: Text
+---
+Inspect project/ and return a report.
+""")
+    definition = load_function(source)
+    assert definition.subtype == "directory-reducer"
+    assert instantiate(definition).subtype == "directory-reducer"
+
+
 class Scripted:
     """Leaves answer from GOLD; `summarize` and `main` follow their pseudocode, as a good interpreter would."""
     def __init__(self, lam, log):

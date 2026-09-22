@@ -25,6 +25,8 @@ export { textFileTree, validateFileWrites, FILE_TREE_LEAF_TYPE, FILE_WRITE_TYPE 
 export type { FileTreeLeaf, FileWrite } from './native/file-tree.js';
 export { NodeFileTree, commitFileWrites } from './native/node-files.js';
 export type { FileWriteReceipt } from './native/node-files.js';
+export { Folder, FolderHandle, FileHandle, EntryHandle, FolderTransaction, WriterLock, FolderBusyError, FolderConflictError } from './native/scoped-fs.js';
+export type { FolderAccess, FileContents, EntryStat, SearchMatch, Change, ChangeSet, ChangeKind, EntryKind } from './native/scoped-fs.js';
 export { admitNativeTrace } from './native/scenario.js';
 export type { NativeScenarioContract } from './native/scenario.js';
 export { TerminalNatlangApplication, createTerminalHost, TerminalSessionStore,

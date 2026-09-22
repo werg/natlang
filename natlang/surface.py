@@ -49,7 +49,9 @@ def schema_of(t, env: TypeEnv, depth: int = 0) -> dict:
     rt = env.resolve(t)
     if isinstance(rt, Prim):
         return {"Text": {"type": "string"}, "Blob": {"type": "string"}, "Num": {"type": "number"},
-                "Bool": {"type": "boolean"}, "Null": {"type": "null"}}[rt.name]
+                "Bool": {"type": "boolean"}, "Null": {"type": "null"},
+                "Folder": {"type": "object", "x-natlang": "folder-handle"},
+                "File": {"type": "object", "x-natlang": "file-handle"}}[rt.name]
     if isinstance(rt, Lit):
         return {"const": rt.value}
     if isinstance(rt, UnionT):

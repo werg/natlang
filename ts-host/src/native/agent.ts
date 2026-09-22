@@ -37,7 +37,8 @@ function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> 
   if (depth > 5) return {};
   const resolved = env.resolve(type);
   if (resolved.kind === 'prim') return { type: { Text: 'string', Blob: 'string', Num: 'number',
-    Bool: 'boolean', Null: 'null' }[resolved.name] };
+    Bool: 'boolean', Null: 'null', Folder: 'object', File: 'object' }[resolved.name],
+    ...(['Folder', 'File'].includes(resolved.name) ? { 'x-natlang': `${resolved.name.toLowerCase()}-handle` } : {}) };
   if (resolved.kind === 'lit') return { const: resolved.value };
   if (resolved.kind === 'union') return resolved.members.every(part => env.resolve(part).kind === 'lit') ?
     { enum: resolved.members.map(part => (env.resolve(part) as Extract<Type, { kind: 'lit' }>).value) } :
@@ -580,11 +581,13 @@ export class NativeToolAgent {
   }
 
   private toolsScope(session: NativeSession): any[] {
-    return [
+    const tools = [
       tool('eval', 'Execute one TypeScript-like step in the persistent typed scope. Declarations persist; imported functions are called with await and positional values.',
         { code: { type: 'string' } }, ['code']),
       tool('read_value', 'Inspect a variable or field/index selection without executing code.',
-        { expression: { type: 'string' }, start: { type: 'integer' }, end: { type: 'integer' } }, ['expression']),
+        { expression: { type: 'string' },
+          start: { type: 'integer', minimum: 0, description: 'Zero-based slice start.' },
+          end: { type: 'integer', minimum: 0, description: 'Exclusive slice end, as in JavaScript slice().' } }, ['expression']),
       tool('write_value', 'Transport an already supplied literal into a top-level scope variable. For normal program work, including literal decisions, prefer eval declarations. as_type is needed only when inference is ambiguous.',
         { name: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' }, value: {}, as_type: { type: 'string' } },
         ['name', 'value']),
@@ -597,6 +600,25 @@ export class NativeToolAgent {
       tool('report_error', 'End without a result because the instructions require an invalid or contradictory operation.',
         { message: { type: 'string' } }, ['message']),
     ];
+    if (session.lam.projectTransaction) tools.splice(4, 0,
+      tool('commit', 'Stage an existing typed variable and select project changes. Patterns are relative to project/.',
+        { value: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' },
+          include: { type: 'array', items: { type: 'string' } },
+          exclude: { type: 'array', items: { type: 'string' } } }, ['value']),
+      tool('list_files', 'List files beneath project/. Paths are sorted and stay inside the reducer project.',
+        { path: { type: 'string' }, pattern: { type: 'string' } }, []),
+      tool('search_files', 'Search project text files and return matching file, line, and context.',
+        { query: { type: 'string' }, path: { type: 'string' }, pattern: { type: 'string' }, regex: { type: 'boolean' } }, ['query']),
+      tool('read_file', 'Read a project file, optionally by one-based inclusive line range.',
+        { path: { type: 'string' }, start_line: { type: 'integer' }, end_line: { type: 'integer' } }, ['path']),
+      tool('write_file', 'Create or replace one project text file in the private overlay.',
+        { path: { type: 'string' }, content: { type: 'string' } }, ['path', 'content']),
+      tool('edit_file', 'Replace one exact or uniquely fuzzy span in a project text file.',
+        { path: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
+        ['path', 'find', 'replace_with']),
+      tool('diff_files', 'Inspect the current private project delta without committing it.',
+        { path: { type: 'string' } }, []));
+    return tools;
   }
 
   tools(session: NativeSession): unknown[] {

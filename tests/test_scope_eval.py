@@ -27,6 +27,7 @@ def test_scope_eval_persists_pure_declarations_and_reads_selections():
     assert root.let["record"] == result.value
     assert surface.apply(active, "read_value", {"expression": "record.count"}).value == 3
     assert surface.apply(active, "read_value", {"expression": "flags[1]"}).value is False
+    assert surface.apply(active, "read_value", {"expression": "flags", "start": 1, "end": 3}).value == [False, True]
 
 
 def test_scope_eval_calls_imports_positionally_and_stages_named_result():

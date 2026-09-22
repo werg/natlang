@@ -12,7 +12,7 @@ class TypeSyntaxError(ValueError):
 
 @dataclass(frozen=True)
 class Prim:
-    name: str  # Text | Num | Bool | Null | Blob
+    name: str  # Text | Num | Bool | Null | Blob | Folder | File
 
 
 @dataclass(frozen=True)
@@ -81,8 +81,9 @@ class IterateT:
 Type = U[Prim, Lit, Record, ListT, DictT, UnionT, Name, LambdaT, MapT, FoldT, IterateT]
 PENDING_TYPES = (LambdaT, MapT, FoldT, IterateT)
 
-TEXT, NUM, BOOL, NULL, BLOB = (Prim(n) for n in ("Text", "Num", "Bool", "Null", "Blob"))
-_PRIMS = {"Text": TEXT, "Num": NUM, "Bool": BOOL, "Null": NULL, "Blob": BLOB}
+TEXT, NUM, BOOL, NULL, BLOB, FOLDER, FILE = (
+    Prim(n) for n in ("Text", "Num", "Bool", "Null", "Blob", "Folder", "File"))
+_PRIMS = {t.name: t for t in (TEXT, NUM, BOOL, NULL, BLOB, FOLDER, FILE)}
 
 _TOKEN = re.compile(
     r'\s*(?:("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,;:?()]))'

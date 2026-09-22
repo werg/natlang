@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NativeRuntime } from '../dist/index.js';
+import { Folder, NativeRuntime } from '../dist/index.js';
 import { NativeToolAgent } from '../dist/native/agent.js';
 import { checkedDefinitions } from '../dist/native/codebase.js';
 import { readTrace } from '../../web/natlang_lite.mjs';
@@ -58,6 +58,7 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   const call = await session.applyAsync('eval', { code: 'const count = await count_true(flags);\ncount' });
   assert.equal(call.kind, 'ok'); assert.equal(call.value, 2); assert.equal(lam.let.count, 2);
   assert.equal(session.apply('read_value', { expression: 'flags[1]' }).value, false);
+  assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
   assert.equal(session.apply('return_value', { variable: 'count' }).kind, 'ok');
   assert.equal(lam.return, 2);
   const mapped = await session.applyAsync('eval', {
@@ -78,6 +79,48 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.equal(nullSession.apply('return_value', { variable: 'result' }).kind, 'ok');
   nullSession.apply('mark_lines', { start: 1 });
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
+});
+
+test('checked directory reducer metadata survives graph instantiation', () => {
+  const graph = checkedDefinitions({ inspect: { kind: 'directory-reducer', args: { request: 'Text' },
+    returns: 'Text', instructions: 'Inspect project/ and return a report.' } }, 'inspect');
+  assert.equal(graph.instantiate({ request: 'audit' }).subtype, 'directory-reducer');
+});
+
+const directoryProgram = folder => ({ $lambda: {
+  type: 'Lambda<{ folder: Folder }, Text>', instructions: 'Apply the rewrite and return its report.',
+  args: { folder }, codebase: { rewrite: { subtype: 'directory-reducer', args: { replacement: 'Text' },
+    returns: 'Text', instructions: 'Replace the greeting in project/message.txt and report success.' } } } });
+
+const directoryAgent = async session => {
+  assert.equal(session.lam.subtype, 'directory-reducer');
+  assert.equal((await session.applyAsync('read_file', { path: 'project/message.txt' })).value, 'hello\n');
+  assert.equal((await session.applyAsync('edit_file', { path: 'project/message.txt', find: 'hello',
+    replace_with: session.lam.args.replacement })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'const report: Text = "changed"; report' })).kind, 'ok');
+  assert.equal(session.apply('commit', { value: 'report' }).kind, 'ok');
+  assert.equal(session.apply('mark_lines', { start: 1 }).kind, 'ok');
+  assert.equal(session.finish(), true);
+};
+
+test('native folder.apply installs directory reducer changes atomically', async () => {
+  const folder = Folder.fromFiles({ 'message.txt': 'hello\n' });
+  const runtime = new NativeRuntime({ agent: directoryAgent });
+  const root = buildPending(directoryProgram(folder));
+  const session = new NativeSession(runtime, root, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'const report = await folder.apply(rewrite, "hi"); report' });
+  assert.equal(result.kind, 'done'); assert.equal(result.value, 'changed');
+  assert.equal(await folder.readText('message.txt'), 'hi\n');
+});
+
+test('native direct directory reducer call discards its private changes', async () => {
+  const folder = Folder.fromFiles({ 'message.txt': 'hello\n' });
+  const runtime = new NativeRuntime({ agent: directoryAgent });
+  const root = buildPending(directoryProgram(folder));
+  const session = new NativeSession(runtime, root, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'const report = await rewrite(folder, "hi"); report' });
+  assert.equal(result.kind, 'ok'); assert.equal(result.value, 'changed');
+  assert.equal(await folder.readText('message.txt'), 'hello\n');
 });
 
 test('explicit inference and action limits still apply', async () => {

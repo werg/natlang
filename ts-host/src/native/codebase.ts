@@ -4,7 +4,8 @@ import { Reject, buildPending, type LambdaNode } from './values.js';
 
 export type NativeDefinition = { args?: Record<string, string>; returns: string;
   instructions?: string; code?: string; engine?: string; types?: Record<string, string>;
-  uses?: Record<string, string>; effects?: string[]; description?: string };
+  uses?: Record<string, string>; effects?: string[]; description?: string;
+  kind?: 'function' | 'directory-reducer' };
 export type NativeGraph = { root: string; definitions: Record<string, NativeDefinition>;
   revision: string; instantiate(inputs?: Record<string, unknown>): LambdaNode };
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -22,6 +23,8 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
     if (!id.test(name)) throw new Reject([{ path: name, code: 'type-mismatch', expected: 'a function identifier' }]);
     if (typeof def.returns !== 'string' || (typeof def.code === 'string') === (typeof def.instructions === 'string'))
       throw new Reject([{ path: name, code: 'type-mismatch', expected: 'returns and exactly one source body' }]);
+    if (def.kind !== undefined && !['function', 'directory-reducer'].includes(def.kind))
+      throw new Reject([{ path: `${name}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer' }]);
     const env = new TypeEnv(Object.fromEntries(Object.entries(def.types ?? {}).map(([key, value]) => [key, parseType(value)])));
     const signature = parseType(`Lambda<{ ${Object.entries(def.args ?? {}).map(([key, value]) =>
       `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${def.returns}>`);
@@ -51,6 +54,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       [kind]: source,
       ...(def.types && Object.keys(def.types).length ? { types: def.types } : {}),
       ...(def.effects?.length ? { effects: def.effects } : {}),
+      ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}),
       ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
       ...(Object.keys(children).length ? { codebase: children } : {}) };
   }
@@ -64,7 +68,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
     const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${def.returns}>`, [kind]: def[kind],
       ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
       args: inputs, types: def.types ?? {}, effects: def.effects ?? [],
-      function: root } });
+      function: root, ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}) } });
     if (node.nodeKind !== 'lambda') throw new Error('internal graph root error');
     node.codebase = (doc.codebase ?? {}) as Record<string, unknown>;
     return node;

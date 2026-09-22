@@ -1,10 +1,12 @@
 import { fitsType, formatType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { isLazyDict, type LazyDict } from './host-tree.js';
+import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
 
 export const MISSING = Symbol('natlang-missing');
 export type Missing = typeof MISSING;
-export type Value = null | boolean | number | string | Value[] | { [key: string]: Value } | Pending | Missing | LazyDict;
+export type Value = null | boolean | number | string | Value[] | { [key: string]: Value } |
+  Pending | Missing | LazyDict | Folder | FolderHandle | FileHandle;
 export type Status = 'unreduced' | 'running' | 'quiesced' | 'waiting' | 'done';
 
 type Base = { type: Type; types: Record<string, Type>; typesSrc: Record<string, string>;
@@ -13,7 +15,9 @@ export type LambdaNode = Base & { nodeKind: 'lambda'; kind: 'instructions' | 'co
   body: string; args: Record<string, Value>; return: Value; effects: string[];
   journal: unknown[]; continuationNote: string; originalBody?: string; let: Record<string, Value>;
   letTypes: Record<string, Type>; codebase: Record<string, unknown>; functionName: string;
-  marks: Record<number, string>; fnCopies: Record<string, unknown> };
+  marks: Record<number, string>; fnCopies: Record<string, unknown>;
+  subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
+  reducerMode: '' | 'apply' | 'direct'; commitInclude?: string[]; commitExclude?: string[] };
 export type MapNode = Base & { nodeKind: 'map'; over: Value; fn: Value; slots?: Value[]; itemName: string };
 export type FoldNode = Base & { nodeKind: 'fold'; over: Value; init: Value; step: Value;
   acc: Value; at: number; current: Value | null; accName: string; itemName: string };
@@ -47,6 +51,7 @@ function inlineCodebase(entries: unknown, inherited: Record<string, string>): Re
       args: raw.args ?? {}, returns: String(raw.returns ?? ''), [kind]: source };
     if (Object.keys(types).length) doc.types = types;
     if (Array.isArray(raw.effects) && raw.effects.length) doc.effects = raw.effects;
+    if (raw.subtype === 'directory-reducer') doc.subtype = raw.subtype;
     if (kind === 'code' && raw.engine && raw.engine !== 'quickjs-isolated') doc.engine = raw.engine;
     const children = inlineCodebase(raw.codebase, types);
     if (Object.keys(children).length) doc.codebase = children;
@@ -57,7 +62,7 @@ export const isPending = (value: unknown): value is Pending => plain(value) &&
   ['lambda', 'map', 'fold', 'iterate'].includes(String(value.nodeKind));
 
 export function cloneValue<T extends Value>(value: T): T {
-  if (isLazyDict(value)) return value;
+  if (isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle) return value;
   if (value === MISSING || value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(x => cloneValue(x)) as T;
   if (isPending(value)) {
@@ -121,6 +126,8 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
         (!Number.isInteger(raw) || Number.isSafeInteger(raw))) return raw;
     if (wanted.name === 'Bool' && typeof raw === 'boolean') return raw;
     if (wanted.name === 'Null' && raw === null) return null;
+    if (wanted.name === 'Folder' && (raw instanceof Folder || raw instanceof FolderHandle)) return raw;
+    if (wanted.name === 'File' && raw instanceof FileHandle) return raw;
     return reject(path, 'type-mismatch', wanted.name, preview(raw));
   }
   if (wanted.kind === 'lit') {
@@ -199,7 +206,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   const expected = key.slice(1);
   if (type.kind !== expected) return reject(path, 'type-mismatch', `a ${expected} type`, formatType(type));
   const lambdaKeys = new Set(['type', 'types', 'effects', 'engine', 'instructions', 'code', 'args', 'return',
-    'status', 'note', 'effects_journal', 'continuation_note', 'codebase', 'let', 'let_types', 'function', 'marks']);
+    'status', 'note', 'effects_journal', 'continuation_note', 'codebase', 'let', 'let_types', 'function', 'marks', 'subtype']);
   const nodeKeys = new Set(['type', 'types', 'status', 'note', 'over', 'fn', 'init', 'step', 'check', 'max',
     'acc', 'at', 'state', 'iteration', 'acc_name', 'item_name', 'state_name', 'check_name']);
   const extra = Object.keys(body).filter(name => !(key === '$lambda' ? lambdaKeys : nodeKeys).has(name) &&
@@ -217,13 +224,17 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       return reject(`${path}/effects`, 'type-mismatch', 'a list of capabilities');
     if (body.args && !plain(body.args) && !(Array.isArray(body.args) && body.args.length === 0))
       return reject(`${path}/args`, 'type-mismatch', formatType(type.params));
+    const subtype = String(body.subtype ?? 'function');
+    if (!['function', 'directory-reducer'].includes(subtype))
+      return reject(`${path}/subtype`, 'type-mismatch', 'function or directory-reducer', subtype);
     const node: LambdaNode = { ...common, nodeKind: 'lambda', kind: hasInstructions ? 'instructions' : 'code',
       engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
       args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
       journal: structuredClone((body.effects_journal ?? []) as unknown[]),
       continuationNote: String(body.continuation_note ?? ''),
       let: {}, letTypes: {}, codebase: inlineCodebase(body.codebase, typesSrc),
-      functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {} };
+      functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {},
+      subtype: subtype as LambdaNode['subtype'], reducerMode: '' };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
       if (!field) return reject(`${path}/args/${name}`, 'unknown-field');
@@ -312,6 +323,9 @@ export function unboundParts(node: Pending, env: TypeEnv, path: string): Diagnos
 
 export function dump(value: Value, full = false): unknown {
   if (value === MISSING) return null;
+  if (value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
+    return { $host: { kind: value instanceof FileHandle ? 'file' : 'folder',
+      path: value instanceof Folder ? '' : value.relativePath, reconstructable: false } };
   if (isLazyDict(value)) return { $host: { kind: 'lazy-dict', label: value.label, path: value.path.join('/') } };
   if (Array.isArray(value)) return value.map(item => dump(item, full));
   if (value && typeof value === 'object' && !isPending(value))
@@ -334,6 +348,7 @@ export function dump(value: Value, full = false): unknown {
       body.let_types = Object.fromEntries(Object.entries(value.letTypes).map(([k, t]) => [k, formatType(t)]));
     if (full && Object.keys(value.codebase).length) body.codebase = value.codebase;
     if (value.functionName) body.function = value.functionName;
+    if (value.subtype !== 'function') body.subtype = value.subtype;
     if (Object.keys(value.marks).length) body.marks = value.marks;
   } else {
     const parts = value.nodeKind === 'map' ? ['over', 'fn'] : value.nodeKind === 'fold' ? ['over', 'init', 'step'] : ['init', 'step', 'check', 'max'];

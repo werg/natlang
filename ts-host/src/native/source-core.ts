@@ -18,13 +18,15 @@ export type SourceFiles = {
 
 type FileDefinition = { description: string; args: Record<string, string>; returns: string;
   instructions?: string; code?: string; engine?: string; types: Record<string, string>;
-  effects?: string[]; codebase: Record<string, FileDefinition>; function: string };
+  effects?: string[]; codebase: Record<string, FileDefinition>; function: string;
+  subtype: 'function' | 'directory-reducer' };
 function inline(def: FileDefinition): Record<string, unknown> {
   const kind = def.code === undefined ? 'instructions' : 'code';
   const doc: Record<string, unknown> = { description: def.description, args: def.args,
     returns: def.returns, [kind]: def[kind] };
   if (Object.keys(def.types).length) doc.types = def.types;
   if (def.effects?.length) doc.effects = def.effects;
+  if (def.subtype !== 'function') doc.subtype = def.subtype;
   if (kind === 'code' && def.engine && def.engine !== 'quickjs-isolated') doc.engine = def.engine;
   if (Object.keys(def.codebase).length) doc.codebase = Object.fromEntries(Object.entries(def.codebase)
     .map(([name, child]) => [name, inline(child)]));
@@ -68,10 +70,13 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
       if (!meta || typeof meta !== 'object' || Array.isArray(meta))
         throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter mapping' }]);
-      const allowed = new Set(['description', 'args', 'returns', 'types', 'uses', 'effects', 'engine']);
+      const allowed = new Set(['description', 'args', 'returns', 'types', 'uses', 'effects', 'engine', 'kind']);
       for (const key of Object.keys(meta)) if (!allowed.has(key))
         throw new Reject([{ path: file, code: 'unknown-field', got: key }]);
       if (typeof meta.returns !== 'string') throw new Reject([{ path: file, code: 'type-mismatch', expected: 'returns' }]);
+      const subtype = String(meta.kind ?? 'function');
+      if (!['function', 'directory-reducer'].includes(subtype))
+        throw new Reject([{ path: `${file}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer', got: subtype }]);
       const functionName = files.basename(file, files.extname(file));
       if (!id.test(functionName)) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'function identifier' }]);
       const folderTypes = files.join(files.dirname(file), 'types.ts');
@@ -104,7 +109,8 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
         returns: meta.returns, [ts ? 'code' : 'instructions']: body,
         engine: String(meta.engine ?? 'quickjs-isolated'), types,
-        effects: meta.effects as string[] ?? [], codebase: children, function: functionName };
+        effects: meta.effects as string[] ?? [], codebase: children, function: functionName,
+        subtype: subtype as FileDefinition['subtype'] };
     } finally { active.delete(file); }
   }
   const definition = read(path, {});
@@ -112,7 +118,8 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
   const kind = definition.code === undefined ? 'instructions' : 'code';
   const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${definition.returns}>`,
     [kind]: definition[kind], engine: definition.engine, types: definition.types,
-    effects: definition.effects, function: definition.function } });
+    effects: definition.effects, function: definition.function,
+    ...(definition.subtype !== 'function' ? { subtype: definition.subtype } : {}) } });
   if (node.nodeKind !== 'lambda') throw new Error('internal file source error');
   node.codebase = Object.fromEntries(Object.entries(definition.codebase)
     .map(([name, child]) => [name, inline(child)]));
@@ -129,6 +136,7 @@ function sourceDefinition(node: LambdaNode): Record<string, unknown> {
   };
   if (Object.keys(node.typesSrc).length) definition.types = node.typesSrc;
   if (node.effects.length) definition.effects = node.effects;
+  if (node.subtype !== 'function') definition.kind = node.subtype;
   if (node.kind === 'code' && node.engine !== 'quickjs-isolated') definition.engine = node.engine;
   if (Object.keys(node.codebase).length) definition.codebase = node.codebase;
   return definition;

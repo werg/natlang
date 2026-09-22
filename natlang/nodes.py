@@ -65,6 +65,11 @@ class Lambda(Pending):
     fn_name: str = ""                              # the function this lambda is an instance of, if any
     marks: dict = field(default_factory=dict)      # line number of the instructions -> "done" | "skipped"
     fn_copies: dict = field(default_factory=dict)  # local name -> FunctionDef it was copied from
+    subtype: str = "function"                      # function | directory-reducer
+    project_transaction: Any = None                 # opaque FolderTransaction while a reducer runs
+    reducer_mode: str = ""                          # apply | direct
+    commit_include: Optional[list] = None
+    commit_exclude: Optional[list] = None
 
     @property
     def is_crisp(self) -> bool:

@@ -30,7 +30,8 @@ VERSION = "natlang.teacher_batch/1"
 ROOT = Path(__file__).resolve().parent.parent
 TOOL_SURFACE_SHA256 = hashlib.sha256(b"\0".join(
     (ROOT / path).read_bytes() for path in
-    ("natlang/surface.py", "natlang/scope_surface.py"))).hexdigest()
+    ("natlang/surface.py", "natlang/scope_surface.py", "natlang/runtime.py",
+     "natlang/tool_agent.py", "natlang/values.py", "natlang/codebase.py"))).hexdigest()
 
 
 def load_records(path: Path, start: int, limit: int | None) -> list[tuple[int, dict]]:
@@ -169,14 +170,9 @@ def run_job(index: int, record: dict, args, system_prompt: str,
     result = jobs / (key + ".result.json")
     if result_matches(result, record, expected):
         return index, json.loads(result.read_text())
-    # A stale or interrupted artifact cannot resume execution and must not
-    # accumulate beside the only result that the pipeline can consume.
-    if result.exists():
-        result.unlink()
-    for stale in jobs.glob(key + ".stale*.json"):
-        stale.unlink()
-    for interrupted in [jobs / (key + ".trace.jsonl"), *jobs.glob(key + ".retry*.trace.jsonl")]:
-        interrupted.unlink(missing_ok=True)
+    # TraceRecorder opens the canonical trace with truncation.  The result is
+    # replaced atomically after a complete attempt, so no pre-run deletion is
+    # needed and cleanup can remain one final batch operation.
     trace = jobs / (key + ".trace.jsonl")
     run_id = hashlib.sha256(json.dumps({"batch": VERSION, "index": index,
         **expected}, sort_keys=True).encode()).hexdigest()[:32]
@@ -188,8 +184,22 @@ def run_job(index: int, record: dict, args, system_prompt: str,
                      surface=ScopeEvalSurface())
     row["provenance"].update(expected)
     write_atomic(result, row)
-    (jobs / f"{index:06d}.error.json").unlink(missing_ok=True)
     return index, row
+
+
+def cleanup_obsolete(jobs: Path, output: Path, completed_indexes: set[int]) -> int:
+    """Remove obsolete artifacts in one final pass after useful work is done."""
+    obsolete = [*jobs.glob("*.tmp-*"), *jobs.glob("*.stale*.json"), *jobs.glob("*.retry*.trace.jsonl")]
+    obsolete += [jobs / f"{index:06d}.error.json" for index in completed_indexes]
+    building = output.with_suffix(output.suffix + ".building")
+    if building.exists():
+        obsolete.append(building)
+    removed = 0
+    for path in dict.fromkeys(obsolete):
+        if path.exists():
+            path.unlink()
+            removed += 1
+    return removed
 
 
 def main() -> None:
@@ -224,9 +234,6 @@ def main() -> None:
     records = load_records(args.ir, args.start, args.limit)
     system_prompt = args.system_file.read_text()
     args.jobs.mkdir(parents=True, exist_ok=True)
-    for temporary in args.jobs.glob("*.tmp-*"):
-        temporary.unlink(missing_ok=True)
-    args.out.with_suffix(args.out.suffix + ".building").unlink(missing_ok=True)
     expected_for = lambda record: expected_provenance(
         record, model_id=args.model_id, root_seed=args.root_seed,
         system_prompt=system_prompt, segment_turns=args.segment_turns,
@@ -298,6 +305,10 @@ def main() -> None:
                 "workers": args.workers, "completed": completed, "missing": missing,
                 "output_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest()}
     write_atomic(args.out.with_suffix(args.out.suffix + ".manifest.json"), manifest)
+    removed = cleanup_obsolete(args.jobs, args.out,
+                               {index for index, _ in records if index not in missing})
+    if removed:
+        print(f"cleanup: removed {removed} obsolete artifact(s)", flush=True)
     print(f"final: {completed}/{len(records)} complete -> {args.out}", flush=True)
     if missing:
         raise SystemExit(2)

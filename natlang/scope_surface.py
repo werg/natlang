@@ -41,8 +41,11 @@ class ScopeEvalSurface(ToolSurface):
             _tool("eval", "Execute one TypeScript-like step in the persistent typed scope. Declarations persist; imported functions are called with await and positional values.",
                   {"code": {"type": "string"}}, ["code"]),
             _tool("read_value", "Inspect a variable or a field/index selection without executing code.",
-                  {"expression": {"type": "string"}, "start": {"type": "integer"},
-                   "end": {"type": "integer"}}, ["expression"]),
+                  {"expression": {"type": "string"},
+                   "start": {"type": "integer", "minimum": 0,
+                             "description": "Zero-based slice start."},
+                   "end": {"type": "integer", "minimum": 0,
+                           "description": "Exclusive slice end, as in JavaScript slice()."}}, ["expression"]),
             _tool("write_value", "Transport an already supplied literal into a top-level scope variable. For normal program work, including literal decisions, prefer eval declarations. as_type is needed only when inference is ambiguous.",
                   {"name": {"type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"},
                    "value": {}, "as_type": {"type": "string"}}, ["name", "value"]),
@@ -56,6 +59,30 @@ class ScopeEvalSurface(ToolSurface):
             _tool("report_error", "End without a result because the instructions require an invalid or contradictory operation.",
                   {"message": {"type": "string"}}, ["message"]),
         ]
+        if session.lam.project_transaction is not None:
+            file_tools = [
+                _tool("list_files", "List files beneath project/. Paths are sorted and stay inside the reducer project.",
+                      {"path": {"type": "string"}, "pattern": {"type": "string"}}, []),
+                _tool("search_files", "Search project text files and return matching file, line, and context.",
+                      {"query": {"type": "string"}, "path": {"type": "string"},
+                       "pattern": {"type": "string"}, "regex": {"type": "boolean"}}, ["query"]),
+                _tool("read_file", "Read a project file, optionally by one-based inclusive line range.",
+                      {"path": {"type": "string"}, "start_line": {"type": "integer"},
+                       "end_line": {"type": "integer"}}, ["path"]),
+                _tool("write_file", "Create or replace one project text file in the private overlay.",
+                      {"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
+                _tool("edit_file", "Replace one exact or uniquely fuzzy span in a project text file.",
+                      {"path": {"type": "string"}, "find": {"type": "string"},
+                       "replace_with": {"type": "string"}, "fuzzy": {"type": "boolean"}},
+                      ["path", "find", "replace_with"]),
+                _tool("diff_files", "Inspect the current private project delta without committing it.",
+                      {"path": {"type": "string"}}, []),
+            ]
+            tools[4:4] = file_tools
+            tools.insert(4, _tool("commit", "Stage an existing typed variable and select project changes. Patterns are relative to project/.",
+                                  {"value": {"type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"},
+                                   "include": {"type": "array", "items": {"type": "string"}},
+                                   "exclude": {"type": "array", "items": {"type": "string"}}}, ["value"]))
         return tools
 
     def render_request(self, session) -> str:

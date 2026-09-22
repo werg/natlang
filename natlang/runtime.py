@@ -349,13 +349,27 @@ class Runtime:
         self._observe("invocation", phase="start", call_id=invocation.call_id,
                       path=invocation.path, attempt=invocation.attempt, parent_path=parent)
         self.invocations.append(invocation)
+        note = None
         try:
-            note = self.agent_factory(node).run(session)
+            try:
+                note = self.agent_factory(node).run(session)
+            except BaseException:
+                tx = getattr(node, "project_transaction", None)
+                if tx is not None and tx.open:
+                    tx.abort()
+                    self._observe("folder", call_id=invocation.call_id, phase="discarded",
+                                  mode=node.reducer_mode, reason="interpreter exception")
+                raise
         finally:
             self.invocations.pop()
             self._observe("invocation", phase="end", call_id=invocation.call_id)
         if session.completed:
             return self._swap_out(node, ref, node.ret)
+        tx = getattr(node, "project_transaction", None)
+        if tx is not None and tx.open:
+            tx.abort()
+            self._observe("folder", call_id=invocation.call_id, phase="discarded",
+                          mode=node.reducer_mode, reason=note or "incomplete invocation")
         return self._quiesce(node, ref, note or "budget exhausted")
 
     # -- Map
@@ -694,7 +708,7 @@ class Session:
             result = Result("refused", "refused\n" + "\n".join(map(str, e.diags)) + _hint(e.diags), e.diags)
         except (js.JsError, ExecutionError) as e:
             result = Result("error", f"error: {e}")
-        except (KeyError, TypeError, AttributeError) as e:
+        except (KeyError, TypeError, AttributeError, ValueError, OSError, UnicodeError) as e:
             result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
         if name in ("write", "write_value", "copy_value", "copy_function", "call", "invoke",
                     "map_items", "fold_items", "repeat_until", "run_function", "for_each", "fold",
@@ -983,8 +997,22 @@ class Session:
     def _op_read_value(self, args):
         path = self._scope_path(str(args.get("expression") or ""))
         if args.get("start") is not None or args.get("end") is not None:
-            lo, hi = args.get("start", args.get("end")), args.get("end", args.get("start"))
-            path += f"[{lo}..{hi}]"
+            _, ref = self.resolve(path)
+            value = ref.get()
+            sequence = value if isinstance(value, list) else value.splitlines(keepends=True) if isinstance(value, str) else None
+            if sequence is None:
+                raise reject(path, "bad-range", "a list or text value")
+            lo, hi = int(args.get("start", 0)), int(args.get("end", len(sequence)))
+            if lo < 0 or hi < lo or hi > len(sequence):
+                raise reject(path, "bad-range", f"a zero-based half-open slice within 0..{len(sequence)}")
+            selected = sequence[lo:hi]
+            if isinstance(value, str):
+                selected = "".join(selected)
+                text = selected
+            else:
+                text = "\n".join(f"{lo + index}: " + (item if isinstance(item, str) else
+                    json.dumps(dump(item), ensure_ascii=False)) for index, item in enumerate(selected))
+            return Result("ok", text, value=selected)
         return self._do_read(Action("read", path=path))
 
     def _op_write_value(self, args):
@@ -1013,7 +1041,77 @@ class Session:
         if variable not in self.lam.let and variable not in self.lam.in_:
             raise reject(variable, "no-such-path", "an existing scope variable")
         source = f"let/{variable}" if variable in self.lam.let else f"args/{variable}"
-        return self._do_copy(Action("copy", path=source, dst="return"))
+        result = self._do_copy(Action("copy", path=source, dst="return"))
+        if self.lam.subtype == "directory-reducer":
+            self.lam.commit_include = self.lam.commit_exclude = None
+        return result
+
+    def _op_commit(self, args):
+        if self.lam.subtype != "directory-reducer" or self.lam.project_transaction is None:
+            raise reject("commit", "bad-action", "a running directory reducer")
+        include, exclude = args.get("include"), args.get("exclude")
+        for name, selectors in (("include", include), ("exclude", exclude)):
+            if selectors is not None and (not isinstance(selectors, list) or
+                    any(not isinstance(item, str) or not item or item.startswith(("/", "codebase/", "project/"))
+                        for item in selectors)):
+                raise reject(name, "bad-action", "relative project glob patterns")
+        result = self._op_return_value({"variable": args.get("value")})
+        self.lam.commit_include = copy.deepcopy(include)
+        self.lam.commit_exclude = copy.deepcopy(exclude)
+        return result
+
+    def _project_file(self, raw: str, *, allow_root: bool = True):
+        tx = self.lam.project_transaction
+        if tx is None:
+            raise reject("path", "bad-action", "a directory reducer project")
+        path = str(raw or "project")
+        if path == "project":
+            relative = ""
+        elif path.startswith("project/"):
+            relative = path[8:]
+        else:
+            raise reject(path, "no-such-path", "a path rooted at project/")
+        if not allow_root and not relative:
+            raise reject(path, "no-such-path", "a project file")
+        return tx.folder, relative
+
+    def _op_list_files(self, args):
+        folder, path = self._project_file(args.get("path") or "project")
+        rows = [{"path": "project/" + item.path, "kind": item.kind,
+                 "bytes": item.bytes, "digest": item.digest}
+                for item in folder.list_files(path, pattern=args.get("pattern"))]
+        return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
+
+    def _op_search_files(self, args):
+        folder, path = self._project_file(args.get("path") or "project")
+        rows = [{"path": "project/" + item.path, "line": item.line, "text": item.text}
+                for item in folder.search(str(args.get("query") or ""), path,
+                                          pattern=args.get("pattern"), regex=args.get("regex") is True)]
+        return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
+
+    def _op_read_file(self, args):
+        folder, path = self._project_file(args.get("path"), allow_root=False)
+        text = folder.read_text(path, args.get("start_line"), args.get("end_line"))
+        return Result("ok", text, value=text)
+
+    def _op_write_file(self, args):
+        folder, path = self._project_file(args.get("path"), allow_root=False)
+        folder.write_text(path, str(args.get("content") or ""))
+        return Result("ok", "ok   project/" + path)
+
+    def _op_edit_file(self, args):
+        folder, path = self._project_file(args.get("path"), allow_root=False)
+        receipt = folder.edit_text(path, str(args.get("find") or ""),
+                                   str(args.get("replace_with") or ""), fuzzy=args.get("fuzzy") is True)
+        return Result("ok", json.dumps(receipt, ensure_ascii=False), value=receipt)
+
+    def _op_diff_files(self, args):
+        folder, path = self._project_file(args.get("path") or "project")
+        delta = folder.diff(path)
+        rows = [{"path": "project/" + item.path, "kind": item.kind,
+                 "before": item.before_digest, "after": item.after_digest}
+                for item in delta.changes]
+        return Result("ok", json.dumps(rows, ensure_ascii=False, indent=1), value=rows)
 
     @staticmethod
     def _infer_scope_type(value):
@@ -1067,6 +1165,14 @@ class Session:
         return "\n".join(rows)
 
     def _eval_scope_expression(self, expression: str):
+        try:
+            _, ref = self.resolve(self._scope_path(expression))
+            value = ref.get()
+            from .scoped_fs import FileHandle, Folder, FolderHandle
+            if isinstance(value, (Folder, FolderHandle, FileHandle)):
+                return value
+        except Reject:
+            pass
         scope = _eval_scope_view({"args": self.lam.in_, "inputs": self.lam.in_, "locals": {
             k: v for k, v in self.lam.let.items() if not is_pending(v)}})
         code = f"(() => {{ {self._scope_bindings_prefix()} return ({expression}); }})()"
@@ -1131,6 +1237,16 @@ class Session:
                 if last.kind not in ("ok", "done"):
                     return last
             return last
+
+        applied = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+"
+            r"([A-Za-z_$][\w$]*)\.apply\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*(.*))?\)\s*;?\s*(?:\1\s*;?)?\s*",
+            code, re.S)
+        if applied and applied.group(4) in self.lam.codebase:
+            local, annotation, folder_name, function, raw_args = applied.groups()
+            folder = self._scope_folder(folder_name)
+            args = self._split_call_args(raw_args or "")
+            return self._call_directory(local, annotation, function, folder, args, "apply")
         mapped = re.fullmatch(
             r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*"
             r"(.+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*"
@@ -1176,6 +1292,11 @@ class Session:
             local, annotation, function, raw_args = direct.groups()
             fn = self._function(function)
             args = self._split_call_args(raw_args)
+            if fn.subtype == "directory-reducer":
+                if not args:
+                    raise reject("code", "bad-call", f"{function}(folder, ...args)")
+                folder = self._scope_folder(args[0])
+                return self._call_directory(local, annotation, function, folder, args[1:], "direct")
             declared = list(fn.args)
             required = sum(not raw.endswith("?") for raw in declared)
             if not required <= len(args) <= len(declared):
@@ -1232,6 +1353,52 @@ class Session:
         text = json.dumps(value, ensure_ascii=False)
         return Result("ok", text if len(text) <= 400 else text[:400] + f" … ({len(text)} chars)", value=value)
 
+    def _scope_folder(self, expression: str):
+        from .scoped_fs import Folder, FolderHandle
+        if expression.strip() == "project" and self.lam.project_transaction is not None:
+            return self.lam.project_transaction.folder
+        value = self._eval_scope_expression(expression)
+        if not isinstance(value, (Folder, FolderHandle)):
+            raise reject("code", "type-mismatch", "a Folder value", type(value).__name__)
+        return value
+
+    def _call_directory(self, local: str, annotation: str | None, function: str,
+                        folder, expressions: list[str], mode: str) -> Result:
+        fn = self._function(function)
+        if fn.subtype != "directory-reducer":
+            raise reject("code", "bad-call", f"{function} declared kind: directory-reducer")
+        declared = list(fn.args)
+        required = sum(not raw.endswith("?") for raw in declared)
+        if not required <= len(expressions) <= len(declared):
+            raise reject("code", "bad-call", fn.signature, f"{len(expressions)} positional arguments")
+        values = {raw.rstrip("?"): self._eval_scope_expression(expr)
+                  for raw, expr in zip(declared, expressions)}
+        if annotation and not fits(parse_type(fn.returns), parse_type(annotation.strip()), self.env):
+            raise reject(local, "type-does-not-fit-slot", annotation.strip(), fn.returns)
+        try:
+            tx = folder.begin_transaction(blocking=False)
+        except Exception as exc:
+            from .scoped_fs import FolderBusyError
+            if isinstance(exc, FolderBusyError):
+                raise reject("code", "folder-busy", "the folder writer to become available") from exc
+            raise
+        try:
+            self._place_call(f"let/{local}", function, {"values": values})
+            _, ref = self.resolve(f"let/{local}")
+            node = ref.get()
+            if not isinstance(node, Lambda):
+                raise reject("code", "bad-call", "a directory reducer lambda")
+            node.project_transaction, node.reducer_mode = tx, mode
+            result = self._do_reduce(Action("reduce", paths=[f"let/{local}"]))
+        except BaseException:
+            if tx.open:
+                tx.abort()
+            raise
+        if result.kind == "done":
+            result.value = dump(self.lam.let[local])
+            result.text = json.dumps(result.value, ensure_ascii=False)
+        return result
+
     def finish(self) -> bool:
         """The agent replied instead of calling a tool. Complete the lambda if `return` is valid."""
         if self.completed:
@@ -1242,6 +1409,18 @@ class Session:
             self._commit_check()
         except Refuse:
             return False
+        tx = self.lam.project_transaction
+        if tx is not None and tx.open:
+            delta = tx.folder.diff().selected(self.lam.commit_include, self.lam.commit_exclude)
+            if self.lam.reducer_mode == "apply":
+                installed = tx.commit(include=self.lam.commit_include, exclude=self.lam.commit_exclude)
+                phase = "installed"
+            else:
+                tx.abort()
+                installed, phase = delta, "discarded"
+            self.rt._observe("folder", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
+                             phase=phase, mode=self.lam.reducer_mode,
+                             changes=[{"path": item.path, "kind": item.kind} for item in installed.changes])
         self.lam.body = ""
         self.completed = True
         return True
@@ -1336,7 +1515,7 @@ class Session:
                 base = self.lam.fn_copies.get(ref_text[4:])
                 return FunctionDef(name=base.name, kind=tpl.kind, body=tpl.body, args=base.args, returns=base.returns,
                                    types=base.types, description=base.description, effects=base.effects,
-                                   codebase=base.codebase, source=ref_text)
+                                   codebase=base.codebase, source=ref_text, subtype=base.subtype)
         raise reject("function", "no-such-function", "one of: " + (", ".join(cb) or "(this task has no functions)"), ref_text)
 
     def _copy_function(self, path: str, fn_name: str):
@@ -1401,7 +1580,8 @@ class Session:
         unbound = [n.rstrip("?") for n in fn.required() if n not in inputs and n not in values and n not in later]
         over, init, until = v.get("over"), v.get("init"), v.get("until")
         lam_spec = {"type": fn.type_text, fn.kind: fn.body, "args_from": inputs, "args": values or None,
-                    "types": fn.types or None, "effects": fn.effects or None, "function": fn.name}
+                    "types": fn.types or None, "effects": fn.effects or None, "function": fn.name,
+                    "subtype": fn.subtype}
         d = {"path": path, "types": fn.types or None}
         if until is not None or v.get("max") is not None:                       # Iterate
             if len(unbound) != 1:
@@ -1482,12 +1662,12 @@ class Session:
         copies = []
 
         def sub(spec, where):
-            body = {k: spec[k] for k in ("type", "instructions", "code", "args", "types", "effects", "function") if spec.get(k) is not None}
+            body = {k: spec[k] for k in ("type", "instructions", "code", "args", "types", "effects", "function", "subtype") if spec.get(k) is not None}
             copies.extend((src, f"{where}/args/{n}") for n, src in (spec.get("args_from") or {}).items())
             return {"$lambda": body}
 
         kind = type(stated).__name__
-        keys = {"LambdaT": ("instructions", "code", "args", "types", "effects", "function"),
+        keys = {"LambdaT": ("instructions", "code", "args", "types", "effects", "function", "subtype"),
                 "MapT": ("types", "item_name"), "FoldT": ("init", "types", "acc_name", "item_name"),
                 "IterateT": ("init", "max", "types", "state_name", "check_name")}.get(kind)
         if keys is None:
@@ -1806,7 +1986,8 @@ _OMIT_HOST_VALUE = object()
 def _eval_scope_view(value):
     """Portable inline-eval view; native dictionaries stay available through the host API."""
     from .host_tree import LazyDict
-    if isinstance(value, LazyDict):
+    from .scoped_fs import FileHandle, Folder, FolderHandle
+    if isinstance(value, (LazyDict, Folder, FolderHandle, FileHandle)):
         return _OMIT_HOST_VALUE
     if isinstance(value, dict):
         out = {}

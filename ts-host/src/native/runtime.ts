@@ -6,6 +6,7 @@ import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isP
   partType, problems, unboundParts, type LambdaNode, type Pending, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { isLazyDict } from './host-tree.js';
+import { FileHandle, Folder, FolderHandle, FolderBusyError, type FolderTransaction } from './scoped-fs.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -124,7 +125,8 @@ function programListing(body: string, marks: Record<number, string>, window = 3)
 }
 function jsView(value: Value): unknown {
   if (value === MISSING) return null;
-  if (isLazyDict(value)) throw new TypeError('a host-backed Dict cannot enter crisp eval; read a leaf or use the crisp host API');
+  if (isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
+    throw new TypeError('an opaque host handle cannot enter ordinary crisp data; use its injected host API');
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
   if (Array.isArray(value)) return value.map(jsView);
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, jsView(v)]));
@@ -133,7 +135,8 @@ function jsView(value: Value): unknown {
 const OMIT_HOST_VALUE = Symbol('omit-host-value');
 function inlineEvalView(value: Value): unknown {
   if (value === MISSING) return null;
-  if (isLazyDict(value)) return OMIT_HOST_VALUE;
+  if (isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
+    return OMIT_HOST_VALUE;
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
   if (Array.isArray(value)) {
     const items = value.map(inlineEvalView);
@@ -435,9 +438,21 @@ export class NativeRuntime {
     try {
       note = await this.agent(session);
       this.checkInterruption();
+    } catch (error) {
+      if (node.projectTransaction?.open) {
+        node.projectTransaction.abort();
+        this.trace.emit('folder', { call_id: callId, phase: 'discarded', mode: node.reducerMode,
+          reason: 'interpreter exception' });
+      }
+      throw error;
     } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId });
       this.stack.pop(); this.invocationPaths.pop(); this.depth--; this.currentCallId = previousCallId; }
     if (session.completed) return this.done(ref, node, node.return);
+    if (node.projectTransaction?.open) {
+      node.projectTransaction.abort();
+      this.trace.emit('folder', { call_id: callId, phase: 'discarded', mode: node.reducerMode,
+        reason: String(note || 'incomplete invocation') });
+    }
     return this.quiesce(ref, node, String(note || 'budget exhausted'));
   }
 
@@ -616,6 +631,16 @@ export class NativeSession {
     if (this.lam.return === MISSING || this.lam.type.kind !== 'lambda') return false;
     const p = problems(this.lam.return, this.lam.type.returns, this.env, 'return');
     if (p.holes.length || p.pending.length) return false;
+    const tx = this.lam.projectTransaction;
+    if (tx?.open) {
+      const delta = tx.folder.diffSync();
+      const selected = this.lam.reducerMode === 'apply' ?
+        tx.commitSync(this.lam.commitInclude, this.lam.commitExclude) :
+        (tx.abort(), delta);
+      this.runtime.trace.emit('folder', { call_id: this.runtime.currentCallId ?? null,
+        phase: this.lam.reducerMode === 'apply' ? 'installed' : 'discarded', mode: this.lam.reducerMode,
+        changes: selected.changes.map(change => ({ path: change.path, kind: change.kind })) });
+    }
     this.completed = true; this.lam.body = ''; return true;
   }
   private summary(): string {
@@ -713,9 +738,24 @@ export class NativeSession {
       if (name === 'mark_lines') return this.applyNow('mark_done', args);
       if (name === 'read_value') {
         const path = this.scopePath(String(args.expression ?? ''));
-        return this.applyNow('read', { path,
-          ...(args.start !== undefined ? { start: args.start } : {}),
-          ...(args.end !== undefined ? { end: args.end } : {}) });
+        if (args.start !== undefined || args.end !== undefined) {
+          const value = this.resolve(path).get();
+          const sequence = Array.isArray(value) ? value : typeof value === 'string' ?
+            value.match(/[^\n]*\n|[^\n]+$/g) ?? [] : null;
+          if (!sequence) throw new Reject([{ path, code: 'bad-range', expected: 'a list or text value' }]);
+          const start = Number(args.start ?? 0), end = Number(args.end ?? sequence.length);
+          if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > sequence.length)
+            throw new Reject([{ path, code: 'bad-range', expected: `a zero-based half-open slice within 0..${sequence.length}` }]);
+          const slice = sequence.slice(start, end);
+          if (typeof value === 'string') {
+            const text = (slice as string[]).join('');
+            return { kind: 'ok', text, value: text };
+          }
+          return { kind: 'ok', text: (slice as Value[]).map((item, index) =>
+            `${start + index}: ${typeof item === 'string' ? item : JSON.stringify(dump(item))}`).join('\n'),
+            value: slice as Value[] };
+        }
+        return this.applyNow('read', { path });
       }
       if (name === 'return_value') {
         const variable = String(args.variable ?? '');
@@ -723,7 +763,24 @@ export class NativeSession {
           Object.hasOwn(this.lam.args, variable) ? `args/${variable}` : '';
         if (!source) throw new Reject([{ path: variable, code: 'no-such-path', expected: 'an existing scope variable' }]);
         if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'return', code: 'type-mismatch' }]);
-        return this.applyNow('write', { path: 'return', type: formatType(this.lam.type.returns), source });
+        const result = this.applyNow('write', { path: 'return', type: formatType(this.lam.type.returns), source });
+        if (this.lam.subtype === 'directory-reducer') {
+          this.lam.commitInclude = undefined; this.lam.commitExclude = undefined;
+        }
+        return result;
+      }
+      if (name === 'commit') {
+        if (this.lam.subtype !== 'directory-reducer' || !this.lam.projectTransaction)
+          throw new Reject([{ path: 'commit', code: 'bad-action', expected: 'a running directory reducer' }]);
+        const include = args.include, exclude = args.exclude;
+        for (const [key, selectors] of [['include', include], ['exclude', exclude]] as const)
+          if (selectors !== undefined && (!Array.isArray(selectors) || selectors.some(item =>
+            typeof item !== 'string' || !item || item.startsWith('/') || item.startsWith('project/') || item.startsWith('codebase/'))))
+            throw new Reject([{ path: key, code: 'bad-action', expected: 'relative project glob patterns' }]);
+        const result = this.applyNow('return_value', { variable: args.value });
+        this.lam.commitInclude = include === undefined ? undefined : [...include as string[]];
+        this.lam.commitExclude = exclude === undefined ? undefined : [...exclude as string[]];
+        return result;
       }
       if (name === 'report_blocker' || name === 'report_error') {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
@@ -1009,6 +1066,47 @@ export class NativeSession {
     const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
   }
 
+  private scopeFolder(expression: string): Folder | FolderHandle {
+    const name = expression.trim();
+    if (name === 'project' && this.lam.projectTransaction) return this.lam.projectTransaction.folder;
+    const value = Object.hasOwn(this.lam.let, name) ? this.lam.let[name] : this.lam.args[name];
+    if (!(value instanceof Folder) && !(value instanceof FolderHandle))
+      throw new Reject([{ path: 'code', code: 'type-mismatch', expected: 'a Folder value', got: typeof value }]);
+    return value;
+  }
+
+  private async callDirectory(local: string, annotation: string | undefined, functionName: string,
+    folder: Folder | FolderHandle, expressions: string[], mode: 'apply' | 'direct'): Promise<NativeResult> {
+    const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
+    if (!definition || definition.subtype !== 'directory-reducer')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: `${functionName} declared kind: directory-reducer` }]);
+    const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
+    const required = declared.filter(name => !name.endsWith('?')).length;
+    if (expressions.length < required || expressions.length > declared.length)
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]);
+    if (annotation && !fitsType(parseType(String(definition.returns)), parseType(annotation.trim()), this.env))
+      throw new Reject([{ path: local, code: 'type-does-not-fit-slot', expected: annotation.trim(), got: String(definition.returns) }]);
+    const values: Record<string, unknown> = {};
+    for (let index = 0; index < expressions.length; index++) values[declared[index]!.replace(/\?$/, '')] =
+      this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[index]}); })()`,
+        false, 'eval', this.scopeView()).result;
+    let tx: FolderTransaction;
+    try { tx = await folder.beginTransaction(false); }
+    catch (error) {
+      if (error instanceof FolderBusyError)
+        throw new Reject([{ path: 'code', code: 'folder-busy', expected: 'the folder writer to become available' }]);
+      throw error;
+    }
+    try {
+      const result = await this.applyAsync('call', { function: functionName, to: `let/${local}`, values,
+        project_transaction: tx, reducer_mode: mode });
+      if (result.kind === 'done') {
+        const value = dump(this.lam.let[local]!) as Value; result.value = value; result.text = JSON.stringify(value);
+      }
+      return result;
+    } catch (error) { if (tx.open) tx.abort(); throw error; }
+  }
+
   private async scopeEval(code: string): Promise<NativeResult> {
     if (!code.trim()) return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript-like statement or expression' }]));
     if (/\b(?:eval|Function|import|process|globalThis|require)\b/.test(code))
@@ -1026,6 +1124,22 @@ export class NativeSession {
         if (!['ok', 'done'].includes(last.kind)) return last;
       }
       return last;
+    }
+    const applied = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\.apply\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*([\s\S]*?))?\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (applied) try {
+      return await this.callDirectory(applied[1]!, applied[2], applied[4]!, this.scopeFolder(applied[3]!),
+        applied[5] ? this.splitCallArgs(applied[5]) : [], 'apply');
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+    const directReducer = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*([^,()]+)(?:\s*,\s*([\s\S]*?))?\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (directReducer && (this.lam.codebase[directReducer[3]!] as Record<string, unknown> | undefined)?.subtype === 'directory-reducer') try {
+      return await this.callDirectory(directReducer[1]!, directReducer[2], directReducer[3]!,
+        this.scopeFolder(directReducer[4]!), directReducer[5] ? this.splitCallArgs(directReducer[5]) : [], 'direct');
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
     const mapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
     if (mapped && Object.hasOwn(this.lam.codebase, mapped[5]!)) {
@@ -1135,6 +1249,38 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
+    if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name)) {
+      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+      if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      this.actions++; this.toolCalls++; this.lam.steps++;
+      try {
+        const tx = this.lam.projectTransaction;
+        if (!tx) throw new Reject([{ path: 'path', code: 'bad-action', expected: 'a directory reducer project' }]);
+        const raw = String(args.path ?? 'project');
+        const path = raw === 'project' ? '' : raw.startsWith('project/') ? raw.slice(8) :
+          (() => { throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a path rooted at project/' }]); })();
+        if (['read_file', 'write_file', 'edit_file'].includes(name) && !path)
+          throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a project file' }]);
+        let value: unknown;
+        if (name === 'list_files') value = tx.folder.listFiles(path, args.pattern === undefined ? undefined : String(args.pattern))
+          .map(item => ({ ...item, path: `project/${item.path}` }));
+        else if (name === 'search_files') value = (await tx.folder.search(String(args.query ?? ''), path,
+          args.pattern === undefined ? undefined : String(args.pattern), args.regex === true))
+          .map(item => ({ ...item, path: `project/${item.path}` }));
+        else if (name === 'read_file') value = await tx.folder.readText(path,
+          args.start_line === undefined ? undefined : Number(args.start_line),
+          args.end_line === undefined ? undefined : Number(args.end_line));
+        else if (name === 'write_file') { tx.folder.writeText(path, String(args.content ?? '')); value = { path: raw, changed: true }; }
+        else if (name === 'edit_file') value = await tx.folder.editText(path, String(args.find ?? ''),
+          String(args.replace_with ?? ''), args.fuzzy === true);
+        else value = tx.folder.diffSync(path);
+        const text = typeof value === 'string' ? value : JSON.stringify(value, null, 1);
+        return this.record(name, args, { kind: 'ok', text, value: value as Value });
+      } catch (error) {
+        if (error instanceof Reject) return this.record(name, args, rejected(error));
+        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      }
+    }
     if (name === 'eval') {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
@@ -1314,7 +1460,8 @@ export class NativeSession {
       const leaf = { type: typeText, [kind]: definition[kind],
         ...(kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated' ?
           { engine: definition.engine } : {}), args: values, types: definition.types ?? {},
-        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName };
+        effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName,
+        subtype: definition.subtype ?? 'function' };
       let raw: Record<string, unknown> = { $lambda: leaf };
       let destination = String(definition.returns);
       if (args.until !== undefined) {
@@ -1347,6 +1494,10 @@ export class NativeSession {
         destination = `${definition.returns}[]`;
       }
       const child = buildPending(raw, this.env);
+      if (child.nodeKind === 'lambda' && args.project_transaction instanceof Object) {
+        child.projectTransaction = args.project_transaction as FolderTransaction;
+        child.reducerMode = args.reducer_mode === 'apply' ? 'apply' : 'direct';
+      }
       if (path.startsWith('let/')) {
         const local = path.slice(4);
         if (!this.lam.letTypes[local]) {

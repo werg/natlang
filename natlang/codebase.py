@@ -25,7 +25,7 @@ _IMPORT = re.compile(
     r'^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}'
     r'\s*from\s*["\']([^"\']+)["\'];?\s*$'
 )
-_KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine"}
+_KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine", "kind"}
 
 
 def _split_imports(source: str) -> tuple[list[tuple[str, str, str]], str]:
@@ -64,6 +64,7 @@ class FunctionDef:
     effects: list = field(default_factory=list)
     codebase: dict = field(default_factory=dict)   # name -> FunctionDef
     source: str = ""                   # where it was defined, for messages
+    subtype: str = "function"          # function | directory-reducer
 
     def __deepcopy__(self, memo):      # definitions are immutable and shared
         return self
@@ -89,6 +90,8 @@ class FunctionDef:
             doc["effects"] = list(self.effects)
         if self.kind == "code" and self.engine != "quickjs-isolated":
             doc["engine"] = self.engine
+        if self.subtype != "function":
+            doc["kind"] = self.subtype
         if self.codebase:
             doc["codebase"] = {n: f.to_inline() for n, f in self.codebase.items()}
         return doc
@@ -102,6 +105,8 @@ class FunctionDef:
             doc["effects"] = list(self.effects)
         if self.kind == "code" and self.engine != "quickjs-isolated":
             doc["engine"] = self.engine
+        if self.subtype != "function":
+            doc["subtype"] = self.subtype
         return doc
 
 
@@ -114,13 +119,16 @@ def _make(name: str, meta: dict, body: str, kind: str, inherited: dict, source: 
         raise reject(source, "type-mismatch", "frontmatter with `returns`")
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         raise reject(source, "type-mismatch", "a function name that is an identifier", name)
+    subtype = str(meta.get("kind") or "function")
+    if subtype not in ("function", "directory-reducer"):
+        raise reject(source, "type-mismatch", "kind: function or kind: directory-reducer", subtype)
     return FunctionDef(name=name, kind=kind, body=body.strip("\n") + "\n",
                        engine=str(meta.get("engine") or "quickjs-isolated"),
                        args={str(k): str(v) for k, v in (meta.get("args") or {}).items()},
                        returns=str(meta["returns"]),
                        types={**inherited, **{str(k): str(v) for k, v in (meta.get("types") or {}).items()}},
                        description=str(meta.get("description") or ""), effects=list(meta.get("effects") or []),
-                       source=source)
+                       source=source, subtype=subtype)
 
 
 # -- from disk ---------------------------------------------------------------------------------------------

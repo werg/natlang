@@ -150,11 +150,9 @@ def _resume_count(output: Path, records: list[dict],
 
 
 def _trace_path(output: Path, index: int) -> Path:
-    base = output.parent / f"{output.stem}-{index}.trace.jsonl"
-    base.unlink(missing_ok=True)
-    for retry in output.parent.glob(f"{output.stem}-{index}.retry*.trace.jsonl"):
-        retry.unlink()
-    return base
+    # TraceRecorder truncates this canonical path.  Obsolete retry traces are
+    # cleaned by the batch driver after collection instead of before work.
+    return output.parent / f"{output.stem}-{index}.trace.jsonl"
 
 
 def main():

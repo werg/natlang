@@ -152,13 +152,21 @@ def _coerce_prim(raw, rt: Prim, yaml: bool, path: str):
     elif rt.name == "Null":
         if raw is None or (yaml and isinstance(raw, str) and raw.strip() in ("", "null", "~")):
             return None
+    elif rt.name == "Folder":
+        from .scoped_fs import Folder, FolderHandle
+        if isinstance(raw, (Folder, FolderHandle)):
+            return raw
+    elif rt.name == "File":
+        from .scoped_fs import FileHandle
+        if isinstance(raw, FileHandle):
+            return raw
     raise reject(path, "type-mismatch", rt.name, _preview(raw))
 
 
 # --------------------------------------------------------------------------- pending nodes
 
 _LAMBDA_KEYS = {"type", "types", "effects", "engine", "instructions", "code", "args", "return", "status", "note",
-                "effects_journal", "continuation_note", "codebase", "let", "let_types", "function", "marks"}
+                "effects_journal", "continuation_note", "codebase", "let", "let_types", "function", "marks", "subtype"}
 
 
 def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: str,
@@ -214,7 +222,9 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
             raise reject(f"{path}/effects", "type-mismatch", "a list of capabilities")
         node = Lambda(kind="instructions" if has_i else "code", body=_norm_text(text),
                       engine=str(body.get("engine") or "quickjs-isolated"),
-                      effects=[str(e) for e in effects], **common)
+                      effects=[str(e) for e in effects], subtype=str(body.get("subtype") or "function"), **common)
+        if node.subtype not in ("function", "directory-reducer"):
+            raise reject(f"{path}/subtype", "type-mismatch", "function or directory-reducer", node.subtype)
         raw_in = body.get("args") or {}
         if not isinstance(raw_in, dict):
             raise reject(f"{path}/args", "type-mismatch", format_type(t.params))
@@ -394,6 +404,11 @@ def dump(x: Any) -> Any:
     """Plain YAML-able form of a value or pending node (SPEC 11)."""
     from .streams import StreamBuffer
     from .host_tree import LazyDict
+    from .scoped_fs import FileHandle, Folder, FolderHandle
+    if isinstance(x, (Folder, FolderHandle, FileHandle)):
+        kind = "file" if isinstance(x, FileHandle) else "folder"
+        path = getattr(x, "relative_path", "")
+        return {"$host": {"kind": kind, "path": path, "reconstructable": False}}
     if isinstance(x, LazyDict):
         return {"$host": {"kind": "lazy-dict", "label": x.label,
                            "path": "/".join(x.path)}}
@@ -432,6 +447,8 @@ def dump(x: Any) -> Any:
             body["continuation_note"] = x.continuation_note
         if x.fn_name:
             body["function"] = x.fn_name
+        if x.subtype != "function":
+            body["subtype"] = x.subtype
         if x.marks:
             body["marks"] = {int(k): v for k, v in sorted(x.marks.items())}
         if x.let:
