@@ -9,19 +9,19 @@ function load(result) {
 
 test('scope compiler records top-level bindings and preserves final-expression REPL semantics', async () => {
   const compiled = compileScopeSnippet(
-    'const selected: Num = input + 1;\nlet label = `v${selected}`;\nlabel',
+    'const selected: number = input + 1;\nlet label = `v${selected}`;\nlabel',
     { inputBindings: ['input'] });
   assert.equal(compiled.version, SCOPE_COMPILE_VERSION);
   assert.deepEqual(compiled.bindings.map(({ name, kind, mutable, annotation }) =>
     ({ name, kind, mutable, annotation })), [
-    { name: 'selected', kind: 'const', mutable: false, annotation: 'Num' },
+    { name: 'selected', kind: 'const', mutable: false, annotation: 'number' },
     { name: 'label', kind: 'let', mutable: true, annotation: undefined },
   ]);
-  assert.deepEqual(compiled.finalExpression, { start: 61, end: 66, line: 3, column: 1 });
+  assert.deepEqual(compiled.finalExpression, { start: 64, end: 69, line: 3, column: 1 });
   assert.match(compiled.body, /return __natlang_finish\(label\);/);
   const run = load(compiled);
   assert.deepEqual(await run({ input: 4 }, {}, {}),
-    { result: 'v5', bindings: { selected: 5, label: 'v5' } });
+    { result: 'v5', inputs: { input: 4 }, bindings: { selected: 5, label: 'v5' } });
 });
 
 test('scope compiler maps stock TypeScript annotations to portable result types', () => {
@@ -30,7 +30,7 @@ test('scope compiler maps stock TypeScript annotations to portable result types'
     'const summary: { ok: boolean; totals: Record<string, number> } = { ok: true, totals: { a: 2 } };\nsummary');
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.deepEqual(compiled.bindings.map(binding => binding.annotation), [
-    'Num', '(Text)[]', '{ ok: Bool, totals: Dict<Num> }',
+    'number', '(string)[]', '{ ok: boolean, totals: Record<string, number> }',
   ]);
 });
 
@@ -43,7 +43,7 @@ test('scope compiler injects async checked-helper placeholders with ordinary cal
   assert.deepEqual(await run({ value: 7 }, {}, async (name, args) => {
     calls.push([name, args]); return args[0] * 2;
   }),
-    { result: 14, bindings: { answer: 14 } });
+    { result: 14, inputs: { value: 7 }, bindings: { answer: 14 } });
   assert.deepEqual(calls, [['double', [7]]]);
 });
 
@@ -51,8 +51,8 @@ test('scope compiler preserves explicit return statements', async () => {
   const compiled = compileScopeSnippet('if (flag) return 3;\nreturn 5;', { inputBindings: ['flag'] });
   assert.equal(compiled.finalExpression, undefined);
   const run = load(compiled);
-  assert.deepEqual(await run({ flag: true }, {}, {}), { result: 3, bindings: {} });
-  assert.deepEqual(await run({ flag: false }, {}, {}), { result: 5, bindings: {} });
+  assert.deepEqual(await run({ flag: true }, {}, {}), { result: 3, inputs: { flag: true }, bindings: {} });
+  assert.deepEqual(await run({ flag: false }, {}, {}), { result: 5, inputs: { flag: false }, bindings: {} });
 });
 
 test('scope compiler reports forbidden capabilities with original source spans', () => {
@@ -86,7 +86,8 @@ test('scope compiler removes a redundant injected self-alias and records the rep
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   assert.equal(compiled.repairs.length, 1);
   assert.match(compiled.repairs[0].message, /redundant self-alias/);
-  assert.deepEqual(await load(compiled)({ ready: [1, 2] }, {}, {}), { result: 2, bindings: {} });
+  assert.deepEqual(await load(compiled)({ ready: [1, 2] }, {}, {}),
+    { result: 2, inputs: { ready: [1, 2] }, bindings: {} });
 });
 
 test('scope compiler transactionally captures existing locals and rejects immutable writes', async () => {
@@ -95,13 +96,21 @@ test('scope compiler transactionally captures existing locals and rejects immuta
   });
   const run = load(compiled);
   assert.deepEqual(await run({ step: 3 }, { count: 4 }, {}),
-    { result: 14, bindings: { count: 7, doubled: 14 } });
+    { result: 14, inputs: { step: 3 }, bindings: { count: 7, doubled: 14 } });
 
   const immutable = compileScopeSnippet('settings = { enabled: false };', {
     localBindings: [{ name: 'settings', mutable: false }],
   });
   assert.equal(immutable.ok, false);
   assert.ok(immutable.diagnostics.some(item => item.code === 'invalid-binding'));
+});
+
+test('scope compiler treats parameters as mutable local bindings', async () => {
+  const compiled = compileScopeSnippet('count += 2; items.push(count); count', {
+    inputBindings: ['count', 'items'],
+  });
+  const result = await load(compiled)({ count: 3, items: [1] }, {}, {});
+  assert.deepEqual(result, { result: 5, inputs: { count: 5, items: [1, 5] }, bindings: {} });
 });
 
 test('scope compiler rejects an early return that would skip persistent declaration initialization', () => {

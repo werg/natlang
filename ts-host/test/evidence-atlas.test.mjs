@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost } from '../dist/index.js';
 import { EvidenceCollection } from '../../applications/evidence_atlas.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/evidence_atlas/answer.nl', import.meta.url));
 
@@ -15,36 +16,23 @@ test('natlang plans search, reads versioned spans and returns citation-checked c
     drainEvents: () => evidence.drainEvents() } });
   const revision = evidence.docs.get('spec').revision;
   const modelTurn = turn => {
-    if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-      return { calls: [], text: 'done', completion_tokens: 1 };
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-    if (prompt.includes('function answer(')) return { calls: [
-      ['call', { function: 'plan_search', to: 'let/queries', inputs: { question: 'args/question' } }],
-      ['call', { function: 'search', to: 'let/found', inputs: { queries: 'let/queries' } }],
-      ['call', { function: 'select', to: 'let/selected', inputs: {
-        question: 'args/question', found: 'let/found' } }],
-      ['call', { function: 'read', to: 'let/passages', inputs: {
-        selected: 'let/selected', collection_revision: 'let/found/collection_revision' } }],
-      ['call', { function: 'compose', to: 'let/draft', inputs: {
-        question: 'args/question', passages: 'let/passages', truncated: 'let/found/truncated' } }],
-      ['call', { function: 'verify', to: 'return', inputs: {
-        passages: 'let/passages', draft: 'let/draft',
-        collection_revision: 'let/found/collection_revision' } }],
-    ], completion_tokens: 1 };
-    if (prompt.includes('two or three focused search phrases')) return { calls: [['write', {
-      path: 'return', value: ['Fold consumes events', 'source order'] }]], completion_tokens: 1 };
-    if (prompt.includes('Choose IDs of the offered hits')) return { calls: [['write', {
-      path: 'return', value: ['spec#p0'] }]], completion_tokens: 1 };
-    return { calls: [['write', { path: 'return', value: {
+    if (prompt.includes('function answer(')) return evalTurn(turn,
+      'const queries = await plan_search(question); const found = await search(queries); const selected = await select(question, found); const passages = await read(selected, found.collection_revision); const draft = await compose(question, passages, found.truncated); await verify(passages, draft, found.collection_revision)');
+    if (prompt.includes('two or three focused search phrases')) return evalTurn(turn,
+      `JSON.stringify(${JSON.stringify(['Fold consumes events', 'source order'])})`);
+    if (prompt.includes('Choose IDs of the offered hits')) return evalTurn(turn,
+      `JSON.stringify(${JSON.stringify(['spec#p0'])})`);
+    return evalTurn(turn, `(${JSON.stringify({
       answer: 'Fold consumes events in source order.',
       claims: [{ text: 'Fold consumes events in source order', span_id: 'spec#p0',
         revision, quote: 'in the order supplied by its source' }], gaps: [],
-    } }]], completion_tokens: 1 };
+    })})`);
   };
   try {
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { question: 'How does Fold consume events?' }, modelTurn,
-      options: { model: { segment_turns: 2 } } });
+      });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'citation-checked');
     assert.equal(result.value.claims[0].span_id, 'spec#p0');

@@ -47,7 +47,7 @@ test('browser client retries automatic GPU loading on CPU and owns model lifecyc
   assert.match(loaded.gpuFallbackReason, /GPU allocation failed/);
   assert.equal(client.model.loaded, true);
   const result = await client.run({ source: { kind: 'program', program: { $lambda: {
-    type: 'Lambda<{}, Num>', instructions: 'Return 7.',
+    type: '() => number', instructions: 'Return 7.',
   } } }, options: { seed: { mode: 'compatibility' } } });
   assert.equal(result.value, 7);
   assert.equal(result.model.id, 'local-q4');
@@ -64,7 +64,7 @@ test('browser client shares an application host with crisp eval', async () => {
   const client = new BrowserNatlangClient({ host: application, mode: 'retained' });
   try {
     const result = await client.run({ source: { kind: 'program', program: { $lambda: {
-      type: 'Lambda<{}, Num>', engine: 'typescript-host',
+      type: '() => number', engine: 'typescript-host',
       code: 'host.count += 3; return host.count;',
     } } } });
     assert.equal(result.value, 7);
@@ -79,7 +79,7 @@ test('retained browser client keeps one eval environment across application runs
   const environment = client.environment;
   assert.equal(environment.mode, 'retained');
   const request = { source: { kind: 'program', program: { $lambda: {
-    type: 'Lambda<{}, Num>', engine: 'typescript-host',
+    type: '() => number', engine: 'typescript-host',
     code: 'if (typeof invocationCount === "undefined") var invocationCount = 0; return ++invocationCount;',
   } } } };
   try {

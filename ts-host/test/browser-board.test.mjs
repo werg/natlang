@@ -11,6 +11,7 @@ async function api() {
 const root = fileURLToPath(new URL('../examples/browser-board/program/', import.meta.url));
 const names = ['board/reduce.nl', 'board/reduce/choose.nl', 'board/reduce/apply.ts',
   'board/view.nl', 'board/view/describe.nl', 'board/view/layout.ts', 'board/types.ts'];
+import { evalTurn } from './support/eval-turn.mjs';
 
 test('native browser board reduces commands and renders a complete safe view tree', async () => {
   const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
@@ -19,32 +20,23 @@ test('native browser board reduces commands and renders a complete safe view tre
   const client = new BrowserNatlangClient();
   let event = null, app;
   const modelTurn = turn => {
-    if (turn.messages.filter(message => message.role === 'assistant').length > 1)
-      return { calls: [], text: 'done', completion_tokens: 1 };
     const prompt = String(turn.messages.find(message => message.role === 'user')?.content ?? '');
-    if (prompt.includes('function reduce(')) return { calls: [
-      ['call', { function: 'choose', to: 'let/decision', inputs: {
-        state: 'args/state', event: 'args/event' } }],
-      ['call', { function: 'apply', to: 'return', inputs: {
-        state: 'args/state', event: 'args/event', decision: 'let/decision' } }],
-    ], completion_tokens: 1 };
-    if (prompt.includes('function view(')) return { calls: [
-      ['call', { function: 'describe', to: 'let/plan', inputs: { state: 'args/state' } }],
-      ['call', { function: 'layout', to: 'return', inputs: {
-        state: 'args/state', plan: 'let/plan' } }],
-    ], completion_tokens: 1 };
+    if (prompt.includes('function reduce(')) return evalTurn(turn,
+      'const decision = await choose(state, event); await apply(state, event, decision)');
+    if (prompt.includes('function view(')) return evalTurn(turn,
+      'const plan = await describe(state); await layout(state, plan)');
     if (prompt.includes('Interpret the incoming UI event')) {
       const decision = event.kind === 'command' ? { kind: 'add', text: event.value } :
         { kind: 'toggle', item_id: event.value };
-      return { calls: [['write', { path: 'return', value: decision }]], completion_tokens: 1 };
+      return evalTurn(turn, `(${JSON.stringify(decision)})`);
     }
     const state = app?.state ?? { revision: 0, next_id: 1, items: [] };
-    return { calls: [['write', { path: 'return', value: {
+    return evalTurn(turn, `(${JSON.stringify({
       title: 'Tasks', summary: `${state.items.length} tasks`, groups: [
         { label: 'Open', ids: state.items.filter(item => !item.done).map(item => item.id) },
         { label: 'Done', ids: state.items.filter(item => item.done).map(item => item.id) },
       ],
-    } }]], completion_tokens: 1 };
+    })})`);
   };
   app = new BrowserNatlangApplication({ client,
     source: { files, reducer: 'board/reduce.nl', view: 'board/view.nl' },

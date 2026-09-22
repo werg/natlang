@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost } from '../dist/index.js';
 import { RepositoryMigration } from '../../applications/repository_migration.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/repository_migration/migrate.nl', import.meta.url));
 const source = {
@@ -25,29 +26,21 @@ test('natlang plans a checked migration without editing the original repository'
   try {
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { request: 'Rename sum to add while preserving the calculation', query: 'sum' },
-      options: { model: { segment_turns: 2 } },
-      modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
+      modelTurn: request => {
+        const turn = request;
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function migrate(')) return { calls: [
-          ['call', { function: 'inspect', to: 'let/snapshot' }],
-          ['call', { function: 'search', to: 'let/uses', inputs: {
-            query: 'args/query', revision: 'let/snapshot/revision' } }],
-          ['call', { function: 'propose', to: 'let/patch', inputs: {
-            request: 'args/request', snapshot: 'let/snapshot', uses: 'let/uses' } }],
-          ['call', { function: 'apply', to: 'let/candidate', inputs: {
-            revision: 'let/snapshot/revision', patch: 'let/patch' } }],
-          ['call', { function: 'validate', to: 'let/checks', inputs: {
-            revision: 'let/candidate/revision' } }],
-          ['call', { function: 'report', to: 'return', inputs: {
-            revision: 'let/candidate/revision', checks: 'let/checks' } }],
-        ], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: [
+        if (prompt.includes('function migrate(')) return evalTurn(turn,
+          'const snapshot = await inspect();\n' +
+          'const uses = await search(query, snapshot.revision);\n' +
+          'const patch = await propose(request, snapshot, uses);\n' +
+          'const candidate = await apply(snapshot.revision, patch);\n' +
+          'const checks = await validate(candidate.revision);\n' +
+          'await report(candidate.revision, checks)');
+        return evalTurn(turn, JSON.stringify([
           { path: 'lib.mjs', old: 'function sum(', new: 'function add(' },
           { path: 'caller.mjs', old: '{ sum }', new: '{ add }' },
           { path: 'caller.mjs', old: 'sum(2, 3)', new: 'add(2, 3)' },
-        ] }]], completion_tokens: 1 };
+        ]));
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'reviewable');

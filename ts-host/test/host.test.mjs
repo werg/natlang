@@ -18,9 +18,9 @@ const run = async (program, environment = new TypeScriptEnvironment()) => {
   finally { host.close(); }
 };
 
-test('full interpreter runs TypeScript generated syntax and finite Map', async () => {
-  const root = { $map: { type: 'Map<Num, Num>', over: [1, 2, 3],
-    fn: lambda('Lambda<{ item: Num }, Num>', 'enum Scale { Double = 2 }; return args.item * Scale.Double;') } };
+test('full interpreter runs TypeScript collection syntax', async () => {
+  const root = lambda('() => number[]',
+    'enum Scale { Double = 2 }; return [1, 2, 3].map(item => item * Scale.Double);');
   const result = await run(root);
   assert.equal(result.outcome.kind, 'done');
   assert.deepEqual(result.value, [2, 4, 6]);
@@ -33,18 +33,15 @@ test('model turns use the native tool surface and shared eval sees host identity
   let turn = 0;
   try {
     const result = await host.run({ source: { kind: 'program', program: {
-      $lambda: { type: 'Lambda<{}, Num>', instructions: 'Increment the host counter and return its value.' },
+      $lambda: { type: '() => number', instructions: 'Increment the host counter and return its value.' },
     } }, modelTurn: () => {
       turn++;
-      if (turn === 1) return { calls: [['run_code', { engine: 'typescript-host',
-        code: 'host.increase(4)' }]], completion_tokens: 4 };
-      if (turn === 2) return { calls: [['write', { path: 'return', value: native.count }]], completion_tokens: 4 };
-      return { calls: [], text: 'done', completion_tokens: 1 };
+      return { calls: [['eval', { code: 'host.increase(4)' }], ['mark_lines', { start: 1 }]], completion_tokens: 4 };
     } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 4);
     assert.equal(native.count, 4);
-    assert.equal(turn, 3);
+    assert.equal(turn, 1);
   } finally { host.close(); }
 });
 
@@ -53,10 +50,11 @@ test('an ordered batch preserves later independent actions after a rejection', a
   let turn = 0;
   try {
     const result = await host.run({ source: { kind: 'program', program: {
-      $lambda: { type: 'Lambda<{}, Bool>', instructions: 'Return true.' },
+      $lambda: { type: '() => boolean', instructions: 'Return true.' },
     } }, validationFeedback: 'local', modelTurn: () => ++turn === 1 ? ({ calls: [
-      ['write', { path: 'args/missing', type: 'Text', value: 'invalid' }],
-      ['write', { path: 'return', type: 'Bool', value: true }],
+      ['eval', { code: 'const invalid: string = args.missing' }],
+      ['eval', { code: 'true' }],
+      ['mark_lines', { start: 1 }],
     ], completion_tokens: 2 }) : ({ calls: [], text: 'done', completion_tokens: 1 }) });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, true);
@@ -69,8 +67,8 @@ test('checked definitions, input binding and trace work from TypeScript', async 
   try {
     const tracePath = join(dir, 'trace.jsonl');
     const result = await host.run({ source: { kind: 'definitions', root: 'main', entries: {
-      main: { args: { price: 'Num' }, returns: 'Num', engine: 'typescript-host',
-        code: 'return args.price * 1.25;' },
+      main: { args: { price: 'number' }, returns: 'number', engine: 'typescript-host',
+        code: 'return price * 1.25;' },
     } }, inputs: { price: 8 }, tracePath });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 10);
@@ -85,7 +83,7 @@ test('checked definitions, input binding and trace work from TypeScript', async 
 test('file source uses the native loader', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'natlang-ts-source-'));
   const path = join(dir, 'program.json');
-  writeFileSync(path, JSON.stringify(lambda('Lambda<{}, Num>', 'return 12;')));
+  writeFileSync(path, JSON.stringify(lambda('() => number', 'return 12;')));
   const host = new NatlangHost();
   try {
     const result = await host.run({ source: { kind: 'file', path } });
@@ -102,7 +100,7 @@ test('fresh and retained eval contexts, immutable snapshots and boundary failure
   const retained = new TypeScriptEnvironment({ mode: 'retained' });
   assert.equal(retained.execute(request('globalThis.marker = 9; 9')).result, 9);
   assert.equal(retained.execute(request('globalThis.marker')).result, 9);
-  assert.throws(() => retained.execute(request('args.n = 10')), /read only|read-only|Cannot assign/);
+  assert.throws(() => retained.execute(request('n = 10')), /read only|read-only|Cannot assign/);
   assert.throws(() => retained.execute(request('new Date()')), /native object/);
   assert.throws(() => retained.execute(request('2n ** 60n')), /unsupported or inexact/);
   assert.throws(() => portable({ x: undefined }), /unsupported or inexact/);
@@ -145,7 +143,7 @@ test('an eval may mutate shared state before its result fails validation', async
   const host = new NatlangHost({ environment });
   try {
     const result = await host.run({ source: { kind: 'program', program:
-      lambda('Lambda<{}, Num>', 'host.count++; return { wrong: true };') } });
+      lambda('() => number', 'host.count++; return { wrong: true };') } });
     assert.equal(result.outcome.kind, 'quiesced');
     assert.equal(native.count, 1);
   } finally { host.close(); }
@@ -156,7 +154,7 @@ test('application capabilities enter the declared effect journal', async () => {
   const host = new NatlangHost();
   try {
     const result = await host.run({ source: { kind: 'program', program: {
-      $lambda: { type: 'Lambda<{}, Num>', engine: 'typescript-host',
+      $lambda: { type: '() => number', engine: 'typescript-host',
         effects: ['counter.add'], code: 'return await fx.counter.add(3);' },
     } }, capabilities: { 'counter.add': ([n]) => { seen.push(n); return n + 2; } } });
     assert.equal(result.outcome.kind, 'done');
@@ -174,8 +172,8 @@ test('eventful Fold consumes an async TypeScript stream in order', async () => {
   const host = new NatlangHost();
   try {
     const result = await host.run({ source: { kind: 'program', program: { $fold: {
-      type: 'Fold<Num, Num>', init: 1, over: [],
-      step: lambda('Lambda<{ acc: Num, item: Num }, Num>', 'return args.acc + args.item;'),
+      type: 'Fold<number, number>', init: 1, over: [],
+      step: lambda('(acc: number, item: number) => number', 'return acc + item;'),
     } } }, streams: { over: source() } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 6);
@@ -184,8 +182,8 @@ test('eventful Fold consumes an async TypeScript stream in order', async () => {
 
 test('retained shared host object is reused by distinct crisp Map calls', async () => {
   const native = { seen: [] };
-  const result = await run({ $map: { type: 'Map<Num, Num>', over: [3, 5, 7],
-    fn: lambda('Lambda<{ item: Num }, Num>', 'host.seen.push(args.item); return host.seen.length;'),
+  const result = await run({ $map: { type: 'Map<number, number>', over: [3, 5, 7],
+    fn: lambda('(item: number) => number', 'host.seen.push(item); return host.seen.length;'),
   } }, new TypeScriptEnvironment({ mode: 'retained', host: native }));
   assert.equal(result.outcome.kind, 'done');
   assert.deepEqual(result.value, [1, 2, 3]);
@@ -199,7 +197,7 @@ test('desktop bindings work through authored natlang code', async () => {
   const native = new DesktopBindings();
   const env = new TypeScriptEnvironment({ mode: 'retained', host: native });
   try {
-    const result = await run(lambda('Lambda<{}, Text>',
+    const result = await run(lambda('() => string',
       `const content: string = host.readText(${JSON.stringify(path)});\n` +
       'const converted = host.run(["node", "-e", "process.stdout.write(process.argv[1].toUpperCase())", content]);\n' +
       'return converted.stdout;'), env);

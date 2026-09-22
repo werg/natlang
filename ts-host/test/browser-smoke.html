@@ -9,7 +9,7 @@
   const host = new BrowserNatlangHost({ host: application });
   try {
     const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: 'Lambda<{}, Num>', code: 'host.count += 3; return host.count;'
+      type: '() => number', code: 'host.count += 3; return host.count;'
     } } } });
     document.getElementById('result').textContent = result.outcome.kind === 'done' &&
       result.value === 5 && application.count === 5 ? 'PASS browser interpreter' :

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { BuildWorkspace } from '../../applications/build_workbench.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const source = fileURLToPath(new URL('../../codebases/build_workbench/build.nl', import.meta.url));
 const node = process.execPath;
@@ -21,28 +22,18 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
     const tracePath = join(folder, 'build.trace.jsonl');
     const cyclic = tasks.every(task => task.needs.length);
     const result = await host.run({ source: { kind: 'file', path: source },
-      inputs: { tasks, goal, files: new NodeFileTree(folder) }, tracePath, options: { model: { segment_turns: 2 } },
+      inputs: { tasks, goal, files: new NodeFileTree(folder) }, tracePath,
       modelTurn: request => {
-        if (request.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function build(')) return { calls: [
-          ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal', tasks: 'args/tasks' } }],
-          ['call', { function: 'step', to: 'return', until: 'finished', init: 'let/initial', max: Math.max(1, tasks.length), inputs: { files: 'args/files' } }],
-        ], completion_tokens: 1 };
-        if (prompt.includes('function step(')) return { calls: cyclic ? [
-          ['call', { function: 'ready_tasks', to: 'let/ready', inputs: { state: 'args/state' } }],
-          ['call', { function: 'stall', to: 'return', inputs: { state: 'args/state' } }],
-        ] : [
-          ['call', { function: 'ready_tasks', to: 'let/ready', inputs: { state: 'args/state' } }],
-          ['call', { function: 'choose', to: 'let/chosen', inputs: {
-            ready: 'let/ready', goal: 'args/state/goal', files: 'args/files' } }],
-          ['call', { function: 'advance', to: 'return', inputs: { state: 'args/state', chosen: 'let/chosen' } }],
-        ], completion_tokens: 1 };
-        return { calls: [
-          ['read', { path: 'args/files/input.txt/text' }],
-          ['write', { path: 'return', value: choose() }],
-        ], completion_tokens: 1 };
+        if (prompt.includes('function build(')) return evalTurn(request,
+          'const initial = await prepare(goal, tasks);\n' +
+          'await step(initial, files)');
+        if (prompt.includes('function step(')) return cyclic ? evalTurn(request,
+          'const ready = await ready_tasks(state);\nawait stall(state)') : evalTurn(request,
+          'const ready = await ready_tasks(state);\n' +
+          'const chosen = await choose(ready, state.goal, files);\n' +
+          'await advance(state, chosen)');
+        return evalTurn(request, JSON.stringify(choose()));
       } });
     const trace = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
     return { result, folder, trace };
@@ -71,8 +62,7 @@ test('natlang builds the goal through a real serial process and records outputs'
     assert.ok(result.value.results.every(row => row.status === 'ok' &&
       row.input_sha256.length === 64 && row.output_sha256.length === 64));
     assert.equal(trace.filter(e => e.kind === 'host' && e.event?.operation === 'build.execute').length, 2);
-    assert.ok(trace.some(e => e.kind === 'action' && e.name === 'read' &&
-      e.arguments?.path === 'args/files/input.txt/text'));
+    assert.ok(trace.some(e => e.kind === 'action' && e.name === 'eval'));
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 

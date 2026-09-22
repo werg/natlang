@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { EvidenceCollection } from '../../applications/evidence_atlas.mjs';
 import { DocumentPublisher } from '../../applications/publisher.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/publisher/publish.nl', import.meta.url));
 
@@ -19,33 +20,19 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
     assets: { graph: './graph.png' } });
   const revision = evidence.docs.get('study').revision;
   const modelTurn = turn => {
-    if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-      return { calls: [], text: 'done', completion_tokens: 1 };
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-    if (prompt.includes('function publish(')) return { calls: [
-      ['read', { path: 'args/files/editorial.md/text' }],
-      ['call', { function: 'read', to: 'let/passages', inputs: {
-        span_ids: 'args/span_ids', collection_revision: 'args/collection_revision' } }],
-      ['call', { function: 'plan', to: 'let/outline', inputs: {
-        brief: 'args/brief', passages: 'let/passages', table_ids: 'args/table_ids',
-        asset_ids: 'args/asset_ids', files: 'args/files' } }],
-      ['call', { function: 'compose', to: 'let/document', inputs: {
-        brief: 'args/brief', outline: 'let/outline', passages: 'let/passages',
-        collection_revision: 'args/collection_revision', table_ids: 'args/table_ids',
-        asset_ids: 'args/asset_ids', files: 'args/files' } }],
-      ['call', { function: 'check', to: 'let/checked', inputs: { document: 'let/document' } }],
-      ['call', { function: 'prepare', to: 'return', inputs: {
-        document: 'let/document', target: 'args/target' } }],
-    ], completion_tokens: 1 };
-    if (prompt.includes('Plan a short document')) return { calls: [['write', {
-      path: 'return', value: { title: 'Study <results>', headings: ['Summary'],
-        selected_tables: ['counts'], selected_assets: ['graph'] } }]], completion_tokens: 1 };
-    return { calls: [['write', { path: 'return', value: {
+    if (prompt.includes('function publish(')) return evalTurn(turn,
+      'const passages = await read(span_ids, collection_revision); const outline = await plan(brief, passages, table_ids, asset_ids, files); const document = await compose(brief, outline, passages, collection_revision, table_ids, asset_ids, files); const checked = await check(document); if (checked.ok) await prepare(document, target); else await reject(target, checked)');
+    if (prompt.includes('Plan a short document')) return evalTurn(turn, `(${JSON.stringify({
+      title: 'Study <results>', headings: ['Summary'],
+      selected_tables: ['counts'], selected_assets: ['graph'],
+    })})`);
+    return evalTurn(turn, `(${JSON.stringify({
       title: 'Study <results>', evidence_revision: evidence.revision(), assets: ['graph'],
       sections: [{ heading: 'Summary', body: '12 samples & follow-up.', table_id: 'counts',
         claims: [{ text: 'The count is 12.', span_id: 'study#p0', revision,
           quote: 'count is 12' }] }],
-    } }]], completion_tokens: 1 };
+    })})`);
   };
   const host = new NatlangHost({ host: { publisher,
     drainEvents: () => publisher.drainEvents() } });
@@ -53,8 +40,7 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { brief: 'Summarize', span_ids: ['study#p0'],
         collection_revision: evidence.revision(), table_ids: ['counts'],
-        asset_ids: ['graph'], target: 'report', files: new NodeFileTree(root) }, modelTurn,
-      options: { model: { segment_turns: 2 } } });
+        asset_ids: ['graph'], target: 'report', files: new NodeFileTree(root) }, modelTurn });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'prepared');
     const html = await readFile(join(root, 'report', 'document.html'), 'utf8');

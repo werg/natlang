@@ -9,7 +9,7 @@ import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProv
 
 const record = id => ({ version: 'natlang.program/1', id, kind: 'lambda_source', source: 'fixture',
   split: 'test', source_ids: [id], source_groups: [id], license: 'test', semantics: {
-    root: { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return one.' } }, inputs: {}, expected: 1,
+    root: { $lambda: { type: '() => number', instructions: 'Return one.' } }, inputs: {}, expected: 1,
     operation: 'exact' } });
 const config = (dir, surface = 'surface-a') => ({ jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'),
   workers: 2, modelId: 'teacher', rootSeed: 7, systemPrompt: 'prompt', segmentTurns: 3,
@@ -65,7 +65,6 @@ test('native collector journals model replies and replays them after an interrup
   const replies = [
     ['eval', { code: 'const answer: number = 1; answer' }],
     ['mark_lines', { start: 1 }],
-    ['return_value', { variable: 'answer' }],
     null,
   ];
   const server = createServer((request, response) => {
@@ -91,10 +90,10 @@ test('native collector journals model replies and replays them after an interrup
       transportRetries: 1, retryDelayMs: 0 };
     const result = await collectBatch([item], options, nativeJobRunner(options));
     assert.equal(result.completed, 1);
-    assert.equal(requests, 5, 'the first decoded response must be replayed locally after interruption');
+    assert.equal(requests, 3, 'the first decoded response must be replayed locally after interruption');
     const output = JSON.parse((await readFile(options.output, 'utf8')).trim());
     assert.equal(output.outcome.accepted, true);
-    assert.equal(output.trajectory.length, 4);
+    assert.equal(output.trajectory.length, 2);
     await assert.rejects(readFile(join(options.jobs, `${jobKey(item)}.partial.json`)), /ENOENT/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost } from '../dist/index.js';
 import { ScheduleWorkspace } from '../../applications/scheduling.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/scheduler/plan.nl', import.meta.url));
 const day = {
@@ -25,21 +26,16 @@ test('natlang ranks exact feasible schedules and host conditionally commits', as
   try {
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { request: 'Draft early, then review' },
-      options: { model: { segment_turns: 2 } },
-      modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
+      modelTurn: request => {
+        const turn = request;
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function plan(')) return { calls: [
-          ['call', { function: 'inspect', to: 'let/snapshot' }],
-          ['call', { function: 'enumerate', to: 'let/alternatives' }],
-          ['call', { function: 'rank', to: 'let/chosen', inputs: {
-            request: 'args/request', snapshot: 'let/snapshot',
-            alternatives: 'let/alternatives' } }],
-          ['call', { function: 'commit', to: 'return', inputs: {
-            chosen: 'let/chosen', revision: 'let/snapshot/revision' } }],
-        ], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: option }]], completion_tokens: 1 };
+        if (prompt.includes('function plan(')) return evalTurn(turn,
+          'const snapshot = await inspect();\n' +
+          'const alternatives = await enumerate();\n' +
+          'if (alternatives.options.length === 0) { await infeasible(snapshot, alternatives); }\n' +
+          'const chosen = await rank(request, snapshot, alternatives);\n' +
+          'await commit(chosen, snapshot.revision)');
+        return evalTurn(turn, JSON.stringify(option));
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'committed');

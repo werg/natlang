@@ -38,7 +38,7 @@ test('browser local inference drives the native tool loop without a server', asy
   const host = new BrowserNatlangHost({ model });
   try {
     const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: 'Lambda<{}, Num>', instructions: 'Write seven.' } } },
+      type: '() => number', instructions: 'Write seven.' } } },
     options: { seed: { mode: 'compatibility' } } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 7);

@@ -4,7 +4,7 @@ import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 const system = { role: 'system', content: 'Use the native scope tools.' };
 const opening = { role: 'user', content: '1 [ ] Compute the result. Current inputs: {"n": 3}' };
-const firstCall = { tool: 'write', source_tool: 'write', arguments: { path: 'return', type: 'Num', value: 6 }, call_id: null };
+const firstCall = { tool: 'write', source_tool: 'write', arguments: { path: 'return', type: 'number', value: 6 }, call_id: null };
 const secondCall = { tool: 'mark_done', source_tool: 'mark_done', arguments: { start: 1, end: 1 }, call_id: null };
 const schema = [{ type: 'function', function: { name: 'write', description: 'Write a value.',
   parameters: { type: 'object', properties: { path: { type: 'string' } } } } }];

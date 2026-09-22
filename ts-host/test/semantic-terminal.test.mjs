@@ -9,6 +9,7 @@ import { dumpNativeState, loadFunctionFile, NatlangHost } from '../dist/index.js
 import { BuildWorkspace } from '../../applications/build_workbench.mjs';
 import { MediaWorkspace } from '../../applications/media_workbench.mjs';
 import { RecipeTerminal } from '../../applications/semantic_terminal.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const stepPath = fileURLToPath(new URL('../../codebases/semantic_terminal/step.nl', import.meta.url));
 const request = (id, text) => ({ kind: 'request', id, request_id: '', job_id: '', text,
@@ -51,31 +52,18 @@ test('natlang stream terminal routes real build and media recipes with correlate
   try {
     const result = await host.run({ source: { kind: 'program', program: { $fold: {
       type: 'Fold<Event, Session>', types: step.$lambda.types, init, step } } },
-      streams: { over: events() }, tracePath, options: { model: { segment_turns: 2 } },
+      streams: { over: events() }, tracePath,
       modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function step(')) {
           const index = stepCount++;
-          if (index % 2 === 0) return { calls: [
-            ['call', { function: 'recipes', to: 'let/catalog' }],
-            ['call', { function: 'interpret', to: 'let/recipe', inputs: {
-              text: 'args/item/text', catalog: 'let/catalog' } }],
-            ['call', { function: 'launch', to: 'return', inputs: {
-              acc: 'args/acc', item: 'args/item', recipe: 'let/recipe' } }],
-          ], completion_tokens: 1 };
-          return { calls: [
-            ['call', { function: 'explain', to: 'let/message', inputs: { item: 'args/item' } }],
-            ['call', { function: 'settle', to: 'return', inputs: {
-              acc: 'args/acc', item: 'args/item', message: 'let/message' } }],
-          ], completion_tokens: 1 };
+          return index % 2 === 0 ? evalTurn(turn,
+            'const catalog = await recipes(); const recipe = await interpret(item.text, catalog, files); await launch(acc, item, recipe)') :
+            evalTurn(turn, 'const message = await explain(item); await settle(acc, item, message)');
         }
-        if (prompt.includes('Choose one recipe ID')) return { calls: [['write', {
-          path: 'return', value: interpretation++ === 0 ? 'compile-note' : 'scale-video' }]],
-          completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: 'Completed with recorded outcome.' }]],
-          completion_tokens: 1 };
+        if (prompt.includes('Choose one recipe ID')) return evalTurn(turn,
+          `JSON.stringify(${JSON.stringify(interpretation++ === 0 ? 'compile-note' : 'scale-video')})`);
+        return evalTurn(turn, JSON.stringify('Completed with recorded outcome.'));
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'ok');
@@ -100,7 +88,7 @@ test('cancellation preserves the actual result and forged completion cannot sett
   const step = dumpNativeState(loadFunctionFile(stepPath));
   const definition = step.$lambda.codebase.settle;
   const source = { kind: 'program', program: { $lambda: {
-    type: 'Lambda<{ acc: Session, item: Event, message: Text }, Session>',
+    type: '(acc: Session, item: Event, message: string) => Session',
     types: step.$lambda.types, engine: definition.engine, code: definition.code } } };
   const acc = { revision: 2, active_request: 'r1', active_job: job.id,
     status: 'cancel-requested', messages: [], history: [] };

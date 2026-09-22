@@ -13,7 +13,7 @@ test('managed model startup can be prepared eagerly and its child is closed with
   writeFileSync(executable, `#!${process.execPath}
 if (process.argv.includes('--version')) { console.log('version: 0.4.1 (build 10964, commit b29c606e2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
-const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
+const args = process.argv.slice(2), port = Number(args[indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
 const server = http.createServer((request, response) => {
   response.setHeader('content-type', 'application/json');
@@ -55,7 +55,7 @@ test('a host can grant managed runtime installation at the first semantic turn',
   writeFileSync(executable, `#!${process.execPath}
 if (process.argv.includes('--version')) { console.log('version: 0.4.1 (build 10964, commit b29c606e2)'); process.exit(0); }
 const http = require('node:http'), fs = require('node:fs');
-const args = process.argv.slice(2), port = Number(args[args.indexOf('--port') + 1]);
+const args = process.argv.slice(2), port = Number(args[indexOf('--port') + 1]);
 fs.appendFileSync(${JSON.stringify(marker)}, 'started\\n');
 const server = http.createServer((_request, response) => response.end(JSON.stringify({ choices: [{ message: { content: 'ready', tool_calls: [] } }] })));
 server.listen(port, '127.0.0.1');

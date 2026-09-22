@@ -4,7 +4,7 @@ import { BrowserLocalModel, BrowserNatlangHost, BrowserNatlangClient,
   type BrowserRunRequest, type UiNode } from '../dist/browser/index.js';
 
 const request: BrowserRunRequest = {
-  source: { kind: 'program', program: { $lambda: { type: 'Lambda<{}, Num>', code: 'return 1;' } } },
+  source: { kind: 'program', program: { $lambda: { type: '() => number', code: 'return 1;' } } },
 };
 const host = new BrowserNatlangHost();
 void host.run(request);
@@ -32,8 +32,8 @@ void application.close();
 void BrowserDomRenderer;
 void view;
 
-const files = { 'main.nl': '---\nreturns: Num\n---\nReturn one.' };
+const files = { 'main.nl': '---\nreturns: number\n---\nReturn one.' };
 void loadFunctionFiles('main.nl', files);
 void localHost.run({ source: { kind: 'files', root: 'main.nl', files } });
-const workspace = new NativeSourceWorkspace({ leaf: { returns: 'Num', instructions: 'Return one.' } }, 'leaf');
+const workspace = new NativeSourceWorkspace({ leaf: { returns: 'number', instructions: 'Return one.' } }, 'leaf');
 void workspace.invoke('leaf');

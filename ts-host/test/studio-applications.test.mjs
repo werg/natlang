@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { evalTurn } from './support/eval-turn.mjs';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { simulateInventory } from '../studio/apps/worlds.mjs';
@@ -96,18 +97,12 @@ test('natlang can drive multiple inspected operations within a single UI interac
     const calls = [],cells=cellHost();
     const client = new BrowserNatlangClient({ host: { studio: { apply: (state, event, d) => { calls.push(d.target); return applyOperation(spec, state, d, cells); } } } });
     const modelTurn = turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-            return { calls: [], text: 'done' };
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes(`Drive the ${spec.title} interaction to completion.`))
-            return { calls: [
-                    ['write', { path: 'let/firstDecision', value: { action: 'execute', target: 'numbers' }, type: 'Decision' }],
-                    ['call', { function: 'apply', to: 'let/first', inputs: { state: 'args/state', event: 'args/event', decision: 'let/firstDecision' } }],
-                    ['write', { path: 'let/nextDecision', value: { action: 'execute', target: 'total' }, type: 'Decision' }],
-                    ['call', { function: 'apply', to: 'let/next', inputs: { state: 'let/first/state', event: 'args/event', decision: 'let/nextDecision' } }],
-                    ['call', { function: 'finish', to: 'return', inputs: { step: 'let/next' } }],
-                ] };
-        return { calls: [['write', { path: 'return', value: { heading: spec.title, summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] } }]] };
+            return evalTurn(turn,
+                'const first = await apply(state, event, { action: "execute", target: "numbers" }); const next = await apply(first.state, event, { action: "execute", target: "total" }); await finish(next)');
+        return evalTurn(turn, `(${JSON.stringify({ heading: spec.title,
+            summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] })})`);
     };
     const app = new BrowserNatlangApplication({ client, source, initialState: spec.initial(), modelTurn });
     try {

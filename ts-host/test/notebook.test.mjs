@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { fileURLToPath } from 'node:url';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/notebook/run.nl', import.meta.url));
 
@@ -17,7 +18,7 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
       source: 'SELECT category, SUM(amount) AS total FROM facts GROUP BY category ORDER BY category' },
     { id: 'view', engine: 'typescript-host', needs: ['totals'],
       description: 'make presentation labels',
-      source: 'return args.deps.totals.map(row => ({ label: row.category.toUpperCase(), total: row.total }));' },
+      source: 'return deps.totals.map(row => ({ label: row.category.toUpperCase(), total: row.total }));' },
     { id: 'unrelated', engine: 'typescript-host', needs: [], description: 'unrelated work',
       source: 'return 999;' },
   ], { facts: [
@@ -28,36 +29,28 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
     drainEvents: () => notebook.drainEvents() }, mode: 'retained' });
   let chosenCount = 0;
   const modelTurn = turn => {
-    if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-      return { calls: [], text: 'done', completion_tokens: 1 };
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-    if (prompt.includes('function run(')) return { calls: [
-      ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal' } }],
-      ['call', { function: 'step', to: 'let/finished', until: 'complete', init: 'let/initial', max: 3, inputs: { files: 'args/files' } }],
-      ['call', { function: 'explain', to: 'let/answer', inputs: {
-        question: 'args/question', state: 'let/finished', files: 'args/files' } }],
-      ['call', { function: 'attach', to: 'return', inputs: {
-        state: 'let/finished', answer: 'let/answer' } }],
-    ], completion_tokens: 1 };
-    if (prompt.includes('function step(')) return { calls: [
-      ['call', { function: 'ready_cells', to: 'let/ready', inputs: { state: 'args/state' } }],
-      ['call', { function: 'choose', to: 'let/chosen', inputs: {
-        ready: 'let/ready', goal: 'args/state/goal', files: 'args/files' } }],
-      ['call', { function: 'advance', to: 'return', inputs: {
-        state: 'args/state', chosen: 'let/chosen' } }],
-    ], completion_tokens: 1 };
+    if (prompt.includes('function run(')) return evalTurn(turn,
+      'const initial = await prepare(goal);\n' +
+      'const finished = await step(initial, files);\n' +
+      'const answer = await explain(question, finished, files);\n' +
+      'await attach(finished, answer)');
+    if (prompt.includes('function step(')) return evalTurn(turn,
+      'const ready = await ready_cells(state);\n' +
+      'if (ready.length === 0) { await stall(state); }\n' +
+      'const chosen = await choose(ready, state.goal, files);\n' +
+      'await advance(state, chosen)');
     if (prompt.includes('Choose one offered ready cell')) {
       const chosen = chosenCount++ === 0 ? 'totals' : 'view';
       // Each run executes totals before view; this scripted driver only checks the host boundary.
-      return { calls: [['write', { path: 'return', value: chosen }]], completion_tokens: 1 };
+      return evalTurn(turn, JSON.stringify(chosen));
     }
-    return { calls: [['write', { path: 'return', value: 'The checked table has alpha 5 and beta 4.' }]],
-      completion_tokens: 1 };
+    return evalTurn(turn, '"The checked table has alpha 5 and beta 4."');
   };
   try {
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { goal: 'view', question: 'What are the category totals?', files: new NodeFileTree(folder) }, modelTurn,
-      options: { model: { segment_turns: 2 } } });
+    });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'done');
     assert.deepEqual(Array.from(result.value.order), ['totals', 'view']);

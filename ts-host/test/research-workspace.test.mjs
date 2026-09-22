@@ -48,8 +48,8 @@ test('stale activation, fabricated effects and artifact corruption are rejected'
 
 test('candidates do not affect active state and clean bundles import', async () => {
     const adapter = new MemoryResearchAdapter(), workspace = new ResearchWorkspace(adapter);
-    const first = await workspace.commitEdits('', { 'schema/types.ts': { kind: 'schema', content: 'export type Observation = { value: Num };' } });
-    const candidate = await workspace.branch(first.id, { 'schema/types.ts': { kind: 'schema', content: 'export type Observation = { value: Num; unit: Text };' } });
+    const first = await workspace.commitEdits('', { 'schema/types.ts': { kind: 'schema', content: 'export type Observation = { value: number };' } });
+    const candidate = await workspace.branch(first.id, { 'schema/types.ts': { kind: 'schema', content: 'export type Observation = { value: number; unit: string };' } });
     assert.equal((await workspace.head()).id, first.id);
     await workspace.commit(first.id, candidate);
     const imported = new ResearchWorkspace(new MemoryResearchAdapter(), 'copy');

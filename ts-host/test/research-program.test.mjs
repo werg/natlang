@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { MemoryResearchAdapter } from '../studio/shared/research-workspace.mjs';
 import { ResearchRuntime } from '../studio/shared/research-runtime.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const root = new URL('../studio/research/programs/', import.meta.url);
 const paths = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
@@ -17,13 +18,10 @@ test('research reducer owns semantic state and actual source loads in the interp
     const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
     const client = new BrowserNatlangClient({ host: { research: {} } });
     const initial = { revision: 0, head: 'manifest', question: '', notice: '', active_view: '', selected: '', receipts: [] };
-    let turns = 0;
     const app = new BrowserNatlangApplication({ client, source: { files, reducer: 'reduce.nl', view: 'view.ts' }, initialState: initial,
-        modelTurn: turn => {
-            if (++turns > 12) throw new Error('Fixture exceeded expected interpreter turns');
-            if (turn.messages.filter(row => row.role === 'assistant').length > 1)
-                return { calls: [], text: 'done', completion_tokens: 1 };
-            return { calls: [['write', { path: 'return', value: { ...initial, revision: 1, question: 'Which cohort improved?', notice: 'The question is open.' } }]] };
+        modelTurn: request => {
+            return evalTurn(request,
+              '({ ...state, revision: state.revision + 1, question: event.value, notice: "The question is open." })');
         } });
     try {
         await app.start();
@@ -47,7 +45,7 @@ test('a learned crisp method executes from its committed source and records the 
         } finally { host.close(); }
     } });
     const manifest = await runtime.commit('', {
-        'methods/compare.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  before: Num\n  after: Num\nreturns: Num\n---*/\nreturn args.after - args.before;' },
+        'methods/compare.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  before: number\n  after: number\nreturns: number\n---*/\nreturn after - before;' },
     });
     const receipt = await runtime.execute(manifest.id, 'methods/compare.ts', { before: 18, after: 7 }, 'trial-1');
     assert.equal(receipt.status, 'complete');

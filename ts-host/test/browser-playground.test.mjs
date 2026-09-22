@@ -12,22 +12,22 @@ test('playground validates linked files while keeping invalid edits available', 
     validProjectPath } = await api();
   assert.equal(validProjectPath('../escape.ts'), false);
   const project = newPlaygroundProject('Math', 'math/add.ts', {
-    'math/add.ts': '/*---\nargs:\n  a: Num\nreturns: Result\nengine: typescript-host\n---*/\nreturn args.a + 2;',
-    'math/types.ts': 'type Result = Num;',
+    'math/add.ts': 'export default function add(a: number): Result {\n  return a + 2;\n}',
+    'math/types.ts': 'type Result = number;',
   }, { a: 5 }, 7);
   assert.deepEqual(validatePlaygroundProject(project), []);
   const invalid = editPlaygroundProject(project, { files: { ...project.files,
-    'math/add.ts': project.files['math/add.ts'].replace('return args.a + 2;', 'return (;') } });
+    'math/add.ts': project.files['math/add.ts'].replace('return a + 2;', 'return (;') } });
   assert.notEqual(invalid.revision, project.revision);
-  assert.equal(project.files['math/add.ts'].includes('return args.a + 2;'), true);
-  assert.match(validatePlaygroundProject(invalid)[0].message, /TypeScript/);
+  assert.equal(project.files['math/add.ts'].includes('return a + 2;'), true);
+  assert.match(validatePlaygroundProject(invalid)[0].message, /typescript/i);
 });
 
 test('playground pins source, reconstructs trace frames, and admits exact captured outcomes', async () => {
   const { BrowserNatlangHost, newPlaygroundProject, editPlaygroundProject,
     runPlaygroundProject, traceFrame, admitPlaygroundRun } = await api();
   const project = newPlaygroundProject('Add', 'add.ts', {
-    'add.ts': '/*---\nargs:\n  a: Num\nreturns: Num\nengine: typescript-host\n---*/\nreturn args.a + 2;',
+    'add.ts': 'export default function add(a: number): number {\n  return a + 2;\n}',
   }, { a: 5 }, 7);
   const host = new BrowserNatlangHost();
   let run;

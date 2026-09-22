@@ -17,7 +17,7 @@ test('a generated interaction is bound to a real natlang handler and a pinned ma
         return { value: { cohort: inputs.cohort, difference: -2 }, trace_id: 'trace-1' };
     } });
     const base = await runtime.commit('', {
-        'methods/compare.nl': { kind: 'source', content: '---\nargs:\n  cohort: Text\nreturns: Text\n---\nCompare.' },
+        'methods/compare.nl': { kind: 'source', content: '---\nargs:\n  cohort: string\nreturns: string\n---\nCompare.' },
         'views/cohorts.json': { kind: 'view', content: { tree: comparison, bindings: { compare: { root: 'methods/compare.nl', from: 'cohort' } } } },
         'evidence/cohorts.json': { kind: 'evidence', content: [{ cohort: 'A', failures: 2 }] },
     });
@@ -61,7 +61,7 @@ test('view validation rejects broken bindings and duplicate controls', () => {
 test('generated module interaction is pinned to declared executable handlers', async () => {
     const runtime = new ResearchRuntime({ adapter: new MemoryResearchAdapter(), runSource: async () => ({ value: null }) });
     const manifest = await runtime.commit('', {
-        'methods/choose.ts': { kind: 'source', content: 'return args.value;' },
+        'methods/choose.ts': { kind: 'source', content: 'return value;' },
         'views/spatial.json': { kind: 'view', content: { module: {
             title: 'Spatial comparison', html: '<button>Choose</button>', style: 'button{color:green}',
             script: "document.querySelector('button').onclick=()=>natlang.emit('choose','A')",

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dumpNativeState, loadFunctionFile, NatlangHost } from '../dist/index.js';
 import { LogWorkspace } from '../../applications/log_investigator.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/log_investigator/step.nl', import.meta.url));
 const line = (id, cursor, code, message) => ({ kind: 'log', id, cursor,
@@ -34,30 +35,20 @@ test('natlang Fold investigates a burst, suppresses duplicate escalation and rec
   try {
     const result = await host.run({ source: { kind: 'program', program: { $fold: {
       type: 'Fold<LogEvent, IncidentState>', types: step.$lambda.types, init, step,
-      over: events } } }, tracePath, options: { model: { segment_turns: 2 } },
+      over: events } } }, tracePath,
       modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function step(')) {
           const index = stepCount++;
-          if (index === 4) return { calls: [['call', { function: 'gap', to: 'return',
-            inputs: { acc: 'args/acc', item: 'args/item' } }]], completion_tokens: 1 };
-          return { calls: [
-            ['call', { function: 'observe', to: 'let/observation', inputs: { item: 'args/item' } }],
-            ['call', { function: 'search', to: 'let/evidence', inputs: { observation: 'let/observation' } }],
-            ['call', { function: 'assess', to: 'let/judgement', inputs: {
-              item: 'args/item', observation: 'let/observation', evidence: 'let/evidence' } }],
-            ['call', { function: 'transition', to: 'return', inputs: {
-              acc: 'args/acc', item: 'args/item', observation: 'let/observation',
-              evidence: 'let/evidence', judgement: 'let/judgement' } }],
-          ], completion_tokens: 1 };
+          if (index === 4) return evalTurn(turn, 'await gap(acc, item)');
+          return evalTurn(turn,
+            'const observation = await observe(item); const evidence = await search(observation); const judgement = await assess(item, observation, evidence, files); await transition(acc, item, observation, evidence, judgement)');
         }
         const index = assessmentCount++;
-        return { calls: [['write', { path: 'return', value: {
+        return evalTurn(turn, `(${JSON.stringify({
           action: index === 2 || index === 3 ? 'escalate' : 'ignore', severity: 'medium',
           claim: 'Repeated failed logins', uncertainty: '',
-        } }]], completion_tokens: 1 };
+        })})`);
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.observed, 4);

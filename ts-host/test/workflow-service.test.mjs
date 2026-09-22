@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dumpNativeState, loadFunctionFile, NatlangHost } from '../dist/index.js';
 import { WorkflowService } from '../../applications/workflow_service.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const path = fileURLToPath(new URL('../../codebases/api_workflow/step.nl', import.meta.url));
 
@@ -22,20 +23,13 @@ test('natlang Fold recovers a lost payment acknowledgement without a second char
       type: 'Fold<WorkflowEvent, WorkflowState>', types: step.$lambda.types,
       init, step, over: [{ kind: 'continue' }, { kind: 'continue', fault: 'lost_ack' },
         { kind: 'reconcile' }, { kind: 'continue' }] } } },
-      options: { model: { segment_turns: 2 } },
       modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function step(')) return { calls: [
-          ['call', { function: 'inspect', to: 'let/current', inputs: { order_id: 'args/acc/order_id' } }],
-          ['call', { function: 'choose', to: 'let/decision', inputs: {
-            current: 'let/current', item: 'args/item' } }],
-          ['call', { function: 'apply', to: 'return', inputs: {
-            current: 'let/current', item: 'args/item', decision: 'let/decision' } }],
-        ], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: {
-          action: choices.shift(), reason: 'Follow durable workflow state' } }]], completion_tokens: 1 };
+        if (prompt.includes('function step(')) return evalTurn(turn,
+          'const current = await inspect(acc.order_id); const decision = await choose(current, item); await apply(current, item, decision)');
+        return evalTurn(turn, `(${JSON.stringify({
+          action: choices.shift(), reason: 'Follow durable workflow state',
+        })})`);
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.phase, 'shipped');

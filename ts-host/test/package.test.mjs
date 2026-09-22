@@ -11,7 +11,7 @@ import { main as cliMain } from '../dist/cli/main.js';
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'natlang-package-'));
   mkdirSync(join(root, 'program'), { recursive: true });
-  writeFileSync(join(root, 'program', 'main.nl'), 'function main: Lambda<{}, Text>\nreturn "hello"\n');
+  writeFileSync(join(root, 'program', 'main.nl'), 'function main: () => string\nreturn "hello"\n');
   writeFileSync(join(root, 'program', 'pixel.bin'), Buffer.from([0, 255, 17, 128]));
   const manifest = { schema: 'natlang.package/v1', name: 'example', version: '1.2.3',
     include: ['program'], exports: { main: 'program/main.nl' } };
@@ -93,13 +93,13 @@ test('CLI packs, installs, and runs a target from the content store', async t =>
   writeFileSync(join(root, 'direct.ts'), `/*---
 description: Return a fixture number.
 args: {}
-returns: Num
+returns: number
 ---*/
 return 7`);
   writeFileSync(join(root, 'helper.ts'), `/*---
 description: Return text from the local codebase.
 args: {}
-returns: Text
+returns: string
 ---*/
 return "local helper"`);
   writeFileSync(join(root, 'ordinary.ts'), 'export const ordinaryHostCode = true;\n');
@@ -110,7 +110,7 @@ return "local helper"`);
     writeFileSync(join(root, name, 'main.ts'), `/*---
 description: Prove administrative words remain valid source paths.
 args: {}
-returns: Text
+returns: string
 ---*/
 return "source named ${name}"`);
   }
@@ -140,7 +140,7 @@ return "source named ${name}"`);
     anonymousTurn++;
     const call = anonymousTurn === 1 ? { name: 'read', arguments: JSON.stringify({ path: 'args/files/project-notes.txt/text' }) } :
       anonymousTurn === 2 ? { name: 'write', arguments: JSON.stringify({
-        path: 'return', type: 'Text', value: 'anonymous result', done: 1 }) } : undefined;
+        path: 'return', type: 'string', value: 'anonymous result', done: 1 }) } : undefined;
     return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{
       id: `anonymous-${anonymousTurn}`, type: 'function', function: call }] : [] } }], usage: { completion_tokens: 1 } }), { status: 200,
       headers: { 'content-type': 'application/json' } });

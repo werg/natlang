@@ -12,14 +12,14 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
   const host = new api.BrowserNatlangHost({ host: shared });
   try {
     const crisp = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: 'Lambda<{}, Num>', code: 'host.count += 3; return host.count;' } } } });
+      type: '() => number', code: 'host.count += 3; return host.count;' } } } });
     assert.equal(crisp.outcome.kind, 'done');
     assert.equal(crisp.value, 5);
     assert.equal(shared.count, 5);
     assert.equal(crisp.trace[0].engine_contracts['typescript-host'].authority, 'shared-browser-host');
     let turns = 0;
     const natural = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: 'Lambda<{}, Num>', instructions: 'Return the current count.' } } },
+      type: '() => number', instructions: 'Return the current count.' } } },
     modelTurn: () => ++turns === 1 ? { calls: [['eval', { code: 'host.count' }]],
       completion_tokens: 1 } : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 } });
     assert.equal(natural.outcome.kind, 'done');
@@ -48,16 +48,16 @@ test('browser loads file source, lexical types, companions, and inputs from virt
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
   const files = {
-    'tasks/add.ts': '/*---\nargs:\n  x: Num\nreturns: Result\n---*/\nreturn args.x + 2;',
-    'tasks/types.ts': 'type Result = Num;',
-    'tasks/add/label.nl': '---\nreturns: Text\n---\nDescribe the result.',
+    'tasks/add.ts': 'import type { Result } from "../types";\nimport label from "./add/label";\nexport default function add(x: number): Result { label(x + 2); return x + 2; }',
+    'tasks/types.ts': 'export type Result = number;',
+    'tasks/add/label.ts': 'export default function label(result: number): string { return String(result); }',
   };
-  const loaded = api.loadFunctionFiles('tasks/add', files);
-  assert.deepEqual(loaded.types.Result, { kind: 'prim', name: 'Num' });
+  const loaded = api.loadFunctionFiles('tasks/add.ts', files);
+  assert.deepEqual(loaded.types.Result, { kind: 'prim', name: 'number' });
   assert(loaded.codebase.label);
   const host = new api.BrowserNatlangHost();
   try {
-    const result = await host.run({ source: { kind: 'files', root: 'tasks/add', files },
+    const result = await host.run({ source: { kind: 'files', root: 'tasks/add.ts', files },
       inputs: { x: 5 } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 7);
@@ -70,13 +70,13 @@ test('browser virtual projects expose non-source files through the shared file-t
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
   const files = {
-    'main.nl': '---\nargs:\n  files: Dict<File>\ntypes:\n  File: \'{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }\'\nreturns: Text\n---\nRead the project note and return it.',
+    'main.ts': 'export type File = { kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number };\nexport default function main(files: Record<string, File>): string { return files["notes/context.md"].text; }',
     'notes/context.md': 'browser project context',
   };
   let turn = 0, observed = '';
   const host = new api.BrowserNatlangHost();
   try {
-    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
+    const result = await host.run({ source: { kind: 'files', root: 'main.ts', files },
       inputs: { files: api.textFileTree(files) }, modelTurn: request => {
       observed = JSON.stringify(request);
       turn++;
@@ -89,23 +89,18 @@ test('browser virtual projects expose non-source files through the shared file-t
   } finally { host.close(); }
 });
 
-test('browser accepts a large lexical codebase and more than sixteen locals', async () => {
+test('browser runs ordinary TypeScript with more than sixteen locals', async () => {
   const nodeProcess = globalThis.process;
   let api;
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
-  const files = { 'main.nl': '---\nreturns: Num\n---\nBuild many intermediate values.' };
-  for (let i = 0; i < 24; i++) files[`main/helper_${i}.nl`] = '---\nreturns: Num\n---\nReturn one.';
-  const loaded = api.loadFunctionFiles('main.nl', files);
-  assert.equal(Object.keys(loaded.codebase).length, 24);
+  const declarations = Array.from({ length: 24 }, (_, i) => `const value_${i} = ${i};`).join('\n');
+  const files = { 'main.ts': `export default function main(): number {\n${declarations}\nreturn value_23 + 1;\n}` };
+  const loaded = api.loadFunctionFiles('main.ts', files);
+  assert.equal(Object.keys(loaded.codebase).length, 0);
   const host = new api.BrowserNatlangHost();
-  let turns = 0;
   try {
-    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
-      modelTurn: () => ++turns === 1 ? { calls: [
-        ...Array.from({ length: 24 }, (_, i) => ['write', { path: `let/value_${i}`, type: 'Num', value: i }]),
-        ['write', { path: 'return', type: 'Num', value: 24 }],
-      ] } : { calls: [], text: 'done' } });
+    const result = await host.run({ source: { kind: 'files', root: 'main.ts', files } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value, 24);
   } finally { host.close(); }
@@ -116,8 +111,8 @@ test('browser source workspace invokes a checked child with browser eval', async
   let api;
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
-  const workspace = new api.NativeSourceWorkspace({ double: { args: { item: 'Num' },
-    returns: 'Num', code: 'return args.item * 2;', engine: 'typescript-host' } }, 'double');
+  const workspace = new api.NativeSourceWorkspace({ double: { args: { item: 'number' },
+    returns: 'number', code: 'return item * 2;', engine: 'typescript-host' } }, 'double');
   const child = await workspace.invoke('double', { item: 4 });
   assert.equal(child.outcome, 'done');
   assert.equal(child.value, 8);

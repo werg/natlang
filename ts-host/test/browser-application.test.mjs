@@ -8,9 +8,9 @@ async function api() {
 }
 
 const files = {
-  'types.ts': 'export type Counter = { count: Num };\nexport type UiEvent = { id: Text, kind: Text, value?: Text };\nexport type View = { tag: Text, text: Text };',
-  'reduce.ts': '/*---\nengine: typescript-host\nargs:\n  state: Counter\n  event: UiEvent\nreturns: Counter\n---*/\nif (args.event.kind === "bad") return { count: "wrong" };\nreturn { count: args.state.count + 1 };',
-  'view.ts': '/*---\nengine: typescript-host\nargs:\n  state: Counter\nreturns: View\n---*/\nreturn { tag: "p", text: `Count ${args.state.count}` };',
+  'types.ts': 'export type Counter = { count: number };\nexport type UiEvent = { id: string, kind: string, value?: string };\nexport type View = { tag: string, text: string };',
+  'reduce.ts': 'export default function reduce(state: Counter, event: UiEvent): Counter {\n  if (event.kind === "bad") return { count: "wrong" };\n  return { count: state.count + 1 };\n}',
+  'view.ts': 'export default function view(state: Counter): View {\n  return { tag: "p", text: `Count ${state.count}` };\n}',
 };
 
 test('browser application serializes incoming events and publishes each reduced view', async () => {
@@ -58,24 +58,31 @@ test('natlang can generate the view while the app contract remains independent o
   } finally { await app.close(); await client.close(); }
 });
 
-test('browser semantic reducer receives per-run textFileTree while crisp view remains portable', async () => {
-  const api = await import('../dist/browser/natlang.js');
+test('browser semantic reducer receives fresh file inputs while crisp view remains portable', async () => {
+  const api = await (async () => {
+    const process = globalThis.process;
+    try { globalThis.process = undefined; return await import('../dist/browser/natlang.js'); }
+    finally { globalThis.process = process; }
+  })();
   const project = {
-    'types.ts': 'export type Counter = { count: Num, note: Text }; export type UiEvent = { id: Text, kind: Text }; export type View = { text: Text }; export type File = { kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num };',
-    'reduce.nl': '---\nargs:\n  state: Counter\n  event: UiEvent\n  files: Dict<File>\nreturns: Counter\n---\nRead args/files/note.txt/text and retain it while incrementing the count.',
-    'view.ts': '/*---\nengine: typescript-host\nargs:\n  state: Counter\nreturns: View\n---*/\nreturn { text: `${args.state.count}:${args.state.note}` };',
+    'types.ts': 'export type Counter = { count: number, note: string }; export type UiEvent = { id: string, kind: string }; export type View = { text: string }; export type File = { kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number };',
+    'reduce.nl': '---\nargs:\n  state: Counter\n  event: UiEvent\n  files: Record<string, File>\nreturns: Counter\n---\nRead files/note.txt/text and retain it while incrementing the count.',
+    'view.ts': 'export default function view(state: Counter): View {\n  return { text: `${state.count}:${state.note}` };\n}',
     'note.txt': 'first note',
   };
-  let calls = 0;
+  let fileInputs = 0;
   const client = new api.BrowserNatlangClient();
   const app = new api.BrowserNatlangApplication({ client,
     source: { files: project, reducer: 'reduce.nl', view: 'view.ts' },
-    initialState: { count: 0, note: '' }, reducerInputs: () => ({ files: api.textFileTree(project) }),
+    initialState: { count: 0, note: '' }, reducerInputs: () => {
+      fileInputs++; return { files: api.textFileTree(project) };
+    },
     modelTurn: request => {
       if (String(request.messages.at(-1)?.content ?? '').includes('return: complete'))
         return { calls: [], text: 'done', completion_tokens: 1 };
-      calls++;
-      if (calls % 2 === 0) return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+      const prior = request.messages.filter(message => message.role === 'assistant')
+        .flatMap(message => message.tool_calls ?? []).at(-1)?.function.name;
+      if (prior === 'eval') return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
       return { calls: [['eval', { code: '({ count: state.count + 1, note: files["note.txt"].text })' }]], completion_tokens: 1 };
     } });
   try {
@@ -83,6 +90,7 @@ test('browser semantic reducer receives per-run textFileTree while crisp view re
     assert.equal((await app.dispatch({ id: 'one', kind: 'request' })).view.text, '1:first note');
     project['note.txt'] = 'second note';
     assert.equal((await app.dispatch({ id: 'two', kind: 'request' })).view.text, '2:second note');
+    assert.equal(fileInputs, 2);
   } finally { await app.close(); await client.close(); }
 });
 

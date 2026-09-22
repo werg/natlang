@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { MediaWorkspace } from '../../applications/media_workbench.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const source = fileURLToPath(new URL('../../codebases/media_workbench/transform.nl', import.meta.url));
 
@@ -27,30 +28,14 @@ async function transform(folder, plan, { vision = null, assessment = null } = {}
   try {
     const result = await host.run({ source: { kind: 'file', path: source }, tracePath,
       inputs: { request: { text: `Please ${plan.kind} the video`, input: 'input.mp4', output: plan.output }, files: new NodeFileTree(folder) },
-      options: { model: { segment_turns: 2 } },
       modelTurn: request => {
-        if (request.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function transform(')) return { calls: [
-          ['call', { function: 'probe', to: 'let/source', inputs: { input: 'args/request/input' } }],
-          ['call', { function: 'choose', to: 'let/plan', inputs: { request: 'args/request', source: 'let/source', files: 'args/files' } }],
-          ['call', { function: 'render', to: 'let/receipt', inputs: {
-            request: 'args/request', source: 'let/source', plan: 'let/plan' } }],
-          ['call', { function: 'inspect', to: 'let/inspection', inputs: {
-            request: 'args/request', plan: 'let/plan', receipt: 'let/receipt' } }],
-          ['call', { function: 'assess', to: 'let/assessment', inputs: {
-            request: 'args/request', source: 'let/source', plan: 'let/plan', files: 'args/files',
-            receipt: 'let/receipt', inspection: 'let/inspection' } }],
-          ['call', { function: 'finalize', to: 'return', inputs: {
-            request: 'args/request', source: 'let/source', plan: 'let/plan',
-            receipt: 'let/receipt', inspection: 'let/inspection', assessment: 'let/assessment' } }],
-        ], completion_tokens: 1 };
-        if (prompt.includes('Choose exactly one')) return {
-          calls: [['write', { path: 'return', value: plan }]], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: assessment ?? {
+        if (prompt.includes('function transform(')) return evalTurn(request,
+          'const source = await probe(request.input); const chosen = await choose(request, source, files); const receipt = await render(request, source, chosen); const inspection = await inspect(request, chosen, receipt); const assessment = await assess(request, source, chosen, files, receipt, inspection); await finalize(request, source, chosen, receipt, inspection, assessment)');
+        if (prompt.includes('Choose exactly one')) return evalTurn(request, `(${JSON.stringify(plan)})`);
+        return evalTurn(request, `(${JSON.stringify(assessment ?? {
           intent_met: true, needs_visual_review: false, explanation: 'The transform matches the request.'
-        } }]], completion_tokens: 1 };
+        })})`);
       } });
     const trace = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
     return { result, trace };

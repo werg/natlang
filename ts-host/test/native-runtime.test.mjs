@@ -61,6 +61,10 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
   assert.equal(pure.kind, 'ok'); assert.equal(pure.value, true); assert.equal(lam.let.first, true);
   const call = await session.applyAsync('eval', { code: 'const count = await count_true(flags);\ncount' });
   assert.equal(call.kind, 'ok'); assert.equal(call.value, 2); assert.equal(lam.let.count, 2);
+  const resultLocal = await session.applyAsync('eval', {
+    code: 'const result = await count_true(flags);\nresult' });
+  assert.equal(resultLocal.kind, 'ok'); assert.equal(resultLocal.value, 2);
+  assert.equal(lam.let.result, 2); assert.equal(lam.return, 2);
   assert.equal(session.apply('read_value', { expression: 'flags[1]' }).value, false);
   assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
   assert.equal(lam.return, 2);

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { NatlangHost } from '../dist/index.js';
 import { EconomyWorld, CombatWorld, NpcWorld } from '../../applications/game_worlds.mjs';
+import { evalTurn } from './support/eval-turn.mjs';
 
 const paths = {
   economy: fileURLToPath(new URL('../../codebases/game_economy/turn.nl', import.meta.url)),
@@ -14,29 +15,20 @@ async function runPolicy(path, binding, inputs, choice, rootName) {
   const host = new NatlangHost({ host: binding });
   try {
     return await host.run({ source: { kind: 'file', path }, inputs,
-      options: { model: { segment_turns: 2 } },
-      modelTurn: turn => {
-        if (turn.messages.filter(m => m.role === 'assistant').length > 1)
-          return { calls: [], text: 'done', completion_tokens: 1 };
+      modelTurn: request => {
+        const turn = request;
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes(`function ${rootName}(`)) return { calls: rootName === 'react' ? [
-          ['call', { function: 'observe', to: 'let/observation', inputs: {
-            actor: 'args/actor', event: 'args/event' } }],
-          ['call', { function: 'decide', to: 'let/plan', inputs: {
-            observation: 'let/observation' } }],
-          ['call', { function: 'apply', to: 'return', inputs: {
-            observation: 'let/observation', plan: 'let/plan' } }],
-        ] : [
-          ['call', { function: 'observe', to: 'let/observation', inputs: {
-            actor: 'args/actor' } }],
-          ['call', { function: rootName === 'turn' && path === paths.combat ? 'choose' : 'decide',
-            to: 'let/plan', inputs: path === paths.combat ?
-              { perception: 'let/observation' } : { observation: 'let/observation' } }],
-          ['call', { function: 'submit', to: 'return', inputs: path === paths.combat ? {
-            actor: 'args/actor', round: 'let/observation/round', plan: 'let/plan',
-          } : { actor: 'args/actor', tick: 'let/observation/tick', intent: 'let/plan' } }],
-        ], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: choice }]], completion_tokens: 1 };
+        if (prompt.includes(`function ${rootName}(`)) return evalTurn(turn, rootName === 'react' ?
+          'const observation = await observe(actor, event);\n' +
+          'const intent = await decide(observation);\n' +
+          'await apply(observation, intent)' : path === paths.combat ?
+          'const observation = await observe(actor);\n' +
+          'const plan = await choose(observation);\n' +
+          'await submit(actor, observation.round, plan)' :
+          'const observation = await observe(actor);\n' +
+          'const intent = await decide(observation);\n' +
+          'await submit(actor, observation.tick, intent)');
+        return evalTurn(turn, JSON.stringify(choice));
       } });
   } finally { host.close(); }
 }
