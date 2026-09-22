@@ -50,34 +50,34 @@ function arrayKernel(rng: Random, id: string): Dict {
   });
   const cases: Array<{ name: string; inputs: Dict; params: string; returns: string; text: string; code: string; expected: unknown }> = [
     { name: 'prefix_sums', inputs: { numbers: nums }, params: 'numbers: Num[]', returns: 'Num[]',
-      text: 'Return every running prefix sum of `args/numbers` in order.',
+      text: 'Return every running prefix sum of `numbers` in order.',
       code: 'args.numbers.reduce((out, x) => out.concat([(out.length ? out[out.length - 1] : 0) + x]), [])',
       expected: nums.reduce<number[]>((out, x) => [...out, (out.at(-1) ?? 0) + x], []) },
     { name: 'window_sums', inputs: { numbers: nums, width: rng.int(1, Math.min(5, nums.length)) }, params: 'numbers: Num[], width: Num', returns: 'Num[]',
-      text: 'Compute the sum of every contiguous window of `args/width` numbers.',
+      text: 'Compute the sum of every contiguous window of `width` numbers.',
       code: 'args.numbers.slice(0, args.numbers.length - args.width + 1).map((_, i) => sum(args.numbers.slice(i, i + args.width)))',
       expected: [] },
     { name: 'top_k', inputs: { numbers: nums, k: rng.int(0, nums.length) }, params: 'numbers: Num[], k: Num', returns: 'Num[]',
-      text: 'Return the largest `args/k` values from `args/numbers`, greatest first.', code: 'args.numbers.slice().sort((a, b) => b - a).slice(0, args.k)', expected: [] },
+      text: 'Return the largest `k` values from `numbers`, greatest first.', code: 'args.numbers.slice().sort((a, b) => b - a).slice(0, args.k)', expected: [] },
     { name: 'stable_unique', inputs: { items }, params: 'items: Text[]', returns: 'Text[]',
-      text: 'Remove duplicate values from `args/items` while preserving first occurrence order.',
+      text: 'Remove duplicate values from `items` while preserving first occurrence order.',
       code: 'args.items.filter((x, i) => args.items.indexOf(x) === i)', expected: [...new Set(items)] },
     { name: 'weighted_checksum', inputs: { numbers: nums }, params: 'numbers: Num[]', returns: 'Num',
       text: 'Multiply each number by its one-based position and add the products.',
       code: 'sum(args.numbers.map((x, i) => x * (i + 1)))', expected: nums.reduce((sum, x, i) => sum + (i + 1) * x, 0) },
     { name: 'adjacent_changes', inputs: { items }, params: 'items: Text[]', returns: 'Num',
-      text: 'Count positions after the first where the value differs from the preceding value.',
+      text: 'Count positions after the first where the value in `items` differs from the preceding value.',
       code: 'args.items.slice(1).filter((x, i) => x !== args.items[i]).length',
       expected: items.slice(1).filter((x, i) => x !== items[i]).length },
     { name: 'row_sums', inputs: { matrix }, params: 'matrix: Num[][]', returns: 'Num[]',
-      text: 'Return the sum of each row in `args/matrix`, preserving row order.', code: 'args.matrix.map(row => sum(row))',
+      text: 'Return the sum of each row in `matrix`, preserving row order.', code: 'args.matrix.map(row => sum(row))',
       expected: matrix.map(row => row.reduce((a, b) => a + b, 0)) },
     { name: 'longest_true_run', inputs: { flags }, params: 'flags: Bool[]', returns: 'Num',
-      text: 'Return the length of the longest contiguous run of true values in `args/flags`.',
+      text: 'Return the length of the longest contiguous run of true values in `flags`.',
       code: 'args.flags.reduce((s, x) => ({ run: x ? s.run + 1 : 0, best: Math.max(s.best, x ? s.run + 1 : 0) }), { run: 0, best: 0 }).best',
       expected: flags.reduce((s, x) => ({ run: x ? s.run + 1 : 0, best: Math.max(s.best, x ? s.run + 1 : 0) }), { run: 0, best: 0 }).best },
     { name: 'merge_intervals', inputs: { intervals }, params: 'intervals: Interval[]', returns: 'Interval[]',
-      text: 'Merge all overlapping intervals in `args/intervals` and return them ordered by start.',
+      text: 'Merge all overlapping intervals in `intervals` and return them ordered by start.',
       code: 'args.intervals.slice().sort((a, b) => a.start - b.start || a.end - b.end).reduce((out, x) => { const last = out[out.length - 1]; return last && x.start <= last.end ? out.slice(0, -1).concat([{ start: last.start, end: Math.max(last.end, x.end) }]) : out.concat([{ start: x.start, end: x.end }]) }, [])',
       expected: mergeIntervals(intervals) },
   ];
@@ -112,7 +112,7 @@ function stagedRanking(rng: Random, id: string): Dict {
   const expected = candidates.map(item => ({ ...item, score: item.quality * 100 - item.cost }))
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, k);
   const candidate = '{ id: Text, quality: Num, cost: Num }', ranked = '{ id: Text, quality: Num, cost: Num, score: Num }';
-  const instructions = 'Score every candidate, sort by descending score with id as the tie breaker, then return the first `args/k`.';
+  const instructions = 'Score every candidate, sort by descending score with id as the tie breaker, then return the first `k`.';
   const codebase = {
     score_candidates: { description: 'Attach the exact quality/cost score to every candidate.', args: { items: 'Candidate[]' }, returns: 'Ranked[]', code: 'return args.items.map(x => ({ ...x, score: x.quality * 100 - x.cost }))' },
     sort_ranked: { description: 'Sort ranked candidates by score descending and id ascending.', args: { items: 'Ranked[]' }, returns: 'Ranked[]', code: 'return args.items.slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))' },
