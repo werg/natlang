@@ -222,6 +222,9 @@ def main() -> None:
     records = load_records(args.ir, args.start, args.limit)
     system_prompt = args.system_file.read_text()
     args.jobs.mkdir(parents=True, exist_ok=True)
+    for temporary in args.jobs.glob("*.tmp-*"):
+        temporary.unlink(missing_ok=True)
+    args.out.with_suffix(args.out.suffix + ".building").unlink(missing_ok=True)
     expected_for = lambda record: expected_provenance(
         record, model_id=args.model_id, root_seed=args.root_seed,
         system_prompt=system_prompt, segment_turns=args.segment_turns,
@@ -239,7 +242,14 @@ def main() -> None:
     print(f"resume: {completed}/{len(records)} complete; {len(pending)} queued", flush=True)
     stopping = threading.Event()
     previous = signal.getsignal(signal.SIGTERM)
-    signal.signal(signal.SIGTERM, lambda *_: stopping.set())
+    def terminate(signum, _frame):
+        # Worker requests may be inside a long model decode. Waiting for the
+        # ThreadPoolExecutor would make an otherwise resumable collector take
+        # minutes to stop. Result publication is atomic, and the next run
+        # discards each unfinished trace before retrying that job.
+        print("interrupted; completed jobs are durable", file=sys.stderr, flush=True)
+        os._exit(128 + signum)
+    signal.signal(signal.SIGTERM, terminate)
     try:
         with ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix="teacher") as pool:
             active = {}
