@@ -15,6 +15,8 @@ import os
 import signal
 import sys
 import threading
+import time
+from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
@@ -87,6 +89,20 @@ def write_atomic(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".tmp-{os.getpid()}-{threading.get_ident()}")
     temporary.write_text(json.dumps(value, ensure_ascii=False) + "\n")
     temporary.replace(path)
+
+
+def transport_failure(exc: BaseException) -> bool:
+    """Recognize a dead/restarting inference server without hiding model bugs."""
+    chain, current = [], exc
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    names = {type(item).__name__ for item in chain}
+    text = " ".join(str(item).lower() for item in chain)
+    return bool(names & {"URLError", "RemoteDisconnected", "ConnectionResetError",
+                         "ConnectionRefusedError", "BrokenPipeError", "TimeoutError"}) or any(
+        phrase in text for phrase in ("connection refused", "connection reset", "remote end closed connection",
+                                      "server disconnected", "timed out"))
 
 
 def merge_completed(records: list[tuple[int, dict]], jobs: Path, output: Path,
@@ -222,6 +238,10 @@ def main() -> None:
     parser.add_argument("--cache-stable-tools", action="store_true",
                         help="present state-dependent path and line constraints as stable base types")
     parser.add_argument("--request-timeout", type=float)
+    parser.add_argument("--transport-retries", type=int, default=8,
+                        help="retry a job after a server disconnect or restart")
+    parser.add_argument("--retry-delay", type=float, default=5,
+                        help="initial transport retry delay; exponential backoff is capped at 30 seconds")
     parser.add_argument("--system-file", type=Path,
                         default=Path("natlang/prompts/tools_explicit.md"))
     parser.add_argument("--import-ir", type=Path, action="append", default=[],
@@ -229,6 +249,7 @@ def main() -> None:
     args = parser.parse_args()
     if (args.start < 0 or args.workers < 1 or args.segment_turns < 1 or
             args.segment_messages < 5 or args.thinking_tokens < 0 or
+            args.transport_retries < 0 or args.retry_delay < 0 or
             (args.limit is not None and args.limit < 1)):
         parser.error("invalid range, worker, continuation, or thinking setting")
     records = load_records(args.ir, args.start, args.limit)
@@ -261,27 +282,38 @@ def main() -> None:
     signal.signal(signal.SIGTERM, terminate)
     try:
         with ThreadPoolExecutor(max_workers=args.workers, thread_name_prefix="teacher") as pool:
-            active = {}
-            cursor = iter(pending)
+            active, retries = {}, {}
+            queued = deque(pending)
             while not stopping.is_set():
                 while len(active) < args.workers:
-                    try:
-                        index, record = next(cursor)
-                    except StopIteration:
+                    if not queued:
                         break
+                    index, record = queued.popleft()
                     future = pool.submit(run_job, index, record, args, system_prompt,
                                          args.jobs, expected_for(record))
-                    active[future] = (index, record["id"])
+                    active[future] = (index, record)
                 if not active:
                     break
                 done, _ = wait(active, return_when=FIRST_COMPLETED)
                 for future in done:
-                    index, program_id = active.pop(future)
+                    index, record = active.pop(future)
+                    program_id = record["id"]
                     try:
                         _, row = future.result()
+                        retries.pop(index, None)
                         print(f"{index} {program_id}: {row['outcome']['status']} "
                               f"accepted={row['outcome']['accepted']}", flush=True)
                     except Exception as exc:
+                        attempt = retries.get(index, 0)
+                        if transport_failure(exc) and attempt < args.transport_retries:
+                            retries[index] = attempt + 1
+                            delay = min(30.0, args.retry_delay * (2 ** min(attempt, 3)))
+                            print(f"{index} {program_id}: server unavailable; retry "
+                                  f"{attempt + 1}/{args.transport_retries} in {delay:g}s", file=sys.stderr, flush=True)
+                            if delay:
+                                time.sleep(delay)
+                            queued.appendleft((index, record))
+                            continue
                         error = {"index": index, "program_id": program_id,
                                  "error": f"{type(exc).__name__}: {exc}"}
                         write_atomic(args.jobs / f"{index:06d}.error.json", error)
@@ -303,6 +335,7 @@ def main() -> None:
                 "require_call": args.require_call,
                 "segment_turns": args.segment_turns, "segment_messages": args.segment_messages,
                 "workers": args.workers, "completed": completed, "missing": missing,
+                "transport_retries": args.transport_retries, "retry_delay": args.retry_delay,
                 "output_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest()}
     write_atomic(args.out.with_suffix(args.out.suffix + ".manifest.json"), manifest)
     removed = cleanup_obsolete(args.jobs, args.out,

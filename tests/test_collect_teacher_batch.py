@@ -1,7 +1,8 @@
 import json
 
 from scripts.collect_teacher_batch import (
-    expected_provenance, import_completed, job_key, merge_completed, result_matches, run_job, write_atomic,
+    expected_provenance, import_completed, job_key, merge_completed, result_matches, run_job,
+    transport_failure, write_atomic,
 )
 
 
@@ -88,3 +89,10 @@ def test_retry_reuses_canonical_trace_and_defers_obsolete_cleanup(tmp_path, monk
         system_prompt="p", segment_turns=6, segment_messages=12)
     run_job(2, row, args, "p", tmp_path, expected)
     assert observed["trace"] == tmp_path / f"{key}.trace.jsonl"
+
+
+def test_transport_failures_are_retried_without_masking_program_errors():
+    from urllib.error import URLError
+    assert transport_failure(URLError(ConnectionRefusedError("connection refused")))
+    assert transport_failure(ConnectionResetError("reset"))
+    assert not transport_failure(ValueError("teacher trajectory is invalid"))
