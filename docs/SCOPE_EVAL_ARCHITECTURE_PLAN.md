@@ -1,6 +1,7 @@
 # Typed scope and `eval` orchestration
 
-Status: proposed architecture, 2026-09-22.
+Status: initial implementation complete; teacher validation and corpus migration
+are active, 2026-09-22.
 
 This plan replaces the model-facing workspace-path and call-combinator protocol with a
 persistent typed execution scope. The model interprets the natural-language program one
@@ -12,6 +13,17 @@ The existing typed tree, pending nodes, reduction engine, effect journal, trace 
 durable continuation machinery remain the execution substrate. The proposal changes how the
 model expresses its decisions. It does not move program interpretation into deterministic
 orchestration.
+
+The Python and native TypeScript runtimes now expose `scope-eval-v1`, including
+typed persistent locals, ordinary imported calls, required line closure,
+directory reducers, shared scoped filesystem overlays, live fixed-manifest
+codebase edits, and matching prompts and trace provenance. The training bridge
+can materialize native scope trajectories and conservatively project simple
+legacy teacher traces. Current teacher runs are the compatibility probe for
+additional natural code forms. Eval lowering intentionally remains a small
+restricted language and is expanded from observed useful programs; it does not
+execute arbitrary TypeScript or replace semantic choices with a deterministic
+planner.
 
 ## 1. Goals and fixed decisions
 
