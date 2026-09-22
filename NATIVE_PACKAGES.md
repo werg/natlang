@@ -137,7 +137,7 @@ engines and executable dependencies. They are declarations, not a sandbox.
 Natlang reducers own interpretation, planning, and decisions; adapters translate
 typed events and expose exact native operations.
 
-Without a profile, model use is lazy. The CLI checks explicit, managed, and PATH
+Without a profile, the CLI checks explicit, managed, and PATH
 llama.cpp executables against its tested version range. If none is compatible,
 an interactive run asks before installing the pinned official archive under the
 user data directory. Downloads are checked against a static byte length and
@@ -145,9 +145,12 @@ SHA-256 digest, extracted atomically, and never alter a system installation.
 Use `natlang --setup` to do this ahead of time, `natlang --setup --yes` for an
 unattended install, and `natlang --runtime status --json` to inspect resolution.
 
-On the first semantic turn the CLI starts the selected server and closes it
-with the command. Crisp only targets do not start it. Model profiles in the
-platform config directory select externally owned services:
+A target that declares a reducer starts preparing the selected server as soon
+as it is resolved. This overlaps target import and application state setup; the
+target begins its interactive run after readiness. Direct programs still start
+on their first semantic turn. Crisp only targets do not start a model. The CLI
+closes an owned server with the command. Model profiles in the platform config
+directory select externally owned services:
 
 ```json
 {

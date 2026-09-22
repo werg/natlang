@@ -248,6 +248,7 @@ async function executeTarget(parsed: Parsed, installed: RunnablePackage,
   const workspace = resolve(option(parsed, '--workspace') ?? '.');
   const entry = join(installed.root, ...target.entry.split('/'));
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  const modelPreparation = target.reducer ? model.prepare() : null;
   try {
     const module = await import(pathToFileURL(entry).href) as Record<string, unknown>;
     const factoryName = target.export ?? 'createTarget', factory = module[factoryName];
@@ -261,7 +262,10 @@ async function executeTarget(parsed: Parsed, installed: RunnablePackage,
         NodeFileTree, runTerminalShell, renderTerminalView }) };
     const executable = await (factory as PackageTargetFactory)(context);
     if (!executable || typeof executable.run !== 'function') throw new Error('target factory must return an executable with run()');
-    try { return Number(await executable.run() ?? 0); }
+    try {
+      await modelPreparation;
+      return Number(await executable.run() ?? 0);
+    }
     finally { await executable.close?.(); }
   } finally { await model.close(); }
 }

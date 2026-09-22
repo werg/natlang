@@ -23,7 +23,9 @@ directory. It never replaces a system installation. Use `natlang --setup --yes`
 in unattended environments. The first semantic run offers the same setup when
 it has an interactive terminal.
 
-Source paths require no package installation. If a semantic run has no model
-profile, the CLI lazily starts its selected local server with the release
-default model and stops it when the command exits. `natlang --runtime status
---json` reports discovery and compatibility details.
+Source paths require no package installation. A reducer-backed application
+starts preparing its selected local server immediately, concurrently with
+target initialization, and opens after readiness. Direct programs remain lazy
+until their first semantic turn. The CLI stops an owned server when the command
+exits. `natlang --runtime status --json` reports discovery and compatibility
+details.

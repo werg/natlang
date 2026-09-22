@@ -19,7 +19,8 @@ export type ModelProfile = { endpoint?: string; model?: string; apiKeyEnv?: stri
   headers?: Record<string, string>; request?: Record<string, unknown> };
 export type ManagedModelStatus = { source: 'external' | 'managed-local'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
-export type ManagedModelSession = { turn(request: ModelTurnRequest): Promise<ModelTurn>;
+export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
+  turn(request: ModelTurnRequest): Promise<ModelTurn>;
   status(): ManagedModelStatus; close(): Promise<void> };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
@@ -173,6 +174,7 @@ export function createManagedModelSession(profile: ModelProfile,
   const onExit = () => { if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); };
   process.once('exit', onExit);
   return {
+    async prepare() { await start(); return this.status(); },
     async turn(request) { const options = await start(); return openAICompatibleModelTurn(options)(request); },
     status() { return external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,

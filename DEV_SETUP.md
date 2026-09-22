@@ -137,7 +137,9 @@ inside natlang's tested range. Missing or incompatible ambient installations
 are left untouched; with consent, natlang installs its verified build beside
 them.
 
-The first semantic model turn:
+A reducer-backed application begins these steps immediately, in parallel with
+loading its target module and state. A direct program begins them on its first
+semantic model turn:
 
 1. selects the statically generated project default;
 2. uses a verified checkout copy when present, otherwise downloads the verified
@@ -147,7 +149,7 @@ The first semantic model turn:
 5. terminates that owned process when the command closes or receives SIGINT or
    SIGTERM.
 
-Crisp only programs never start or download a model. `natlang --setup` repeats
+Crisp only programs and package targets never start or download a model. `natlang --setup` repeats
 runtime discovery and installation, `natlang --runtime status --json` explains
 every candidate, and `natlang --runtime install` explicitly installs the managed
 build. Point at a custom compatible binary with `NATLANG_LLAMA_SERVER`.

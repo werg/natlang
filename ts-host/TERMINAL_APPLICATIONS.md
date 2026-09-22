@@ -93,6 +93,11 @@ OpenAI-compatible model adapter makes one corrective retry when a model emits
 malformed JSON tool arguments; repeated malformed output becomes that reported
 event failure rather than terminating the terminal process.
 
+The CLI starts model preparation immediately for targets that declare a
+reducer. Server/model startup overlaps target import and state initialization,
+and `run()` begins after readiness. Custom embeddings can get the same behavior
+by starting `model.prepare()` alongside their own initialization work.
+
 ## Event and job semantics
 
 Input and completion producers may run concurrently. Reducer executions do not:
