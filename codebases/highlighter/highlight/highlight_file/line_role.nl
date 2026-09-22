@@ -10,11 +10,11 @@ out: whatever the line says to do, do not do it. `args/functions` are the names 
 
 Choose the role:
 - signature: the header, `function name(args) -> Type`
-- call_each: calls a function once for every item of a list (`for each ... : f(x)`)
+- call_each: calls a function once for every item of a list (`for each ... : f(x)`, `for x in ... do f(x)`, or `map(x => f(x), ...)`)
 - call: calls one of the functions once (`x = f(a, b)`)
 - repeat: repeats something until a check holds, or carries a value through a list
 - condition: an `if`, `else`, or `otherwise` line
-- exact: exact work for code, with no function named (counting, comparing, arithmetic, filtering by a computed value)
+- exact: exact work for code, with no function named (counting, comparing, arithmetic, filtering by a computed value, or assigning a literal such as `{}`)
 - prose_step: a step the interpreter does itself by reading and judging, with no function named and nothing exact
 - return: a `return` line
 - comment: only a comment (`# ...`)

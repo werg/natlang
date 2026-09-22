@@ -684,11 +684,14 @@ def _role(line: str, functions: list) -> str:
         return "condition"
     if l.startswith("repeat") or " repeat " in l or "carry a " in l:
         return "repeat"
-    if "for each" in l and called:
+    if called and (re.search(r"\bfor(?:\s+each)?\s+\w+\s+in\b.*(?:\bdo\b|:)", l, re.I) or
+                   re.search(r"\bmap\s*\(", l)):
         return "call_each"
     if called:
         return "call"
     if "# exact" in l:
+        return "exact"
+    if re.search(r"=\s*(?:\{\s*\}|\[\s*\]|true|false|null|-?\d+(?:\.\d+)?|[\"']).*$", l, re.I):
         return "exact"
     return "prose_step" if "=" in l else "leaf_text"
 

@@ -29,13 +29,24 @@ def line_role(a):                      # stands in for the model's judgment
         return "condition"
     if l.startswith("repeat") or "until" in l.split("#")[0]:
         return "repeat"
-    if "for each" in l and called:
+    if called and (re.search(r"\bfor(?:\s+each)?\s+\w+\s+in\b.*(?:\bdo\b|:)", l, re.I) or
+                   re.search(r"\bmap\s*\(", l)):
         return "call_each"
     if called:
         return "call"
     if "# exact" in l:
         return "exact"
+    if re.search(r"=\s*(?:\{\s*\}|\[\s*\]|true|false|null|-?\d+(?:\.\d+)?|[\"']).*$", l, re.I):
+        return "exact"
     return "prose_step" if "=" in l else "leaf_text"
+
+
+def test_line_role_covers_iteration_spellings_and_literal_assignments():
+    functions = ["classify"]
+    assert line_role({"line": "for x in rows do classify(x)", "functions": functions}) == "call_each"
+    assert line_role({"line": "roles = map(x => classify(x), rows)", "functions": functions}) == "call_each"
+    assert line_role({"line": "fallback = {}", "functions": functions}) == "exact"
+    assert line_role({"line": "x = classify(row)", "functions": functions}) == "call"
 
 
 class Interpreter:
