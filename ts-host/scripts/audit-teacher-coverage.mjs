@@ -10,6 +10,6 @@ const args = process.argv.slice(2), value = (flag, fallback) => {
 const report = await auditCoverage(root,
   value('--config', resolve(root, 'training/teacher_coverage.json')),
   value('--studio-cases', resolve(root, 'data/teacher/studio-cases-v1.jsonl')),
-  value('--program-ir', resolve(root, 'data/external_pilot/teacher-selection-balanced-s909.ir.jsonl')));
+  value('--program-ir', resolve(root, 'data/teacher/coverage-selection-s909.ir.jsonl')));
 console.log(JSON.stringify(report, null, 2));
 if (!report.ready) process.exitCode = 2;

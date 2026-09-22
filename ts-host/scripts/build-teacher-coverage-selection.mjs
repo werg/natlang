@@ -11,7 +11,7 @@ if (!output) throw new Error('usage: build-teacher-coverage-selection.mjs OUT [-
 const patterns = values('--glob');
 const perFamily = Number(value('--per-family', 4)), seed = Number(value('--seed', 909));
 if (!Number.isInteger(perFamily) || perFamily < 1 || !Number.isSafeInteger(seed)) throw new Error('invalid per-family or seed');
-const paths = await expandPatterns(patterns.length ? patterns : ['data/external_pilot/synthetic-*-reviewed-*.ir.jsonl']);
+const paths = await expandPatterns(patterns.length ? patterns : ['data/teacher/native-synthetic.ir.jsonl']);
 if (!paths.length) throw new Error('corpus glob found no files');
 const { rows, manifest } = await buildSelection(paths, { perFamily, seed });
 const target = resolve(output), staged = `${target}.building`;

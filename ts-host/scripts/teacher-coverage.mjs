@@ -69,7 +69,7 @@ export async function auditCoverage(root, configPath, studioPath, programsPath) 
     if (files.some(name => name.endsWith('.nl'))) codebases.add(`codebase:${item.name}`);
   }
   const applications = new Set((await readdir(resolve(root, 'applications')))
-    .filter(name => name.endsWith('.py') || name.endsWith('.mjs')).map(name => `application:${name}`));
+    .filter(name => name.endsWith('.mjs')).map(name => `application:${name}`));
   const actual = new Set([...codebases, ...applications]);
   const owned = new Set(config.targets.flatMap(target => target.owns));
   const excluded = new Set(config.excluded ?? []);

@@ -13,28 +13,36 @@ WORKERS="${TEACHER_WORKERS:-1}"
 # conversation when possible; longer work still checkpoints into durable state.
 SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-24}"
 SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-48}"
-SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
-PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-balanced-s909-pass3.jobs}"
-PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage.ir.jsonl}"
-PROGRAM_TURNS="${TEACHER_PROGRAM_TURNS:-data/teacher-program-coverage.turns.jsonl}"
-PROGRAM_SFT="${TEACHER_PROGRAM_SFT:-data/teacher-program-coverage.sft.jsonl}"
-STUDIO_CASES="${TEACHER_STUDIO_CASES:-data/teacher/studio-cases-v1.jsonl}"
-STUDIO_JOBS="${TEACHER_STUDIO_JOBS:-runs/teacher-studio-coverage.jobs}"
-STUDIO_TURNS="${TEACHER_STUDIO_TURNS:-data/teacher-studio-coverage.turns.jsonl}"
-STUDIO_SFT="${TEACHER_STUDIO_SFT:-data/teacher-studio-coverage.sft.jsonl}"
+SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s${SEED}.ir.jsonl}"
+NATIVE_SYNTHETIC="${TEACHER_NATIVE_SYNTHETIC:-data/teacher/native-synthetic-s${SEED}.ir.jsonl}"
+PROGRAMS_PER_FAMILY="${TEACHER_PROGRAMS_PER_FAMILY:-4}"
+SYNTHETIC_PROGRAMS="${TEACHER_SYNTHETIC_PROGRAMS:-512}"
+PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-coverage-s${SEED}.jobs}"
+PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage-s${SEED}.ir.jsonl}"
+PROGRAM_TURNS="${TEACHER_PROGRAM_TURNS:-data/teacher-program-coverage-s${SEED}.turns.jsonl}"
+PROGRAM_SFT="${TEACHER_PROGRAM_SFT:-data/teacher-program-coverage-s${SEED}.sft.jsonl}"
+STUDIO_CASES="${TEACHER_STUDIO_CASES:-data/teacher/studio-cases-s${SEED}.jsonl}"
+STUDIO_JOBS="${TEACHER_STUDIO_JOBS:-runs/teacher-studio-coverage-s${SEED}.jobs}"
+STUDIO_TURNS="${TEACHER_STUDIO_TURNS:-data/teacher-studio-coverage-s${SEED}.turns.jsonl}"
+STUDIO_SFT="${TEACHER_STUDIO_SFT:-data/teacher-studio-coverage-s${SEED}.sft.jsonl}"
 exec 9>runs/teacher-generation.lock
 flock -n 9 || { echo "another teacher generation pipeline holds runs/teacher-generation.lock" >&2; exit 3; }
 settle="${TEACHER_SETTLE_SECONDS:-5}"
 snapshot() {
-  node ts-host/scripts/build-teacher-coverage-selection.mjs "$SELECTION" --seed "$SEED"
+  node ts-host/scripts/generate-synthetic-ir.mjs --out "$NATIVE_SYNTHETIC" \
+    --seed "$SEED" --start-index 0 --n "$SYNTHETIC_PROGRAMS"
+  node ts-host/scripts/build-teacher-coverage-selection.mjs "$SELECTION" \
+    --glob "$NATIVE_SYNTHETIC" --per-family "$PROGRAMS_PER_FAMILY" --seed "$SEED"
   node ts-host/scripts/freeze-studio-teacher-cases.mjs "$STUDIO_CASES" 6
 }
 fingerprint() {
-  sha256sum "$SELECTION" "$SELECTION.manifest.json" "$STUDIO_CASES" \
+  sha256sum "$NATIVE_SYNTHETIC" "$NATIVE_SYNTHETIC.manifest.json" \
+    "$SELECTION" "$SELECTION.manifest.json" "$STUDIO_CASES" \
     "$STUDIO_CASES.manifest.json" training/teacher_coverage.json | sha256sum | cut -d' ' -f1
 }
 
 wave=0
+npm --prefix ts-host run build:node
 while true; do
   wave=$((wave + 1))
   echo "teacher generation wave $wave: discovering current sources"
