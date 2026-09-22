@@ -24,6 +24,16 @@ test('scope compiler records top-level bindings and preserves final-expression R
     { result: 'v5', bindings: { selected: 5, label: 'v5' } });
 });
 
+test('scope compiler maps stock TypeScript annotations to portable result types', () => {
+  const compiled = compileScopeSnippet(
+    'const count: number = 2;\nconst labels: string[] = ["a"];\n' +
+    'const summary: { ok: boolean; totals: Record<string, number> } = { ok: true, totals: { a: 2 } };\nsummary');
+  assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
+  assert.deepEqual(compiled.bindings.map(binding => binding.annotation), [
+    'Num', '(Text)[]', '{ ok: Bool, totals: Dict<Num> }',
+  ]);
+});
+
 test('scope compiler injects async checked-helper placeholders with ordinary call syntax', async () => {
   const compiled = compileScopeSnippet('const answer = await double(value);\nanswer', {
     inputBindings: ['value'], helperBindings: ['double'],

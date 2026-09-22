@@ -69,6 +69,50 @@ function namesOf(name: ts.BindingName): ts.Identifier[] {
   return name.elements.flatMap(element => ts.isOmittedExpression(element) ? [] : namesOf(element.name));
 }
 
+/** Translate ordinary TypeScript annotations to the portable natlang type tree. */
+function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | undefined {
+  const primitive = new Map<number, string>([
+    [ts.SyntaxKind.StringKeyword, 'Text'], [ts.SyntaxKind.NumberKeyword, 'Num'],
+    [ts.SyntaxKind.BooleanKeyword, 'Bool'], [ts.SyntaxKind.NullKeyword, 'Null'],
+  ]);
+  const direct = primitive.get(node.kind);
+  if (direct) return direct;
+  if (ts.isLiteralTypeNode(node)) return node.literal.getText(file);
+  if (ts.isParenthesizedTypeNode(node)) {
+    const inner = portableAnnotation(node.type, file); return inner ? `(${inner})` : undefined;
+  }
+  if (ts.isArrayTypeNode(node)) {
+    const element = portableAnnotation(node.elementType, file); return element ? `(${element})[]` : undefined;
+  }
+  if (ts.isUnionTypeNode(node)) {
+    const members = node.types.map(type => portableAnnotation(type, file));
+    return members.every(Boolean) ? members.join(' | ') : undefined;
+  }
+  if (ts.isTypeLiteralNode(node)) {
+    const fields: string[] = [];
+    for (const member of node.members) {
+      if (!ts.isPropertySignature(member) || !member.type || !member.name) return;
+      const type = portableAnnotation(member.type, file);
+      if (!type) return;
+      fields.push(`${member.name.getText(file)}${member.questionToken ? '?' : ''}: ${type}`);
+    }
+    return `{ ${fields.join(', ')} }`;
+  }
+  if (ts.isTypeOperatorNode(node) && node.operator === ts.SyntaxKind.ReadonlyKeyword)
+    return portableAnnotation(node.type, file);
+  if (ts.isTypeReferenceNode(node)) {
+    const name = node.typeName.getText(file), args = node.typeArguments ?? [];
+    if ((name === 'Array' || name === 'ReadonlyArray') && args.length === 1) {
+      const element = portableAnnotation(args[0]!, file); return element ? `(${element})[]` : undefined;
+    }
+    if (name === 'Record' && args.length === 2 && args[0]!.kind === ts.SyntaxKind.StringKeyword) {
+      const value = portableAnnotation(args[1]!, file); return value ? `Dict<${value}>` : undefined;
+    }
+    if (!args.length) return name;
+  }
+  return;
+}
+
 function isPropertyName(node: ts.Identifier): boolean {
   const parent = node.parent;
   return (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
@@ -146,13 +190,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const kind: ScopeBinding['kind'] = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : 'var';
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
-          ...(declaration.type ? { annotation: declaration.type.getText(file) } : {}),
+          ...(declaration.type && portableAnnotation(declaration.type, file) ?
+            { annotation: portableAnnotation(declaration.type, file) } : {}),
           ...(declaration.initializer ? { initializer: declaration.initializer.getText(file) } : {}),
           start: span(name).start, end: span(name).end });
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {
       bindings.push({ name: statement.name.text, kind: 'function', mutable: false,
-        ...(statement.type ? { annotation: statement.type.getText(file) } : {}),
+        ...(statement.type && portableAnnotation(statement.type, file) ?
+          { annotation: portableAnnotation(statement.type, file) } : {}),
         start: span(statement.name).start, end: span(statement.name).end });
       add('forbidden-control', 'Top-level function declarations cannot be persisted; use a local arrow expression within one eval.', statement);
     }

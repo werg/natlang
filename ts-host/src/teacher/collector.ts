@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, rename } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
@@ -13,6 +13,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
+export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
 const PROGRAM_VERSION = 'natlang.program/1';
 const TOOL_SCHEMA = 'scope-eval-v1';
 
@@ -215,14 +216,57 @@ function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<
     raw_response_sha256: raw ? sha256(canonical(raw)) : null };
 }
 
+type PartialTurn = { request_sha256: string; response: ModelTurn };
+type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[] };
+
+async function loadPartial(path: string, item: IndexedRecord,
+  expected: Record<string, unknown>): Promise<PartialJob | undefined> {
+  try {
+    const value = JSON.parse(await readFile(path, 'utf8')) as PartialJob;
+    if (value.version !== TEACHER_PARTIAL_VERSION || value.program_id !== item.record.id ||
+        canonical(value.provenance) !== canonical(expected) || !Array.isArray(value.turns)) return;
+    for (const turn of value.turns) if (typeof turn.request_sha256 !== 'string' ||
+        !turn.response || typeof turn.response !== 'object') return;
+    return value;
+  } catch { return; }
+}
+
+async function removeIfPresent(path: string): Promise<void> {
+  try { await unlink(path); }
+  catch (error) {
+    if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') throw error;
+  }
+}
+
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint) throw new Error('endpoint is required for native teacher collection');
   return async (item, expected, signal) => {
     const transport = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     const trajectory: Record<string, unknown>[] = [];
+    const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
+    const saved = await loadPartial(partialPath, item, expected);
+    const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
+      program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
+    let replayIndex = 0;
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
-      const response = await transport(request); trajectory.push(trajectoryTurn(request, response)); return response;
+      const requestSha256 = sha256(canonical(request));
+      const recorded = partial.turns[replayIndex];
+      let response: ModelTurn;
+      if (recorded) {
+        if (recorded.request_sha256 !== requestSha256)
+          throw new Error(`partial teacher replay diverged at model turn ${replayIndex}`);
+        response = structuredClone(recorded.response);
+      } else {
+        response = await transport(request);
+        partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
+        // The response is durable before its actions execute. A restart can
+        // replay it into the deterministic frozen harness without another decode.
+        await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
+      }
+      replayIndex++;
+      trajectory.push(trajectoryTurn(request, response));
+      return response;
     };
     const root = buildPending(item.record.semantics.root);
     bindInputs(root, item.record.semantics.inputs);
@@ -255,6 +299,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         capture_limits: [] };
       await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
         runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
+      await removeIfPresent(partialPath);
       return row;
     } finally { runtime.close(); environment.close(); }
   };

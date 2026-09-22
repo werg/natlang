@@ -14,6 +14,13 @@ node scripts/materialize-native-teacher.mjs runs/teacher/merged.jsonl data/teach
 
 Pass `--replace` when rebuilding a derived view from resumable source jobs.
 
+The collector journals every exact model request and response before executing
+the proposed actions. If collection is interrupted mid-program, the next run
+replays those decisions through the fresh deterministic fixture runtime and
+continues at the first request that was never answered. A request digest mismatch
+fails closed. The journal is deleted when the job publishes its final accepted
+or rejected row; only final rows enter materialization.
+
 The output contains one record for each teacher decision (which can contain one
 or more actions) or checkpoint response. In addition to the lossless semantic
 `decision` object, each record has the standard template-neutral
