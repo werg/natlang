@@ -17,9 +17,11 @@ SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s909.ir.jsonl}"
 PROGRAM_JOBS="${TEACHER_PROGRAM_JOBS:-runs/teacher-program-balanced-s909-pass3.jobs}"
 PROGRAM_OUT="${TEACHER_PROGRAM_OUT:-runs/teacher-program-coverage.ir.jsonl}"
 PROGRAM_TURNS="${TEACHER_PROGRAM_TURNS:-data/teacher-program-coverage.turns.jsonl}"
+PROGRAM_SFT="${TEACHER_PROGRAM_SFT:-data/teacher-program-coverage.sft.jsonl}"
 STUDIO_CASES="${TEACHER_STUDIO_CASES:-data/teacher/studio-cases-v1.jsonl}"
 STUDIO_JOBS="${TEACHER_STUDIO_JOBS:-runs/teacher-studio-coverage.jobs}"
 STUDIO_TURNS="${TEACHER_STUDIO_TURNS:-data/teacher-studio-coverage.turns.jsonl}"
+STUDIO_SFT="${TEACHER_STUDIO_SFT:-data/teacher-studio-coverage.sft.jsonl}"
 exec 9>runs/teacher-generation.lock
 flock -n 9 || { echo "another teacher generation pipeline holds runs/teacher-generation.lock" >&2; exit 3; }
 settle="${TEACHER_SETTLE_SECONDS:-5}"
@@ -54,10 +56,14 @@ while true; do
     --cache-stable-tools
   node ts-host/scripts/materialize-native-teacher.mjs \
     "$PROGRAM_OUT" "$PROGRAM_TURNS" --replace
+  node ts-host/scripts/export-native-sft.mjs "$PROGRAM_TURNS" "$PROGRAM_SFT" \
+    --server "$SERVER" --workers 4
   node ts-host/scripts/collect-studio-teacher.mjs "$STUDIO_CASES" "$STUDIO_JOBS" \
     --server "$SERVER" --model "$MODEL" --seed "$SEED" --workers "$WORKERS"
   node ts-host/scripts/materialize-studio-teacher.mjs \
     "$STUDIO_JOBS" "$STUDIO_TURNS" --cases "$STUDIO_CASES"
+  node ts-host/scripts/export-native-sft.mjs "$STUDIO_TURNS" "$STUDIO_SFT" \
+    --server "$SERVER" --workers 4
   # Refreeze after all slow work. Any source/corpus that arrived during this
   # wave changes the fingerprint and is processed in the next wave.
   snapshot

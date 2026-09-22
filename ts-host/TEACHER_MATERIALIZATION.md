@@ -48,3 +48,14 @@ limits. Materialization preserves those snapshots without token-based truncation
 so long code or reasoning remains intact. To make examples shorter, lower the
 collector's `segment_turns` or `segment_messages`; those bounds count decisions
 and messages rather than imposing a completion-token cap.
+
+Render approved decisions with the model server's selected chat template:
+
+```sh
+node scripts/export-native-sft.mjs data/teacher-native-turns.jsonl data/teacher-native.sft.jsonl \
+  --server http://127.0.0.1:8081 --workers 4
+```
+
+This Node exporter preserves exposed reasoning and exact structured teacher
+choices, skips denied decision-level admissions, checks template prefix and end
+token boundaries, and records the template digest in its manifest.
