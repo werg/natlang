@@ -4,11 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-RUN="${1:?usage: evaluate_lfm_teacher_adapter.sh RUN_DIR [LABEL]}"
+RUN="${1:?usage: evaluate_lfm_teacher_adapter.sh RUN_DIR [LABEL] [CHECKPOINT_DIR]}"
 LABEL="${2:-$(basename "$RUN")}"
-STATE="$RUN/checkpoint/state.json"
-ADAPTER="$RUN/checkpoint/weights"
-GGUF="$RUN/adapter-final-f16.gguf"
+CHECKPOINT="${3:-$RUN/checkpoint}"
+STATE="$CHECKPOINT/state.json"
+ADAPTER="$CHECKPOINT/weights"
+GGUF="$CHECKPOINT/adapter-f16.gguf"
 RESULTS="runs/evaluations/$LABEL"
 PROBE="$RESULTS/applications.json"
 TURN_MANIFEST="$RESULTS/turns.manifest.json"
@@ -17,13 +18,16 @@ READINESS="$RESULTS/readiness.json"
 BASE_CONFIG="runs/lfm25-8b-base-config"
 BASE_GGUF="candidates/lfm25-8b-a1b/LFM2.5-8B-A1B-Q4_K_M.gguf"
 
-python - "$STATE" <<'PY'
+python - "$STATE" "${3:+snapshot}" <<'PY'
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
 if not p.exists():
-    raise SystemExit(f"missing completed training state: {p}")
+    raise SystemExit(f"missing training state: {p}")
 s = json.loads(p.read_text())
-if s.get("step", 0) < s.get("corpus", {}).get("steps", 10**18) or "heldout_after" not in s:
+snapshot = len(sys.argv) > 2 and sys.argv[2] == "snapshot"
+if snapshot and s.get("step", 0) < 1:
+    raise SystemExit(f"empty snapshot: {p}")
+if not snapshot and (s.get("step", 0) < s.get("corpus", {}).get("steps", 10**18) or "heldout_after" not in s):
     raise SystemExit(f"training is not complete: step={s.get('step')}, heldout_after={s.get('heldout_after')}")
 PY
 
