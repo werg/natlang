@@ -18,7 +18,7 @@ const TOOL_SCHEMA = 'scope-eval-v1';
 
 export type ProgramRecord = { version: string; id: string; kind: string;
   semantics: { root: Record<string, unknown>; inputs: Record<string, unknown>; expected: unknown;
-    operation?: string; effects?: Record<string, unknown> }; [key: string]: unknown };
+    operation?: string; effects?: Record<string, unknown>; events?: unknown[] }; [key: string]: unknown };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
@@ -157,6 +157,42 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
 
 function same(a: unknown, b: unknown): boolean { return canonical(a) === canonical(b); }
 
+function effectHarness(specs: Record<string, unknown>): {
+  capabilities: Record<string, (args: unknown[]) => unknown>; observed: Record<string, unknown[]>;
+  expected: Record<string, unknown[]>;
+} {
+  const observed: Record<string, unknown[]> = {}, expected: Record<string, unknown[]> = {}, capabilities: Record<string, (args: unknown[]) => unknown> = {};
+  for (const [name, raw] of Object.entries(specs)) {
+    observed[name] = [];
+    if (Array.isArray(raw)) {
+      expected[name] = raw;
+      capabilities[name] = args => { observed[name]!.push(args[0]); return null; };
+      continue;
+    }
+    const spec = raw as Record<string, unknown>;
+    if (spec.kind === 'record_args') {
+      expected[name] = spec.expected as unknown[];
+      capabilities[name] = args => { observed[name]!.push(structuredClone(args)); return null; };
+      continue;
+    }
+    if (spec.kind === 'deliver_once_ack_loss') {
+      expected[name] = spec.expected_delivered as unknown[];
+      const delivered = new Set<string>(), failed = new Set<string>(), failKey = String(spec.fail_key);
+      capabilities[name] = args => {
+        const command = args[0] as Record<string, unknown>, key = String(command.key);
+        if (!delivered.has(key)) { delivered.add(key); observed[name]!.push(structuredClone(command)); }
+        if (key === failKey && !failed.has(key)) {
+          failed.add(key); throw new Error('delivery succeeded but its acknowledgement was lost');
+        }
+        return null;
+      };
+      continue;
+    }
+    throw new Error(`unsupported effect contract for ${name}`);
+  }
+  return { capabilities, observed, expected };
+}
+
 function bindInputs(root: ReturnType<typeof buildPending>, inputs: Record<string, unknown>): void {
   if (!Object.keys(inputs).length) return;
   if (!isPending(root) || root.nodeKind !== 'lambda' || root.type.kind !== 'lambda')
@@ -191,24 +227,30 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const root = buildPending(item.record.semantics.root);
     bindInputs(root, item.record.semantics.inputs);
     const environment = new TypeScriptEnvironment({ mode: 'fresh' });
-    const capabilities = Object.fromEntries(Object.keys(item.record.semantics.effects ?? {}).map(name => [name, () => null]));
+    const effects = effectHarness(item.record.semantics.effects ?? {});
+    let streamIndex = 0;
+    const events = item.record.semantics.events;
+    const stream = events ? { poll: () => streamIndex < events.length ?
+      { kind: 'item' as const, value: structuredClone(events[streamIndex++]) } : { kind: 'closed' as const } } : undefined;
     const agent = new NativeToolAgent(driver, { systemPrompt: config.systemPrompt, temperature: 0,
       segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages, toolSchema: TOOL_SCHEMA,
       validationFeedback: 'caller' });
     const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index, ...expected })).slice(0, 32);
-    const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), capabilities,
+    const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), capabilities: effects.capabilities, stream,
       seedPolicy: { mode: 'derived', root: config.rootSeed }, runId, signal });
     try {
       const result = await runtime.runRoot(root), actual = dump(result.value);
       const expectedKind = item.record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
-      const accepted = result.outcome.kind === expectedKind &&
+      if (Object.hasOwn(effects.observed, 'out.emit')) effects.observed['out.emit'] = result.emitted;
+      const effectsOk = same(effects.observed, effects.expected);
+      const accepted = result.outcome.kind === expectedKind && effectsOk &&
         (expectedKind !== 'done' || same(actual, item.record.semantics.expected));
       const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
         id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,
         task: { kind: 'whole_program', program_ir: item.record,
           source_program_ids: [item.record.id] } as TeacherRow['task'], provenance: { ...expected,
           trace_sha256: sha256(canonical(runtime.trace.events)) }, outcome: { status: result.outcome.kind,
-          detail: result.outcome.detail, value: actual, effects: result.emitted, accepted,
+          detail: result.outcome.detail, value: actual, effects: effects.observed, accepted,
           action_ledger: runtime.trace.events.filter(event => event.kind === 'action') }, trajectory,
         capture_limits: [] };
       await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
