@@ -1354,8 +1354,8 @@ class Session:
 
     # -- eval
     def _do_eval(self, a: Action, engine: str = "quickjs-isolated") -> Result:
-        scope = {"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
-                 "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}}
+        scope = _eval_scope_view({"instructions": self.lam.body, "args": self.lam.in_, "return": self.lam.ret,
+                                  "let": {k: v for k, v in self.lam.let.items() if not is_pending(v)}})
         executor = self.rt._executor(engine)
         self.rt._observe("eval", phase="start", path="eval", mode="expression", engine=engine,
                          code=a.body, effectful=bool(self.lam.effects))
@@ -1402,6 +1402,29 @@ def _slice(value, p: Path, ref: Ref):
             raise reject(p.text, "bad-range", f"items 0..{len(value) - 1}")
         return value[lo: hi + 1], ref.type
     raise reject(p.text, "bad-range", "Text or a list")
+
+
+_OMIT_HOST_VALUE = object()
+
+
+def _eval_scope_view(value):
+    """Portable inline-eval view; native dictionaries stay available through the host API."""
+    from .host_tree import LazyDict
+    if isinstance(value, LazyDict):
+        return _OMIT_HOST_VALUE
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            projected = _eval_scope_view(item)
+            if projected is not _OMIT_HOST_VALUE:
+                out[key] = projected
+        return out
+    if isinstance(value, list):
+        out = [_eval_scope_view(item) for item in value]
+        if _OMIT_HOST_VALUE in out:
+            raise ExecutionError("a host-backed Dict inside a list cannot enter crisp eval; use the crisp host API")
+        return out
+    return value
 
 
 _HINTS = {

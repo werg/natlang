@@ -828,6 +828,19 @@ test('host file trees have the same observable surface in Python and TypeScript'
   assert.deepEqual({ path: childRead.properties.path, kind: childResult.kind, text: childResult.text }, expected.child);
 });
 
+test('inline eval omits lazy dictionaries but retains other arguments in both runtimes', { skip: !python }, () => {
+  const doc = { $lambda: { type: 'Lambda<{ files: Dict<Num>, scalar: Num }, Num>',
+    instructions: 'Use exact arithmetic when helpful.', args: { scalar: 6 } } };
+  const script = `import json,sys\nfrom natlang.host_tree import lazy_dict\nfrom natlang.runtime import Runtime,Session\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\nroot=load_program(json.load(sys.stdin)); root.in_['files']=lazy_dict({'one':1})\nr=Session(Runtime(None),root,TypeEnv()).apply('run_code',{'code':'args.scalar + 1'})\nprint(json.dumps({'kind':r.kind,'value':r.value}))`;
+  const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(doc), encoding: 'utf8' });
+  assert.equal(py.status, 0, py.stderr);
+  const node = buildPending(doc); node.args.files = lazyDict({ one: 1 });
+  const result = new NativeSession(new NativeRuntime(), node, new TypeEnv()).apply('run_code', {
+    engine: 'typescript-host', code: 'args.scalar + 1',
+  });
+  assert.deepEqual({ kind: result.kind, value: result.value }, JSON.parse(py.stdout));
+});
+
 test('portable file-write plan validation agrees in Python and TypeScript', { skip: !python }, () => {
   const cases = [
     [{ path: 'docs/note.txt', text: 'hello' }],

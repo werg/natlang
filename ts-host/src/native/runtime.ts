@@ -103,6 +103,21 @@ function jsView(value: Value): unknown {
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, jsView(v)]));
   return value;
 }
+const OMIT_HOST_VALUE = Symbol('omit-host-value');
+function inlineEvalView(value: Value): unknown {
+  if (value === MISSING) return null;
+  if (isLazyDict(value)) return OMIT_HOST_VALUE;
+  if (pending(value)) return { $pending: formatType(value.type), status: value.status };
+  if (Array.isArray(value)) {
+    const items = value.map(inlineEvalView);
+    if (items.includes(OMIT_HOST_VALUE))
+      throw new TypeError('a host-backed Dict inside a list cannot enter crisp eval; use the crisp host API');
+    return items;
+  }
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value)
+    .flatMap(([key, item]) => { const projected = inlineEvalView(item); return projected === OMIT_HOST_VALUE ? [] : [[key, projected]]; }));
+  return value;
+}
 const itemRef = (container: Record<string, Value> | Value[], key: string | number, type: Type, env: TypeEnv,
   path: string, deny = ''): Ref => ({ path, type, env, deny,
     get: () => Object.hasOwn(container, String(key)) ? (container as Record<string, Value>)[String(key)]! : MISSING,
@@ -826,7 +841,8 @@ export class NativeSession {
         if (engine !== 'typescript-host') return { kind: 'error', text: `engine ${engine} unavailable` };
         const result = this.runtime.evalFor(this.lam, String(args.code ?? ''), false, 'eval',
           { instructions: this.lam.body,
-            args: jsView(this.lam.args as Value), return: jsView(this.lam.return), let: jsView(this.lam.let as Value) });
+            args: inlineEvalView(this.lam.args as Value), return: inlineEvalView(this.lam.return),
+            let: inlineEvalView(this.lam.let as Value) });
         return { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value };
       }
       throw new Reject([{ path: name, code: 'bad-action' }]);
@@ -886,8 +902,8 @@ export class NativeSession {
         if (args.engine !== 'typescript-host') throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'typescript-host' }]);
         const expression = String(args.code ?? '');
         const result = await this.runtime.evalForAsync(this.lam, `(async () => (${expression}))()`, 'eval',
-          { instructions: this.lam.body, args: jsView(this.lam.args as Value),
-            return: jsView(this.lam.return), let: jsView(this.lam.let as Value) }, false);
+          { instructions: this.lam.body, args: inlineEvalView(this.lam.args as Value),
+            return: inlineEvalView(this.lam.return), let: inlineEvalView(this.lam.let as Value) }, false);
         return this.record(name, args, { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value });
       } catch (error) {
         if (error instanceof Reject) return this.record(name, args, rejected(error));

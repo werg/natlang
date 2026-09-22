@@ -76,6 +76,12 @@ def test_lazy_dict_checks_observed_leaves_and_cannot_enter_crisp_eval():
     rejected = Session(Runtime(None), natural, TypeEnv()).apply("read", {"path": "args/items/bad"})
     assert rejected.kind == "rejected" and "type-mismatch" in rejected.codes
 
+    calculable = load_program({"$lambda": {"type": "Lambda<{ items: Dict<Num>, scalar: Num }, Num>",
+                                           "instructions": "Use exact arithmetic when helpful."}})
+    calculable.in_.update({"items": lazy_dict({"one": 1}), "scalar": 6})
+    evaluated = Session(Runtime(None), calculable, TypeEnv()).apply("run_code", {"code": "args.scalar + 1"})
+    assert evaluated.kind == "ok" and evaluated.value == 7
+
     crisp = load_program({"$lambda": {"type": "Lambda<{ items: Dict<Num> }, Num>",
                                       "code": "return 1;"}})
     crisp.in_["items"] = lazy_dict({"one": 1})
