@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NODE_ONLY=0
 COMMAND_ONLY=0
 INSTALL_COMMAND=1
+RUNTIME_YES=0
 COMMAND_DIR="${NATLANG_DEV_BIN_DIR:-$HOME/.local/bin}"
 
 usage() {
@@ -17,6 +18,7 @@ Prepare a natlang development checkout and install its `natlang` command.
   --command-only     Only install the command; do not install or build dependencies.
   --no-command       Do not install the command.
   --command-dir DIR  Install the command in DIR (default: ~/.local/bin).
+  --yes              Approve a verified managed llama.cpp download when needed.
   -h, --help         Show this help.
 
 NATLANG_DEV_BIN_DIR provides the same override as --command-dir. The installer
@@ -29,6 +31,7 @@ while [[ "$#" -gt 0 ]]; do
     --node-only) NODE_ONLY=1; shift ;;
     --command-only) COMMAND_ONLY=1; shift ;;
     --no-command) INSTALL_COMMAND=0; shift ;;
+    --yes) RUNTIME_YES=1; shift ;;
     --command-dir)
       [[ "$#" -ge 2 ]] || { echo "setup_dev.sh: --command-dir requires a directory" >&2; exit 2; }
       COMMAND_DIR="$2"
@@ -76,6 +79,11 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
 
   echo "==> Building the TypeScript host and browser bundle"
   npm --prefix "$ROOT/ts-host" run build
+
+  echo "==> Checking the local model runtime"
+  RUNTIME_ARGS=(setup)
+  if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
+  NATLANG_RUNTIME_HOME="$ROOT/.natlang/runtime" node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
 
   if [[ "$NODE_ONLY" -eq 0 ]]; then
     command -v uv >/dev/null || {

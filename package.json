@@ -7,6 +7,7 @@
     "dev:setup": "scripts/setup_dev.sh",
     "natlang": "scripts/natlang",
     "app": "scripts/natlang-app",
+    "runtime:update": "node scripts/update_llama_runtime.mjs",
     "build": "npm --workspace @natlang/typescript-host run build",
     "test": "npm --workspace @natlang/typescript-host test",
     "pack:core": "npm pack --workspace @natlang/core",

@@ -16,6 +16,16 @@ with its development extras. It also installs `natlang` in `~/.local/bin` as a
 symlink to this checkout's source wrapper. If that directory is missing from
 `PATH`, setup prints the exact export to add to your shell profile.
 
+This is the only repository setup command. It also checks an existing
+`llama-server` version. If there is no compatible server, it asks before
+downloading natlang's pinned, verified build into `.natlang/runtime`. The setup
+does not modify a system installation. For unattended setup, `--yes` grants
+permission for that managed download:
+
+```bash
+scripts/setup_dev.sh --yes
+```
+
 The install is safe to repeat and will not replace a `natlang` command owned by
 another checkout or package installation. Use a different directory when you
 want commands for multiple checkouts, or omit command installation:
@@ -92,22 +102,28 @@ natlang app doctor packages/semantic-terminal.natlang.json --json
 
 ## Model lifecycle
 
-No endpoint or model configuration is needed for the default local workflow.
+No endpoint, model, or system llama.cpp installation is needed for the default
+local workflow. Setup discovers `NATLANG_LLAMA_SERVER`, a managed runtime, and
+`llama-server` on `PATH`, in that order. Every candidate must report a version
+inside natlang's tested range. Missing or incompatible ambient installations
+are left untouched; with consent, natlang installs its verified build beside
+them.
+
 The first semantic model turn:
 
 1. selects the statically generated project default;
 2. uses a verified checkout copy when present, otherwise downloads the verified
    GGUF once into the natlang cache;
-3. starts `llama-server` on a private free loopback port;
+3. starts the selected `llama-server` on a private free loopback port;
 4. waits for its health endpoint; and
 5. terminates that owned process when the command closes or receives SIGINT or
    SIGTERM.
 
-Crisp only programs never start or download a model. `llama-server` must be on
-`PATH`; the official llama.cpp packages provide it (`brew install llama.cpp`,
-`conda install -c conda-forge llama.cpp`, or another platform package). Point
-at another binary with `NATLANG_LLAMA_SERVER`. `natlang doctor --json`
-reports whether the managed local runtime is ready.
+Crisp only programs never start or download a model. `natlang setup` repeats
+runtime discovery and installation, `natlang runtime status --json` explains
+every candidate, and `natlang runtime install` explicitly installs the managed
+build. Point at a custom compatible binary with `NATLANG_LLAMA_SERVER`.
+`natlang doctor --json` reports whether the complete local runtime is ready.
 
 Useful local overrides are:
 
@@ -115,6 +131,7 @@ Useful local overrides are:
 export NATLANG_MODEL_PATH=/path/to/model.gguf
 export NATLANG_TEMPLATE=/path/to/chat-template.jinja
 export NATLANG_LLAMA_SERVER=/path/to/llama-server
+export NATLANG_RUNTIME_HOME=/path/to/natlang-runtimes
 ```
 
 To use an already managed local or remote OpenAI compatible service instead,
@@ -151,6 +168,13 @@ template; installed users receive a newer default by updating natlang. Pass
 `--download-url` during publication when that snapshot must be downloadable
 outside the source checkout. Runtime startup never consults a mutable `latest`
 URL.
+
+The llama.cpp runtime follows the same static publication rule. Maintainers run
+`npm run runtime:update -- --version X.Y.Z` for a reviewed stable release. The
+publisher follows that release's official build pointer, requires GitHub SHA-256
+digests for every supported platform archive, and regenerates
+`ts-host/src/llama-runtime-release.ts`. Installed CLIs never consult a mutable
+latest release.
 
 ## Installed applications and packages
 

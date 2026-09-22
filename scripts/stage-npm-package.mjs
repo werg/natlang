@@ -26,7 +26,8 @@ if (kind === 'core') {
     cpSync(join(source, name), join(destination, name), { recursive: true });
   for (const name of ['contracts.d.ts', 'contracts.js', 'desktop.d.ts', 'desktop.js',
     'environment.d.ts', 'environment.js', 'index.d.ts', 'index.js', 'model-default.d.ts',
-    'model-default.js', 'node-runtime.d.ts', 'node-runtime.js'])
+    'model-default.js', 'llama-runtime-release.d.ts', 'llama-runtime-release.js',
+    'node-runtime.d.ts', 'node-runtime.js'])
     cpSync(join(source, name), join(destination, name));
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');

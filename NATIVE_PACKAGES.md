@@ -120,7 +120,8 @@ work across systems that do not support symbolic links.
 
 `NATLANG_HOME`, `NATLANG_CONFIG_HOME`, `NATLANG_STATE_HOME`, and
 `NATLANG_CACHE_HOME` override the platform package, configuration, application
-state, and cache roots.
+state, and cache roots. `NATLANG_RUNTIME_HOME` overrides the managed native
+runtime root.
 
 ## Executable target contract
 
@@ -137,10 +138,17 @@ engines and executable dependencies. They are declarations, not a sandbox.
 Natlang reducers own interpretation, planning, and decisions; adapters translate
 typed events and expose exact native operations.
 
-Without a profile, model use is lazy: the CLI starts an owned local
-`llama-server` with the statically published default model on the first semantic turn
-and closes it with the command. Crisp only targets do not start it. Model
-profiles in the platform config directory select externally owned services:
+Without a profile, model use is lazy. The CLI checks explicit, managed, and PATH
+llama.cpp executables against its tested version range. If none is compatible,
+an interactive run asks before installing the pinned official archive under the
+user data directory. Downloads are checked against a static byte length and
+SHA-256 digest, extracted atomically, and never alter a system installation.
+Use `natlang setup` to do this ahead of time, `natlang setup --yes` for an
+unattended install, and `natlang runtime status --json` to inspect resolution.
+
+On the first semantic turn the CLI starts the selected server and closes it
+with the command. Crisp only targets do not start it. Model profiles in the
+platform config directory select externally owned services:
 
 ```json
 {

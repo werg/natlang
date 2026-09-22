@@ -3,11 +3,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive, readPackageArchive,
   writePackageArchive, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import type { PackageTargetContext, PackageTargetFactory } from '../package/target.js';
-import { createManagedModelSession, DEFAULT_LOCAL_MODEL, localModelPrerequisites } from '../model/index.js';
+import { createManagedModelSession, DEFAULT_LOCAL_MODEL, describeLlamaRuntime, discoverLlamaRuntime,
+  installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
+  type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/index.js';
 import { NativeNatlangHost } from '../native/host.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { TerminalNatlangApplication } from '../terminal/application.js';
@@ -21,7 +24,7 @@ export const NATLANG_CLI_VERSION = '0.1.0';
 type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
-  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version']);
+  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -57,12 +60,16 @@ Usage:
   natlang app list [--store DIR] [--json]
   natlang app run PATH|PACKAGE [--root DIR] [--target NAME] [--profile NAME] [--workspace DIR] [-- ARGS...]
   natlang app doctor PACKAGE [--target NAME] [--profile NAME] [--json]
+  natlang setup [--yes] [--json]
+  natlang runtime status [--json]
+  natlang runtime install [--yes] [--json]
   natlang doctor [--profile NAME] [--json]
 
 Without model configuration, semantic turns lazily start an owned local llama-server
 with natlang's release default model. Model settings can override this through
 ~/.config/natlang/config.json, NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH,
-NATLANG_LLAMA_SERVER, and NATLANG_API_KEY. NATLANG_HOME selects the package store.`; }
+NATLANG_LLAMA_SERVER, NATLANG_RUNTIME_HOME, and NATLANG_API_KEY. NATLANG_HOME
+selects the package store.`; }
 
 function output(value: unknown, json: boolean): void {
   process.stdout.write(json ? JSON.stringify(value, null, 2) + '\n' : typeof value === 'string' ? value + '\n' :
@@ -81,10 +88,46 @@ function loadProfile(name?: string): { name: string; profile: Profile; configPat
     endpoint: process.env.NATLANG_SERVER ?? configured.endpoint,
     model: process.env.NATLANG_MODEL ?? configured.model } };
 }
-function modelSession(profileName?: string) {
+async function confirm(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) return false;
+  const terminal = createInterface({ input: process.stdin, output: process.stderr });
+  try { return !/^n(?:o)?$/i.test((await terminal.question(`${question} [Y/n] `)).trim()); }
+  finally { terminal.close(); }
+}
+
+async function ensureRuntime(discovery: LlamaRuntimeDiscovery, assumeYes: boolean,
+  forceInstall = false): Promise<LlamaServerInspection | null> {
+  if (discovery.selected && (!forceInstall || discovery.selected.source === 'managed')) return discovery.selected;
+  const explicit = discovery.candidates.find(candidate => candidate.source === 'explicit');
+  if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(discovery)}`);
+  if (!discovery.artifact) throw new Error(`natlang has no managed llama.cpp build for ${process.platform}-${process.arch}; set NATLANG_LLAMA_SERVER to a compatible build`);
+  const found = discovery.candidates.length ? `Found incompatible ${describeLlamaRuntime(discovery)}. ` : '';
+  const artifact = discovery.artifact;
+  const allowed = assumeYes || await confirm(`${found}Download and install the verified llama.cpp ${LLAMA_RUNTIME_RELEASE.version} ${artifact.backend} runtime (${Math.ceil(artifact.bytes / 1_000_000)} MB)?`);
+  if (!allowed) return null;
+  return installManagedLlamaRuntime({ error: process.stderr });
+}
+
+function runtimeReport(discovery = discoverLlamaRuntime()): Record<string, unknown> {
+  return { ok: Boolean(discovery.selected), required: LLAMA_RUNTIME_RELEASE.compatible,
+    recommended: { version: LLAMA_RUNTIME_RELEASE.version, build: LLAMA_RUNTIME_RELEASE.build,
+      artifact: discovery.artifact?.key ?? null, bytes: discovery.artifact?.bytes ?? null },
+    selected: discovery.selected, candidates: discovery.candidates, runtimeRoot: discovery.runtimeRoot };
+}
+function outputRuntime(discovery: LlamaRuntimeDiscovery, json: boolean): void {
+  if (json) { output(runtimeReport(discovery), true); return; }
+  if (discovery.selected) {
+    output(`llama.cpp runtime ready\nsource: ${discovery.selected.source}\npath: ${discovery.selected.path}\nversion: ${discovery.selected.version} (build ${discovery.selected.build})`, false);
+    return;
+  }
+  output(`llama.cpp runtime unavailable\n${describeLlamaRuntime(discovery)}`, false);
+}
+
+function modelSession(profileName?: string, assumeYes = false) {
   const { profile } = loadProfile(profileName);
   return createManagedModelSession({ ...profile,
-    request: profile.request, headers: profile.headers });
+    request: profile.request, headers: profile.headers }, process.env, process.stderr,
+  { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes) });
 }
 
 type RunnablePackage = { name: string; version: string; digest: string; root: string;
@@ -109,7 +152,7 @@ async function executeTarget(parsed: Parsed, installed: RunnablePackage,
   const traceDirectory = resolve(option(parsed, '--traces') ?? join(stateDirectory, 'traces'));
   const workspace = resolve(option(parsed, '--workspace') ?? '.');
   const entry = join(installed.root, ...target.entry.split('/'));
-  const model = modelSession(option(parsed, '--profile'));
+  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
     const module = await import(pathToFileURL(entry).href) as Record<string, unknown>;
     const factoryName = target.export ?? 'createTarget', factory = module[factoryName];
@@ -182,7 +225,7 @@ async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   const inputsPath = option(parsed, '--inputs');
   const inputs = inputsPath ? JSON.parse(readFileSync(resolve(inputsPath), 'utf8')) as Record<string, unknown> : undefined;
   const host = new NativeNatlangHost();
-  const model = modelSession(option(parsed, '--profile'));
+  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
     const result = await host.run({ source: { kind: 'file', path }, inputs,
       modelTurn: request => model.turn(request),
@@ -272,6 +315,30 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   const parsed = parseArgs(argv), json = parsed.options.has('--json');
   if (parsed.options.has('--version')) { output(NATLANG_CLI_VERSION, false); return 0; }
   if (parsed.options.has('--help') || parsed.options.has('-h') || !parsed.words.length) { output(help(), false); return 0; }
+  if (parsed.words[0] === 'setup' || parsed.words[0] === 'runtime') {
+    const action = parsed.words[0] === 'setup' ? 'ensure' : parsed.words[1] ?? 'status';
+    if (parsed.words[0] === 'setup') {
+      const selected = loadProfile(option(parsed, '--profile'));
+      if (selected.profile.endpoint) {
+        const report = { ok: true, modelSource: 'external', endpoint: selected.profile.endpoint,
+          model: selected.profile.model ?? DEFAULT_LOCAL_MODEL.id, runtimeRequired: false };
+        output(json ? report : `external model profile ready\nendpoint: ${report.endpoint}\nmodel: ${report.model}`, json);
+        return 0;
+      }
+    }
+    if (action === 'status') {
+      const discovery = discoverLlamaRuntime(); outputRuntime(discovery, json);
+      return discovery.selected ? 0 : 1;
+    }
+    if (action === 'ensure' || action === 'install') {
+      const discovery = discoverLlamaRuntime();
+      const selected = await ensureRuntime(discovery, parsed.options.has('--yes'), action === 'install');
+      if (!selected && action === 'ensure') { outputRuntime(discovery, json); return 0; }
+      if (!selected) throw new Error('llama.cpp installation was declined; run natlang setup when ready');
+      outputRuntime(discoverLlamaRuntime(), json); return 0;
+    }
+    throw new Error('unknown runtime command; run natlang --help');
+  }
   if (parsed.words[0] === 'package') {
     const action = parsed.words[1], argument = parsed.words[2];
     if (action === 'pack' && argument) {

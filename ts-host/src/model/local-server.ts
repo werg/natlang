@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { basename, join, resolve } from 'node:path';
@@ -10,6 +10,8 @@ import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
+  type LlamaServerInspection } from './llama-runtime.js';
 
 export const DEFAULT_LOCAL_MODEL = DEFAULT_MODEL_RELEASE;
 
@@ -19,16 +21,11 @@ export type ManagedModelStatus = { source: 'external' | 'managed-local'; endpoin
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { turn(request: ModelTurnRequest): Promise<ModelTurn>;
   status(): ManagedModelStatus; close(): Promise<void> };
-
-function executable(command: string): string | null {
-  if (command.includes('/') || command.includes('\\')) return existsSync(resolve(command)) ? resolve(command) : null;
-  const probe = spawnSync(process.platform === 'win32' ? 'where.exe' : 'which', [command], { encoding: 'utf8' });
-  return probe.status === 0 ? probe.stdout.trim().split(/\r?\n/, 1)[0] || null : null;
-}
+export type ManagedModelRuntimeOptions = { ensureRuntime?:
+  (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
 
 export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process.env) {
-  const command = environment.NATLANG_LLAMA_SERVER ?? 'llama-server';
-  const found = executable(command);
+  const runtime = discoverLlamaRuntime(environment), found = runtime.selected?.path ?? null;
   const explicitModel = environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null;
   const checkoutModel = resolve('models', DEFAULT_LOCAL_MODEL.file);
   const cachedModel = join(defaultNatlangCacheDirectory(environment), 'models',
@@ -36,7 +33,8 @@ export function localModelPrerequisites(environment: NodeJS.ProcessEnv = process
   const modelPath = [explicitModel, checkoutModel, cachedModel].find((value): value is string => Boolean(value && existsSync(value))) ?? null;
   const template = templateCandidates(environment).find(existsSync) ?? null;
   const modelAvailable = Boolean(modelPath || DEFAULT_LOCAL_MODEL.downloadUrl);
-  return { executable: found, available: Boolean(found && modelAvailable && template), command,
+  return { executable: found, available: Boolean(found && modelAvailable && template),
+    command: environment.NATLANG_LLAMA_SERVER ?? 'llama-server', runtime,
     model: DEFAULT_LOCAL_MODEL.id, modelPath, template, downloadable: Boolean(DEFAULT_LOCAL_MODEL.downloadUrl) };
 }
 
@@ -114,14 +112,15 @@ async function stopChild(child: ChildProcess): Promise<void> {
 }
 
 export function createManagedModelSession(profile: ModelProfile,
-  environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr): ManagedModelSession {
+  environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
+  runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
   const external = profile.endpoint ? { endpoint: profile.endpoint,
     model: profile.model ?? DEFAULT_LOCAL_MODEL.id } : null;
   if (!profile.endpoint && profile.model)
     throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
   let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '';
-  const prerequisites = localModelPrerequisites(environment);
+  let prerequisites = localModelPrerequisites(environment);
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (external) return { ...profile, endpoint: external.endpoint, model: external.model,
@@ -129,7 +128,15 @@ export function createManagedModelSession(profile: ModelProfile,
     if (local) return local;
     if (starting) return starting;
     starting = (async () => {
-      if (!prerequisites.executable) throw new Error(`managed model server needs llama-server; install llama.cpp or set NATLANG_LLAMA_SERVER`);
+      if (!prerequisites.executable && runtimeOptions.ensureRuntime) {
+        const installed = await runtimeOptions.ensureRuntime(prerequisites.runtime);
+        if (installed?.compatible) prerequisites = { ...localModelPrerequisites(environment), executable: installed.path };
+      }
+      if (!prerequisites.executable) {
+        const explicit = prerequisites.runtime.candidates.find(candidate => candidate.source === 'explicit');
+        if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
+        throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang setup or natlang runtime install`);
+      }
       const modelPath = await ensureModel(environment, error), port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;
       const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', '1',
