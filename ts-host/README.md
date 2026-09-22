@@ -191,3 +191,15 @@ The local pilot server sends COOP/COEP headers and supports byte ranges for the 
 Inference quality depends on the chosen model, available memory, and its tool calling support. More capable models need more storage and RAM. Multiple WASM CPU threads require cross origin isolation (COOP and COEP headers); WebGPU itself does not require those headers. The browser host returns the complete trace in memory; applications can save it with `new Blob([JSON.stringify(result.trace)], { type: 'application/json' })`. Browser capabilities use application callbacks, including DOM or network access when supplied by the application. Eval uses `Function` and direct `eval`, so the page's CSP must permit dynamic code execution. The shared eval environment is trusted application code, not an isolation boundary. Browser code does not expose Node process bindings, a disk trace writer, or a Node VM CPU timeout.
 
 `DesktopBindings` supplies bounded text/byte file access and argv process execution, jobs, polling, cancellation requests, release, and event observations. Add application-specific objects to a separate host object as needed. Pass `observe: event => ...` to `TypeScriptEnvironment` to receive host and eval observations even without a trace file. `close()` on `NatlangHost` disposes its owned TypeScript context; close application-owned bindings separately. Aborting a run or hitting a timeout leaves external effect outcomes uncertain.
+# Native synthetic Program IR generation
+
+The TypeScript host includes a deterministic synthetic source generator for the algorithmic families used by the current teacher corpus. It writes `natlang.program/1` JSONL directly and does not import or invoke the Python generator.
+
+```sh
+npm --prefix ts-host run build:node
+node ts-host/scripts/generate-synthetic-ir.mjs \
+  --out data/native-algorithms.ir.jsonl --seed 902 --start-index 0 --n 120 \
+  --families array_kernel,staged_ranking,algorithm_pipeline
+```
+
+Each program is derived from `(seed, index)`, so ranges can be generated separately and reproduced. The output has an adjacent `.manifest.json` containing the generator source hash and output hash. Supported families are `array_kernel`, `staged_ranking`, and `algorithm_pipeline`; the CLI rejects other family names instead of silently changing their semantics. The existing Python-only program and codebase families remain outside this first native generator slice.
