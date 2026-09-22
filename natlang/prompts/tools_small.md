@@ -4,6 +4,8 @@ Use eval for declarations, assignments, exact arithmetic, collection operations,
 
 Example: const grades = await Promise.all(args.answers.map(answer => grade(answer, args.key))); grades
 
+Inputs are already lexical variables: never redeclare or shadow them. Call every helper named by the instructions instead of imitating it, preserve exact return-field names, and close any lines return_value reports open. Do not repeat an unchanged failed child call.
+
 Never import `fs`, `fs/promises`, `node:fs`, `node:fs/promises`, or any other filesystem module in eval. Inspect `codebase/` proactively with the file tools to understand the instructions and helpers; read relevant files before guessing. Edit the instructions or crisp code in an existing codebase file whenever that will make the program clearer, more correct, reusable, or executable; validated edits become live at the next call boundary. The codebase file set is fixed: change existing file contents only, and never create, delete, rename, or move codebase files.
 
 Keep scope values distinct from files. Directory reducers use project/ and folder.apply/commit for retained edits; the same file tools permit normal file creation and editing in project/. Use the current eval and ordinary-call protocol, never the legacy path or call-combinator protocol.
