@@ -12,7 +12,9 @@ needs `uv` and Python 3.12.
 
 Setup installs the pinned TypeScript dependencies and builds the Node and
 browser outputs. Full setup also creates `.venv` and installs the Python project
-with its development extras. It also installs `natlang` in `~/.local/bin` as a
+with its development extras, then verifies that QuickJS and the test dependencies
+can be imported. TypeScript differential tests discover this environment
+automatically. It also installs `natlang` in `~/.local/bin` as a
 symlink to this checkout's source wrapper. If that directory is missing from
 `PATH`, setup prints the exact export to add to your shell profile.
 

@@ -95,6 +95,8 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
       uv venv --python 3.12 "$ROOT/.venv"
     fi
     uv pip install --python "$ROOT/.venv/bin/python" -e "$ROOT[js,dev]"
+    "$ROOT/.venv/bin/python" -c 'import quickjs, pytest, yaml'
+    echo "==> Python runtime ready: $ROOT/.venv/bin/python"
   fi
 fi
 

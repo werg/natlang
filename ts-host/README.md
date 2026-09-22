@@ -43,10 +43,19 @@ From this repository:
 cd ts-host
 npm ci
 npm run build
-NATLANG_PYTHON=/path/to/natlang-python npm test
+npm test
 ```
 
-`NATLANG_PYTHON` must point to Python 3.11 or newer with the natlang Python dependencies installed for paired differential tests. The production package does not use Python. The package uses TypeScript's compiler API for transpilation and Node 22.13 or newer. It does not statically type-check arbitrary model-generated snippets; natlang checks values at the tree boundary. The package can be installed from this directory with `npm install /path/to/natlang/ts-host` after building it. The native conformance checks run with `npm run test:conformance` and do not require Python.
+The paired differential tests automatically use the checkout's
+`.venv/bin/python` when full development setup has created it.
+`NATLANG_PYTHON=/path/to/python npm test` overrides that interpreter. Without
+either one, the Python parity cases are skipped; the production package does
+not use Python. The package uses TypeScript's compiler API for transpilation
+and Node 22.13 or newer. It does not statically type-check arbitrary
+model-generated snippets; natlang checks values at the tree boundary. The
+package can be installed from this directory with `npm install
+/path/to/natlang/ts-host` after building it. The native conformance checks run
+with `npm run test:conformance` and do not require Python.
 
 Import `NatlangHost` for runs. The declared conformance and paired trace coverage is recorded in [NATIVE_TYPESCRIPT_PORT.md](../plans/NATIVE_TYPESCRIPT_PORT.md).
 

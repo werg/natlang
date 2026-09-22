@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { MemoryFileTree, NativeRuntime } from '../dist/index.js';
@@ -15,7 +15,8 @@ import { dumpState } from '../dist/native/values.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const python = process.env.NATLANG_PYTHON;
+const checkoutPython = fileURLToPath(new URL('../../.venv/bin/python', import.meta.url));
+const python = process.env.NATLANG_PYTHON || (existsSync(checkoutPython) ? checkoutPython : undefined);
 const SCRIPT = `import json,sys\nfrom natlang.runtime import Runtime\nfrom natlang.values import load_program,dump\nroot=load_program(json.load(sys.stdin))\nout,value=Runtime(None).run_root(root)\nprint(json.dumps({'kind':out.kind,'value':dump(value)},sort_keys=True))`;
 
 function assertTraceParity(actual, expected) {

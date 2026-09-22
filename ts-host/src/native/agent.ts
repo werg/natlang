@@ -267,7 +267,7 @@ export class NativeToolAgent {
     };
     if (unmarked.length) writeProperties.done = done;
     const tools = [
-      tool('read', 'Read a value from the workspace. Optional line or item range for long ones. `codebase/<function>` shows the text of a function; `files` lists host project files and `files/<path>` reads one lazily; `args@effects` shows the full effect journal.', {
+      tool('read', 'Inspect a value only when you need its contents to make a decision. Workspace paths can be passed directly to `call` without reading them first; do not walk through collection items merely to pass the collection to a function. Optional line or item range for long values. `codebase/<function>` shows the text of a function; `files` lists host project files and `files/<path>` reads one lazily; `args@effects` shows the full effect journal.', {
         path: hasFiles ? { anyOf: [{ type: 'string', description: 'what to read', enum: [...new Set([
           ...(lam.journal.length ? ['args@effects'] : []), ...readable,
           ...Object.keys(lam.codebase).map(name => `codebase/${name}`), 'files'])] },
