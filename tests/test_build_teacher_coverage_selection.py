@@ -18,6 +18,7 @@ def test_coverage_selection_combines_new_corpora_and_balances_families(tmp_path)
     rows, manifest = build([one, two], per_family=2, seed=7)
     assert len(rows) == 4 and manifest["families"] == 2
     assert {item["family"] for item in rows} == {"a", "b"}
+    assert [item["family"] for item in rows] == ["a", "b", "a", "b"]
 
 
 def test_coverage_selection_fails_when_new_family_lacks_variants(tmp_path):

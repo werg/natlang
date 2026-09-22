@@ -33,10 +33,16 @@ def build(paths: list[Path], *, per_family: int, seed: int) -> tuple[list[dict],
     short = {family: len(rows) for family, rows in grouped.items() if len(rows) < per_family}
     if short:
         raise ValueError(f"families below {per_family} eligible programs: {short}")
-    selected = []
+    by_family = {}
     for family, rows in sorted(grouped.items()):
         rows.sort(key=lambda row: hashlib.sha256(f"{seed}:{row['id']}".encode()).digest())
-        selected.extend(rows[:per_family])
+        by_family[family] = rows[:per_family]
+    # Preserve the balanced set while spreading useful breadth across every
+    # resumable prefix of the queue. An interrupted run should not contain
+    # only variants of the alphabetically first family.
+    selected = [by_family[family][variant]
+                for variant in range(per_family)
+                for family in sorted(by_family)]
     return selected, {"schema": "natlang.teacher_coverage_selection/1", "seed": seed,
                       "per_family": per_family, "families": len(grouped),
                       "programs": len(selected), "sources": sources,
