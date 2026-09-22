@@ -63,7 +63,13 @@ def read_reviews(paths):
     return decisions
 
 
-def select(paths, bank, reviews):
+def require_surface(row, target_surface, path):
+    actual = row.get("provenance", {}).get("tool_schema")
+    if target_surface is not None and actual != target_surface:
+        raise ValueError(f"{path}: trajectory surface {actual!r} does not match target {target_surface!r}; project it explicitly")
+
+
+def select(paths, bank, reviews, target_surface=None):
     candidates = defaultdict(list)
     stats = Counter()
     for path in paths:
@@ -73,6 +79,7 @@ def select(paths, bank, reviews):
             row = json.loads(raw)
             if row["task"]["kind"] != "generative_leaf":
                 continue
+            require_surface(row, target_surface, path)
             key = row["task"]["reference_key"]
             loc = location(row["provenance"]["audit_file"], row["provenance"]["audit_line"])
             review = reviews.get(loc)
@@ -104,7 +111,7 @@ def select(paths, bank, reviews):
     return sorted(selected, key=lambda row: row["task"]["reference_key"]), stats
 
 
-def iter_programs(paths, stats):
+def iter_programs(paths, stats, target_surface=None):
     """Take independently admitted whole-program attempts from any frozen IR batch."""
     chosen = set()
     revisions = {}
@@ -115,6 +122,7 @@ def iter_programs(paths, stats):
             row = json.loads(raw)
             if row["task"]["kind"] != "whole_program":
                 raise ValueError(f"{path}: expected whole_program trajectory")
+            require_surface(row, target_surface, path)
             if not row["outcome"].get("accepted") or not (
                     row["outcome"].get("admission") or {}).get("admitted"):
                 stats["not_admitted"] += 1
@@ -135,9 +143,9 @@ def iter_programs(paths, stats):
             yield row
 
 
-def select_programs(paths):
+def select_programs(paths, target_surface=None):
     stats = Counter()
-    return list(iter_programs(paths, stats)), stats
+    return list(iter_programs(paths, stats, target_surface)), stats
 
 
 def main():
@@ -153,6 +161,8 @@ def main():
                     help="frozen programs used to recover leaf definitions absent from older audits")
     ap.add_argument("--system-file", type=Path, default=Path("natlang/prompts/tools_small.md"))
     ap.add_argument("--allow-incomplete", action="store_true")
+    ap.add_argument("--target-surface", default="scope-eval-v1",
+                    help="reject trajectories from any other model-facing surface")
     args = ap.parse_args()
     if not args.ir and not args.whole_ir:
         ap.error("supply --ir or --whole-ir")
@@ -160,9 +170,9 @@ def main():
         ap.error("output already exists")
     bank = ({item["key"]: item["value"] for item in
              map(json.loads, args.reference_bank.read_text().splitlines())} if args.ir else {})
-    selected, stats = select(args.ir, bank, read_reviews(args.review))
+    selected, stats = select(args.ir, bank, read_reviews(args.review), args.target_surface)
     program_stats = Counter()
-    programs = iter_programs(args.whole_ir, program_stats)
+    programs = iter_programs(args.whole_ir, program_stats, args.target_surface)
     missing_programs = [row for row in selected if not row["task"].get("leaf_program")]
     if missing_programs:
         if not args.program_ir:
@@ -207,6 +217,7 @@ def main():
                 "reference_bank": str(args.reference_bank),
                 "reference_bank_sha256": file_sha256(args.reference_bank) if args.ir else None,
                 "program_ir": {str(args.program_ir): file_sha256(args.program_ir)} if args.program_ir else None,
+                "target_surface": args.target_surface,
                 "trajectories": len(selected) + program_count,
                 "leaf_trajectories": len(selected), "whole_program_trajectories": program_count,
                 "turns": turns, "missing_keys": missing, "selection_stats": dict(stats),

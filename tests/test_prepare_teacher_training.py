@@ -61,3 +61,15 @@ def test_whole_program_selection_requires_trace_admission_and_deduplicates(tmp_p
     tampered.write_text(json.dumps(bad) + "\n")
     with pytest.raises(ValueError, match="digest mismatch"):
         select_programs([tampered])
+
+
+def test_training_selection_requires_an_explicit_matching_surface(tmp_path):
+    path = tmp_path / "programs.jsonl"
+    program = {"id": "p"}
+    row = {"id": "scope", "task": {"kind": "whole_program", "program_ir": program},
+           "provenance": {"program_ir_sha256": digest(program), "tool_schema": "scope-eval-v1"},
+           "outcome": {"accepted": True, "admission": {"admitted": True}}}
+    path.write_text(json.dumps(row) + "\n")
+    assert select_programs([path], "scope-eval-v1")[0][0]["id"] == "scope"
+    with pytest.raises(ValueError, match="does not match target"):
+        select_programs([path], "tools-v4")
