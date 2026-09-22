@@ -22,6 +22,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--review-prompt", choices=["baseline", "repeat_instructions", "checklist"], default="baseline")
     ap.add_argument('--server', default='http://127.0.0.1:8080')
+    ap.add_argument('--system-file', type=Path,
+                    default=ROOT / 'natlang/prompts/tools_delegate.md')
     ap.add_argument('--seed', type=int, default=19)
     ap.add_argument('--n', type=int, default=2, help='programs per family')
     ap.add_argument('--seconds', type=float, default=120, help='wall-clock budget per program, including callees')
@@ -36,7 +38,7 @@ def main():
     args = ap.parse_args()
     if args.workers < 1:
         ap.error("workers must be positive")
-    prompt = (ROOT / 'natlang/prompts/tools_delegate.md').read_text()
+    prompt = args.system_file.read_text()
     rows = []
     started = time.monotonic()
     jobs = [(family, args.seed + index) for family in ARCHITECTURES for index in range(args.n)]
@@ -70,7 +72,8 @@ def main():
         rows.append(row)
         rows.sort(key=lambda r: r['case_index'])
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps({'server': args.server, 'validation_feedback': args.validation_feedback,
+        args.out.write_text(json.dumps({'server': args.server, 'system_file': str(args.system_file),
+                                       'validation_feedback': args.validation_feedback,
                                        'workers': args.workers, 'careful_threshold': args.careful_threshold, 'state_view': args.state_view, 'review_scope': args.review_scope, 'review_prompt': args.review_prompt, 'withdrawal_policy': args.withdrawal_policy, 'write_constraints': args.write_constraints, 'wall_seconds': time.monotonic() - started,
                                        'rows': rows, 'usage': total_usage(rows)}, indent=2) + '\n')
         print(f'{row["family"]}/{row["seed"]}: {row["status"]} correct={row["correct"]} '

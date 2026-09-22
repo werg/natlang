@@ -31,7 +31,8 @@ class InjectedFaultReferenceAgent(ReferenceAgent):
         return self.injected_fault
 
 
-def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0, trace_sink=None):
+def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0, trace_sink=None,
+                system_prompt=None):
     samples = []
     recovery_rng = random.Random(recovery_seed)
 
@@ -44,8 +45,11 @@ def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0, t
         if prog.injected_fault:
             return InjectedFaultReferenceAgent(plan, samples, check_grammar=check_grammar,
                                                recovery_rng=recovery_rng, recovery_rate=1,
-                                               injected_fault=prog.injected_fault)
-        return ReferenceAgent(plan, samples, check_grammar=check_grammar, recovery_rng=recovery_rng, recovery_rate=recovery_rate)
+                                               injected_fault=prog.injected_fault,
+                                               **({"system_prompt": system_prompt} if system_prompt is not None else {}))
+        return ReferenceAgent(plan, samples, check_grammar=check_grammar, recovery_rng=recovery_rng,
+                              recovery_rate=recovery_rate,
+                              **({"system_prompt": system_prompt} if system_prompt is not None else {}))
 
     if prog.loader is not None:
         root = prog.loader()
@@ -102,12 +106,13 @@ def make_program(seed: int, i: int, families):
 
 
 def _shard(job):
-    seed, first, last, families, keep_template, keep_alternatives, recovery_rate = job
+    seed, first, last, families, keep_template, keep_alternatives, recovery_rate, system_prompt = job
     from natlang.native import _strip_private
     lines, stats, episodes = [], Counter(), 0
     for i in range(first, last):
         fam, prog = make_program(seed, i, families)
-        samples, eps = run_program(prog, recovery_seed=f"{seed}:{i}:recovery", recovery_rate=recovery_rate)
+        samples, eps = run_program(prog, recovery_seed=f"{seed}:{i}:recovery",
+                                   recovery_rate=recovery_rate, system_prompt=system_prompt)
         episodes += eps
         for j, s in enumerate(samples):
             if s.get("template") and not keep_template:
@@ -134,12 +139,16 @@ def main():
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     ap.add_argument("--shard", type=int, default=250, help="programs per shard")
     ap.add_argument("--recovery-rate", type=float, default=0, help="chance to add verified error/correction history before exact work")
+    ap.add_argument("--system-file", type=Path,
+                    default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_small.md",
+                    help="system prompt embedded in every generated trajectory")
     a = ap.parse_args()
     if a.start_index < 0 or a.n < 0:
         ap.error("--start-index and --n must be nonnegative")
     if not 0 <= a.recovery_rate <= 1:
         ap.error("--recovery-rate must be between 0 and 1")
     families = MIXES[a.mix] if a.mix else (a.families or list(FAMILIES))
+    system_prompt = a.system_file.read_text()
     sharded = a.out.suffix not in (".jsonl", ".gz")
     (a.out if sharded else a.out.parent).mkdir(parents=True, exist_ok=True)
     root_dir = Path(__file__).resolve().parent.parent
@@ -152,6 +161,7 @@ def main():
                 "marks": os.environ.get("NATLANG_MARKS", "1"), "mark_style": os.environ.get("NATLANG_MARK_STYLE", "mixed"),
                 "done_arg": os.environ.get("NATLANG_DONE_ARG", "1"),
                 "template_leaves": a.keep_template_leaves, "alternatives": a.keep_alternatives,
+                "system_file": str(a.system_file), "system_prompt_sha256": digest(system_prompt),
                 "sources": digest([(str(p.relative_to(root_dir)), file_digest(p)) for p in tracked_sources]),
                 "phrase_bank": file_digest(root_dir / "data/phrases.json"),
                 "leaf_references": file_digest(root_dir / "data/leaf_references.jsonl") if (root_dir / "data/leaf_references.jsonl").exists() else None}
@@ -164,7 +174,8 @@ def main():
     manifest_path.write_text(json.dumps(identity, indent=2) + "\n")
     name = lambda first: a.out / f"part-{first:07d}.jsonl.gz"
     end_index = a.start_index + a.n
-    jobs = [(a.seed, first, min(first + a.shard, end_index), families, a.keep_template_leaves, a.keep_alternatives, a.recovery_rate)
+    jobs = [(a.seed, first, min(first + a.shard, end_index), families, a.keep_template_leaves,
+             a.keep_alternatives, a.recovery_rate, system_prompt)
             for first in range(a.start_index, end_index, a.shard) if not (sharded and name(first).exists())]
     stats, episodes, total = Counter(), 0, 0
     single = None if sharded else (gzip.open(a.out, "wt") if a.out.suffix == ".gz" else a.out.open("w"))
