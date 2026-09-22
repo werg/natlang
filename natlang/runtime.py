@@ -1000,7 +1000,10 @@ class Session:
         if args.get("start") is not None or args.get("end") is not None:
             _, ref = self.resolve(path)
             value = ref.get()
-            sequence = value if isinstance(value, list) else value.splitlines(keepends=True) if isinstance(value, str) else None
+            # ``start``/``end`` follow ordinary slicing for the selected value:
+            # characters for Text and items for lists.  In particular this must
+            # agree with the ``(N chars)`` preview shown for long Text values.
+            sequence = value if isinstance(value, (list, str)) else None
             if sequence is None:
                 raise reject(path, "bad-range", "a list or text value")
             lo, hi = int(args.get("start", 0)), int(args.get("end", len(sequence)))
@@ -1008,7 +1011,6 @@ class Session:
                 raise reject(path, "bad-range", f"a zero-based half-open slice within 0..{len(sequence)}")
             selected = sequence[lo:hi]
             if isinstance(value, str):
-                selected = "".join(selected)
                 text = selected
             else:
                 text = "\n".join(f"{lo + index}: " + (item if isinstance(item, str) else
@@ -1045,6 +1047,10 @@ class Session:
         result = self._do_copy(Action("copy", path=source, dst="return"))
         if self.lam.subtype == "directory-reducer":
             self.lam.commit_include = self.lam.commit_exclude = None
+        from .render import pending_lines
+        open_ = pending_lines(self.lam.original_body or self.lam.body, self.lam.marks)
+        if open_:
+            result.text = result.text.rstrip() + "\nResult staged; lines still open: " + ", ".join(map(str, open_)) + "."
         return result
 
     def _op_commit(self, args):

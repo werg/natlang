@@ -30,6 +30,21 @@ def test_scope_eval_persists_pure_declarations_and_reads_selections():
     assert surface.apply(active, "read_value", {"expression": "flags", "start": 1, "end": 3}).value == [False, True]
 
 
+def test_read_value_slices_text_by_zero_based_character_offsets():
+    root = load_program({"$lambda": {
+        "type": "Lambda<{ text: Text }, Text>",
+        "instructions": "Return part of the text.",
+        "args": {"text": "alpha\nbeta"},
+    }})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    result = active.apply("read_value", {"expression": "text", "start": 4, "end": 8})
+    assert result.kind == "ok"
+    assert result.value == "a\nbe"
+    assert result.text == "a\nbe"
+    rejected = active.apply("read_value", {"expression": "text", "start": 0, "end": 11})
+    assert rejected.kind == "rejected" and "0..10" in rejected.text
+
+
 def test_scope_eval_preserves_static_type_when_copying_an_ambiguous_value():
     root = load_program({"$lambda": {
         "type": "Lambda<{ initial: { blocked: Text[], done: Bool } }, Bool>",
@@ -49,6 +64,15 @@ def test_scope_eval_calls_imports_positionally_and_stages_named_result():
     assert called.kind == "ok" and called.value == 2
     assert root.let["count"] == 2 and root.let_types["count"] is not None
     assert surface.apply(active, "return_value", {"variable": "count"}).kind == "ok"
+    assert root.ret == 2
+
+
+def test_return_value_reports_each_still_open_program_line():
+    root, active = session()
+    active.apply("write_value", {"name": "answer", "value": 2})
+    result = active.apply("return_value", {"variable": "answer"})
+    assert result.kind == "ok"
+    assert "Result staged; lines still open: 2." in result.text
     assert root.ret == 2
 
 

@@ -123,6 +123,13 @@ function programListing(body: string, marks: Record<number, string>, window = 3)
   }
   return output.join('\n');
 }
+function pendingProgramLines(body: string, marks: Record<number, string>): number[] {
+  return body.replace(/^\n+|\n+$/g, '').split('\n').flatMap((raw, index) => {
+    const text = raw.trim();
+    const markable = !!text && !text.startsWith('#') && !text.startsWith('function ');
+    return markable && !Object.hasOwn(marks, index + 1) ? [index + 1] : [];
+  });
+}
 function jsView(value: Value): unknown {
   if (value === MISSING) return null;
   if (isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
@@ -740,16 +747,16 @@ export class NativeSession {
         const path = this.scopePath(String(args.expression ?? ''));
         if (args.start !== undefined || args.end !== undefined) {
           const value = this.resolve(path).get();
-          const sequence = Array.isArray(value) ? value : typeof value === 'string' ?
-            value.match(/[^\n]*\n|[^\n]+$/g) ?? [] : null;
+          // Text ranges are character slices, matching both JS slicing and the
+          // ``(N chars)`` preview.  Lists continue to use item ranges.
+          const sequence = Array.isArray(value) || typeof value === 'string' ? value : null;
           if (!sequence) throw new Reject([{ path, code: 'bad-range', expected: 'a list or text value' }]);
           const start = Number(args.start ?? 0), end = Number(args.end ?? sequence.length);
           if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > sequence.length)
             throw new Reject([{ path, code: 'bad-range', expected: `a zero-based half-open slice within 0..${sequence.length}` }]);
           const slice = sequence.slice(start, end);
           if (typeof value === 'string') {
-            const text = (slice as string[]).join('');
-            return { kind: 'ok', text, value: text };
+            return { kind: 'ok', text: slice as string, value: slice as string };
           }
           return { kind: 'ok', text: (slice as Value[]).map((item, index) =>
             `${start + index}: ${typeof item === 'string' ? item : JSON.stringify(dump(item))}`).join('\n'),
@@ -767,6 +774,8 @@ export class NativeSession {
         if (this.lam.subtype === 'directory-reducer') {
           this.lam.commitInclude = undefined; this.lam.commitExclude = undefined;
         }
+        const open = pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks);
+        if (open.length) result.text = `${result.text.trimEnd()}\nResult staged; lines still open: ${open.join(', ')}.`;
         return result;
       }
       if (name === 'commit') {

@@ -82,6 +82,28 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
 });
 
+test('scope read_value slices Text by zero-based characters and lists by items', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ text: Text, flags: Bool[] }, Text>',
+    instructions: 'Return part of the text.', args: { text: 'alpha\nbeta', flags: [true, false, true] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const text = session.apply('read_value', { expression: 'text', start: 4, end: 8 });
+  assert.equal(text.kind, 'ok'); assert.equal(text.value, 'a\nbe'); assert.equal(text.text, 'a\nbe');
+  assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
+  const rejected = session.apply('read_value', { expression: 'text', start: 0, end: 11 });
+  assert.equal(rejected.kind, 'rejected'); assert.match(rejected.text, /0\.\.10/);
+});
+
+test('scope return_value reports every still-open instruction line', () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Num>',
+    instructions: 'First step.\n# explanation\nSecond step.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  session.apply('write_value', { name: 'answer', value: 2 });
+  const result = session.apply('return_value', { variable: 'answer' });
+  assert.equal(result.kind, 'ok');
+  assert.match(result.text, /Result staged; lines still open: 1, 3\./);
+  assert.equal(lam.return, 2);
+});
+
 test('scope eval preserves static type when copying an ambiguous value', async () => {
   const lam = buildPending({ $lambda: {
     type: 'Lambda<{ initial: { blocked: Text[], done: Bool } }, Bool>',
