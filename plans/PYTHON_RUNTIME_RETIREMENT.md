@@ -2,8 +2,8 @@
 
 Status: migration in progress. New whole-program `scope-eval-v1` teacher runs
 start at `node ts-host/scripts/teacher-collector.mjs`. That stable command
-delegates to `ts-host/scripts/collect-teacher-batch.mjs`; until the collector is
-present it fails closed instead of falling back to Python.
+delegates to the compiled native collector at `ts-host/dist/teacher/cli.js` and
+fails closed instead of falling back to Python.
 
 This inventory covers executable paths that import `natlang.runtime.Runtime` or
 `Session`, and commands that start those paths. Python data transforms that do
