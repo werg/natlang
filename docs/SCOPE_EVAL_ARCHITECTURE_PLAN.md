@@ -43,6 +43,9 @@ The design must:
 13. Define a distinct directory-reducer lambda subtype. It is applied asynchronously to a folder,
     receives an automatically forked folder at `project/`, can inspect and locally edit its module
     snapshot at `codebase/`, and can commit only selected `project/` changes.
+14. Permit the same directory reducer to be called directly as
+    `await reducer(folder, ...args)` when the caller wants only its typed value. Direct calls always
+    discard the private project fork; only `folder.apply(reducer, ...args)` can retain changes.
 
 ## 2. Model-facing naming
 
@@ -106,7 +109,7 @@ not the preferred way to perform normal assignment.
 
 ### 3.2 Directory-reducer profile
 
-A directory-reducer lambda receives the core interpreter tools except `return_value`, plus:
+A directory-reducer lambda receives the core interpreter tools, including `return_value`, plus:
 
 ```text
 list_files(path?, pattern?)
@@ -263,8 +266,10 @@ Rules:
 
 This separates eval's local `return` from completion of the natural-language function.
 
-`return_value` is not offered to a directory reducer; directory reducers complete through
-`commit`.
+In a directory reducer, `return_value(variable="report")` is a terminal alias for
+`commit(value="report")`: both select all dirty project files by default. The invocation mode
+determines whether that selected delta is merged or discarded. This terminal reducer behavior is
+distinct from an ordinary lambda's write-then-end `return_value` behavior.
 
 ### 4.5 `commit(value, include?, exclude?)`
 
@@ -294,6 +299,11 @@ Rules:
 - On rejection, blocker, error, cancellation, or merge conflict, the caller's folder remains
   unchanged. The fork stays attached to a resumable pending invocation when resumption is valid.
 - `codebase/` edits never cross the commit boundary.
+
+When the reducer was called directly, `commit` still validates the typed value, marks, pending
+work, and file selection, but the complete project delta is discarded after validation. This makes
+the reducer's internal behavior independent of how the caller chose to consume it while ensuring
+that an ordinary function call cannot mutate the supplied folder.
 
 The commit tool is not a version-control command and does not require a textual commit message.
 The typed return may itself be a `Text` message, a structured report, or any other declared return
@@ -450,10 +460,13 @@ interface DirectoryReducer<Args extends unknown[], Return> {
   readonly kind: "directoryReducer";
   readonly parameters: Args;
   readonly returns: Return;
+
+  (folder: Folder, ...args: Args): Promise<Return>;
 }
 
-interface Folder {
+interface Folder<Access extends "read" | "write" | "overlay" = "write"> {
   apply<Args extends unknown[], Return>(
+    this: Folder<"write"> | Folder<"overlay">,
     reducer: DirectoryReducer<Args, Return>,
     ...args: Args
   ): Promise<Return>;
@@ -466,13 +479,19 @@ The model-facing call is ordinary asynchronous code:
 const report = await folder.apply(refactorProject, request, policy);
 ```
 
-The folder is not repeated in the reducer's declared parameter list. `Folder.apply` supplies it
-implicitly and transparently creates a fork. A directory reducer cannot be called directly; doing
-so is a type error. An ordinary lambda cannot call `commit`.
+The folder is not repeated in the reducer's declared parameter list. It is supplied either by the
+`Folder.apply` receiver or as the first argument of a direct call. Both forms transparently create
+a private fork. An ordinary lambda cannot call `commit` because it has no reducer transaction.
 
 Source metadata declares the subtype (`kind: directory-reducer` in the current source format).
-Imports preserve it, so `refactorProject` is statically accepted by `folder.apply` and rejected as
-an ordinary callable. Crisp libraries remain ordinary imports available inside the reducer.
+Imports preserve its overloaded type, so both forms are statically valid:
+
+```ts
+const applied = await folder.apply(refactorProject, request);
+const analysis = await refactorProject(folder, request);
+```
+
+Crisp libraries remain ordinary imports available inside the reducer.
 
 ### 7.1 Invocation mounts
 
@@ -506,6 +525,9 @@ into the current overlay; it does not bypass the outer reducer's eventual commit
 
 ### 7.2 Apply lifecycle
 
+Both invocation forms capture the folder revision, create the same mounts, and execute the same
+reducer. Their finalization differs.
+
 `await folder.apply(reducer, ...args)` performs:
 
 1. Capture the receiver's current revision.
@@ -517,9 +539,16 @@ into the current overlay; it does not bypass the outer reducer's eventual commit
 7. Validate and atomically merge the selected project delta into the receiver.
 8. Resolve the JavaScript promise to the commit's typed value.
 
-No separate caller-interest flag or alternate function-call syntax exists. Calling `apply` on a
-particular `Folder` is the signal that the caller wants the reducer's committed file output in that
-folder. The returned promise carries the typed value; the receiver carries the committed files.
+`await reducer(folder, ...args)` performs steps 1 through 6, validates the same terminal action,
+discards both writable overlays, leaves `folder` unchanged, and resolves to the typed value.
+
+No separate caller-interest flag exists. The syntax is the signal:
+
+- `await folder.apply(reducer, ...args)` requests the typed value and committed project changes;
+- `await reducer(folder, ...args)` requests only the typed value and discards all tentative edits.
+
+This supports pure analysis, analysis after speculative local edits, and mutation-producing
+application with one reducer implementation.
 
 If two applies run concurrently, each receives a fork of the stated receiver revision. Disjoint or
 identical deltas can merge deterministically. Conflicting deltas reject with both revisions intact.
@@ -532,10 +561,102 @@ output directory, or existing overlay. The handle defines its own finalization p
 - a transactional parent folder merges child commits into its overlay;
 - a preview folder retains committed deltas for inspection or export;
 - a host-backed writable folder applies the reducer commit with optimistic revision checks;
-- a read-only folder cannot accept a directory reducer that may commit changes.
+- a read-only folder supports a direct reducer call but rejects `folder.apply`, which could retain
+  changes.
 
 Thus the same reducer can drive an in-memory preview, a nested transformation, or an atomic update
 of a real input folder without changing its model-facing implementation.
+
+### 7.4 First-class folder and file handles
+
+Folders and files are opaque, lazy capability values in the eval type system. They are not expanded
+into JSON trees and their contents do not enter model context until explicitly read.
+
+The primary code-side API is handle-oriented:
+
+```ts
+interface EntryHandle<Access> {
+  readonly name: string;
+  readonly relativePath: string;
+  readonly parent: Folder<Access> | null;
+
+  exists(): Promise<boolean>;
+  stat(): Promise<EntryStat>;
+  remove(): Promise<void>;
+  moveTo(destination: Folder<Access> | FileHandle<Access>): Promise<void>;
+}
+
+interface FileHandle<Access> extends EntryHandle<Access> {
+  readText(range?: LineRange): Promise<string>;
+  readBytes(): Promise<Uint8Array>;
+  readJson<T = unknown>(): Promise<T>;
+
+  writeText(content: string): Promise<void>;
+  writeBytes(content: Uint8Array): Promise<void>;
+  writeJson(value: unknown): Promise<void>;
+  editText(edit: TextEdit): Promise<void>;
+}
+
+interface Folder<Access extends "read" | "write" | "overlay"> extends EntryHandle<Access> {
+  dir(path: string): Folder<Access>;
+  file(path: string): FileHandle<Access>;
+  entry(path: string): EntryHandle<Access>;
+
+  entries(options?: ListOptions): Promise<EntryHandle<Access>[]>;
+  files(pattern?: string): Promise<FileHandle<Access>[]>;
+  folders(pattern?: string): Promise<Folder<Access>[]>;
+  walk(options?: WalkOptions): AsyncIterable<EntryHandle<Access>>;
+  diff(): Promise<ChangeSet>;
+
+  apply<Args extends unknown[], Return>(
+    this: Folder<"write"> | Folder<"overlay">,
+    reducer: DirectoryReducer<Args, Return>,
+    ...args: Args
+  ): Promise<Return>;
+}
+```
+
+Typical use is concise and keeps paths relative to a retained handle:
+
+```ts
+const src = project.dir("src");
+const routes = src.dir("routes");
+const manifest = project.file("package.json");
+
+const packageJson: PackageJson = await manifest.readJson();
+const sources = await src.files("**/*.ts");
+
+for (const file of sources) {
+  const text = await file.readText();
+  await file.writeText(updateImports(text));
+}
+
+const analysis = await src.apply(analyzeSources, policy);
+```
+
+`dir`, `file`, and `entry` create lazy handles without reading the backing filesystem. The first
+operation that needs existence, contents, metadata, or a listing captures the corresponding backing
+observation. Handles retain their mount, normalized path, rights, overlay identity, and captured
+revision, so they remain valid across model turns and resumable continuations.
+
+`files`, `folders`, and `entries` return handles rather than path strings. This reduces invented paths and lets a
+handle to a subfolder be passed directly to another reducer. A reducer applied to a subfolder sees
+that subfolder as its complete `project/` root and cannot escape to its parent.
+
+Read-only handles expose read methods. Direct reducer calls may accept a read-only folder because
+their private fork is discarded. `apply` requires a writable or overlay folder. Rights can be
+attenuated with `folder.readOnly()` when that method is added, but can never be escalated by model
+code.
+
+Dynamic property access such as `project.src.components` is not the primary API. It conflicts with
+method names, cannot distinguish a missing file from a directory without I/O, and fails on ordinary
+names containing dots, spaces, or hyphens. An implementation may offer `folder.files[path]` and
+`folder.folders[path]` convenience proxies later, but `file(path)` and `dir(path)` define portable
+semantics.
+
+The model-facing file tools continue to use root-qualified textual paths because tool arguments
+cannot safely capture arbitrary JavaScript object identity. Eval code uses first-class handles. Both
+routes resolve through the same `ScopedFileSystem` and observe the same overlay.
 
 ## 8. Ordinary control flow
 
@@ -771,7 +892,7 @@ Core IR nodes include:
 ```text
 Literal, ReadBinding, ReadMember, Declare, Assign
 Block, If, ForOf, BoundedLoop, Break, Continue
-Call, ApplyDirectoryReducer, Await, Parallel, ReturnEval
+Call, CallDirectoryReducerDiscarding, ApplyDirectoryReducer, Await, Parallel, ReturnEval
 CommitDirectory(value, include, exclude)
 ```
 
@@ -793,8 +914,9 @@ The normal episode is intentionally incremental:
 5. It proceeds to the next open line.
 6. An ordinary lambda calls `return_value` when the required result exists, then ends naturally
    once the return and marks are valid.
-7. A directory reducer calls terminal `commit` after its typed result exists and every substantive
-   line is closed; a successful commit completes the reducer immediately.
+7. A directory reducer calls terminal `commit` or its unfiltered alias `return_value` after its
+   typed result exists and every substantive line is closed. Apply mode merges the selected project
+   delta; direct-call mode discards it. Either terminal action resolves to the typed value.
 
 The prompt should discourage speculative reading, line marking before observation, loop unrolling,
 manual execution of imported semantic functions, and restating large values.
@@ -907,8 +1029,8 @@ Synthetic and teacher data must cover:
 
 - one line per eval-and-mark cycle;
 - direct natural-language and crisp calls through identical imports;
-- directory reducers invoked only through awaited `folder.apply`, with transparent forks and typed
-  commits;
+- directory reducers invoked through awaited `folder.apply` for retained edits and called directly
+  for value-only analysis with discarded edits;
 - visible eval results from final expressions and local `return`;
 - branches with explicit skipped lines;
 - parallel map, sequential accumulation, and bounded repeat-until;
@@ -916,6 +1038,8 @@ Synthetic and teacher data must cover:
 - blockers and explicit errors;
 - interruption and resumption inside eval loops and child calls;
 - large and lazy values read through `read_value`;
+- first-class folder and file handles retained across turns, subfolder-relative operations, and
+  reducers applied to subfolders;
 - developer discovery, exact edits, fuzzy edits, patches, import refactors, validation, and tests;
 - code-side `fs` reads and writes, lazy backing reads, child overlay merges, conflicts, diffs, and
   project-only reducer commits;
@@ -963,8 +1087,9 @@ behavior.
 
 - Add durable lexical bindings over the existing typed tree.
 - Add normal static imports and compile legacy `uses`/companion codebases into the new graph.
-- Add branded `DirectoryReducer<Args, Return>` and `Folder` types; direct reducer calls must fail
-  type checking while `await folder.apply(reducer, ...args)` is accepted.
+- Add branded `DirectoryReducer<Args, Return>` and `Folder` types with both accepted forms:
+  `await reducer(folder, ...args)` for a discarded fork and
+  `await folder.apply(reducer, ...args)` for an applied commit.
 - Present imported signatures and compact values in the opening state.
 - Implement revision-pinned module snapshots.
 - Implement lazy captured backing snapshots and durable copy-on-write overlays.
@@ -976,6 +1101,8 @@ behavior.
   bounded loops.
 - Lower `Folder.apply` to an automatic project fork, resumable reducer invocation, typed commit,
   and atomic selected-delta merge.
+- Lower a direct directory-reducer call through the same machinery with an unconditional discard
+  finalizer.
 - Serialize safe suspension points and program counters.
 - Lower safe parallel map, fold-like loops, and repeat-until loops to existing runtime nodes.
 
@@ -1075,7 +1202,7 @@ The new surface is ready for broad teacher generation when:
 2. A process can stop inside a natural-language call or loop and resume without repeating a
    completed effect or preceding conversation.
 3. Imported ordinary crisp and natural-language functions are indistinguishable at the call site;
-   imported directory reducers retain their branded `Folder.apply` calling convention.
+   imported directory reducers support both their direct analysis call and `Folder.apply`.
 4. A model can inspect, patch, validate, and run an authorized codebase without confusing a file
    path with a scope variable.
 5. The same scoped file written through `fs` can be read through a file tool and vice versa, while
@@ -1083,8 +1210,10 @@ The new surface is ready for broad teacher generation when:
 6. `await folder.apply(reducer, ...args)` leaves the folder unchanged on failure and atomically
    applies only the reducer's selected `project/` delta on success; `codebase/` never crosses that
    boundary.
-7. Whole-program teacher probes remove the current wrong-destination and call-mode failure classes
+7. `await reducer(folder, ...args)` returns the same typed value while leaving the supplied folder
+   unchanged even when the reducer wrote files or called `commit` internally.
+8. Whole-program teacher probes remove the current wrong-destination and call-mode failure classes
    without replacing them with persistent scope or eval parsing failures.
-8. Every successful program has a valid typed result and complete, explicit line marks.
-9. Tool schemas remain small and stable across ordinary scope changes.
-10. Training assembly rejects incompatible surface versions by construction.
+9. Every successful program has a valid typed result and complete, explicit line marks.
+10. Tool schemas remain small and stable across ordinary scope changes.
+11. Training assembly rejects incompatible surface versions by construction.
