@@ -6,6 +6,7 @@ from natlang.invocation import RunOptions, SeedPolicy
 from scripts.collect_scenario_teacher import collect
 from scripts.audit_trajectory_admission import audit_scope_turns
 from scripts.materialize_teacher_trajectory_ir import materialize
+from scripts.migrate_teacher_scope_ir import migrate
 from scripts.project_teacher_trajectory_ir import project
 from scripts.teacher_probe_trajectory_ir import convert_probe
 from scripts.teacher_trajectory_ir import convert
@@ -178,3 +179,45 @@ def test_scope_eval_trajectory_replays_and_preserves_model_choices():
     assert "eval" in {tool["function"]["name"] for tool in samples[0]["tools"]}
     assert samples[-1]["target"]["content"] == ""
     assert audit_scope_turns(samples)
+
+
+def test_unambiguous_legacy_leaf_migrates_to_scope_eval_and_replays():
+    row = {"version": "natlang.teacher_trajectory/1", "id": "teacher-leaf:legacy",
+           "task": {"kind": "generative_leaf", "reference_key": "legacy",
+                    "source_program_ids": ["program-1"],
+                    "leaf_program": {"$lambda": {"type": "Lambda<{}, Num>",
+                        "instructions": "Return seven.\n\nKeep the numeric type.", "args": {}}}},
+           "provenance": {"model": "teacher", "tool_schema": "tools-v4"},
+           "outcome": {"accepted": True, "status": "done", "value": 7},
+           "trajectory": [{"index": 0, "function": "root",
+               "assistant": {"content": "", "reasoning": "Seven is requested.",
+                             "calls": [{"tool": "write", "source_tool": "write",
+                                        "arguments": {"path": "return", "type": "Num", "value": 7}}]},
+               "reviews": [], "executions": [{"call_index": 0, "kind": "done"}]}]}
+    migrated, reason = migrate(row)
+    assert reason == "migrated"
+    assert migrated["provenance"]["tool_schema"] == "scope-eval-v1"
+    assert migrated["source_trajectory"] == row["trajectory"]
+    assert [t["assistant"]["calls"][0]["tool"] for t in migrated["trajectory"][:-1]] == [
+        "write_value", "mark_lines", "mark_lines", "return_value"]
+    samples = materialize(migrated, system_prompt="Execute the scope program.")
+    assert samples[0]["teacher_reasoning"] == "Seven is requested."
+    assert samples[-1]["skill"] == "reply"
+
+
+def test_legacy_scope_migration_rejects_corrections_and_keeps_source_untouched():
+    row = {"version": "natlang.teacher_trajectory/1", "id": "teacher-leaf:legacy",
+           "task": {"kind": "generative_leaf", "reference_key": "legacy",
+                    "source_program_ids": ["program-1"],
+                    "leaf_program": {"$lambda": {"type": "Lambda<{}, Text>",
+                        "instructions": "Return text.", "args": {}}}},
+           "provenance": {"tool_schema": "tools-v3"},
+           "outcome": {"accepted": True, "status": "done", "value": "right"},
+           "trajectory": [{"assistant": {"calls": [
+               {"tool": "write", "arguments": {"path": "return", "type": "Text", "value": "wrong"}},
+               {"tool": "write", "arguments": {"path": "return", "type": "Text", "value": "right"}}]},
+               "executions": []}]}
+    before = json.loads(json.dumps(row))
+    migrated, reason = migrate(row)
+    assert migrated is None and reason == "not-one-write"
+    assert row == before
