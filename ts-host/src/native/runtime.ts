@@ -1136,6 +1136,11 @@ export class NativeSession {
             return `import { ${childName} } from "./${name}/${childName}${childExtension}";`;
           });
           this.lam.codebasePaths[key] = path;
+          this.lam.codebaseFiles[path] = definition;
+          this.lam.codebaseImports[path] = Object.fromEntries(Object.entries(nested ?? {}).map(([childName, childRaw]) => {
+            const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
+            return [childName, [...prefix, name, `${childName}${childExtension}`].join('/')];
+          }));
           files[path] = `${imports.length ? `${imports.join('\n')}\n\n` : ''}${this.editableDefinitionSource(definition)}`;
           if (!ancestors.has(definition)) {
             if (nested) add(nested, [...prefix, name], new Set([...ancestors, definition]));
@@ -1152,14 +1157,15 @@ export class NativeSession {
     const entry = Object.entries(this.lam.codebasePaths).find(([, source]) => source === path);
     if (!entry) throw new Reject([{ path: `codebase/${path}`, code: 'no-such-path', expected: 'an imported function source' }]);
     const [binding] = entry, parts = binding.split('/');
-    let previous = this.lam.codebase[parts[0]!] as Record<string, unknown>;
-    for (const name of parts.slice(1)) previous = (previous.codebase as Record<string, unknown>)[name] as Record<string, unknown>;
+    const previous = this.lam.codebaseFiles[path] as Record<string, unknown>;
     const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
     let moduleSource = source;
-    const importLine = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["'][^"']+["'];?\s*\r?\n/;
+    const imports: Array<{ alias: string; exported: string; specifier: string }> = [];
+    const importLine = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']([^"']+)["'];?\s*\r?\n/;
     while (moduleSource.startsWith('import')) {
       const imported = importLine.exec(moduleSource);
       if (!imported) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'one named static import per line' }]);
+      imports.push({ exported: imported[1]!, alias: imported[2] ?? imported[1]!, specifier: imported[3]! });
       moduleSource = moduleSource.slice(imported[0].length);
     }
     moduleSource = moduleSource.replace(/^\r?\n/, '');
@@ -1172,23 +1178,48 @@ export class NativeSession {
     const subtype = String(meta.kind ?? 'function');
     if (!['function', 'directory-reducer'].includes(subtype))
       throw new Reject([{ path: `codebase/${path}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer' }]);
+    const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    const linkedPaths: Record<string, string> = {};
+    for (const item of imports) {
+      if (!item.specifier.startsWith('.'))
+        throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'a relative import within codebase/' }]);
+      const pieces: string[] = [];
+      for (const piece of `${base}/${item.specifier}`.split('/')) {
+        if (!piece || piece === '.') continue;
+        if (piece === '..') { if (!pieces.length) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'a relative import within codebase/' }]); pieces.pop(); }
+        else pieces.push(piece);
+      }
+      const target = pieces.join('/'), candidates = /\.[A-Za-z0-9]+$/.test(target) ? [target] : [`${target}.nl`, `${target}.ts`];
+      const targetEntry = Object.entries(this.lam.codebasePaths).find(([, candidate]) => candidates.includes(candidate));
+      if (!targetEntry) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'an existing associated codebase file', got: item.specifier }]);
+      const targetName = targetEntry[0].split('/').at(-1)!;
+      if (targetName !== item.exported)
+        throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: `export { ${targetName} }`, got: item.exported }]);
+      linkedPaths[item.alias] = this.lam.codebasePaths[targetEntry[0]]!;
+    }
     const updated: Record<string, unknown> = { description: String(meta.description ?? ''),
       args: meta.args ?? {}, returns: meta.returns, [isCode ? 'code' : 'instructions']:
         match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types: meta.types ?? previous.types ?? {},
-      effects: meta.effects ?? [], subtype, codebase: previous.codebase ?? {} };
+      effects: meta.effects ?? [], subtype, codebase: {} };
     if (isCode) updated.engine = String(meta.engine ?? 'quickjs-isolated');
     // Parse all declared types before making the edited binding live.
     const env = this.env.child(Object.fromEntries(Object.entries(updated.types as Record<string, string>)
       .map(([key, value]) => [key, parseType(value)])));
     env.checkNames(parseType(`Lambda<{ ${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
       `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${updated.returns}>`));
-    const install = (definitions: Record<string, unknown>, depth = 0): Record<string, unknown> => {
-      const name = parts[depth]!, prior = definitions[name] as Record<string, unknown>;
-      const changed = depth + 1 === parts.length ? updated :
-        { ...prior, codebase: install(prior.codebase as Record<string, unknown>, depth + 1) };
-      return { ...definitions, [name]: changed };
+    this.lam.codebaseFiles[path] = updated;
+    this.lam.codebaseImports[path] = linkedPaths;
+    const memo = new Map<string, Record<string, unknown>>();
+    const link = (sourcePath: string): Record<string, unknown> => {
+      const existing = memo.get(sourcePath); if (existing) return existing;
+      const clone = { ...(this.lam.codebaseFiles[sourcePath] as Record<string, unknown>), codebase: {} };
+      memo.set(sourcePath, clone);
+      clone.codebase = Object.fromEntries(Object.entries(this.lam.codebaseImports[sourcePath] ?? {})
+        .map(([alias, target]) => [alias, link(target)]));
+      return clone;
     };
-    this.lam.codebase = install(this.lam.codebase);
+    this.lam.codebase = Object.fromEntries(Object.keys(this.lam.codebase)
+      .filter(name => this.lam.codebasePaths[name]).map(name => [name, link(this.lam.codebasePaths[name]!) ]));
   }
 
   private async scopeFsCall(code: string): Promise<NativeResult | undefined> {

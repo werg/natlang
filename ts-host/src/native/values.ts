@@ -18,7 +18,8 @@ export type LambdaNode = Base & { nodeKind: 'lambda'; kind: 'instructions' | 'co
   marks: Record<number, string>; fnCopies: Record<string, unknown>;
   subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
   reducerMode: '' | 'apply' | 'direct'; commitInclude?: string[]; commitExclude?: string[];
-  codebaseFolder?: Folder; codebasePaths: Record<string, string> };
+  codebaseFolder?: Folder; codebasePaths: Record<string, string>;
+  codebaseFiles: Record<string, unknown>; codebaseImports: Record<string, Record<string, string>> };
 export type MapNode = Base & { nodeKind: 'map'; over: Value; fn: Value; slots?: Value[]; itemName: string };
 export type FoldNode = Base & { nodeKind: 'fold'; over: Value; init: Value; step: Value;
   acc: Value; at: number; current: Value | null; accName: string; itemName: string };
@@ -235,7 +236,8 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       continuationNote: String(body.continuation_note ?? ''),
       let: {}, letTypes: {}, codebase: inlineCodebase(body.codebase, typesSrc),
       functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>), fnCopies: {},
-      subtype: subtype as LambdaNode['subtype'], reducerMode: '', codebasePaths: {} };
+      subtype: subtype as LambdaNode['subtype'], reducerMode: '', codebasePaths: {},
+      codebaseFiles: {}, codebaseImports: {} };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
       if (!field) return reject(`${path}/args/${name}`, 'unknown-field');

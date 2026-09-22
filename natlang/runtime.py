@@ -5,6 +5,7 @@ import copy
 import difflib
 import hashlib
 import json
+import posixpath
 import re
 import sys
 import time
@@ -1081,7 +1082,7 @@ class Session:
     def _codebase_folder(self):
         from .scoped_fs import Folder
         if self.lam.codebase_folder is None:
-            files, paths = {}, {}
+            files, paths, file_defs, import_graph = {}, {}, {}, {}
 
             def add(definitions, prefix=(), ancestors=frozenset()):
                 for name, fn in definitions.items():
@@ -1089,10 +1090,15 @@ class Session:
                     ext = ".ts" if fn.kind == "code" else ".nl"
                     path = "/".join((*prefix, name + ext))
                     paths[key] = path
+                    file_defs[path] = fn
                     imports = []
+                    links = {}
                     for child_name, child in fn.codebase.items():
                         child_ext = ".ts" if child.kind == "code" else ".nl"
+                        child_path = "/".join((*prefix, name, child_name + child_ext))
                         imports.append(f'import {{ {child_name} }} from "./{name}/{child_name}{child_ext}";')
+                        links[child_name] = child_path
+                    import_graph[path] = links
                     files[path] = (("\n".join(imports) + "\n\n") if imports else "") + fn.to_source()
                     # A recursive import still gets a visible source file, but
                     # do not expand the same lexical definition forever.
@@ -1102,29 +1108,57 @@ class Session:
             add(self.lam.codebase)
             self.lam.codebase_folder = Folder.from_files(files, access="overlay")
             self.lam.codebase_paths = paths
+            self.lam.codebase_files = file_defs
+            self.lam.codebase_imports = import_graph
         return self.lam.codebase_folder
 
     def _refresh_codebase_file(self, relative: str):
-        from .codebase import parse_function_source
+        from .codebase import _split_imports, parse_function_source
         matches = [name for name, path in self.lam.codebase_paths.items() if path == relative]
         if not matches:
             raise reject("codebase/" + relative, "no-such-path", "an imported function source")
         binding = matches[0]
         parts = binding.split("/")
+        source = self.lam.codebase_folder.read_text(relative)
+        imports, _ = _split_imports(source)
 
-        def update(definitions, depth=0):
-            name = parts[depth]
-            previous = definitions[name]
-            if depth + 1 == len(parts):
-                changed = parse_function_source(name, self.lam.codebase_folder.read_text(relative),
-                                                previous=previous, path="codebase/" + relative)
-            else:
-                changed = replace(previous, codebase=update(previous.codebase, depth + 1))
-            return {**definitions, name: changed}
+        linked_paths = {}
+        base = posixpath.dirname(relative)
+        for alias, exported, specifier in imports:
+            if not specifier.startswith("."):
+                raise reject("codebase/" + relative, "bad-import", "a relative import within codebase/")
+            target_path = posixpath.normpath(posixpath.join(base, specifier))
+            if target_path == ".." or target_path.startswith("../"):
+                raise reject("codebase/" + relative, "bad-import", "a relative import within codebase/")
+            candidates = [target_path] if posixpath.splitext(target_path)[1] else [target_path + ".nl", target_path + ".ts"]
+            target_key = next((key for key, path in self.lam.codebase_paths.items() if path in candidates), None)
+            if target_key is None:
+                raise reject("codebase/" + relative, "bad-import", "an existing associated codebase file", specifier)
+            resolved_path = self.lam.codebase_paths[target_key]
+            target = self.lam.codebase_files[resolved_path]
+            if target.name != exported:
+                raise reject("codebase/" + relative, "bad-import", f"export {{ {target.name} }}", exported)
+            linked_paths[alias] = resolved_path
+        previous = self.lam.codebase_files[relative]
+        changed = parse_function_source(parts[-1], source, previous=previous, path="codebase/" + relative)
+        changed.codebase = {}
+        self.lam.codebase_files[relative] = changed
+        self.lam.codebase_imports[relative] = linked_paths
 
-        # Rebuild the lexical ancestors so an edit is private to this frame;
-        # FunctionDef instances may be shared by other running invocations.
-        self.lam.codebase = update(self.lam.codebase)
+        memo = {}
+        def linked_definition(path):
+            if path in memo:
+                return memo[path]
+            clone = replace(self.lam.codebase_files[path], codebase={})
+            memo[path] = clone
+            clone.codebase = {alias: linked_definition(target)
+                              for alias, target in self.lam.codebase_imports[path].items()}
+            return clone
+
+        # Rebuild every live binding from the file registry. Orphaned files stay
+        # editable and can be imported again later without changing the manifest.
+        self.lam.codebase = {name: linked_definition(self.lam.codebase_paths[name])
+                             for name in self.lam.codebase if name in self.lam.codebase_paths}
 
     def _op_list_files(self, args):
         root, folder, path = self._project_file(args.get("path"))

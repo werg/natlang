@@ -72,6 +72,8 @@ class Lambda(Pending):
     commit_exclude: Optional[list] = None
     codebase_folder: Any = None                       # editable source overlay for this frame
     codebase_paths: dict = field(default_factory=dict) # binding -> relative source path
+    codebase_files: dict = field(default_factory=dict) # relative source path -> unlinked FunctionDef
+    codebase_imports: dict = field(default_factory=dict) # relative source path -> alias -> source path
 
     @property
     def is_crisp(self) -> bool:

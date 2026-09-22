@@ -107,6 +107,16 @@ test('native codebase folder exposes and live edits nested lexical sources', asy
   assert.equal((await session.applyAsync('edit_file', { path: 'codebase/outer/inner.ts', find: 'return "old";',
     replace_with: 'return "new";' })).kind, 'ok');
   assert.equal(lam.codebase.outer.codebase.inner.code, 'return "new";\n');
+  const source = (await session.applyAsync('read_file', { path: 'codebase/outer.nl' })).value;
+  const relinked = source.replace('import { inner }', 'import { inner as renamed }');
+  assert.equal((await session.applyAsync('write_file', { path: 'codebase/outer.nl', content: relinked })).kind, 'ok');
+  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['renamed']);
+  assert.equal((await session.applyAsync('edit_file', { path: 'codebase/outer/inner.ts', find: 'return "new";',
+    replace_with: 'return "newer";' })).kind, 'ok');
+  assert.equal(lam.codebase.outer.codebase.renamed.code, 'return "newer";\n');
+  const invalid = relinked.replace('./outer/inner.ts', './missing.ts');
+  assert.equal((await session.applyAsync('write_file', { path: 'codebase/outer.nl', content: invalid })).kind, 'rejected');
+  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['renamed']);
 });
 
 test('native injected fs and file tools share the codebase overlay', async () => {

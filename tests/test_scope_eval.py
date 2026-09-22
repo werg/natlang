@@ -136,6 +136,16 @@ def test_codebase_folder_exposes_and_live_edits_nested_lexical_sources():
                                          "replace_with": 'return "new";'})
     assert edited.kind == "ok"
     assert root.codebase["outer"].codebase["inner"].body == 'return "new";\n'
+    source = active.apply("read_file", {"path": "codebase/outer.nl"}).value
+    relinked = source.replace('import { inner }', 'import { inner as renamed }')
+    assert active.apply("write_file", {"path": "codebase/outer.nl", "content": relinked}).kind == "ok"
+    assert list(root.codebase["outer"].codebase) == ["renamed"]
+    assert active.apply("edit_file", {"path": "codebase/outer/inner.ts", "find": 'return "new";',
+                                      "replace_with": 'return "newer";'}).kind == "ok"
+    assert root.codebase["outer"].codebase["renamed"].body == 'return "newer";\n'
+    invalid = relinked.replace('./outer/inner.ts', './missing.ts')
+    assert active.apply("write_file", {"path": "codebase/outer.nl", "content": invalid}).kind == "rejected"
+    assert list(root.codebase["outer"].codebase) == ["renamed"]
 
 
 def test_injected_fs_and_file_tools_share_the_live_codebase_overlay():
