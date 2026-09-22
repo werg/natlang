@@ -40,9 +40,9 @@ The design must:
     interruption and fresh-context continuation remain safe.
 12. Keep Python and TypeScript behavior conformant while allowing each implementation to follow
     its language's internal naming conventions.
-13. Give every authorized lambda a scoped, copy-on-write view of its associated codebase files.
-    The same view is available through file tools and an injected `fs` library inside eval and
-    crisp code.
+13. Define a distinct directory-reducer lambda subtype. It is applied asynchronously to a folder,
+    receives an automatically forked folder at `project/`, can inspect and locally edit its module
+    snapshot at `codebase/`, and can commit only selected `project/` changes.
 
 ## 2. Model-facing naming
 
@@ -57,6 +57,7 @@ eval
 read_value
 write_value
 return_value
+commit
 mark_lines
 report_blocker
 report_error
@@ -103,9 +104,9 @@ The ordinary path is `eval`, `mark_lines`, and finally `return_value`. `read_val
 large, lazy, or truncated values. `write_value` exists for direct typed literal transfer; it is
 not the preferred way to perform normal assignment.
 
-### 3.2 Runtime file profile
+### 3.2 Directory-reducer profile
 
-A lambda whose module has associated files or declared file mounts additionally receives:
+A directory-reducer lambda receives the core interpreter tools except `return_value`, plus:
 
 ```text
 list_files(path?, pattern?)
@@ -114,11 +115,13 @@ read_file(path, start_line?, end_line?)
 write_file(path, content)
 edit_file(path, find, replace_with, fuzzy?)
 diff_files(path?)
+commit(value, include?, exclude?)
 ```
 
-It also receives the injected `fs` binding inside eval and crisp code. Writes affect only the
-execution overlay. This profile is fixed by the loaded module declaration, so the tool list does
-not fluctuate during the episode.
+It receives an injected `fs` binding inside eval and crisp code. Both `project/` and `codebase/`
+are readable and locally editable. Only `project/` changes are eligible for `commit`; `codebase/`
+edits are invocation-local and retained in the audit trace. This profile is fixed by the lambda
+subtype, so its tool list does not fluctuate during the episode.
 
 ### 3.3 Developer profile
 
@@ -133,9 +136,8 @@ run_program(entry, inputs?)
 commit_files(paths?, message?)
 ```
 
-The developer profile extends the runtime file profile. File tools operate on source revisions,
-never on execution-scope variables. Ordinary interpreter episodes can edit their declared overlay
-without receiving backing-tree or arbitrary-package authority.
+The developer profile extends the directory file operations for agents authoring source outside a
+directory-reducer invocation. File tools operate on files, never on execution-scope variables.
 
 Read-only modules or developer tasks receive only the applicable discovery and read operations.
 The distinction is declared module and host authority, not a prompt request.
@@ -261,7 +263,43 @@ Rules:
 
 This separates eval's local `return` from completion of the natural-language function.
 
-### 4.5 `mark_lines(start, end?, skipped?)`
+`return_value` is not offered to a directory reducer; directory reducers complete through
+`commit`.
+
+### 4.5 `commit(value, include?, exclude?)`
+
+`commit` is the terminal result action of a directory-reducer lambda.
+
+```text
+commit(value="report")
+commit(value="report", include=["src/**", "package.json"])
+commit(value="report", exclude=["dist/**", "tmp/**"])
+```
+
+Rules:
+
+- `value` names an existing typed scope variable. It must be complete and fit the reducer's
+  declared return type.
+- Paths and patterns are relative to `project/`. Naming `codebase/` is rejected.
+- With neither selector, every change made under `project/` by this reducer is committed.
+- `include` selects dirty files, deletions, and moves to commit. `exclude` subtracts from that
+  selection. Excluded project edits are discarded when the reducer invocation closes, while their
+  trace remains available.
+- An empty selected delta is valid; a reducer may inspect a directory and return a typed value
+  without changing it.
+- All substantive instruction lines must already be closed. `commit` validates the typed return,
+  line marks, pending calls, file selection, and target folder revision as one terminal boundary.
+- On success, the selected delta merges atomically into the `Folder` on which `apply` was called,
+  and `folder.apply(...)` resolves to the typed value.
+- On rejection, blocker, error, cancellation, or merge conflict, the caller's folder remains
+  unchanged. The fork stays attached to a resumable pending invocation when resumption is valid.
+- `codebase/` edits never cross the commit boundary.
+
+The commit tool is not a version-control command and does not require a textual commit message.
+The typed return may itself be a `Text` message, a structured report, or any other declared return
+type.
+
+### 4.6 `mark_lines(start, end?, skipped?)`
 
 Line closure deliberately remains explicit and noncompact.
 
@@ -288,7 +326,7 @@ Rules:
 Completion requires a valid returned value and closure of every substantive line. Correct marks
 cannot make an invalid result valid, and a correct result cannot bypass open lines.
 
-### 4.6 Honest exits
+### 4.7 Honest exits
 
 ```text
 report_blocker(missing)
@@ -318,7 +356,15 @@ Scope:
   locals
     ready: Task[] = 2 items
   result: State — not written
-  files: module-scoped writable overlay (3 changed)
+```
+
+A directory reducer additionally shows:
+
+```text
+Directory reducer:
+  project/: fork of Folder revision 81ac… (3 changed)
+  codebase/: pinned module revision 229f… (1 local edit)
+  commit: not submitted
 ```
 
 The model normally refers to input names directly. Record fields and list elements use ordinary
@@ -339,8 +385,8 @@ Scope invariants:
 - Scope changes from an eval snippet are staged and committed only when the snippet reaches a safe
   boundary. External effects and completed child calls remain journaled and are never pretended to
   have rolled back.
-- When file authority is present, `fs` is an immutable injected binding backed by the same scoped
-  overlay as the model-facing file tools.
+- In a directory reducer, `project`, `codebase`, and `fs` are immutable injected bindings backed by
+  the same scoped overlays as the model-facing file tools.
 
 ## 6. Static imports and unified callables
 
@@ -394,7 +440,104 @@ suspended call.
 Existing companion folders, `uses`, inline codebases, and link records become loader inputs for a
 migration compiler. They should not remain permanent model-facing concepts.
 
-## 7. Ordinary control flow
+## 7. Directory reducers and `Folder.apply`
+
+A directory reducer is a distinct lambda subtype with a typed ordinary-argument list and typed
+return, plus one implicit directory transaction. Its runtime type is conceptually:
+
+```ts
+interface DirectoryReducer<Args extends unknown[], Return> {
+  readonly kind: "directoryReducer";
+  readonly parameters: Args;
+  readonly returns: Return;
+}
+
+interface Folder {
+  apply<Args extends unknown[], Return>(
+    reducer: DirectoryReducer<Args, Return>,
+    ...args: Args
+  ): Promise<Return>;
+}
+```
+
+The model-facing call is ordinary asynchronous code:
+
+```ts
+const report = await folder.apply(refactorProject, request, policy);
+```
+
+The folder is not repeated in the reducer's declared parameter list. `Folder.apply` supplies it
+implicitly and transparently creates a fork. A directory reducer cannot be called directly; doing
+so is a type error. An ordinary lambda cannot call `commit`.
+
+Source metadata declares the subtype (`kind: directory-reducer` in the current source format).
+Imports preserve it, so `refactorProject` is statically accepted by `folder.apply` and rejected as
+an ordinary callable. Crisp libraries remain ordinary imports available inside the reducer.
+
+### 7.1 Invocation mounts
+
+Inside the reducer, the filesystem has exactly two standard roots:
+
+```text
+project/    the automatically forked input folder
+codebase/   the reducer's revision-pinned module and associated files
+```
+
+Both roots can be read and edited through file tools and the injected `fs` library. Their commit
+semantics differ:
+
+- `project/` is the reducer's transactional output. Selected changes merge into the `Folder`
+  receiver when `commit` succeeds.
+- `codebase/` is a writable invocation-local overlay over the pinned module snapshot. Changes can
+  support analysis, temporary adaptation, generation, and developer workflows, but cannot be
+  included in the reducer commit.
+- Active imported function bindings remain pinned even if their source under `codebase/` is edited.
+  Testing changed code requires a fresh module load through the developer execution surface.
+
+The reducer may refer to the implicit project folder as `project` in eval code when it needs to
+apply another directory reducer:
+
+```ts
+const nestedResult = await project.apply(normalizeSources, options);
+```
+
+That nested apply forks the reducer's current project overlay. A successful nested commit merges
+into the current overlay; it does not bypass the outer reducer's eventual commit boundary.
+
+### 7.2 Apply lifecycle
+
+`await folder.apply(reducer, ...args)` performs:
+
+1. Capture the receiver's current revision.
+2. Fork a private project overlay.
+3. Mount the reducer's pinned source snapshot at `codebase/` with its own local overlay.
+4. Run the reducer line by line with its ordinary arguments and implicit folder context.
+5. Require explicit marks for every substantive instruction line.
+6. Receive one terminal `commit` action with a typed value and file selection.
+7. Validate and atomically merge the selected project delta into the receiver.
+8. Resolve the JavaScript promise to the commit's typed value.
+
+No separate caller-interest flag or alternate function-call syntax exists. Calling `apply` on a
+particular `Folder` is the signal that the caller wants the reducer's committed file output in that
+folder. The returned promise carries the typed value; the receiver carries the committed files.
+
+If two applies run concurrently, each receives a fork of the stated receiver revision. Disjoint or
+identical deltas can merge deterministically. Conflicting deltas reject with both revisions intact.
+
+### 7.3 Root folders
+
+A host creates a `Folder` from a real directory, package tree, virtual browser directory, empty
+output directory, or existing overlay. The handle defines its own finalization policy:
+
+- a transactional parent folder merges child commits into its overlay;
+- a preview folder retains committed deltas for inspection or export;
+- a host-backed writable folder applies the reducer commit with optimistic revision checks;
+- a read-only folder cannot accept a directory reducer that may commit changes.
+
+Thus the same reducer can drive an in-memory preview, a nested transformation, or an atomic update
+of a real input folder without changing its model-facing implementation.
+
+## 8. Ordinary control flow
 
 There are no model-facing `run_function`, `for_each`, `fold`, `repeat`, or `resume` tools.
 
@@ -441,28 +584,31 @@ No special `mapCall`, `foldCall`, or `untilCall` vocabulary is required. Standar
 may exist for ordinary data operations, but they are regular imports and not privileged model
 protocol.
 
-## 8. Scoped filesystem and developer file surface
+## 9. Scoped filesystem and developer file surface
 
 Execution scope and source files are intentionally separate domains.
 
 | Domain | Examples | Tools |
 |---|---|---|
 | Typed execution state | `state`, `ready`, `nextState` | `eval`, `read_value`, `write_value`, `return_value` |
-| Codebase source | `planning/step.nl`, `std/money.ts` | `list_files`, `search_files`, `read_file`, `write_file`, `edit_file`, `apply_patch`, `move_file`, `delete_file` |
+| Reducer project | `project/package.json`, `project/src/index.ts` | file tools and `fs` |
+| Reducer codebase | `codebase/refactor.nl`, `codebase/helpers.ts` | file tools and `fs`, never reducer-committable |
 
 A value tool rejects filesystem paths. A file tool never treats its contents as a live scope value.
 This removes the current ambiguity between workspace paths, function instruction text, and host
 files.
 
-### 8.1 Filesystem layers
+### 9.1 Filesystem layers
 
-Every root execution owns a `ScopedFileSystem` with three logical layers:
+Every directory-reducer invocation owns a `ScopedFileSystem` for each mounted root, with three
+logical layers:
 
 1. **Local overlay.** New files, replacements, moves, and tombstones created by the running
    program or agent.
 2. **Inherited overlay.** The immutable view inherited from the caller or parent execution.
-3. **Backing snapshot.** Associated package or codebase files, read lazily from the host,
-   package archive, browser virtual filesystem, or another configured provider.
+3. **Backing snapshot.** The applied `Folder` for `project/`, or the reducer's pinned module tree
+   for `codebase/`, read lazily from the host, package archive, browser virtual filesystem, or
+   another configured provider.
 
 Resolution is copy-on-write:
 
@@ -477,15 +623,15 @@ records the content hash and retains or references the captured bytes. A later h
 change cannot alter the view of a running or resumed execution. Directory listings similarly
 capture their observed revision, so a newly appearing host file does not silently enter an old run.
 
-Paths are POSIX and relative to the lambda's associated module root. `..`, absolute paths, symlink
-escapes, device files, and undeclared mounts are rejected. A package may explicitly mount data or
-generated-output directories with separate read and write authority.
+Paths are POSIX and begin with `project/` or `codebase/`. `..`, absolute paths, symlink escapes,
+device files, and undeclared mounts are rejected. Additional named mounts require explicit typed
+capabilities and cannot silently participate in a project commit.
 
-### 8.2 Lambda and child-call scoping
+### 9.2 Lambda and child-call scoping
 
-Each lambda receives a module-rooted filesystem view. A called function sees files associated with
-its own module and explicitly declared mounts; it does not gain arbitrary access to its caller's
-source tree.
+Each directory reducer receives the two-root view. Ordinary lambdas receive no ambient filesystem.
+Ordinary crisp functions called by a reducer may use the reducer's injected `fs` capability only
+when it is passed or declared in their effect contract; they do not gain arbitrary host access.
 
 A child call forks an overlay at call start:
 
@@ -501,25 +647,25 @@ A child call forks an overlay at call start:
 The trace records every layer lookup, first-read backing hash, overlay mutation, merge, conflict,
 and explicit backing commit.
 
-### 8.3 Injected `fs` library
+### 9.3 Injected `fs` library
 
-When file authority is present, eval and crisp code receive an immutable `fs` binding. It exposes a
-portable asynchronous API rather than Node's process-wide filesystem:
+Inside a directory reducer, eval and authorized crisp code receive an immutable `fs` binding. It
+exposes a portable asynchronous API rather than Node's process-wide filesystem:
 
 ```ts
-await fs.exists("rules/policy.json")
-await fs.list("rules", { pattern: "**/*.json" })
-await fs.readText("rules/policy.json")
-await fs.readText("rules/policy.json", { startLine: 20, endLine: 40 })
-await fs.readBytes("assets/icon.bin")
-await fs.readJson("rules/policy.json")
-await fs.writeText("generated/report.md", report)
-await fs.writeBytes("generated/data.bin", bytes)
-await fs.writeJson("generated/result.json", result)
-await fs.editText("rules/policy.json", { find, replaceWith, fuzzy: true })
-await fs.move("draft.md", "archive/draft.md")
-await fs.remove("obsolete.json")
-await fs.diff()
+await fs.exists("project/rules/policy.json")
+await fs.list("project/rules", { pattern: "**/*.json" })
+await fs.readText("project/rules/policy.json")
+await fs.readText("codebase/templates/report.md", { startLine: 20, endLine: 40 })
+await fs.readBytes("project/assets/icon.bin")
+await fs.readJson("project/rules/policy.json")
+await fs.writeText("project/generated/report.md", report)
+await fs.writeBytes("project/generated/data.bin", bytes)
+await fs.writeJson("project/generated/result.json", result)
+await fs.editText("project/rules/policy.json", { find, replaceWith, fuzzy: true })
+await fs.move("project/draft.md", "project/archive/draft.md")
+await fs.remove("project/obsolete.json")
+await fs.diff("project/")
 ```
 
 Injected methods and model-facing file tools use the same host interface and emit the same trace
@@ -533,17 +679,18 @@ implement the proxy differently while preserving these observable semantics.
 File contents are not automatically inserted into model context or typed value scope. The model
 chooses `read_file`, `read_value`, or eval with `fs` according to the task.
 
-### 8.4 Discovery and reading
+### 9.4 Discovery and reading
 
 `list_files(path?, pattern?)` returns a bounded, sorted source inventory with type and size.
 `search_files(query, path?, pattern?)` performs literal or explicitly requested regular-expression
 search and returns file, line, and a short match context. `read_file(path, start_line?, end_line?)`
 returns numbered source lines and a revision digest.
 
-All paths are module- or mount-relative POSIX paths. Absolute paths and traversal outside the authorized
+All reducer paths are root-qualified POSIX paths. Developer sessions outside a reducer use paths
+relative to their explicitly opened workspace. Absolute paths and traversal outside the authorized
 root are rejected.
 
-### 8.5 Writing and editing
+### 9.5 Writing and editing
 
 `write_file(path, content)` creates a file or replaces the entire current file. For replacement it
 accepts an optional expected revision internally, so a host can reject stale writes.
@@ -562,7 +709,7 @@ atomically across files. It is the preferred operation for coordinated developer
 write authority for deletion, but deletion is part of the developer surface rather than simulated
 with empty writes.
 
-### 8.6 Diffs, validation, execution, and backing commits
+### 9.6 Diffs, validation, execution, and backing commits
 
 `diff_files(path?)` returns the overlay delta as a structured summary and unified diff without
 changing the backing store. It includes changes made through both file tools and injected `fs`.
@@ -575,17 +722,19 @@ returns the typed outcome, trace identifier, effects summary, and validation dia
 developer agent can therefore inspect, edit, validate, and exercise a codebase without leaving the
 agent surface.
 
-`commit_files(paths?, message?)` applies selected overlay changes to a mutable backing working tree
+`commit_files(paths?, message?)` is a developer-authoring operation that applies selected overlay changes to a mutable backing working tree
 with optimistic revision checks. It is absent unless the host grants backing-write authority. If a
 backing file changed since capture, the commit reports a conflict and leaves both overlay and
 backing file intact. Immutable packages can export the diff as an artifact instead.
+
+This developer operation is distinct from a directory reducer's typed `commit` action.
 
 An edit never hot-patches an active lambda. To test edited source, the agent runs a new program
 revision against the overlay. This provides familiar edit-test ergonomics while preserving
 resumability and trace truth. After validation and tests pass, an authorized developer agent can
 commit the same reviewed overlay to the backing tree.
 
-## 9. Eval language and execution IR
+## 10. Eval language and execution IR
 
 `eval` must not be implemented as unrestricted JavaScript plus an ad hoc asynchronous callback.
 Natural-language calls can suspend, resume, spawn children, perform effects, and survive process
@@ -622,7 +771,8 @@ Core IR nodes include:
 ```text
 Literal, ReadBinding, ReadMember, Declare, Assign
 Block, If, ForOf, BoundedLoop, Break, Continue
-Call, Await, Parallel, ReturnEval
+Call, ApplyDirectoryReducer, Await, Parallel, ReturnEval
+CommitDirectory(value, include, exclude)
 ```
 
 Every node carries source spans and inferred types. Suspended evaluation serializes the IR digest,
@@ -632,7 +782,7 @@ The TypeScript parser should be shared or produce a canonical serialized AST con
 runtimes. Python and TypeScript execute the same conformance fixtures and serialized IR. The
 browser bundle uses the same grammar and lowering rules.
 
-## 10. Turn and continuation behavior
+## 11. Turn and continuation behavior
 
 The normal episode is intentionally incremental:
 
@@ -641,8 +791,10 @@ The normal episode is intentionally incremental:
 3. It observes the actual tool result.
 4. It calls `mark_lines` for that line or contiguous completed range.
 5. It proceeds to the next open line.
-6. It calls `return_value` when the required result exists.
-7. Once the return is valid and every substantive line is closed, it ends its turn naturally.
+6. An ordinary lambda calls `return_value` when the required result exists, then ends naturally
+   once the return and marks are valid.
+7. A directory reducer calls terminal `commit` after its typed result exists and every substantive
+   line is closed; a successful commit completes the reducer immediately.
 
 The prompt should discourage speculative reading, line marking before observation, loop unrolling,
 manual execution of imported semantic functions, and restating large values.
@@ -662,7 +814,7 @@ A continuation begins with a fresh conversation containing this durable state an
 pastes the preceding conversation. The checkpoint is requested only at a safe boundary; a
 suspended eval already has its own program counter and does not require the model to reconstruct it.
 
-## 11. Failure semantics
+## 12. Failure semantics
 
 Failures are classified rather than flattened into prose:
 
@@ -671,6 +823,9 @@ Failures are classified rather than flattened into prose:
 - **binding rejection:** an unknown, immutable, or out-of-scope name was used;
 - **child blocker:** a called lambda reported missing information;
 - **child error:** a called lambda reported invalid instructions or failed validation;
+- **directory conflict:** a reducer commit no longer applies cleanly to its `Folder` revision;
+- **invalid directory commit:** a reducer selected `codebase/`, omitted required marks, or supplied
+  a value that does not fit its declared return type;
 - **effect failure:** an authorized external operation failed or has uncertain completion;
 - **resource interruption:** an explicit embedding budget or cancellation stopped work.
 
@@ -683,7 +838,7 @@ Eval code cannot catch validation failures, blockers, or effect uncertainty duri
 implementation. Later typed domain errors may be represented as ordinary result unions and handled
 by program logic without weakening runtime errors.
 
-## 12. Tracing, audit, and provenance
+## 13. Tracing, audit, and provenance
 
 Every model proposal records:
 
@@ -692,6 +847,8 @@ Every model proposal records:
 - scope revision before and after execution;
 - values read and bindings written;
 - imported function calls, arguments, results, and child trace identifiers;
+- folder revisions, automatic forks, reducer applies, complete dirty sets, commit selections,
+  discarded edits, merges, and conflicts;
 - effects and their stable identities;
 - line marks;
 - validation diagnostics;
@@ -701,11 +858,13 @@ The new surface receives a new explicit identifier such as `scope-eval-v1`. No r
 an older surface name in action events. Manifests, action events, materialized trajectories, and SFT
 exports must agree on the identifier and source revision.
 
-Final prose remains audit content. The typed returned value is the only program result.
+Final prose remains audit content. An ordinary lambda's program result is its typed value. A
+directory reducer additionally produces the committed project delta recorded in its invocation
+outcome and applied to the `Folder` receiver.
 
-## 13. Training and data migration
+## 14. Training and data migration
 
-### 13.1 Canonical trajectory IR
+### 14.1 Canonical trajectory IR
 
 Training IR stores semantic actions independently of backend tool serialization:
 
@@ -714,6 +873,7 @@ Eval(code, lowered_ir, reads, writes, displayed_value)
 ReadValue(expression, range)
 WriteValue(name, type, value)
 ReturnValue(variable)
+Commit(value, include, exclude, selected_delta)
 MarkLines(start, end, status)
 ReportBlocker(message)
 ReportError(message)
@@ -723,7 +883,7 @@ FileAction(...)
 Teacher reasoning, ordering choices, continuation notes, confidence, reviews, executions, and
 validation results remain in the IR. Renderers decide the exact chat template and tool-call syntax.
 
-### 13.2 Projection of existing data
+### 14.2 Projection of existing data
 
 Existing traces may be projected only when their semantics are unambiguous:
 
@@ -741,12 +901,14 @@ Every training assembly command must require one target surface and reject rows 
 surface unless an explicit, tested projection produced them. Old rendered v2/v3/v4 files must not
 be discoverable through a broad glob in a new training run.
 
-### 13.3 New curriculum
+### 14.3 New curriculum
 
 Synthetic and teacher data must cover:
 
 - one line per eval-and-mark cycle;
 - direct natural-language and crisp calls through identical imports;
+- directory reducers invoked only through awaited `folder.apply`, with transparent forks and typed
+  commits;
 - visible eval results from final expressions and local `return`;
 - branches with explicit skipped lines;
 - parallel map, sequential accumulation, and bounded repeat-until;
@@ -756,7 +918,7 @@ Synthetic and teacher data must cover:
 - large and lazy values read through `read_value`;
 - developer discovery, exact edits, fuzzy edits, patches, import refactors, validation, and tests;
 - code-side `fs` reads and writes, lazy backing reads, child overlay merges, conflicts, diffs, and
-  authorized backing commits;
+  project-only reducer commits;
 - reserved keys, unusual field names, empty collections, unions, optional fields, and effects;
 - contrastive examples in which the model honestly persists when a careful review challenges a
   correct action and withdraws when it recognizes a real mistake.
@@ -764,7 +926,7 @@ Synthetic and teacher data must cover:
 Rare actions receive explicit quotas. In particular, no accepted corpus may contain zero
 `report_error`, negligible resumption coverage, or only a handful of developer edits.
 
-## 14. Evaluation plan
+## 15. Evaluation plan
 
 Compare v4 and `scope-eval-v1` on the same semantic programs and input seeds. Measure:
 
@@ -789,7 +951,7 @@ Admission remains semantic: exact expected value and effects, type-valid trace, 
 line closure, no incompatible or superseded surface calls, and human review for novel teacher
 behavior.
 
-## 15. Implementation phases
+## 16. Implementation phases
 
 ### Phase 0: specification and fixtures
 
@@ -801,6 +963,8 @@ behavior.
 
 - Add durable lexical bindings over the existing typed tree.
 - Add normal static imports and compile legacy `uses`/companion codebases into the new graph.
+- Add branded `DirectoryReducer<Args, Return>` and `Folder` types; direct reducer calls must fail
+  type checking while `await folder.apply(reducer, ...args)` is accepted.
 - Present imported signatures and compact values in the opening state.
 - Implement revision-pinned module snapshots.
 - Implement lazy captured backing snapshots and durable copy-on-write overlays.
@@ -810,13 +974,15 @@ behavior.
 - Parse the restricted TypeScript subset into canonical orchestration IR.
 - Implement declarations, assignments, displayed results, direct awaited calls, conditions, and
   bounded loops.
+- Lower `Folder.apply` to an automatic project fork, resumable reducer invocation, typed commit,
+  and atomic selected-delta merge.
 - Serialize safe suspension points and program counters.
 - Lower safe parallel map, fold-like loops, and repeat-until loops to existing runtime nodes.
 
 ### Phase 3: interpreter tools
 
-- Implement `eval`, `read_value`, `write_value`, `return_value`, and the unchanged noncompact
-  `mark_lines` requirement in Python and TypeScript.
+- Implement `eval`, `read_value`, `write_value`, `return_value`, directory-reducer `commit`, and the
+  unchanged noncompact `mark_lines` requirement in Python and TypeScript.
 - Preserve caller validation, honest exits, careful review, and natural completion.
 - Fix surface provenance at every trace layer.
 
@@ -853,7 +1019,7 @@ behavior.
 - Stop producing new v2/v3/v4 training rows and remove superseded rendered corpora once the new
   manifests are reproducible.
 
-## 16. Risks and mitigations
+## 17. Risks and mitigations
 
 ### The model may write bad code
 
@@ -900,7 +1066,7 @@ failures with both revisions preserved.
 Support `Promise.all(...map(...))` and lower it to the runtime's parallel map where safe. Preserve
 explicit sequential loops when order or effects matter.
 
-## 17. Initial acceptance criteria
+## 18. Initial acceptance criteria
 
 The new surface is ready for broad teacher generation when:
 
@@ -908,13 +1074,17 @@ The new surface is ready for broad teacher generation when:
    traces match on shared fixtures.
 2. A process can stop inside a natural-language call or loop and resume without repeating a
    completed effect or preceding conversation.
-3. Imported crisp and natural-language functions are indistinguishable at the call site.
+3. Imported ordinary crisp and natural-language functions are indistinguishable at the call site;
+   imported directory reducers retain their branded `Folder.apply` calling convention.
 4. A model can inspect, patch, validate, and run an authorized codebase without confusing a file
    path with a scope variable.
 5. The same scoped file written through `fs` can be read through a file tool and vice versa, while
    unauthorized paths remain inaccessible.
-6. Whole-program teacher probes remove the current wrong-destination and call-mode failure classes
+6. `await folder.apply(reducer, ...args)` leaves the folder unchanged on failure and atomically
+   applies only the reducer's selected `project/` delta on success; `codebase/` never crosses that
+   boundary.
+7. Whole-program teacher probes remove the current wrong-destination and call-mode failure classes
    without replacing them with persistent scope or eval parsing failures.
-7. Every successful program has a valid typed result and complete, explicit line marks.
-8. Tool schemas remain small and stable across ordinary scope changes.
-9. Training assembly rejects incompatible surface versions by construction.
+8. Every successful program has a valid typed result and complete, explicit line marks.
+9. Tool schemas remain small and stable across ordinary scope changes.
+10. Training assembly rejects incompatible surface versions by construction.
