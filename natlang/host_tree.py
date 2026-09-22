@@ -80,6 +80,9 @@ class MemoryTreeProvider:
             if not path or str(raw).startswith("/") or any(part in (".", "..") for part in path):
                 raise ValueError(f"invalid host-tree path: {raw}")
             self.leaves[path] = value
+        for path in self.leaves:
+            if any(path[:end] in self.leaves for end in range(1, len(path))):
+                raise ValueError(f"host-tree leaf is also a branch: {'/'.join(path)}")
 
     def list(self, path: tuple[str, ...]):
         children = {}

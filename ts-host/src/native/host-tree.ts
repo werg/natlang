@@ -50,6 +50,11 @@ export class MemoryTreeProvider<T = unknown> implements TreeProvider<T> {
         throw new TypeError(`invalid host-tree path: ${raw}`);
       this.leaves.set(parts.join('/'), value);
     }
+    for (const leaf of this.leaves.keys()) {
+      const parts = leaf.split('/');
+      if (parts.slice(1).some((_, index) => this.leaves.has(parts.slice(0, index + 1).join('/'))))
+        throw new TypeError(`host-tree leaf is also a branch: ${leaf}`);
+    }
   }
   list(path: readonly string[]): TreeEntry[] {
     const prefix = path.length ? `${key(path)}/` : '', children = new Map<string, 'branch' | 'leaf'>();

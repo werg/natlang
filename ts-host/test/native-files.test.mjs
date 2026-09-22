@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { commitFileWrites, NodeFileTree, validateFileWrites } from '../dist/index.js';
+import { commitFileWrites, lazyDict, NodeFileTree, validateFileWrites } from '../dist/index.js';
+
+test('lazy dictionaries reject a path that is both a leaf and a branch', () => {
+  assert.throws(() => lazyDict({ collision: 1, 'collision/child': 2 }), /also a branch/);
+});
 
 test('NodeFileTree resolves directory metadata and file contents on demand', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-files-'));

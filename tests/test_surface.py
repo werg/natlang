@@ -65,6 +65,11 @@ def test_filesystem_file_tree_resolves_after_construction(tmp_path):
 
 
 def test_lazy_dict_checks_observed_leaves_and_cannot_enter_crisp_eval():
+    try:
+        lazy_dict({"collision": 1, "collision/child": 2})
+        assert False, "a lazy dictionary cannot expose one path as both leaf and branch"
+    except ValueError as exc:
+        assert "also a branch" in str(exc)
     natural = load_program({"$lambda": {"type": "Lambda<{ items: Dict<Num> }, Num>",
                                         "instructions": "Inspect one item."}})
     natural.in_["items"] = lazy_dict({"bad": "not a number"})
@@ -77,6 +82,34 @@ def test_lazy_dict_checks_observed_leaves_and_cannot_enter_crisp_eval():
     outcome, _ = Runtime(None).run_root(crisp)
     assert outcome.kind == "quiesced"
     assert "host-backed Dict cannot enter crisp eval" in outcome.detail
+
+
+def test_lazy_dict_passes_to_a_typed_semantic_child_without_materializing():
+    doc = {"$lambda": {
+        "type": "Lambda<{ files: Dict<File> }, Text>", "function": "root",
+        "types": {"File": FILE_TREE_LEAF_TYPE}, "instructions": "Ask inspect to read the note.",
+        "codebase": {"inspect": {"args": {"files": "Dict<File>"}, "returns": "Text",
+                                   "instructions": "Read note.txt and return its text."}},
+    }}
+    root = load_program(doc); root.in_["files"] = text_file_tree({"note.txt": "from child"})
+
+    class Agent:
+        def __init__(self, lam):
+            self.lam = lam
+
+        def run(self, session):
+            if self.lam.fn_name == "inspect":
+                observed = session.apply("read", {"path": "args/files/note.txt/text"})
+                assert observed.kind == "ok" and observed.text == "from child"
+                assert session.apply("write", {"path": "return", "type": "Text",
+                                                "value": observed.text}).kind == "ok"
+            else:
+                assert session.apply("call", {"function": "inspect", "to": "return",
+                                               "inputs": {"files": "args/files"}}).kind == "done"
+            assert session.finish()
+
+    outcome, value = Runtime(lambda lam: Agent(lam)).run_root(root)
+    assert outcome.kind == "done" and value == "from child"
 
 
 def test_file_write_plans_are_checked_and_committed_beneath_root(tmp_path):
