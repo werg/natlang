@@ -67,24 +67,24 @@ export function createPlaygroundJobs(root) {
     const output = `runs/playground-${name}`;
     switch (kind) {
       case 'materialize':
-        return { cmd: 'python', args: ['scripts/materialize_ir.py', data,
-          inside(`data/${name}-materialized.jsonl`, ['data'])] };
+        fail('generic program IR materialization is not available in the Node workbench yet; use the Node teacher pipeline for supported teacher rows');
       case 'cases_ir':
-        return { cmd: 'python', args: ['scripts/import_playground_cases.py', data,
+        return { cmd: 'node', args: ['ts-host/scripts/import-playground-cases.mjs', data,
           inside(`data/${name}-program-ir.jsonl`, ['data'])] };
       case 'teacher': {
         const modelId = String(config.modelId ?? '').trim();
         if (!modelId || modelId.length > 128) fail('teacher model ID is required');
         const seed = Number(config.rootSeed ?? 0);
         if (!Number.isSafeInteger(seed) || seed < 0) fail('root seed must be a nonnegative integer');
-        return { cmd: 'node', args: ['ts-host/scripts/teacher-collector.mjs', data,
+        return { cmd: 'node', args: ['ts-host/scripts/playground-teacher.mjs', data,
           inside(`runs/playground-${name}-teacher.jobs`, ['runs']),
-          inside(`data/${name}-teacher.jsonl`, ['data']), '--model-id', modelId,
+          inside(`data/${name}-teacher.jsonl`, ['data']),
+          inside(`data/${name}-teacher-turns.jsonl`, ['data']), '--model-id', modelId,
           '--root-seed', String(seed), '--server', server] };
       }
       case 'export':
-        return { cmd: 'python', args: ['scripts/export_sft.py', data,
-          inside(`data/${name}-sft.jsonl`, ['data']), '--resume', '--server', server] };
+        return { cmd: 'node', args: ['ts-host/scripts/export-native-sft.mjs', data,
+          inside(`data/${name}-sft.jsonl`, ['data']), '--server', server] };
       case 'train': {
         const steps = Number(config.steps ?? 300);
         if (!Number.isInteger(steps) || steps < 1 || steps > 100000) fail('steps must be 1–100000');
@@ -95,7 +95,7 @@ export function createPlaygroundJobs(root) {
       case 'evaluate': {
         const label = String(config.modelLabel ?? '').trim();
         if (!label || label.length > 128) fail('evaluation model label is required');
-        return { cmd: 'python', args: ['scripts/eval_turns.py', data,
+        return { cmd: 'node', args: ['ts-host/scripts/eval-playground-turns.mjs', data,
           '--out', inside(`${output}/eval.json`, ['runs']), '--model-label', label,
           '--server', server] };
       }
