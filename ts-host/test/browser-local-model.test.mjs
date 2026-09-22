@@ -17,15 +17,18 @@ test('browser local inference drives the native tool loop without a server', asy
     async loadModelFromHF() {}, async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion(request) {
       requests.push(request);
-      const write = request.tools.find(tool => tool.function.name.startsWith('write_value_alt_') &&
-        (tool.function.parameters.properties.destination.const === 'return' ||
-          tool.function.parameters.properties.destination.enum?.includes('return')) &&
-        tool.function.parameters.properties.type?.const === 'Num');
+      const names = request.tools.map(tool => tool.function.name);
+      assert.ok(names.includes('eval'));
+      assert.ok(names.includes('mark_lines'));
+      assert.equal(names.some(name => name.includes('_alt_')), false);
       return requests.length === 1 ? { choices: [{ finish_reason: 'tool_calls', message: {
         content: null, tool_calls: [{ id: 'local_1', type: 'function', function: {
-          name: write.function.name, arguments: '{"destination":"return","type":"Num","value":7}',
+          name: 'eval', arguments: '{"code":"7"}',
         } }],
-      } }], usage: { completion_tokens: 9 } } :
+      } }], usage: { completion_tokens: 9 } } : requests.length === 2 ?
+        { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'local_2',
+          type: 'function', function: { name: 'mark_lines', arguments: '{"start":1}' } }] } }],
+          usage: { completion_tokens: 4 } } :
         { choices: [{ finish_reason: 'stop', message: { content: 'finished' } }],
           usage: { completion_tokens: 2 } };
     },
@@ -43,13 +46,12 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.ok(requests[0].tools.some(tool => tool.function.name.startsWith('write_value_alt_')));
-    assert.equal(requests[0].tools.some(tool => tool.function.parameters['x-natlang-alternatives']), false);
+    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_value', 'mark_lines',
+      'report_blocker', 'report_error']);
     assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
-    assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments,
-      { destination: 'return', type: 'Num', value: 7 });
+    assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments, { code: '7' });
   } finally { host.close(); await model.close(); }
 });
 
@@ -60,7 +62,7 @@ test('local model validates calls and exposes local loading options', async () =
     async loadModelFromHF(_model, received) { params = received; loaded = true; },
     async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion() { return { choices: [{ finish_reason: 'tool_calls', message: {
-      tool_calls: [{ type: 'function', function: { name: 'write', arguments: 'not-json' } }],
+      tool_calls: [{ type: 'function', function: { name: 'eval', arguments: 'not-json' } }],
     } }], usage: { completion_tokens: 1 } }; } };
   const model = new BrowserLocalModel({ engine: fake });
   try {
@@ -123,23 +125,17 @@ test('browser GPU selection checks adapter features and keeps CPU fallback', asy
   } finally { await model.close(); }
 });
 
-test('typed browser tools preserve destination and source constraints while compacting equal values', async () => {
+test('browser tools preserve scope-eval names and definitions', async () => {
   const { compileBrowserTools } = await browserApi();
-  const tools = [{ type: 'function', function: { name: 'write', parameters: {
-    type: 'object', 'x-natlang-alternatives': [
-      { path: { const: 'return/a' }, type: { const: 'Num' }, value: { type: 'number' } },
-      { path: { const: 'return/b' }, type: { const: 'Num' }, value: { type: 'number' } },
-      { path: { const: 'return/c' }, type: { const: 'Num' }, source: { enum: ['args/a'] } },
-    ], properties: { path: { type: 'string' } }, required: ['path'] } } }];
-  const typed = compileBrowserTools(tools);
-  assert.equal(typed.tools.length, 2);
-  assert.deepEqual(typed.tools[0].function.parameters.properties.path.enum, ['return/a', 'return/b']);
-  assert.deepEqual(typed.tools[1].function.parameters.properties.source.enum, ['args/a']);
-  assert.equal(typed.names.get('write_alt_0'), 'write');
-  assert.equal(typed.tools[0].function.parameters['x-natlang-alternatives'], undefined);
-  const broad = compileBrowserTools(tools, 'broad');
-  assert.equal(broad.tools.length, 1);
-  assert.equal(broad.tools[0].function.name, 'write');
+  const tools = ['eval', 'read_value', 'mark_lines', 'report_blocker', 'report_error'].map(name => ({
+    type: 'function', function: { name, description: `${name} description`, parameters: {
+      type: 'object', properties: { code: { type: 'string', 'x-natlang': 'private-hint' } },
+      required: ['code'], additionalProperties: false } } }));
+  const compiled = compileBrowserTools(tools);
+  assert.deepEqual(compiled.map(tool => tool.function.name), tools.map(tool => tool.function.name));
+  assert.deepEqual(compiled[0].function.parameters.properties.code, { type: 'string' });
+  assert.equal(compiled[0].function.description, 'eval description');
+  assert.equal(compileBrowserTools([]).length, 0);
 });
 
 test('browser model records token use and retries one malformed local tool call', async () => {
@@ -151,13 +147,13 @@ test('browser model records token use and retries one malformed local tool call'
       attempts++;
       assert.equal(request.cache_prompt, true);
       return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'raw_1',
-        type: 'function', function: { name: 'write', arguments: attempts === 1 ? '{bad' : '{"path":"return","value":7}' } }] } }],
+        type: 'function', function: { name: 'eval', arguments: attempts === 1 ? '{bad' : '{"code":"7"}' } }] } }],
       usage: { prompt_tokens: 20, completion_tokens: 4, prompt_tokens_details: { cached_tokens: attempts === 1 ? 0 : 10 } } };
     } };
-  const model = new BrowserLocalModel({ engine: fake, schemaMode: 'broad' });
+  const model = new BrowserLocalModel({ engine: fake });
   try {
     const turn = await model.turn({ messages: [{ role: 'user', content: 'write seven' }],
-      tools: [{ type: 'function', function: { name: 'write', parameters: { type: 'object' } } }],
+      tools: [{ type: 'function', function: { name: 'eval', parameters: { type: 'object' } } }],
       temperature: 0, seed: null, max_tokens: 50 });
     assert.equal(attempts, 2);
     assert.equal(turn.prompt_tokens, 40);

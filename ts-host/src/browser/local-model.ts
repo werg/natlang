@@ -96,69 +96,20 @@ function chatMessages(messages: unknown[]): ModelMessage[] {
   });
 }
 
-export type BrowserSchemaMode = 'typed' | 'broad';
-
-function compactWriteAlternatives(alternatives: Record<string, unknown>[]): Record<string, unknown>[] {
-  const groups = new Map<string, Record<string, unknown>>();
-  for (const alternative of alternatives) {
-    const alt = structuredClone(alternative);
-    const path = alt.path as Record<string, unknown> | undefined;
-    const type = alt.type as Record<string, unknown> | undefined;
-    const kind = Object.hasOwn(alt, 'value') ? 'value' : Object.hasOwn(alt, 'source') ? 'source' : null;
-    const source = alt.source as Record<string, unknown> | undefined;
-    const key = path && type && kind && Object.hasOwn(path, 'const') && Object.hasOwn(type, 'const') &&
-      (kind !== 'source' || Array.isArray(source?.enum)) ?
-      JSON.stringify([kind, type.const, alt[kind], alt.done, alt['x-optional']]) : null;
-    if (key === null || !groups.has(key)) {
-      groups.set(key ?? `unique_${groups.size}`, alt);
-      continue;
-    }
-    const previous = groups.get(key)!;
-    const priorPath = previous.path as Record<string, unknown>;
-    const paths = Array.isArray(priorPath.enum) ? priorPath.enum : [priorPath.const];
-    previous.path = { enum: [...new Set([...paths, path!.const])] };
-  }
-  return [...groups.values()];
-}
-
-/** Compile natlang's typed alternatives for Wllama without changing runtime action names. */
-export function compileBrowserTools(rawTools: unknown[], mode: BrowserSchemaMode = 'typed'):
-  { tools: ModelTool[]; names: Map<string, string> } {
-  const names = new Map<string, string>();
-  const expanded: unknown[] = [];
-  const coupledAlternatives = new Set(['write', 'call', 'write_value', 'copy_value', 'copy_function',
-    'edit_text', 'run_function', 'for_each', 'fold', 'repeat', 'resume']);
+/** Keep the scope-eval surface and names intact; remove only host-private schema annotations. */
+export function compileBrowserTools(rawTools: unknown[]): ModelTool[] {
+  const tools: ModelTool[] = [];
   for (const [toolIndex, raw] of rawTools.entries()) {
     const tool = raw as ModelTool;
     if (tool?.type !== 'function' || typeof tool.function?.name !== 'string')
       throw new TypeError(`model tool ${toolIndex} is invalid`);
-    const base = tool.function.name;
-    const alternatives = tool.function.parameters?.['x-natlang-alternatives'];
-    if (mode === 'broad' || !coupledAlternatives.has(base) || !Array.isArray(alternatives) || !alternatives.length) {
-      expanded.push(tool);
-      continue;
-    }
-    const variants = base === 'write' ? compactWriteAlternatives(alternatives as Record<string, unknown>[]) :
-      alternatives as Record<string, unknown>[];
-    for (const [index, alt] of variants.entries()) {
-      const name = `${base}_alt_${index}`;
-      names.set(name, base);
-      const optional = new Set(Array.isArray(alt['x-optional']) ? alt['x-optional'] as string[] : []);
-      const properties = Object.fromEntries(Object.entries(alt).filter(([key]) => key !== 'x-optional'));
-      const summary = Object.entries(properties).filter(([, value]) =>
-        value && typeof value === 'object' && Object.hasOwn(value, 'const'))
-        .map(([key, value]) => `${key}=${String((value as Record<string, unknown>).const)}`).join(', ');
-      expanded.push({ ...tool, function: { ...tool.function, name,
-        description: `${base === 'write' ? 'Write or copy' : tool.function.description ?? base}. ${summary}.`,
-        parameters: { type: 'object', properties,
-          required: Object.keys(properties).filter(key => !optional.has(key)), additionalProperties: false } } });
-    }
+    tools.push(publicSchema(tool) as ModelTool);
   }
-  return { tools: expanded.map(raw => publicSchema(raw) as ModelTool), names };
+  return tools;
 }
 
 /** Adapt one local model response to the host's template-independent model turn. */
-export function localModelTurn(response: ModelResponse, names: Map<string, string> = new Map()): ModelTurn {
+export function localModelTurn(response: ModelResponse): ModelTurn {
   const choice = response.choices[0];
   if (!choice) throw new Error('local model returned no choice');
   if (choice.finish_reason === 'length') throw new Error('local model reached its token limit before finishing the turn');
@@ -170,7 +121,7 @@ export function localModelTurn(response: ModelResponse, names: Map<string, strin
     catch { throw new Error(`local model tool call ${index} has invalid JSON arguments`); }
     if (!args || typeof args !== 'object' || Array.isArray(args))
       throw new Error(`local model tool call ${index} needs object arguments`);
-    return [names.get(call.function.name) ?? call.function.name, args as Record<string, unknown>];
+    return [call.function.name, args as Record<string, unknown>];
   });
   return { calls, text: choice.message.content ?? '', raw_calls: rawCalls,
     completion_tokens: response.usage?.completion_tokens,
@@ -188,7 +139,6 @@ export class BrowserLocalModel {
   private gpuSelectionReason: string | null = null;
   private readonly gpuProbe: () => Promise<BrowserGpuCapability>;
   private turnQueue: Promise<void> = Promise.resolve();
-  readonly schemaMode: BrowserSchemaMode;
   lastLoadMs: number | null = null;
   lastTurn: { durationMs: number; promptTokens: number | null; cachedTokens: number | null;
     completionTokens: number | null; toolSchemaBytes: number; retries: number; tokensPerSecond: number | null } | null = null;
@@ -196,8 +146,7 @@ export class BrowserLocalModel {
 
   constructor(options: { wasmUrl?: string; compatWasmUrl?: string; compatWorkerUrl?: string;
     firefoxGpuCompatibility?: boolean; engine?: BrowserInferenceEngine; allowOffline?: boolean;
-    schemaMode?: BrowserSchemaMode; gpuProbe?: () => Promise<BrowserGpuCapability> } = {}) {
-    this.schemaMode = options.schemaMode ?? 'typed';
+    gpuProbe?: () => Promise<BrowserGpuCapability> } = {}) {
     this.gpuProbe = options.gpuProbe ?? (() => probeBrowserGpu({
       firefoxCompatibility: options.firefoxGpuCompatibility }));
     this.ownsEngine = !options.engine;
@@ -268,8 +217,8 @@ export class BrowserLocalModel {
     await previous;
     try {
       if (signal?.aborted) throw new Error('local model turn aborted');
-      const compiled = compileBrowserTools(request.tools, this.schemaMode);
-      const schemaBytes = new TextEncoder().encode(JSON.stringify(compiled.tools)).length;
+      const tools = compileBrowserTools(request.tools);
+      const schemaBytes = new TextEncoder().encode(JSON.stringify(tools)).length;
       const baseMessages = chatMessages(request.messages);
       let messages = baseMessages;
       let retries = 0, promptTokens = 0, completionTokens = 0, cachedTokens = 0;
@@ -279,7 +228,7 @@ export class BrowserLocalModel {
         let response: ModelResponse;
         try {
           response = await this.engine.createChatCompletion({ messages,
-            tools: compiled.tools, tool_choice: 'auto', cache_prompt: true,
+            tools, tool_choice: 'auto', cache_prompt: true,
             ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
             temperature: request.temperature, ...(request.seed === null ? {} : { seed: request.seed }),
             abortSignal: signal });
@@ -299,7 +248,7 @@ export class BrowserLocalModel {
           cachedTokens += response.usage.prompt_tokens_details.cached_tokens; hasCached = true;
         }
         try {
-          const turn = localModelTurn(response, compiled.names);
+          const turn = localModelTurn(response);
           const durationMs = Math.round(performance.now() - started);
           this.lastTurn = { durationMs, promptTokens: hasPrompt ? promptTokens : null,
             completionTokens: hasCompletion ? completionTokens : null,

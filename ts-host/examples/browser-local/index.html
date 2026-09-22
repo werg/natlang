@@ -16,7 +16,6 @@
 <p>The model and interpreter run locally. Serve this page from the natlang repository root to use the trained natlang GGUF (about 379 MB).</p>
 <div class="row">
   <label>Model <select id="model"></select></label>
-  <label>Tool schema <select id="schema"><option value="typed">Typed alternatives</option><option value="broad">Broad tools</option></select></label>
   <label>GPU layers <input id="gpuLayers" type="number" min="0" placeholder="Auto (all supported layers, else CPU)"></label>
   <label>Context tokens <input id="context" type="number" min="512" value="8192"></label>
 </div>
@@ -74,7 +73,7 @@
       const contextTokens = Number($('context').value);
       if (!Number.isInteger(contextTokens) || contextTokens < 512) throw new Error('Context must be at least 512 tokens');
       const gpuLayers = $('gpuLayers').value === '' ? undefined : Number($('gpuLayers').value);
-      const options = { contextTokens, schemaMode: $('schema').value,
+      const options = { contextTokens,
         ...(gpuLayers === undefined ? {} : { gpuLayers }),
         onProgress: ({ loaded, total }) => status(total ?
           `Downloading ${Math.round(loaded / total * 100)}% (${mb(loaded)} / ${mb(total)})` : 'Loading model…') };
@@ -143,12 +142,12 @@
       }
       reports.push({ schema: 'natlang.browser_pilot/1', at: new Date().toISOString(),
         user_agent: navigator.userAgent, model: $('file').files[0]?.name ?? chosen().id,
-        schema_mode: model.schemaMode, diagnostics: model.diagnostics, load_ms: model.lastLoadMs,
+        tool_schema: 'scope-eval-v1', diagnostics: model.diagnostics, load_ms: model.lastLoadMs,
         tasks: results.map(({ trace, ...rest }) => rest),
         traces: results.map(result => ({ id: result.id, events: result.trace })) });
       $('download').disabled = false;
       status(`${results.filter(item => item.correct).length}/${results.length} correct. ` +
-        `Reports retained: ${reports.length}. Reload in the other schema mode to compare.`);
+        `Reports retained: ${reports.length}.`);
     } finally {
       controller = null; $('cancel').disabled = true; $('run').disabled = false; $('suite').disabled = false;
     }

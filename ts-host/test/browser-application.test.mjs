@@ -43,14 +43,12 @@ test('natlang can generate the view while the app contract remains independent o
   const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
   const client = new BrowserNatlangClient();
   const naturalFiles = { ...files, 'view.nl': `---\nargs:\n  state: Counter\nreturns: View\n---\nDescribe the current count as a short paragraph UI node.` };
-  let rendered = 0;
   const app = new BrowserNatlangApplication({ client,
     source: { files: naturalFiles, reducer: 'reduce.ts', view: 'view.nl' },
     initialState: { count: 0 }, modelTurn: turn => {
-      if (turn.messages.filter(message => message.role === 'assistant').length > 1)
-        return { calls: [], text: 'done', completion_tokens: 1 };
-      return { calls: [['write', { path: 'return', value: {
-        tag: 'p', text: `Natlang view ${rendered++}` } }]], completion_tokens: 1 };
+      if (turn.messages.filter(message => message.role === 'assistant').length > 0)
+        return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+      return { calls: [['eval', { code: '({ tag: "p", text: "Natlang view " + state.count })' }]], completion_tokens: 1 };
     } });
   try {
     assert.equal((await app.start()).view.text, 'Natlang view 0');
@@ -77,9 +75,8 @@ test('browser semantic reducer receives per-run textFileTree while crisp view re
       if (String(request.messages.at(-1)?.content ?? '').includes('return: complete'))
         return { calls: [], text: 'done', completion_tokens: 1 };
       calls++;
-      if (calls % 2 === 0) return { calls: [['write', { path: 'return', value:
-        calls === 2 ? { count: 1, note: 'first note' } : { count: 2, note: 'second note' }, done: 1 }]], completion_tokens: 1 };
-      return { calls: [['read', { path: 'args/files/note.txt/text' }]], completion_tokens: 1 };
+      if (calls % 2 === 0) return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+      return { calls: [['eval', { code: '({ count: state.count + 1, note: files["note.txt"].text })' }]], completion_tokens: 1 };
     } });
   try {
     assert.equal((await app.start()).view.text, '0:');

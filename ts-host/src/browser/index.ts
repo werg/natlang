@@ -17,8 +17,7 @@ export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
   admitPlaygroundRun } from './playground.js';
 export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from './playground.js';
 export { checkTypeScriptBody } from './environment.js';
-export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics,
-  BrowserSchemaMode } from './local-model.js';
+export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics } from './local-model.js';
 export type { BrowserModelManifest, BrowserModelCatalog, BrowserStorageStatus } from './models.js';
 export type { BrowserRunRequest, BrowserModelTurn, BrowserModelTurnRequest,
   BrowserRunOptions, BrowserReviewOptions } from './host.js';

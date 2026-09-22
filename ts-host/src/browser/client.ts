@@ -1,6 +1,5 @@
 import { BrowserNatlangHost, type BrowserRunRequest } from './host.js';
-import { BrowserLocalModel, type BrowserModelLoadOptions, type BrowserModelDiagnostics,
-  type BrowserSchemaMode } from './local-model.js';
+import { BrowserLocalModel, type BrowserModelLoadOptions, type BrowserModelDiagnostics } from './local-model.js';
 import { TypeScriptEnvironment } from './environment.js';
 import { loadBrowserModelCatalog } from './models.js';
 
@@ -13,7 +12,6 @@ export type BrowserModelSource =
 export type BrowserClientLoadOptions = BrowserModelLoadOptions & {
   /** Try CPU only when automatic full-GPU loading fails. */
   cpuFallback?: boolean;
-  schemaMode?: BrowserSchemaMode;
 };
 
 export type BrowserClientModelStatus = { id: string; diagnostics: BrowserModelDiagnostics;
@@ -24,7 +22,7 @@ export type BrowserClientOptions = { host?: object; mode?: 'fresh' | 'retained';
   /** Override asset URLs when a bundler does not keep WASM beside the browser entrypoint. */
   wasmUrl?: string; compatWasmUrl?: string; compatWorkerUrl?: string;
   firefoxGpuCompatibility?: boolean; allowOffline?: boolean;
-  modelFactory?: (schemaMode: BrowserSchemaMode) => BrowserLocalModel };
+  modelFactory?: () => BrowserLocalModel };
 
 export type BrowserClientRun = Awaited<ReturnType<BrowserNatlangHost['run']>> & {
   model: (BrowserClientModelStatus & { turns: BrowserLocalModel['turnHistory'] }) | null;
@@ -37,7 +35,7 @@ export class BrowserNatlangClient {
   private loading = false;
   private running = false;
   private closed = false;
-  private readonly factory: (schemaMode: BrowserSchemaMode) => BrowserLocalModel;
+  private readonly factory: () => BrowserLocalModel;
   private readonly hostObject?: object;
   private readonly mode?: 'fresh' | 'retained';
   private readonly environment?: TypeScriptEnvironment;
@@ -49,7 +47,7 @@ export class BrowserNatlangClient {
     this.ownsEnvironment = !options.environment && options.mode === 'retained';
     this.environment = options.environment ?? (this.ownsEnvironment ?
       new TypeScriptEnvironment({ host: options.host, mode: 'retained' }) : undefined);
-    this.factory = options.modelFactory ?? (schemaMode => new BrowserLocalModel({ schemaMode,
+    this.factory = options.modelFactory ?? (() => new BrowserLocalModel({
       wasmUrl: options.wasmUrl, compatWasmUrl: options.compatWasmUrl,
       compatWorkerUrl: options.compatWorkerUrl,
       firefoxGpuCompatibility: options.firefoxGpuCompatibility,
@@ -76,7 +74,7 @@ export class BrowserNatlangClient {
           if (!response.ok) throw new Error(`model template unavailable: ${source.templateUrl}`);
           return response.text();
         }) : undefined);
-      const { cpuFallback = true, schemaMode = 'typed', ...given } = options;
+      const { cpuFallback = true, ...given } = options;
       const loadOptions: BrowserModelLoadOptions = {
         ...given, ...(template ? { chatTemplate: template } : {}),
         ...(globalThis.crossOriginIsolated ? {} : { threads: given.threads ?? 1 }),
@@ -86,7 +84,7 @@ export class BrowserNatlangClient {
       await this.current?.close();
       this.current = null; this.statusValue = null;
       const load = async (override: Partial<BrowserModelLoadOptions> = {}) => {
-        const candidate = this.factory(schemaMode);
+        const candidate = this.factory();
         try {
           const params = { ...loadOptions, ...override };
           if (source.kind === 'url') await candidate.loadFromUrl(source.url, params);

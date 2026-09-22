@@ -13,7 +13,6 @@ const cpu = process.argv.includes('--cpu');
 const gpu = process.argv.includes('--gpu');
 const headed = process.argv.includes('--headed');
 const quant = process.argv.find(arg => arg.startsWith('--quant='))?.slice('--quant='.length);
-const broad = process.argv.includes('--broad');
 const probe = process.argv.find(arg => arg.startsWith('--probe='))?.slice('--probe='.length);
 const probeTokens = Number(process.argv.find(arg => arg.startsWith('--probe-tokens='))?.slice('--probe-tokens='.length) ?? 8);
 const suite = process.argv.includes('--suite');
@@ -93,7 +92,6 @@ try {
       if (index < 0) throw new Error(`No browser model with quantization ${quant}`);
       await page.locator('#model').selectOption({ index });
     }
-    if (broad) await page.locator('#schema').selectOption('broad');
     if (cpu) await page.locator('#gpuLayers').fill('0');
     await page.locator('#context').fill(String(contextTokens));
     await page.locator('#load').click();
@@ -124,12 +122,12 @@ try {
         try {
           if (kind === 'natlang-raw') {
             const { compileBrowserTools } = await import('/ts-host/dist/browser/natlang.js');
-            const compiled = compileBrowserTools(request.tools, model.schemaMode);
+            const compiled = compileBrowserTools(request.tools);
             const response = await model.engine.createChatCompletion({
-              messages: request.messages, tools: compiled.tools, tool_choice: 'auto',
+              messages: request.messages, tools: compiled, tool_choice: 'auto',
               temperature: 0, seed: 1, max_tokens: 32 });
             return { elapsed_ms: Math.round(performance.now() - started),
-              request_bytes: JSON.stringify(request).length, tool_count: compiled.tools.length,
+              request_bytes: JSON.stringify(request).length, tool_count: compiled.length,
               response };
           }
           const turn = await model.turn(request ? { ...request, max_tokens: probeTokens } : { messages: [{ role: 'user',

@@ -20,9 +20,8 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
     let turns = 0;
     const natural = await host.run({ source: { kind: 'program', program: { $lambda: {
       type: 'Lambda<{}, Num>', instructions: 'Return the current count.' } } },
-    modelTurn: () => ++turns === 1 ? { calls: [['run_code', { engine: 'typescript-host', code: 'host.count' }]],
-      completion_tokens: 1 } : turns === 2 ? { calls: [['write', { path: 'return', type: 'Num', value: 5 }]],
-      completion_tokens: 1 } : { calls: [], text: 'done', completion_tokens: 1 } });
+    modelTurn: () => ++turns === 1 ? { calls: [['eval', { code: 'host.count' }]],
+      completion_tokens: 1 } : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 } });
     assert.equal(natural.outcome.kind, 'done');
     assert.equal(natural.value, 5);
     assert(natural.trace.some(event => event.kind === 'action'));
@@ -81,8 +80,8 @@ test('browser virtual projects expose non-source files through the shared file-t
       inputs: { files: api.textFileTree(files) }, modelTurn: request => {
       observed = JSON.stringify(request);
       turn++;
-      if (turn === 1) return { calls: [['read', { path: 'args/files/notes/context.md/text' }]] };
-      if (turn === 2) return { calls: [['write', { path: 'return', type: 'Text', value: 'browser project context' }]] };
+      if (turn === 1) return { calls: [['eval', { code: 'files["notes/context.md"].text' }]] };
+      if (turn === 2) return { calls: [['mark_lines', { start: 1 }]] };
       return { calls: [] };
     } });
     assert.equal(result.value, 'browser project context');

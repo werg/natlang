@@ -21,15 +21,14 @@ test('browser client retries automatic GPU loading on CPU and owns model lifecyc
       },
       async createChatCompletion(request) {
         turns++;
-        if (turns > 1) return { choices: [{ finish_reason: 'stop',
-          message: { content: 'finished' } }], usage: { completion_tokens: 2 } };
-        const write = request.tools.find(tool => tool.function.name.startsWith('write_value_alt_') &&
-          (tool.function.parameters.properties.destination.const === 'return' ||
-            tool.function.parameters.properties.destination.enum?.includes('return')) &&
-          tool.function.parameters.properties.type?.const === 'Num');
+        if (turns > 1) return { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{
+          id: 'client_2', type: 'function', function: { name: 'mark_lines', arguments: '{"start":1}' } }] } }],
+          usage: { completion_tokens: 2 } };
+        assert.ok(request.tools.some(tool => tool.function.name === 'eval'));
+        assert.ok(request.tools.some(tool => tool.function.name === 'mark_lines'));
         return { choices: [{ finish_reason: 'tool_calls', message: { content: null,
-          tool_calls: [{ id: 'client_1', type: 'function', function: { name: write.function.name,
-            arguments: '{"destination":"return","type":"Num","value":7}' } }] } }],
+          tool_calls: [{ id: 'client_1', type: 'function', function: { name: 'eval',
+            arguments: '{"code":"7"}' } }] } }],
           usage: { completion_tokens: 9 } };
       },
       async exit() {},
@@ -48,7 +47,7 @@ test('browser client retries automatic GPU loading on CPU and owns model lifecyc
   assert.match(loaded.gpuFallbackReason, /GPU allocation failed/);
   assert.equal(client.model.loaded, true);
   const result = await client.run({ source: { kind: 'program', program: { $lambda: {
-    type: 'Lambda<{}, Num>', instructions: 'Write seven to return.',
+    type: 'Lambda<{}, Num>', instructions: 'Return 7.',
   } } }, options: { seed: { mode: 'compatibility' } } });
   assert.equal(result.value, 7);
   assert.equal(result.model.id, 'local-q4');
