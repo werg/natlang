@@ -1462,6 +1462,23 @@ class Session:
         handle_result = self._scope_handle_call(code)
         if handle_result is not None:
             return handle_result
+        while_repeated = re.fullmatch(
+            r"\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*"
+            r"let\s+([A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*"
+            r"while\s*\(\s*!\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*&&\s*\4\s*<\s*(\d+)\s*\)\s*\{\s*"
+            r"\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;\s*\4\s*\+\+\s*;?\s*\}\s*"
+            r"\1\s*;?\s*", code, re.S)
+        if (while_repeated and while_repeated.group(5) in self.lam.codebase and
+                while_repeated.group(7) in self.lam.codebase):
+            local, annotation, initial_expr, _, check, maximum, step = while_repeated.groups()
+            fn = self._function(step); initial = self._eval_scope_expression(initial_expr)
+            result = self._op_call({"function": step, "to": f"let/{local}", "init": initial,
+                                    "until": check, "max": int(maximum)})
+            if annotation and not fits(parse_type(fn.returns), parse_type(annotation.strip()), self.env):
+                raise reject(local, "type-does-not-fit-slot", annotation.strip(), fn.returns)
+            if result.kind == "done":
+                result.value = dump(self.lam.let[local]); result.text = json.dumps(result.value, ensure_ascii=False)
+            return result
         statements = self._split_scope_statements(code)
         imported = tuple(self.lam.codebase)
         if (len(statements) > 1 and not re.search(r"\bfor\s*\(", code) and
@@ -1597,7 +1614,9 @@ class Session:
         # Pure snippets are executed atomically.  We capture top-level declared
         # locals and an optional terminal expression, then validate every binding
         # before installing any of them.
-        declarations = list(re.finditer(r"(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=", code))
+        declarations = list(re.finditer(
+            r"(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=\s*([^;\n]+)",
+            code))
         names = [match.group(1) for match in declarations]
         terminal = None
         pieces = [part.strip() for part in re.split(r";|\n", code) if part.strip()]
@@ -1618,6 +1637,7 @@ class Session:
         out = portable(executor.run(CrispRequest(body, scope, True, "eval", False), self.rt._fx(self.lam)))
         staged = []
         annotations = {match.group(1): match.group(2) for match in declarations}
+        initializers = {match.group(1): match.group(3).strip() for match in declarations}
         for name in capture_names:
             annotation = annotations.get(name)
             if name in self.lam.in_ or name in self.lam.codebase:
@@ -1628,7 +1648,15 @@ class Session:
             if name in self.lam.let_types and annotation is None:
                 stated = self.lam.let_types[name]
             else:
-                stated = parse_type(annotation.strip()) if annotation else parse_type(self._infer_scope_type(value))
+                stated = parse_type(annotation.strip()) if annotation else None
+                if stated is None and name in initializers:
+                    try:
+                        _, source = self.resolve(self._scope_path(initializers[name]))
+                        stated = source.type
+                    except (Reject, Refuse):
+                        pass
+                if stated is None:
+                    stated = parse_type(self._infer_scope_type(value))
             staged.append((name, stated, coerce(value, stated, self.env, yaml=False, path=f"let/{name}")))
         for name, stated, value in staged:
             self.lam.let_types[name], self.lam.let[name] = stated, value

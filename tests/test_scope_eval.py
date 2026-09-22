@@ -30,6 +30,18 @@ def test_scope_eval_persists_pure_declarations_and_reads_selections():
     assert surface.apply(active, "read_value", {"expression": "flags", "start": 1, "end": 3}).value == [False, True]
 
 
+def test_scope_eval_preserves_static_type_when_copying_an_ambiguous_value():
+    root = load_program({"$lambda": {
+        "type": "Lambda<{ initial: { blocked: Text[], done: Bool } }, Bool>",
+        "instructions": "Inspect the initial state.",
+        "args": {"initial": {"blocked": [], "done": False}},
+    }})
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    result = active.apply("eval", {"code": "let state = initial; state"})
+    assert result.kind == "ok" and result.value == {"blocked": [], "done": False}
+    assert root.let_types["state"] is not None
+
+
 def test_scope_eval_calls_imports_positionally_and_stages_named_result():
     root, active = session()
     surface = ScopeEvalSurface()
@@ -74,6 +86,11 @@ def test_scope_eval_lowers_ordinary_accumulation_and_bounded_repeat():
         "let current: Num = 0; for (let attempt = 0; attempt < 8; attempt++) { "
         "if (await finished(current)) break; current = await step(current); } current"})
     assert repeated.kind == "done" and repeated.value == 3
+    active = Session(Runtime(lambda lam: None), root, TypeEnv())
+    while_repeated = active.apply("eval", {"code":
+        "let current = 0; let rounds = 0; while (!finished(current) && rounds < 8) { "
+        "current = await step(current); rounds++; } current"})
+    assert while_repeated.kind == "done" and while_repeated.value == 3
 
 
 def test_scope_surface_is_stable_and_completion_ignores_blank_lines():

@@ -82,6 +82,16 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
 });
 
+test('scope eval preserves static type when copying an ambiguous value', async () => {
+  const lam = buildPending({ $lambda: {
+    type: 'Lambda<{ initial: { blocked: Text[], done: Bool } }, Bool>',
+    instructions: 'Inspect the initial state.', args: { initial: { blocked: [], done: false } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'let state = initial; state' });
+  assert.equal(result.kind, 'ok'); assert.equal(JSON.stringify(result.value), '{"blocked":[],"done":false}');
+  assert.ok(lam.letTypes.state);
+});
+
 test('native codebase edits are live while the codebase file set stays fixed', async () => {
   const lam = buildPending({ $lambda: { type: 'Lambda<{}, Text>', instructions: 'Call label.',
     codebase: { label: { args: {}, returns: 'Text', code: 'return "old";' } } } });
@@ -146,6 +156,11 @@ test('scope eval lowers ordinary accumulation and bounded repeat', async () => {
     'let current: Num = 0; for (let attempt = 0; attempt < 8; attempt++) { ' +
     'if (await finished(current)) break; current = await step(current); } current' });
   assert.equal(repeated.kind, 'done'); assert.equal(repeated.value, 3);
+  const whileSession = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const whileRepeated = await whileSession.applyAsync('eval', { code:
+    'let current = 0; let rounds = 0; while (!finished(current) && rounds < 8) { ' +
+    'current = await step(current); rounds++; } current' });
+  assert.equal(whileRepeated.kind, 'done'); assert.equal(whileRepeated.value, 3);
 });
 
 test('checked directory reducer metadata survives graph instantiation', () => {

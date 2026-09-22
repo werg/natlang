@@ -1345,6 +1345,22 @@ export class NativeSession {
       if (error instanceof Reject) return rejected(error);
       return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
     }
+    const whileRepeated = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*let\s+([A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*while\s*\(\s*!\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*&&\s*\4\s*<\s*(\d+)\s*\)\s*\{\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;\s*\4\s*\+\+\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
+    if (whileRepeated && Object.hasOwn(this.lam.codebase, whileRepeated[5]!) &&
+        Object.hasOwn(this.lam.codebase, whileRepeated[7]!)) try {
+      const initial = this.runtime.evalFor(this.lam,
+        `(() => { ${this.scopePrefix()} return (${whileRepeated[3]}); })()`,
+        false, 'eval', this.scopeView()).result;
+      const result = await this.applyAsync('call', { function: whileRepeated[7], to: `let/${whileRepeated[1]}`,
+        init: initial, until: whileRepeated[5], max: Number(whileRepeated[6]) });
+      if (result.kind === 'done') {
+        result.value = dump(this.lam.let[whileRepeated[1]!]!) as Value; result.text = JSON.stringify(result.value);
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
     const statements = this.splitScopeStatements(code), imported = Object.keys(this.lam.codebase);
     if (statements.length > 1 && !/\bfor\s*\(/.test(code) &&
         imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
@@ -1471,7 +1487,7 @@ export class NativeSession {
       return result;
     }
     try {
-      const declarationPattern = /(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=/g;
+      const declarationPattern = /(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=\s*([^;\n]+)/g;
       const declarations = [...code.matchAll(declarationPattern)], names = declarations.map(match => match[1]!);
       const pieces = code.split(/;|\n/).map(part => part.trim()).filter(Boolean);
       let rewritten = code, terminal: string | undefined;
@@ -1486,13 +1502,16 @@ export class NativeSession {
       const output = this.runtime.evalFor(this.lam, body, true, 'eval', this.scopeView()).result as
         { bindings: Record<string, unknown>; result: unknown };
       const annotations = new Map(declarations.map(match => [match[1]!, match[2]?.trim()]));
+      const initializers = new Map(declarations.map(match => [match[1]!, match[3]!.trim()]));
       const staged: [string, Type, Value][] = captureNames.flatMap(name => {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
         const value = output.bindings[name];
         if (name === 'result' && value === null && !Object.hasOwn(this.lam.let, name) && !annotations.has(name)) return [];
-        const type = this.lam.letTypes[name] && !annotations.get(name) ? this.lam.letTypes[name]! :
-          parseType(annotations.get(name) || this.inferScopeType(value));
+        let type = this.lam.letTypes[name] && !annotations.get(name) ? this.lam.letTypes[name]! : undefined;
+        if (!type && annotations.get(name)) type = parseType(annotations.get(name)!);
+        if (!type && initializers.has(name)) try { type = this.resolve(this.scopePath(initializers.get(name)!)).type; } catch {}
+        if (!type) type = parseType(this.inferScopeType(value));
         return [[name, type, coerce(value, type, this.env, `let/${name}`)]];
       });
       for (const [name, type, value] of staged) { this.lam.letTypes[name] = type; this.lam.let[name] = value; }
