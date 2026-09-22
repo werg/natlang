@@ -109,7 +109,7 @@ returns: Text
 return "source named ${name}"`);
   }
   writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
-    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length); } };
+    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length + ':' + typeof context.runtime.NodeFileTree); } };
   }`);
   writeFileSync(join(root, 'natlang.json'), JSON.stringify({ schema: 'natlang.package/v1',
     name: 'cli-fixture', version: '1.0.0', include: ['target.mjs'], targets: {
@@ -154,10 +154,10 @@ return "source named ${name}"`);
   assert.match(JSON.stringify(wire), /helper/);
   assert.match(JSON.stringify(wire), /non-source project context/);
   const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
-  assert.equal(local, 'cli-fixture:local:0');
+  assert.equal(local, 'cli-fixture:local:0:function');
   const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],
     { encoding: 'utf8', cwd: tmpdir() });
-  assert.equal(localManifest, 'cli-fixture:path:0');
+  assert.equal(localManifest, 'cli-fixture:path:0:function');
   const inspected = JSON.parse(execFileSync(process.execPath, [cli, '--inspect', root, '--json'], { encoding: 'utf8' }));
   assert.equal(inspected.target, 'hello');
   const discovered = JSON.parse(execFileSync(process.execPath, [cli, '--apps', root, '--json'], { encoding: 'utf8' }));
@@ -175,8 +175,8 @@ return "source named ${name}"`);
   assert.match(listing, /cli-fixture@1\.0\.0/);
   const result = execFileSync(process.execPath, [cli, 'cli-fixture@1.0.0#hello',
     '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
-  assert.equal(result, 'cli-fixture:one,two:0');
+  assert.equal(result, 'cli-fixture:one,two:0:function');
   const convenient = execFileSync(process.execPath, [cli, 'cli-fixture',
     '--store', store, '--', 'three'], { encoding: 'utf8' });
-  assert.equal(convenient, 'cli-fixture:three:0');
+  assert.equal(convenient, 'cli-fixture:three:0:function');
 });

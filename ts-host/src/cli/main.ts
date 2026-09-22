@@ -258,7 +258,7 @@ async function executeTarget(parsed: Parsed, installed: RunnablePackage,
         error: process.stderr, color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
       modelTurn: request => model.turn(request), runtime: Object.freeze({ NativeNatlangHost,
         TypeScriptEnvironment, TerminalNatlangApplication, TerminalSessionStore, TerminalEventQueue,
-        runTerminalShell, renderTerminalView }) };
+        NodeFileTree, runTerminalShell, renderTerminalView }) };
     const executable = await (factory as PackageTargetFactory)(context);
     if (!executable || typeof executable.run !== 'function') throw new Error('target factory must return an executable with run()');
     try { return Number(await executable.run() ?? 0); }
