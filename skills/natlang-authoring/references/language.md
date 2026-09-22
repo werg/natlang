@@ -19,8 +19,8 @@ A function sees helpers in its same-named companion directory and explicit `uses
 ---
 description: Review evidence against a stated criterion.
 args:
-  observations: Text[]
-  criterion: Text
+  observations: string[]
+  criterion: string
 returns: Report
 uses:
   summarize: ../shared/summarize
@@ -29,55 +29,33 @@ uses:
 
 `uses` paths are relative to the source file; inspect the target layout before choosing one. In supplied definition graphs, `uses` targets are definition names instead of filesystem paths. Use aliases with legal identifiers. Native packages resolve and install before a run; `uses` never downloads a missing source while a lambda is executing.
 
-A crisp file uses `/*---` through `---*/` frontmatter followed by a function
-body. Inputs are `args`, and the body returns its value with `return`. The
-model-facing `eval` scope exposes arguments and imports as ordinary lexical
-names; its final expression can complete the function. Exact portable crisp
-bodies use the canonical `typescript-host`, the same host used by model eval.
+A crisp `.ts` module is an ordinary TypeScript module with a default-exported
+function:
+
+```ts
+export default function summarize(observations: string[], criterion: string): Report {
+  return { count: observations.length, criterion };
+}
+```
+
+Use normal parameters, local variables, imports, and `return`. Natural-language
+functions use frontmatter for their signature and instruction lines for their
+body. In model eval, typed parameters and imported functions are ordinary
+lexical names; the final eval expression can supply the natural-language
+function's result.
 
 ## Types
 
-Use `Text`, `Num`, `Bool`, `Null`, records, `T[]`, `Dict<T>`, named aliases, and unions such as `"supported" | "contradicted" | "uncertain"`. Optional record/parameter names have `?`. Quote YAML type strings containing record syntax or other YAML punctuation. Folder aliases use `export type Name = ...;` or `type Name = ...;`. Nested records accept commas or semicolons.
+Use ordinary TypeScript types: `string`, `number`, `boolean`, `null`, records,
+arrays (`T[]`), `Record<string, T>`, named aliases, and literal unions such as
+`"supported" | "contradicted" | "uncertain"`. Optional record and parameter
+names use `?`. Quote YAML type strings containing record syntax or other YAML
+punctuation. Folder aliases use `export type Name = ...;` or `type Name = ...;`.
 
-This is a structural subset, not the TypeScript compiler's type system. Do not assume `any`, interfaces, imported types, generics, methods, branded host objects, or automatic inference. Even when a type name such as `Blob` exists, check the target's representation before using it. Host buffers, processes, database connections, and DOM nodes normally remain host-owned and are accessed by portable IDs or crisp environment code.
-
-### Host-backed dictionaries
-
-An embedding can bind a lazy, read-only implementation of the existing
-`Dict<T>` type. Natlang source does not declare `LazyDict`, `Tree`, a provider,
-or a special namespace. This is useful when enumerating or materializing the
-whole input would be expensive. A project-aware function can declare:
-
-```yaml
----
-args:
-  files: Dict<ProjectFile>
-types:
-  ProjectFile: '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }'
-returns: Report
----
-```
-
-The root is the lexical `files` input. Inspect a branch or leaf with
-scope evaluation, for example `files["docs"]["design.md"].text`. A filesystem
-adapter supplies the record at the leaf and leaves binary bytes outside model state. The host
-loads each observed directory or leaf at most once for that bound value, so a
-run sees a stable observation even when the backing store later changes.
-
-Treat this like any other argument. A natlang helper that needs the mapping
-declares a compatible `Dict<ProjectFile>` parameter and receives it through an
-ordinary positional call such as `await inspectTree(files)`. It is not ambient
-state and should not be copied leaf by leaf. Eager dictionaries continue to
-behave as before.
-
-The lazy implementation is read-only and not a portable snapshot. Returning or
-persisting selected typed leaves is supported; process restart requires the
-host to bind the provider again. Crisp code that needs arbitrary filesystem or
-database access should use its real host API. A crisp function cannot receive a
-host-backed dictionary as an argument. `eval` remains usable for other values,
-but provider-backed fields are omitted from its portable execution view.
-Do not force the runtime to materialize a native provider merely to pass it
-into eval.
+Types are checked structurally at function boundaries, after eval transactions,
+and before completion. Use real TypeScript function declarations for crisp
+helpers. Runtime host objects remain host-owned and should be accessed through
+an imported helper or, for reducer file operations, the folder API.
 
 Partial return records can be built incrementally; completion requires a complete result of the declared type. Wrongly typed fields are rejected. A validated record can still be semantically false. Exact count checks, semantic rubrics, and external effect receipts address different claims.
 
@@ -95,9 +73,9 @@ File names remain ordinary values:
 const evidence = await workspaceRead(args.state.head, "evidence/observations.json");
 ```
 
-The callee must actually exist with those parameters. Use scope evaluation for scope inspection and `read_file` for source or data files. Reuse computed values by variable reference. For a host-backed dictionary, pass the dictionary value to a compatible callee and read only the branches or leaves needed for the decision.
+The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_function` to inspect an imported function. `edit_function` and `diff_functions` are the function editing tools for normal lambdas. Directory reducers alone receive file tools and `folder.fs`; file paths are relative to that reducer's input folder, without `project/` or `codebase/` prefixes. Reuse computed values by variable reference.
 
-To change a function, edit the contents of its existing writable codebase source and use the normal import/reload path. The codebase file set is fixed during a run: do not create, delete, or move codebase files. Directory-reducer project folders have the broader file lifecycle when a task needs generated files or structural refactoring. For generated programs, validate and execute the new artifact before claiming it works.
+Imported functions have stable names and signatures. The function tools inspect or edit their source; the fixed function set cannot be created, deleted, moved, or renamed. A directory reducer can create, edit, move, and remove files within its input folder. Its direct call `await reducer(folder, ...args)` returns only the typed value and discards file changes. Use `await folder.apply(reducer, ...args)` when selected file changes should be retained in the folder. For generated programs, validate and execute the new artifact before claiming it works.
 
 ## Combinators and completion
 

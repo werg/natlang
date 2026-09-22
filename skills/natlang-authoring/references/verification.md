@@ -27,11 +27,11 @@ This loads and binds; it does not execute inference. For a fixture run use a scr
 
 Use scenarios tied to desired behavior rather than only a happy-path demo. Cover ambiguity, conflicting evidence, missing information, zero/one/many items, order-sensitive updates, and interruptions where applicable. Include a case requiring multiple inspected operations. For stateful systems verify actual receipts and committed state; a model's prose about a completed effect is insufficient.
 
-For a host-backed `Dict<T>`, verify that an ordinary eager dictionary still
-works, directory reads do not fetch leaves, a selected leaf is fetched once,
-the leaf is checked against `T`, traversal cannot escape the provider root, and
-the same value can be passed to a typed child. Test provider reconstruction
-separately from portable runtime-state restoration.
+For filesystem work, verify that ordinary lambdas have no file tools, reducer
+paths stay within the supplied folder, direct reducer calls discard changes,
+and `folder.apply` retains only the selected changes. For typed keyed inputs,
+verify both empty and populated `Record<string, T>` values at function
+boundaries.
 
 For stochastic behavior pin source, model/template, seeds, sampling, and ordered inputs, and report how many trials were run. Keep model sampling randomness separate from game/world randomness. Classify failures: source/loader, schema/transport, runtime, continuation, host/effect, model semantics, environment capacity.
 
@@ -39,7 +39,7 @@ In a checkout, useful checks are `.venv/bin/python -m pytest -q tests/test_codeb
 
 ## Diagnose before modifying policy
 
-- Rejected `inputs` path: distinguish interpreter paths from artifact IDs; put literal arguments in `values`. Do not unwrap arbitrary malformed values to make the test pass.
+- Failed eval or function call: use its diagnostic and the typed source contract to correct the operation. Do not revive path-based scope binding or unwrap malformed values to make the call pass.
 - Correct return type, wrong answer: improve semantic criteria, algorithm, evidence access, or model; structural validation is working as intended.
 - Growing prompt: inspect presented schemas and repeated data, not just source length. Compact representation before adding language size limits.
 - Read-only error on a read: verify host parity; input immutability should reject mutation, not inspection.

@@ -35,7 +35,7 @@ Both main agents support conversation rollover through `segment_turns` and `segm
 
 In-memory continuation is not process restart recovery. Persist the actual source identity, state/pending nodes when supported, effect observations, invocation seed policy, and ownership metadata. Reconstruct native resources through an application recovery contract. `dump_state` / `load_program` in Python and native state serialization support runtime state; they do not snapshot arbitrary host objects or provider sessions.
 
-This includes host-backed `Dict<T>` inputs. Their observed leaves can inform
+This includes typed `Record<string, T>` inputs. Their observed values can inform
 portable results and traces, but the provider itself remains native. Record the
 provider root or revision needed by the application, revalidate that identity,
 and bind a new provider on restart. Do not silently substitute a changed

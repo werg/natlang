@@ -1,6 +1,7 @@
 # Natlang notebook
 
-`run.nl` executes a declared cell graph through natlang's Iterate shape.
+`run.nl` executes a declared cell graph through ordinary TypeScript loops and
+named natlang helpers.
 Natlang chooses among ready cells and explains bounded result samples in answer
 to a question. Exact helpers limit execution to the goal's dependency closure,
 recheck readiness, associate outputs with source revisions, and reject a result
@@ -31,7 +32,7 @@ executing a cell.
 The workspace remains local. SQL cells are application-level evaluator
 bindings through the TypeScript host. Python separately provides an optional
 registered SQLite executor in `hosts/sqlite_host.py`; the native TS notebook
-binding does not automatically register that engine in `run_code`. Cross-host
+binding does not automatically register that engine in model `eval`. Cross-host
 SQL parity remains an explicit integration task. Live edit events, background
 runs, persistent datasets, large table paging and a teacher quality pilot
 remain product gates. Samples are truncated for the

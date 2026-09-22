@@ -14,8 +14,10 @@ natlang semantic-terminal
 ```
 
 Multiple words that do not resolve to a path execute as an anonymous
-`Lambda<{ files: Dict<ProjectFile> }, Text>` over the current directory's
-top-level natlang functions and lazy file tree.
+`(files: Record<string, ProjectFile>) => string` natural-language function.
+It can call the current directory's top-level natlang functions and receives
+the declared file manifest as an ordinary typed record. Directory reducers
+provide the model-facing filesystem tools for relative-path operations.
 
 `natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
 asks before installing natlang's pinned, hash checked runtime in the user data

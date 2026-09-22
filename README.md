@@ -41,11 +41,12 @@ natlang --apps codebases
 ```
 
 Two or more words that do not name an existing path form an anonymous
-instruction. Natlang uses the current directory as the codebase root. The
-fixed writable `codebase/` manifest permits content edits and import relinking
-but forbids creating, moving, or deleting codebase files. Directory reducers
-use an isolated writable `project/` tree; they may create, move, edit, and
-delete there, then select retained changes with `commit` or `folder.apply`.
+instruction. Natlang uses the current directory as the codebase root. Agents
+can inspect and edit existing imported functions through function tools, but
+cannot create, move, or delete source files. Directory reducers receive an
+isolated writable copy of their input folder. Their paths are directly relative
+to that folder, and they may create, move, edit, and delete files before
+retaining changes through their result, `commit`, or `folder.apply`.
 
 The terminal applications open without fixture files and explain their own
 capabilities. Use `/help`; evidence and notebook include useful starter data,
@@ -305,7 +306,7 @@ To diagnose whether typed decoding hides incorrect writes:
 types/values reach the runtime validator, while tool syntax and path choices
 stay constrained. Use `--write-constraints typed` for comparisons. A single
 JSON-text layer can still be parsed, and scalar values can acquire missing quotes
-for a Text slot. Existing Text is preserved verbatim. Extra `{value: ...}` object
+for a `string` slot. Existing string values are preserved verbatim. Extra `{value: ...}` object
 wrappers are rejected unless the destination actually expects that record.
 `--trace-probs` saves selected token IDs/logprobs and top alternatives before
 sampling constraints. These are next-token probabilities, not calibrated

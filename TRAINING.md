@@ -4,17 +4,16 @@ Companion to `PLAN.md`. Covers target use cases, the skill taxonomy, data
 sources (synthetic, existing datasets, teacher distillation), the training
 recipe, and evaluation. Status: draft, 2026-09-19.
 
-The training target is the current `scope-eval-v1` surface. Each episode has
-a persistent TypeScript scope in the same Node host as crisp code and uses `eval` for declarations,
-assignments, control flow, exact work, and awaited positional calls to
-imported natlang or crisp functions. The model-facing actions are
-`read_value`, `write_value`, `return_value`, `mark_lines`, `report_blocker`,
-`report_error`, and the `list_files`, `search_files`, `read_file`, `write_file`,
-`edit_file`, and `diff_files` file actions. Codebase files use the fixed
-writable `codebase/` manifest: existing content and imports may change, while
-file creation, movement, and deletion are forbidden. Directory reducers
-receive a writable `project/` tree and may retain selected changes with
-`commit` or `folder.apply`.
+The training target is ordinary TypeScript source functions. Crisp helpers are
+default-exported TypeScript functions; natural-language functions use typed
+frontmatter and run in a persistent TypeScript scope. The model uses `eval` for
+declarations, assignments, control flow, exact work, and awaited positional
+calls to imported functions. The shared model-facing surface is `eval`,
+`read_value`, `mark_lines`, `report_blocker`, `report_error`, and function tools
+for inspecting or editing imported functions. Filesystem tools are available
+only inside directory reducers, with paths relative to the input folder.
+`await reducer(folder, ...args)` discards file changes; `await folder.apply(reducer,
+...args)` retains the selected changes.
 
 Some experiment notes below preserve slash-path, `call`-combinator, and
 eight-tool traces as historical training data. They are not the current agent
@@ -29,7 +28,7 @@ Facts from the LFM2.5 model cards and Liquid's release post (fetched
 |------|--------------------|
 | 230M and 350M, both with Base and instruction-tuned variants. 32k context. 14 layers (conv + GQA hybrid). | Full fine-tuning is cheap; LoRA is for the memory-constrained mode (§5). Step prompts of 1–2k tokens are comfortably in range. |
 | Positioned for data extraction, structured output, tool use. **Not recommended for math, code, creative writing.** | Matches our leaf profile (judge, extract, classify). Evals must stay small: stdlib calls, not programs. See 0.1. |
-| Native tool-call format: `<|tool_call_start|>[fn(arg=..), ...]<|tool_call_end|>`, **Pythonic calls in a Python list**; JSON on request. | The interpreter works through **native tool calls** in exactly this format, decoded under a per-turn grammar over the native call text (`spec/SPEC.md` §5.8). History must be rendered by the model's official chat template. |
+| Native tool-call format: `<|tool_call_start|>[fn(arg=..), ...]<|tool_call_end|>`, **Pythonic calls in a Python list**; JSON on request. | Treat this as a provider serialization detail. The runtime offers its `eval`, line-marking, function, and reducer tools through the adapter; do not train source programs in the provider's serialization syntax. |
 | 350M: IFEval 77, BFCLv3 44, τ²-bench ~18. | Follows single instructions well; multi-turn agentic behavior is weak out of the box. That is the gap that short per-function episodes, stated program structure, write-time typing, and fine-tuning must close. |
 | ~40k output tok/s on one H100 at high concurrency (SGLang). 300–550 tok/s decode on laptop-class CPUs. | The batching thesis holds. 40k tok/s ≈ 400+ agent steps per second per GPU at ~100 output tokens per step. |
 | Third-party fine-tune (distil labs): 5k synthetic examples from a 120B teacher took exact-match tool calls from 61 % → 98 % (shell), 63 % → 97 % (smart home), 35 % → 96 % (banking). Plateau after 3–4 epochs. Matched or beat the teacher. | Per-step accuracy in the high nineties on a *narrow protocol* is demonstrated at this size. The residual 2–4 % is what type checks, resumable calls, and blockers must absorb. |
@@ -49,8 +48,8 @@ model-written code tiny:
   expression over the persistent scope using the standard library
   (`labels.map(l => l !== "spam")`). Train this surface explicitly (skill K6),
   always as short expressions.
-- Measure a Python-shaped expression surface in Phase 2 as the fallback.
-  Switch only if the per-skill numbers clearly demand it.
+- Measure ordinary TypeScript eval fluency directly, including small exact
+  expressions, loops, and calls to named helpers.
 
 ## 1. Target use cases
 
@@ -182,12 +181,11 @@ constraints while behaving fuzzily. The project owner's ideas are marked ★.
 
 **What the reactive ideas imply for the design**
 
-1. *Long-lived state* (decided). A reactive program is a **top-level `Fold`
-   over a stream of events**, with the harness threading the state. No new
-   combinator: on the model-facing surface it is the ordinary `Fold`, whose
-   `over` happens to be an *open* list that the harness keeps appending to.
-   The step is a code-base function `(acc, item) -> acc`; outputs to the world
-   are effects inside it. See `PLAN.md` §2.4.
+1. *Long-lived state* (decided). A reactive program is a state reducer over a
+   stream of events, with the host threading the state. Its step is an
+   ordinary typed function `(acc, item) -> acc`; loops and helper calls use
+   standard TypeScript. Outputs to the world are explicit host operations
+   inside the reducer.
 2. *Legal actions by construction* (decided). A crisp function computes the
    legal moves from the state; the program passes them to the decision
    function, whose `returns` is a finite type, so the choice is a typed write
@@ -214,35 +212,35 @@ traces.
 
 | # | Skill | Oracle |
 |---|-------|--------|
-| K1 | Read pseudocode and choose the next statement: what is done (its local or return part exists), what comes next, across dialects (Python-like, numbered steps, structured prose) | reference policy |
-| K2 | `x = f(a, b)` → one `call` with `inputs`, `to` the right local or part of `return` | reference policy |
-| K3 | `for each` → one `call ... over`, leaving out exactly the item parameter; carried values → `over` + `init`; `repeat until` → `init` + `until` + `max`. Never unroll, never do the items' work | reference policy |
-| K4 | Bind inputs by path among the values whose type fits; pass values, never restate data; `write` with `source` instead of re-emitting | reference policy |
-| K5 | Locals: name intermediate results as the pseudocode does; write results that are only returned straight into `return/<field>`; assemble records | reference policy |
-| K6 | Exact glue: recognise exact work no function covers, one `run_code` expression over `args` / `locals`, then `write` the result. Never estimate | reference policy (the code is the oracle) |
-| K7 | Conditionals: evaluate the condition (look, think, or `run_code`), then carry out only the branch taken | reference policy + Python twin |
-| K8 | Nested functions: as a callee, interpret one's own pseudocode with one's own code base; nothing from the caller but `args` | reference policy |
-| K9 | Resume and repair: read a quiesced call's note; call again with `function` + `to` to retry what failed, or with corrected arguments; fix a rejected call from its hint | perturbation + reference policy |
-| K10 | Copy, edit, call the copy: adapt a function when the program asks for a variation | reference policy |
-| K11 | Blockers: `report_blocker` with a precise note when inputs do not determine the result; as a caller, pass a callee's blocker upward; never guess | construction (undetermined instances) |
-| K12 | Cold restart: continue from `let` and `return` alone; consult the effect journal | reference policy |
-| K13 | Finish: reply only when `return` is complete; on "still missing", fill exactly that | validator + reference policy |
-| K14 | Navigate: `read` what the listing cuts off, with ranges; read `codebase/<f>` when a signature is not enough | reference policy |
+| K1 | Read a function's instructions and choose the next unfinished substantive line | reference policy |
+| K2 | Translate `x = await f(a, b)` into an ordinary awaited call with positional values | reference policy |
+| K3 | Use ordinary TypeScript loops and array methods for repeated work; preserve order and carried state | reference policy |
+| K4 | Select the correct typed values from `args` and locals; pass values without re-emitting their contents | reference policy |
+| K5 | Name intermediate results clearly and assemble the declared record or array result | reference policy |
+| K6 | Use a short `eval` expression for exact glue when no named helper covers it; do not estimate | reference policy (the code is the oracle) |
+| K7 | Evaluate conditions and close only the branch that applies | reference policy |
+| K8 | Interpret a nested function with its own typed parameters, imports, and private scope | reference policy |
+| K9 | Resume from persistent values and marks; correct rejected calls from their diagnostics | perturbation + reference policy |
+| K10 | Inspect or edit an imported function with function tools when the task requires a source change | reference policy |
+| K11 | Use `report_blocker` when required information is absent; never guess | construction (undetermined instances) |
+| K12 | Continue after a fresh conversation from persistent state and the effect journal | reference policy |
+| K13 | Finish only with a value matching the declared return type and all substantive lines closed | validator + reference policy |
+| K14 | Use `read_value` to inspect scope; use directory-reducer file tools only for relative paths in the supplied folder | reference policy |
 
 **Leaves (L): the prompt-like tasks, kept and trained throughout**
 
 | # | Skill | Oracle |
 |---|-------|--------|
-| L1 | Judge: a `Bool` from a short input and a criterion | gold labels, hidden attributes |
+| L1 | Judge: a `boolean` from a short input and a criterion | gold labels, hidden attributes |
 | L2 | Classify: an enum from an input and a rubric | gold labels, hidden attributes |
-| L3 | Extract: a complete typed record in one `write`; optional fields absent, not invented | hidden record |
+| L3 | Extract: a complete typed record; optional fields absent, not invented | hidden record |
 | L4 | Rewrite, summarize, draft: a short text under stated constraints | teacher, crisp checkers |
-| L5 | Check: a `Bool` check function for a loop (is it short enough, does it cover the points) | construction, crisp twin |
+| L5 | Check: a `boolean` check function for a loop (is it short enough, does it cover the points) | construction, crisp twin |
 | L6 | Data is not code: embedded instructions in inputs change nothing | unaffected behavior |
 
 K-skills are algorithmic and must reach the high nineties; they compound.
-L-skills are where existing datasets pour in. `TYPES.md` §8 specifies the
-balance between drafting and fixing and its metrics.
+L-skills are where existing datasets pour in. [`TYPES.md`](TYPES.md) summarizes
+the current type and validation contract.
 
 ## 3. Data sources
 
@@ -271,10 +269,10 @@ Additions specific to training:
   structured prose, SOP voice, second-person recipe voice. Naming styles for
   locals and functions. Keyword paraphrases ("for each / go through every /
   per item"). Teacher paraphrases, kept only after a round trip (3.4).
-- **Conventions to instill**: follow the stated structure; one `call` per
-  loop; bind by path; exact work through functions or `run_code`, never by
-  estimation; intermediate results in named locals; never re-emit data;
-  blockers instead of guesses.
+- **Conventions to instill**: follow the stated structure; use ordinary
+  function calls and loops; pass typed values; exact work through named
+  functions or short `eval` expressions; intermediate results in named locals;
+  never re-emit data; blockers instead of guesses.
 
 ### 3.2 Natural programs with verifiable outcomes
 
@@ -333,7 +331,7 @@ collections as the inputs of code-base programs (families A–E).
   SemEval ABSA).
 - Moderation: Civil Comments / Jigsaw (policy-as-rubric).
 - Security input triage: [Sajid576 SQL Injection Dataset](https://www.kaggle.com/datasets/sajid576/sql-injection-dataset)
-  supplies `Query,Label` rows for a Bool leaf (0 = benign, 1 = injection).
+  supplies `Query,Label` rows for a boolean leaf (0 = benign, 1 = injection).
   Version 1 has 30,919 rows (19,537 negative, 11,382 positive). Use both
   the source labels and Jev judgments to audit disagreements before making
   reference trajectories. Exclude empty queries and exact strings with
@@ -402,15 +400,15 @@ reference policy. The teacher supplies what neither can:
    needs them). This is a **test of the language** (if a 27B cannot follow a
    program, the program style or the surface is at fault) and a source of
    trajectories on human-written code bases, kept only when the outcome is
-   correct and the structure lint passes (one `call` per loop, no work done
-   for a callee, no guessing).
+   correct and the structure lint passes (ordinary loops and helper calls,
+   no work done on behalf of a callee, no guessing).
 5. *Program author* (later): writes new code bases from a dataset card and a
    persona; kept only if they load, run under the reference leaf oracles, and
    reproduce gold.
 
 **Making teacher traces small-model-shaped**
 - A capped thinking budget; only the final tool calls are kept.
-- `run_code` restricted to one expression over the standard library.
+- Model-written eval snippets restricted to short, transparent TypeScript.
 - A written interpreter prompt (`natlang/prompts/tools_delegate.md`); a
   structure linter on traces; reject traces that violate it rather than
   patching them.
@@ -446,8 +444,9 @@ https://prismml.com/news/bonsai-2-27b
 Prism ML's llama.cpp fork (`scripts/serve_bonsai.sh`; details in `PLAN.md`
 §10). With checks-based grading it solves 19 of 20 of the leaf-style
 conformance programs with no rejected calls, and it follows the triage code
-base step by step (`call ... over`, `run_code` glue, `select_by_flags`),
-correcting rejected calls from their hints. K2 Horizon has not been tried; a
+base step by step (ordinary helper calls and loops, short eval glue,
+`select_by_flags`),
+correcting rejected calls from their diagnostics. K2 Horizon has not been tried; a
 second model is still wanted as the *blind verifier* for round-trip checks,
 which must differ from the generator.
 
@@ -526,11 +525,12 @@ final state. This is the training ground for families F and K and for
 effectful crisp functions.
 
 **Y8. Interpreter drills.** Tiny single-turn exercises, generated in bulk,
-one per K-skill: the next statement of a half-finished function; the `call`
-for one `for each` line; binding inputs among type-fitting paths; the
-`run_code` expression for one line of exact glue; taking one branch; resuming
-a quiesced call; repairing a rejected call from its hint; replying only when
-`return` is complete. Cheap, exact, and the fastest way to move K1–K14.
+one per K-skill: the next unfinished instruction line; an awaited helper call
+with positional values; a TypeScript loop; selecting typed values; a short
+`eval` expression for exact glue; taking one branch; resuming from persisted
+scope and marks; repairing a rejected operation from its diagnostic; returning
+only when the declared result is complete. Cheap, exact, and the fastest way
+to move K1–K14.
 
 **Y9. Scale sets.** The same code bases over inputs far larger than one
 episode can hold: hundreds of items, long texts chunked by a crisp function.
@@ -682,8 +682,8 @@ laptop-CPU numbers for the on-device story.
 
 ## 7. Milestones (training track)
 
-1. **T0 (done on the development machine):** harness with code bases,
-   `call`, locals; reference policy; first synthesizer shapes; teacher served
+1. **T0 (done on the development machine):** harness with typed functions,
+   persistent locals, and ordinary imports; reference policy; first synthesizer shapes; teacher served
    locally; paraphrase round trip; checks-based grading.
 2. **T1:** synthesizer across all constructs and tiers; adapters for
    Super-NaturalInstructions, Banking77, SQuAD 2.0, one ER set, SPoC, BREAK;

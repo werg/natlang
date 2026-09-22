@@ -1,58 +1,35 @@
-# Code bases, calls and locals: design rationale
+# Source functions and imports
 
-The normative text is in `SPEC.md`: §3 (lambda parts, locals, code bases),
-§4 (combinators), §5 (the eight tools, `call`), §7 (how an interpreter works).
-A worked example is `examples/triage/`; the tests are `tests/test_codebase.py`.
-This note records why the design is what it is.
+The normative source and execution contract is in [`SPEC.md`](SPEC.md).
+Programs are graphs of named typed functions. Natural-language functions use
+frontmatter signatures and line-by-line instructions. Crisp helpers are
+ordinary TypeScript modules with default-exported functions:
 
-**Programs are pseudocode, and the structure is the author's.** A natlang
-program is an algorithm: functions with typed signatures, subroutine calls,
-loops, conditions, locals. Inventing a decomposition is the hardest thing to
-ask of a 350M model and something a 27B has no reason to do; *carrying out* a
-stated structure is a small step at a time. Prompt-like tasks (judge,
-classify, extract, rewrite) are the leaves of such programs.
+```ts
+export default function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+```
 
-**No anonymous lambdas.** Every sub-task is an instance of a function of the
-acting lambda's code base. Tool alternatives constrain function and parameter
-names and literal types. Input paths carry parameter type descriptions and are
-checked by the runtime; they are not enumerated per parameter as state grows.
-The interpreter follows the authored structure. It can specialise editable copies;
-generated source can also be loaded through explicit host facilities. Checked
-codebase graphs reject cycles, so calls do not provide recursion.
+Function parameters and return values use ordinary TypeScript data types,
+including `string`, `number`, `boolean`, `null`, records, arrays,
+`Record<string, T>`, aliases, and literal unions. Structural validation checks
+values at call boundaries and completion. It does not prove domain semantics.
 
-**One action to call.** `call(function, to, inputs, ...)` places and runs. A
-placed-but-unrun instance, a separate `run`, continuations with parameters to
-be produced later, and outside-in construction all disappear: straight-line
-locals give the order. Calling again with only `function` and `to` resumes.
+Imports give functions stable names. A function sees its own imports and
+companion helpers rather than inheriting the caller's lexical dependencies.
+Natural-language and crisp functions share ordinary awaited positional call
+syntax, for example `await inspect(event, policy)`. Use standard TypeScript
+loops and array methods for collection work.
 
-**The code base is immutable; variation is copy, edit, call the copy.** The
-copy lives in a local, so edits are visible state with provenance, and the
-original stays what the author wrote.
+Natural-language functions execute in persistent TypeScript scope through
+`eval`. `read_value` inspects that scope, and `mark_lines` closes each completed
+instruction line. Function tools inspect and edit imported function source.
+Those tools cannot create, delete, move, or rename functions.
 
-**The lambda holds every zone of state** (`args`, `let`, `return`, `codebase`
-beside type and body), so swap-out, cold restart and provenance deal with one
-object.
-
-**Lexical scope, links in frontmatter.** A function sees its companion folder
-and its `uses`. More verbose than inheriting the caller's functions, much
-simpler to reason about, and it survives git, archives and Windows, which OS
-symlinks do not.
-
-There is no fixed number-of-functions cap. The former 12-helper listing budget
-rejected valid programs at load time and prevented a research controller from
-using its ordinary crisp library. Keep interpreter prompts efficient by
-decomposing codebases into meaningful lexical groups and reading only relevant
-source; do not turn prompt budgeting into a language validity rule.
-The former 16-local and six-pending-node fixed limits were removed for the
-same reason. Recursion checks remain, and embeddings may explicitly choose
-execution budgets when their environment requires them.
-
-Folder `types.ts` supports named type aliases, including nested records and recursive
-types. It is not a general TypeScript module/typechecker: imports, interfaces, and
-arbitrary TypeScript declarations are not supported.
-
-Folder `types.ts` aliases are terminated by a semicolon at declaration depth,
-not by a semicolon inside a record. Both native hosts accept comma or semicolon
-record field separators, including nested records and trailing separators.
-Quoted semicolons remain literal text. Duplicate or unterminated aliases produce
-loader errors instead of silently truncating a type declaration.
+Directory reducers are the only functions with model-facing file tools. They
+receive a writable copy of an input folder and use paths relative to that
+folder. A direct `await reducer(folder, ...args)` returns the typed result and
+discards file changes. `await folder.apply(reducer, ...args)` retains the
+reducer's selected changes. See [`SPEC.md`](SPEC.md#directory-reducers) for
+commit and folder details.

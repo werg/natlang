@@ -34,18 +34,14 @@ export async function mountApplication({ files, initialState, revision, journal,
 }
 ```
 
-`journal` and `renderer` are application interfaces to implement, not natlang exports. A supplied `modelTurn` permits another backend or a clearly labelled fixture. The reducer signature is `(state: State, event: Event) -> State`; the view takes `state` and returns the chosen UI type. `BrowserAppEvent` has `id`, `kind`, and optional Text `value`; encode richer payloads deliberately or use a typed application layer.
+`journal` and `renderer` are application interfaces to implement, not natlang exports. A supplied `modelTurn` permits another backend or a clearly labelled fixture. The reducer signature is `(state: State, event: Event) -> State`; the view takes `state` and returns the chosen UI type. `BrowserAppEvent` has `id`, `kind`, and optional `string` `value`; encode richer payloads deliberately or use a typed application layer.
 
-If a browser program should inspect a virtual project or document collection,
-declare `files: Dict<ProjectFile>` and bind `textFileTree(files)` from
-`@natlang/browser` through
-`reducerInputs: () => ({files: textFileTree(currentFiles())})`.
-The `source.files` map loads natlang source; the `inputs.files` value is what the
-semantic program can browse through lexical `files` expressions. Keeping these roles explicit
-also lets the application provide only the data subtree it intends to expose.
-The per-run factory observes browser-side changes between events without
-changing a value during one reduction. Use `viewInputs` only when the view is
-semantic and declares the dictionary; crisp views cannot receive it.
+When a browser operation needs model-directed filesystem access, implement it
+as a directory reducer. Its file tools and `folder.fs` API use paths relative
+to the supplied folder. A direct reducer call discards edits; `folder.apply`
+retains the selected edits. Ordinary event reducers and views do not receive
+filesystem tools. The `source.files` map continues to define natlang source,
+not an ambient filesystem capability.
 
 `dispatch` queues events. Stable IDs suppress duplicate events for the current application instance; durable exactly-once behavior needs a persistent event/operation journal. Supply recovered `initialRevision` as well as state. `onCommit` is awaited before view computation. `refresh()` retries presentation without rerunning the reducer. Persist traces intentionally rather than accumulating them forever in memory. Failed reductions can still have host effects; a preserved previous State does not imply rollback.
 

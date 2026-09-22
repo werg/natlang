@@ -34,19 +34,18 @@ Schema changes need executable migrations and evidence preservation. Test missin
 
 ## Extension decisions
 
-Before adding a runtime feature, try the existing typed values, named functions, Map/Fold/Iterate, crisp evaluator, and host-owned objects. Search, SQL, shell commands, binary assets, stronger-model calls, and native jobs can often be host libraries callable from crisp code. This does not mean inventing a special workaround around a broken runtime contract.
+Before adding a runtime feature, try existing typed values, named functions,
+ordinary TypeScript control flow, the crisp evaluator, and host-owned objects.
+Search, SQL, shell commands, binary assets, stronger-model calls, and native
+jobs can often be host libraries callable from crisp code. This does not mean
+inventing a special workaround around a broken runtime contract.
 
 When a general capability is missing, identify its semantic contract and implement it at the shared layer. Wire it through relevant Python, native TS, and browser paths or document the unsupported targets. Check all application callers; a broadly useful correction should not be activated only in the motivating demo. Keep portability and weak-interpreter cognitive cost explicit.
 
-Use a host-backed `Dict<T>` when the semantic program needs selective,
-read-only access to a large keyed space: repository files, document corpora,
-asset metadata, build inputs, trace archives, or database-shaped records. Keep
-queries that require indexing or full-text search in crisp code and return a
-small typed result; a lazy dictionary is navigation and observation, not an
-index. Keep writes as explicit host operations or return a typed change plan
-such as `{ path: Text, text: Text }[]` for the host to validate and commit.
-
-Do not add a live host dictionary beside a pinned source revision merely as
-extra context. That silently changes what can influence a replay. Import the
-needed material into the versioned domain collection, or make the provider's
-identity and observation policy an explicit part of the application contract.
+Use `Record<string, T>` when a keyed collection is an ordinary typed input.
+Keep indexed searches and native database queries in crisp helpers that return
+small typed results. Directory reducers are the only functions with model-side
+filesystem access; their relative paths resolve within the reducer's input
+folder. A direct call `await reducer(folder, ...args)` discards file changes,
+while `await folder.apply(reducer, ...args)` retains the reducer's selected
+changes.

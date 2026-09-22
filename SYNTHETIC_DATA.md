@@ -7,12 +7,14 @@ Status: draft, 2026-09-19. Research was done by web survey on 2026-09-18;
 items marked *[unverified]* could not be confirmed and need a second look.
 
 **What every dataset here produces** is natlang programs in the sense of
-`spec/SPEC.md`: **code bases of pseudocode functions** (typed signatures,
-calls, `for each`, `repeat until`, `if`/`else`, locals, crisp `.ts` helpers)
-whose **leaves** are small prompt-like tasks (judge, classify, extract,
-rewrite). The author or the synthesizer states the structure; the interpreter
-carries it out with `call`, `write`, `run_code`, `read`, `edit`,
-`report_blocker`. Leaf-only programs remain about a quarter of the corpus.
+`spec/SPEC.md`: code bases of typed functions with TypeScript signatures,
+natural-language instruction lines, ordinary loops and helper calls, locals,
+and default-exported crisp `.ts` helpers. Their leaves are small prompt-like
+tasks (judge, classify, extract, rewrite). The author or synthesizer states
+the structure; the interpreter carries it out with `eval`, ordinary imports,
+`mark_lines`, and explicit blocker or error reports. Directory reducers alone
+receive relative-path file tools for their input folder. Leaf-only programs
+remain about a quarter of the corpus.
 Skill codes (K1–K14 interpreting, L1–L6 leaves) are those of `TRAINING.md` §2.
 
 **Contents.** Sections are grouped by the machinery they share, not by number.
@@ -84,7 +86,8 @@ tokenization (https://arxiv.org/abs/2602.07672). SemCoder found concise
 natural-language descriptions of key state beat full dumps (61.8 vs 48.8 on
 CRUXEval-I; https://arxiv.org/pdf/2406.01006). CWM prints unchanged variables
 as `".."` (https://arxiv.org/pdf/2510.02387). Consequences: keep renderings
-sparse, route all string manipulation to crisp functions and `run_code`,
+sparse, route exact string manipulation to crisp functions and short `eval`
+expressions,
 oversample string-state drills.
 
 **Small models are unreliable at free-form search-and-replace.** Aider found
@@ -250,19 +253,19 @@ states (https://arxiv.org/abs/2401.09074).
 
 | Drill | State shown | Target turn | Variants |
 |-------|-------------|-------------|----------|
-| What-next | a function half carried out: some locals exist | the single correct next call | near-miss twins where one local flips the answer; all dialects |
-| For-each | one `for each` line, its functions, its lists | one `call ... over`, the item parameter left out | several lists; extra inputs; the list is a local |
-| Bind | a call whose parameters have several type-fitting candidates | the right `inputs` | distractor values of the right type and wrong meaning |
-| Glue | a line of exact work no function covers | one `run_code` expression, then the `write` | string ops; counting long lists; rounding |
-| Branch | an `if`/`else` and the values it depends on | the first call of the branch taken, only | twin with the condition flipped; empty-list conditions |
-| Return | finished locals, declared `returns` | calls straight `to` `return/<field>`, `write` with `source`, then the reply | optional fields, nested records |
-| Navigate | a listing that cuts a value off, a step that needs it | `read(path, start, end)` | deep paths, list ranges, long Text; twin where reading is unnecessary |
-| Resume | a call that quiesced with a note | `call` with `function` + `to` only; or with corrected arguments | partial Map; stopped Fold |
-| Call repair | previous call + real rejection and hint | corrected call | `bad-call`, `unknown-field`, type does not fit |
+| What-next | a function half carried out: some locals exist | the single correct next instruction line | near-miss twins where one local flips the answer; all dialects |
+| For-each | one loop line, its functions, and its lists | a standard TypeScript loop with the right helper call | several lists; extra inputs; the list is a local |
+| Bind | a helper call whose parameters have several type-fitting candidates | the right positional values | distractor values of the right type and wrong meaning |
+| Glue | a line of exact work no function covers | one short `eval` expression | string ops; counting long lists; rounding |
+| Branch | an `if`/`else` and the values it depends on | the condition and only its selected branch | twin with the condition flipped; empty-list conditions |
+| Return | finished locals and declared return type | a value with the required type, then line closure | optional fields, nested records |
+| Navigate | a scope value is truncated before a step needs it | `read_value(expression, start, end)` | nested values, list ranges, long strings; twin where reading is unnecessary |
+| Resume | a function continued after a fresh context | continue from persisted scope and marks | interrupted loops and nested calls |
+| Call repair | previous helper call plus a real rejection diagnostic | corrected call | type mismatch, missing argument, invalid operation |
 | Blocker | inputs that do not determine the result | `report_blocker` with a precise note | twin where they do; a callee's blocker passed upward |
-| Copy-edit-call | a program line asking for a variation of a function | `Function<f>` copy, one `edit`, `call` of the copy | twin where an argument suffices |
-| Loop check | a state and a criterion | the `Bool` of a check function | met, nearly met, not met |
-| Leaf | item + question or rubric or record type | one complete typed `write` | Y11 minimal pairs |
+| Copy-edit-call | a program line asking for a variation of a function | edit the imported function with function tools and call it by name | twin where an argument suffices |
+| Loop check | a state and a criterion | the `boolean` of a check function | met, nearly met, not met |
+| Leaf | item + question or rubric or record type | one complete typed return value | Y11 minimal pairs |
 | Ignore embedded | data containing instructions | unaffected turn | Y12 |
 | Finish | "still missing: x" after a reply | exactly the missing write | twin: nothing missing → reply |
 
@@ -420,7 +423,7 @@ task.
    conflicting mentions (gold per a stated precedence rule, e.g. "latest
    wins"), distractor entities, values stated indirectly (dates as "next
    Tuesday" relative to a stated date, which routes to a crisp function).
-4. Emit as a leaf function (`args: { document: Text }`, `returns` = the
+4. Emit as a leaf function (`args: { document: string }`, `returns` = the
    type), and as the leaf of code bases that call it over a folder of
    documents and aggregate the records with crisp code.
 5. **Repair episodes.** Corrupt a correct `return`: wrong type, missing
@@ -663,7 +666,7 @@ query (https://arxiv.org/abs/2503.18813), which is structurally what our
 `instructions`-vs-inputs split already is.
 
 **Structural defenses first (runtime, not data).** The renderer marks
-provenance: `instructions` is the only program text; all other Text nodes are
+provenance: `instructions` is the only program text; all other string values are
 rendered inside reserved delimiters that are stripped from data on write
 (StruQ's secure front end), optionally datamarked.
 
@@ -834,7 +837,8 @@ the result" rule out by construction.
 
 **Generator design.**
 1. *Scale sweeps.* Y2 programs with list sizes K ∈ {1, 3, 10, 30, 100, 1000}.
-   The reference trajectory is the same at every K: one `call ... over`.
+   The reference trajectory is the same at every K: one standard TypeScript
+   loop with a helper call for each item.
    Small K is included so that the model calls the function even when it could
    have answered by hand.
 2. *Long texts.* One long document instead of a list: the program calls a
@@ -885,7 +889,7 @@ SynLogic, Enigmata: generator + verifier suites.
 3. *Tasks.* Base rewriting/summarizing/formatting leaf + 1–5 sampled
    constraints. Program shape: `draft = write(...)`, then `repeat at most n
    times until passes(draft): draft = revise(draft)`, where `passes` is the
-   generated checker as a crisp `Bool` function, and a final branch that
+   generated checker as a crisp `boolean` function, and a final branch that
    reports which constraints still fail.
 4. *Conflicting constraints* (unsatisfiable sets) where the right result is
    to report the conflict.

@@ -14,13 +14,12 @@ runs, commits state before presentation, derives event seeds, suppresses
 committed event IDs and retries the view independently. Crisp helpers own exact
 process/file/database calls and typed result checks.
 
-For a terminal application that reasons over its working tree, declare a
-`files: Dict<ProjectFile>` reducer argument and configure
-`reducerInputs: () => ({ files: new NodeFileTree(root) })`. The reducer can
-browse `files` lazily with `read_value` expressions and pass the same dictionary
-positionally to compatible semantic helpers.
-The factory creates a fresh dictionary for each reduction, while observations
-within one run remain stable. Keep it out of a crisp view's inputs.
+When a workspace operation needs model-directed filesystem access, implement
+it as a directory reducer. Its file tools and `folder.fs` API use paths
+relative to the supplied folder. A direct call `await reducer(folder, ...args)`
+returns the typed result and discards edits; `await folder.apply(reducer, ...args)`
+retains the selected edits. Ordinary event reducers and views do not receive
+filesystem tools.
 
 Use `TerminalEventQueue` to combine readline input, job completions, watchers or
 sockets. Producers may be concurrent, but events wait while one lambda runs and

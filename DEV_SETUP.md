@@ -68,15 +68,13 @@ natlang summarize the available functions and when to call them
 
 When two or more positional words, or one quoted multiword argument, do not form
 an existing path, the CLI wraps them in an anonymous
-`Lambda<{ files: Dict<ProjectFile> }, Text>`. The
-working directory is its codebase root: every top-level `.nl` and natlang
-frontmatter `.ts` function is available by name, and those functions retain
-their declared companions. Ordinary host `.ts` files are ignored. Instruction
-runs accept `--profile`, `--trace`, `--seed`, `--timeout`, and `--json`. Other
-files are available as the ordinary `args/files` dictionary. The Node provider
-reads directories and file leaves on demand and exposes binary files as
-metadata. A child that needs the tree declares a compatible dictionary argument
-and receives `args/files` through a normal call binding.
+`(files: Record<string, ProjectFile>) => string`. The working directory is its
+codebase root: every top-level `.nl` and natlang frontmatter `.ts` function is
+available by name, and those functions retain their declared companions.
+Ordinary host `.ts` files are ignored. Instruction runs accept `--profile`,
+`--trace`, `--seed`, `--timeout`, and `--json`. The file manifest is an ordinary
+typed record passed to the instruction. Directory reducers use the relative
+file API when they need model-directed filesystem changes.
 
 Run an application by giving its manifest or a directory containing
 `natlang.json`:
