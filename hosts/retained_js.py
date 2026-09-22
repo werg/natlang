@@ -9,7 +9,7 @@ from pathlib import Path
 from natlang.execution import CrispRequest, ExecutionError, portable
 from natlang.nodes import MISSING
 
-WORKER = Path(__file__).with_name("retained_js_worker.js")
+WORKER = Path(__file__).with_name("retained_js_worker.cjs")
 
 
 def _scope(value):
