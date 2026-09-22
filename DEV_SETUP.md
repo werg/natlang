@@ -138,8 +138,8 @@ are left untouched; with consent, natlang installs its verified build beside
 them.
 
 A reducer-backed application begins these steps immediately, in parallel with
-loading its target module and state. A direct program begins them on its first
-semantic model turn:
+loading its target module and state. A direct source program begins them in
+parallel with source loading:
 
 1. selects the statically generated project default;
 2. uses a verified checkout copy when present, otherwise downloads the verified
@@ -149,7 +149,8 @@ semantic model turn:
 5. terminates that owned process when the command closes or receives SIGINT or
    SIGTERM.
 
-Crisp only programs and package targets never start or download a model. `natlang --setup` repeats
+Administrative and host-only package commands do not start or download a model.
+`natlang --setup` repeats
 runtime discovery and installation, `natlang --runtime status --json` explains
 every candidate, and `natlang --runtime install` explicitly installs the managed
 build. Point at a custom compatible binary with `NATLANG_LLAMA_SERVER`.

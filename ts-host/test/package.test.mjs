@@ -82,7 +82,13 @@ test('dependency locks choose a stable version and cycles are rejected', () => {
     make('b', '1.0.0', { a: '*' })]), /dependency cycle/);
 });
 
-test('CLI packs, installs, and runs a target from the content store', async () => {
+test('CLI packs, installs, and runs a target from the content store', async t => {
+  const previousServer = process.env.NATLANG_SERVER, previousModel = process.env.NATLANG_MODEL;
+  process.env.NATLANG_SERVER = 'http://model.test'; process.env.NATLANG_MODEL = 'fixture';
+  t.after(() => {
+    if (previousServer === undefined) delete process.env.NATLANG_SERVER; else process.env.NATLANG_SERVER = previousServer;
+    if (previousModel === undefined) delete process.env.NATLANG_MODEL; else process.env.NATLANG_MODEL = previousModel;
+  });
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
   writeFileSync(join(root, 'direct.ts'), `/*---
 description: Return a fixture number.
@@ -128,7 +134,6 @@ return "source named ${name}"`);
     assert.equal(collidingPath, `"source named ${name}"\n`);
   }
   const originalFetch = globalThis.fetch, originalWrite = process.stdout.write, originalCwd = process.cwd();
-  const previousServer = process.env.NATLANG_SERVER, previousModel = process.env.NATLANG_MODEL;
   let wire, anonymousOutput = '', anonymousTurn = 0;
   globalThis.fetch = async (_url, init) => {
     wire = JSON.parse(init.body);
@@ -140,14 +145,11 @@ return "source named ${name}"`);
       id: `anonymous-${anonymousTurn}`, type: 'function', function: call }] : [] } }], usage: { completion_tokens: 1 } }), { status: 200,
       headers: { 'content-type': 'application/json' } });
   };
-  process.env.NATLANG_SERVER = 'http://model.test'; process.env.NATLANG_MODEL = 'fixture';
   process.stdout.write = chunk => { anonymousOutput += String(chunk); return true; };
   process.chdir(root);
   try { assert.equal(await cliMain(['answer from this codebase', '--timeout', '5000']), 0); }
   finally {
     process.chdir(originalCwd); process.stdout.write = originalWrite; globalThis.fetch = originalFetch;
-    if (previousServer === undefined) delete process.env.NATLANG_SERVER; else process.env.NATLANG_SERVER = previousServer;
-    if (previousModel === undefined) delete process.env.NATLANG_MODEL; else process.env.NATLANG_MODEL = previousModel;
   }
   assert.equal(anonymousOutput, 'anonymous result\n');
   assert.match(JSON.stringify(wire), /answer from this codebase/);

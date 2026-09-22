@@ -96,8 +96,9 @@ Examples:
 
 Run natlang --help COMMAND for focused usage and options.
 
-Semantic execution lazily starts and owns its configured local model server.
-Run natlang --setup once to inspect or prepare it.`; }
+Source execution and reducer-backed applications immediately prepare and own
+their configured local model server. Run natlang --setup to prepare it ahead of
+the command when desired.`; }
 
 function topicHelp(topic: string): string {
   if (topic === 'source') return `Run source or an installed application:
@@ -380,11 +381,13 @@ async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   const host = new NativeNatlangHost();
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
-    const result = await host.run({ source: { kind: 'file', path }, inputs,
+    const preparation = model.prepare();
+    const run = host.run({ source: { kind: 'file', path }, inputs,
       modelTurn: request => model.turn(request),
       tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
       timeoutMs,
       options: seed === undefined ? undefined : { seed: { mode: 'derived', root: seed } } });
+    const [, result] = await Promise.all([preparation, run]);
     if (parsed.options.has('--json')) output(result, true);
     else process.stdout.write(JSON.stringify(result.value, null, 2) + '\n');
     if (result.outcome.kind !== 'done') process.stderr.write(`natlang: ${result.outcome.kind}: ${result.outcome.detail}\n`);
@@ -399,16 +402,18 @@ async function runAnonymousInstruction(parsed: Parsed, instruction: string): Pro
   const host = new NativeNatlangHost();
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
+    const preparation = model.prepare();
     const program = loadAnonymousInstruction(process.cwd(), instruction);
     const body = program.$lambda as Record<string, unknown>;
     body.type = 'Lambda<{ files: Dict<ProjectFile> }, Text>';
     body.types = { ...body.types as Record<string, string> ?? {}, ProjectFile: FILE_TREE_LEAF_TYPE };
-    const result = await host.run({ source: { kind: 'program', program },
+    const run = host.run({ source: { kind: 'program', program },
       inputs: { files: new NodeFileTree(process.cwd()) },
       modelTurn: request => model.turn(request),
       tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
       timeoutMs,
       options: seed === undefined ? undefined : { seed: { mode: 'derived', root: seed } } });
+    const [, result] = await Promise.all([preparation, run]);
     if (parsed.options.has('--json')) output(result, true);
     else if (typeof result.value === 'string') process.stdout.write(result.value + (result.value.endsWith('\n') ? '' : '\n'));
     else process.stdout.write(JSON.stringify(result.value, null, 2) + '\n');

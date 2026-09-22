@@ -20,12 +20,13 @@ top-level natlang functions and lazy file tree.
 `natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
 asks before installing natlang's pinned, hash checked runtime in the user data
 directory. It never replaces a system installation. Use `natlang --setup --yes`
-in unattended environments. The first semantic run offers the same setup when
-it has an interactive terminal.
+in unattended environments. The first source or reducer-backed application run
+offers the same setup when it has an interactive terminal.
 
 Source paths require no package installation. A reducer-backed application
 starts preparing its selected local server immediately, concurrently with
-target initialization, and opens after readiness. Direct programs remain lazy
-until their first semantic turn. The CLI stops an owned server when the command
-exits. `natlang --runtime status --json` reports discovery and compatibility
-details.
+target initialization, and opens after readiness. Source execution through this
+CLI also prepares the model immediately; only the lower-level embeddable model
+session remains lazy until its caller invokes `prepare()` or `turn()`. The CLI
+stops an owned server when the command exits.
+`natlang --runtime status --json` reports discovery and compatibility details.

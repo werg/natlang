@@ -37,6 +37,7 @@ process.on('SIGTERM', () => { fs.appendFileSync(${JSON.stringify(marker)}, 'stop
   assert.equal(session.status().running, true);
   await session.close();
   assert.deepEqual(readFileSync(marker, 'utf8').trim().split('\n'), ['started', 'stopped']);
+  await assert.rejects(session.prepare(), /model session is closed/);
 });
 
 test('configured endpoints stay externally owned', async () => {

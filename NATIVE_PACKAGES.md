@@ -147,9 +147,9 @@ unattended install, and `natlang --runtime status --json` to inspect resolution.
 
 A target that declares a reducer starts preparing the selected server as soon
 as it is resolved. This overlaps target import and application state setup; the
-target begins its interactive run after readiness. Direct programs still start
-on their first semantic turn. Crisp only targets do not start a model. The CLI
-closes an owned server with the command. Model profiles in the platform config
+target begins its interactive run after readiness. Direct source programs also
+prepare the model immediately. Host-only executable targets do not start one.
+The CLI closes an owned server with the command. Model profiles in the platform config
 directory select externally owned services:
 
 ```json

@@ -120,10 +120,11 @@ export function createManagedModelSession(profile: ModelProfile,
   if (!profile.endpoint && profile.model)
     throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
-  let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '';
+  let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '', closed = false;
   let prerequisites = localModelPrerequisites(environment);
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
+    if (closed) throw new Error('model session is closed');
     if (external) return { ...profile, endpoint: external.endpoint, model: external.model,
       apiKey: environment[profile.apiKeyEnv ?? 'NATLANG_API_KEY'], toolAliases: { call: 'call_function' } };
     if (local) return local;
@@ -138,7 +139,9 @@ export function createManagedModelSession(profile: ModelProfile,
         if (explicit) throw new Error(`NATLANG_LLAMA_SERVER is incompatible: ${describeLlamaRuntime(prerequisites.runtime)}`);
         throw new Error(`managed model server is unavailable: ${describeLlamaRuntime(prerequisites.runtime)}; run natlang --setup or natlang --runtime install`);
       }
-      const modelPath = await ensureModel(environment, error), port = await freePort();
+      const modelPath = await ensureModel(environment, error);
+      if (closed) throw new Error('model session is closed');
+      const port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;
       const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', '1',
         '-c', String(DEFAULT_LOCAL_MODEL.contextTokens), '-ngl', '99', '--cache-ram', '256', '--no-webui',
@@ -180,7 +183,14 @@ export function createManagedModelSession(profile: ModelProfile,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
       model: environment.NATLANG_MODEL ?? DEFAULT_LOCAL_MODEL.id, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
-    async close() { process.removeListener('SIGINT', terminate); process.removeListener('SIGTERM', terminate);
-      process.removeListener('exit', onExit); if (child) await stopChild(child); child = null; local = null; },
+    async close() {
+      closed = true;
+      process.removeListener('SIGINT', terminate); process.removeListener('SIGTERM', terminate);
+      process.removeListener('exit', onExit);
+      if (child) await stopChild(child);
+      if (starting) await starting.catch(() => undefined);
+      if (child) await stopChild(child);
+      child = null; local = null;
+    },
   };
 }
