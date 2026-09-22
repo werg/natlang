@@ -34,7 +34,8 @@ export async function runTerminalShell<S, E extends TerminalEvent>(
       ...(app.view?.help ?? [])];
     writeNote([...new Set(rows)].join('\n'));
   };
-  const consume = app.consume(queue, transition => show(transition.view));
+  const consume = app.consume(queue, transition => show(transition.view), error =>
+    writeNote(`Request failed: ${error instanceof Error ? error.message : String(error)}`));
   const external = options.events ? (async () => {
     try { for await (const event of options.events!) queue.push(event); }
     catch (error) { queue.fail(error); }

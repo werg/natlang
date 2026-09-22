@@ -42,6 +42,8 @@ crisp view is appropriate when it only projects semantic state.
 commands control redraw, inference cancellation, semantic job cancellation and
 exit. For jobs, return an ID promptly and publish their actual outcomes through
 an event source. Shutdown must abort or transfer ownership of native work.
+One failed event is reported at the prompt without terminating the shell; the
+last committed state remains available for a corrected request or `/refresh`.
 
 `openAICompatibleModelTurn` keeps endpoint/model aliases and raw exchanges in a
 transport adapter. Configure it for the actual endpoint; do not copy those

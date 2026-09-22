@@ -144,6 +144,12 @@ The example illustrates the transport shape, not a canned interpreter policy. Re
 
 Keep model/template quirks inside the adapter. For example, the repository's Bonsai adapter aliases `call` because of its parser, while source programs still use the same natlang call semantics. Use the selected backend's supported structured/typed tool representation, including literal parameter types. Do not blindly strip alternatives, silently unwrap malformed values, or paste model-specific conventions into every `.nl` file. Capture the exact presented tools/messages, not only the pre-adaptation request.
 
+The shared OpenAI-compatible adapter retries one response whose tool arguments
+are malformed JSON, adding a narrow correction to the original turn. A second
+malformed response is a bounded transport failure. This repair happens before
+runtime validation feedback, which handles well-formed calls that violate the
+offered schema or current state.
+
 When `max_tokens` is absent/null, omit a provider field that requires an integer. Report actual usage and termination reasons when available. Do not replace unknown usage with invented zero-cost success. Forward cancellation where supported; provider cancellation and effect cancellation are different.
 
 ## Version checks

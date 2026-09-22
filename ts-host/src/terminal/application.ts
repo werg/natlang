@@ -186,10 +186,16 @@ export class TerminalNatlangApplication<S, V, E extends TerminalEvent = Terminal
 
   cancel(): void { this.active?.abort(); }
   async consume(events: AsyncIterable<E>,
-    each?: (transition: TerminalTransition<S, V, E>) => void | Promise<void>): Promise<void> {
+    each?: (transition: TerminalTransition<S, V, E>) => void | Promise<void>,
+    failed?: (error: unknown, event: E) => void | Promise<void>): Promise<void> {
     for await (const event of events) {
-      const transition = await this.dispatch(event);
-      if (transition) await each?.(transition);
+      try {
+        const transition = await this.dispatch(event);
+        if (transition) await each?.(transition);
+      } catch (error) {
+        if (!failed) throw error;
+        await failed(error, event);
+      }
     }
   }
   async close(): Promise<void> {

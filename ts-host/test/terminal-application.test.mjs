@@ -67,6 +67,32 @@ test('terminal application serializes events, persists state, and restores dupli
   } finally { await app.close(); host.close(); rmSync(folder, { recursive: true, force: true }); }
 });
 
+test('terminal event consumption reports a failed reduction and continues with later events', async () => {
+  let reductions = 0;
+  const runner = { async run(request) {
+    if (request.source.path === 'reduce') {
+      if (reductions++ === 0) throw new Error('malformed model turn');
+      return { outcome: { kind: 'done' }, value: { count: 1 } };
+    }
+    return { outcome: { kind: 'done' }, value: { blocks: [] } };
+  } };
+  const app = new TerminalNatlangApplication({ runner,
+    source: { reducer: 'reduce', view: 'view' }, initialState: { count: 0 } });
+  const failures = [], transitions = [];
+  async function* events() {
+    yield { id: 'bad', kind: 'request' };
+    yield { id: 'good', kind: 'request' };
+  }
+  try {
+    await app.start();
+    await app.consume(events(), transition => transitions.push(transition),
+      (error, event) => failures.push({ error: String(error), id: event.id }));
+    assert.deepEqual(failures, [{ error: 'Error: reduce failed: Error: malformed model turn', id: 'bad' }]);
+    assert.equal(transitions.length, 1);
+    assert.equal(app.state.count, 1);
+  } finally { await app.close(); }
+});
+
 test('terminal reducer gets a fresh lazy file view while crisp view stays file-free', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-files-'));
   const types = join(folder, 'types.ts'), reducer = join(folder, 'reduce.nl'), view = join(folder, 'view.ts');
@@ -125,6 +151,46 @@ test('OpenAI-compatible driver aliases tools without changing natlang call names
     assert.equal('max_tokens' in wire, false);
     assert.deepEqual(result.calls, [['call', { function: 'work', to: 'return' }]]);
     assert.equal(result.prompt_tokens, 9);
+  } finally { globalThis.fetch = original; }
+});
+
+test('OpenAI-compatible driver retries one malformed tool call with corrective context', async () => {
+  const original = globalThis.fetch, wires = [];
+  globalThis.fetch = async (_url, init) => {
+    wires.push(JSON.parse(init.body));
+    const malformed = wires.length === 1;
+    return new Response(JSON.stringify({ choices: [{ finish_reason: 'tool_calls', message: {
+      content: '', tool_calls: [{ function: { name: 'write',
+        arguments: malformed ? '{"path":"return"' : '{"path":"return","value":"ok"}' } }],
+    } }], usage: { completion_tokens: 2, prompt_tokens: 5 } }), { status: 200,
+      headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const driver = openAICompatibleModelTurn({ endpoint: 'http://model.test', model: 'fixture' });
+    const result = await driver({ messages: [{ role: 'user', content: 'Return ok.' }],
+      tools: [{ type: 'function', function: { name: 'write', parameters: { type: 'object' } } }],
+      temperature: 0, seed: 3, max_tokens: null });
+    assert.equal(wires.length, 2);
+    assert.match(wires[1].messages.at(-1).content, /valid JSON object arguments/);
+    assert.deepEqual(result.calls, [['write', { path: 'return', value: 'ok' }]]);
+    assert.equal(result.prompt_tokens, 10);
+    assert.equal(result.completion_tokens, 4);
+  } finally { globalThis.fetch = original; }
+});
+
+test('OpenAI-compatible driver bounds malformed-call repair', async () => {
+  const original = globalThis.fetch; let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    return new Response(JSON.stringify({ choices: [{ finish_reason: 'tool_calls', message: {
+      content: '', tool_calls: [{ function: { name: 'write', arguments: '{"path":' } }],
+    } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const driver = openAICompatibleModelTurn({ endpoint: 'http://model.test', model: 'fixture' });
+    await assert.rejects(driver({ messages: [], tools: [], temperature: 0, seed: 3, max_tokens: null }),
+      /malformed tool arguments after 2 attempts/);
+    assert.equal(requests, 2);
   } finally { globalThis.fetch = original; }
 });
 

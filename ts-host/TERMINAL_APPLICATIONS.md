@@ -88,6 +88,10 @@ view. A failed view can be retried with `refresh()` without rerunning the
 reducer. A failed commit leaves the in-memory application at its previous
 revision. Native effects may already have happened; applications that retry
 effects need stable operation IDs and reconciliation in their host library.
+`runTerminalShell` reports a failed event and continues accepting input. The
+OpenAI-compatible model adapter makes one corrective retry when a model emits
+malformed JSON tool arguments; repeated malformed output becomes that reported
+event failure rather than terminating the terminal process.
 
 ## Event and job semantics
 
