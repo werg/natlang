@@ -18,6 +18,8 @@ from natlang.scenario import CALL_MODES, action_matches
 
 SEMANTIC_TOOLS = {"call", "write", "write_value", "copy_value", *CALL_MODES,
                   "report_error", "report_blocker"}
+SCOPE_TOOLS = {"eval", "read_value", "write_value", "return_value", "mark_lines",
+               "report_blocker", "report_error"}
 
 
 def target_actions(rows):
@@ -28,6 +30,30 @@ def target_actions(rows):
             if name in SEMANTIC_TOOLS:
                 actions.append({"tool": name, "arguments": json.loads(call["function"]["arguments"])})
     return actions
+
+
+def audit_scope_turns(rows):
+    """Validate the shape of scope-eval targets without applying legacy action contracts.
+
+    Scope eval deliberately expresses work as ordinary declarations and line
+    closure.  Its exact semantics are checked by the teacher replay and
+    runtime admission; this pass only guards the shared IR/training boundary
+    against silently dropping or inventing tool choices.
+    """
+    for row in rows:
+        target = row.get("target") or {}
+        for call in target.get("tool_calls") or []:
+            function = call.get("function") or {}
+            name = function.get("name")
+            if name not in SCOPE_TOOLS:
+                raise ValueError(f"{row.get('id', '<row>')}: unknown scope-eval tool: {name}")
+            try:
+                args = json.loads(function.get("arguments") or "{}")
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{row.get('id', '<row>')}: invalid scope-eval arguments") from exc
+            if not isinstance(args, dict):
+                raise ValueError(f"{row.get('id', '<row>')}: scope-eval arguments are not an object")
+    return True
 
 
 def audit_actions(record, actions, *, complete=True):
@@ -70,6 +96,10 @@ def audit_actions(record, actions, *, complete=True):
 
 
 def audit_turns(record, rows, *, complete=True):
+    offered = {tool["function"]["name"] for row in rows for tool in row.get("tools", [])
+               if isinstance(tool, dict) and isinstance(tool.get("function"), dict)}
+    if "eval" in offered or "return_value" in offered:
+        return audit_scope_turns(rows)
     return audit_actions(record, target_actions(rows), complete=complete)
 
 

@@ -606,6 +606,7 @@ export class NativeSession {
   completed = false;
   actions = 0;
   toolCalls = 0;
+  surfaceName = 'tools-v3';
   readonly env: TypeEnv;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
@@ -658,7 +659,7 @@ export class NativeSession {
     if (['write', 'edit', 'call'].includes(name) && ['ok', 'done', 'quiesced'].includes(result.kind))
       result.text = result.text.trimEnd() + '\n' + this.progress();
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null,
-      surface: 'tools-v3', name, arguments: args,
+      surface: this.surfaceName, name, arguments: args,
       outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     this.runtime.observeState('after-action');
     return result;
@@ -697,7 +698,9 @@ export class NativeSession {
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
     try {
       if (name === 'write_value') return this.applyNow('write', {
-        path: args.destination, type: args.type, value: args.value });
+        path: args.name !== undefined ? `let/${String(args.name)}` : args.destination,
+        type: args.as_type ?? args.type ?? (args.name !== undefined ? this.inferScopeType(args.value) : undefined),
+        value: args.value });
       if (name === 'copy_function') return this.applyNow('write', {
         path: args.save_as, type: `Function<${String(args.function ?? '')}>` });
       if (name === 'copy_value') {
@@ -708,6 +711,20 @@ export class NativeSession {
       if (name === 'edit_text') return this.applyNow('edit', { path: args.path, old: args.find,
         new: args.replace_with ?? '', fuzzy: args.fuzzy ?? false });
       if (name === 'mark_lines') return this.applyNow('mark_done', args);
+      if (name === 'read_value') {
+        const path = this.scopePath(String(args.expression ?? ''));
+        return this.applyNow('read', { path,
+          ...(args.start !== undefined ? { start: args.start } : {}),
+          ...(args.end !== undefined ? { end: args.end } : {}) });
+      }
+      if (name === 'return_value') {
+        const variable = String(args.variable ?? '');
+        const source = Object.hasOwn(this.lam.let, variable) ? `let/${variable}` :
+          Object.hasOwn(this.lam.args, variable) ? `args/${variable}` : '';
+        if (!source) throw new Reject([{ path: variable, code: 'no-such-path', expected: 'an existing scope variable' }]);
+        if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'return', code: 'type-mismatch' }]);
+        return this.applyNow('write', { path: 'return', type: formatType(this.lam.type.returns), source });
+      }
       if (name === 'report_blocker' || name === 'report_error') {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
         if (message.length < 8) throw new Reject([{ path: name === 'report_blocker' ? 'missing' : 'message',
@@ -916,6 +933,190 @@ export class NativeSession {
     throw new Reject([{ path, code: 'bad-range' }]);
   }
 
+  private inferScopeType(value: unknown): string {
+    if (value === null) return 'Null';
+    if (typeof value === 'boolean') return 'Bool';
+    if (typeof value === 'number' && Number.isFinite(value)) return 'Num';
+    if (typeof value === 'string') return 'Text';
+    if (Array.isArray(value)) {
+      if (!value.length) throw new Reject([{ path: 'as_type', code: 'type-mismatch', expected: 'as_type for an empty list' }]);
+      const types = [...new Set(value.map(item => this.inferScopeType(item)))];
+      if (types.length !== 1) throw new Reject([{ path: 'as_type', code: 'type-mismatch', expected: 'as_type for a heterogeneous list' }]);
+      return `(${types[0]})[]`;
+    }
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value);
+      if (!entries.length) throw new Reject([{ path: 'as_type', code: 'type-mismatch', expected: 'as_type for an empty record' }]);
+      return `{ ${entries.map(([key, item]) => `${key}: ${this.inferScopeType(item)}`).join(', ')} }`;
+    }
+    throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable literal' }]);
+  }
+
+  private scopePath(expression: string): string {
+    const match = /^([A-Za-z_$][\w$]*)(.*)$/.exec(expression.trim());
+    if (!match) throw new Reject([{ path: 'expression', code: 'bad-action', expected: 'a variable and field/index selections' }]);
+    const root = match[1]!, base = root === 'args' ? 'args' : Object.hasOwn(this.lam.let, root) ? `let/${root}` :
+      Object.hasOwn(this.lam.args, root) ? `args/${root}` : '';
+    if (!base) throw new Reject([{ path: root, code: 'no-such-path', expected: 'a scope variable' }]);
+    let path = base, tail = match[2]!;
+    while (tail) {
+      const member = /^\.([A-Za-z_$][\w$]*)(.*)$/s.exec(tail);
+      const index = /^\[(?:"([^"\\]+)"|'([^'\\]+)'|(\d+))\](.*)$/s.exec(tail);
+      if (member) { path += `/${member[1]}`; tail = member[2]!; }
+      else if (index) { path += `/${index[1] ?? index[2] ?? index[3]}`; tail = index[4]!; }
+      else throw new Reject([{ path: 'expression', code: 'bad-action', expected: 'field and index selection without computation' }]);
+    }
+    return path;
+  }
+
+  private scopePrefix(includeResult = true): string {
+    return [...(includeResult ? ['let result = self.locals.result;'] : []),
+      ...Object.keys(this.lam.args).map(name => `const ${name} = self.inputs[${JSON.stringify(name)}];`),
+      ...Object.entries(this.lam.let).filter(([name, value]) => name !== 'result' && !pending(value))
+        .map(([name]) => `let ${name} = self.locals[${JSON.stringify(name)}];`)].join('\n');
+  }
+
+  private scopeView(): Record<string, unknown> {
+    return { args: inlineEvalView(this.lam.args as Value), inputs: inlineEvalView(this.lam.args as Value), locals: inlineEvalView(Object.fromEntries(
+      Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
+  }
+
+  private splitCallArgs(source: string): string[] {
+    const out: string[] = []; let start = 0, depth = 0, quote = '', escaped = false;
+    for (let i = 0; i < source.length; i++) {
+      const char = source[i]!;
+      if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
+      else if ('\"\'`'.includes(char)) quote = char;
+      else if ('([{'.includes(char)) depth++;
+      else if (')]}'.includes(char)) depth--;
+      else if (char === ',' && depth === 0) { out.push(source.slice(start, i).trim()); start = i + 1; }
+    }
+    const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
+  }
+
+  private splitScopeStatements(source: string): string[] {
+    const out: string[] = []; let start = 0, depth = 0, quote = '', escaped = false;
+    for (let i = 0; i < source.length; i++) {
+      const char = source[i]!;
+      if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
+      else if ('\"\'`'.includes(char)) quote = char;
+      else if ('([{'.includes(char)) depth++;
+      else if (')]}'.includes(char)) depth--;
+      else if ((char === ';' || char === '\n') && depth === 0) {
+        const part = source.slice(start, i).trim(); if (part) out.push(part); start = i + 1;
+      }
+    }
+    const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
+  }
+
+  private async scopeEval(code: string): Promise<NativeResult> {
+    if (!code.trim()) return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript-like statement or expression' }]));
+    if (/\b(?:eval|Function|import|process|globalThis|require)\b/.test(code))
+      return rejected(new Reject([{ path: 'code', code: 'eval-forbidden', expected: 'the restricted typed scope language' }]));
+    const statements = this.splitScopeStatements(code), imported = Object.keys(this.lam.codebase);
+    if (statements.length > 1 && imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
+      let last: NativeResult = { kind: 'ok', text: 'null', value: null };
+      for (let statement of statements) {
+        if (statement.includes('.map(') && !statement.includes('Promise.all') &&
+            imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(statement))) {
+          const head = /^\s*((?:const|let)\s+[A-Za-z_$][\w$]*(?:\s*:\s*[^=]+)?\s*=\s*)([\s\S]*)$/.exec(statement);
+          if (head) statement = `${head[1]}await Promise.all(${head[2]})`;
+        }
+        last = await this.scopeEval(statement);
+        if (!['ok', 'done'].includes(last.kind)) return last;
+      }
+      return last;
+    }
+    const mapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (mapped && Object.hasOwn(this.lam.codebase, mapped[5]!)) {
+      const definition = this.lam.codebase[mapped[5]!] as Record<string, unknown>;
+      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
+      const expressions = this.splitCallArgs(mapped[6]!);
+      if (expressions.length !== declared.length)
+        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${declared.length} positional arguments` }]));
+      try {
+        const evaluate = (expression: string) => this.runtime.evalFor(this.lam,
+          `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result;
+        const values: Record<string, unknown> = {}, omitted: string[] = [];
+        expressions.forEach((expression, index) => {
+          const parameter = declared[index]!.replace(/\?$/, '');
+          if (expression.trim() === mapped[4]) omitted.push(parameter); else values[parameter] = evaluate(expression);
+        });
+        if (omitted.length !== 1) return rejected(new Reject([{ path: 'code', code: 'bad-call',
+          expected: 'the map item supplied to exactly one function parameter' }]));
+        const rawName = declared.find(name => name.replace(/\?$/, '') === omitted[0])!;
+        const itemType = signature[rawName]!, listType = parseType(`(${itemType})[]`), hidden = `__items_${this.actions}`;
+        this.lam.letTypes[hidden] = listType;
+        this.lam.let[hidden] = coerce(evaluate(mapped[3]!), listType, this.env, `let/${hidden}`);
+        try {
+          const result = await this.applyAsync('call', { function: mapped[5], to: `let/${mapped[1]}`,
+            over: `let/${hidden}`, values });
+          if (result.kind === 'done') {
+            const value = dump(this.lam.let[mapped[1]!]!) as Value; result.value = value; result.text = JSON.stringify(value);
+          }
+          return result;
+        } finally { delete this.lam.let[hidden]; delete this.lam.letTypes[hidden]; }
+      } catch (error) {
+        if (error instanceof Reject) return rejected(error);
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    const direct = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
+    if (direct && Object.hasOwn(this.lam.codebase, direct[3]!)) {
+      const definition = this.lam.codebase[direct[3]!] as Record<string, unknown>;
+      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
+      const expressions = this.splitCallArgs(direct[4]!);
+      const required = declared.filter(name => !name.endsWith('?')).length;
+      if (expressions.length < required || expressions.length > declared.length)
+        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]));
+      const values: Record<string, unknown> = {};
+      try {
+        for (let i = 0; i < expressions.length; i++) values[declared[i]!.replace(/\?$/, '')] =
+          this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[i]}); })()`,
+            false, 'eval', this.scopeView()).result;
+      } catch (error) { return { kind: 'error', text: error instanceof Error ? error.message : String(error) }; }
+      const result = await this.applyAsync('call', { function: direct[3], to: `let/${direct[1]}`, values });
+      if (result.kind === 'done') {
+        const value = dump(this.lam.let[direct[1]!]!) as Value; result.value = value;
+        result.text = JSON.stringify(value);
+      }
+      return result;
+    }
+    try {
+      const declarationPattern = /(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=/g;
+      const declarations = [...code.matchAll(declarationPattern)], names = declarations.map(match => match[1]!);
+      const pieces = code.split(/;|\n/).map(part => part.trim()).filter(Boolean);
+      let rewritten = code, terminal: string | undefined;
+      const last = pieces.at(-1);
+      if (last && !/^(?:const|let)\b/.test(last)) {
+        terminal = last.startsWith('return ') ? last.slice(7).trim() : last;
+        rewritten = code.slice(0, code.lastIndexOf(last)) + `const __natlangResult = (${terminal});`;
+      }
+      const captureNames = [...new Set([...Object.keys(this.lam.let), ...names, 'result'])];
+      const captures = captureNames.map(name => `${JSON.stringify(name)}: (typeof ${name} === 'undefined' ? null : ${name})`).join(', ');
+      const body = `${this.scopePrefix(!names.includes('result'))}\n${rewritten}\nreturn { bindings: {${captures}}, result: ${terminal ? '__natlangResult' : 'null'} };`;
+      const output = this.runtime.evalFor(this.lam, body, true, 'eval', this.scopeView()).result as
+        { bindings: Record<string, unknown>; result: unknown };
+      const annotations = new Map(declarations.map(match => [match[1]!, match[2]?.trim()]));
+      const staged: [string, Type, Value][] = captureNames.flatMap(name => {
+        if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
+          throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
+        const value = output.bindings[name];
+        if (name === 'result' && value === null && !Object.hasOwn(this.lam.let, name) && !annotations.has(name)) return [];
+        const type = this.lam.letTypes[name] && !annotations.get(name) ? this.lam.letTypes[name]! :
+          parseType(annotations.get(name) || this.inferScopeType(value));
+        return [[name, type, coerce(value, type, this.env, `let/${name}`)]];
+      });
+      for (const [name, type, value] of staged) { this.lam.letTypes[name] = type; this.lam.let[name] = value; }
+      const text = JSON.stringify(output.result);
+      return { kind: 'ok', text: text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`,
+        value: output.result as Value };
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   private checkEffects(value: Value, path: string): void {
     if (pending(value)) {
       if (value.nodeKind === 'lambda') {
@@ -934,6 +1135,12 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
+    if (name === 'eval') {
+      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+      if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      this.actions++; this.toolCalls++; this.lam.steps++;
+      return this.record(name, args, await this.scopeEval(String(args.code ?? '')));
+    }
     if (['run_function', 'for_each', 'fold', 'repeat'].includes(name)) {
       const functionName = String(args.function ?? '');
       const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;

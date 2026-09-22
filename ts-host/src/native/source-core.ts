@@ -33,6 +33,18 @@ function inline(def: FileDefinition): Record<string, unknown> {
 const frontNl = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const frontTs = /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/;
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const staticImport = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']([^"']+)["'];?\s*$/;
+function splitImports(source: string): { imports: [string, string, string][]; source: string } {
+  const lines = source.match(/[^\n]*\n|[^\n]+$/g) ?? [], imports: [string, string, string][] = [];
+  let at = 0;
+  while (at < lines.length) {
+    const match = staticImport.exec(lines[at]!.replace(/\r?\n$/, ''));
+    if (!match) break;
+    imports.push([match[2] ?? match[1]!, match[1]!, match[3]!]); at++;
+  }
+  if (at && at < lines.length && !lines[at]!.trim()) at++;
+  return { imports, source: lines.slice(at).join('') };
+}
 
 function fileFor(path: string, files: SourceFiles): string {
   const absolute = files.resolve(path);
@@ -50,7 +62,8 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
     active.add(file);
     try {
       const ts = files.extname(file) === '.ts';
-      const match = (ts ? frontTs : frontNl).exec(files.read(file));
+      const parsed = splitImports(files.read(file));
+      const match = (ts ? frontTs : frontNl).exec(parsed.source);
       if (!match) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
       const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
       if (!meta || typeof meta !== 'object' || Array.isArray(meta))
@@ -67,7 +80,7 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       const types = { ...inherited, ...localTypes, ...meta.types as Record<string, string> ?? {} };
       const children: Record<string, FileDefinition> = {};
       const companion = files.join(files.dirname(file), functionName);
-      if (files.isDirectory(companion)) {
+      if (!parsed.imports.length && files.isDirectory(companion)) {
         for (const child of files.list(companion).sort()) {
           if (!['.nl', '.ts'].includes(files.extname(child)) || child === 'types.ts') continue;
           children[files.basename(child, files.extname(child))] = read(files.join(companion, child), types);
@@ -75,7 +88,17 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       }
       for (const [alias, target] of Object.entries(meta.uses as Record<string, string> ?? {})) {
         if (!id.test(alias)) throw new Reject([{ path: `${file}/uses/${alias}`, code: 'type-mismatch' }]);
-        children[alias] = read(files.join(files.dirname(file), String(target)), {});
+        if (!parsed.imports.some(([binding]) => binding === alias))
+          children[alias] = read(files.join(files.dirname(file), String(target)), {});
+      }
+      for (const [binding, exported, specifier] of parsed.imports) {
+        if (!specifier.startsWith('.')) throw new Reject([{ path: file, code: 'no-such-path',
+          expected: 'a relative natlang module import', got: specifier }]);
+        const child = read(files.join(files.dirname(file), specifier), types);
+        if (child.function !== exported) throw new Reject([{ path: file, code: 'bad-import',
+          expected: `export {${child.function}} from ${specifier}`, got: exported }]);
+        if (Object.hasOwn(children, binding)) throw new Reject([{ path: file, code: 'duplicate-path', got: binding }]);
+        children[binding] = child;
       }
       const body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
@@ -123,7 +146,7 @@ export function loadCodebaseSource(path: string, files: SourceFiles): Record<str
     const file = files.join(root, name);
     // A natlang TypeScript function is explicitly marked by frontmatter. Ordinary
     // host TypeScript may coexist at an application or repository root.
-    if (extension === '.ts' && !frontTs.test(files.read(file))) continue;
+    if (extension === '.ts' && !frontTs.test(splitImports(files.read(file)).source)) continue;
     const functionName = files.basename(name, extension);
     if (Object.hasOwn(entries, functionName))
       throw new Reject([{ path: file, code: 'duplicate-path', got: functionName }]);

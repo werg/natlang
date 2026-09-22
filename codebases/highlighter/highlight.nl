@@ -1,3 +1,4 @@
+import { highlight_file } from "./highlight/highlight_file";
 ---
 description: Semantic syntax highlighting for a natlang code base - one HTML document per source file.
 args:

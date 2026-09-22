@@ -1,3 +1,5 @@
+import { interpret } from "./cast/interpret";
+import { resolve } from "./cast/resolve";
 ---
 description: Interpret a spoken spell, then commit only an exactly valid plan against the observed arena revision.
 args:

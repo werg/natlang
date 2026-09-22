@@ -1,3 +1,7 @@
+import { check_state } from "./merge_permissions/check_state";
+import { interpret } from "./merge_permissions/interpret";
+import { prepare_envelope } from "./prepare_envelope";
+import { validate_claims } from "./validate_claims";
 ---
 description: Merge access policy edits while exposing conflicting grants and revocations.
 args:

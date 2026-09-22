@@ -1,3 +1,6 @@
+import { check_candidate } from "./infer/check_candidate";
+import { finalize } from "./infer/finalize";
+import { propose } from "./infer/propose";
 ---
 description: Propose a TS-style natlang signature from bounded source and caller evidence. Read files for source context when the bounded snapshot leaves a question open.
 args:

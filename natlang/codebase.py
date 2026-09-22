@@ -21,7 +21,34 @@ from .diag import reject
 
 _FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 _FRONT_TS = re.compile(r"\A\s*/\*---\n(.*?)\n---\*/\n?(.*)\Z", re.S)
+_IMPORT = re.compile(
+    r'^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}'
+    r'\s*from\s*["\']([^"\']+)["\'];?\s*$'
+)
 _KEYS = {"description", "args", "returns", "types", "uses", "effects", "engine"}
+
+
+def _split_imports(source: str) -> tuple[list[tuple[str, str, str]], str]:
+    """Split the deliberately small, static module preamble from source.
+
+    Natural-language modules put imports before YAML frontmatter.  We accept one
+    named binding per declaration so the binding and source export remain
+    explicit in traces and checked graphs.  The migration emits exactly this
+    form; aliases are accepted for hand-authored modules.
+    """
+    imports, lines = [], source.splitlines(keepends=True)
+    at = 0
+    while at < len(lines):
+        line = lines[at].rstrip("\r\n")
+        match = _IMPORT.fullmatch(line)
+        if not match:
+            break
+        exported, alias, specifier = match.groups()
+        imports.append((alias or exported, exported, specifier))
+        at += 1
+    if at and at < len(lines) and not lines[at].strip():
+        at += 1
+    return imports, "".join(lines[at:])
 
 
 @dataclass(eq=False)
@@ -157,7 +184,7 @@ def load_function(path, *, _inherited: Optional[dict] = None, _cache: Optional[d
     file = file.resolve()
     if file in cache:                                  # a link to something already loading or loaded: share it
         return cache[file]
-    text = file.read_text()
+    imports, text = _split_imports(file.read_text())
     m = (_FRONT_TS if file.suffix == ".ts" else _FRONT).match(text)
     if not m:
         raise reject(str(file), "type-mismatch", "frontmatter between --- lines")
@@ -166,12 +193,24 @@ def load_function(path, *, _inherited: Optional[dict] = None, _cache: Optional[d
     fn = _make(file.stem, meta, m.group(2), "code" if file.suffix == ".ts" else "instructions", inherited, str(file))
     cache[file] = fn
     folder = file.with_suffix("")
-    if folder.is_dir():
+    # Static imports define the lexical callable scope.  Companion discovery is
+    # retained only for unmigrated sources.
+    if not imports and folder.is_dir():
         for child in sorted(folder.iterdir()):
             if child.suffix in (".nl", ".ts") and child.name != "types.ts":
                 fn.codebase[child.stem] = load_function(child, _inherited=fn.types, _cache=cache)
     for name, rel in (meta.get("uses") or {}).items():
-        fn.codebase[str(name)] = load_function((file.parent / str(rel)), _inherited=None, _cache=cache)
+        if str(name) not in {binding for binding, _, _ in imports}:
+            fn.codebase[str(name)] = load_function((file.parent / str(rel)), _inherited=None, _cache=cache)
+    for binding, exported, specifier in imports:
+        if not specifier.startswith("."):
+            raise reject(str(file), "no-such-path", "a relative natlang module import", specifier)
+        target = load_function(file.parent / specifier, _inherited=fn.types, _cache=cache)
+        if target.name != exported:
+            raise reject(str(file), "bad-import", f"export {{{target.name}}} from {specifier}", exported)
+        if binding in fn.codebase:
+            raise reject(str(file), "duplicate-path", "a unique imported binding", binding)
+        fn.codebase[binding] = target
     if _cache is None:
         check(fn)
     return fn

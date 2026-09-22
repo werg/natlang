@@ -1,10 +1,16 @@
+import json
 from pathlib import Path
 
 from natlang.gen.codebases import ref_key
+from natlang.invocation import RunOptions, SeedPolicy
+from scripts.collect_scenario_teacher import collect
+from scripts.audit_trajectory_admission import audit_scope_turns
 from scripts.materialize_teacher_trajectory_ir import materialize
 from scripts.project_teacher_trajectory_ir import project
 from scripts.teacher_probe_trajectory_ir import convert_probe
 from scripts.teacher_trajectory_ir import convert
+from natlang.scope_surface import ScopeEvalSurface
+from natlang.decoder import ChatTurn
 
 
 def test_teacher_turns_preserve_reasoning_order_and_rejected_actions():
@@ -131,3 +137,44 @@ def test_behavior_probe_choices_convert_without_leaf_reference_key():
     ir = convert_probe(doc, row, path=Path("probe.json"), index=1)
     assert ir["task"]["kind"] == "behavior_probe"
     assert ir["trajectory"][0]["assistant"]["reasoning"] == "The value is ready."
+
+
+def test_scope_eval_trajectory_replays_and_preserves_model_choices():
+    record = {"version": "natlang.program/1", "id": "fixture:scope-leaf",
+              "kind": "lambda_source", "source": "fixture", "split": "train",
+              "source_ids": ["fixture:scope-leaf"], "source_groups": ["fixture:scope-leaf"],
+              "license": "project-generated",
+              "semantics": {"operation": "leaf", "inputs": {"a": 7}, "expected": 7,
+                            "root": {"$lambda": {"type": "Lambda<{ a: Num }, Num>",
+                                "function": "root", "instructions": "Return the supplied number."}}}}
+
+    class Teacher:
+        def __init__(self):
+            self.seen = []
+
+        def chat(self, _messages, _tools, **_kwargs):
+            calls = {
+                1: [("eval", {"code": "const answer: Num = args.a; answer"})],
+                2: [("mark_lines", {"start": 1})],
+                3: [("return_value", {"variable": "answer"})],
+                4: [],
+            }[len(getattr(self, "seen", [])) + 1]
+            self.seen.append(calls)
+            return ChatTurn(calls=calls, text="", completion_tokens=1,
+                            raw_response={"choices": [{"message": {"content": ""}}]})
+
+    row, _ = collect(record, Teacher(), model_id="scope-teacher",
+                     options=RunOptions(seed=SeedPolicy("derived", 17)),
+                     system_prompt="Execute a typed scope program.", surface=ScopeEvalSurface())
+    assert row["provenance"]["tool_schema"] == "scope-eval-v1"
+    assert row["outcome"]["accepted"] is True
+    assert [call["tool"] for call in row["trajectory"][0]["assistant"]["calls"]] == ["eval"]
+    assert row["trajectory"][0]["assistant"]["calls"][0]["arguments"]["code"].startswith("const answer")
+
+    samples = materialize(row, system_prompt="Execute a typed scope program.")
+    assert [sample["skill"] for sample in samples] == ["eval", "mark_lines", "return_value", "reply"]
+    assert samples[0]["target"]["tool_calls"][0]["function"]["name"] == "eval"
+    assert json.loads(samples[0]["target"]["tool_calls"][0]["function"]["arguments"])["code"].startswith("const answer")
+    assert "eval" in {tool["function"]["name"] for tool in samples[0]["tools"]}
+    assert samples[-1]["target"]["content"] == ""
+    assert audit_scope_turns(samples)

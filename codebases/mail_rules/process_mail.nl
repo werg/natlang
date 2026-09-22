@@ -1,3 +1,5 @@
+import { handle_mail } from "./process_mail/handle_mail";
+import { tally_actions } from "./process_mail/tally_actions";
 ---
 description: Personal mail rules - what my landlord dates go into the calendar, the rest is sorted.
 args:

@@ -1,3 +1,6 @@
+import { add_to_calendar } from "./handle_mail/add_to_calendar";
+import { find_date } from "./handle_mail/find_date";
+import { from_landlord } from "./handle_mail/from_landlord";
 ---
 description: Decide what to do with one email; dates from my landlord go into the calendar.
 args:

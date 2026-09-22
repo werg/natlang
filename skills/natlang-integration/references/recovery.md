@@ -31,7 +31,7 @@ Multiple calls in one model response are an ordered non-atomic batch, not proof 
 
 ## Continuation versus durable restart
 
-Both main agents support conversation rollover through `segment_turns` and `segment_messages`. Defaults at the inspected revision are six work turns and twelve messages; either can trigger a checkpoint. Setting one to null does not disable the other. Python uses `None`. A short note and typed workspace resume the same task. Model-run budgets default to unbounded, while the checkpoint note itself has a separate allowance. Inspect truncation/finish reason if a note loses necessary information.
+Both main agents support conversation rollover through `segment_turns` and `segment_messages`. Defaults at the inspected revision are six work turns and twelve messages; either can trigger a checkpoint. Setting one to null does not disable the other. Python uses `None`. A short note plus serialized typed scope, pending calls, and line marks continues the same task. Model-run budgets default to unbounded, while the checkpoint note itself has a separate allowance. Inspect truncation/finish reason if a note loses necessary information.
 
 In-memory continuation is not process restart recovery. Persist the actual source identity, state/pending nodes when supported, effect observations, invocation seed policy, and ownership metadata. Reconstruct native resources through an application recovery contract. `dump_state` / `load_program` in Python and native state serialization support runtime state; they do not snapshot arbitrary host objects or provider sessions.
 

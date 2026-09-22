@@ -1,3 +1,11 @@
+import { apply_action } from "./serve/apply_action";
+import { checked_action } from "./serve/checked_action";
+import { choose_action } from "./serve/choose_action";
+import { emit_reply } from "./serve/emit_reply";
+import { goods_of } from "./serve/goods_of";
+import { legal_actions } from "./serve/legal_actions";
+import { read_intent } from "./serve/read_intent";
+import { say } from "./serve/say";
 ---
 description: A shopkeeper handles one customer message - understand it, act only within what is legal, reply, update the shop.
 args:

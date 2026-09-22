@@ -133,6 +133,16 @@ function previewValue(value: Value): string {
   return String(value);
 }
 
+function scopeProgramListing(body: string, marks: Record<number, string>): string {
+  const lines = body.replace(/^\n+|\n+$/g, '').split('\n'), width = String(lines.length).length;
+  return lines.map((line, index) => {
+    const number = index + 1, text = line.trim();
+    const markable = !!text && !text.startsWith('#') && !text.startsWith('function ');
+    const box = !markable ? '   ' : marks[number] === 'done' ? '[x]' : marks[number] === 'skipped' ? '[-]' : '[ ]';
+    return `${String(number).padStart(width)} ${box} ${line}`.trimEnd();
+  }).join('\n');
+}
+
 function stateParts(value: Value, type: Type, env: TypeEnv, path: string,
   filled: string[], todo: string[], subs: string[], depth = 0): void {
   if (value === MISSING) { todo.push(`${path} (${formatType(type)})`); return; }
@@ -162,7 +172,7 @@ export class NativeToolAgent {
       temperature?: number; maxSeconds?: number; systemPrompt?: string;
       validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
       segmentTurns?: number | null; segmentMessages?: number | null;
-      toolSchema?: 'tools-v3' | 'tools-v4' } = {}) {
+      toolSchema?: 'tools-v3' | 'tools-v4' | 'scope-eval-v1' } = {}) {
     if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
         (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
       throw new RangeError('segmentTurns must be positive or null');
@@ -198,6 +208,10 @@ export class NativeToolAgent {
   private openMarks(session: NativeSession): number[] {
     if (!Object.keys(session.lam.marks).length) return [];
     return this.unmarkedLines(session);
+  }
+
+  private pendingMarks(session: NativeSession): number[] {
+    return this.options.toolSchema === 'scope-eval-v1' ? this.unmarkedLines(session) : this.openMarks(session);
   }
 
   private unmarkedLines(session: NativeSession): number[] {
@@ -565,8 +579,32 @@ export class NativeToolAgent {
     return result;
   }
 
+  private toolsScope(session: NativeSession): any[] {
+    return [
+      tool('eval', 'Execute one TypeScript-like step in the persistent typed scope. Declarations persist; imported functions are called with await and positional values.',
+        { code: { type: 'string' } }, ['code']),
+      tool('read_value', 'Inspect a variable or field/index selection without executing code.',
+        { expression: { type: 'string' }, start: { type: 'integer' }, end: { type: 'integer' } }, ['expression']),
+      tool('write_value', 'Transport an already supplied literal into a top-level scope variable. For normal program work, including literal decisions, prefer eval declarations. as_type is needed only when inference is ambiguous.',
+        { name: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' }, value: {}, as_type: { type: 'string' } },
+        ['name', 'value']),
+      tool('return_value', 'Stage one existing variable as this function\'s typed result. End the turn naturally after all instruction lines are closed.',
+        { variable: { type: 'string', pattern: '^[A-Za-z_$][A-Za-z0-9_$]*$' } }, ['variable']),
+      tool('mark_lines', 'Close one instruction line or inclusive contiguous range after its work succeeded. Use skipped only for an untaken branch.',
+        { start: { type: 'integer' }, end: { type: 'integer' }, skipped: { type: 'boolean' } }, ['start']),
+      tool('report_blocker', 'End without a result because required information is missing. Do not guess.',
+        { missing: { type: 'string' } }, ['missing']),
+      tool('report_error', 'End without a result because the instructions require an invalid or contradictory operation.',
+        { message: { type: 'string' } }, ['message']),
+    ];
+  }
+
   tools(session: NativeSession): unknown[] {
-    return this.options.toolSchema === 'tools-v3' ? this.toolsV3(session) : this.toolsV4(session);
+    session.surfaceName = this.options.toolSchema ?? 'tools-v4';
+    if (this.options.toolSchema === 'scope-eval-v1' &&
+        !this.missing(session) && !this.unmarkedLines(session).length) return [];
+    return this.options.toolSchema === 'tools-v3' ? this.toolsV3(session) :
+      this.options.toolSchema === 'scope-eval-v1' ? this.toolsScope(session) : this.toolsV4(session);
   }
 
   opening(session: NativeSession): string {
@@ -599,6 +637,27 @@ export class NativeToolAgent {
     return lines.join('\n');
   }
 
+  private scopeOpening(session: NativeSession): string {
+    const lam = session.lam;
+    if (lam.type.kind !== 'lambda') return 'Scope:';
+    const original = lam.originalBody ?? lam.body;
+    const program = scopeProgramListing(original, lam.marks);
+    const inputs = lam.type.params.fields.map(field => `  ${field.name}: ${formatType(field.type)} = ` +
+      (Object.hasOwn(lam.args, field.name) ? previewValue(lam.args[field.name]!) : 'missing'));
+    const imports = Object.entries(lam.codebase).map(([name, raw]) => {
+      const fn = raw as Record<string, unknown>;
+      return `  ${name}(${Object.entries(fn.args as Record<string, string> ?? {})
+        .map(([key, value]) => `${key.replace(/\?$/, '')}: ${value}`).join(', ')}): ${fn.returns}`;
+    });
+    const locals = Object.entries(lam.let).map(([name, value]) =>
+      `  ${name}: ${formatType(lam.letTypes[name]!)} = ${previewValue(value)}`);
+    return ['Execute the natural-language function line by line.', '', 'Program:', program, '', 'Scope:',
+      ' inputs (immutable)', ...(inputs.length ? inputs : ['  (none)']),
+      ' imports (immutable live bindings)', ...(imports.length ? imports : ['  (none)']),
+      ' locals', ...(locals.length ? locals : ['  (none)']),
+      ` result: ${formatType(lam.type.returns)} — ${lam.return === MISSING ? 'not staged' : 'staged'}`].join('\n');
+  }
+
   missing(session: NativeSession): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return '';
@@ -627,6 +686,10 @@ export class NativeToolAgent {
       return `${String(index + 1).padStart(String(numbered.length).length)} ${markable ?
         lam.marks[index + 1] === 'done' ? '[x]' : lam.marks[index + 1] === 'skipped' ? '[-]' : '[ ]' : '   '} ${line}`.trimEnd();
     }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
+    if (this.options.toolSchema === 'scope-eval-v1') return [
+      { role: 'system', content: this.options.systemPrompt ?? EXPLICIT_TOOLS_PROMPT },
+      { role: 'user', content: this.scopeOpening(session) },
+    ];
     const messages: Record<string, unknown>[] = [
       { role: 'system', content: (this.options.systemPrompt ??
         (this.options.toolSchema === 'tools-v3' ? TOOLS_PROMPT : EXPLICIT_TOOLS_PROMPT)) +
@@ -661,7 +724,7 @@ export class NativeToolAgent {
       const itemLimit = this.options.segmentMessages === undefined ? 12 : this.options.segmentMessages;
       if (((rollover !== null && segmentTurns >= rollover) ||
            (itemLimit !== null && messages.length >= itemLimit)) && checkpointReady &&
-          (this.missing(session) || this.openMarks(session).length)) {
+          (this.missing(session) || this.pendingMarks(session).length)) {
         const budget = allowance();
         const checkpointLimit = budget === null ? 512 : Math.min(512, budget);
         const checkpointMessages = [...messages, { role: 'user', content: CHECKPOINT_REQUEST }];
@@ -728,7 +791,7 @@ export class NativeToolAgent {
       if (!response.calls?.length) {
         if (this.options.validationFeedback !== 'local' && this.missing(session))
           return `validation failed: ${this.missing(session)}`;
-        const marks = this.openMarks(session);
+        const marks = this.pendingMarks(session);
         if (marks.length) {
           if (++nudges > 2) return `validation failed: unfinished lines: ${marks.join(', ')}`;
           messages.push({ role: 'assistant', content: response.text ?? '' },

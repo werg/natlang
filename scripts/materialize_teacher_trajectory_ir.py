@@ -14,6 +14,7 @@ from natlang.decoder import ChatTurn
 from natlang.explicit_surface import ExplicitToolSurface
 from natlang.native import _strip_private
 from natlang.runtime import Runtime
+from natlang.scope_surface import ScopeEvalSurface
 from natlang.tool_agent import ToolAgent
 from natlang.surface import ToolSurface
 from natlang.values import dump, load_program
@@ -85,7 +86,16 @@ def materialize(row, *, system_prompt: str):
     lowered = lower(program) if task_kind == "whole_program" else None
     root = whole_root(lowered) if lowered is not None else load_program(program)
     tool_schema = row.get("provenance", {}).get("tool_schema", "tools-v2")
-    surface = ExplicitToolSurface() if tool_schema == "tools-v4" else ToolSurface()
+    # The trajectory IR keeps the model-facing tool names and arguments.  Use
+    # the matching surface when replaying them; falling back to tools-v2 for
+    # unknown historical schemas keeps old rows migratable while preventing a
+    # scope-eval row from being silently replayed through path-based tools.
+    if tool_schema == "scope-eval-v1":
+        surface = ScopeEvalSurface()
+    elif tool_schema == "tools-v4":
+        surface = ExplicitToolSurface()
+    else:
+        surface = ToolSurface()
     recorder = TraceRecorder({"run_id": row["id"], "source_sha256": digest(program),
                               "teacher_trajectory_sha256": digest(row),
                               "tool_schema": tool_schema, "engine_bindings": ["quickjs-isolated"],

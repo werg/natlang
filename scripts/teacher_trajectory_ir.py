@@ -229,6 +229,7 @@ def convert(audit, *, audit_path: Path, line_number: int, links: dict, program_i
                            "audit_row_sha256": digest(audit),
                            "program_ir_sha256": program_ir_hash,
                            "model": models[0].get("id") if models else None,
+                           "tool_schema": audit.get("tool_schema") or audit.get("surface"),
                            "teacher_system_prompt": audit.get("system_prompt"),
                            "temperature": audit.get("temperature"),
                            "thinking": audit.get("thinking"),

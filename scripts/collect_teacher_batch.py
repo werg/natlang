@@ -23,13 +23,14 @@ from natlang.decoder import LlamaServerDecoder
 from natlang.native import NativeCallDecoder
 from natlang.invocation import RunOptions, SeedPolicy
 from scripts.collect_scenario_teacher import collect
+from natlang.scope_surface import ScopeEvalSurface
 from scripts.program_ir import digest, validate
 
 VERSION = "natlang.teacher_batch/1"
 ROOT = Path(__file__).resolve().parent.parent
 TOOL_SURFACE_SHA256 = hashlib.sha256(b"\0".join(
     (ROOT / path).read_bytes() for path in
-    ("natlang/surface.py", "natlang/explicit_surface.py"))).hexdigest()
+    ("natlang/surface.py", "natlang/scope_surface.py"))).hexdigest()
 
 
 def load_records(path: Path, start: int, limit: int | None) -> list[tuple[int, dict]]:
@@ -57,7 +58,7 @@ def expected_provenance(record: dict, *, model_id: str, root_seed: int,
                         segment_messages: int, cache_stable_tools: bool = False,
                         decode: str = "server", require_call: bool = False) -> dict:
     provenance = {"program_ir_sha256": digest(record), "model": model_id,
-                  "tool_schema": "tools-v4",
+                  "tool_schema": "scope-eval-v1",
                   "tool_surface_sha256": TOOL_SURFACE_SHA256,
                   "seed_policy": vars(SeedPolicy("derived", root_seed)),
                   "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
@@ -158,7 +159,7 @@ def decoder_for(args) -> LlamaServerDecoder:
         args.server,
         timeout=args.request_timeout,
         chat_extra=chat_extra,
-        typed_alternatives=True, typed_alternative_names={"write_value"},
+        typed_alternatives=False, typed_alternative_names=set(),
         cache_stable_tools=getattr(args, "cache_stable_tools", False))
 
 
@@ -183,7 +184,8 @@ def run_job(index: int, record: dict, args, system_prompt: str,
                      options=RunOptions(seed=SeedPolicy("derived", args.root_seed), run_id=run_id),
                      system_prompt=system_prompt, trace_path=trace,
                      segment_turns=args.segment_turns,
-                     segment_messages=args.segment_messages)
+                     segment_messages=args.segment_messages,
+                     surface=ScopeEvalSurface())
     row["provenance"].update(expected)
     write_atomic(result, row)
     (jobs / f"{index:06d}.error.json").unlink(missing_ok=True)

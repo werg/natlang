@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from natlang.gen.programs import BLOCKED
+from natlang.scope_surface import ScopeEvalSurface
 from natlang.explicit_surface import ExplicitToolSurface
 from natlang.invocation import RunOptions, SeedPolicy
 from natlang.runtime import Runtime
@@ -56,17 +57,18 @@ def _turn(source):
 def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None = None,
             system_prompt: str = TOOLS_PROMPT, trace_path: Path | None = None,
             segment_turns: int | None = 6,
-            segment_messages: int | None = 12) -> tuple[dict, TraceRecorder]:
+            segment_messages: int | None = 12, surface=None) -> tuple[dict, TraceRecorder]:
     validate(record)
     program = lower(record)
     options = options or RunOptions(seed=SeedPolicy("derived", 0))
+    surface = surface or ExplicitToolSurface()
     recorder = TraceRecorder({"run_id": options.run_id, "source_sha256": digest(record),
-                              "semantic_version": record["version"], "tool_schema": "tools-v4",
+                              "semantic_version": record["version"], "tool_schema": surface.name,
                               "model": model_id, "seed_policy": vars(options.seed),
                               "capture": "teacher-whole-program"}, trace_path)
     captured = []
     rt = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
-                                      surface=ExplicitToolSurface(),
+                                      surface=surface,
                                       temperature=0, validation_feedback="caller",
                                       teacher_turns=captured, segment_turns=segment_turns,
                                       segment_messages=segment_messages),
@@ -92,9 +94,18 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
     admission = None
     if accepted:
         semantic = record["semantics"].get("contract") if record["kind"] == "lambda_scenario" else None
-        required = tuple({"name": item["tool"], "arguments": item["arguments"]}
-                         for item in (semantic or {}).get("required_actions", []))
-        constraints = tuple((semantic or {}).get("constrained_calls", []))
+        # Old program IR may retain assertions over the retired path/call tool
+        # spelling.  The new surface preserves the program's observable result,
+        # effects and explicit line closure, but has no one-to-one old action
+        # ledger.  Keep that fact visible instead of rejecting valid new traces.
+        required = (() if surface.name == "scope-eval-v1" else tuple(
+            {"name": item["tool"], "arguments": item["arguments"]}
+            for item in (semantic or {}).get("required_actions", [])))
+        constraints = (() if surface.name == "scope-eval-v1" else
+                       tuple((semantic or {}).get("constrained_calls", [])))
+        if surface.name == "scope-eval-v1" and ((semantic or {}).get("required_actions") or
+                                                 (semantic or {}).get("constrained_calls")):
+            limits.append("legacy_action_contract_not_applicable_to_scope_eval")
         effects = (tuple(("out.emit", [payload]) for payload in program.expected_effects)
                    if program.expected_effects is not None else None)
         try:
@@ -108,7 +119,7 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
            "task": {"kind": "whole_program", "program_ir": record,
                     "source_program_ids": [record["id"]]},
            "provenance": {"model": model_id, "program_ir_sha256": digest(record),
-                          "tool_schema": "tools-v4", "seed_policy": vars(options.seed),
+                          "tool_schema": surface.name, "seed_policy": vars(options.seed),
                           "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
                           "trace_sha256": digest(recorder.events)},
            "outcome": {"status": outcome.kind, "detail": outcome.detail, "value": actual,
@@ -171,7 +182,9 @@ def main():
         args.server,
         chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
-        typed_alternatives=True, typed_alternative_names={"write_value"})
+        # scope-eval-v1 has ordinary JSON literal arguments and deliberately no
+        # historical `{_literal: ...}` union wrapper.
+        typed_alternatives=False, typed_alternative_names=set())
     system_prompt = args.system_file.read_text()
     records = []
     with args.ir.open() as source:
@@ -192,6 +205,7 @@ def main():
             options = RunOptions(seed=SeedPolicy("derived", args.root_seed))
             row, _ = collect(record, decoder, model_id=args.model_id, options=options,
                              system_prompt=system_prompt,
+                             surface=ScopeEvalSurface(),
                              segment_turns=args.segment_turns, segment_messages=args.segment_messages,
                              trace_path=_trace_path(args.out, index))
             target.write(json.dumps(row, ensure_ascii=False) + "\n")

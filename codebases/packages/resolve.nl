@@ -1,3 +1,7 @@
+import { choose } from "./resolve/choose";
+import { finalize } from "./resolve/finalize";
+import { solutions } from "./resolve/solutions";
+import { unresolved } from "./resolve/unresolved";
 ---
 description: Choose a compatible content-pinned package lock from exact offline solver results.
 args:

@@ -1,3 +1,9 @@
+import { compose } from "./answer/compose";
+import { plan_search } from "./answer/plan_search";
+import { read } from "./answer/read";
+import { search } from "./answer/search";
+import { select } from "./answer/select";
+import { verify } from "./answer/verify";
 ---
 description: Search a versioned collection, read exact passages, and compose a cited answer.
 args:

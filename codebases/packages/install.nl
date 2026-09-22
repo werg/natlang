@@ -1,3 +1,6 @@
+import { publish } from "./install/publish";
+import { rejected } from "./install/rejected";
+import { validate } from "./install/validate";
 ---
 description: Check a locked natlang bundle and publish it to an offline installation target.
 args:

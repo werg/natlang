@@ -1,3 +1,7 @@
+import { append } from "./reduce/append";
+import { catalog } from "./reduce/catalog";
+import { choose_goal } from "./reduce/choose_goal";
+import { run as run_notebook } from "../notebook/run";
 ---
 description: Interpret a notebook terminal request, execute its dependency graph, and retain the explained run.
 args:

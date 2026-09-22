@@ -1,3 +1,7 @@
+import { check_state } from "./merge_set/check_state";
+import { interpret } from "./merge_set/interpret";
+import { prepare_envelope } from "./prepare_envelope";
+import { validate_claims } from "./validate_claims";
 ---
 description: Merge membership changes to a semantic collection, including add/remove and synonym conflicts.
 args:

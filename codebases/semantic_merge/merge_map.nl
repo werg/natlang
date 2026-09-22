@@ -1,3 +1,7 @@
+import { check_state } from "./merge_map/check_state";
+import { interpret } from "./merge_map/interpret";
+import { prepare_envelope } from "./prepare_envelope";
+import { validate_claims } from "./validate_claims";
 ---
 description: Merge a keyed configuration or encyclopedia infobox, including semantic renames and conflicting values.
 args:

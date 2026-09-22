@@ -1,3 +1,8 @@
+import { finish } from "./merge_history/finish";
+import { interpret_history } from "./merge_history/interpret_history";
+import { prepare } from "./merge_history/prepare";
+import { reject } from "./merge_history/reject";
+import { unchanged } from "./merge_history/unchanged";
 ---
 description: Semantically reconcile an agreed base and a finite set of updates, preserving unresolved alternatives.
 args:

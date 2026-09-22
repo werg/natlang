@@ -46,6 +46,40 @@ test('native reads may inspect read-only inputs', () => {
   assert.deepEqual(result.value, { head: 'manifest-1' });
 });
 
+test('scope-eval-v1 persists locals, calls imports positionally and stages a named result', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ flags: Bool[] }, Num>',
+    instructions: 'function total(flags) -> Num\n  Count the true flags.\n', args: { flags: [true, false, true] },
+    codebase: { count_true: { args: { flags: 'Bool[]' }, returns: 'Num',
+      code: 'return args.flags.filter(Boolean).length;' },
+      as_num: { args: { flag: 'Bool' }, returns: 'Num', code: 'return args.flag ? 1 : 0;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const pure = await session.applyAsync('eval', { code: 'const first = flags[0];\nfirst' });
+  assert.equal(pure.kind, 'ok'); assert.equal(pure.value, true); assert.equal(lam.let.first, true);
+  const call = await session.applyAsync('eval', { code: 'const count = await count_true(flags);\ncount' });
+  assert.equal(call.kind, 'ok'); assert.equal(call.value, 2); assert.equal(lam.let.count, 2);
+  assert.equal(session.apply('read_value', { expression: 'flags[1]' }).value, false);
+  assert.equal(session.apply('return_value', { variable: 'count' }).kind, 'ok');
+  assert.equal(lam.return, 2);
+  const mapped = await session.applyAsync('eval', {
+    code: 'const counts = await Promise.all(flags.map(flag => as_num(flag)));\ncounts' });
+  assert.equal(mapped.kind, 'ok'); assert.deepEqual(mapped.value, [1, 0, 1]);
+  const sequenced = await session.applyAsync('eval', { code:
+    'const again: Num[] = flags.map(flag => as_num(flag));\n' +
+    'const finalCount: Num = await count_true(flags);\nfinalCount' });
+  assert.equal(sequenced.kind, 'ok'); assert.equal(sequenced.value, 2);
+  const names = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' })
+    .tools(session).map(entry => entry.function.name);
+  assert.deepEqual(names, ['eval', 'read_value', 'write_value', 'return_value', 'mark_lines',
+    'report_blocker', 'report_error']);
+  const nullLam = buildPending({ $lambda: { type: 'Lambda<{}, Null>', instructions: 'Return null.' } });
+  const nullSession = new NativeSession(new NativeRuntime(), nullLam, new TypeEnv());
+  const nullResult = await nullSession.applyAsync('eval', { code: 'const result: Null = null; result' });
+  assert.equal(nullResult.kind, 'ok'); assert.equal(nullLam.let.result, null);
+  assert.equal(nullSession.apply('return_value', { variable: 'result' }).kind, 'ok');
+  nullSession.apply('mark_lines', { start: 1 });
+  assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
+});
+
 test('explicit inference and action limits still apply', async () => {
   const program = { $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return seven.' } };
   const runtime = new NativeRuntime();

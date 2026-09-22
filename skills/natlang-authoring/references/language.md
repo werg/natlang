@@ -1,6 +1,6 @@
 # Language and source contracts
 
-This guide describes the implementation inspected in September 2026. Resolve version differences using the actual loader, runtime, and tests. Some older specification passages still describe removed local/function limits and older tool schemas.
+This guide describes the scope-eval-v1 model-facing architecture. Resolve implementation differences using the actual loader, runtime, and tests.
 
 ## Source layout
 
@@ -79,31 +79,26 @@ Partial return records can be built incrementally; completion requires a complet
 
 ## Calls, values, and reuse
 
-In source, write `assessment = assess(observation, criterion)` and make argument intent unambiguous. The interpreter can implement this with:
+In source, write `const assessment = await assess(observation, criterion)` using ordinary positional calls:
 
 ```text
-call(function="assess", to="let/assessment",
-     inputs={"observation":"args/observations/0", "criterion":"args/criterion"})
+const assessment = await assess(args.observations[0], args.criterion);
 ```
 
-Mixed literal/path binding:
+File names remain ordinary values:
 
 ```text
-call(function="workspace_read", to="let/evidence",
-     inputs={"head":"args/state/head"},
-     values={"path":"evidence/observations.json"})
+const evidence = await workspaceRead(args.state.head, "evidence/observations.json");
 ```
 
-The callee must actually exist with those parameters. `read(path="args/state")` reads interpreter state; it does not retrieve an application artifact. To reuse a computed value, use `write` with `source` or bind a path to a call rather than regenerating the value as tokens. Use full/ranged reads when the state listing says a value is only a preview. For a host-backed dictionary, pass the dictionary path directly to a compatible callee and read only the branches or leaves needed for the decision. Directory listings discover names without loading every leaf.
+The callee must actually exist with those parameters. Use `read_value` for scope inspection and `read_file` for source or data files. Reuse computed values by variable reference. For a host-backed dictionary, pass the dictionary value to a compatible callee and read only the branches or leaves needed for the decision.
 
-To vary a function, copy `Function<helper>` into a local, edit that copy's instructions, and call `let/copy`. The checked original remains immutable. For larger generated programs, use the application's versioned source loader and child execution API; validate and execute the new artifact before claiming it works.
+To change a function, edit its writable codebase source and use the normal import/reload path. For generated programs, validate and execute the new artifact before claiming it works.
 
 ## Combinators and completion
 
-- Map: `call(function="assess", to="let/results", over="args/observations", inputs={"criterion":"args/criterion"})`. Leave the per-item parameter unbound. Output order follows input order.
-- Fold: with `over` and `init`, leave `item` and `acc` unbound; the helper returns the next accumulator.
-- Iterate: bind fixed parameters and leave one state parameter for `init`; `until` names a checked Boolean predicate. The explicit `max` is the Iterate contract, not an implicit cap on every program. Choose it from the algorithm's requirements. Long loops can also keep explicit state in a natlang function.
-- Calling the same unfinished function destination with only `function` and `to` requests resumption. Distinguish this from making a new call or repeating an effect.
+- Repeated work uses ordinary control flow, for example `await Promise.all(items.map(item => assess(item, criterion)))`, or an explicit loop when order matters.
+- A natural-language loop keeps its state in ordinary scope variables and closes each source line with `mark_lines`. Continuation is represented by the persistent scope and line marks, with no separate model command.
 - The interpreter finishes by writing the typed return and ending its tool episode. Chat prose alone is not a return value. `report_blocker` and `report_error` terminate without a completed return.
 
 Completion marks denote executed or skipped program lines. Mark actual work only after success; a range is inclusive, not a pair of isolated line numbers. Avoid using line marks as proof that a semantic result is correct.

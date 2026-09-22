@@ -133,7 +133,7 @@ The TS `modelTurn` callback receives `messages`, `tools`, `temperature`, `seed`,
 
 ```ts
 {
-  calls: [['call', { function: 'helper', to: 'let/result', values: { label: 'sample' } }]],
+  calls: [['eval', { code: 'const result = await helper(sample, "label"); result' }]],
   text: '',
   completion_tokens: 42,
   prompt_tokens: 700,
@@ -142,7 +142,7 @@ The TS `modelTurn` callback receives `messages`, `tools`, `temperature`, `seed`,
 
 The example illustrates the transport shape, not a canned interpreter policy. Return actual model output. Empty calls end a normal interpreter episode; checkpoint requests intentionally have no work tools and ask for a note. Preserve tool-call identities and every per-call result. A response may contain an ordered batch. Do not discard all but the first call or require serial generation just because the runtime applies effects in order.
 
-Keep model/template quirks inside the adapter. For example, the repository's Bonsai adapter aliases `call` because of its parser, while source programs still use the same natlang call semantics. Use the selected backend's supported structured/typed tool representation, including literal parameter types. Do not blindly strip alternatives, silently unwrap malformed values, or paste model-specific conventions into every `.nl` file. Capture the exact presented tools/messages, not only the pre-adaptation request.
+Keep model/template quirks inside the adapter. Source programs use scope-eval-v1 tools and ordinary positional calls; adapters may map those tools to a provider's structured representation. Use the selected backend's supported typed tool representation. Do not silently unwrap malformed values or paste model-specific conventions into `.nl` files. Capture the exact presented tools/messages, not only the pre-adaptation request.
 
 The shared OpenAI-compatible adapter retries one response whose tool arguments
 are malformed JSON, adding a narrow correction to the original turn. A second

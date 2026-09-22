@@ -28,7 +28,7 @@ from .nodes import (DONE, MISSING, QUIESCED, WAITING, RUNNING, UNREDUCED, FoldNo
 from .paths import Path, parse_path
 from .refs import Ref, pending_refs_under, resolve
 from .render import opening, pending_line, render, scalar
-from .types import (TEXT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
+from .types import (TEXT, NUM, BOOL, NULL, DictT, LambdaT, ListT, Record, TypeEnv, TypeSyntaxError, PENDING_TYPES, fits,
                     format_type, is_pending_type, parse_type, FoldT, IterateT, MapT)
 from .values import (body_lambda_fits, build_pending, coerce, dump, problems, unbound_parts)
 from .values import dump_state
@@ -629,6 +629,7 @@ class Session:
         self.completed = False
         self.actions = 0
         self.tool_calls = 0
+        self.surface_name = "tools-v2"
 
     # -- observations
     def observation(self) -> str:
@@ -703,7 +704,7 @@ class Session:
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
                               "kind": result.kind, "result": result.text})
         self.rt._observe("action", call_id=getattr(getattr(self, "invocation", None), "call_id", None),
-                         surface="tools-v2", name=name, arguments=submitted,
+                         surface=self.surface_name, name=name, arguments=submitted,
                          outcome=result.kind, result_text=result.text,
                          diagnostics=result.codes)
         self.rt._observe_state("after-action")
@@ -975,6 +976,261 @@ class Session:
         if engine is None:
             engine = "quickjs-isolated"
         return self._do_eval(Action("eval", body=args["code"]), engine=engine)
+
+    def _op_eval(self, args):
+        return self._scope_eval(str(args.get("code") or ""))
+
+    def _op_read_value(self, args):
+        path = self._scope_path(str(args.get("expression") or ""))
+        if args.get("start") is not None or args.get("end") is not None:
+            lo, hi = args.get("start", args.get("end")), args.get("end", args.get("start"))
+            path += f"[{lo}..{hi}]"
+        return self._do_read(Action("read", path=path))
+
+    def _op_write_value(self, args):
+        # tools-v4 compatibility.  scope-eval-v1 uses ``name``; historical
+        # traces and reference generation use destination/type/value.
+        if "name" not in args:
+            forwarded = {"path": args["destination"], "value": args["value"]}
+            if args.get("type") is not None:
+                forwarded["type"] = args["type"]
+            return self._op_write(forwarded)
+        name = str(args.get("name") or "")
+        if not re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", name) or name in self.lam.in_ or name in self.lam.codebase:
+            raise reject(name, "not-writable", "a new or mutable local variable name")
+        type_text = args.get("as_type") or self._infer_scope_type(args.get("value"))
+        path = f"let/{name}"
+        undo = self._local_type(path, str(type_text), {})
+        try:
+            return self._set_value(path, parse_type(type_text), args.get("value"), yaml=False)
+        except (Reject, Refuse):
+            if undo:
+                undo()
+            raise
+
+    def _op_return_value(self, args):
+        variable = str(args.get("variable") or "")
+        if variable not in self.lam.let and variable not in self.lam.in_:
+            raise reject(variable, "no-such-path", "an existing scope variable")
+        source = f"let/{variable}" if variable in self.lam.let else f"args/{variable}"
+        return self._do_copy(Action("copy", path=source, dst="return"))
+
+    @staticmethod
+    def _infer_scope_type(value):
+        if value is None:
+            return "Null"
+        if isinstance(value, bool):
+            return "Bool"
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return "Num"
+        if isinstance(value, str):
+            return "Text"
+        if isinstance(value, list):
+            if not value:
+                raise reject("as_type", "type-mismatch", "as_type for an empty list")
+            types = {Session._infer_scope_type(item) for item in value}
+            if len(types) != 1:
+                raise reject("as_type", "type-mismatch", "as_type for a heterogeneous list")
+            return f"({next(iter(types))})[]"
+        if isinstance(value, dict):
+            if not value:
+                raise reject("as_type", "type-mismatch", "as_type for an empty record")
+            return "{ " + ", ".join(f"{key}: {Session._infer_scope_type(item)}" for key, item in value.items()) + " }"
+        raise reject("value", "type-mismatch", "a portable literal")
+
+    def _scope_path(self, expression: str) -> str:
+        match = re.fullmatch(r"([A-Za-z_$][\w$]*)(.*)", expression.strip())
+        if not match:
+            raise reject("expression", "bad-action", "a variable followed only by field or index selections")
+        root, tail = match.groups()
+        path = "args" if root == "args" else f"let/{root}" if root in self.lam.let else f"args/{root}" if root in self.lam.in_ else ""
+        if not path:
+            raise reject(root, "no-such-path", "a scope variable")
+        while tail:
+            member = re.match(r"^\.([A-Za-z_$][\w$]*)(.*)$", tail, re.S)
+            index = re.match(r'^\[(?:"([^"\\]+)"|\'(?:([^\'\\]+))\'|(\d+))\](.*)$', tail, re.S)
+            if member:
+                path += "/" + member.group(1); tail = member.group(2)
+            elif index:
+                path += "/" + next(part for part in index.groups()[:3] if part is not None); tail = index.group(4)
+            else:
+                raise reject("expression", "bad-action", "field and index selection without calls or computation")
+        return path
+
+    def _scope_bindings_prefix(self, *, include_result: bool = True) -> str:
+        rows = ["let result = self.locals.result;"] if include_result else []
+        for name in self.lam.in_:
+            rows.append(f"const {name} = self.inputs[{json.dumps(name)}];")
+        for name in self.lam.let:
+            if name != "result" and not is_pending(self.lam.let[name]):
+                rows.append(f"let {name} = self.locals[{json.dumps(name)}];")
+        return "\n".join(rows)
+
+    def _eval_scope_expression(self, expression: str):
+        scope = _eval_scope_view({"args": self.lam.in_, "inputs": self.lam.in_, "locals": {
+            k: v for k, v in self.lam.let.items() if not is_pending(v)}})
+        code = f"(() => {{ {self._scope_bindings_prefix()} return ({expression}); }})()"
+        executor = self.rt._executor("quickjs-isolated")
+        return portable(executor.run(CrispRequest(code, scope, False, "eval", False), self.rt._fx(self.lam)))
+
+    @staticmethod
+    def _split_call_args(source: str) -> list[str]:
+        out, start, depth, quote, escaped = [], 0, 0, "", False
+        for i, char in enumerate(source):
+            if quote:
+                if escaped: escaped = False
+                elif char == "\\": escaped = True
+                elif char == quote: quote = ""
+            elif char in "\"'`": quote = char
+            elif char in "([{": depth += 1
+            elif char in ")]}": depth -= 1
+            elif char == "," and depth == 0:
+                out.append(source[start:i].strip()); start = i + 1
+        tail = source[start:].strip()
+        if tail: out.append(tail)
+        return out
+
+    @staticmethod
+    def _split_scope_statements(source: str) -> list[str]:
+        out, start, depth, quote, escaped = [], 0, 0, "", False
+        for i, char in enumerate(source):
+            if quote:
+                if escaped: escaped = False
+                elif char == "\\": escaped = True
+                elif char == quote: quote = ""
+            elif char in "\"'`": quote = char
+            elif char in "([{": depth += 1
+            elif char in ")]}": depth -= 1
+            elif char in ";\n" and depth == 0:
+                part = source[start:i].strip()
+                if part: out.append(part)
+                start = i + 1
+        tail = source[start:].strip()
+        if tail: out.append(tail)
+        return out
+
+    def _scope_eval(self, code: str) -> Result:
+        if not code.strip():
+            raise reject("code", "bad-action", "a TypeScript-like statement or expression")
+        if re.search(r"\b(?:eval|Function|import|process|globalThis|require)\b", code):
+            raise reject("code", "eval-forbidden", "the restricted typed scope language")
+        statements = self._split_scope_statements(code)
+        imported = tuple(self.lam.codebase)
+        if len(statements) > 1 and any(re.search(rf"\b{re.escape(name)}\s*\(", code) for name in imported):
+            last = Result("ok", "null", value=None)
+            for statement in statements:
+                # Awaiting an ordinary value is valid.  Accept the familiar
+                # synchronous Array.map spelling and lower its imported calls
+                # through the same checked Map node.
+                if (".map(" in statement and "Promise.all" not in statement and
+                        any(re.search(rf"\b{re.escape(name)}\s*\(", statement) for name in imported)):
+                    head = re.match(r"\s*((?:const|let)\s+[A-Za-z_$][\w$]*(?:\s*:\s*[^=]+)?\s*=\s*)(.*)", statement, re.S)
+                    if head:
+                        statement = head.group(1) + "await Promise.all(" + head.group(2) + ")"
+                last = self._scope_eval(statement)
+                if last.kind not in ("ok", "done"):
+                    return last
+            return last
+        mapped = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*"
+            r"(.+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*"
+            r"([A-Za-z_$][\w$]*)\s*\((.*)\)\s*\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        if mapped and mapped.group(5) in self.lam.codebase:
+            local, annotation, items_expr, item_name, function, raw_args = mapped.groups()
+            fn, expressions = self._function(function), self._split_call_args(raw_args)
+            declared = list(fn.args)
+            if len(expressions) != len(declared):
+                raise reject("code", "bad-call", fn.signature, f"{len(expressions)} positional arguments")
+            supplied = {}
+            omitted = []
+            for raw, expression in zip(declared, expressions):
+                if expression.strip() == item_name:
+                    omitted.append(raw.rstrip("?"))
+                else:
+                    supplied[raw.rstrip("?")] = self._eval_scope_expression(expression)
+            if len(omitted) != 1:
+                raise reject("code", "bad-call", "the map item supplied to exactly one function parameter")
+            items = self._eval_scope_expression(items_expr)
+            item_type = fn.args[next(raw for raw in declared if raw.rstrip("?") == omitted[0])]
+            hidden = f"__items_{self.actions}"
+            undo = self._local_type(f"let/{hidden}", f"({item_type})[]", fn.types)
+            try:
+                self._set_value(f"let/{hidden}", parse_type(f"({item_type})[]"), items, yaml=False)
+                result = self._op_call({"function": function, "to": f"let/{local}",
+                                        "over": f"let/{hidden}", "values": supplied})
+            finally:
+                self.lam.let.pop(hidden, None); self.lam.let_types.pop(hidden, None)
+            if annotation and not fits(parse_type(f"({fn.returns})[]"), parse_type(annotation.strip()), self.env):
+                raise reject(local, "type-does-not-fit-slot", annotation.strip(), f"({fn.returns})[]")
+            if result.kind == "done":
+                result.value = dump(self.lam.let[local])
+                result.text = json.dumps(result.value, ensure_ascii=False)
+            return result
+
+        # A direct natural-language/crisp call.  Calls are reduced by the normal
+        # checked runtime, then their typed result becomes a lexical local.
+        direct = re.fullmatch(
+            r"\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+"
+            r"([A-Za-z_$][\w$]*)\s*\((.*)\)\s*;?\s*(?:\1\s*;?)?\s*", code, re.S)
+        if direct and direct.group(3) in self.lam.codebase:
+            local, annotation, function, raw_args = direct.groups()
+            fn = self._function(function)
+            args = self._split_call_args(raw_args)
+            declared = list(fn.args)
+            required = sum(not raw.endswith("?") for raw in declared)
+            if not required <= len(args) <= len(declared):
+                raise reject("code", "bad-call", fn.signature, f"{len(args)} positional arguments")
+            values = {raw.rstrip("?"): self._eval_scope_expression(expr)
+                      for raw, expr in zip(declared, args)}
+            if annotation and not fits(parse_type(fn.returns), parse_type(annotation.strip()), self.env):
+                raise reject(local, "type-does-not-fit-slot", annotation.strip(), fn.returns)
+            result = self._op_call({"function": function, "to": f"let/{local}", "values": values})
+            if result.kind == "done":
+                result.text = json.dumps(dump(self.lam.let[local]), ensure_ascii=False)
+                result.value = dump(self.lam.let[local])
+            return result
+
+        # Pure snippets are executed atomically.  We capture top-level declared
+        # locals and an optional terminal expression, then validate every binding
+        # before installing any of them.
+        declarations = list(re.finditer(r"(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=", code))
+        names = [match.group(1) for match in declarations]
+        terminal = None
+        pieces = [part.strip() for part in re.split(r";|\n", code) if part.strip()]
+        if pieces and not re.match(r"^(?:const|let)\b", pieces[-1]) and not pieces[-1].startswith("return "):
+            terminal = pieces[-1]; code = code[:code.rfind(pieces[-1])] + f"const __natlangResult = ({terminal});"
+        elif pieces and pieces[-1].startswith("return "):
+            terminal = pieces[-1][7:].strip(); code = code[:code.rfind(pieces[-1])] + f"const __natlangResult = ({terminal});"
+        capture_names = list(dict.fromkeys([*self.lam.let, *names, "result"]))
+        captures = ", ".join(f"{json.dumps(name)}: (typeof {name} === 'undefined' ? null : {name})"
+                             for name in capture_names)
+        declares_result = any(match.group(1) == "result" for match in declarations)
+        body = (self._scope_bindings_prefix(include_result=not declares_result) + "\n" + code +
+                f"\nreturn {{ bindings: {{{captures}}}, result: " +
+                ("__natlangResult" if terminal is not None else "null") + " };" )
+        scope = _eval_scope_view({"args": self.lam.in_, "inputs": self.lam.in_, "locals": {
+            k: v for k, v in self.lam.let.items() if not is_pending(v)}})
+        executor = self.rt._executor("quickjs-isolated")
+        out = portable(executor.run(CrispRequest(body, scope, True, "eval", False), self.rt._fx(self.lam)))
+        staged = []
+        annotations = {match.group(1): match.group(2) for match in declarations}
+        for name in capture_names:
+            annotation = annotations.get(name)
+            if name in self.lam.in_ or name in self.lam.codebase:
+                raise reject(name, "not-writable", "a local variable")
+            value = out["bindings"][name]
+            if name == "result" and value is None and name not in self.lam.let and name not in annotations:
+                continue
+            if name in self.lam.let_types and annotation is None:
+                stated = self.lam.let_types[name]
+            else:
+                stated = parse_type(annotation.strip()) if annotation else parse_type(self._infer_scope_type(value))
+            staged.append((name, stated, coerce(value, stated, self.env, yaml=False, path=f"let/{name}")))
+        for name, stated, value in staged:
+            self.lam.let_types[name], self.lam.let[name] = stated, value
+        value = out.get("result")
+        text = json.dumps(value, ensure_ascii=False)
+        return Result("ok", text if len(text) <= 400 else text[:400] + f" … ({len(text)} chars)", value=value)
 
     def finish(self) -> bool:
         """The agent replied instead of calling a tool. Complete the lambda if `return` is valid."""

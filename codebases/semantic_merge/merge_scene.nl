@@ -1,3 +1,7 @@
+import { check_state } from "./merge_scene/check_state";
+import { interpret } from "./merge_scene/interpret";
+import { prepare_envelope } from "./prepare_envelope";
+import { validate_claims } from "./validate_claims";
 ---
 description: Merge edits to a shared diagram or game scene with semantic object identity.
 args:

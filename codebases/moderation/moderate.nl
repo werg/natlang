@@ -1,3 +1,8 @@
+import { severity_of } from "./moderate/severity_of";
+import { split_rules } from "./moderate/split_rules";
+import { violates } from "./moderate/violates";
+import { select_by_flags } from "../std/select_by_flags";
+import { any_true } from "../std/any_true";
 ---
 description: Moderate one post against a written policy - allow, warn, remove, or escalate to a human.
 args:
