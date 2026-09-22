@@ -7,6 +7,7 @@ prompt are rejected because they teach an ambiguous next action.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 from collections import Counter, defaultdict
@@ -98,6 +99,36 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
     return kept, dropped
 
 
+def balance_targets(rows: list[dict], minimum: int = 1, maximum: int = 0):
+    """Bound exact next-action frequency while retaining prompt diversity.
+
+    Prompt deduplication is still important, but it can turn a semantically
+    essential action into a single row when the workspace preview is stable.
+    Stable replication gives rare actions a real chance to enter a partial
+    epoch. Replicas keep the original program_id so train/holdout splitting
+    cannot leak the same state across partitions.
+    """
+    by_target = defaultdict(list)
+    for row in rows:
+        by_target[row.get("native_target") or row["completion"]].append(row)
+    balanced, added, removed = [], 0, 0
+    for target in sorted(by_target):
+        bucket = sorted(by_target[target], key=lambda row: hashlib.sha256(row["id"].encode()).hexdigest())
+        if maximum and len(bucket) > maximum:
+            removed += len(bucket) - maximum
+            bucket = bucket[:maximum]
+        balanced.extend(bucket)
+        if len(bucket) < minimum:
+            original = tuple(bucket)
+            for index in range(minimum - len(bucket)):
+                replica = copy.deepcopy(original[index % len(original)])
+                replica["id"] += f":target-replica:{index + 1}"
+                balanced.append(replica)
+                added += 1
+    balanced.sort(key=lambda row: (row.get("program_id") or row["id"], row["id"]))
+    return balanced, added, removed
+
+
 def distribution(rows):
     families = Counter(r.get("family") or "unknown" for r in rows)
     completion_lengths = sorted(len(r["completion"]) for r in rows)
@@ -128,9 +159,16 @@ def main():
     ap.add_argument("--max-per-program", type=int, default=32)
     ap.add_argument("--max-writes-per-program", type=int, default=4)
     ap.add_argument("--max-terminals-per-program", type=int, default=1)
+    ap.add_argument("--min-per-target", type=int, default=1,
+                    help="replicate rare exact native targets to at least this many rows")
+    ap.add_argument("--max-per-target", type=int, default=0,
+                    help="cap dominant exact native targets; zero leaves them uncapped")
     args = ap.parse_args()
-    if min(args.max_per_program, args.max_writes_per_program, args.max_terminals_per_program) < 1:
+    if min(args.max_per_program, args.max_writes_per_program, args.max_terminals_per_program,
+           args.min_per_target) < 1 or args.max_per_target < 0:
         ap.error("selection caps must be positive")
+    if args.max_per_target and args.max_per_target < args.min_per_target:
+        ap.error("--max-per-target must be zero or at least --min-per-target")
     if args.dst.exists() or args.dst.with_suffix(args.dst.suffix + ".manifest.json").exists():
         ap.error("destination already exists")
 
@@ -175,6 +213,8 @@ def main():
 
     selected, dropped = select(rows, args.max_per_program, args.max_writes_per_program,
                                args.max_terminals_per_program)
+    selected, target_replicas, target_cap_drops = balance_targets(
+        selected, args.min_per_target, args.max_per_target)
     after = Counter(r.get("skill") or "unknown" for r in selected)
     args.dst.parent.mkdir(parents=True, exist_ok=True)
     staged = args.dst.with_suffix(args.dst.suffix + ".building")
@@ -189,6 +229,8 @@ def main():
               "renderer": renderer, "source_rows": sum(before.values()),
               "exact_duplicates_removed": duplicates, "unique_prompts": len(rows),
               "reasoning_variants_removed": reasoning_variants,
+              "target_replicas_added": target_replicas,
+              "target_cap_drops": target_cap_drops,
               "selected_rows": len(selected), "programs": len({r.get('program_id') or r['id'] for r in selected}),
               "skill_counts_before": dict(before), "skill_counts_after": dict(after),
               "distribution_before": distribution(rows),
@@ -196,7 +238,9 @@ def main():
               "dropped_by_cap": dict(dropped),
               "caps": {"per_program": args.max_per_program,
                        "writes_per_program": args.max_writes_per_program,
-                       "terminals_per_program": args.max_terminals_per_program},
+                       "terminals_per_program": args.max_terminals_per_program,
+                       "min_per_target": args.min_per_target,
+                       "max_per_target": args.max_per_target},
               "sha256": h.hexdigest()}
     args.dst.with_suffix(args.dst.suffix + ".manifest.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scripts.select_sft import difficulty, distribution, select
+from scripts.select_sft import balance_targets, difficulty, distribution, select
 
 
 def row(identity, program, skill):
@@ -68,3 +68,19 @@ def test_selection_keeps_all_failure_contrasts():
         item["family"] = "failure_bounds_valid"
     kept, _ = select(rows, max_per_program=1, max_writes=1, max_terminals=1)
     assert kept == rows
+
+
+def test_target_balance_caps_common_and_replicates_rare_without_split_leakage():
+    rows = [row(f"common-{i}", f"p{i}", "call") for i in range(5)]
+    for item in rows:
+        item["native_target"] = "call-common"
+    rare = row("rare", "rare-program", "write")
+    rare["native_target"] = "write-source"
+    balanced, added, removed = balance_targets(rows + [rare], minimum=3, maximum=4)
+    targets = [item["native_target"] for item in balanced]
+    replicas = [item for item in balanced if item["native_target"] == "write-source"]
+    assert targets.count("call-common") == 4
+    assert len(replicas) == 3
+    assert {item["program_id"] for item in replicas} == {"rare-program"}
+    assert len({item["id"] for item in replicas}) == 3
+    assert (added, removed) == (2, 1)
