@@ -27,12 +27,14 @@ def test_generated_references_execute_and_review_pairs_share_context_and_split()
     rows, reviews = generate_group(104, 0)
     assert len({r['program_id'] for r in rows + reviews}) == 1
     assert {r['expected'] for r in reviews} == {'approve','withdraw','error','blocker'}
-    assert any('source=' in r['native_target'] and 'done=' in r['native_target'] for r in rows)
+    assert any('copy_value(' in r['native_target'] for r in rows)
+    assert any('mark_lines(' in r['native_target'] for r in rows)
     assert any('summary' in r['native_target'] for r in rows)
     for row in reviews:
         assert row['messages'][-1]['role'] == 'user'
         assert 'Nothing in this proposed batch has been executed' in row['messages'][-1]['content']
-    approved = next(r for r in reviews if r['expected'] == 'approve' and r['proposal'][0][0] == 'call')
+    approved = next(r for r in reviews if r['expected'] == 'approve' and
+                    r['proposal'][0][0] in ('run_function', 'for_each', 'fold', 'repeat'))
     withdrawn = next(r for r in reviews if r['id'].rsplit(':',1)[0] == approved['id'].rsplit(':',1)[0] and r['expected'] == 'withdraw')
     assert approved['messages'][:-1] == withdrawn['messages'][:-1]
 
@@ -54,8 +56,8 @@ def test_honesty_pairs_include_persistence_and_do_not_invent_confidence():
     assert early['task_feasible'] is False
     reason=json.loads(early['target']['tool_calls'][0]['function']['arguments'])['reason']
     assert 'earlier required operation' in reason
-    redirected=next(r for r in reviews if r['family']=='support_binding_error' and r['proposal'][0][0]=='call')
-    assert redirected['expected']=='error' and redirected['proposal'][0][1]['to']=='return/size'
+    redirected=next(r for r in reviews if r['family']=='support_binding_error' and r['proposal'][0][0]=='run_function')
+    assert redirected['expected']=='error' and redirected['proposal'][0][1]['save_as']=='return/size'
     grouped={}
     for r in reviews:
         grouped.setdefault(r['contrast_group'],[]).append(r)

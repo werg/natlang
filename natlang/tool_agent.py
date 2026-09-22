@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from .decoder import Decoder
+from .nodes import MISSING, is_pending
 from .surface import ToolSurface
 
 TOOLS_PROMPT = (Path(__file__).parent / "prompts" / "tools_small.md").read_text()
@@ -25,6 +26,71 @@ CHECKPOINT_REQUEST = (
     "The workspace, line marks, and effects will be shown again; do not restate them. "
     "Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters."
 )
+
+
+def _batch_schedule(session, calls):
+    """Stable dataflow ordering for one parallel-tool proposal.
+
+    Only explicit workspace paths create edges; no dependency is guessed from
+    the natural-language program.
+    """
+    producers = {}
+    for index, (name, args) in enumerate(calls):
+        path = (args.get("save_as") if name in ("run_function", "for_each", "fold", "repeat", "copy_function") else
+                args.get("destination") if name in ("write_value", "copy_value") else
+                args.get("to") if name in ("call", "invoke", "map_items", "fold_items", "repeat_until") else
+                args.get("path") if name == "write" else None)
+        if isinstance(path, str) and path:
+            producers.setdefault(path, []).append(index)
+
+    def available(path):
+        try:
+            _, ref = session.resolve(path)
+            value = ref.get()
+            return value is not MISSING and not is_pending(value)
+        except Exception:
+            return False
+
+    def references(name, args):
+        out = []
+        if name in ("run_function", "for_each", "fold", "repeat"):
+            out.extend(value for value in (args.get("inputs") or []) if isinstance(value, str))
+            for field in ("items", "initial"):
+                if isinstance(args.get(field), str):
+                    out.append(args[field])
+        elif name in ("call", "invoke", "map_items", "fold_items", "repeat_until"):
+            out.extend(value for value in (args.get("inputs") or {}).values() if isinstance(value, str))
+            for field in ("over", "init", "initial"):
+                if isinstance(args.get(field), str):
+                    out.append(args[field])
+        elif name == "write" and isinstance(args.get("source"), str):
+            out.append(args["source"])
+        elif name == "copy_value" and isinstance(args.get("source"), str):
+            out.append(args["source"])
+        elif name == "resume" and isinstance(args.get("computation", args.get("path")), str):
+            out.append(args.get("computation", args.get("path")))
+        elif name in ("read", "edit", "edit_text") and isinstance(args.get("path"), str):
+            out.append(args["path"])
+        return out
+
+    edges = {index: set() for index in range(len(calls))}
+    for consumer, (name, args) in enumerate(calls):
+        for path in references(name, args):
+            if available(path):
+                continue
+            for made, owners in producers.items():
+                if path == made or path.startswith(made + "/"):
+                    edges[consumer].update(owner for owner in owners if owner != consumer)
+
+    ordered, remaining = [], set(edges)
+    while remaining:
+        ready = [index for index in sorted(remaining) if not (edges[index] & remaining)]
+        if not ready:
+            ordered.extend(sorted(remaining))
+            break
+        ordered.extend(ready)
+        remaining.difference_update(ready)
+    return ordered
 
 
 class ToolAgent:
@@ -252,7 +318,10 @@ class ToolAgent:
                         low_value = (self.careful_threshold is not None and confidence is not None and
                                      confidence["geometric_mean"] < self.careful_threshold)
                         structural = self.review_scope == "actions" and (
-                            name in ("call", "mark_done", "edit") or "done" in args or "source" in args)
+                            name in ("call", "invoke", "map_items", "fold_items", "repeat_until",
+                                     "run_function", "for_each", "fold", "repeat", "resume",
+                                     "mark_done", "mark_lines", "edit", "edit_text", "copy_value", "copy_function")
+                            or "done" in args or "source" in args)
                         if not (low_value or structural):
                             continue
                         if exhausted():
@@ -307,18 +376,6 @@ class ToolAgent:
                     proposal["released"] = True
                     session.rt._observe("proposal", call_id=getattr(invocation, "call_id", None),
                                         phase="released", turn=turns, calls=turn.calls)
-                first = None
-                if turn.calls:
-                    name, args = turn.calls[0]
-                    first = s.apply(session, name, args)
-                    self.log.append({"action": f"{name} {json.dumps(args)}", "kind": first.kind, "attempt": 0})
-                    if teacher_turn is not None:
-                        teacher_turn["executions"].append({"call_index": 0, "name": name,
-                                                            "args": args, "kind": first.kind,
-                                                            "text": first.text})
-                    # Even a failed operation may have performed effects. Feed its result back;
-                    # never silently replay it or refund the work/turn budget.
-
                 if not turn.calls:                # the reply: the normal end of an agent episode
                     if self.validation_feedback == "caller" and (missing := s.missing(session)):
                         return "validation failed: " + missing
@@ -348,32 +405,43 @@ class ToolAgent:
                     checkpoint_ready = False
                     continue
 
-                results = [first]
-                for name, args in turn.calls[1:]:     # an ordered, non-atomic batch
-                    if results[-1].kind in ("blocked", "completed", "budget"):
+                # A parallel-tool response is a small dataflow batch. Consumers
+                # wait for paths produced elsewhere in the same response.
+                results_by_index, execution_order = {}, []
+                for index in _batch_schedule(session, turn.calls):
+                    if execution_order and results_by_index[execution_order[-1]].kind in ("blocked", "completed", "budget"):
                         break
                     if timed_out():
                         return "episode wall-clock budget exhausted"
+                    name, args = turn.calls[index]
                     r = s.apply(session, name, args)
                     self.log.append({"action": f"{name} {json.dumps(args)}", "kind": r.kind, "attempt": 0})
                     if teacher_turn is not None:
-                        teacher_turn["executions"].append({"call_index": len(results), "name": name,
+                        teacher_turn["executions"].append({"call_index": index, "name": name,
                                                             "args": args, "kind": r.kind,
                                                             "text": r.text})
-                    results.append(r)
+                    results_by_index[index] = r
+                    execution_order.append(index)
+                    # Even a failed operation may have performed effects. Feed its result back;
+                    # never silently replay it or refund the work/turn budget.
+                results = [results_by_index[index] for index in sorted(results_by_index)]
                 if results[-1].kind == "budget":
                     return "budget exhausted"
                 if results[-1].kind == "blocked":         # ends the episode; the lambda quiesces with this note
                     return results[-1].text
+                proposed_raw = turn.raw_calls or _raw(turn.calls)
                 raw = [c if c.get("id") else {**c, "id": f"call_{len(messages)}_{i}"}
-                       for i, c in enumerate(turn.raw_calls or _raw(turn.calls))][: len(results)]
+                       for i, c in enumerate(proposed_raw) if i in results_by_index]
                 messages.append({"role": "assistant", "content": "", "tool_calls": raw})
                 for c, r in zip(raw, results):
                     messages.append({"role": "tool", "tool_call_id": c["id"], "content": r.text})
                 # A read or run_code result may be the only copy of information the
                 # next turn needs. Keep that tool response in the live conversation.
                 checkpoint_ready = (not any(result.kind in FAILED for result in results) and
-                                    turn.calls[len(results) - 1][0] in ("write", "call", "edit", "mark_done"))
+                                    turn.calls[execution_order[-1]][0] in
+                                    ("write", "write_value", "copy_value", "copy_function", "call", "invoke",
+                                     "map_items", "fold_items", "repeat_until", "run_function", "for_each",
+                                     "fold", "repeat", "resume", "edit", "edit_text", "mark_done", "mark_lines"))
                 failed = next((result for result in results if result.kind in ("rejected", "refused")), None)
                 if self.validation_feedback == "caller" and failed is not None:
                     return "validation failed: " + failed.text

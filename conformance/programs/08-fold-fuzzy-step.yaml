@@ -16,7 +16,7 @@ program:
     codebase:
       update_address:
         description: Given the running state and one more message, the new address-tracking state.
-        args: { item: Text, acc: Addr }
+        args: { acc: Addr, item: Text }
         returns: '{ address: Text, changes: Num }'
         instructions: |
           `args/acc` holds the customer's latest known delivery address and how many times it has

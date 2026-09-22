@@ -140,6 +140,7 @@ class LlamaServerDecoder:
                  timeout: Optional[float] = None,
                  chat_extra: Optional[dict] = None, tool_aliases: Optional[dict] = None,
                  json_text_values: bool = False, typed_alternatives: bool = False,
+                 typed_alternative_names: Optional[set[str]] = None,
                  cache_stable_tools: bool = False, completion_extra: Optional[dict] = None):
         if json_text_values and typed_alternatives:
             raise ValueError("typed alternatives and JSON-text values are different transports")
@@ -148,6 +149,7 @@ class LlamaServerDecoder:
         self._request_deadline = ContextVar(f"decoder-deadline-{id(self)}", default=None)
         self.json_text_values = json_text_values
         self.typed_alternatives = typed_alternatives
+        self.typed_alternative_names = typed_alternative_names
         self.cache_stable_tools = cache_stable_tools
         # per-model opt-in: harness tool name -> the name this model's server is shown. (Bonsai's server
         # cannot emit a tool literally named `call`: its tool-call format uses that word itself.)
@@ -195,7 +197,11 @@ class LlamaServerDecoder:
             for tool in tools:
                 fn = tool["function"]
                 alts = (fn.get("parameters") or {}).get("x-natlang-alternatives")
-                if fn["name"] not in ("write", "call") or not alts:
+                expanded_names = {"write", "call", "write_value", "copy_value", "copy_function",
+                                  "invoke", "map_items", "fold_items", "repeat_until", "run_function",
+                                  "for_each", "fold", "repeat", "resume", "edit", "edit_text"}
+                selected = self.typed_alternative_names if self.typed_alternative_names is not None else expanded_names
+                if fn["name"] not in selected or not alts:
                     expanded.append(tool)
                     continue
                 if fn["name"] == "write":
@@ -204,18 +210,39 @@ class LlamaServerDecoder:
                     name = f"{fn['name']}_alt_{index}"
                     variant_names[name] = fn["name"]
                     optional = alt.get("x-optional") or []
-                    fields = {key: value for key, value in alt.items() if key != "x-optional"}
+                    fields = {key: value for key, value in alt.items() if not key.startswith("x-")}
                     summary = ", ".join(f"{key}={value['const']}" for key, value in fields.items()
                                         if isinstance(value, dict) and "const" in value)
-                    verb = "Write or copy" if fn["name"] == "write" else "Call"
+                    verb = {"write": "Write or copy", "write_value": "Write", "copy_value": "Copy value",
+                            "copy_function": "Copy function", "invoke": "Invoke", "map_items": "Map",
+                            "fold_items": "Fold", "repeat_until": "Repeat", "resume": "Resume",
+                            "run_function": "Run function", "for_each": "Map", "fold": "Fold",
+                            "repeat": "Repeat", "edit": "Edit", "edit_text": "Edit"}.get(fn["name"], "Call")
                     expanded.append({**tool, "function": {**fn, "name": name,
                         "description": f"{verb}. {summary}.",
                         "parameters": {"type": "object", "properties": fields,
                                        "required": [key for key in fields if key not in optional],
                                        "additionalProperties": False}}})
             tools = expanded
-        tools = [{**t, "function": {**t["function"], "parameters": {
-            k: v for k, v in (t["function"].get("parameters") or {}).items() if not k.startswith("x-")}}} for t in tools]
+        def portable_schema(value):
+            """Remove tuple syntax mishandled by some OpenAI-compatible template converters.
+
+            The native decoder retains per-position constraints. Remote servers
+            receive the same length bounds and path-only item type; the runtime
+            remains the authority for each position's exact type.
+            """
+            if isinstance(value, list):
+                return [portable_schema(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+            out = {key: portable_schema(item) for key, item in value.items()
+                   if not key.startswith("x-") and key != "prefixItems"}
+            if "prefixItems" in value:
+                out["items"] = {"type": "string"}
+            return out
+
+        tools = [{**t, "function": {**t["function"],
+                  "parameters": portable_schema(t["function"].get("parameters") or {})}} for t in tools]
         if self.json_text_values:
             # XML tool parsers need an unambiguous argument type. The runtime
             # already parses JSON text for non-Text slots; no wrapper repair.

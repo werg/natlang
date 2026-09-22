@@ -15,7 +15,7 @@ program:
     codebase:
       add_line:
         description: Running total plus one order line's amount.
-        args: { item: Line, acc: Num }
+        args: { acc: Num, item: Line }
         returns: Num
         code: return args.acc + args.item.qty * args.item.unit_price
 inputs:

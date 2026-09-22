@@ -94,6 +94,14 @@ class PyGrammar:
         if t == "null":
             return _alt([lit("None"), lit("null")])
         if t == "array":
+            if "prefixItems" in s:
+                prefix = s.get("prefixItems") or []
+                lo, hi = int(s.get("minItems", len(prefix))), int(s.get("maxItems", len(prefix)))
+                choices = []
+                for length in range(lo, hi + 1):
+                    fields = ' ", " '.join(self.value(item, depth + 1) for item in prefix[:length])
+                    choices.append(f'"[" {fields} "]"' if fields else '"[]"')
+                return self.fresh("tuple", " | ".join(choices))
             item = self.value(s.get("items") or {}, depth + 1)
             least = ' ' if s.get("minItems") else '?'
             body = f'{item} ( ", " {item} )*'
@@ -143,7 +151,7 @@ class PyGrammar:
             bodies = []
             for a in alts:                             # "x-optional": keys of this alternative that may be left out
                 opt = a.get("x-optional") or []
-                props = {k: v for k, v in a.items() if k != "x-optional"}
+                props = {k: v for k, v in a.items() if not k.startswith("x-")}
                 bodies.append(self._fields(props, [k for k in props if k not in opt], 0, key=kw))
             return self.fresh("call", " | ".join(f'{lit(fn["name"] + "(")} {b} ")"' for b in bodies))
         body = self._fields(params.get("properties") or {}, params.get("required") or [], 0, key=kw)
@@ -188,6 +196,8 @@ def write_grammar_tools(tools, mode="typed"):
 
     Rendering uses the original tools in both modes. No runtime validator is
     weakened, and copied-function/source alternatives keep their constraints.
+    In tools-v4 the destination and stated type remain guided while the literal
+    itself may still be a fallible proposal.
     """
     if mode not in ("typed", "runtime"):
         raise ValueError("write_constraints must be typed or runtime")
@@ -196,12 +206,13 @@ def write_grammar_tools(tools, mode="typed"):
     result = copy.deepcopy(tools)
     for tool in result:
         fn = tool["function"]
-        if fn["name"] != "write":
+        if fn["name"] not in ("write", "write_value"):
             continue
         params = fn["parameters"]
         for alt in params.get("x-natlang-alternatives", []):
             if "value" in alt:
-                alt["type"] = {"type": "string"}
+                if fn["name"] == "write":
+                    alt["type"] = {"type": "string"}
                 alt["value"] = {}
     return result
 

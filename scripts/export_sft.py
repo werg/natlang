@@ -155,19 +155,21 @@ def main():
         else:
             parts.append("I will follow the current instruction and preserve the declared input and return types.")
         for name, args in calls:
-            if name == "call":
-                shape = " over the selected items" if "over" in args else ""
-                parts.append(f"The required subproblem is implemented by {args.get('function', 'the named function')}{shape}; its typed result belongs in {args.get('to', 'the destination')} so later steps can depend on it.")
-            elif name == "write":
+            if name in ("call", "run_function", "for_each", "fold", "repeat"):
+                shape = " over the selected items" if name in ("for_each", "fold") or "over" in args else ""
+                destination = args.get("save_as", args.get("to", "the destination"))
+                parts.append(f"The required subproblem is implemented by {args.get('function', 'the named function')}{shape}; its typed result belongs in {destination} so later steps can depend on it.")
+            elif name in ("write", "write_value", "copy_value"):
                 source = (f" from {args['source']}" if "source" in args else "")
-                parts.append(f"The value is fully determined{source}; write it to {args.get('path', 'the destination')} as {args.get('type', 'the declared type')} without inventing or coercing a different result.")
+                destination = args.get("destination", args.get("path", "the destination"))
+                parts.append(f"The value is fully determined{source}; write it to {destination} as {args.get('type', 'the declared type')} without inventing or coercing a different result.")
             elif name == "run_code":
                 parts.append("This is a deterministic algorithm over the supplied values. Execute the stated transformation exactly so sorting, grouping, boundaries, and arithmetic are handled by code rather than mental approximation.")
             elif name == "read":
                 parts.append(f"The current listing only previews {args.get('path', 'the required value')}; read it before deciding so no hidden element is guessed or omitted.")
             elif name in ("report_error", "report_blocker"):
                 parts.append("The requested result is not derivable from the available instructions and values. Report the precise failure instead of fabricating a value that merely satisfies the schema.")
-            elif name == "mark_done":
+            elif name in ("mark_done", "mark_lines"):
                 parts.append("Close only the instruction lines whose effects are already reflected in state; skipped or unresolved work must remain distinguishable.")
             else:
                 parts.append(f"Apply the verified next action: {name}.")
@@ -188,7 +190,7 @@ def main():
         return_already_written = any(
             m.get("role") == "tool" and "return: written" in (m.get("content") or "")
             for m in s["messages"])
-        if calls and return_already_written and "mark_done" not in tool_names:
+        if calls and return_already_written and not ({"mark_done", "mark_lines"} & tool_names):
             reason = f"post_completion_action: {s['id']} proposed another action after the return was complete"
             if a.drop_invalid_actions:
                 return None, reason

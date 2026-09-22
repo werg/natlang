@@ -16,6 +16,34 @@ class ScenarioContract:
     constrained_calls: tuple = ()
 
 
+CALL_MODES = {"run_function", "for_each", "fold", "repeat"}
+
+
+def action_matches(actual: dict, required: dict) -> bool:
+    """Compare tools-v2 semantic obligations with either v2 or tools-v4 actions."""
+    aname, aargs = actual.get("name"), actual.get("arguments", {})
+    rname, rargs = required.get("name"), required.get("arguments", {})
+    if aname == rname:
+        return all(aargs.get(key) == value for key, value in rargs.items())
+    if rname == "write" and aname == "write_value":
+        translated = {"path": aargs.get("destination"), "type": aargs.get("type"), "value": aargs.get("value")}
+        return all(translated.get(key) == value for key, value in rargs.items())
+    if rname == "write" and aname == "copy_value":
+        translated = {"path": aargs.get("destination"), "source": aargs.get("source")}
+        return all(translated.get(key) == value for key, value in rargs.items())
+    if rname == "call" and aname in CALL_MODES:
+        translated = {"function": aargs.get("function"), "to": aargs.get("save_as"),
+                      "inputs": dict(zip((rargs.get("inputs") or {}).keys(), aargs.get("inputs") or []))}
+        if aname in ("for_each", "fold"):
+            translated["over"] = aargs.get("items")
+        if aname in ("fold", "repeat"):
+            translated["init"] = aargs.get("initial")
+        if aname == "repeat":
+            translated.update(until=aargs.get("until"), max=aargs.get("at_most"))
+        return all(translated.get(key) == value for key, value in rargs.items())
+    return False
+
+
 def admit(reader: TraceReader, contract: ScenarioContract) -> dict:
     replay = reader.replay_observations()
     if replay["outcome"] != contract.outcome:
@@ -34,16 +62,14 @@ def admit(reader: TraceReader, contract: ScenarioContract) -> dict:
             raise ValueError("required effect was requested but did not complete")
     for rule in contract.constrained_calls:
         for event in replay["actions"]:
-            if event.get("name") == "call" and event.get("arguments", {}).get("function") == rule["function"]:
-                arguments = event["arguments"]
-                if arguments.get("to") != rule["to"] or arguments.get("inputs", {}) != rule["inputs"]:
+            if event.get("name") in ({"call"} | CALL_MODES) and event.get("arguments", {}).get("function") == rule["function"]:
+                required = {"name": "call", "arguments": rule}
+                if not action_matches(event, required):
                     raise ValueError("required call destination or inputs changed")
     executed = replay["actions"]  # proposals are separate records; rejected actions were still attempted
     cursor = 0
     for required in contract.required_actions:
-        while cursor < len(executed) and (executed[cursor].get("name") != required.get("name") or
-                                         any(executed[cursor].get("arguments", {}).get(k) != v
-                                             for k, v in required.get("arguments", {}).items())):
+        while cursor < len(executed) and not action_matches(executed[cursor], required):
             cursor += 1
         if cursor == len(executed):
             raise ValueError(f"required ordered action absent: {required}")

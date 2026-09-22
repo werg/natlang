@@ -16,7 +16,7 @@ export type LambdaNode = Base & { nodeKind: 'lambda'; kind: 'instructions' | 'co
   marks: Record<number, string>; fnCopies: Record<string, unknown> };
 export type MapNode = Base & { nodeKind: 'map'; over: Value; fn: Value; slots?: Value[]; itemName: string };
 export type FoldNode = Base & { nodeKind: 'fold'; over: Value; init: Value; step: Value;
-  acc: Value; at: number; current: Value | null };
+  acc: Value; at: number; current: Value | null; accName: string; itemName: string };
 export type IterateNode = Base & { nodeKind: 'iterate'; init: Value; step: Value; check: Value;
   max: Value; state: Value; iteration: number; recent: Value[]; seenHashes: string[];
   current: Value | null; stateName: string; checkName: string };
@@ -167,7 +167,8 @@ export function partType(node: Pending, part: string): Type {
     if (part === 'over') return { kind: 'list', element: type.a };
     if (part === 'init' || part === 'acc') return type.s;
     if (part === 'step') return { kind: 'lambda', params: { kind: 'record', fields: [
-      { name: 'acc', type: type.s, optional: false }, { name: 'item', type: type.a, optional: false }] }, returns: type.s };
+      { name: node.accName, type: type.s, optional: false },
+      { name: node.itemName, type: type.a, optional: false }] }, returns: type.s };
   }
   if (node.nodeKind === 'iterate' && type.kind === 'iterate') {
     if (part === 'init' || part === 'state') return type.s;
@@ -200,7 +201,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   const lambdaKeys = new Set(['type', 'types', 'effects', 'engine', 'instructions', 'code', 'args', 'return',
     'status', 'note', 'effects_journal', 'continuation_note', 'codebase', 'let', 'let_types', 'function', 'marks']);
   const nodeKeys = new Set(['type', 'types', 'status', 'note', 'over', 'fn', 'init', 'step', 'check', 'max',
-    'acc', 'at', 'state', 'iteration', 'item_name', 'state_name', 'check_name']);
+    'acc', 'at', 'state', 'iteration', 'acc_name', 'item_name', 'state_name', 'check_name']);
   const extra = Object.keys(body).filter(name => !(key === '$lambda' ? lambdaKeys : nodeKeys).has(name) &&
     !(key === '$map' && name === 'slots')).sort()[0];
   if (extra) return reject(`${path}/${extra}`, 'unknown-field', key === '$lambda' ? 'a Lambda part' :
@@ -247,7 +248,8 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
   }
   if (key === '$fold' && type.kind === 'fold') {
     const node: FoldNode = { ...common, nodeKind: 'fold', over: MISSING, init: MISSING, step: MISSING,
-      acc: MISSING, at: Number(body.at ?? 0), current: null };
+      acc: MISSING, at: Number(body.at ?? 0), current: null,
+      accName: String(body.acc_name ?? 'acc'), itemName: String(body.item_name ?? 'item') };
     for (const part of ['over', 'init', 'step'] as const) if (part in body) node[part] = coerce(body[part], partType(node, part), inner, `${path}/${part}`);
     if ('acc' in body) node.acc = coerce(body.acc, type.s, inner, `${path}/acc`);
     if ('current' in body && body.current !== null) node.current = coerce(body.current, partType(node, 'step'), inner, `${path}/current`);
@@ -346,6 +348,8 @@ export function dump(value: Value, full = false): unknown {
     if (value.nodeKind === 'fold') {
       if (value.acc !== MISSING) body.acc = dump(value.acc, full);
       if (value.at) body.at = value.at;
+      if (value.accName !== 'acc') body.acc_name = value.accName;
+      if (value.itemName !== 'item') body.item_name = value.itemName;
     }
     if (value.nodeKind === 'iterate') {
       if (value.state !== MISSING) body.state = dump(value.state, full);

@@ -89,6 +89,8 @@ class FoldNode(Pending):
     acc: Any = MISSING
     at: int = 0
     current: Any = None
+    acc_name: str = "acc"        # first parameter of the step function
+    item_name: str = "item"      # second parameter of the step function
 
 
 @dataclass(eq=False)

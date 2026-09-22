@@ -26,7 +26,8 @@ def test_sandbox_scope_preserves_reserved_dictionary_keys():
 def test_saga_training_contains_resume_after_lost_acknowledgement():
     samples, _ = run_program(ARCHITECTURES['cb_order_saga'](random.Random(0)))
     resumes = [s for s in samples for c in s['target'].get('tool_calls') or []
-               if c['function']['name'] == 'call' and '"function": "dispatch"' in c['function']['arguments']
-               and '"inputs"' not in c['function']['arguments']]
+               if c['function']['name'] == 'resume' or
+               (c['function']['name'] == 'run_function' and '"function": "dispatch"' in c['function']['arguments']
+               and '"inputs"' not in c['function']['arguments'])]
     assert resumes
     assert any(any(m['role'] == 'tool' and 'quiesced' in m['content'] for m in s['messages']) for s in samples)

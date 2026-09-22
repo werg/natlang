@@ -32,7 +32,7 @@ def test_dependent_calls_are_in_separate_turns():
     samples, _ = run_program(prog)
     root_task = samples[0]["messages"][1]["content"]           # the root episode comes first, whatever its wording
     root_turns = [s["skill"] for s in samples if s["messages"][1]["content"] == root_task]
-    assert [t.split("+")[-1] for t in root_turns] == ["call", "call", "reply"]        # the second call reads the local the first one made
+    assert [t.split("+")[-1] for t in root_turns] == ["for_each", "run_function", "reply"]
 
 
 @pytest.mark.parametrize("shape", ["ticket_report", "review_digest", "expense_audit", "nested_assessment"])
@@ -44,7 +44,8 @@ def test_synthesized_programs_run_and_match_their_twin(shape):
     for _ in range(6):
         prog = SHAPES[shape](rng)
         samples, episodes = run_program(prog)
-        assert episodes >= 4 and any("call" in s["skill"].split("+") for s in samples)
+        assert episodes >= 4 and any(set(s["skill"].split("+")) &
+                                     {"run_function", "for_each", "fold", "repeat"} for s in samples)
         assert samples[0]["messages"][1]["content"].lstrip().startswith("1     function ")
         assert any(s["skill"].startswith("mark") for s in samples)
         assert "Functions you can call:" in samples[0]["messages"][1]["content"]
@@ -61,10 +62,10 @@ def test_composed_programs_are_varied_and_verified():
         texts.add(samples[0]["messages"][1]["content"].split("Functions you can call")[0])
         for s in samples:
             for c in s["target"].get("tool_calls") or []:
-                if c["function"]["name"] != "call":
+                if c["function"]["name"] not in ("run_function", "for_each", "fold", "repeat"):
                     continue
-                a = c["function"]["arguments"]
-                kinds.add("repeat" if '"until"' in a else "fold" if '"init"' in a else "each" if '"over"' in a else "plain")
+                kinds.add({"run_function": "plain", "for_each": "each", "fold": "fold",
+                           "repeat": "repeat"}[c["function"]["name"]])
     assert len(texts) == 25 and {"each", "plain"} <= kinds
 
 

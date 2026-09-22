@@ -21,10 +21,10 @@ def test_leaf_and_map_report_use_real_harness(tmp_path):
     rows = [task(1, "Customer asks a question", "false"),
             task(2, "Customer says payment is blocked", "true")]
     leaf, _ = run_program(leaf_program(rows[0]))
-    assert any(s["skill"] == "write" for s in leaf)
+    assert any(s["skill"] == "write_value" for s in leaf)
     mapped, episodes = run_program(map_report_program(rows))
     assert episodes == 3
-    assert any(s["skill"] == "call" for s in mapped)
+    assert any(s["skill"] in ("run_function", "for_each") for s in mapped)
     assert any(s["skill"] == "run_code" for s in mapped)
     out = tmp_path / "traces.jsonl"
     counts = generate(rows, out)
@@ -72,7 +72,7 @@ def test_case_report_calls_independent_questions():
             "source_meta": {"question_key": "demo"}}
     samples, episodes = run_program(case_report_program([concern, demo]))
     assert episodes == 3
-    assert sum(sample["skill"] == "call" for sample in samples) == 2
+    assert sum(sample["skill"] == "run_function" for sample in samples) == 2
     assert samples[-1]["skill"] == "reply"
 
 

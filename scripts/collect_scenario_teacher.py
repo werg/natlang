@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from natlang.gen.programs import BLOCKED
+from natlang.explicit_surface import ExplicitToolSurface
 from natlang.invocation import RunOptions, SeedPolicy
 from natlang.runtime import Runtime
 from natlang.scenario import ScenarioContract, admit
@@ -60,11 +61,12 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
     program = lower(record)
     options = options or RunOptions(seed=SeedPolicy("derived", 0))
     recorder = TraceRecorder({"run_id": options.run_id, "source_sha256": digest(record),
-                              "semantic_version": record["version"], "tool_schema": "tools-v2",
+                              "semantic_version": record["version"], "tool_schema": "tools-v4",
                               "model": model_id, "seed_policy": vars(options.seed),
                               "capture": "teacher-whole-program"}, trace_path)
     captured = []
     rt = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
+                                      surface=ExplicitToolSurface(),
                                       temperature=0, validation_feedback="caller",
                                       teacher_turns=captured, segment_turns=segment_turns,
                                       segment_messages=segment_messages),
@@ -106,7 +108,7 @@ def collect(record: dict, decoder, *, model_id: str, options: RunOptions | None 
            "task": {"kind": "whole_program", "program_ir": record,
                     "source_program_ids": [record["id"]]},
            "provenance": {"model": model_id, "program_ir_sha256": digest(record),
-                          "tool_schema": "tools-v2", "seed_policy": vars(options.seed),
+                          "tool_schema": "tools-v4", "seed_policy": vars(options.seed),
                           "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
                           "trace_sha256": digest(recorder.events)},
            "outcome": {"status": outcome.kind, "detail": outcome.detail, "value": actual,
@@ -160,7 +162,7 @@ def main():
     parser.add_argument("--segment-messages", type=int, default=12,
                         help="conversation items before a safe continuation checkpoint")
     parser.add_argument("--system-file", type=Path,
-                        default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_teacher_compact.md")
+                        default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_explicit.md")
     args = parser.parse_args()
     if args.start < 0 or args.limit < 1 or args.segment_turns < 1 or args.segment_messages < 5:
         parser.error("start must be nonnegative; limit and segment turns positive, segment messages at least 5")
@@ -169,7 +171,7 @@ def main():
         args.server,
         chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
-        tool_aliases={"call": "call_function"}, json_text_values=True)
+        typed_alternatives=True, typed_alternative_names={"write_value"})
     system_prompt = args.system_file.read_text()
     records = []
     with args.ir.open() as source:

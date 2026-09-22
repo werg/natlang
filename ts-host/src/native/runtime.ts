@@ -25,6 +25,33 @@ type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 const pending = (value: Value): value is Pending => isPending(value);
 const hash = (value: unknown) => hexDigest(JSON.stringify(value));
+function fuzzyEditSpan(text: string, remembered: string): string | undefined {
+  if (remembered.trim().length < 4) return;
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const score = (left: string, right: string): number => {
+    const a = left.trim(), b = right.trim();
+    if (!a.length || !b.length) return 0;
+    const width = Math.max(a.length, b.length), row = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let previous = row[0]!; row[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const saved = row[j]!;
+        row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+        previous = saved;
+      }
+    }
+    return 1 - row[b.length]! / width;
+  };
+  const candidates: [number, string][] = [];
+  for (let width = 1; width <= 3; width++) for (let start = 0; start + width <= lines.length; start++) {
+    const span = lines.slice(start, start + width).join('');
+    if (span.trim() && text.split(span).length - 1 === 1) candidates.push([score(remembered, span), span]);
+  }
+  candidates.sort((a, b) => b[0] - a[0]);
+  if (!candidates.length || candidates[0]![0] < 0.72 ||
+      (candidates.length > 1 && candidates[0]![0] - candidates[1]![0] < 0.08)) return;
+  return candidates[0]![1];
+}
 function oneLine(value: unknown): string {
   if (isLazyDict(value)) return `[${value.label}; lazy read-only Dict]`;
   if (Array.isArray(value)) return `${value.length} items`;
@@ -530,7 +557,7 @@ export class NativeRuntime {
       }
       if (node.current === null) {
         const step = cloneValue(node.step as LambdaNode);
-        step.args.acc = cloneValue(node.acc); step.args.item = cloneValue(item);
+        step.args[node.accName] = cloneValue(node.acc); step.args[node.itemName] = cloneValue(item);
         node.current = step;
       }
       const child = itemRef(node as unknown as Record<string, Value>, 'current', node.type.s, env, `${ref.path}/step/${node.at}`);
@@ -661,14 +688,26 @@ export class NativeSession {
     if (this.actionLimitReached())
       return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
-    if (name !== 'mark_done') this.actions++;
-    if (name !== 'mark_done') this.lam.steps++;
+    if (name !== 'mark_done' && name !== 'mark_lines') this.actions++;
+    if (name !== 'mark_done' && name !== 'mark_lines') this.lam.steps++;
     if (name === 'write' && args.done !== undefined) try { this.doneRange(args.done); }
     catch (error) { if (error instanceof Reject) return this.record(name, args, rejected(error)); throw error; }
     return this.record(name, args, this.applyNow(name, args));
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
     try {
+      if (name === 'write_value') return this.applyNow('write', {
+        path: args.destination, type: args.type, value: args.value });
+      if (name === 'copy_function') return this.applyNow('write', {
+        path: args.save_as, type: `Function<${String(args.function ?? '')}>` });
+      if (name === 'copy_value') {
+        const source = this.resolve(String(args.source ?? ''));
+        if (!source.type) throw new Reject([{ path: String(args.source ?? ''), code: 'no-such-path' }]);
+        return this.applyNow('write', { path: args.destination, type: formatType(source.type), source: args.source });
+      }
+      if (name === 'edit_text') return this.applyNow('edit', { path: args.path, old: args.find,
+        new: args.replace_with ?? '', fuzzy: args.fuzzy ?? false });
+      if (name === 'mark_lines') return this.applyNow('mark_done', args);
       if (name === 'report_blocker' || name === 'report_error') {
         const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
         if (message.length < 8) throw new Reject([{ path: name === 'report_blocker' ? 'missing' : 'message',
@@ -788,8 +827,10 @@ export class NativeSession {
       if (name === 'edit') {
         const ref = this.resolve(String(args.path ?? ''));
         if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
-        const value = ref.get(), old = String(args.old ?? ''), replacement = String(args.new ?? '');
+        const value = ref.get(), remembered = String(args.old ?? ''), replacement = String(args.new ?? '');
         if (typeof value !== 'string') throw new Reject([{ path: ref.path, code: 'type-mismatch', expected: 'a text' }]);
+        const old = value.split(remembered).length - 1 === 1 ? remembered :
+          args.fuzzy === true ? fuzzyEditSpan(value, remembered) ?? remembered : remembered;
         const occurrences = old ? value.split(old).length - 1 : 0;
         if (occurrences !== 1) throw new Reject([{ path: ref.path,
           code: occurrences ? 'old-not-unique' : 'old-not-found',
@@ -893,6 +934,64 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
+    if (['run_function', 'for_each', 'fold', 'repeat'].includes(name)) {
+      const functionName = String(args.function ?? '');
+      const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
+      if (!definition) return this.record(name, args, rejected(new Reject([{ path: 'function', code: 'no-such-function' }])));
+      const signature = definition.args as Record<string, string> ?? {};
+      const declared = Object.keys(signature).map(raw => raw.replace(/\?$/, ''));
+      const skip = name === 'fold' ? 2 : name === 'for_each' || name === 'repeat' ? 1 : 0;
+      const paths = args.inputs ?? [];
+      if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string'))
+        return this.record(name, args, rejected(new Reject([{ path: 'inputs', code: 'bad-call', expected: 'ordered workspace paths' }])));
+      const tail = Object.keys(signature).slice(skip);
+      const required = tail.filter(raw => !raw.endsWith('?')).length;
+      if (paths.length < required || paths.length > tail.length)
+        return this.record(name, args, rejected(new Reject([{ path: 'inputs', code: 'bad-call',
+          expected: `${required} to ${tail.length} paths in parameter order` }])));
+      const inputs = Object.fromEntries(paths.map((path, index) => [declared[skip + index]!, path]));
+      const forwarded: Record<string, unknown> = { function: functionName, to: args.save_as, inputs };
+      if (name === 'for_each' || name === 'fold') forwarded.over = args.items;
+      if (name === 'fold' || name === 'repeat') forwarded.init = args.initial;
+      if (name === 'repeat') { forwarded.until = args.until; forwarded.max = args.at_most; }
+      return this.applyAsync('call', forwarded);
+    }
+    if (name === 'invoke') return this.applyAsync('call', args);
+    if (name === 'map_items') {
+      const item = String(args.item_param ?? '');
+      const inputs = args.inputs as Record<string, unknown> ?? {}, values = args.values as Record<string, unknown> ?? {};
+      if (!item || item in inputs || item in values)
+        return this.record(name, args, rejected(new Reject([{ path: 'item_param', code: 'bad-call',
+          expected: 'the parameter supplied by the map, absent from inputs and values' }])));
+      const { item_param: _item, ...forwarded } = args;
+      return this.applyAsync('call', forwarded);
+    }
+    if (name === 'fold_items') {
+      if (args.item_param !== 'item' || args.accumulator_param !== 'acc')
+        return this.record(name, args, rejected(new Reject([{ path: 'item_param', code: 'bad-call',
+          expected: 'item and acc for the current fold function' }])));
+      const { item_param: _item, accumulator_param: _acc, initial, ...forwarded } = args;
+      return this.applyAsync('call', { ...forwarded, init: initial });
+    }
+    if (name === 'repeat_until') {
+      const state = String(args.state_param ?? '');
+      const inputs = args.inputs as Record<string, unknown> ?? {}, values = args.values as Record<string, unknown> ?? {};
+      if (!state || state in inputs || state in values)
+        return this.record(name, args, rejected(new Reject([{ path: 'state_param', code: 'bad-call',
+          expected: 'the transition parameter supplied by the loop' }])));
+      const { initial, state_param: _state, ...forwarded } = args;
+      return this.applyAsync('call', { ...forwarded, init: initial });
+    }
+    if (name === 'resume') {
+      const path = String(args.computation ?? args.path ?? '');
+      const ref = this.resolve(path), value = ref.get();
+      if (!pending(value) || !['unreduced', 'quiesced'].includes(value.status))
+        return this.record(name, args, rejected(new Reject([{ path, code: 'no-such-path',
+          expected: 'an unfinished computation' }])));
+      const outcome = await this.runtime.trigger(ref);
+      return this.record(name, args, { kind: outcome.kind,
+        text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
+    }
     if (name === 'run_code' && /\bawait\b/.test(String(args.code ?? ''))) {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actionLimitReached())
@@ -980,6 +1079,7 @@ export class NativeSession {
       const callEnv = this.env.child(named);
       const declared = Object.fromEntries(Object.entries(signature).map(([name, text]) =>
         [name.replace(/\?$/, ''), parseType(text)]));
+      const declaredNames = Object.keys(signature).map(name => name.replace(/\?$/, ''));
       for (const name of [...Object.keys(inputPaths), ...Object.keys(values)])
         if (!(name in declared)) throw new Reject([{ path: `inputs/${name}`, code: 'unknown-field' }]);
       for (const [name, path] of Object.entries(inputPaths)) {
@@ -994,13 +1094,13 @@ export class NativeSession {
       const init = args.init === undefined ? undefined : typeof args.init === 'string' ?
         (() => { try { return this.resolve(args.init as string).get(); } catch { return args.init; } })() : args.init;
       const later = over === undefined ? args.until === undefined ? [] : [required.find(n => !(n in values))] :
-        init === undefined ? [required.find(n => !(n in values))] : ['acc', 'item'];
+        init === undefined ? [required.find(n => !(n in values))] : declaredNames.slice(0, 2);
       if (required.some(name => !(name in values) && !later.includes(name)))
         throw new Reject([{ path: 'inputs', code: 'bad-call', expected: required.join(', ') }]);
       if (overRef && (overRef.env.resolve(overRef.type!).kind !== 'list' || !Array.isArray(over)))
         throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: 'a list' }]);
       if (overRef && overRef.type) {
-        const itemType = signature[init === undefined ? later[0]! : 'item'];
+        const itemType = signature[init === undefined ? later[0]! : later[1]!];
         if (itemType && !fitsType(overRef.type, parseType(`${itemType}[]`), callEnv))
           throw new Reject([{ path: overRef.path, code: 'type-does-not-fit-slot', expected: `${itemType}[]` }]);
       }
@@ -1027,9 +1127,11 @@ export class NativeSession {
               { engine: check.engine } : {}), function: String(args.until) } } } };
         destination = stateType;
       } else if (over !== undefined && init !== undefined) {
-        if (!('acc' in signature) || !('item' in signature)) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);
-        raw = { $fold: { type: `Fold<${signature.item}, ${signature.acc}>`, over, init, step: { $lambda: leaf } } };
-        destination = signature.acc!;
+        const [accName, itemName] = declaredNames;
+        if (!accName || !itemName) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);
+        raw = { $fold: { type: `Fold<${signature[itemName]}, ${signature[accName]}>`, over, init,
+          acc_name: accName, item_name: itemName, step: { $lambda: leaf } } };
+        destination = signature[accName]!;
       } else if (over !== undefined) {
         const itemName = later[0];
         if (!itemName) throw new Reject([{ path: 'inputs', code: 'bad-call' }]);

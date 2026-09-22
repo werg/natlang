@@ -242,14 +242,14 @@ def build_pending(wrapper: str, body: Any, env: TypeEnv, *, yaml: bool, path: st
 
     parts = {MapNode: ("over", "fn"), FoldNode: ("over", "init", "step"),
              IterateNode: ("init", "step", "check", "max")}[cls]
-    state_keys = {"acc", "at", "state", "iteration", "item_name", "state_name", "check_name"}
+    state_keys = {"acc", "at", "state", "iteration", "acc_name", "item_name", "state_name", "check_name"}
     extra = set(map(str, body)) - set(parts) - {"type", "types", "status", "note"} - state_keys
     if cls is MapNode:
         extra -= {"slots"}
     if extra:
         raise reject(f"{path}/{sorted(extra)[0]}", "unknown-field", f"a {cls.__name__} part")
     node = cls(**common)
-    for k in ("item_name", "state_name", "check_name"):
+    for k in ("acc_name", "item_name", "state_name", "check_name"):
         if k in body and hasattr(node, k):
             setattr(node, k, str(body[k]))
     for part in parts:
@@ -286,7 +286,8 @@ def part_type(node: Pending, part: str):
                 "fn": LambdaT(Record(((node.item_name, t.a, False),)), t.b)}[part]
     if isinstance(node, FoldNode):
         return {"over": ListT(t.a), "init": t.s, "acc": t.s,
-                "step": LambdaT(Record((("acc", t.s, False), ("item", t.a, False))), t.s)}[part]
+                "step": LambdaT(Record(((node.acc_name, t.s, False),
+                                         (node.item_name, t.a, False))), t.s)}[part]
     if isinstance(node, IterateNode):
         return {"init": t.s, "state": t.s, "max": NUM,
                 "step": LambdaT(Record(((node.state_name, t.s, False),)), t.s),
@@ -454,6 +455,10 @@ def dump(x: Any) -> Any:
                 body[part] = dump(getattr(x, part))
         if x.at:
             body["at"] = x.at
+        if x.acc_name != "acc":
+            body["acc_name"] = x.acc_name
+        if x.item_name != "item":
+            body["item_name"] = x.item_name
     elif isinstance(x, IterateNode):
         for part in ("init", "step", "check", "max", "state"):
             if getattr(x, part) is not MISSING:

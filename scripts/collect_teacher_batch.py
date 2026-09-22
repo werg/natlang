@@ -53,6 +53,7 @@ def expected_provenance(record: dict, *, model_id: str, root_seed: int,
                         segment_messages: int, cache_stable_tools: bool = False,
                         decode: str = "server", require_call: bool = False) -> dict:
     provenance = {"program_ir_sha256": digest(record), "model": model_id,
+                  "tool_schema": "tools-v4",
                   "seed_policy": vars(SeedPolicy("derived", root_seed)),
                   "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest(),
                   "segment_turns": segment_turns, "segment_messages": segment_messages}
@@ -152,7 +153,7 @@ def decoder_for(args) -> LlamaServerDecoder:
         args.server,
         timeout=args.request_timeout,
         chat_extra=chat_extra,
-        tool_aliases={"call": args.call_tool_name}, json_text_values=True,
+        typed_alternatives=True, typed_alternative_names={"write_value"},
         cache_stable_tools=getattr(args, "cache_stable_tools", False))
 
 
@@ -209,13 +210,11 @@ def main() -> None:
     parser.add_argument("--decode", choices=("server", "native"), default="server")
     parser.add_argument("--require-call", action="store_true")
     parser.add_argument("--reasoning-effort", choices=("low", "medium", "high"), default="low")
-    parser.add_argument("--call-tool-name", default="call_function",
-                        help="server-native name for the runtime call tool")
     parser.add_argument("--cache-stable-tools", action="store_true",
                         help="present state-dependent path and line constraints as stable base types")
     parser.add_argument("--request-timeout", type=float)
     parser.add_argument("--system-file", type=Path,
-                        default=Path("natlang/prompts/tools_teacher_compact.md"))
+                        default=Path("natlang/prompts/tools_explicit.md"))
     parser.add_argument("--import-ir", type=Path, action="append", default=[],
                         help="adopt matching compact trajectories from an older collector; may repeat")
     args = parser.parse_args()

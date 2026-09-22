@@ -11,9 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from natlang.decoder import ChatTurn
+from natlang.explicit_surface import ExplicitToolSurface
 from natlang.native import _strip_private
 from natlang.runtime import Runtime
 from natlang.tool_agent import ToolAgent
+from natlang.surface import ToolSurface
 from natlang.values import dump, load_program
 from natlang.trace import TraceRecorder, TraceReader
 from natlang.scenario import ScenarioContract, admit
@@ -82,11 +84,14 @@ def materialize(row, *, system_prompt: str):
     log = []
     lowered = lower(program) if task_kind == "whole_program" else None
     root = whole_root(lowered) if lowered is not None else load_program(program)
+    tool_schema = row.get("provenance", {}).get("tool_schema", "tools-v2")
+    surface = ExplicitToolSurface() if tool_schema == "tools-v4" else ToolSurface()
     recorder = TraceRecorder({"run_id": row["id"], "source_sha256": digest(program),
                               "teacher_trajectory_sha256": digest(row),
-                              "tool_schema": "tools-v2", "engine_bindings": ["quickjs-isolated"],
+                              "tool_schema": tool_schema, "engine_bindings": ["quickjs-isolated"],
                               "capture": "recorded-teacher-replay"})
     outcome, value = Runtime(lambda lam: ToolAgent(decoder, system_prompt=system_prompt,
+                                                  surface=surface,
                                                   validation_feedback="caller", log=log,
                                                   segment_turns=segment_turns,
                                                   segment_messages=segment_messages),
@@ -145,7 +150,7 @@ def main():
     parser.add_argument("src", type=Path)
     parser.add_argument("dst", type=Path)
     parser.add_argument("--system-file", type=Path,
-                        default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_small.md")
+                        default=Path(__file__).resolve().parent.parent / "natlang/prompts/tools_explicit.md")
     parser.add_argument("--tool-map", type=Path,
                         help='JSON tool migration; defaults to dropping legacy end_turn')
     parser.add_argument("--drop-reasoning", action="store_true")

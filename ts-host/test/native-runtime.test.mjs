@@ -161,6 +161,20 @@ test('native source calls lower to Map and Fold combinators', async () => {
   assert.deepEqual(actions.map(x => x.kind), ['done', 'done']);
 });
 
+test('tools-v4 binds ordinary positional paths for calls and folds', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{ items: Num[] }, Num>',
+    instructions: 'Add the items.', args: { items: [2, 4] }, codebase: {
+      add: { args: { total: 'Num', entry: 'Num' }, returns: 'Num',
+        code: 'return args.total + args.entry;' },
+    } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.equal(session.apply('write_value', { destination: 'let/zero', type: 'Num', value: 0 }).kind, 'ok');
+  const result = await session.applyAsync('fold', { function: 'add', items: 'args/items',
+    initial: 'let/zero', save_as: 'return' });
+  assert.equal(result.kind, 'done');
+  assert.equal(lam.return, 6);
+});
+
 test('native traces reconstruct in the shared offline reader', async () => {
   const runtime = new NativeRuntime();
   const result = await runtime.runRoot(crisp('Lambda<{}, Num>', 'return 14;'));

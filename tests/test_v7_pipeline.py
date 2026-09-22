@@ -35,10 +35,10 @@ def test_wrong_call_destination_is_history_followed_by_a_correct_local_call():
     assert corrections
     first = corrections[0]
     target = first['target']['tool_calls'][-1]['function']
-    assert json.loads(target['arguments'])['to'] == 'let/joined'
+    assert json.loads(target['arguments'])['save_as'] == 'let/joined'
     assert any(m['role'] == 'tool' and 'type-does-not-fit-slot' in m['content'] for m in first['messages'])
     bad = [m for m in first['messages'] if m.get('tool_calls')][-1]['tool_calls'][0]['function']
-    assert json.loads(bad['arguments'])['to'] == 'return'
+    assert json.loads(bad['arguments'])['save_as'] == 'return'
 
 
 def test_recovery_does_not_inject_a_call_forbidden_by_the_current_grammar():

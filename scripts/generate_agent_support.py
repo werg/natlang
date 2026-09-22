@@ -18,7 +18,7 @@ from natlang.gen.policy import ReferenceAgent, native_text
 from natlang.gen.programs import Plan
 from natlang.native import call_grammar, _strip_private
 from natlang.runtime import Runtime
-from natlang.surface import ToolSurface
+from natlang.explicit_surface import ExplicitToolSurface
 from natlang.tool_agent import review_messages, review_tools
 from natlang.values import load_program, dump
 from scripts.generate_failures import matched_cases
@@ -112,8 +112,9 @@ def generate_group(seed, group, *, state_view=False, include_reviews=True):
     execution, reviews = [], []
     for c in support_cases(seed, group):
         samples = []
-        rt = Runtime(lambda lam: ReferenceAgent(Plan('calls', steps=c['steps']), samples, surface=ToolSurface(state_view=state_view),
-                                                   system_prompt=(ROOT / "natlang/prompts/tools_small_support.md").read_text()))
+        rt = Runtime(lambda lam: ReferenceAgent(Plan('calls', steps=c['steps']), samples,
+                                                   surface=ExplicitToolSurface(state_view=state_view),
+                                                   system_prompt=(ROOT / "natlang/prompts/tools_explicit.md").read_text()))
         out, value = rt.run_root(load_program(c['root']))
         assert rt.emitted == c['effects']
         if c['failure']:
@@ -133,46 +134,50 @@ def generate_group(seed, group, *, state_view=False, include_reviews=True):
             calls = [(t['function']['name'], json.loads(t['function']['arguments'])) for t in target]
             candidates = []
             name, args = calls[0]
-            if name in ('write', 'call'):
-                if name == 'call':
-                    support = (f"The program requires {args['function']} into {args['to']}. "
-                               f"The proposal uses that destination and the required input references {json.dumps(args.get('inputs', {}))}.")
+            if name in ('write_value', 'copy_value', 'run_function', 'for_each', 'fold', 'repeat'):
+                if name in ('run_function', 'for_each', 'fold', 'repeat'):
+                    support = (f"The program requires {args['function']} into {args['save_as']}. "
+                               f"The proposal uses that destination and ordered input paths {json.dumps(args.get('inputs', []))}.")
                 else:
                     required = c['expected']
-                    for part in args['path'].split('/')[1:]:
+                    destination = args['destination']
+                    for part in destination.split('/')[1:]:
                         required = required[part]
-                    support = (f"The required value at {args['path']} is {json.dumps(required)}. " +
+                    support = (f"The required value at {destination} is {json.dumps(required)}. " +
                                (f"The computed source {args['source']} holds that value; copying it preserves its type."
                                 if 'source' in args else "This proposal writes that value without changing the requirement."))
                 candidates.append((calls, 'approve', support))
                 candidates.append(([('report_error', {'message':'The task cannot be completed as written.'})],
                                    'withdraw', 'This error report skips an earlier required operation. Execute that operation before reporting the later conflict.'
                                    if c['failure'] else 'The given inputs and requested operation permit this task. An unsupported failure claim should be withdrawn; continue the required work.'))
-                if name == 'call':
-                    candidates.append(([('mark_done', {'start': args.get('done', 1)})], 'withdraw',
+                if name in ('run_function', 'for_each', 'fold', 'repeat'):
+                    candidates.append(([('mark_lines', {'start': 1})], 'withdraw',
                                        'The required call has not executed. Marking its line cannot perform its work.'))
-                    wrong = {**args, 'to': 'return'}
-                    if args['to'] != 'return':
-                        candidates.append(([('call', wrong)], 'withdraw',
+                    wrong = {**args, 'save_as': 'return'}
+                    if args['save_as'] != 'return':
+                        candidates.append(([(name, wrong)], 'withdraw',
                                            'The instruction names a local destination. This proposal changes it; the task itself remains executable.'))
-                else:
-                    wrong = {k: v for k, v in args.items() if k != 'source'}
+                elif name == 'write_value':
+                    wrong = dict(args)
                     actual = c['expected']
-                    for part in args['path'].split('/')[1:]:
+                    for part in args['destination'].split('/')[1:]:
                         actual = actual[part]
                     wrong['value'] = wrong_value(actual)
-                    candidates.append(([('write', wrong)], 'withdraw',
+                    candidates.append(([('write_value', wrong)], 'withdraw',
                                        'The proposed value does not match the required result. The original task can still be completed.'))
             elif name in ('report_error', 'report_blocker'):
                 candidates.append((calls, 'approve', args.get('message', args.get('missing'))))
                 # A tempting write at the same pre-error state, not a corrected program.
-                candidates.append(([('write', {'path': 'return', 'type': 'Num', 'value': 0})],
+                candidates.append(([('write_value', {'destination': 'return', 'type': 'Num', 'value': 0})],
                                    'error' if name == 'report_error' else 'blocker',
                                    args.get('message', args.get('missing'))))
                 if c['name'] == 'binding_error':
-                    redirected = {**c['allowed_failure_call'], 'to':'return/size'}
-                    candidates.append(([('call', redirected)], 'error',
-                                       'The program explicitly requires the scalar call result directly in the record return. Appending a field changes that destination. The original task has a type conflict.'))
+                    source = c['allowed_failure_call']
+                    redirected = {'function': source['function'],
+                                  'inputs': list((source.get('inputs') or {}).values()),
+                                  'save_as': 'return/size'}
+                    candidates.append(([('run_function', redirected)], 'error',
+                                       'The program requires the scalar result directly in return. Appending a field changes that destination; the original task has a type conflict.'))
             for j, (candidate, decision, reason) in enumerate(candidates):
                 tools = review_tools()
                 verdict = [('review_write', {'reason': reason, 'decision': decision})]

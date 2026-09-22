@@ -14,8 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from program_ir import read_jsonl
+from natlang.scenario import CALL_MODES, action_matches
 
-SEMANTIC_TOOLS = {"call", "write", "report_error", "report_blocker"}
+SEMANTIC_TOOLS = {"call", "write", "write_value", "copy_value", *CALL_MODES,
+                  "report_error", "report_blocker"}
 
 
 def target_actions(rows):
@@ -44,9 +46,9 @@ def audit_actions(record, actions, *, complete=True):
         name, args = action["tool"], action["arguments"]
         if name not in SEMANTIC_TOOLS:
             continue
-        if name == "call" and args.get("function") in constraints:
+        if name in ({"call"} | CALL_MODES) and args.get("function") in constraints:
             rule = constraints[args["function"]]
-            if args.get("to") != rule["to"] or args.get("inputs", {}) != rule["inputs"]:
+            if not action_matches({"name": name, "arguments": args}, {"name": "call", "arguments": rule}):
                 raise ValueError(f"{record['id']}: changed required call destination or inputs: {args}")
             # An impossible direct call may be attempted and rejected before the error report.
             if position < len(expected) and expected[position]["tool"] != "call":
@@ -54,7 +56,8 @@ def audit_actions(record, actions, *, complete=True):
         if position >= len(expected):
             raise ValueError(f"{record['id']}: extra semantic action: {action}")
         required = expected[position]
-        if name != required["tool"] or any(args.get(k) != v for k, v in required["arguments"].items()):
+        if not action_matches({"name": name, "arguments": args},
+                              {"name": required["tool"], "arguments": required["arguments"]}):
             raise ValueError(f"{record['id']}: expected {required}, got {action}")
         position += 1
     if complete and position != len(expected):

@@ -37,11 +37,11 @@ def program_ir():
 
 def test_nested_teacher_run_round_trips_through_shared_ir():
     decoder = Teacher([
-        ([("call", {"function": "classify", "to": "return", "over": "args/tickets",
-                     "inputs": {"rubric": "args/rubric"}})], ""),
-        ([("write", {"path": "return", "type": "Text", "value": "billing"})], ""),
+        ([("for_each", {"function": "classify", "items": "args/tickets",
+                         "inputs": ["args/rubric"], "save_as": "return"})], ""),
+        ([("write_value", {"destination": "return", "type": "Text", "value": "billing"})], ""),
         ([], "billing ticket"),
-        ([("write", {"path": "return", "type": "Text", "value": "spam"})], ""),
+        ([("write_value", {"destination": "return", "type": "Text", "value": "spam"})], ""),
         ([], "advertising"),
         ([], "classified"),
     ])
@@ -54,7 +54,8 @@ def test_nested_teacher_run_round_trips_through_shared_ir():
     assert {turn["call_id"] for turn in row["trajectory"]} >= {"$root@1", "return/0@1", "return/1@1"}
     assert [event["phase"] for event in recorder.events if event["kind"] == "proposal"].count("generated") == 6
     samples = materialize(row, system_prompt="Follow the instructions.")
-    assert [sample["skill"] for sample in samples] == ["call", "write", "reply", "write", "reply", "reply"]
+    assert [sample["skill"] for sample in samples] == ["for_each", "write_value", "reply",
+                                                        "write_value", "reply", "reply"]
     assert all(sample["trace_admission"]["admitted"] for sample in samples)
     assert {sample["program_id"] for sample in samples} == {"fixture-map"}
 

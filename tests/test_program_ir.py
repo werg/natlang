@@ -38,7 +38,7 @@ def test_decision_ir_discards_provider_payload_and_verifies_composition():
     assert "tool_calls" not in json.dumps(record)
     samples, episodes = run_program(lower(json.loads(json.dumps(record))))
     assert episodes == 3
-    assert {s["skill"] for s in samples} >= {"call", "run_code", "write", "reply"}
+    assert {s["skill"] for s in samples} >= {"for_each", "run_code", "write_value", "reply"}
 
 
 def test_state_sequence_resolves_repeated_instruction_with_history():
@@ -50,7 +50,7 @@ def test_state_sequence_resolves_repeated_instruction_with_history():
                                       {"utterance": "move it", "before": "same", "after": "other"}]}}
     samples, episodes = run_program(lower(validate(record)))
     assert episodes == 3
-    assert sum(s["skill"] == "call" for s in samples) == 2
+    assert sum(s["skill"] == "run_function" for s in samples) == 2
 
 
 def test_state_sequence_rejects_broken_chain():

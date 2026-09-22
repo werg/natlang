@@ -17,6 +17,7 @@ from ..native import CALL_OPEN, call_grammar
 from ..nodes import MISSING
 from ..render import INLINE, PREVIEW_ITEMS
 from ..surface import ToolSurface, is_previewed
+from ..surface_projection import project_actions_v4
 from ..tool_agent import CHECKPOINT_REQUEST, TOOLS_PROMPT
 from ..types import format_type
 from ..types import parse_type, TypeSyntaxError
@@ -134,7 +135,14 @@ class ReferenceAgent:
             except StopIteration:
                 break
             tools = s.tools(session)
-            recovery = self.recovery_action(session, calls) if not self.recovered and self.recovery_rate else None
+            planned_calls = calls
+            if s.name == "tools-v4":
+                calls = [projected for name, args in calls
+                         for projected in project_actions_v4(name, args, offered_tools=tools)]
+            recovery = self.recovery_action(session, planned_calls) if not self.recovered and self.recovery_rate else None
+            if recovery and s.name == "tools-v4":
+                projected = project_actions_v4(recovery[0], recovery[1], offered_tools=tools)
+                recovery = (*projected[-1], recovery[2]) if len(projected) == 1 else None
             if (recovery and self.recovery_rng.random() < self.recovery_rate
                     and gbnf.accepts(call_grammar(tools), native_text([(recovery[0], recovery[1])]))):
                 # A failed model action is history, never a supervised target. It has no
@@ -162,7 +170,9 @@ class ReferenceAgent:
             segment_turns += 1
             if (((self.segment_turns is not None and segment_turns >= self.segment_turns) or
                  (self.segment_messages is not None and len(messages) >= self.segment_messages))
-                    and calls[-1][0] in ("write", "call", "edit", "mark_done")
+                    and calls[-1][0] in ("write", "call", "edit", "mark_done", "write_value", "copy_value",
+                                         "copy_function", "run_function", "for_each", "fold", "repeat",
+                                         "edit_text", "mark_lines")
                     and (s.missing(session) or s.pending(session))):
                 note = ("No hidden decision remains. Continue from the typed workspace and "
                         "complete the remaining open instruction lines in order.")
@@ -175,11 +185,13 @@ class ReferenceAgent:
                 session.lam.continuation_note = note
                 messages = self._opening_messages(session)
                 segment_turns = 0
-            sent = results[-1] if self.plan.kind == "script" else results[-1].value
-            if results[-1].kind == "blocked":
-                return results[-1].text
-            if results[-1].kind == "quiesced" and self.plan.kind != "script":
-                raise AssertionError(f"a reference call did not finish: {calls} -> {results[-1].text}")
+            work_results = [result for (name, _), result in zip(calls, results) if name != "mark_lines"]
+            last = work_results[-1] if work_results else results[-1]
+            sent = last if self.plan.kind == "script" else last.value
+            if last.kind == "blocked":
+                return last.text
+            if last.kind == "quiesced" and self.plan.kind != "script":
+                raise AssertionError(f"a reference call did not finish: {calls} -> {last.text}")
         open_lines = s.pending(session)
         if session.lam.ret is MISSING or open_lines or not session.finish():
             raise AssertionError(f"reference policy ended without a valid return and closed lines: {open_lines}; "

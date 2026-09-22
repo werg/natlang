@@ -6,11 +6,12 @@ import json
 import threading
 
 from natlang.decoder import LlamaServerDecoder
+from natlang.explicit_surface import ExplicitToolSurface
 from natlang.tool_agent import ToolAgent
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PROMPT = (ROOT / "natlang/prompts/tools_teacher_compact.md").read_text()
+PROMPT = (ROOT / "natlang/prompts/tools_explicit.md").read_text()
 
 
 class _RecordingToolAgent(ToolAgent):
@@ -36,13 +37,15 @@ def teacher_factory(server: str, *, turns_path: Path | None = None,
         server,
         chat_extra={"thinking_budget_tokens": 256, "top_p": 0.95, "top_k": 20,
                     "chat_template_kwargs": {"reasoning_effort": "low"}},
-        tool_aliases={"call": "call_function"},
-        typed_alternatives=True)
+        tool_aliases={},
+        typed_alternatives=True,
+        typed_alternative_names={"write_value"})
     lock = threading.Lock()
     if turns_path is not None:
         turns_path = Path(turns_path)
         turns_path.parent.mkdir(parents=True, exist_ok=True)
         turns_path.touch(exist_ok=False)
     return lambda lam: _RecordingToolAgent(decoder, system_prompt=PROMPT, temperature=0,
+                                           surface=ExplicitToolSurface(),
                                            validation_feedback=validation_feedback, turns_path=turns_path,
                                            turns_lock=lock)

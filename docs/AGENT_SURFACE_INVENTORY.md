@@ -28,7 +28,7 @@ The actual result is only the typed value stored at `return`.
 |---|---|---|---|
 | `tools_delegate.md` | Live delegated interpreter/student style | End without text after a valid return | Concise operational rules; explicitly discourages unnecessary reads |
 | `tools_small.md` | Reference generation and TS parity | End without text | More examples, explicit ordered-batch semantics |
-| `tools_teacher_compact.md` | Bonsai teacher adapter | A natural reply may finish after return and line closure | Explains `report_error` and `report_blocker`; compact teacher-specific wording |
+| `tools_explicit.md` | Bonsai teacher adapter | A natural reply may finish after return and line closure | Positional path calls, explicit modes, `report_error`, and `report_blocker` |
 
 This means teacher and student currently receive semantically close, but not byte-identical,
 instructions about the final assistant reply.
@@ -176,14 +176,14 @@ There are three materially different presentations of the same conceptual tools:
 1. **Native grammar.** Dynamic `x-natlang-alternatives` compile into a grammar. Syntax and many
    enum choices are forced, but runtime mode deliberately leaves value semantics fallible.
 2. **Ordinary chat tools.** A backend receives JSON Schema through its native chat template.
-3. **Bonsai teacher tools.** `call` is aliased to `call_function`, because that server cannot emit
-   a tool literally named `call`. Typed alternatives expand `write` and `call` into many numbered
-   backend tool variants, then map them back to the conceptual names after generation. Bonsai
-   also receives a small reasoning budget and its own native template.
+3. **Bonsai teacher tools.** Tools-v4 uses names that do not collide with the server's call syntax.
+   Only typed literal writes expand to numbered exact tools. Function calls keep one explicit tool
+   per mode, limiting schema growth on larger codebases. Bonsai also receives a small reasoning
+   budget and its own native template.
 
 Optional adapters can encode write values as JSON text or remove changing path enums to improve
 prefix-cache reuse. Those are transport choices, not runtime semantics. The current teacher
-factory uses typed alternatives and the `call_function` alias; it does not use JSON-text values or
+factory uses typed alternatives for literal writes; it does not use JSON-text values or
 cache-stable schemas.
 
 Only simple coercions happen at execution: a single JSON string layer can be parsed for a
@@ -236,7 +236,18 @@ by default because they reset conversation context without failing the underlyin
 
 ## 6. Python and TypeScript parity
 
-Both runtimes expose the same workspace model, dynamic read/write/edit/call/marking/error tools,
+Both runtimes expose the same workspace model and execute the explicit tools-v4 operations.
+Python currently constructs the teacher-facing tools-v4 schemas; TypeScript accepts the same
+actions and positional ABI while its default model surface remains tools-v3 pending a schema
+presentation migration. Both runtimes retain tools-v2/v3 execution paths for trajectory replay.
+
+The tools-v4 call ABI follows ordinary positional function calls. A declaration such as
+`replace(text, old, new)` is invoked with `inputs=["args/text", "args/old", "args/new"]`.
+The list contains workspace paths only. Parameter names remain in declarations and function
+bodies, but a caller never maps names. `for_each` supplies parameter 1, `fold` supplies parameters
+1 and 2 as accumulator and item, and `repeat` supplies parameter 1 as state.
+
+Both runtimes otherwise expose the same workspace model, dynamic read/write/edit/call/marking/error tools,
 caller versus local validation, review fork, natural completion, and fresh-context continuations.
 The checked parity target is currently called `tools-v3` because both runtimes make the execution
 engine explicit. The main intentional difference is the available engine: Python can expose
@@ -390,12 +401,12 @@ Evidence files:
 
 The inventory points to a smaller decision at each action site:
 
-1. Split `call` into explicit invoke, map, fold, repeat, and resume operations.
-2. Split literal write, value copy, and function copy.
+1. **Implemented in tools-v4:** split `call` into `run_function`, `for_each`, `fold`, `repeat`, and `resume`.
+2. **Implemented in tools-v4:** split literal write, value copy, and function copy.
 3. Remove the redundant type argument wherever the destination or selected operation determines
    it; retain an explicit type only when creating a genuinely new local with no other type source.
-4. Make path references a visibly different schema concept from literals, with mode-specific
-   parameter requirements and no implicit “one omitted parameter” puzzle.
+4. **Implemented in tools-v4:** all call inputs are positional workspace paths; literals must first
+   be written as typed locals. Each mode states which leading positions it supplies.
 5. Keep natural completion, caller-level validation, explicit error/blocker exits, fresh-context
    continuations, and fallible semantic proposals.
 6. Materialize teacher and synthetic IR into the selected surface so backend aliases and schema

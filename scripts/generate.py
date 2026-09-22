@@ -14,6 +14,7 @@ from natlang.gen.programs import BLOCKED, FAMILIES
 from natlang.gen.synth import SHAPES
 from natlang.gen.codebases import CODEBASES
 from natlang.gen.algorithms import ALGORITHMS
+from natlang.explicit_surface import ExplicitToolSurface
 FAMILIES = {**FAMILIES, **SHAPES, **CODEBASES, **ALGORITHMS}
 from natlang.runtime import Runtime
 from natlang.corpus import digest, file_digest
@@ -42,14 +43,17 @@ def run_program(prog, check_grammar=True, *, recovery_seed=0, recovery_rate=0, t
         if plan is None:
             plan = next((p for k, p in prog.plans.items() if k.strip() == lam.body.strip()), None)
         assert plan is not None, f"no plan for: {lam.body!r}"
+        agent_options = {"surface": ExplicitToolSurface(),
+                         "system_prompt": system_prompt or
+                         (Path(__file__).resolve().parent.parent / "natlang/prompts/tools_explicit.md").read_text()}
         if prog.injected_fault:
             return InjectedFaultReferenceAgent(plan, samples, check_grammar=check_grammar,
                                                recovery_rng=recovery_rng, recovery_rate=1,
                                                injected_fault=prog.injected_fault,
-                                               **({"system_prompt": system_prompt} if system_prompt is not None else {}))
+                                               **agent_options)
         return ReferenceAgent(plan, samples, check_grammar=check_grammar, recovery_rng=recovery_rng,
                               recovery_rate=recovery_rate,
-                              **({"system_prompt": system_prompt} if system_prompt is not None else {}))
+                              **agent_options)
 
     if prog.loader is not None:
         root = prog.loader()

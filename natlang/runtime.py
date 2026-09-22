@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import difflib
 import hashlib
 import json
 import re
@@ -37,6 +38,26 @@ MAX_ACTIONS = 40
 MAX_TOOL_CALLS = 128
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 _WRAPPER_FOR = {LambdaT: "$lambda", MapT: "$map", FoldT: "$fold", IterateT: "$iterate"}
+
+
+def _fuzzy_edit_span(text: str, remembered: str) -> str:
+    """Resolve an inexact line/block quotation only when one candidate is clear."""
+    if not isinstance(remembered, str) or len(remembered.strip()) < 4:
+        return ""
+    lines = text.splitlines(keepends=True)
+    candidates = []
+    for width in range(1, 4):
+        for start in range(0, len(lines) - width + 1):
+            span = "".join(lines[start:start + width])
+            if span.strip() and text.count(span) == 1:
+                score = difflib.SequenceMatcher(None, remembered.strip(), span.strip()).ratio()
+                candidates.append((score, span))
+    candidates.sort(key=lambda pair: pair[0], reverse=True)
+    if not candidates or candidates[0][0] < 0.72:
+        return ""
+    if len(candidates) > 1 and candidates[0][0] - candidates[1][0] < 0.08:
+        return ""
+    return candidates[0][1]
 
 
 class OpenList(list):
@@ -441,8 +462,8 @@ class Runtime:
                 break
             if node.current is None:
                 inst = _instantiate(node.step)
-                inst.in_["acc"] = copy.deepcopy(node.acc)
-                inst.in_["item"] = copy.deepcopy(node.over[node.at])
+                inst.in_[node.acc_name] = copy.deepcopy(node.acc)
+                inst.in_[node.item_name] = copy.deepcopy(node.over[node.at])
                 node.current = inst
             cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
             out = self.trigger(cref, None)
@@ -470,8 +491,8 @@ class Runtime:
                 self._observe("stream", path=ref.path, phase="admitted", position=source.position,
                               value=polled.value)
                 inst = _instantiate(node.step)
-                inst.in_["acc"] = copy.deepcopy(node.acc)
-                inst.in_["item"] = copy.deepcopy(polled.value)
+                inst.in_[node.acc_name] = copy.deepcopy(node.acc)
+                inst.in_[node.item_name] = copy.deepcopy(polled.value)
                 node.current = inst
             cref = Ref(type=node.type.s, env=inner, path=f"{ref.path}/step/{node.at}", holder=node, attr="current")
             out = self.trigger(cref, None)
@@ -647,7 +668,7 @@ class Session:
                  self.tool_calls >= self.rt.options.max_tool_calls)):
             return Result("budget", "action or tool-call budget exhausted")
         self.tool_calls += 1
-        if name != "mark_done":                 # bookkeeping does not spend the budget of work
+        if name not in ("mark_done", "mark_lines"):  # bookkeeping does not spend the budget of work
             self.actions += 1
             self.lam.steps += 1
         args = dict(args) if isinstance(args, dict) else args
@@ -674,7 +695,10 @@ class Session:
             result = Result("error", f"error: {e}")
         except (KeyError, TypeError, AttributeError) as e:
             result = Result("rejected", f"rejected\n{name}: bad arguments ({e})")
-        if name in ("write", "call", "edit") and result.kind in ("ok", "done", "quiesced"):
+        if name in ("write", "write_value", "copy_value", "copy_function", "call", "invoke",
+                    "map_items", "fold_items", "repeat_until", "run_function", "for_each", "fold",
+                    "repeat", "resume", "edit", "edit_text") \
+                and result.kind in ("ok", "done", "quiesced"):
             result.text = result.text.rstrip() + "\n" + self._progress()      # where the program stands, at no extra turn
         self.rt.trace.append({"lambda": id(self.lam), "n": self.actions, "action": f"{name} {json.dumps(args, default=str)}",
                               "kind": result.kind, "result": result.text})
@@ -813,6 +837,9 @@ class Session:
         if not isinstance(text, str):
             raise reject(ref.path, "type-mismatch", "a text")
         n = text.count(old) if old else 0
+        if n != 1 and args.get("fuzzy"):
+            old = _fuzzy_edit_span(text, old)
+            n = text.count(old) if old else 0
         if n != 1:
             raise reject(ref.path, "old-not-unique" if n else "old-not-found",
                          "`old` copied exactly from the text, occurring once", f"{n} occurrences")
@@ -820,6 +847,113 @@ class Session:
         if new == "":                                  # deleting a whole line should not leave it blank
             updated = "".join(l for l in updated.splitlines(keepends=True) if l.strip() or not old.strip())
         return self._write_text(ref, updated)
+
+    # tools-v4 has one name per operation. Historical tools-v2 actions remain
+    # accepted so captured traces can be replayed and projected explicitly.
+    def _op_write_value(self, args):
+        forwarded = {"path": args["destination"], "value": args["value"]}
+        if args.get("type") is not None:
+            forwarded["type"] = args["type"]
+        return self._op_write(forwarded)
+
+    def _op_copy_value(self, args):
+        source, destination = args["source"], args["destination"]
+        _, src = self.resolve(source)
+        undo = self._local_type(destination, format_type(src.type), {}) if src.type is not None else None
+        try:
+            return self._do_copy(Action("copy", path=source, dst=destination))
+        except (Reject, Refuse):
+            if undo:
+                undo()
+            raise
+
+    def _op_copy_function(self, args):
+        return self._copy_function(args["save_as"], args["function"])
+
+    def _positional_call(self, args, *, skip=0, mode="run"):
+        fn = self._function(str(args.get("function") or ""))
+        declared = [name.rstrip("?") for name in fn.args]
+        paths = args.get("inputs") or []
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            raise reject("inputs", "bad-call", "an ordered list of workspace paths")
+        available = declared[skip:]
+        required = sum(not raw.endswith("?") for raw in list(fn.args)[skip:])
+        if not required <= len(paths) <= len(available):
+            raise reject("inputs", "bad-call", f"{required} to {len(available)} paths in parameter order", fn.signature)
+        forwarded = {"function": args["function"], "to": args["save_as"],
+                     "inputs": dict(zip(available, paths))}
+        if mode in ("map", "fold"):
+            forwarded["over"] = args["items"]
+        if mode in ("fold", "repeat"):
+            forwarded["init"] = args["initial"]
+        if mode == "repeat":
+            forwarded["until"], forwarded["max"] = args["until"], args["at_most"]
+        return self._op_call(forwarded)
+
+    def _op_run_function(self, args):
+        return self._positional_call(args)
+
+    def _op_for_each(self, args):
+        return self._positional_call(args, skip=1, mode="map")
+
+    def _op_fold(self, args):
+        return self._positional_call(args, skip=2, mode="fold")
+
+    def _op_repeat(self, args):
+        return self._positional_call(args, skip=1, mode="repeat")
+
+    def _op_edit_text(self, args):
+        return self._op_edit({"path": args["path"], "old": args["find"],
+                              "new": args.get("replace_with", ""), "fuzzy": args.get("fuzzy", False)})
+
+    def _op_invoke(self, args):
+        if args.get("values"):
+            raise reject("values", "bad-call", "workspace-path inputs; write a literal to a local first")
+        return self._op_call(args)
+
+    def _op_map_items(self, args):
+        if args.get("values"):
+            raise reject("values", "bad-call", "workspace-path inputs; write a literal to a local first")
+        item = args.get("item_param")
+        if not isinstance(item, str) or not item:
+            raise reject("item_param", "bad-call", "the function parameter that receives each item")
+        forwarded = {k: v for k, v in args.items() if k != "item_param"}
+        if item in (forwarded.get("inputs") or {}) or item in (forwarded.get("values") or {}):
+            raise reject(item, "bad-call", "item_param is supplied by the map, not inputs or values")
+        return self._op_call(forwarded)
+
+    def _op_fold_items(self, args):
+        if args.get("values"):
+            raise reject("values", "bad-call", "workspace-path inputs; write a literal to a local first")
+        if args.get("item_param") != "item" or args.get("accumulator_param") != "acc":
+            raise reject("item_param", "bad-call", "item and acc for the current fold function")
+        forwarded = {k: v for k, v in args.items()
+                     if k not in ("item_param", "accumulator_param", "initial")}
+        forwarded["init"] = args.get("initial")
+        return self._op_call(forwarded)
+
+    def _op_repeat_until(self, args):
+        if args.get("values"):
+            raise reject("values", "bad-call", "workspace-path inputs; write a literal to a local first")
+        state = args.get("state_param")
+        if not isinstance(state, str) or not state:
+            raise reject("state_param", "bad-call", "the transition parameter that receives the state")
+        if state in (args.get("inputs") or {}) or state in (args.get("values") or {}):
+            raise reject(state, "bad-call", "state_param is supplied by the loop, not inputs or values")
+        forwarded = {k: v for k, v in args.items() if k not in ("initial", "state_param")}
+        forwarded["init"] = args.get("initial")
+        return self._op_call(forwarded)
+
+    def _op_resume(self, args):
+        path = str(args.get("computation", args.get("path")) or "")
+        _, ref = self.resolve(path)
+        node = ref.get()
+        if not is_pending(node) or node.status not in (UNREDUCED, QUIESCED):
+            raise reject(path, "no-such-path", "an unfinished computation")
+        return self._do_reduce(Action("reduce", paths=[path]))
+
+    def _op_mark_lines(self, args):
+        return self._op_mark_done(args)
 
     def _op_copy(self, args):
         return self._do_copy(Action("copy", path=args["from"], dst=args["to"]))
@@ -1028,12 +1162,18 @@ class Session:
                      check_name=chk.required()[0].rstrip("?"), step=lam_spec,
                      check={"type": chk.type_text, chk.kind: chk.body, "types": chk.types or None, "function": chk.name})
             slot_type = st
-        elif over is not None and ("acc" in names and "item" in names) and init is not None:   # Fold
-            rest = [n for n in unbound if n not in ("acc", "item")]
+        elif over is not None and init is not None:                              # Fold
+            ordered = [n.rstrip("?") for n in fn.args]
+            acc_name, item_name = ordered[:2] if len(ordered) >= 2 else (None, None)
+            if not acc_name or not item_name:
+                raise reject("inputs", "bad-call", f"a fold step with accumulator and item first: {fn.signature}")
+            rest = [n for n in unbound if n not in (acc_name, item_name)]
             if rest:
                 raise reject("inputs", "bad-call", f"inputs for: {', '.join(rest)}", fn.signature)
-            d.update(type=f"Fold<{names['item']}, {names['acc']}>", over_from=over, **self._init(init, names['acc'], fn.types), step=lam_spec)
-            slot_type = names["acc"]
+            d.update(type=f"Fold<{names[item_name]}, {names[acc_name]}>", over_from=over,
+                     **self._init(init, names[acc_name], fn.types), step=lam_spec,
+                     acc_name=acc_name, item_name=item_name)
+            slot_type = names[acc_name]
         elif over is not None:                                                  # Map
             if len(unbound) != 1:
                 raise reject("inputs", "bad-call", f"exactly one parameter left for the item: {fn.signature}", ", ".join(unbound) or "none")
@@ -1092,7 +1232,7 @@ class Session:
 
         kind = type(stated).__name__
         keys = {"LambdaT": ("instructions", "code", "args", "types", "effects", "function"),
-                "MapT": ("types", "item_name"), "FoldT": ("init", "types"),
+                "MapT": ("types", "item_name"), "FoldT": ("init", "types", "acc_name", "item_name"),
                 "IterateT": ("init", "max", "types", "state_name", "check_name")}.get(kind)
         if keys is None:
             raise reject(path, "type-mismatch", "a Lambda, Map, Fold or Iterate type", args["type"])

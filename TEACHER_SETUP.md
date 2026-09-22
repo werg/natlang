@@ -24,14 +24,15 @@ accumulator and completed rounds.
 
 ## Keep the execution path simple
 
-- Use `natlang/prompts/tools_teacher_compact.md`, temperature 0, low reasoning
+- Use `natlang/prompts/tools_explicit.md`, temperature 0, low reasoning
   effort, and a 256-token thinking budget.
-- Application evaluations use `LlamaServerDecoder(typed_alternatives=True)`:
-  the chat adapter compiles natlang's destination-specific alternatives into
-  separate named tools and maps their calls back to the stable action. The
-  runtime still validates every proposed call. Older leaf/scenario collectors
-  retain their recorded JSON-text transport until those collection paths are
-  migrated and checked against their own fixtures.
+- Teacher generation uses tools-v4. Calls are explicit by mode and bind an ordered
+  list of workspace paths to the function declaration. The chat adapter expands
+  typed alternatives only for `write_value`; expanding every function alternative
+  needlessly enlarged prompts. Tuple path schemas are simplified to string arrays
+  for remote servers because Bonsai's template converter rendered `prefixItems`
+  constants as objects. The native grammar retains exact per-position guidance,
+  and the runtime checks every path against its declared position.
 - A 20 September typed-chat probe (`scripts/probe_typed_chat.py`) found that
   this server preserved a nested `{id, label, tags}` record under one exact
   tool schema and under two separately named exact tools. A single tool with
@@ -48,7 +49,7 @@ accumulator and completed rounds.
 - A normal assistant reply signals successful completion. The harness checks
   return validity and closed numbered lines at that boundary. `report_error`
   and `report_blocker` remain failure signals.
-- Existing values can be copied with `write(source=...)`. The runtime preserves
+- Existing values can be copied with `copy_value(source=..., destination=...)`. The runtime preserves
   types, permits one incidental JSON quoting layer when necessary, and never
   unwraps a `{ "value": ... }` object. Fold/iterate literal initializers follow
   the same quote rule; source references retain their existing behavior.

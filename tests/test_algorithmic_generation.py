@@ -18,12 +18,12 @@ def test_algorithmic_families_execute_against_independent_oracles(family):
         samples, _ = run_program(ALGORITHMS[family](random.Random(seed)))
         skills.extend(sample["skill"] for sample in samples)
     if family == "array_kernel":
-        assert "run_code" in skills and "write" in skills
+        assert "run_code" in skills and "write_value" in skills
     elif family == "staged_ranking":
-        assert skills.count("call") >= 18
+        assert sum(skill in ("run_function", "for_each", "fold", "repeat") for skill in skills) >= 18
     else:
-        assert skills.count("call") >= 12
-        assert "run_code" in skills and "write" in skills
+        assert sum(skill in ("run_function", "for_each", "fold", "repeat") for skill in skills) >= 12
+        assert "run_code" in skills and "write_value" in skills
 
 
 @pytest.mark.parametrize("family", sorted(ALGORITHMS))
