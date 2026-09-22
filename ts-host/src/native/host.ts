@@ -35,6 +35,7 @@ export class NativeNatlangHost {
       throw new RangeError('mapWorkers must be positive');
     this.running = true;
     let runtime: NativeRuntime | undefined;
+    let runFailed = false;
     const unbind: (() => void)[] = [];
     try {
       let root: Pending;
@@ -106,16 +107,24 @@ export class NativeNatlangHost {
         if (timer) clearTimeout(timer);
         if (abortListener) request.signal?.removeEventListener('abort', abortListener);
       }
-      if (request.tracePath) writeFileSync(request.tracePath,
-        runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
       return { outcome: { kind: outcome.outcome.kind, path: outcome.outcome.path, detail: outcome.outcome.detail },
         value: dump(outcome.value), emitted: outcome.emitted,
         trace: request.tracePath ? runtime.trace.events as Record<string, unknown>[] : null,
         run_id: runtime.options.runId };
+    } catch (error) {
+      runFailed = true;
+      throw error;
     } finally {
+      let traceFailure: unknown;
+      if (request.tracePath && runtime) {
+        try { writeFileSync(request.tracePath,
+          runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n'); }
+        catch (error) { if (!runFailed) traceFailure = error; }
+      }
       for (const release of unbind.reverse()) release();
       runtime?.close();
       this.running = false;
+      if (traceFailure) throw traceFailure;
     }
   }
 

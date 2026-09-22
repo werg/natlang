@@ -93,6 +93,20 @@ test('terminal event consumption reports a failed reduction and continues with l
   } finally { await app.close(); }
 });
 
+test('native host preserves a trace when the model transport fails', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-failed-trace-'));
+  const source = join(folder, 'main.nl'), tracePath = join(folder, 'failed.jsonl');
+  writeFileSync(source, '---\nargs: {}\nreturns: Text\n---\nReturn a short greeting.');
+  const host = new NatlangHost();
+  try {
+    await assert.rejects(host.run({ source: { kind: 'file', path: source }, tracePath,
+      modelTurn: () => { throw new SyntaxError('malformed tool arguments'); } }), /malformed tool arguments/);
+    const events = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(events.some(event => event.kind === 'model_request' && event.phase === 'error' &&
+      String(event.error).includes('malformed tool arguments')));
+  } finally { host.close(); rmSync(folder, { recursive: true, force: true }); }
+});
+
 test('terminal reducer gets a fresh lazy file view while crisp view stays file-free', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-files-'));
   const types = join(folder, 'types.ts'), reducer = join(folder, 'reduce.nl'), view = join(folder, 'view.ts');
