@@ -31,23 +31,23 @@ function assertTraceParity(actual, expected) {
   assert.deepEqual(stable(actual), stable(expected));
 }
 
-test('native default system prompt stays aligned with Python tool agent', { skip: !python }, async () => {
+test('native tools-v3 compatibility prompt stays aligned with Python tool agent', { skip: !python }, async () => {
   const reference = readFileSync(new URL('../../natlang/prompts/tools_small.md', import.meta.url), 'utf8');
   assert.equal(TOOLS_PROMPT, reference);
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
-    return { calls: [], text: '', completion_tokens: 1 }; });
+    return { calls: [], text: '', completion_tokens: 1 }; }, { toolSchema: 'tools-v3' });
   await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
     type: 'Lambda<{}, Num>', instructions: 'Write one.' } });
   assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
 });
 
-test('native tools-v4 system prompt stays aligned with Python explicit tool agent', async () => {
+test('native default tools-v4 prompt stays aligned with Python explicit tool agent', async () => {
   const reference = readFileSync(new URL('../../natlang/prompts/tools_explicit.md', import.meta.url), 'utf8');
   assert.equal(EXPLICIT_TOOLS_PROMPT, reference);
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
-    return { calls: [], text: '', completion_tokens: 1 }; }, { toolSchema: 'tools-v4' });
+    return { calls: [], text: '', completion_tokens: 1 }; });
   await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
     type: 'Lambda<{}, Num>', instructions: 'Write one.' } });
   assert.equal(seen, reference + '\nFor run_code, always name an engine offered in its current tool schema.');
@@ -187,7 +187,7 @@ print(json.dumps({'state':surface.render_state(session),'tools':surface.tools(se
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify(program), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const session = new NativeSession(new NativeRuntime(), buildPending(program), new TypeEnv());
-  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const agent = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' });
   const expected = JSON.parse(py.stdout);
   assert.equal(agent.opening(session), expected.state);
   assert.deepEqual(agent.tools(session), expected.tools);
@@ -340,7 +340,7 @@ test('native workspace text and core tool alternatives agree with Python surface
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
-  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const agent = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' });
   const definitions = Object.fromEntries(agent.tools(session).map(item =>
     [item.function.name, item.function.parameters]));
   assert.equal(agent.opening(session), expected.state);
@@ -357,7 +357,7 @@ test('native complete leaf tool schema equals Python tools-v3', { skip: !python 
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
-  assert.deepEqual(new NativeToolAgent(() => ({ calls: [] })).tools(session), expected);
+  assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' }).tools(session), expected);
 });
 
 test('native marked request text matches Python program and function listing', { skip: !python }, async () => {
@@ -414,7 +414,7 @@ test('native complete checked-call and completion-mark schema equals Python tool
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
-  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const agent = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' });
   assert.deepEqual(agent.tools(session), expected);
 });
 
@@ -468,7 +468,7 @@ test('native complete pending-child tool schema equals Python tools-v3', { skip:
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
   const session = new NativeSession(new NativeRuntime(), buildPending(doc), new TypeEnv());
-  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const agent = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' });
   assert.deepEqual(agent.tools(session), expected);
 });
 

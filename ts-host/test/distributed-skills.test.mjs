@@ -12,14 +12,14 @@ for (const observations of [[], ['one', 'two', 'three']]) {
     try {
       const result = await host.run({ source: { kind: 'file', path },
         inputs: { observations, criterion: 'Fixture criterion' }, modelTurn: request => {
-          const calls = request.tools.some(tool => tool.function.name === 'call');
-          const worked = request.messages.some(message => message.role === 'assistant' && message.tool_calls?.some(call => call.function.name === 'write'));
-          if (!calls) return worked ? { calls: [] } : { calls: [['write', { path: 'return', type: 'Assessment',
+          const calls = request.tools.some(tool => tool.function.name === 'run_function');
+          const worked = request.messages.some(message => message.role === 'assistant' && message.tool_calls?.some(call => call.function.name === 'write_value'));
+          if (!calls) return worked ? { calls: [] } : { calls: [['write_value', { destination: 'return', type: 'Assessment',
             value: { verdict: decisions[observations[child++]], reason: 'Scripted wiring fixture' } }]] };
-          if (parent++ === 0) return { calls: [['call', { function: 'assess', to: 'let/assessments',
-            over: 'args/observations', inputs: { criterion: 'args/criterion' } }]] };
-          if (parent === 2) return { calls: [['call', { function: 'summarize', to: 'return',
-            inputs: { assessments: 'let/assessments' } }]] };
+          if (parent++ === 0) return { calls: [['for_each', { function: 'assess', save_as: 'let/assessments',
+            items: 'args/observations', inputs: ['args/criterion'] }]] };
+          if (parent === 2) return { calls: [['run_function', { function: 'summarize', save_as: 'return',
+            inputs: ['let/assessments'] }]] };
           return { calls: [] };
         } });
       assert.equal(result.outcome.kind, 'done', result.outcome.detail);

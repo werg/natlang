@@ -237,9 +237,8 @@ by default because they reset conversation context without failing the underlyin
 ## 6. Python and TypeScript parity
 
 Both runtimes expose the same workspace model, construct the explicit tools-v4 schemas, and
-execute the same operations. TypeScript selects it with `options.model.tool_schema: "tools-v4"`;
-its default remains tools-v3 for existing callers. Both runtimes retain tools-v2/v3 execution
-paths for trajectory replay.
+execute the same operations. TypeScript uses tools-v4 by default; historical replay can explicitly
+select `options.model.tool_schema: "tools-v3"`. Both runtimes retain tools-v2/v3 execution paths.
 
 The tools-v4 call ABI follows ordinary positional function calls. A declaration such as
 `replace(text, old, new)` is invoked with `inputs=["args/text", "args/old", "args/new"]`.

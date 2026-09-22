@@ -26,7 +26,7 @@ test('native file loader links companion functions and lexical types', async () 
   const result = await host.run({ source: { kind: 'file', path: file },
     inputs: { tickets: [], rubric: 'none' }, modelTurn: request => {
       looked = true;
-      assert.ok(request.tools.some(tool => tool.function.name === 'call'));
+      assert.ok(request.tools.some(tool => tool.function.name === 'run_function'));
       return { calls: [['report_blocker', { missing: 'No tickets were supplied for triage.' }]], completion_tokens: 8 };
     }, options: { model: { max_turns: 2 } } });
   assert.equal(looked, true);

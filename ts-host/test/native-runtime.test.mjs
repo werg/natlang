@@ -235,7 +235,7 @@ test('native tool schemas narrow to typed slots and expand as workspace values a
       count: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item;' },
     } } });
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
-  const agent = new NativeToolAgent(() => ({ calls: [] }));
+  const agent = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' });
   const tools = agent.tools(session);
   const write = tools.find(item => item.function.name === 'write').function.parameters;
   assert.ok(write['x-natlang-alternatives'].some(alt => alt.path?.const === 'return/label'));
@@ -253,7 +253,7 @@ test('native tool alternatives bind paths to their declared types and readable s
     instructions: 'Copy the number and label the words.', args: { number: 3, words: ['a', 'b'] },
     codebase: { identity: { args: { item: 'Num' }, returns: 'Num', code: 'return args.item;' } } } });
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
-  const definitions = new NativeToolAgent(() => ({ calls: [] })).tools(session);
+  const definitions = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' }).tools(session);
   const parameters = name => definitions.find(item => item.function.name === name).function.parameters;
   const writes = parameters('write')['x-natlang-alternatives'];
   assert.ok(writes.some(alt => alt.path?.const === 'return/count' && alt.type?.const === 'Num' &&
@@ -451,7 +451,7 @@ test('native en-passant done marks validate before work and follow successful wr
   assert.deepEqual(lam.marks, {});
   assert.equal(session.apply('write', { path: 'return', value: 7, done: 1 }).kind, 'ok');
   assert.equal(lam.marks[1], 'done');
-  const tools = new NativeToolAgent(() => ({ calls: [] })).tools(session);
+  const tools = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'tools-v3' }).tools(session);
   const mark = tools.find(item => item.function.name === 'mark_done');
   assert.deepEqual(mark.function.parameters['x-natlang-alternatives'][0].start.enum, [2]);
   assert.ok(tools.find(item => item.function.name === 'write').function.parameters.properties.done);

@@ -17,13 +17,13 @@ test('browser local inference drives the native tool loop without a server', asy
     async loadModelFromHF() {}, async loadModelFromUrl() {}, async loadModel() {}, async exit() {},
     async createChatCompletion(request) {
       requests.push(request);
-      const write = request.tools.find(tool => tool.function.name.startsWith('write_alt_') &&
-        (tool.function.parameters.properties.path.const === 'return' ||
-          tool.function.parameters.properties.path.enum?.includes('return')) &&
+      const write = request.tools.find(tool => tool.function.name.startsWith('write_value_alt_') &&
+        (tool.function.parameters.properties.destination.const === 'return' ||
+          tool.function.parameters.properties.destination.enum?.includes('return')) &&
         tool.function.parameters.properties.type?.const === 'Num');
       return requests.length === 1 ? { choices: [{ finish_reason: 'tool_calls', message: {
         content: null, tool_calls: [{ id: 'local_1', type: 'function', function: {
-          name: write.function.name, arguments: '{"path":"return","type":"Num","value":7}',
+          name: write.function.name, arguments: '{"destination":"return","type":"Num","value":7}',
         } }],
       } }], usage: { completion_tokens: 9 } } :
         { choices: [{ finish_reason: 'stop', message: { content: 'finished' } }],
@@ -43,13 +43,13 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.ok(requests[0].tools.some(tool => tool.function.name.startsWith('write_alt_')));
+    assert.ok(requests[0].tools.some(tool => tool.function.name.startsWith('write_value_alt_')));
     assert.equal(requests[0].tools.some(tool => tool.function.parameters['x-natlang-alternatives']), false);
     assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
     assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments,
-      { path: 'return', type: 'Num', value: 7 });
+      { destination: 'return', type: 'Num', value: 7 });
   } finally { host.close(); await model.close(); }
 });
 

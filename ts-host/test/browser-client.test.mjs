@@ -23,13 +23,13 @@ test('browser client retries automatic GPU loading on CPU and owns model lifecyc
         turns++;
         if (turns > 1) return { choices: [{ finish_reason: 'stop',
           message: { content: 'finished' } }], usage: { completion_tokens: 2 } };
-        const write = request.tools.find(tool => tool.function.name.startsWith('write_alt_') &&
-          (tool.function.parameters.properties.path.const === 'return' ||
-            tool.function.parameters.properties.path.enum?.includes('return')) &&
+        const write = request.tools.find(tool => tool.function.name.startsWith('write_value_alt_') &&
+          (tool.function.parameters.properties.destination.const === 'return' ||
+            tool.function.parameters.properties.destination.enum?.includes('return')) &&
           tool.function.parameters.properties.type?.const === 'Num');
         return { choices: [{ finish_reason: 'tool_calls', message: { content: null,
           tool_calls: [{ id: 'client_1', type: 'function', function: { name: write.function.name,
-            arguments: '{"path":"return","type":"Num","value":7}' } }] } }],
+            arguments: '{"destination":"return","type":"Num","value":7}' } }] } }],
           usage: { completion_tokens: 9 } };
       },
       async exit() {},

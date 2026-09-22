@@ -126,13 +126,15 @@ export function compileBrowserTools(rawTools: unknown[], mode: BrowserSchemaMode
   { tools: ModelTool[]; names: Map<string, string> } {
   const names = new Map<string, string>();
   const expanded: unknown[] = [];
+  const coupledAlternatives = new Set(['write', 'call', 'write_value', 'copy_value', 'copy_function',
+    'edit_text', 'run_function', 'for_each', 'fold', 'repeat', 'resume']);
   for (const [toolIndex, raw] of rawTools.entries()) {
     const tool = raw as ModelTool;
     if (tool?.type !== 'function' || typeof tool.function?.name !== 'string')
       throw new TypeError(`model tool ${toolIndex} is invalid`);
     const base = tool.function.name;
     const alternatives = tool.function.parameters?.['x-natlang-alternatives'];
-    if (mode === 'broad' || !['write', 'call'].includes(base) || !Array.isArray(alternatives) || !alternatives.length) {
+    if (mode === 'broad' || !coupledAlternatives.has(base) || !Array.isArray(alternatives) || !alternatives.length) {
       expanded.push(tool);
       continue;
     }
@@ -147,7 +149,7 @@ export function compileBrowserTools(rawTools: unknown[], mode: BrowserSchemaMode
         value && typeof value === 'object' && Object.hasOwn(value, 'const'))
         .map(([key, value]) => `${key}=${String((value as Record<string, unknown>).const)}`).join(', ');
       expanded.push({ ...tool, function: { ...tool.function, name,
-        description: `${base === 'write' ? 'Write or copy' : 'Call'}. ${summary}.`,
+        description: `${base === 'write' ? 'Write or copy' : tool.function.description ?? base}. ${summary}.`,
         parameters: { type: 'object', properties,
           required: Object.keys(properties).filter(key => !optional.has(key)), additionalProperties: false } } });
     }

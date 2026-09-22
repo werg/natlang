@@ -566,7 +566,7 @@ export class NativeToolAgent {
   }
 
   tools(session: NativeSession): unknown[] {
-    return this.options.toolSchema === 'tools-v4' ? this.toolsV4(session) : this.toolsV3(session);
+    return this.options.toolSchema === 'tools-v3' ? this.toolsV3(session) : this.toolsV4(session);
   }
 
   opening(session: NativeSession): string {
@@ -629,7 +629,7 @@ export class NativeToolAgent {
     }).join('\n') + '\n\nThe lines are numbered. [ ] is still to do, [x] is done, [-] did not apply. Mark lines done as you finish them.' : lam.body.trim();
     const messages: Record<string, unknown>[] = [
       { role: 'system', content: (this.options.systemPrompt ??
-        (this.options.toolSchema === 'tools-v4' ? EXPLICIT_TOOLS_PROMPT : TOOLS_PROMPT)) +
+        (this.options.toolSchema === 'tools-v3' ? TOOLS_PROMPT : EXPLICIT_TOOLS_PROMPT)) +
         '\nFor run_code, always name an engine offered in its current tool schema.' },
       { role: 'user', content: `${program}\n\nWrite the result to \`return\` (${output}).` +
         (functions.length ? `\n\nFunctions you can call:\n${functions.join('\n')}` : '') },
