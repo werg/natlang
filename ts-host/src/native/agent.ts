@@ -134,6 +134,16 @@ function previewValue(value: Value): string {
   return String(value);
 }
 
+function scopePreviewValue(value: Value): string {
+  if (!isPending(value)) {
+    try {
+      const encoded = JSON.stringify(value);
+      if (encoded !== undefined && encoded.length <= 800) return encoded;
+    } catch { /* fall back to the bounded structural preview */ }
+  }
+  return previewValue(value);
+}
+
 function scopeProgramListing(body: string, marks: Record<number, string>): string {
   const lines = body.replace(/^\n+|\n+$/g, '').split('\n'), width = String(lines.length).length;
   return lines.map((line, index) => {
@@ -670,15 +680,16 @@ export class NativeToolAgent {
     const original = lam.originalBody ?? lam.body;
     const program = scopeProgramListing(original, lam.marks);
     const inputs = lam.type.params.fields.map(field => `  ${field.name}: ${formatType(field.type)} = ` +
-      (Object.hasOwn(lam.args, field.name) ? previewValue(lam.args[field.name]!) : 'missing'));
+      (Object.hasOwn(lam.args, field.name) ? scopePreviewValue(lam.args[field.name]!) : 'missing'));
     const imports = Object.entries(lam.codebase).map(([name, raw]) => {
       const fn = raw as Record<string, unknown>;
       return `  ${name}(${Object.entries(fn.args as Record<string, string> ?? {})
         .map(([key, value]) => `${key.replace(/\?$/, '')}: ${value}`).join(', ')}): Promise<${fn.returns}>`;
     });
     const locals = Object.entries(lam.let).map(([name, value]) =>
-      `  ${name}: ${formatType(lam.letTypes[name]!)} = ${previewValue(value)}`);
-    return ['Execute the natural-language function line by line.', '', 'Program:', program, '', 'Scope:',
+      `  ${name}: ${formatType(lam.letTypes[name]!)} = ${scopePreviewValue(value)}`);
+    return ['Execute the natural-language function line by line.', '', 'Program:', program, '',
+      'Use each parameter name directly in eval (for example `ready.filter(...)`); do not copy values from this display.', '', 'Scope:',
       ' parameters (immutable lexical bindings; there is no inputs or args object)',
       ...(inputs.length ? inputs : ['  (none)']),
       ' imports (immutable live bindings)', ...(imports.length ? imports : ['  (none)']),
