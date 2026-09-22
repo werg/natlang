@@ -131,7 +131,8 @@ async function runCase(frozen, options, bindings) {
     const accepted = isDeepStrictEqual(actual.state, frozen.expected.state) && actual.ok === frozen.expected.ok;
     return { schema: 'natlang.studio_teacher_trajectory/1', id: `teacher:${frozen.id}:${options.seed}`,
       case: frozen, provenance: { model: options.model, seed: options.seed,
-        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'tools-v4' },
+        source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'tools-v4',
+        tool_surface_sha256: options.toolSurfaceRevision },
       outcome: { accepted, expected: frozen.expected, actual },
       runs: { reducer: transition.reducerRun, view: transition.viewRun }, exchanges };
   } finally { await app.close(); await client.close(); }
@@ -147,7 +148,8 @@ async function validResult(path, frozen, options) {
   try { const row = JSON.parse(await readFile(path, 'utf8'));
     return row.case.id === frozen.id && row.case.source_revision === frozen.source_revision &&
       row.provenance.model === options.model && row.provenance.seed === options.seed &&
-      row.provenance.tool_schema === 'tools-v4';
+      row.provenance.tool_schema === 'tools-v4' &&
+      row.provenance.tool_surface_sha256 === options.toolSurfaceRevision;
   } catch { return false; }
 }
 
@@ -156,7 +158,9 @@ async function main() {
   const positional = args.filter((value, index) => !value.startsWith('--') && !args[index - 1]?.startsWith('--'));
   if (positional.length < 2) throw new Error('usage: collect-studio-teacher.mjs CASES.jsonl JOB_DIR --model ID --seed N [--server URL] [--workers N]');
   const casesPath = resolve(positional[0]), jobs = resolve(positional[1]);
-  const options = { model: take('--model'), seed: Number(take('--seed')), server: take('--server') ?? 'http://127.0.0.1:8081', workers: Number(take('--workers') ?? 1) };
+  const options = { model: take('--model'), seed: Number(take('--seed')), server: take('--server') ?? 'http://127.0.0.1:8081',
+    workers: Number(take('--workers') ?? 1),
+    toolSurfaceRevision: digest(await readFile(resolve(here, '../dist/browser/natlang.js'))) };
   if (!options.model || !Number.isSafeInteger(options.seed) || !Number.isInteger(options.workers) || options.workers < 1)
     throw new Error('--model, integer --seed, and positive --workers are required');
   await mkdir(jobs, { recursive: true });
@@ -182,6 +186,7 @@ async function main() {
   }
   await writeAtomic(resolve(jobs, 'manifest.json'), { schema: 'natlang.studio_teacher_batch/1',
     cases_sha256: digest(await readFile(casesPath)), model: options.model, seed: options.seed,
+    tool_schema: 'tools-v4', tool_surface_sha256: options.toolSurfaceRevision,
     completed: cases.length - missing.length, missing });
   if (missing.length) process.exitCode = 2;
 }
