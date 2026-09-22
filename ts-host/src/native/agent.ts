@@ -245,7 +245,7 @@ export class NativeToolAgent {
       }
     }
     for (const name of Object.keys(lam.codebase)) readAlternatives.push({ path: { const: `codebase/${name}` } });
-    const hasFiles = !session.path && !!session.runtime.fileTree;
+    const hasFiles = !!session.runtime.fileTree;
     if (hasFiles) readAlternatives.push({ path: { const: 'files' } },
       { path: { type: 'string', pattern: '^files/.+' }, start: { type: 'integer' }, end: { type: 'integer' },
         'x-optional': ['start', 'end'] });

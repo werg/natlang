@@ -175,7 +175,7 @@ class ToolSurface:
             pos = positions(sl.value)
             if pos:                                           # a range can only name positions that exist
                 read_alts.append({"path": {"const": sl.path}, "start": {"enum": pos}, "end": {"enum": pos}})
-        has_files = not session.path and session.rt.file_tree is not None
+        has_files = session.rt.file_tree is not None
         if has_files:
             read_alts += [{"path": {"const": "files"}},
                           {"path": {"type": "string", "pattern": "^files/.+"},

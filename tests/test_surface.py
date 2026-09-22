@@ -33,6 +33,12 @@ def test_host_files_are_read_only_lazy_surface():
     assert session.apply("read", {"path": "files/notes/todo.txt", "start": 2}).text == "second"
     assert session.apply("read", {"path": "files/image.bin"}).text == (
         "image.bin: binary file, 2 bytes; content requires a host binary capability")
+    child = Session(rt, load_program({"$lambda": {"type": "Lambda<{}, Text>",
+                                                   "instructions": "Inspect files."}}),
+                    TypeEnv(), path="return/child")
+    child_params = ToolSurface().tools(child)[0]["function"]["parameters"]
+    assert "anyOf" in child_params["properties"]["path"]
+    assert child.apply("read", {"path": "files/notes/todo.txt"}).text == "first\nsecond"
 
 
 def test_filesystem_file_tree_resolves_after_construction(tmp_path):

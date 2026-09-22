@@ -35,7 +35,7 @@ A path is a sequence of segments separated by `/`. A segment is a record
 field name, a dict key, or a list index (0-based). Inside an episode, paths
 are **relative to the current lambda**, whose addressable parts are
 `instructions`, `args`, `let`, and `return`; `codebase/<name>` is readable. A
-host may also give the root episode a read-only `files` namespace.
+host may also give a run a read-only `files` namespace.
 
 ```
 args/tickets/3/body
@@ -370,10 +370,11 @@ lists that directory, and `files/<file>` reads text. Text defaults to its first
 200 lines and accepts inclusive, 1-based `start` and `end` ranges. Binary files
 return metadata; their bytes require an explicit host capability. Providers
 resolve entries on demand where their platform permits it. The namespace is
-read-only, belongs to the host rather than the serialized value tree, and is
-available only in the root episode. File reads are recorded as ordinary tool
-actions in the execution trace. In-memory hosts must expose the same observable
-listing, range, and binary-metadata behavior.
+read-only and belongs to the host rather than the serialized value tree. It is
+inherited by every lambda invoked within the run, including Map, Fold, Iterate,
+and codebase calls. File reads are recorded as ordinary tool actions in the
+execution trace. In-memory hosts must expose the same observable listing,
+range, and binary-metadata behavior.
 
 ### 5.2 write
 

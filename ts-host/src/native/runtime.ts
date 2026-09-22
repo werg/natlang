@@ -731,7 +731,7 @@ export class NativeSession {
       if (name === 'read') {
         const path = String(args.path ?? '');
         if (path === 'files' || path.startsWith('files/')) {
-          if (this.path || !this.runtime.fileTree) throw new Reject([{ path, code: 'no-such-path' }]);
+          if (!this.runtime.fileTree) throw new Reject([{ path, code: 'no-such-path' }]);
           let result;
           try { result = this.runtime.fileTree.read(path === 'files' ? '' : path.slice(6),
             args.start === undefined ? undefined : typeof args.start === 'number' ? args.start : Number.NaN,

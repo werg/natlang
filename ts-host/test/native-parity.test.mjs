@@ -803,7 +803,7 @@ test('host file trees have the same observable surface in Python and TypeScript'
     ['read', { path: 'files/assets' }],
     ['read', { path: 'files/assets/pixel.bin' }],
   ];
-  const script = `import json,sys\nfrom natlang.files import MemoryFileTree\nfrom natlang.runtime import Runtime,Session\nfrom natlang.surface import ToolSurface\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,files,calls=json.load(sys.stdin)\nfiles={k:(bytes(v) if isinstance(v,list) else v) for k,v in files.items()}\ns=Session(Runtime(None,file_tree=MemoryFileTree(files)),load_program(doc),TypeEnv())\ntools=ToolSurface().tools(s); params=tools[0]['function']['parameters']\nprint(json.dumps({'results':[{'kind':r.kind,'text':r.text,'value':r.value} for n,a in calls for r in [s.apply(n,a)]], 'path':params['properties']['path'], 'alternatives':params['x-natlang-alternatives'][-2:]}))`;
+  const script = `import json,sys\nfrom natlang.files import MemoryFileTree\nfrom natlang.runtime import Runtime,Session\nfrom natlang.surface import ToolSurface\nfrom natlang.types import TypeEnv\nfrom natlang.values import load_program\ndoc,files,calls=json.load(sys.stdin)\nfiles={k:(bytes(v) if isinstance(v,list) else v) for k,v in files.items()}\nrt=Runtime(None,file_tree=MemoryFileTree(files)); s=Session(rt,load_program(doc),TypeEnv())\ntools=ToolSurface().tools(s); params=tools[0]['function']['parameters']\nchild=Session(rt,load_program(doc),TypeEnv(),path='return/child'); child_params=ToolSurface().tools(child)[0]['function']['parameters']\nchild_read=child.apply('read',{'path':'files/src/main.txt'})\nprint(json.dumps({'results':[{'kind':r.kind,'text':r.text,'value':r.value} for n,a in calls for r in [s.apply(n,a)]], 'path':params['properties']['path'], 'alternatives':params['x-natlang-alternatives'][-2:], 'child':{'path':child_params['properties']['path'],'kind':child_read.kind,'text':child_read.text}}))`;
   const py = spawnSync(python, ['-c', script], { cwd: root, input: JSON.stringify([doc, files, calls]), encoding: 'utf8' });
   assert.equal(py.status, 0, py.stderr);
   const expected = JSON.parse(py.stdout);
@@ -816,4 +816,8 @@ test('host file trees have the same observable surface in Python and TypeScript'
   }), expected.results);
   assert.deepEqual(read.properties.path, expected.path);
   assert.deepEqual(read['x-natlang-alternatives'].slice(-2), expected.alternatives);
+  const child = new NativeSession(new NativeRuntime({ fileTree: tree }), buildPending(doc), new TypeEnv(), 'return/child');
+  const childRead = new NativeToolAgent(() => ({ calls: [] })).tools(child)[0].function.parameters;
+  const childResult = child.apply('read', { path: 'files/src/main.txt' });
+  assert.deepEqual({ path: childRead.properties.path, kind: childResult.kind, text: childResult.text }, expected.child);
 });

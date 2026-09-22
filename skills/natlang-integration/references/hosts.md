@@ -34,8 +34,8 @@ def run_review(decoder, observations, criterion):
     return outcome, value
 ```
 
-Import `FilesystemFileTree` or `MemoryFileTree` from `natlang.files`. The root
-episode then sees a read-only `files/...` namespace. Filesystem providers resolve
+Import `FilesystemFileTree` or `MemoryFileTree` from `natlang.files`. Every
+lambda in the run then sees the inherited, read-only `files/...` namespace. Filesystem providers resolve
 content lazily; memory providers give browsers and embedded hosts the same tool
 semantics.
 

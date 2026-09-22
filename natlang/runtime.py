@@ -706,7 +706,7 @@ class Session:
     def _op_read(self, args):
         path = args["path"]
         if path == "files" or path.startswith("files/"):
-            if self.path or self.rt.file_tree is None:
+            if self.rt.file_tree is None:
                 raise reject(path, "no-such-path")
             from .files import format_file_tree_read
             try:
