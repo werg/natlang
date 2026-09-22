@@ -237,12 +237,13 @@ and support common branch-shaped eval programs.
 
 ## Cross-cutting conclusions
 
-### The runtime is not yet as ordinary as its TypeScript-like contract
+### The former regex evaluator violated the TypeScript contract
 
-The model can use imports through recognized top-level awaited patterns, but
-not as lexical functions inside arbitrary expressions or control flow. Several
-apparently irrational model attempts were reasonable under the advertised
-surface. This contract gap should be fixed before prompt tuning around it.
+The diagnostic run showed that several apparently irrational model attempts
+were valid TypeScript rejected by a regex lowering layer. That layer has now
+been removed. Eval and crisp code use the same TypeScript compiler and Node host;
+imported natlang functions cross a checked async host bridge from arbitrary
+expressions and control flow.
 
 ### Caller-level validation is exposing useful evidence
 

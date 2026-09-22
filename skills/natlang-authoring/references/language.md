@@ -33,10 +33,9 @@ A crisp file uses `/*---` through `---*/` frontmatter followed by a function
 body. Inputs are `args`, and the body returns its value with `return`. The
 model-facing `eval` scope instead exposes arguments and imports as ordinary
 lexical names and reports its final expression as an observation. Exact
-portable crisp bodies can omit `engine` for compatibility loader behavior;
-select `engine: typescript-host` when using the native TS host. Python's default
-crisp evaluator is `quickjs-isolated`; additional executor names exist only
-when the embedding registers them.
+portable crisp bodies omit `engine` and use the canonical `typescript-host`,
+the same host used by model eval. Historical Python sources may explicitly
+name `quickjs-isolated`; new sources should not.
 
 ## Types
 

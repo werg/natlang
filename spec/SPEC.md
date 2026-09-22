@@ -17,7 +17,7 @@ Key words: **must**, **must not**, **may** are used in their plain sense.
 
 ### Current agent surface: `scope-eval-v1`
 
-The model receives a persistent TypeScript-like evaluation scope. `eval(code)`
+The model receives a persistent TypeScript evaluation scope in the same Node host used by crisp code. `eval(code)`
 handles declarations, assignments, control flow, exact expressions, and
 ordinary awaited positional calls to imported natlang and crisp functions;
 bindings remain available on later turns. The auxiliary actions are
@@ -789,9 +789,10 @@ Target: an opening exchange of at most 1,500 tokens.
 
 Crisp execution is selected independently from the language and model. The
 embedding provides an engine registry; authored functions can declare `engine`.
-Python's compatibility default is `quickjs-isolated`. The native TS and browser
-hosts provide `typescript-host`, including shared native host objects. Fresh or
-retained globals describe lifetime, not isolation. Shared-host evaluators are
+The canonical runtime uses `typescript-host` for crisp functions and model eval,
+including shared native host objects. Historical Python traces may declare
+`quickjs-isolated`; that compatibility label does not select the canonical executor.
+Fresh or retained globals describe lifetime, not isolation. Shared-host evaluators are
 trusted execution and can mutate native objects before validation fails. Their
 portable results still cross the typed tree boundary; traces cannot replay
 arbitrary native memory. The following limits describe the QuickJS binding only.

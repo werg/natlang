@@ -6,7 +6,7 @@ Training, use cases, and datasets are covered in depth in `TRAINING.md`.
 Detailed designs for the synthesized datasets are in `SYNTHETIC_DATA.md`.
 The type system, validation, and validation feedback are specified in `TYPES.md`.
 The current model-facing interface is `scope-eval-v1`: a persistent
-TypeScript-like scope, line-oriented `eval`, ordinary awaited positional
+TypeScript scope in the same Node host as crisp code, line-oriented `eval`, ordinary awaited positional
 imports, explicit line closure, and separate value and file tools. The fixed
 `codebase/` manifest permits content edits and import relinking but forbids
 creating, moving, or deleting codebase files. Directory reducers use an

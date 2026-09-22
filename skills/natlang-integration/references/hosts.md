@@ -4,8 +4,8 @@
 
 | Target | Public path | Crisp execution |
 |---|---|---|
-| Python | `natlang.host.load` / `load_definitions`, `Runtime`, `ToolAgent` | Default isolated QuickJS; custom registered executors |
-| Node | `NatlangHost` from `@natlang/typescript-host` | Native TS host; Python is not a production dependency |
+| Python compatibility | `natlang.host.load` / `load_definitions`, `Runtime`, `ToolAgent` | Historical traces and offline utilities; not the canonical runtime or teacher collector |
+| Node | `NatlangHost` from `@natlang/typescript-host` | Canonical TypeScript host for crisp code and model eval; Python is not a production dependency |
 | Browser | `BrowserNatlangClient`, `BrowserNatlangApplication` from `@natlang/browser` | Browser TS evaluator and local model or supplied driver |
 
 The inspected TS package is private and built from the repository. Do not promise a public npm package or downloadable model without checking availability. In a checkout, `npm ci --prefix ts-host` then `npm --prefix ts-host run build` builds it. A consumer can install the built local directory. Python can be installed with `pip install -e '.[js,dev]'` from the checkout; the optional JS dependency is needed for default crisp execution. Source programs themselves are regular files or virtual file maps.

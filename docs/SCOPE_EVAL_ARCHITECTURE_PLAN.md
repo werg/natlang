@@ -5,7 +5,7 @@ are active, 2026-09-22.
 
 This plan replaces the model-facing workspace-path and call-combinator protocol with a
 persistent typed execution scope. The model interprets the natural-language program one
-line at a time, executes ordinary TypeScript-like statements with `eval`, observes their
+line at a time, executes ordinary TypeScript statements with `eval` in the same Node host as crisp code, observes their
 results, and explicitly closes every substantive source line. Natural-language lambdas,
 crisp functions, and host-backed functions are imported and called through the same syntax.
 
@@ -14,16 +14,16 @@ durable continuation machinery remain the execution substrate. The proposal chan
 model expresses its decisions. It does not move program interpretation into deterministic
 orchestration.
 
-The Python and native TypeScript runtimes now expose `scope-eval-v1`, including
+The canonical native TypeScript runtime now exposes `scope-eval-v1`, including
 typed persistent locals, ordinary imported calls, required line closure,
 directory reducers, shared scoped filesystem overlays, live fixed-manifest
 codebase edits, and matching prompts and trace provenance. The training bridge
 can materialize native scope trajectories and conservatively project simple
 legacy teacher traces. Current teacher runs are the compatibility probe for
-additional natural code forms. Eval lowering intentionally remains a small
-restricted language and is expanded from observed useful programs; it does not
-execute arbitrary TypeScript or replace semantic choices with a deterministic
-planner.
+additional natural code forms. Eval is parsed and transpiled by TypeScript 5.9
+and executes through the same async host boundary as crisp code. The compiler
+restricts ambient authority, imports, dynamic code, and prototype mutation; it
+does not replace semantic choices with a deterministic planner.
 
 ## 1. Goals and fixed decisions
 
@@ -52,8 +52,8 @@ The design must:
     revision visible in the invocation's `codebase/` overlay.
 11. Serialize scope, suspended calls, marks, notes, effects, and the eval program counter so
     interruption and fresh-context continuation remain safe.
-12. Keep Python and TypeScript behavior conformant while allowing each implementation to follow
-    its language's internal naming conventions.
+12. Keep the canonical Node and browser TypeScript behavior conformant. Python remains an
+    offline compatibility and migration implementation and must not collect new teacher runs.
 13. Give every lambda a scoped, writable `codebase/` overlay for its associated module files, with
     compatible content edits to existing files observed by later imported calls. The overlay's
     file manifest is fixed at invocation start: adding, deleting, or moving codebase files is
@@ -188,7 +188,7 @@ remain local to the execution overlay.
 
 ### 4.1 `eval(code)`
 
-`eval` executes a TypeScript-like snippet in the lambda's persistent typed scope.
+`eval` executes a TypeScript snippet in the lambda's persistent typed scope through the shared Node host.
 
 ```json
 {

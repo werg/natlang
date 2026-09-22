@@ -1,7 +1,7 @@
 # Agent-facing surface and observed failures
 
 > **Current interface (`scope-eval-v1`, 2026-09-22).** The model uses a
-> persistent TypeScript-like evaluation scope. `eval(code)` supports
+> persistent TypeScript evaluation scope in the same Node host as crisp code. `eval(code)` supports
 > declarations, assignments, control flow, exact work, and ordinary awaited
 > positional calls to imported natlang or crisp functions. The auxiliary
 > actions are `read_value`, `write_value`, `return_value`, `mark_lines`,

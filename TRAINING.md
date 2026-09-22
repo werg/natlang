@@ -5,7 +5,7 @@ sources (synthetic, existing datasets, teacher distillation), the training
 recipe, and evaluation. Status: draft, 2026-09-19.
 
 The training target is the current `scope-eval-v1` surface. Each episode has
-a persistent TypeScript-like scope and uses `eval` for declarations,
+a persistent TypeScript scope in the same Node host as crisp code and uses `eval` for declarations,
 assignments, control flow, exact work, and awaited positional calls to
 imported natlang or crisp functions. The model-facing actions are
 `read_value`, `write_value`, `return_value`, `mark_lines`, `report_blocker`,
@@ -37,15 +37,15 @@ Facts from the LFM2.5 model cards and Liquid's release post (fetched
 
 ### 0.1 Consequence for exact work
 
-TypeScript on QuickJS is the language of crisp functions and current `eval`
-(decided). The model card says the model is weak at code, so the design keeps
+TypeScript in the shared Node host is the language of crisp functions and current `eval`.
+The model card says the model is weak at code, so the design keeps
 model-written code tiny:
 
 - **Exact work belongs to the author first.** Counting, filtering, grouping and
   arithmetic are crisp `.ts` functions in the code base or the linkable `std/`
   library; the interpreter calls them like any other function and writes no
   code at all.
-- **`eval` is for glue the author did not name**: one TypeScript-like
+- **`eval` is for glue the author did not name**: one TypeScript
   expression over the persistent scope using the standard library
   (`labels.map(l => l !== "spam")`). Train this surface explicitly (skill K6),
   always as short expressions.
