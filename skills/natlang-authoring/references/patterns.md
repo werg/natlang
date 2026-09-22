@@ -45,3 +45,8 @@ queries that require indexing or full-text search in crisp code and return a
 small typed result; a lazy dictionary is navigation and observation, not an
 index. Keep writes as explicit host operations or return a typed change plan
 such as `{ path: Text, text: Text }[]` for the host to validate and commit.
+
+Do not add a live host dictionary beside a pinned source revision merely as
+extra context. That silently changes what can influence a replay. Import the
+needed material into the versioned domain collection, or make the provider's
+identity and observation policy an explicit part of the application contract.

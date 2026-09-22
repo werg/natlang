@@ -44,9 +44,10 @@ root:
 ## Minimal application
 
 ```ts
-import { NatlangHost, TerminalNatlangApplication, TerminalSessionStore,
+import { NatlangHost, NodeFileTree, TerminalNatlangApplication, TerminalSessionStore,
   runTerminalShell } from '@natlang/node';
 
+const workspaceRoot = process.cwd();
 const native = { jobs, drainEvents: () => jobs.drainEvents() };
 const host = new NatlangHost({ host: native, mode: 'retained' });
 const store = new TerminalSessionStore<State>('session.json');
@@ -56,6 +57,7 @@ let app: TerminalNatlangApplication<State, TerminalView, Event>;
 app = new TerminalNatlangApplication({
   runner: host,
   source: { reducer: 'program/reduce.nl', view: 'program/view.ts' },
+  reducerInputs: () => ({ files: new NodeFileTree(workspaceRoot) }),
   initialState: saved.state,
   initialRevision: saved.revision,
   seenEventIds: saved.seen_event_ids,
@@ -73,6 +75,13 @@ await runTerminalShell(app, {
 });
 host.close();
 ```
+
+`inputs` supplies values to both stages. `reducerInputs` and `viewInputs` keep
+stage-specific authority explicit. Each accepts either a record or a factory;
+factories run once per invocation. Use a factory for filesystem-backed lazy
+dictionaries so separate events observe current files while repeated reads in
+one reduction remain stable. Do not pass a lazy dictionary to a crisp view or
+crisp helper; those use their native host surface or selected portable leaves.
 
 `onCommit` finishes before the framework publishes new state or computes its
 view. A failed view can be retried with `refresh()` without rerunning the

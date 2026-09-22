@@ -27,7 +27,6 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
           return { calls: [], text: 'done', completion_tokens: 1 };
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function build(')) return { calls: [
-          ['read', { path: 'args/files/input.txt/text' }],
           ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal', tasks: 'args/tasks' } }],
           ['call', { function: 'step', to: 'return', until: 'finished', init: 'let/initial', max: Math.max(1, tasks.length), inputs: { files: 'args/files' } }],
         ], completion_tokens: 1 };
@@ -36,10 +35,14 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
           ['call', { function: 'stall', to: 'return', inputs: { state: 'args/state' } }],
         ] : [
           ['call', { function: 'ready_tasks', to: 'let/ready', inputs: { state: 'args/state' } }],
-          ['call', { function: 'choose', to: 'let/chosen', inputs: { ready: 'let/ready', goal: 'args/state/goal' } }],
+          ['call', { function: 'choose', to: 'let/chosen', inputs: {
+            ready: 'let/ready', goal: 'args/state/goal', files: 'args/files' } }],
           ['call', { function: 'advance', to: 'return', inputs: { state: 'args/state', chosen: 'let/chosen' } }],
         ], completion_tokens: 1 };
-        return { calls: [['write', { path: 'return', value: choose() }]], completion_tokens: 1 };
+        return { calls: [
+          ['read', { path: 'args/files/input.txt/text' }],
+          ['write', { path: 'return', value: choose() }],
+        ], completion_tokens: 1 };
       } });
     const trace = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
     return { result, folder, trace };

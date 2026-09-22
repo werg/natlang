@@ -76,6 +76,11 @@ automatically a semantic argument. For host project data, pass
 `textFileTree(files)` as a declared input in browsers and portable embeddings,
 or `NodeFileTree(root)` in Node.
 
+Application reducers that run once per event should construct filesystem trees
+through the framework's `reducerInputs` factory. Reusing one `NodeFileTree`
+object across runs also reuses its observation cache and can hide changes made
+between events. A direct `host.run` call already has a single-run lifetime.
+
 ## Lazy `Dict<T>` providers
 
 Use `LazyDict` with a `TreeProvider<T>` for other large keyed spaces. The
@@ -90,6 +95,11 @@ code needs to browse a few entries. Use crisp search or an indexed host query
 when selection requires scanning the whole collection. Keep binary payloads in
 the host and expose typed metadata plus targeted operations.
 
+Avoid attaching a changing filesystem tree to a workflow whose declared
+authority is a pinned repository, evidence collection, source revision, or
+merge base. Either import the relevant file into that versioned input or make
+the live provider and its identity part of the reproducibility contract.
+
 Provider rules:
 
 - Return stable, unique immediate names with `branch` or `leaf` kind. Reject
@@ -98,8 +108,10 @@ Provider rules:
   when a run must see newer backing data.
 - Bind it only to a compatible `Dict<T>` parameter. Normal eager dictionaries
   remain valid inputs for the same source.
-- Do not pass the whole provider-backed value into crisp eval. Select a portable
-  leaf first, or let crisp code use the native host API directly.
+- Do not pass the whole provider-backed value into a crisp function. Select a
+  portable leaf first, or let crisp code use the native host API directly.
+  Inline `run_code` omits provider-backed fields from its portable scope while
+  retaining the other arguments.
 - Do not expect `dump_state` or trace data to serialize the provider. Persist
   selected results and enough provider identity to reconstruct the binding.
 

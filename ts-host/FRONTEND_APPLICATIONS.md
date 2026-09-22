@@ -6,9 +6,12 @@ function for each UI event. It is a library for browser applications, not a
 new language primitive or a universal component framework.
 
 ```ts
+import { BrowserNatlangApplication, textFileTree } from '@natlang/browser';
+
 const app = new BrowserNatlangApplication({
   client,
   source: { files, reducer: 'board/reduce.nl', view: 'board/view.nl' },
+  reducerInputs: () => ({ files: textFileTree(projectFiles) }),
   initialState,
   seedRoot: 17,
   onTransition: ({ view }) => renderer.render(view),
@@ -17,6 +20,14 @@ await app.start();
 // Browser controls, WebSocket messages and timers all enter the same queue:
 await app.dispatch({ id: 'event-1', kind: 'command', value: 'Add a task' });
 ```
+
+`inputs` supplies values to both reducer and view runs. Use `reducerInputs` or
+`viewInputs` when only one stage declares a value. All three options accept a
+record or a per-run factory. A browser project that changes over time should
+build a fresh `textFileTree` in the factory from the current file map: this
+preserves stable lazy reads inside one reduction and exposes the latest
+snapshot to the next event. A crisp view should not declare a lazy dictionary
+argument.
 
 The application queue gives one state owner an explicit event order. Each
 completed reducer invocation is one Fold-like step. The new state commits only

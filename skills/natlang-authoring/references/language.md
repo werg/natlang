@@ -69,8 +69,11 @@ before.
 The lazy implementation is read-only and not a portable snapshot. Returning or
 persisting selected typed leaves is supported; process restart requires the
 host to bind the provider again. Crisp code that needs arbitrary filesystem or
-database access should use its real host API. Do not force the runtime to
-materialize a native provider merely to pass it into eval.
+database access should use its real host API. A crisp function cannot receive a
+host-backed dictionary as an argument. Inline `run_code` remains usable for
+other values, but provider-backed fields are omitted from its portable scope.
+Do not force the runtime to materialize a native provider merely to pass it
+into eval.
 
 Partial return records can be built incrementally; completion requires a complete result of the declared type. Wrongly typed fields are rejected. A validated record can still be semantically false. Exact count checks, semantic rubrics, and external effect receipts address different claims.
 

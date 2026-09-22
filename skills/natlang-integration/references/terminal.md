@@ -14,12 +14,12 @@ runs, commits state before presentation, derives event seeds, suppresses
 committed event IDs and retries the view independently. Crisp helpers own exact
 process/file/database calls and typed result checks.
 
-For a terminal application that reasons over its working tree, bind a
-`NodeFileTree(root)` to a declared `files: Dict<ProjectFile>` reducer argument
-or invocation input. The reducer can browse `args/files/...` lazily and pass the
-same dictionary to helpers. Recreate the binding for each session or run that
-must observe filesystem changes; observations within one bound value are
-stable.
+For a terminal application that reasons over its working tree, declare a
+`files: Dict<ProjectFile>` reducer argument and configure
+`reducerInputs: () => ({ files: new NodeFileTree(root) })`. The reducer can
+browse `args/files/...` lazily and pass the same dictionary to semantic helpers.
+The factory creates a fresh dictionary for each reduction, while observations
+within one run remain stable. Keep it out of a crisp view's inputs.
 
 Use `TerminalEventQueue` to combine readline input, job completions, watchers or
 sockets. Producers may be concurrent, but events wait while one lambda runs and

@@ -165,10 +165,11 @@ test('semantic terminal receives native job completion through the shared event 
     const prompt = String(turn.messages.find(message => message.role === 'user')?.content ?? '');
     seenPrompts.push(prompt.slice(0, 500));
     if (prompt.includes('function reduce(')) return { calls: [['call', { function: 'step', to: 'return',
-      inputs: { acc: 'args/state', item: 'args/event' } }]], completion_tokens: 1 };
+      inputs: { acc: 'args/state', item: 'args/event', files: 'args/files' } }]], completion_tokens: 1 };
     if (prompt.includes('function step(') && stepCount++ === 0) return { calls: [
       ['call', { function: 'recipes', to: 'let/catalog' }],
-      ['call', { function: 'interpret', to: 'let/recipe', inputs: { text: 'args/item/text', catalog: 'let/catalog' } }],
+      ['call', { function: 'interpret', to: 'let/recipe', inputs: {
+        text: 'args/item/text', catalog: 'let/catalog', files: 'args/files' } }],
       ['call', { function: 'launch', to: 'return', inputs: { acc: 'args/acc', item: 'args/item', recipe: 'let/recipe' } }],
     ], completion_tokens: 1 };
     if (prompt.includes('function step(')) return { calls: [
@@ -179,7 +180,8 @@ test('semantic terminal receives native job completion through the shared event 
     return { calls: [['write', { path: 'return', value: 'Inspection completed: clean.' }]], completion_tokens: 1 };
   };
   const app = new TerminalNatlangApplication({ runner: host,
-    source: { reducer: source('reduce.nl'), view: source('view.ts') }, initialState, modelTurn: driver });
+    source: { reducer: source('reduce.nl'), view: source('view.ts') },
+    reducerInputs: () => ({ files: new NodeFileTree(process.cwd()) }), initialState, modelTurn: driver });
   try {
     await app.start();
     await app.dispatch({ kind: 'request', id: 'r1', request_id: '', job_id: '', text: 'inspect', status: '', detail: '' });
@@ -208,20 +210,24 @@ test('notebook console keeps semantic goal selection and dependency traversal in
     if (prompt.includes('function reduce(')) return { calls: [
       ['call', { function: 'catalog', to: 'let/cells' }],
       ['call', { function: 'choose_goal', to: 'let/goal', inputs: { request: 'args/event/value', cells: 'let/cells' } }],
-      ['call', { function: 'run_notebook', to: 'let/result', inputs: { goal: 'let/goal', question: 'args/event/value' } }],
+      ['call', { function: 'run_notebook', to: 'let/result', inputs: {
+        goal: 'let/goal', question: 'args/event/value', files: 'args/files' } }],
       ['call', { function: 'append', to: 'return', inputs: { state: 'args/state', request: 'args/event/value', result: 'let/result' } }],
     ], completion_tokens: 1 };
     if (prompt.includes('Choose exactly one offered cell ID'))
       return { calls: [['write', { path: 'return', value: 'report' }]], completion_tokens: 1 };
     if (prompt.includes('function run(')) return { calls: [
       ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal' } }],
-      ['call', { function: 'step', to: 'let/finished', until: 'complete', init: 'let/initial', max: 2 }],
-      ['call', { function: 'explain', to: 'let/answer', inputs: { question: 'args/question', state: 'let/finished' } }],
+      ['call', { function: 'step', to: 'let/finished', until: 'complete', init: 'let/initial', max: 2,
+        inputs: { files: 'args/files' } }],
+      ['call', { function: 'explain', to: 'let/answer', inputs: {
+        question: 'args/question', state: 'let/finished', files: 'args/files' } }],
       ['call', { function: 'attach', to: 'return', inputs: { state: 'let/finished', answer: 'let/answer' } }],
     ], completion_tokens: 1 };
     if (prompt.includes('function step(')) return { calls: [
       ['call', { function: 'ready_cells', to: 'let/ready', inputs: { state: 'args/state' } }],
-      ['call', { function: 'choose', to: 'let/chosen', inputs: { ready: 'let/ready', goal: 'args/state/goal' } }],
+      ['call', { function: 'choose', to: 'let/chosen', inputs: {
+        ready: 'let/ready', goal: 'args/state/goal', files: 'args/files' } }],
       ['call', { function: 'advance', to: 'return', inputs: { state: 'args/state', chosen: 'let/chosen' } }],
     ], completion_tokens: 1 };
     if (prompt.includes('Choose one offered ready cell'))
@@ -230,6 +236,7 @@ test('notebook console keeps semantic goal selection and dependency traversal in
   };
   const app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
+    reducerInputs: () => ({ files: new NodeFileTree(process.cwd()) }),
     initialState: { requests: [], runs: [], status: 'idle' }, modelTurn: driver });
   try {
     await app.start();
