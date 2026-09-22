@@ -4,10 +4,10 @@ kind: program
 exercises: [report_blocker, quiesced root, note quality, no guessing]
 program:
   $lambda:
-    type: 'Lambda<{ item: Text, rubric: Text }, "accept" | "reject">'
+    type: '(item: string, rubric: string) => "accept" | "reject"'
     function: decide_claim
     instructions: |
-      Decide `args/item` strictly by `args/rubric`. If the rubric does not cover the case,
+      Decide `item` strictly by `rubric`. If the rubric does not cover the case,
       call report_blocker and say what is missing.
 inputs:
   rubric: |
@@ -23,5 +23,4 @@ lint:
   must_not: [writing accept or reject]
 reference:
   decide_claim:
-    calls:
-      - { tool: report_blocker, args: { missing: "The rubric has no rule for a claim of 50 EUR or more that has a receipt attached." } }
+    blocker: The rubric has no rule for a claim of 50 EUR or more that has a receipt attached.

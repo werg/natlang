@@ -1,29 +1,27 @@
 id: 12-iterate-model-check
-title: A natural-language check function drives the iterate's stop condition
+title: A natural-language check function controls a bounded TypeScript loop
 kind: program
-exercises: [code base, call with init+until+max (iterate), natural-language check returning Bool]
+exercises: [code base, bounded TypeScript loop, natural-language stop check]
 program:
   $lambda:
-    type: 'Lambda<{ seed: Text[] }, Text[]>'
+    type: '(seed: string[]) => string[]'
     function: collect_fruits
     instructions: |
-      function collect_fruits(seed) -> Text[]
-
-        start = seed
-        return add_fruit applied repeatedly to start, at most 8 times, until has_four_distinct_fruits
+      Add a fruit with `add_fruit` until `has_four_distinct_fruits` says the list is complete.
+      Limit the loop to eight updates and return the current list.
     codebase:
       add_fruit:
         description: Add one fruit not already in the list.
-        args: { state: 'Text[]' }
-        returns: 'Text[]'
+        args: { state: 'string[]' }
+        returns: 'string[]'
         instructions: |
-          Add one fruit that is not already in `args/state` to the end of the list, and return the new list.
+          Add one fruit that is not already in `state` to the end of the list, and return the new list.
       has_four_distinct_fruits:
         description: Does the list contain four different fruits?
-        args: { state: 'Text[]' }
-        returns: Bool
+        args: { state: 'string[]' }
+        returns: boolean
         instructions: |
-          Does `args/state` contain four different fruits? Answer true or false.
+          Does `state` contain four different fruits? Answer true or false.
 inputs:
   seed: ["apple"]
 expect:
@@ -33,19 +31,33 @@ expect:
     - { kind: judge, question: "Is every item a fruit?", answer: true }
 lint:
   must:
-    - add_fruit called with init+until+max (an iterate), until names has_four_distinct_fruits
+    - the root loops at most eight times and asks has_four_distinct_fruits whether to stop
     - has_four_distinct_fruits is a natural-language function, not crisp
   must_not: [the root deciding when to stop itself]
 reference:
   collect_fruits:
-    calls:
-      - { tool: write, args: { path: let/start, type: 'Text[]', value: ["apple"] } }
-      - { tool: call, args: { function: add_fruit, to: return, init: let/start, until: has_four_distinct_fruits, max: 8 } }
+    eval: 'const start = ["apple"];
+
+      let __state1 = start;
+
+      for (let __i1 = 0; __i1 < 8; __i1++) { if (await has_four_distinct_fruits(__state1)) break; __state1
+      = await add_fruit(__state1); }
+
+      __state1'
   add_fruit:
     answer_by:
-      '["apple"]': ["apple", "banana"]
-      '["apple", "banana"]': ["apple", "banana", "cherry"]
-      '["apple", "banana", "cherry"]': ["apple", "banana", "cherry", "date"]
+      '["apple"]':
+      - apple
+      - banana
+      '["apple", "banana"]':
+      - apple
+      - banana
+      - cherry
+      '["apple", "banana", "cherry"]':
+      - apple
+      - banana
+      - cherry
+      - date
   has_four_distinct_fruits:
     answer_by:
       '["apple"]': false

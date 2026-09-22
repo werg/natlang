@@ -4,25 +4,23 @@ kind: program
 exercises: [code base, crisp function, Dict, enum]
 program:
   $lambda:
-    type: 'Lambda<{ stock: Dict<Num>, request: Text }, Action>'
+    type: '(stock: Record<string, number>, request: string) => Action'
     function: choose_action
     types:
       Action: '"sell_apple" | "sell_pear" | "decline"'
     instructions: |
-      function choose_action(stock, request) -> Action
-
-        return decide_action(stock, request)
+      Return `await decide_action(stock, request)`.
     codebase:
       decide_action:
         description: >
           Choose, among the legal actions (an item can be sold only if stock has at least one; declining
           is always legal), the one that serves the request. If what the customer wants cannot be sold,
           decline.
-        args: { stock: 'Dict<Num>', request: Text }
+        args: { stock: 'Record<string, number>', request: string }
         returns: '"sell_apple" | "sell_pear" | "decline"'
         code: |
-          const legal = new Set(["decline", ...Object.keys(args.stock).filter(k => args.stock[k] > 0).map(k => "sell_" + k)])
-          const wants = Object.keys(args.stock).find(k => args.request.toLowerCase().includes(k))
+          const legal = new Set(["decline", ...Object.keys(stock).filter(k => stock[k] > 0).map(k => "sell_" + k)])
+          const wants = Object.keys(stock).find(k => request.toLowerCase().includes(k))
           const wanted = wants ? "sell_" + wants : "decline"
           return legal.has(wanted) ? wanted : "decline"
 inputs:
@@ -38,5 +36,4 @@ lint:
   must_not: [the root working out legality itself, the legal set typed out by the model]
 reference:
   choose_action:
-    calls:
-      - { tool: call, args: { function: decide_action, to: return, inputs: { stock: args/stock, request: args/request } } }
+    eval: await decide_action(stock, request)

@@ -4,27 +4,22 @@ kind: program
 exercises: [code base, crisp function, locals, conditional]
 program:
   $lambda:
-    type: 'Lambda<{ amounts: Num[], limit: Num }, Text>'
+    type: '(amounts: number[], limit: number) => string'
     function: budget_check
     instructions: |
-      function budget_check(amounts, limit) -> Text
-
-        total = sum_amounts(amounts)
-        if total > limit:
-            return over_message(total, limit)
-        else:
-            return "within budget"
+      Compute `total` with `await sum_amounts(amounts)`. If it exceeds `limit`, return
+      `await over_message(total, limit)`; otherwise return `"within budget"`.
     codebase:
       sum_amounts:
         description: Add up a list of amounts.
-        args: { amounts: 'Num[]' }
-        returns: Num
-        code: return sum(args.amounts)
+        args: { amounts: 'number[]' }
+        returns: number
+        code: return sum(amounts)
       over_message:
         description: The "over budget by N" message for an excess.
-        args: { total: Num, limit: Num }
-        returns: Text
-        code: return `over budget by ${Math.round((args.total - args.limit) * 100) / 100}`
+        args: { total: number, limit: number }
+        returns: string
+        code: return `over budget by ${Math.round((total - limit) * 100) / 100}`
 inputs:
   amounts: [120, 80.5, 310]
   limit: 400
@@ -37,6 +32,6 @@ lint:
   must_not: [the root doing arithmetic itself, the root writing the message text directly]
 reference:
   budget_check:
-    calls:
-      - { tool: call, args: { function: sum_amounts, to: let/total, inputs: { amounts: args/amounts } } }
-      - { tool: call, args: { function: over_message, to: return, inputs: { total: let/total, limit: args/limit } } }
+    eval: 'const total = await sum_amounts(amounts);
+
+      total > limit ? await over_message(total, limit) : "within budget"'

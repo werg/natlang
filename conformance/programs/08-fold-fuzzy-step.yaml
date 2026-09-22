@@ -1,28 +1,26 @@
 id: 08-fold-fuzzy-step
-title: Fold with a judged step; the harness threads the accumulator
+title: A TypeScript loop threads state through a natural-language function
 kind: program
-exercises: [code base, call with over+init (fold), accumulator typing, natural-language step]
+exercises: [code base, TypeScript for...of loop, accumulator typing, natural-language function]
 program:
   $lambda:
-    type: 'Lambda<{ messages: Text[] }, Addr>'
+    type: '(messages: string[]) => Addr'
     function: track_address
     types:
-      Addr: '{ address: Text, changes: Num }'
+      Addr: '{ address: string, changes: number }'
     instructions: |
-      function track_address(messages) -> Addr
-
-        start = { address: "unknown", changes: 0 }
-        return fold over messages, starting from start, updating the address with update_address
+      Start with the address "unknown" and zero changes. For each message, ask `update_address`
+      for the next state. Return the final state.
     codebase:
       update_address:
         description: Given the running state and one more message, the new address-tracking state.
-        args: { acc: Addr, item: Text }
-        returns: '{ address: Text, changes: Num }'
+        args: { acc: Addr, item: string }
+        returns: '{ address: string, changes: number }'
         instructions: |
-          `args/acc` holds the customer's latest known delivery address and how many times it has
-          changed. `args/item` is the next message. If it states a delivery address different from
-          `args/acc/address`, return the new address with changes increased by one. Otherwise return
-          `args/acc` unchanged.
+          `acc` holds the customer's latest known delivery address and how many times it has
+          changed. `item` is the next message. If it states a delivery address different from
+          `acc/address`, return the new address with changes increased by one. Otherwise return
+          `acc` unchanged.
 inputs:
   messages:
     - "Hi, please send it to 12 Oak Lane, Bristol."
@@ -34,17 +32,29 @@ expect:
   value: { address: "9 Quay Street, Hull", changes: 3 }
 notes: The first address counts as a change from "unknown".
 lint:
-  must: [update_address called with over+init (a fold), step has params acc and item]
-  must_not: [the root reading messages one by one itself, unrolling the fold]
+  must: [the root loops over messages and calls update_address with the current state and message]
+  must_not: [the root deciding which address to keep itself]
 reference:
   track_address:
-    calls:
-      - { tool: write, args: { path: let/start, type: Addr, value: { address: "unknown", changes: 0 } } }
-      - { tool: call, args: { function: update_address, to: return, over: args/messages, init: let/start } }
+    eval: 'let state = { address: "unknown", changes: 0 };
+
+      for (const message of messages) state = await update_address(state, message);
+
+      state'
   update_address:
     answer_by:
-      "Hi, please send it to 12 Oak Lane, Bristol.": { address: "12 Oak Lane, Bristol", changes: 1 }
-      "Any idea when it ships?": { address: "12 Oak Lane, Bristol", changes: 1 }
-      "Actually I've moved - use 4 Mill Road, Leeds instead.": { address: "4 Mill Road, Leeds", changes: 2 }
-      "Thanks!": { address: "4 Mill Road, Leeds", changes: 2 }
-      "Sorry, one more change: 9 Quay Street, Hull.": { address: "9 Quay Street, Hull", changes: 3 }
+      Hi, please send it to 12 Oak Lane, Bristol.:
+        address: 12 Oak Lane, Bristol
+        changes: 1
+      Any idea when it ships?:
+        address: 12 Oak Lane, Bristol
+        changes: 1
+      Actually I've moved - use 4 Mill Road, Leeds instead.:
+        address: 4 Mill Road, Leeds
+        changes: 2
+      Thanks!:
+        address: 4 Mill Road, Leeds
+        changes: 2
+      'Sorry, one more change: 9 Quay Street, Hull.':
+        address: 9 Quay Street, Hull
+        changes: 3

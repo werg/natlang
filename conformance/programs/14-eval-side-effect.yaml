@@ -4,24 +4,23 @@ kind: program
 exercises: [code base, crisp function, effects declaration, effect journal]
 program:
   $lambda:
-    type: 'Lambda<{ alerts: Alert[] }, Num>'
+    type: '(alerts: Alert[]) => number'
     function: emit_critical
     types:
-      Alert: '{ id: Text, level: Text }'
+      Alert: '{ id: string, level: string }'
     effects: [out.emit]
     instructions: |
-      function emit_critical(alerts) -> Num
-
-        return emit_critical_alerts(alerts)
+      Return `await emit_critical_alerts(alerts)`. The helper emits the critical records and returns
+      their count.
     codebase:
       emit_critical_alerts:
         description: Emit one output record { id } for every critical alert; return how many were emitted.
         args: { alerts: 'Alert[]' }
-        returns: Num
+        returns: number
         effects: [out.emit]
         code: |
           let n = 0
-          for (const a of args.alerts) {
+          for (const a of alerts) {
             if (a.level === "critical") { fx.out.emit({ id: a.id }); n++ }
           }
           return n
@@ -39,5 +38,4 @@ lint:
   must_not: [the root emitting anything itself, an eval attempting to write the tree]
 reference:
   emit_critical:
-    calls:
-      - { tool: call, args: { function: emit_critical_alerts, to: return, inputs: { alerts: args/alerts } } }
+    eval: await emit_critical_alerts(alerts)

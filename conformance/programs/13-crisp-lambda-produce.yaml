@@ -4,18 +4,16 @@ kind: program
 exercises: [code base, crisp function, large value never passes through the model]
 program:
   $lambda:
-    type: 'Lambda<{ emails: Text[] }, Text[]>'
+    type: '(emails: string[]) => string[]'
     function: distinct_emails
     instructions: |
-      function distinct_emails(emails) -> Text[]
-
-        return normalize_emails(emails)
+      Return `await normalize_emails(emails)` without changing its result.
     codebase:
       normalize_emails:
         description: The distinct email addresses, lower-cased and sorted.
-        args: { emails: 'Text[]' }
-        returns: 'Text[]'
-        code: return uniq(args.emails.map(lower)).sort()
+        args: { emails: 'string[]' }
+        returns: 'string[]'
+        code: return uniq(emails.map(lower)).sort()
 inputs:
   emails: ["Zed@x.org", "amy@x.org", "AMY@x.org", "bob@y.com", "zed@X.org", "cy@z.net"]
 expect:
@@ -25,5 +23,4 @@ lint:
   must_not: [the root retyping or re-emitting the list itself]
 reference:
   distinct_emails:
-    calls:
-      - { tool: call, args: { function: normalize_emails, to: return, inputs: { emails: args/emails } } }
+    eval: await normalize_emails(emails)

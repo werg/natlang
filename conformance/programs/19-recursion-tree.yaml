@@ -8,17 +8,13 @@ notes: >
   recurse internally to flatten a recursive value; the interpreter never has to reduce the tree by hand.
 program:
   $lambda:
-    type: 'Lambda<{ root: Unit }, Num>'
+    type: '(root: Unit) => number'
     function: count_fruit_units
     types:
-      Unit: "{ name: Text, reports: Unit[] }"
+      Unit: "{ name: string, reports: Unit[] }"
     instructions: |
-      function count_fruit_units(root) -> Num
-
-        units = flatten_tree(root)
-        names = unit_names(units)
-        flags = for each n in names: is_fruit_name(n)
-        return count_true(flags)
+      Flatten the tree with `flatten_tree`, extract names with `unit_names`, and classify each name
+      with `Promise.all(names.map(...))` and `is_fruit_name`. Return `count_true(flags)`.
     codebase:
       flatten_tree:
         description: Every unit in the tree, at any depth, as a flat list.
@@ -27,23 +23,23 @@ program:
         code: |
           const out = []
           const visit = (u) => { out.push(u); for (const r of u.reports) visit(r) }
-          visit(args.root)
+          visit(root)
           return out
       unit_names:
         description: The name of every unit in a list.
         args: { units: 'Unit[]' }
-        returns: 'Text[]'
-        code: return args.units.map(u => u.name)
+        returns: 'string[]'
+        code: return units.map(u => u.name)
       is_fruit_name:
         description: Is this name a fruit?
-        args: { name: Text }
-        returns: Bool
-        code: return ["apple", "pear", "mango", "cherry", "plum", "banana"].includes(args.name.toLowerCase())
+        args: { name: string }
+        returns: boolean
+        code: return ["apple", "pear", "mango", "cherry", "plum", "banana"].includes(name.toLowerCase())
       count_true:
         description: How many flags are true.
-        args: { flags: 'Bool[]' }
-        returns: Num
-        code: return args.flags.filter(Boolean).length
+        args: { flags: 'boolean[]' }
+        returns: number
+        code: return flags.filter(Boolean).length
 inputs:
   root:
     name: "Head Office"
@@ -64,8 +60,10 @@ lint:
   must_not: [the root reading the tree level by level itself, a natlang function calling itself]
 reference:
   count_fruit_units:
-    calls:
-      - { tool: call, args: { function: flatten_tree, to: let/units, inputs: { root: args/root } } }
-      - { tool: call, args: { function: unit_names, to: let/names, inputs: { units: let/units } } }
-      - { tool: call, args: { function: is_fruit_name, to: let/flags, over: let/names } }
-      - { tool: call, args: { function: count_true, to: return, inputs: { flags: let/flags } } }
+    eval: 'const units = await flatten_tree(root);
+
+      const names = await unit_names(units);
+
+      const flags = await Promise.all(names.map(async item => await is_fruit_name(item)));
+
+      await count_true(flags)'

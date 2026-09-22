@@ -4,21 +4,20 @@ kind: program
 exercises: [code base, call over a list, named types, enum, crisp library functions]
 program:
   $lambda:
-    type: 'Lambda<{ tickets: Text[], rubric: Text }, Label[]>'
+    type: '(tickets: string[], rubric: string) => Label[]'
     function: label_tickets
     types:
       Label: '"billing" | "technical" | "spam"'
     instructions: |
-      function label_tickets(tickets, rubric) -> Label[]
-
-        return for each t in tickets: classify(t, rubric)
+      Return the result of `Promise.all(tickets.map(...))`, calling `classify(ticket, rubric)` for
+      every ticket.
     codebase:
       classify:
         description: Label one ticket using the rubric.
-        args: { item: Text, rubric: Text }
+        args: { item: string, rubric: string }
         returns: '"billing" | "technical" | "spam"'
         instructions: |
-          Label the ticket in `args/item` according to `args/rubric`.
+          Label the ticket in `item` according to `rubric`.
 inputs:
   rubric: |
     billing: anything about charges, invoices, refunds, or payment methods.
@@ -34,16 +33,15 @@ expect:
   value: [billing, technical, spam, billing, technical]
 lint:
   must:
-    - classify called once, over args/tickets, with rubric passed to every instance
+    - classify called once, over tickets, with rubric passed to every instance
   must_not: [the root labelling tickets itself, one call per ticket]
 reference:
   label_tickets:
-    calls:
-      - { tool: call, args: { function: classify, to: return, over: args/tickets, inputs: { rubric: args/rubric } } }
+    eval: await Promise.all(tickets.map(async item => await classify(item, rubric)))
   classify:
     answer_by:
-      "I was charged twice for my March invoice.": billing
-      "The app crashes every time I open the settings page.": technical
-      "CHEAP WATCHES!!! Visit our store today for 90% off.": spam
-      "Please change the card on file, the old one expired.": billing
-      "Export to CSV produces an empty file.": technical
+      I was charged twice for my March invoice.: billing
+      The app crashes every time I open the settings page.: technical
+      CHEAP WATCHES!!! Visit our store today for 90% off.: spam
+      Please change the card on file, the old one expired.: billing
+      Export to CSV produces an empty file.: technical

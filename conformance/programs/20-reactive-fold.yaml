@@ -1,51 +1,48 @@
 id: 20-reactive-fold
-title: A long-lived program is a top-level fold over an open list of events
+title: TypeScript event processing threads state and emits one reply per input
 kind: program
-exercises: [root combinator, open list, state threading by the harness, effects in step, crisp decision]
+exercises: [TypeScript for...of loop, positional function call, state threading, declared effects]
 program:
-  $fold:
-    type: 'Fold<Event, Shop>'
+  $lambda:
+    type: '(events: Event[]) => Shop'
+    function: handle_events
     types:
-      Event: "{ text: Text }"
-      Shop: "{ stock: Dict<Num>, coins: Num }"
-    init: { stock: { apple: 0, pear: 3 }, coins: 0 }
-    step:
-      $lambda:
-        type: 'Lambda<{ acc: Shop, item: Event }, Shop>'
-        function: handle_message
+      Event: '{ text: string }'
+      Shop: '{ stock: Record<string, number>, coins: number }'
+    effects: [out.emit]
+    instructions: |
+      Start with no apples, three pears, and zero coins. For each event, call `decide_and_apply`
+      with the current state and event text. Return the final state.
+    codebase:
+      decide_and_apply:
+        description: Decide what to do about the customer message, emit a reply record, and return the new shop state.
+        args: { acc: Shop, text: string }
+        returns: Shop
         effects: [out.emit]
-        codebase:
-          decide_and_apply:
-            description: >
-              Decide what to do about the customer message (an item can be sold only if stock has at
-              least one of it; declining is always legal; a sale removes one unit and adds 2 coins),
-              emit a reply record { action, text }, and return the new shop state.
-            args: { acc: 'Shop', text: Text }
-            returns: 'Shop'
-            effects: [out.emit]
-            code: |
-              const wants = Object.keys(args.acc.stock).find(k => args.text.toLowerCase().includes(k))
-              const canSell = wants && args.acc.stock[wants] > 0
-              const action = canSell ? "sell_" + wants : "decline"
-              fx.out.emit({ action, text: canSell ? `One ${wants}, coming up!` : "Sorry, I can't help with that." })
-              if (!canSell) return args.acc
-              return { stock: { ...args.acc.stock, [wants]: args.acc.stock[wants] - 1 }, coins: args.acc.coins + 2 }
-        instructions: |
-          function handle_message(acc, item) -> Shop
-
-            return decide_and_apply(acc, item.text)
-streams:
-  over:
+        code: |
+          const wants = Object.keys(acc.stock).find(k => text.toLowerCase().includes(k))
+          const canSell = wants && acc.stock[wants] > 0
+          const action = canSell ? "sell_" + wants : "decline"
+          fx.out.emit({ action, text: canSell ? `One ${wants}, coming up!` : "Sorry, I can't help with that." })
+          if (!canSell) return acc
+          return { stock: { ...acc.stock, [wants]: acc.stock[wants] - 1 }, coins: acc.coins + 2 }
+inputs:
+  events:
     - { text: "A pear, please." }
     - { text: "Got any apples?" }
     - { text: "One more pear." }
-    - $close
 expect:
   value: { stock: { apple: 0, pear: 1 }, coins: 4 }
+  emitted:
+    - { action: sell_pear, text: "One pear, coming up!" }
+    - { action: decline, text: "Sorry, I can't help with that." }
+    - { action: sell_pear, text: "One pear, coming up!" }
 lint:
-  must: [decide_and_apply decides, emits, and returns the new state together, crisply]
-  must_not: [the step reading or writing anything outside its own node]
+  must: [the root loops over events and calls decide_and_apply with the current state]
+  must_not: [the root reading or writing outside its own scope]
 reference:
-  handle_message:
-    calls:
-      - { tool: call, args: { function: decide_and_apply, to: return, inputs: { acc: args/acc, text: args/item/text } } }
+  handle_events:
+    eval: |-
+      let state = { stock: { apple: 0, pear: 3 }, coins: 0 };
+      for (const event of events) state = await decide_and_apply(state, event.text);
+      state

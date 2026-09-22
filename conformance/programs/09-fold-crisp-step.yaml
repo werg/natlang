@@ -1,23 +1,22 @@
 id: 09-fold-crisp-step
-title: A fold whose step is a crisp function; no model episode below the root
+title: A TypeScript loop threads numeric state through a crisp function
 kind: program
-exercises: [code base, call with over+init (fold), crisp step, no model calls in the loop]
+exercises: [code base, TypeScript for...of loop, crisp step, accumulator update]
 program:
   $lambda:
-    type: 'Lambda<{ lines: Line[] }, Num>'
+    type: '(lines: Line[]) => number'
     function: order_total
     types:
-      Line: '{ sku: Text, qty: Num, unit_price: Num }'
+      Line: '{ sku: string, qty: number, unit_price: number }'
     instructions: |
-      function order_total(lines) -> Num
-
-        return fold over lines, starting from 0, adding each line's amount with add_line
+      Start a total at zero. For each order line, update it with `add_line`.
+      Return the final total.
     codebase:
       add_line:
         description: Running total plus one order line's amount.
-        args: { acc: Num, item: Line }
-        returns: Num
-        code: return args.acc + args.item.qty * args.item.unit_price
+        args: { acc: number, item: Line }
+        returns: number
+        code: return acc + item.qty * item.unit_price
 inputs:
   lines:
     - { sku: "A1", qty: 2, unit_price: 9.5 }
@@ -26,10 +25,12 @@ inputs:
 expect:
   value: 146.5
 lint:
-  must: [add_line called with over+init (a fold), the step is crisp]
+  must: [the root loops over lines and calls add_line with the total and current line]
   must_not: [arithmetic done by the root itself]
 reference:
   order_total:
-    calls:
-      - { tool: write, args: { path: let/start, type: Num, value: 0 } }
-      - { tool: call, args: { function: add_line, to: return, over: args/lines, init: let/start } }
+    eval: 'let total = 0;
+
+      for (const line of lines) total = await add_line(total, line);
+
+      total'

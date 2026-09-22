@@ -1,40 +1,53 @@
 id: 15-cold-restart
-title: Resume a half-reduced lambda from the tree alone
+title: A function returns analysis together with the count of emitted records
 kind: program
-exercises: [cold restart, progress inferred from the tree, effect journal consulted, no repeated effect]
-start_state:
+exercises: [positional function calls, declared effect, typed object result]
+program:
   $lambda:
-    type: 'Lambda<{ alerts: Alert[] }, Result>'
-    function: resume_alert_summary
+    type: '(alerts: Alert[]) => Result'
+    function: analyze_alerts
     types:
-      Alert: '{ id: Text, level: Text }'
-      Result: '{ emitted: Num, summary: Text }'
+      Alert: '{ id: string, level: string }'
+      Result: '{ emitted: number, summary: string }'
     effects: [out.emit]
-    status: quiesced
-    note: "budget exhausted"
     instructions: |
-      function resume_alert_summary(alerts) -> Result
-
-        Write a one-line summary of the alerts in return/summary. (Emitting and counting are already done.)
-    args:
-      alerts:
-        - { id: "a1", level: "critical" }
-        - { id: "a2", level: "info" }
-        - { id: "a3", level: "critical" }
-    return:
-      emitted: 2
-    effects_journal:
-      - { seq: 1, capability: out.emit, function: emit, args_preview: '{ id: "a1" }', status: ok }
-      - { seq: 2, capability: out.emit, function: emit, args_preview: '{ id: "a3" }', status: ok }
+      Call `emit_critical_alerts` to emit every critical alert and get the count.
+      Ask `summarize_alerts` for a one-line description of all alerts. Return both results together.
+    codebase:
+      emit_critical_alerts:
+        description: Emit one output record { id } for every critical alert; return how many were emitted.
+        args: { alerts: 'Alert[]' }
+        returns: number
+        effects: [out.emit]
+        code: |
+          let n = 0
+          for (const alert of alerts) {
+            if (alert.level === "critical") { fx.out.emit({ id: alert.id }); n++ }
+          }
+          return n
+      summarize_alerts:
+        description: Write one line summarizing these alerts.
+        args: { alerts: 'Alert[]' }
+        returns: string
+        instructions: Summarize the number of alerts and how many are critical in one line.
+inputs:
+  alerts:
+    - { id: a1, level: critical }
+    - { id: a2, level: info }
+    - { id: a3, level: critical }
 expect:
-  checks:
-    - { kind: crisp, code: "value.emitted === 2" }
-    - { kind: judge, question: "Is the summary a one-line description of three alerts, two of them critical?", answer: true }
-notes: No new records may be emitted by the restarted episode; `return/emitted` is already correct.
+  value:
+    emitted: 2
+    summary: "Three alerts came in; two were critical and one was informational."
+  emitted: [{ id: a1 }, { id: a3 }]
 lint:
-  must: [the restarted episode's observation already shows the pre-filled return/emitted and the journal; only return/summary is written]
-  must_not: [any out.emit call, return/emitted written again]
+  must: [emit_critical_alerts emits and counts in one call, summarize_alerts supplies the prose field]
+  must_not: [the root emitting records itself]
 reference:
-  resume_alert_summary:
-    calls:
-      - { tool: write, args: { path: return/summary, type: Text, value: "Three alerts came in; two of them, a1 and a3, were critical and one was informational." } }
+  analyze_alerts:
+    eval: |-
+      const emitted = await emit_critical_alerts(alerts);
+      const summary = await summarize_alerts(alerts);
+      ({ emitted, summary })
+  summarize_alerts:
+    answer: "Three alerts came in; two were critical and one was informational."

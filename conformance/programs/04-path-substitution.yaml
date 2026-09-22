@@ -4,31 +4,28 @@ kind: program
 exercises: [code base, crisp filter, call over a list, locals feeding a later call]
 program:
   $lambda:
-    type: 'Lambda<{ reviews: Text[] }, Text>'
+    type: '(reviews: string[]) => string'
     function: delivery_theme
     instructions: |
-      function delivery_theme(reviews) -> Text
-
-        flags    = for each r in reviews: mentions_delivery(r)
-        selected = select_by_flags(reviews, flags)
-        return summarize_delivery(selected)
+      Use `Promise.all(reviews.map(...))` with `mentions_delivery` to get one flag per review.
+      Pass the reviews and flags to `select_by_flags`, then return `summarize_delivery(selected)`.
     codebase:
       mentions_delivery:
         description: Does this review mention delivery?
-        args: { review: Text }
-        returns: Bool
-        code: return lower(args.review).includes("delivery")
+        args: { review: string }
+        returns: boolean
+        code: return lower(review).includes("delivery")
       select_by_flags:
         description: The items whose flag (same position) is true.
-        args: { items: 'Text[]', flags: 'Bool[]' }
-        returns: 'Text[]'
-        code: return args.items.filter((_, i) => args.flags[i])
+        args: { items: 'string[]', flags: 'boolean[]' }
+        returns: 'string[]'
+        code: return items.filter((_, i) => flags[i])
       summarize_delivery:
         description: One short sentence about what a set of delivery-related reviews have in common.
-        args: { reviews: 'Text[]' }
-        returns: Text
+        args: { reviews: 'string[]' }
+        returns: string
         instructions: |
-          Write one sentence, at most 40 words, saying what `args/reviews` have in common about delivery.
+          Write one sentence, at most 40 words, saying what `reviews` have in common about delivery.
 inputs:
   reviews:
     - "Delivery took nine days. Never again."
@@ -42,15 +39,17 @@ expect:
     - { kind: crisp, code: "wordCount(value) <= 40" }
 lint:
   must:
-    - mentions_delivery called over args/reviews, once per review
+    - mentions_delivery called over reviews, once per review
     - select_by_flags used to pick the delivery-related reviews
     - summarize_delivery called once, over the selection only
   must_not: [the root reading every review's full text itself, an unrolled per-review summary]
 reference:
   delivery_theme:
-    calls:
-      - { tool: call, args: { function: mentions_delivery, to: let/flags, over: args/reviews } }
-      - { tool: call, args: { function: select_by_flags, to: let/selected, inputs: { items: args/reviews, flags: let/flags } } }
-      - { tool: call, args: { function: summarize_delivery, to: return, inputs: { reviews: let/selected } } }
+    eval: 'const flags = await Promise.all(reviews.map(async item => await mentions_delivery(item)));
+
+      const selected = await select_by_flags(reviews, flags);
+
+      await summarize_delivery(selected)'
   summarize_delivery:
-    answer: "Several reviews describe delivery as slow or mishandled, citing long waits, rough treatment by the courier, and unreliable tracking."
+    answer: Several reviews describe delivery as slow or mishandled, citing long waits, rough treatment
+      by the courier, and unreliable tracking.

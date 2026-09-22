@@ -1,47 +1,38 @@
 id: 11-iterate-degenerate
-title: A loop that cannot progress quiesces; the root writes the fallback
+title: Ordinary TypeScript control flow detects that an update made no progress
 kind: program
-exercises: [code base, call with init+until+max (iterate), quiesced call, root writes fallback]
+exercises: [code base, bounded TypeScript loop, no-progress detection, typed result]
 program:
   $lambda:
-    type: 'Lambda<{ text: Text }, Result>'
+    type: '(text: string) => Result'
     function: trim_long_words
     types:
-      Result: '{ text: Text, gave_up: Bool }'
+      Result: '{ text: string, gave_up: boolean }'
     instructions: |
-      function trim_long_words(text) -> Result
-
-        start = text
-        trimmed = remove_long_words applied repeatedly to start, at most 6 times, until short_enough
-        if that did not finish:
-            return { text: text, gave_up: true }
-        else:
-            return { text: trimmed, gave_up: false }
+      Use a TypeScript loop to call `remove_long_words` at most six times.
+      Stop once the text has fewer than three words. If an update leaves the text unchanged,
+      return the original text with `gave_up: true`. Otherwise return the trimmed text.
     codebase:
       remove_long_words:
         description: Remove every word longer than 20 letters from the text.
-        args: { state: Text }
-        returns: Text
-        code: return args.state.split(/\s+/).filter(w => w.length <= 20).join(" ")
+        args: { state: string }
+        returns: string
+        code: return state.split(/\s+/).filter(w => w.length <= 20).join(" ")
       short_enough:
         description: Does the text have fewer than 3 words?
-        args: { state: Text }
-        returns: Bool
-        code: return args.state.trim().split(/\s+/).length < 3
+        args: { state: string }
+        returns: boolean
+        code: return state.trim().split(/\s+/).length < 3
 inputs:
   text: "the quick brown fox"
 expect:
   value: { text: "the quick brown fox", gave_up: true }
-notes: >
-  No word is longer than 20 letters, so the state never changes; the call quiesces as degenerate
-  (repeated state) well before the max of 6 rounds.
+notes: No word is longer than 20 letters, so the first update leaves the state unchanged.
 lint:
-  must: [remove_long_words called with init+until+max (an iterate), the root reads the quiesced note and writes the fallback itself]
-  must_not: [retrying the loop unchanged, guessing a trimmed result]
+  must: [a bounded TypeScript loop calls remove_long_words, unchanged state sets gave_up]
+  must_not: [an unbounded loop, claiming to have shortened text when nothing changed]
 reference:
   trim_long_words:
-    calls:
-      - { tool: write, args: { path: let/start, type: Text, value: "the quick brown fox" } }
-      - { tool: call, args: { function: remove_long_words, to: let/trimmed, init: let/start, until: short_enough, max: 6 } }
-      - { tool: write, args: { path: return/text, type: Text, value: "the quick brown fox" } }
-      - { tool: write, args: { path: return/gave_up, type: Bool, value: true } }
+    eval: "let state = text;\nlet gaveUp = false;\nfor (let i = 0; i < 6; i++) {\n  const next = await remove_long_words(state);\n\
+      \  if (next === state) { gaveUp = true; break; }\n  state = next;\n  if (await short_enough(state))\
+      \ break;\n}\n({ text: gaveUp ? text : state, gave_up: gaveUp })"

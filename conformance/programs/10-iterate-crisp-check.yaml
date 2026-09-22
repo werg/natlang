@@ -1,30 +1,26 @@
 id: 10-iterate-crisp-check
-title: Refine until a crisp check passes
+title: Refine text in a bounded TypeScript loop until a crisp check passes
 kind: program
-exercises: [code base, call with init+until+max (iterate), fuzzy step, crisp check, mandatory max]
+exercises: [code base, bounded TypeScript loop, natural-language step, crisp check]
 program:
   $lambda:
-    type: 'Lambda<{ text: Text }, Text>'
+    type: '(text: string) => string'
     function: shorten_text
     instructions: |
-      function shorten_text(text) -> Text
-
-        draft = text
-        repeat at most 5 times, until is_short(draft):
-            draft = shorten(draft)
-        return draft
+      Refine the text with `shorten`, checking `is_short` before each update.
+      Use a maximum of five updates and return the latest draft.
     codebase:
       shorten:
         description: Make a text noticeably shorter without losing facts.
-        args: { text: Text }
-        returns: Text
+        args: { text: string }
+        returns: string
         instructions: |
-          Rewrite `args/text` to be noticeably shorter, at most 12 words. Keep every fact; drop filler.
+          Rewrite `text` to be noticeably shorter, at most 12 words. Keep every fact; drop filler.
       is_short:
         description: Is the text at most 12 words?
-        args: { text: Text }
-        returns: Bool
-        code: return wordCount(args.text) <= 12
+        args: { text: string }
+        returns: boolean
+        code: return wordCount(text) <= 12
 inputs:
   text: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday."
 expect:
@@ -32,12 +28,18 @@ expect:
     - { kind: crisp, code: "wordCount(value) <= 12" }
     - { kind: judge, question: "Does it say the shop is closed on Monday?", answer: true }
 lint:
-  must: [shorten called with init+until+max (an iterate) with max 5, until names is_short]
-  must_not: [a hand-driven loop in the root]
+  must: [the root uses a loop capped at five updates and checks is_short]
+  must_not: [an unbounded loop]
 reference:
   shorten_text:
-    calls:
-      - { tool: write, args: { path: let/draft, type: Text, value: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday." } }
-      - { tool: call, args: { function: shorten, to: return, init: let/draft, until: is_short, max: 5 } }
+    eval: 'const draft = "We would like to inform all of our valued customers that, due to circumstances
+      beyond our control, the shop will unfortunately be closed on Monday.";
+
+      let __state1 = draft;
+
+      for (let __i1 = 0; __i1 < 5; __i1++) { if (await is_short(__state1)) break; __state1 = await shorten(__state1);
+      }
+
+      __state1'
   shorten:
-    answer: "The shop will be closed on Monday."
+    answer: The shop will be closed on Monday.

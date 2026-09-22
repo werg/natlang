@@ -4,9 +4,9 @@ kind: program
 exercises: [leaf, finite-typed write, completion]
 program:
   $lambda:
-    type: 'Lambda<{ message: Text }, Bool>'
+    type: '(message: string) => boolean'
     instructions: |
-      Is `args/message` a complaint? Answer true or false.
+      Is `message` a complaint? Answer true or false.
 inputs:
   message: "The package arrived two weeks late and the box was crushed. I want a refund."
 expect:
@@ -16,4 +16,5 @@ lint:
   must_not: [construct a child, eval]
   max_actions: 3
 reference:
-  '': { answer: true }
+  ? ''
+  : answer: true

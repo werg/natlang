@@ -22,7 +22,7 @@ expect:
     - { kind: judge, question: "Does the summary mention that customers cannot log in or that payments are failing?", answer: true }
 lint:
   must:
-    - labels produced by one call of classify over args/tickets
+    - labels produced by one call of classify over tickets
     - is_urgent called over the non-spam tickets only
     - summarize called once, only because some ticket is urgent
   must_not: [the root labelling or judging tickets itself, one call per ticket]

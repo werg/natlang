@@ -4,31 +4,28 @@ kind: program
 exercises: [code base, crisp split, call over a list, crisp aggregate]
 program:
   $lambda:
-    type: 'Lambda<{ log: Text }, Num>'
+    type: '(log: string) => number'
     function: count_complaints
     instructions: |
-      function count_complaints(log) -> Num
-
-        lines = split_log(log)
-        flags = for each line in lines: is_complaint(line)
-        return count_true(flags)
+      Split the log with `split_log`, classify each line with `Promise.all(lines.map(...))` and
+      `is_complaint`, then return `count_true(flags)`.
     codebase:
       split_log:
         description: The log split into one entry per non-empty line.
-        args: { log: Text }
-        returns: 'Text[]'
-        code: return splitLines(args.log)
+        args: { log: string }
+        returns: 'string[]'
+        code: return splitLines(log)
       is_complaint:
         description: Is this customer comment a complaint?
-        args: { line: Text }
-        returns: Bool
+        args: { line: string }
+        returns: boolean
         instructions: |
-          Is the comment in `args/line` a complaint? Answer true or false.
+          Is the comment in `line` a complaint? Answer true or false.
       count_true:
         description: How many flags are true.
-        args: { flags: 'Bool[]' }
-        returns: Num
-        code: return args.flags.filter(Boolean).length
+        args: { flags: 'boolean[]' }
+        returns: number
+        code: return flags.filter(Boolean).length
 inputs:
   log: |
     Arrived broken, very disappointed.
@@ -59,32 +56,33 @@ lint:
     - split_log is crisp and produces the lines
     - is_complaint called over the split lines
     - count_true is crisp
-  must_not: [the root reading args/log directly]
+  must_not: [the root reading log directly]
 reference:
   count_complaints:
-    calls:
-      - { tool: call, args: { function: split_log, to: let/lines, inputs: { log: args/log } } }
-      - { tool: call, args: { function: is_complaint, to: let/flags, over: let/lines } }
-      - { tool: call, args: { function: count_true, to: return, inputs: { flags: let/flags } } }
+    eval: 'const lines = await split_log(log);
+
+      const flags = await Promise.all(lines.map(async item => await is_complaint(item)));
+
+      await count_true(flags)'
   is_complaint:
     answer_by:
-      "Arrived broken, very disappointed.": true
-      "Love it, thank you!": false
-      "Still waiting after three weeks. This is ridiculous.": true
-      "Works as described.": false
-      "The colour is nothing like the photo and nobody answers my emails.": true
-      "Five stars.": false
-      "Charged twice and no refund yet - terrible.": true
-      "Does what it says.": false
-      "Quick delivery, nicely packed.": false
-      "Stopped working after two days. Want my money back.": true
-      "Perfect gift.": false
-      "Great price.": false
-      "Instructions were missing and support hung up on me.": true
-      "Happy with the purchase.": false
-      "Would buy again.": false
-      "The zip broke the first time I used it, poor quality.": true
-      "Lovely.": false
-      "Exactly what I needed.": false
-      "Wrong size sent, return label never arrived, awful service.": true
-      "Nice and sturdy.": false
+      Arrived broken, very disappointed.: true
+      Love it, thank you!: false
+      Still waiting after three weeks. This is ridiculous.: true
+      Works as described.: false
+      The colour is nothing like the photo and nobody answers my emails.: true
+      Five stars.: false
+      Charged twice and no refund yet - terrible.: true
+      Does what it says.: false
+      Quick delivery, nicely packed.: false
+      Stopped working after two days. Want my money back.: true
+      Perfect gift.: false
+      Great price.: false
+      Instructions were missing and support hung up on me.: true
+      Happy with the purchase.: false
+      Would buy again.: false
+      The zip broke the first time I used it, poor quality.: true
+      Lovely.: false
+      Exactly what I needed.: false
+      Wrong size sent, return label never arrived, awful service.: true
+      Nice and sturdy.: false
