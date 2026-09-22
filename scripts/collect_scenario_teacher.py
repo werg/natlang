@@ -156,6 +156,8 @@ def _trace_path(output: Path, index: int) -> Path:
 
 
 def main():
+    from scripts.python_runtime_retirement import refuse_legacy_scope_eval
+    refuse_legacy_scope_eval("scripts/collect_scenario_teacher.py")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ir", type=Path)
     parser.add_argument("out", type=Path)

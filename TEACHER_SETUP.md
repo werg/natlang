@@ -296,7 +296,7 @@ Use at least `--max-len 6050` for a run meant to include every teacher turn;
 the next run should use `--max-len 8192`, subject to its GPU memory check.
 
 For an incoming frozen program batch, collect accepted whole-program teacher
-IR with `scripts/collect_scenario_teacher.py`, then pass its JSONL to
+IR with the Node collector, then pass its JSONL to
 `prepare_teacher_training.py --whole-ir`. Only attempts with successful
 semantic trace admission are selected; replay checks them again. The same
 `export_sft.py` step renders those turns for the next training corpus. Use a
@@ -307,7 +307,8 @@ frozen JSONL file, so completed ranges can run while other program files are
 still being generated. Preserve each range's raw trajectory and trace files.
 
 ```bash
-.venv/bin/python scripts/collect_scenario_teacher.py data/new-batch.ir.jsonl runs/new-batch.teacher.ir.jsonl \
+node ts-host/scripts/teacher-collector.mjs \
+  data/new-batch.ir.jsonl runs/new-batch.teacher.jobs runs/new-batch.teacher.ir.jsonl \
   --model-id Ternary-Bonsai-2-27B-PTQ1_0 --root-seed 907 --start 0 --limit 100
 .venv/bin/python scripts/prepare_teacher_training.py data/new-batch.teacher.turns.jsonl \
   --whole-ir runs/new-batch.teacher.ir.jsonl

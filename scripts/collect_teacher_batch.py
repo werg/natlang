@@ -219,6 +219,8 @@ def cleanup_obsolete(jobs: Path, output: Path, completed_indexes: set[int]) -> i
 
 
 def main() -> None:
+    from scripts.python_runtime_retirement import refuse_legacy_scope_eval
+    refuse_legacy_scope_eval("scripts/collect_teacher_batch.py")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("ir", type=Path)
     parser.add_argument("jobs", type=Path)

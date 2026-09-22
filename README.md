@@ -196,7 +196,7 @@ docker build -t natlang-prism-runtime -f docker/prism.Dockerfile docker
 # model:    prism-ml/Ternary-Bonsai-2-27B-gguf  Ternary-Bonsai-2-27B-PTQ1_0.gguf  -> models/
 # template: prism-ml/Ternary-Bonsai-2-27B-mlx-2bit chat_template.jinja -> models/templates/Ternary-Bonsai-2-27B.jinja
 scripts/serve_bonsai.sh 8081 32768 99 2 & # stop: docker stop natlang-bonsai; scripts/watch_bonsai.sh keeps it up
-scripts/run_teacher_generation.sh        # resumable coverage generation; rescans sources between waves
+scripts/run_teacher_generation.sh        # Node runtime; resumable coverage generation; rescans sources between waves
 .venv/bin/python scripts/baseline.py --decode server --server http://127.0.0.1:8081 --thinking 512 --temperature 0.6 \
     --system-file natlang/prompts/tools_delegate.md --alias call=call_function --verbose 23
 .venv/bin/python scripts/paraphrase.py --server http://127.0.0.1:8081     # paraphrases, kept only after a round trip

@@ -45,7 +45,7 @@ For current public APIs see [the TS host](../ts-host/README.md),
 .venv/bin/python -m pytest -q
 uv build --out-dir /tmp/natlang-infrastructure-dist
 .venv/bin/python scripts/materialize_ir.py data/programs.ir.jsonl data/turns.jsonl --trace-dir data/traces
-.venv/bin/python scripts/collect_scenario_teacher.py data/programs.ir.jsonl data/teacher.jsonl --model-id MODEL --root-seed 43 --limit 1
+node ts-host/scripts/teacher-collector.mjs data/programs.ir.jsonl runs/teacher.jobs data/teacher.jsonl --model-id MODEL --root-seed 43 --limit 1
 .venv/bin/python scripts/materialize_teacher_trajectory_ir.py data/teacher.jsonl data/teacher-turns.jsonl
 .venv/bin/python scripts/probe_engine_surface.py --model-id MODEL --out runs/engine-surface-pilot.json
 ```

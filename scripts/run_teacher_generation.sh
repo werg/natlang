@@ -21,12 +21,6 @@ STUDIO_JOBS="${TEACHER_STUDIO_JOBS:-runs/teacher-studio-coverage.jobs}"
 STUDIO_TURNS="${TEACHER_STUDIO_TURNS:-data/teacher-studio-coverage.turns.jsonl}"
 exec 9>runs/teacher-generation.lock
 flock -n 9 || { echo "another teacher generation pipeline holds runs/teacher-generation.lock" >&2; exit 3; }
-IMPORTS=()
-for old in runs/teacher-program-balanced-s909-pass2.ir.jsonl \
-           runs/teacher-program-balanced-s909-pass3.ir.jsonl; do
-  [ ! -f "$old" ] || IMPORTS+=(--import-ir "$old")
-done
-
 settle="${TEACHER_SETTLE_SECONDS:-5}"
 snapshot() {
   python scripts/build_teacher_coverage_selection.py "$SELECTION" --seed "$SEED"
@@ -51,13 +45,12 @@ while true; do
     snapshot
   done
   before="$(fingerprint)"
-  PYTHONPATH=. .venv/bin/python scripts/collect_teacher_batch.py \
+  node ts-host/scripts/teacher-collector.mjs \
     "$SELECTION" "$PROGRAM_JOBS" "$PROGRAM_OUT" \
     --server "$SERVER" --model-id "$MODEL" --root-seed "$SEED" \
     --limit "$(wc -l < "$SELECTION")" --workers "$WORKERS" \
     --segment-turns "$SEGMENT_TURNS" --segment-messages "$SEGMENT_MESSAGES" \
-    --cache-stable-tools \
-    "${IMPORTS[@]}"
+    --cache-stable-tools
   node ts-host/scripts/collect-studio-teacher.mjs "$STUDIO_CASES" "$STUDIO_JOBS" \
     --server "$SERVER" --model "$MODEL" --seed "$SEED" --workers "$WORKERS"
   PYTHONPATH=. .venv/bin/python scripts/materialize_studio_teacher.py \

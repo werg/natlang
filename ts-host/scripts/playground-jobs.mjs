@@ -77,7 +77,8 @@ export function createPlaygroundJobs(root) {
         if (!modelId || modelId.length > 128) fail('teacher model ID is required');
         const seed = Number(config.rootSeed ?? 0);
         if (!Number.isSafeInteger(seed) || seed < 0) fail('root seed must be a nonnegative integer');
-        return { cmd: 'python', args: ['scripts/collect_scenario_teacher.py', data,
+        return { cmd: 'node', args: ['ts-host/scripts/teacher-collector.mjs', data,
+          inside(`runs/playground-${name}-teacher.jobs`, ['runs']),
           inside(`data/${name}-teacher.jsonl`, ['data']), '--model-id', modelId,
           '--root-seed', String(seed), '--server', server] };
       }
