@@ -54,7 +54,7 @@ function inlineCodebase(entries: unknown, inherited: Record<string, string>): Re
     if (Object.keys(types).length) doc.types = types;
     if (Array.isArray(raw.effects) && raw.effects.length) doc.effects = raw.effects;
     if (raw.subtype === 'directory-reducer') doc.subtype = raw.subtype;
-    if (kind === 'code' && raw.engine && raw.engine !== 'quickjs-isolated') doc.engine = raw.engine;
+    if (kind === 'code' && raw.engine && raw.engine !== 'typescript-host') doc.engine = raw.engine;
     const children = inlineCodebase(raw.codebase, types);
     if (Object.keys(children).length) doc.codebase = children;
     return [name, doc];
@@ -230,7 +230,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
     if (!['function', 'directory-reducer'].includes(subtype))
       return reject(`${path}/subtype`, 'type-mismatch', 'function or directory-reducer', subtype);
     const node: LambdaNode = { ...common, nodeKind: 'lambda', kind: hasInstructions ? 'instructions' : 'code',
-      engine: String(body.engine ?? 'quickjs-isolated'), body: text && !text.endsWith('\n') ? text + '\n' : text,
+      engine: String(body.engine ?? 'typescript-host'), body: text && !text.endsWith('\n') ? text + '\n' : text,
       args: {}, return: MISSING, effects: [...(body.effects ?? []) as string[]],
       journal: structuredClone((body.effects_journal ?? []) as unknown[]),
       continuationNote: String(body.continuation_note ?? ''),
@@ -340,7 +340,7 @@ export function dump(value: Value, full = false): unknown {
   if (value.note) body.note = value.note;
   if (value.nodeKind === 'lambda') {
     body[value.kind] = value.body;
-    if (value.kind === 'code' && value.engine !== 'quickjs-isolated') body.engine = value.engine;
+    if (value.kind === 'code' && value.engine !== 'typescript-host') body.engine = value.engine;
     if (Object.keys(value.args).length) body.args = dump(value.args, full);
     if (value.return !== MISSING) body.return = dump(value.return, full);
     if (value.effects.length) body.effects = value.effects;

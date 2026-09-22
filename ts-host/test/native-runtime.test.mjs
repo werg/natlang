@@ -46,6 +46,17 @@ test('native reads may inspect read-only inputs', () => {
   assert.deepEqual(result.value, { head: 'manifest-1' });
 });
 
+test('scope execution can await checked host bridge calls', async () => {
+  const lam = buildPending({ $lambda: { type: 'Lambda<{}, Num>', instructions: 'Return a number.' } });
+  const runtime = new NativeRuntime();
+  const result = await runtime.evalScopeFor(lam,
+    'const helper = async (value: Num) => fx.natlang.scope(self.__natlangScopeToken, "call", [value]);\n' +
+    'return await helper(6);', 'eval', { args: {}, let: {} }, async (operation, args) => {
+      assert.equal(operation, 'call'); assert.deepEqual(args, [6]); return 7;
+    });
+  assert.equal(result.result, 7);
+});
+
 test('scope-eval-v1 persists locals, calls imports positionally and stages a named result', async () => {
   const lam = buildPending({ $lambda: { type: 'Lambda<{ flags: Bool[] }, Num>',
     instructions: 'function total(flags) -> Num\n  Count the true flags.\n', args: { flags: [true, false, true] },
@@ -70,9 +81,9 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.equal(loopMapped.kind, 'ok'); assert.deepEqual(loopMapped.value, [1, 0, 1]);
   const repairedMap = await session.applyAsync('eval', { code:
     'const repaired = flags.map(flag => await as_num(flag)); repaired' });
-  assert.equal(repairedMap.kind, 'ok'); assert.deepEqual(repairedMap.value, [1, 0, 1]);
+  assert.equal(repairedMap.kind, 'error');
   const sequenced = await session.applyAsync('eval', { code:
-    'const again: Num[] = flags.map(flag => as_num(flag));\n' +
+    'const again: Num[] = await Promise.all(flags.map(flag => as_num(flag)));\n' +
     'const finalCount: Num = await count_true(flags);\nfinalCount' });
   assert.equal(sequenced.kind, 'ok'); assert.equal(sequenced.value, 2);
   const names = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' })
@@ -89,7 +100,7 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' }).tools(nullSession), []);
 });
 
-test('failed scope child retains its cause and only reruns through explicit retry', async () => {
+test('failed scope child bubbles to eval without leaving a resumable model-facing local', async () => {
   const lam = buildPending({ $lambda: { type: 'Lambda<{ value: Num }, Num>',
     instructions: 'Ask the helper.', args: { value: 4 },
     codebase: { inspect: { args: { value: 'Num' }, returns: 'Num', instructions: 'Inspect the value.' } } } });
@@ -100,21 +111,18 @@ test('failed scope child retains its cause and only reruns through explicit retr
   } });
   const session = new NativeSession(runtime, lam, new TypeEnv());
   const first = await session.applyAsync('eval', { code: 'const answer = await inspect(value); answer' });
-  assert.equal(first.kind, 'quiesced');
-  const child = lam.let.answer;
-  assert.equal(child.note, 'original child failure, attempt 1');
+  assert.equal(first.kind, 'error');
+  assert.match(first.text, /original child failure/);
+  assert.equal(Object.hasOwn(lam.let, 'answer'), false);
 
   const pure = await session.applyAsync('eval', { code: 'const other = value + 1; other' });
   assert.equal(pure.kind, 'ok'); assert.equal(pure.value, 5);
-  assert.equal(lam.let.answer, child); assert.equal(child.note, 'original child failure, attempt 1');
+  assert.equal(Object.hasOwn(lam.let, 'answer'), false);
 
   const unchanged = await session.applyAsync('eval', { code: 'const answer = await inspect(value); answer' });
-  assert.equal(unchanged.kind, 'rejected'); assert.deepEqual(unchanged.codes, ['unchanged-retry']);
-  assert.match(unchanged.text, /await retry\(local\)/); assert.deepEqual(attempts, [1]);
-
-  const retried = await session.applyAsync('eval', { code: 'await retry(answer); answer' });
-  assert.equal(retried.kind, 'quiesced'); assert.deepEqual(attempts, [1, 2]);
-  assert.equal(lam.let.answer, child); assert.equal(child.note, 'original child failure, attempt 2');
+  assert.equal(unchanged.kind, 'error');
+  assert.deepEqual(attempts, [1, 1]);
+  assert.equal(Object.hasOwn(lam.let, 'answer'), false);
 });
 
 test('scope read_value slices Text by zero-based characters and lists by items', () => {
@@ -148,6 +156,21 @@ test('scope eval preserves static type when copying an ambiguous value', async (
   const result = await session.applyAsync('eval', { code: 'let state = initial; state' });
   assert.equal(result.kind, 'ok'); assert.equal(JSON.stringify(result.value), '{"blocked":[],"done":false}');
   assert.ok(lam.letTypes.state);
+});
+
+test('scope eval uses a checked helper return type for nested empty collections', async () => {
+  const lam = buildPending({ $lambda: {
+    type: 'Lambda<{ values: Text[] }, State>', types: { State: '{ values: Text[], done: Text[] }' },
+    instructions: 'Prepare the state.', args: { values: ['a'] }, codebase: {
+      prepare: { args: { values: 'Text[]' }, returns: 'State',
+        code: 'return { values: args.values, done: [] };' },
+    } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'const initial = await prepare(values); initial' });
+  assert.equal(result.kind, 'ok');
+  assert.deepEqual(lam.let.initial, { values: ['a'], done: [] });
+  assert.equal(lam.letTypes.initial.kind, 'name');
+  assert.equal(lam.letTypes.initial.name, 'State');
 });
 
 test('scope eval preserves collection types through find, filter, slice and map', async () => {
@@ -242,16 +265,16 @@ test('scope eval lowers ordinary accumulation and bounded repeat', async () => {
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
   const folded = await session.applyAsync('eval', { code:
     'let total: Num = 1; for (const item of values) { total = await add(total, item); } total' });
-  assert.equal(folded.kind, 'done'); assert.equal(folded.value, 6);
+  assert.equal(folded.kind, 'ok'); assert.equal(folded.value, 6);
   const repeated = await session.applyAsync('eval', { code:
     'let current: Num = 0; for (let attempt = 0; attempt < 8; attempt++) { ' +
     'if (await finished(current)) break; current = await step(current); } current' });
-  assert.equal(repeated.kind, 'done'); assert.equal(repeated.value, 3);
+  assert.equal(repeated.kind, 'ok'); assert.equal(repeated.value, 3);
   const whileSession = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
   const whileRepeated = await whileSession.applyAsync('eval', { code:
-    'let current = 0; let rounds = 0; while (!finished(current) && rounds < 8) { ' +
+    'current = 0; let rounds = 0; while (!(await finished(current)) && rounds < 8) { ' +
     'current = await step(current); rounds++; } current' });
-  assert.equal(whileRepeated.kind, 'done'); assert.equal(whileRepeated.value, 3);
+  assert.equal(whileRepeated.kind, 'ok'); assert.equal(whileRepeated.value, 3);
 });
 
 test('checked directory reducer metadata survives graph instantiation', () => {
@@ -282,7 +305,7 @@ test('native folder.apply installs directory reducer changes atomically', async 
   const root = buildPending(directoryProgram(folder));
   const session = new NativeSession(runtime, root, new TypeEnv());
   const result = await session.applyAsync('eval', { code: 'const report = await folder.apply(rewrite, "hi"); report' });
-  assert.equal(result.kind, 'done'); assert.equal(result.value, 'changed');
+  assert.equal(result.kind, 'ok'); assert.equal(result.value, 'changed');
   assert.equal(await folder.readText('message.txt'), 'hi\n');
 });
 

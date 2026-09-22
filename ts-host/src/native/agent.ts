@@ -582,7 +582,7 @@ export class NativeToolAgent {
 
   private toolsScope(session: NativeSession): any[] {
     const tools = [
-      tool('eval', 'Execute one TypeScript-like step in the persistent typed scope. Declarations persist; imported functions are called with await and positional values.',
+      tool('eval', 'Execute TypeScript in the persistent typed scope and the same host as crisp code. Declarations persist; imported functions are called with await and positional values.',
         { code: { type: 'string' } }, ['code']),
       tool('read_value', 'Inspect a variable or field/index selection without executing code.',
         { expression: { type: 'string' },

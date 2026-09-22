@@ -38,7 +38,7 @@ class ScopeEvalSurface(ToolSurface):
         if not self.missing(session) and not self.pending(session):
             return []
         tools = [
-            _tool("eval", "Execute one TypeScript-like step in the persistent typed scope. Declarations persist; imported functions are called with await and positional values.",
+            _tool("eval", "Execute TypeScript in the persistent typed scope and the same host as crisp code. Declarations persist; imported functions are called with await and positional values.",
                   {"code": {"type": "string"}}, ["code"]),
             _tool("read_value", "Inspect a variable or a field/index selection without executing code.",
                   {"expression": {"type": "string"},

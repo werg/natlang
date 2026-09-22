@@ -32,7 +32,7 @@ export class NativeSourceWorkspace {
     const args = Object.entries(definition.args ?? {}).map(([key, type]) => `${key}: ${type}`).join(', ');
     return { name, signature: `${name}(${args}) -> ${definition.returns}`,
       kind: definition.code === undefined ? 'instructions' : 'code',
-      engine: definition.code === undefined ? null : definition.engine ?? 'quickjs-isolated',
+      engine: definition.code === undefined ? null : definition.engine ?? 'typescript-host',
       functions: Object.keys(definition.uses ?? {}).sort(), revision: this.revision };
   }
 

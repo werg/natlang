@@ -9,7 +9,7 @@ variables, organised as a **code base** of `.nl` files (frontmatter plus a
 pseudocode body; `somefun.nl` with an optional companion folder `somefun/`;
 `.ts` files for exact functions; reuse through `uses` links). The author
 states the structure. The model carries it out through the current
-`scope-eval-v1` surface: a persistent TypeScript-like scope, ordinary awaited
+`scope-eval-v1` surface: a persistent TypeScript scope in the same Node host as crisp code, ordinary awaited
 positional imports, value actions (`read_value`, `write_value`,
 `return_value`), file actions (`list_files`, `search_files`, `read_file`,
 `write_file`, `edit_file`, `diff_files`), and explicit `mark_lines`,

@@ -55,7 +55,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       ...(def.types && Object.keys(def.types).length ? { types: def.types } : {}),
       ...(def.effects?.length ? { effects: def.effects } : {}),
       ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}),
-      ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
+      ...(kind === 'code' && def.engine && def.engine !== 'typescript-host' ? { engine: def.engine } : {}),
       ...(Object.keys(children).length ? { codebase: children } : {}) };
   }
   const stable = canonical(supplied);
@@ -66,7 +66,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       `${name.replace(/\?$/, '')}${name.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
     const kind = def.code !== undefined ? 'code' : 'instructions';
     const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${def.returns}>`, [kind]: def[kind],
-      ...(kind === 'code' && def.engine && def.engine !== 'quickjs-isolated' ? { engine: def.engine } : {}),
+      ...(kind === 'code' && def.engine && def.engine !== 'typescript-host' ? { engine: def.engine } : {}),
       args: inputs, types: def.types ?? {}, effects: def.effects ?? [],
       function: root, ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}) } });
     if (node.nodeKind !== 'lambda') throw new Error('internal graph root error');

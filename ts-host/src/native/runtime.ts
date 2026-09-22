@@ -7,6 +7,7 @@ import { MISSING, Reject, buildPending, cloneValue, coerce, dump, dumpState, isP
 import { changes, NativeTraceRecorder } from './trace.js';
 import { isLazyDict } from './host-tree.js';
 import { FileHandle, Folder, FolderHandle, FolderBusyError, type FolderTransaction } from './scoped-fs.js';
+import { compileScopeSnippet } from '../scope-compiler.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -188,6 +189,8 @@ export class NativeRuntime {
   private streamPosition = 0;
   private readonly signal?: AbortSignal;
   private readonly deadline?: number;
+  private readonly scopeBridges = new Map<string, (operation: string, args: unknown[]) => unknown>();
+  private scopeBridgeSequence = 0;
 
   constructor(options: NativeRuntimeOptions) {
     this.options = { maxEpisodes: options.maxEpisodes, maxDepth: options.maxDepth,
@@ -264,6 +267,15 @@ export class NativeRuntime {
     } finally { this.acting = previous; this.currentCallId = previousCallId; }
   }
 
+  async evalScopeFor(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>,
+    bridge: (operation: string, args: unknown[]) => unknown) {
+    const token = `${this.options.runId}:scope:${++this.scopeBridgeSequence}`;
+    this.scopeBridges.set(token, bridge);
+    try {
+      return await this.evalForAsync(node, code, path, { ...scope, __natlangScopeToken: token }, true);
+    } finally { this.scopeBridges.delete(token); }
+  }
+
   private recordHostEvents(path: string, events: HostEvent[]): void {
     this.events.push(...events);
     for (const event of events) if (event.operation !== 'typescript.eval')
@@ -273,6 +285,13 @@ export class NativeRuntime {
   private acting?: LambdaNode;
   private effect(cap: string, fn: string, args: unknown[]): unknown {
     this.checkInterruption();
+    if (cap === 'natlang' && fn === 'scope') {
+      const [token, operation, raw] = args;
+      const bridge = this.scopeBridges.get(String(token ?? ''));
+      if (!bridge) throw new Error('scope bridge is unavailable');
+      if (!Array.isArray(raw)) throw new Error('scope bridge arguments must be positional');
+      return bridge(String(operation ?? ''), raw);
+    }
     const name = `${cap}.${fn}`, node = this.acting;
     if (!node || !node.effects.includes(name)) throw new Error('effect-undeclared');
     const entry = { seq: node.journal.length + 1, capability: name, function: fn,
@@ -631,6 +650,8 @@ export class NativeSession {
   toolCalls = 0;
   surfaceName = 'tools-v3';
   readonly env: TypeEnv;
+  private scopeCallSequence = 0;
+  private readonly scopeLocalMutability = new Map<string, boolean>();
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
     this.env = outerEnv.child(lam.types);
@@ -1040,15 +1061,18 @@ export class NativeSession {
     return path;
   }
 
-  private scopePrefix(includeResult = true): string {
-    return [...(includeResult ? ['let result = self.locals.result;'] : []),
-      ...Object.keys(this.lam.args).map(name => `const ${name} = self.inputs[${JSON.stringify(name)}];`),
-      ...Object.entries(this.lam.let).filter(([name, value]) => name !== 'result' && !pending(value))
-        .map(([name]) => `let ${name} = self.locals[${JSON.stringify(name)}];`)].join('\n');
-  }
-
   private scopeInitializerType(expression: string, locals: Record<string, Type>): Type | undefined {
     const source = expression.trim();
+    const directCall = /^(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(source);
+    if (directCall && Object.hasOwn(this.lam.codebase, directCall[1]!)) {
+      const definition = this.lam.codebase[directCall[1]!] as Record<string, unknown>;
+      if (typeof definition.returns === 'string') return parseType(definition.returns);
+    }
+    const mappedCall = /^await\s+Promise\.all\([\s\S]*\.map\([\s\S]*?([A-Za-z_$][\w$]*)\s*\(/.exec(source);
+    if (mappedCall && Object.hasOwn(this.lam.codebase, mappedCall[1]!)) {
+      const definition = this.lam.codebase[mappedCall[1]!] as Record<string, unknown>;
+      if (typeof definition.returns === 'string') return parseType(`(${definition.returns})[]`);
+    }
     const collection = /^(.*)\.(find|filter|slice)\s*\(.*\)$/s.exec(source);
     const projected = /^(.*)\.map\s*\(\s*(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*\2((?:\.[A-Za-z_$][\w$]*|\[(?:\d+|"[^"]+"|'[^']+')\])+)\s*\)$/s.exec(source);
     const receiver = (collection?.[1] ?? projected?.[1] ?? source).trim();
@@ -1087,105 +1111,260 @@ export class NativeSession {
       Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
   }
 
-  private splitCallArgs(source: string): string[] {
-    const out: string[] = []; let start = 0, depth = 0, quote = '', escaped = false;
-    for (let i = 0; i < source.length; i++) {
-      const char = source[i]!;
-      if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
-      else if ('\"\'`'.includes(char)) quote = char;
-      else if ('([{'.includes(char)) depth++;
-      else if (')]}'.includes(char)) depth--;
-      else if (char === ',' && depth === 0) { out.push(source.slice(start, i).trim()); start = i + 1; }
-    }
-    const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
-  }
-
-  private splitScopeStatements(source: string): string[] {
-    const out: string[] = []; let start = 0, depth = 0, quote = '', escaped = false;
-    for (let i = 0; i < source.length; i++) {
-      const char = source[i]!;
-      if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
-      else if ('\"\'`'.includes(char)) quote = char;
-      else if ('([{'.includes(char)) depth++;
-      else if (')]}'.includes(char)) depth--;
-      else if ((char === ';' || char === '\n') && depth === 0) {
-        const part = source.slice(start, i).trim(); if (part) out.push(part); start = i + 1;
-      }
-    }
-    const tail = source.slice(start).trim(); if (tail) out.push(tail); return out;
-  }
-
-  private scopeConditional(source: string): { condition?: string; body: string }[] | undefined {
-    const text = source.trim(), branches: { condition?: string; body: string }[] = []; let at = 0;
-    const space = () => { while (at < text.length && /\s/.test(text[at]!)) at++; };
-    const balanced = (opening: string, closing: string): string | undefined => {
-      if (text[at] !== opening) return;
-      const start = at++; let depth = 1, quote = '', escaped = false;
-      for (; at < text.length; at++) {
-        const char = text[at]!;
-        if (quote) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === quote) quote = ''; }
-        else if ('"\'`'.includes(char)) quote = char;
-        else if (char === opening) depth++;
-        else if (char === closing && --depth === 0) { const value = text.slice(start + 1, at); at++; return value; }
-      }
-      return;
-    };
-    space();
-    for (;;) {
-      let condition: string | undefined;
-      if (/^if\b/.test(text.slice(at))) { at += 2; space(); condition = balanced('(', ')'); if (condition === undefined) return; space(); }
-      else if (/^else\b/.test(text.slice(at))) {
-        at += 4; space();
-        if (/^if\b/.test(text.slice(at))) { at += 2; space(); condition = balanced('(', ')'); if (condition === undefined) return; space(); }
-      } else return;
-      const body = balanced('{', '}'); if (body === undefined) return;
-      branches.push({ condition, body }); space();
-      if (at === text.length) return branches;
-      if (!/^else\b/.test(text.slice(at))) return;
+  private async scopeBridge(operation: string, raw: unknown[]): Promise<unknown> {
+    if (operation === 'fs') return this.scopeFsBridge(String(raw[0] ?? ''), raw.slice(1));
+    if (operation === 'handle') return this.scopeHandleBridge(raw[0], String(raw[1] ?? ''), raw.slice(2));
+    if (operation === 'directory') return this.scopeDirectoryBridge(String(raw[0] ?? ''), raw[1],
+      String(raw[2] ?? ''), Array.isArray(raw[3]) ? raw[3] : []);
+    if (operation !== 'call')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a checked natlang call', got: operation }]);
+    const functionName = String(raw[0] ?? '');
+    const positional = raw[1];
+    if (!Array.isArray(positional))
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: 'positional function arguments' }]);
+    const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
+    if (!definition)
+      throw new Reject([{ path: functionName, code: 'no-such-function' }]);
+    if (definition.subtype === 'directory-reducer' && positional.length && this.isScopeHandle(positional[0]))
+      return this.scopeDirectoryBridge('direct', positional[0], functionName, positional.slice(1));
+    const signature = definition.args as Record<string, string> ?? {};
+    const declared = Object.keys(signature);
+    const required = declared.filter(name => !name.endsWith('?')).length;
+    if (positional.length < required || positional.length > declared.length)
+      throw new Reject([{ path: functionName, code: 'bad-call',
+        expected: `${required} to ${declared.length} positional arguments`, got: String(positional.length) }]);
+    const values = Object.fromEntries(positional.map((value, index) =>
+      [declared[index]!.replace(/\?$/, ''), value]));
+    const hidden = `__scope_call_${++this.scopeCallSequence}`;
+    try {
+      const outcome = await this.applyAsync('call', { function: functionName, to: `let/${hidden}`, values });
+      if (outcome.kind !== 'done') throw new Error(`${functionName}: ${outcome.kind}: ${outcome.text}`);
+      return dump(this.lam.let[hidden]!) as Value;
+    } finally {
+      delete this.lam.let[hidden];
+      delete this.lam.letTypes[hidden];
     }
   }
 
-  private scopeFolder(expression: string): Folder | FolderHandle {
-    const name = expression.trim();
-    if (name === 'project' && this.lam.projectTransaction) return this.lam.projectTransaction.folder;
-    const value = Object.hasOwn(this.lam.let, name) ? this.lam.let[name] : this.lam.args[name];
-    if (!(value instanceof Folder) && !(value instanceof FolderHandle))
-      throw new Reject([{ path: 'code', code: 'type-mismatch', expected: 'a Folder value', got: typeof value }]);
+  private isScopeHandle(value: unknown): value is { __natlangHandle: Record<string, unknown> } {
+    return !!value && typeof value === 'object' && !!(value as Record<string, unknown>).__natlangHandle;
+  }
+
+  private resolveScopeHandle(value: unknown): FolderHandle | FileHandle {
+    if (!this.isScopeHandle(value))
+      throw new Reject([{ path: 'code', code: 'type-mismatch', expected: 'a folder or file handle' }]);
+    const descriptor = value.__natlangHandle, source = String(descriptor.source ?? ''),
+      name = String(descriptor.name ?? ''), path = String(descriptor.path ?? ''), kind = String(descriptor.kind ?? 'folder');
+    const base = source === 'project' ? this.lam.projectTransaction?.folder :
+      source === 'codebase' ? this.editableCodebase() :
+      source === 'arg' ? this.lam.args[name] : source === 'local' ? this.lam.let[name] : undefined;
+    if (!(base instanceof Folder) && !(base instanceof FolderHandle) && !(base instanceof FileHandle))
+      throw new Reject([{ path: name || source, code: 'type-mismatch', expected: 'a folder or file handle' }]);
+    const folder = base instanceof Folder ? base : base.folder;
+    const basePath = base instanceof Folder ? '' : base.path;
+    const joined = path ? folder.join(basePath, path) : basePath;
+    return kind === 'file' ? folder.file(joined) : folder.dir(joined);
+  }
+
+  private scopePortableHandle(value: unknown, descriptor?: Record<string, unknown>): unknown {
+    if (value instanceof FileHandle) return { __natlangHandle: { ...(descriptor ?? {}), path: value.path, kind: 'file' } };
+    if (value instanceof FolderHandle) return { __natlangHandle: { ...(descriptor ?? {}), path: value.path, kind: 'folder' } };
+    if (Array.isArray(value)) return value.map(item => this.scopePortableHandle(item, descriptor));
     return value;
   }
 
-  private async callDirectory(local: string, annotation: string | undefined, functionName: string,
-    folder: Folder | FolderHandle, expressions: string[], mode: 'apply' | 'direct'): Promise<NativeResult> {
-    if (this.lam.codebaseFolder && this.lam.codebasePaths[functionName])
-      this.refreshCodebaseFile(this.lam.codebasePaths[functionName]!);
+  private async scopeHandleBridge(rawHandle: unknown, method: string, rawArgs: unknown[]): Promise<unknown> {
+    const handle = this.resolveScopeHandle(rawHandle), owner = handle.folder;
+    if (['remove', 'moveTo'].includes(method) && owner === this.editableCodebase())
+      throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved or deleted' }]);
+    const callable = (handle as unknown as Record<string, unknown>)[method];
+    if (typeof callable !== 'function')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a Folder or FileHandle method', got: method }]);
+    const args = rawArgs.map(value => this.isScopeHandle(value) ? this.resolveScopeHandle(value) : value);
+    const codebaseWrite = handle instanceof FileHandle && owner === this.editableCodebase() &&
+      ['writeText', 'writeBytes', 'writeJson', 'editText'].includes(method);
+    if (codebaseWrite && !owner.isFile(handle.path))
+      throw new Reject([{ path: `codebase/${handle.path}`, code: 'not-writable', expected: 'an existing codebase file' }]);
+    const before = codebaseWrite ? owner.readBytesSync(handle.path) : undefined;
+    let value: unknown;
+    try { value = await (callable as Function).apply(handle, args); if (codebaseWrite) this.refreshCodebaseFile(handle.path); }
+    catch (error) { if (before) owner.writeBytes(handle.path, before); throw error; }
+    return this.scopePortableHandle(value, this.isScopeHandle(rawHandle) ? rawHandle.__natlangHandle : undefined);
+  }
+
+  private async scopeDirectoryBridge(mode: string, rawFolder: unknown, functionName: string,
+    positional: unknown[]): Promise<unknown> {
+    const handle = this.resolveScopeHandle(rawFolder);
+    if (!(handle instanceof FolderHandle))
+      throw new Reject([{ path: 'code', code: 'type-mismatch', expected: 'a folder handle' }]);
     const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
     if (!definition || definition.subtype !== 'directory-reducer')
-      throw new Reject([{ path: 'code', code: 'bad-call', expected: `${functionName} declared kind: directory-reducer` }]);
+      throw new Reject([{ path: functionName, code: 'bad-call', expected: 'a directory-reducer function' }]);
     const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
     const required = declared.filter(name => !name.endsWith('?')).length;
-    if (expressions.length < required || expressions.length > declared.length)
-      throw new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]);
-    if (annotation && !fitsType(parseType(String(definition.returns)), parseType(annotation.trim()), this.env))
-      throw new Reject([{ path: local, code: 'type-does-not-fit-slot', expected: annotation.trim(), got: String(definition.returns) }]);
-    const values: Record<string, unknown> = {};
-    for (let index = 0; index < expressions.length; index++) values[declared[index]!.replace(/\?$/, '')] =
-      this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[index]}); })()`,
-        false, 'eval', this.scopeView()).result;
+    if (positional.length < required || positional.length > declared.length)
+      throw new Reject([{ path: functionName, code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]);
+    const values = Object.fromEntries(positional.map((value, index) =>
+      [declared[index]!.replace(/\?$/, ''), value]));
     let tx: FolderTransaction;
-    try { tx = await folder.beginTransaction(false); }
+    try { tx = await handle.beginTransaction(false); }
     catch (error) {
       if (error instanceof FolderBusyError)
         throw new Reject([{ path: 'code', code: 'folder-busy', expected: 'the folder writer to become available' }]);
       throw error;
     }
+    const hidden = `__scope_directory_${++this.scopeCallSequence}`;
     try {
-      const result = await this.applyAsync('call', { function: functionName, to: `let/${local}`, values,
-        project_transaction: tx, reducer_mode: mode });
-      if (result.kind === 'done') {
-        const value = dump(this.lam.let[local]!) as Value; result.value = value; result.text = JSON.stringify(value);
-      }
-      return result;
+      const outcome = await this.applyAsync('call', { function: functionName, to: `let/${hidden}`, values,
+        project_transaction: tx, reducer_mode: mode === 'apply' ? 'apply' : 'direct' });
+      if (outcome.kind !== 'done') throw new Error(`${functionName}: ${outcome.kind}: ${outcome.text}`);
+      return dump(this.lam.let[hidden]!) as Value;
     } catch (error) { if (tx.open) tx.abort(); throw error; }
+    finally { delete this.lam.let[hidden]; delete this.lam.letTypes[hidden]; }
+  }
+
+  private async scopeFsBridge(method: string, values: unknown[]): Promise<unknown> {
+    if (!values.length || typeof values[0] !== 'string')
+      throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, ...)` }]);
+    const rawPath = values[0], root = rawPath === 'project' || rawPath.startsWith('project/') ? 'project' :
+      rawPath === 'codebase' || rawPath.startsWith('codebase/') ? 'codebase' : '';
+    if (!root) throw new Reject([{ path: rawPath, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
+    const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
+    if (!folder) throw new Reject([{ path: rawPath, code: 'bad-action', expected: 'a directory reducer project' }]);
+    const path = rawPath === root ? '' : rawPath.slice(root.length + 1);
+    if (method === 'exists') return folder.exists(path);
+    if (method === 'list') {
+      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
+      return folder.listFiles(path, options.pattern === undefined ? undefined : String(options.pattern))
+        .map(item => ({ ...item, path: `${root}/${item.path}` }));
+    }
+    if (method === 'readText' || method === 'readJson') {
+      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
+      const content = await folder.readText(path, options.startLine === undefined ? undefined : Number(options.startLine),
+        options.endLine === undefined ? undefined : Number(options.endLine));
+      return method === 'readJson' ? JSON.parse(content) : content;
+    }
+    if (method === 'writeText' || method === 'writeJson') {
+      if (values.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, value)` }]);
+      if (root === 'codebase' && !folder.isFile(path))
+        throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'an existing codebase file' }]);
+      const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
+      folder.writeText(path, method === 'writeText' ? String(values[1]) : `${JSON.stringify(values[1], null, 2)}\n`);
+      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+      catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
+      return null;
+    }
+    if (method === 'editText') {
+      if (values.length !== 2 || !values[1] || typeof values[1] !== 'object')
+        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.editText(path, { find, replaceWith, fuzzy? })' }]);
+      const options = values[1] as Record<string, unknown>, before = folder.readBytesSync(path);
+      const result = await folder.editText(path, String(options.find ?? ''), String(options.replaceWith ?? ''), options.fuzzy === true);
+      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
+      catch (error) { folder.writeBytes(path, before); throw error; }
+      return result;
+    }
+    if (method === 'diff') return folder.diffSync(path).changes.map(change =>
+      ({ path: `${root}/${change.path}`, kind: change.kind }));
+    if (method === 'remove') {
+      if (root === 'codebase') throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'codebase files cannot be deleted' }]);
+      folder.remove(path); return null;
+    }
+    if (method === 'move') {
+      if (values.length !== 2 || typeof values[1] !== 'string')
+        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.move(source, destination)' }]);
+      if (root !== 'project' || !(values[1] === 'project' || values[1].startsWith('project/')))
+        throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved' }]);
+      folder.move(path, values[1].slice(8)); return null;
+    }
+    throw new Reject([{ path: 'code', code: 'bad-call', expected: 'an fs method', got: method }]);
+  }
+
+  private async scopeEvalNative(code: string): Promise<NativeResult> {
+    if (!code.trim())
+      return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]));
+    const inputNames = Object.entries(this.lam.args)
+      .filter(([, value]) => !(value instanceof Folder) && !(value instanceof FolderHandle) && !(value instanceof FileHandle))
+      .map(([name]) => name);
+    const locals = Object.entries(this.lam.let)
+      .filter(([, value]) => !pending(value) && !(value instanceof Folder) &&
+        !(value instanceof FolderHandle) && !(value instanceof FileHandle));
+    const localBindings = locals.map(([name]) => ({ name,
+      mutable: this.scopeLocalMutability.get(name) ?? true,
+      annotation: this.lam.letTypes[name] ? formatType(this.lam.letTypes[name]!) : undefined }));
+    const helperNames = Object.keys(this.lam.codebase);
+    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: helperNames });
+    if (!compiled.ok || !compiled.program) {
+      const text = compiled.diagnostics.map(item =>
+        `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
+      return { kind: 'rejected', text, codes: [...new Set(compiled.diagnostics.map(item => item.code))] };
+    }
+    const handleFactory = `const __makeHandle = (descriptor: Record<string, unknown>) => {\n` +
+      `  const value: Record<string, unknown> = { __natlangHandle: descriptor };\n` +
+      `  const child = (kind: string, path: string) => __makeHandle({ ...descriptor, kind, path: ` +
+      `[String(descriptor.path ?? ""), path].filter(Boolean).join("/") });\n` +
+      `  Object.defineProperties(value, {\n` +
+      `    path: { get: () => String(descriptor.path ?? "") }, relativePath: { get: () => String(descriptor.path ?? "") },\n` +
+      `    name: { get: () => String(descriptor.path ?? "").split("/").at(-1) ?? "" },\n` +
+      `    dir: { value: (path: string) => child("folder", path) }, file: { value: (path: string) => child("file", path) },\n` +
+      `    entry: { value: (path: string) => child("folder", path) },\n` +
+      `    apply: { value: (fn: { __natlangFunction?: string }, ...args: unknown[]) => ` +
+      `fx.natlang.scope(self.__natlangScopeToken, "directory", ["apply", value, fn.__natlangFunction, args]) },\n` +
+      `  });\n` +
+      `  for (const method of ["exists","stat","remove","moveTo","readText","readBytes","readJson",` +
+      `"writeText","writeBytes","writeJson","editText","entries","files","folders","diff"]) ` +
+      `Object.defineProperty(value, method, { value: (...args: unknown[]) => ` +
+      `fx.natlang.scope(self.__natlangScopeToken, "handle", [value, method, ...args]) });\n` +
+      `  return value;\n};\n`;
+    const handleBindings = [
+      ...Object.entries(this.lam.args).filter(([, value]) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
+        .map(([name, value]) => `const ${name} = __makeHandle(${JSON.stringify({ source: 'arg', name,
+          path: '', kind: value instanceof FileHandle ? 'file' : 'folder' })});`),
+      ...Object.entries(this.lam.let).filter(([, value]) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
+        .map(([name, value]) => `const ${name} = __makeHandle(${JSON.stringify({ source: 'local', name,
+          path: '', kind: value instanceof FileHandle ? 'file' : 'folder' })});`),
+      `const codebase = __makeHandle({ source: "codebase", path: "", kind: "folder" });`,
+      ...(this.lam.projectTransaction ? [`const project = __makeHandle({ source: "project", path: "", kind: "folder" });`] : []),
+    ].join('\n');
+    const source = handleFactory + handleBindings + `\nconst fs = new Proxy({}, { get: (_, method) => (...args: unknown[]) => ` +
+      `fx.natlang.scope(self.__natlangScopeToken, "fs", [String(method), ...args]) });\n` +
+      `const __invoke = (name: string, args: unknown[]) => ` +
+      `fx.natlang.scope(self.__natlangScopeToken, "call", [name, args]);\n${compiled.program}\n` +
+      `return await ${compiled.entrypoint}(self.inputs, self.locals, __invoke);`;
+    try {
+      const evaluated = await this.runtime.evalScopeFor(this.lam, source, 'eval', this.scopeView(),
+        (operation, args) => this.scopeBridge(operation, args));
+      const output = evaluated.result as { result?: unknown; bindings?: Record<string, unknown> };
+      if (!output || typeof output !== 'object' || !output.bindings || typeof output.bindings !== 'object')
+        throw new Reject([{ path: 'code', code: 'bad-action', expected: 'an atomic scope transaction result' }]);
+      const annotations = new Map(compiled.bindings.map(binding => [binding.name, binding.annotation]));
+      const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
+      const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));
+      const staged: [string, Type, Value][] = [];
+      const inferred: Record<string, Type> = { ...this.lam.letTypes };
+      for (const [name, value] of Object.entries(output.bindings)) {
+        if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
+          throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
+        const materialized = this.isScopeHandle(value) ? this.resolveScopeHandle(value) : value;
+        let type = this.lam.letTypes[name];
+        const annotation = annotations.get(name);
+        if (annotation) type = parseType(annotation);
+        if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
+        if (!type) type = parseType(this.inferScopeType(materialized));
+        inferred[name] = type;
+        staged.push([name, type, coerce(materialized, type, this.env, `let/${name}`)]);
+      }
+      for (const [name, type, value] of staged) {
+        this.lam.letTypes[name] = type;
+        this.lam.let[name] = value;
+        if (mutability.has(name)) this.scopeLocalMutability.set(name, mutability.get(name)!);
+      }
+      const text = JSON.stringify(output.result ?? null);
+      return { kind: 'ok', text: text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`,
+        value: (output.result ?? null) as Value };
+    } catch (error) {
+      if (error instanceof Reject) return rejected(error);
+      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   private editableDefinitionSource(definition: Record<string, unknown>): string {
@@ -1195,7 +1374,7 @@ export class NativeSession {
     if (definition.types && Object.keys(definition.types as object).length) meta.types = definition.types;
     if (Array.isArray(definition.effects) && definition.effects.length) meta.effects = definition.effects;
     if (definition.subtype === 'directory-reducer') meta.kind = definition.subtype;
-    if (kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated') meta.engine = definition.engine;
+    if (kind === 'code' && definition.engine && definition.engine !== 'typescript-host') meta.engine = definition.engine;
     const front = YAML.stringify(meta).trimEnd(), body = String(definition[kind] ?? '').replace(/^\n+|\n+$/g, '') + '\n';
     return kind === 'code' ? `/*---\n${front}\n---*/\n${body}` : `---\n${front}\n---\n${body}`;
   }
@@ -1278,7 +1457,7 @@ export class NativeSession {
       args: meta.args ?? {}, returns: meta.returns, [isCode ? 'code' : 'instructions']:
         match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types: meta.types ?? previous.types ?? {},
       effects: meta.effects ?? [], subtype, codebase: {} };
-    if (isCode) updated.engine = String(meta.engine ?? 'quickjs-isolated');
+    if (isCode) updated.engine = String(meta.engine ?? 'typescript-host');
     // Parse all declared types before making the edited binding live.
     const env = this.env.child(Object.fromEntries(Object.entries(updated.types as Record<string, string>)
       .map(([key, value]) => [key, parseType(value)])));
@@ -1297,381 +1476,6 @@ export class NativeSession {
     };
     this.lam.codebase = Object.fromEntries(Object.keys(this.lam.codebase)
       .filter(name => this.lam.codebasePaths[name]).map(name => [name, link(this.lam.codebasePaths[name]!) ]));
-  }
-
-  private async scopeFsCall(code: string): Promise<NativeResult | undefined> {
-    const assigned = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+fs\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    const bare = /^\s*await\s+fs\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*$/.exec(code);
-    if (!assigned && !bare) return;
-    const local = assigned?.[1], annotation = assigned?.[2], method = assigned?.[3] ?? bare![1], raw = assigned?.[4] ?? bare![2]!;
-    const expressions = this.splitCallArgs(raw), values = expressions.map(expression => this.runtime.evalFor(this.lam,
-      `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result);
-    if (!values.length || typeof values[0] !== 'string')
-      throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, ...)` }]);
-    const rawPath = values[0], root = rawPath === 'project' || rawPath.startsWith('project/') ? 'project' :
-      rawPath === 'codebase' || rawPath.startsWith('codebase/') ? 'codebase' : '';
-    if (!root) throw new Reject([{ path: rawPath, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
-    const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
-    if (!folder) throw new Reject([{ path: rawPath, code: 'bad-action', expected: 'a directory reducer project' }]);
-    const path = rawPath === root ? '' : rawPath.slice(root.length + 1);
-    let value: unknown;
-    if (method === 'exists') value = await folder.exists(path);
-    else if (method === 'list') {
-      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
-      value = folder.listFiles(path, options.pattern === undefined ? undefined : String(options.pattern))
-        .map(item => ({ ...item, path: `${root}/${item.path}` }));
-    } else if (method === 'readText' || method === 'readJson') {
-      const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
-      const content = await folder.readText(path, options.startLine === undefined ? undefined : Number(options.startLine),
-        options.endLine === undefined ? undefined : Number(options.endLine));
-      value = method === 'readJson' ? JSON.parse(content) : content;
-    } else if (method === 'writeText' || method === 'writeJson') {
-      if (values.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, value)` }]);
-      if (root === 'codebase' && !folder.isFile(path)) throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'an existing codebase file' }]);
-      const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
-      folder.writeText(path, method === 'writeText' ? String(values[1]) : `${JSON.stringify(values[1], null, 2)}\n`);
-      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-      catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
-      value = null;
-    } else if (method === 'editText') {
-      if (values.length !== 2 || !values[1] || typeof values[1] !== 'object')
-        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.editText(path, { find, replaceWith, fuzzy? })' }]);
-      const options = values[1] as Record<string, unknown>, before = folder.readBytesSync(path);
-      value = await folder.editText(path, String(options.find ?? ''), String(options.replaceWith ?? ''), options.fuzzy === true);
-      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-      catch (error) { folder.writeBytes(path, before); throw error; }
-    } else if (method === 'diff') value = folder.diffSync(path).changes.map(change =>
-      ({ path: `${root}/${change.path}`, kind: change.kind }));
-    else if (method === 'remove') {
-      if (root === 'codebase') throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'codebase files cannot be deleted' }]);
-      folder.remove(path); value = null;
-    } else if (method === 'move') {
-      if (values.length !== 2 || typeof values[1] !== 'string')
-        throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.move(source, destination)' }]);
-      if (root !== 'project' || !(values[1] === 'project' || values[1].startsWith('project/')))
-        throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved' }]);
-      folder.move(path, values[1].slice(8)); value = null;
-    } else throw new Reject([{ path: 'code', code: 'bad-call', expected: 'an fs method', got: method }]);
-    if (local) {
-      const type = parseType(annotation?.trim() || this.inferScopeType(value));
-      const created = !this.lam.letTypes[local]; if (created) this.lam.letTypes[local] = type;
-      try { this.lam.let[local] = coerce(value, type, this.env, `let/${local}`); }
-      catch (error) { if (created) delete this.lam.letTypes[local]; throw error; }
-    }
-    return { kind: 'ok', text: JSON.stringify(value), value: value as Value };
-  }
-
-  private async scopeHandleCall(code: string): Promise<NativeResult | undefined> {
-    const assigned = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(await\s+)?([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    const bare = /^\s*await\s+([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\(([\s\S]*)\)\s*;?\s*$/.exec(code);
-    if (!assigned && !bare) return;
-    const local = assigned?.[1], annotation = assigned?.[2], receiverName = (assigned?.[4] ?? bare![1])!,
-      method = (assigned?.[5] ?? bare![2])!, raw = (assigned?.[6] ?? bare![3])!;
-    if (method === 'apply') return;
-    if (!['project', 'codebase'].includes(receiverName) && !Object.hasOwn(this.lam.args, receiverName) &&
-        !Object.hasOwn(this.lam.let, receiverName)) return;
-    const receiver = receiverName === 'project' && this.lam.projectTransaction ? this.lam.projectTransaction.folder.root() :
-      receiverName === 'codebase' ? this.editableCodebase().root() :
-      Object.hasOwn(this.lam.let, receiverName) ? this.lam.let[receiverName] : this.lam.args[receiverName];
-    if (!(receiver instanceof Folder) && !(receiver instanceof FolderHandle) && !(receiver instanceof FileHandle)) return;
-    const values = this.splitCallArgs(raw).map(expression => this.runtime.evalFor(this.lam,
-      `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result);
-    const owner = receiver instanceof Folder ? receiver : receiver.folder;
-    if (['remove', 'moveTo'].includes(method) && owner === this.editableCodebase())
-      throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved or deleted' }]);
-    const callable = (receiver as unknown as Record<string, unknown>)[method];
-    if (typeof callable !== 'function')
-      throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a Folder or FileHandle method', got: method }]);
-    const codebaseReceiver = receiver instanceof FileHandle && owner === this.editableCodebase();
-    if (codebaseReceiver && method.startsWith('write') && !owner.isFile(receiver.path))
-      throw new Reject([{ path: `codebase/${receiver.path}`, code: 'not-writable', expected: 'an existing codebase file' }]);
-    const before = codebaseReceiver && ['writeText', 'writeBytes', 'writeJson', 'editText'].includes(method) ?
-      owner.readBytesSync(receiver.path) : undefined;
-    let value: unknown;
-    if (method === 'editText' && values.length === 1 && values[0] && typeof values[0] === 'object') {
-      const options = values[0] as Record<string, unknown>;
-      value = await (callable as Function).call(receiver, String(options.find ?? ''),
-        String(options.replaceWith ?? ''), options.fuzzy === true);
-    } else value = await (callable as Function).apply(receiver, values);
-    if (before && receiver instanceof FileHandle) try { this.refreshCodebaseFile(receiver.path); }
-    catch (error) { owner.writeBytes(receiver.path, before); throw error; }
-    if (local) {
-      const type = parseType(annotation?.trim() || this.inferScopeType(value));
-      const created = !this.lam.letTypes[local]; if (created) this.lam.letTypes[local] = type;
-      try { this.lam.let[local] = coerce(value, type, this.env, `let/${local}`); }
-      catch (error) { if (created) delete this.lam.letTypes[local]; throw error; }
-    }
-    const display = value instanceof FileHandle || value instanceof FolderHandle ?
-      { handle: value instanceof FileHandle ? 'file' : 'folder', path: value.path } : value;
-    return { kind: 'ok', text: JSON.stringify(display), value: value as Value };
-  }
-
-  private async scopeEval(code: string): Promise<NativeResult> {
-    if (!code.trim()) return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript-like statement or expression' }]));
-    if (/\b(?:eval|Function|import|process|globalThis|require)\b/.test(code))
-      return rejected(new Reject([{ path: 'code', code: 'eval-forbidden', expected: 'the restricted typed scope language' }]));
-    if (code.includes('fs.')) try {
-      const result = await this.scopeFsCall(code); if (result) return result;
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    try {
-      const handleResult = await this.scopeHandleCall(code); if (handleResult) return handleResult;
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const conditional = this.scopeConditional(code);
-    if (conditional) try {
-      for (const branch of conditional) if (branch.condition === undefined || Boolean(this.runtime.evalFor(this.lam,
-        `(() => { ${this.scopePrefix()} return (${branch.condition}); })()`, false, 'eval', this.scopeView()).result))
-        return branch.body.trim() ? await this.scopeEval(branch.body) : { kind: 'ok', text: 'null', value: null };
-      return { kind: 'ok', text: 'null', value: null };
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const collected = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*\[\s*\]\s*;\s*for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+([\s\S]+?)\s*\)\s*\{\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*;\s*\1\.push\(\s*\5\s*\)\s*;?\s*\}\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (collected && Object.hasOwn(this.lam.codebase, collected[6]!)) {
-      const declared = `const ${collected[1]}${collected[2] ? `: ${collected[2]!.trim()}` : ''}`;
-      return this.scopeEval(`${declared} = await Promise.all((${collected[4]!.trim()}).map(${collected[3]} => ` +
-        `${collected[6]}(${collected[7]}))); ${collected[1]}`);
-    }
-    const ordinaryMapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*?)\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (ordinaryMapped && !code.includes('Promise.all') && Object.hasOwn(this.lam.codebase, ordinaryMapped[5]!)) {
-      const declared = `const ${ordinaryMapped[1]}${ordinaryMapped[2] ? `: ${ordinaryMapped[2]!.trim()}` : ''}`;
-      return this.scopeEval(`${declared} = await Promise.all((${ordinaryMapped[3]!.trim()}).map(${ordinaryMapped[4]} => ` +
-        `${ordinaryMapped[5]}(${ordinaryMapped[6]}))); ${ordinaryMapped[1]}`);
-    }
-    const retried = /^\s*await\s+retry\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/s.exec(code);
-    if (retried) try {
-      const local = retried[1]!, ref = this.resolve(`let/${local}`), node = ref.get();
-      if (!pending(node) || node.status !== 'quiesced')
-        throw new Reject([{ path: local, code: 'no-such-path', expected: 'a quiesced local computation' }]);
-      const outcome = await this.runtime.trigger(ref);
-      const result: NativeResult = { kind: outcome.kind,
-        text: `${ref.path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value };
-      if (outcome.kind === 'done') {
-        result.value = dump(this.lam.let[local]!) as Value; result.text = JSON.stringify(result.value);
-      }
-      return result;
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const whileRepeated = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*let\s+([A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*while\s*\(\s*!\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*&&\s*\4\s*<\s*(\d+)\s*\)\s*\{\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;\s*\4\s*\+\+\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
-    if (whileRepeated && Object.hasOwn(this.lam.codebase, whileRepeated[5]!) &&
-        Object.hasOwn(this.lam.codebase, whileRepeated[7]!)) try {
-      const initial = this.runtime.evalFor(this.lam,
-        `(() => { ${this.scopePrefix()} return (${whileRepeated[3]}); })()`,
-        false, 'eval', this.scopeView()).result;
-      const result = await this.applyAsync('call', { function: whileRepeated[7], to: `let/${whileRepeated[1]}`,
-        init: initial, until: whileRepeated[5], max: Number(whileRepeated[6]) });
-      if (result.kind === 'done') {
-        result.value = dump(this.lam.let[whileRepeated[1]!]!) as Value; result.text = JSON.stringify(result.value);
-      }
-      return result;
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const statements = this.splitScopeStatements(code), imported = Object.keys(this.lam.codebase);
-    if (statements.length > 1 && !/\bfor\s*\(/.test(code) &&
-        imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(code))) {
-      let last: NativeResult = { kind: 'ok', text: 'null', value: null };
-      for (let statement of statements) {
-        if (statement.includes('.map(') && !statement.includes('Promise.all') &&
-            imported.some(name => new RegExp(`\\b${name}\\s*\\(`).test(statement))) {
-          const head = /^\s*((?:const|let)\s+[A-Za-z_$][\w$]*(?:\s*:\s*[^=]+)?\s*=\s*)([\s\S]*)$/.exec(statement);
-          if (head) statement = `${head[1]}await Promise.all(${head[2]})`;
-        }
-        last = await this.scopeEval(statement);
-        if (!['ok', 'done'].includes(last.kind)) return last;
-      }
-      return last;
-    }
-    const uninitialized = /^\s*(?:let|const)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*;?\s*$/s.exec(code);
-    if (uninitialized) {
-      if (uninitialized[2]) this.lam.letTypes[uninitialized[1]!] = parseType(uninitialized[2].trim());
-      return { kind: 'ok', text: 'null', value: null };
-    }
-    const applied = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\.apply\(\s*([A-Za-z_$][\w$]*)(?:\s*,\s*([\s\S]*?))?\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (applied) try {
-      return await this.callDirectory(applied[1]!, applied[2], applied[4]!, this.scopeFolder(applied[3]!),
-        applied[5] ? this.splitCallArgs(applied[5]) : [], 'apply');
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const folded = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*for\s*\(\s*const\s+([A-Za-z_$][\w$]*)\s+of\s+([^\)]+)\)\s*\{\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*,\s*\4\s*\)\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
-    if (folded && Object.hasOwn(this.lam.codebase, folded[6]!)) try {
-      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[folded[6]!]!);
-      const definition = this.lam.codebase[folded[6]!] as Record<string, unknown>,
-        signature = definition.args as Record<string, string>, declared = Object.keys(signature);
-      if (declared.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a two-parameter accumulator function' }]);
-      const evaluate = (expression: string) => this.runtime.evalFor(this.lam,
-        `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result;
-      const initial = evaluate(folded[3]!), items = evaluate(folded[5]!), hidden = `__items_${this.actions}`;
-      this.lam.letTypes[hidden] = parseType(`(${signature[declared[1]!]})[]`);
-      this.lam.let[hidden] = coerce(items, this.lam.letTypes[hidden]!, this.env, `let/${hidden}`);
-      try {
-        const result = await this.applyAsync('call', { function: folded[6], to: `let/${folded[1]}`,
-          over: `let/${hidden}`, init: initial });
-        if (result.kind === 'done') {
-          result.value = dump(this.lam.let[folded[1]!]!) as Value; result.text = JSON.stringify(result.value);
-        }
-        return result;
-      } finally { delete this.lam.let[hidden]; delete this.lam.letTypes[hidden]; }
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const repeated = /^\s*let\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*([^;]+);\s*for\s*\(\s*let\s+[A-Za-z_$][\w$]*\s*=\s*0\s*;\s*[A-Za-z_$][\w$]*\s*<\s*(\d+)\s*;[^\)]*\)\s*\{\s*if\s*\(\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*\)\s*break\s*;\s*\1\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*\1\s*\)\s*;?\s*\}\s*\1\s*;?\s*$/s.exec(code);
-    if (repeated && Object.hasOwn(this.lam.codebase, repeated[5]!) && Object.hasOwn(this.lam.codebase, repeated[6]!)) try {
-      const initial = this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${repeated[3]}); })()`,
-        false, 'eval', this.scopeView()).result;
-      const result = await this.applyAsync('call', { function: repeated[6], to: `let/${repeated[1]}`,
-        init: initial, until: repeated[5], max: Number(repeated[4]) });
-      if (result.kind === 'done') {
-        result.value = dump(this.lam.let[repeated[1]!]!) as Value; result.text = JSON.stringify(result.value);
-      }
-      return result;
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const directReducer = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+([A-Za-z_$][\w$]*)\s*\(\s*([^,()]+)(?:\s*,\s*([\s\S]*?))?\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (directReducer && (this.lam.codebase[directReducer[3]!] as Record<string, unknown> | undefined)?.subtype === 'directory-reducer') try {
-      return await this.callDirectory(directReducer[1]!, directReducer[2], directReducer[3]!,
-        this.scopeFolder(directReducer[4]!), directReducer[5] ? this.splitCallArgs(directReducer[5]) : [], 'direct');
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
-    const mapped = /^\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*await\s+Promise\.all\(\s*([\s\S]+?)\.map\(\s*(?:async\s*)?(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*\)\s*\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (mapped && Object.hasOwn(this.lam.codebase, mapped[5]!)) {
-      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[mapped[5]!]!);
-      const definition = this.lam.codebase[mapped[5]!] as Record<string, unknown>;
-      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
-      const expressions = this.splitCallArgs(mapped[6]!);
-      if (expressions.length !== declared.length)
-        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${declared.length} positional arguments` }]));
-      try {
-        const evaluate = (expression: string) => this.runtime.evalFor(this.lam,
-          `(() => { ${this.scopePrefix()} return (${expression}); })()`, false, 'eval', this.scopeView()).result;
-        const values: Record<string, unknown> = {}, omitted: string[] = [];
-        expressions.forEach((expression, index) => {
-          const parameter = declared[index]!.replace(/\?$/, '');
-          if (expression.trim() === mapped[4]) omitted.push(parameter); else values[parameter] = evaluate(expression);
-        });
-        if (omitted.length !== 1) return rejected(new Reject([{ path: 'code', code: 'bad-call',
-          expected: 'the map item supplied to exactly one function parameter' }]));
-        const rawName = declared.find(name => name.replace(/\?$/, '') === omitted[0])!;
-        const itemType = signature[rawName]!, listType = parseType(`(${itemType})[]`), hidden = `__items_${this.actions}`;
-        this.lam.letTypes[hidden] = listType;
-        this.lam.let[hidden] = coerce(evaluate(mapped[3]!), listType, this.env, `let/${hidden}`);
-        try {
-          const result = await this.applyAsync('call', { function: mapped[5], to: `let/${mapped[1]}`,
-            over: `let/${hidden}`, values });
-          if (result.kind === 'done') {
-            const value = dump(this.lam.let[mapped[1]!]!) as Value; result.value = value; result.text = JSON.stringify(value);
-          }
-          return result;
-        } finally { delete this.lam.let[hidden]; delete this.lam.letTypes[hidden]; }
-      } catch (error) {
-        if (error instanceof Reject) return rejected(error);
-        return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-      }
-    }
-    const direct = /^\s*(?:(?:const|let)\s+)?([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;]+))?\s*=\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*(?:\1\s*;?)?\s*$/.exec(code);
-    if (direct && Object.hasOwn(this.lam.codebase, direct[3]!)) {
-      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[direct[3]!]!);
-      const definition = this.lam.codebase[direct[3]!] as Record<string, unknown>;
-      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
-      const expressions = this.splitCallArgs(direct[4]!);
-      const required = declared.filter(name => !name.endsWith('?')).length;
-      if (expressions.length < required || expressions.length > declared.length)
-        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]));
-      const values: Record<string, unknown> = {};
-      try {
-        for (let i = 0; i < expressions.length; i++) values[declared[i]!.replace(/\?$/, '')] =
-          this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[i]}); })()`,
-            false, 'eval', this.scopeView()).result;
-      } catch (error) { return { kind: 'error', text: error instanceof Error ? error.message : String(error) }; }
-      const result = await this.applyAsync('call', { function: direct[3], to: `let/${direct[1]}`, values });
-      if (result.kind === 'done') {
-        const value = dump(this.lam.let[direct[1]!]!) as Value; result.value = value;
-        result.text = JSON.stringify(value);
-      }
-      return result;
-    }
-    const bareCall = /^\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)\s*;?\s*$/.exec(code);
-    if (bareCall && Object.hasOwn(this.lam.codebase, bareCall[1]!)) {
-      if (this.lam.codebaseFolder) this.refreshCodebaseFile(this.lam.codebasePaths[bareCall[1]!]!);
-      const definition = this.lam.codebase[bareCall[1]!] as Record<string, unknown>;
-      const signature = definition.args as Record<string, string> ?? {}, declared = Object.keys(signature);
-      const expressions = this.splitCallArgs(bareCall[2]!);
-      const required = declared.filter(name => !name.endsWith('?')).length;
-      if (expressions.length < required || expressions.length > declared.length)
-        return rejected(new Reject([{ path: 'code', code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]));
-      const values: Record<string, unknown> = {};
-      try {
-        for (let i = 0; i < expressions.length; i++) values[declared[i]!.replace(/\?$/, '')] =
-          this.runtime.evalFor(this.lam, `(() => { ${this.scopePrefix()} return (${expressions[i]}); })()`,
-            false, 'eval', this.scopeView()).result;
-      } catch (error) { return { kind: 'error', text: error instanceof Error ? error.message : String(error) }; }
-      const hidden = `__discarded_${this.actions}`;
-      const result = await this.applyAsync('call', { function: bareCall[1], to: `let/${hidden}`, values });
-      if (result.kind === 'done') {
-        delete this.lam.let[hidden]; delete this.lam.letTypes[hidden];
-        return { kind: 'ok', text: 'null', value: null };
-      }
-      return result;
-    }
-    try {
-      const declarationPattern = /(?:^|[;\n])\s*(?:const|let)\s+([A-Za-z_$][\w$]*)(?:\s*:\s*([^=;\n]+))?\s*=\s*([^;\n]+)/g;
-      const declarations = [...code.matchAll(declarationPattern)], names = declarations.map(match => match[1]!);
-      const pieces = code.split(/;|\n/).map(part => part.trim()).filter(Boolean);
-      let rewritten = code, terminal: string | undefined;
-      const last = pieces.at(-1);
-      if (last && !/^(?:const|let)\b/.test(last)) {
-        terminal = last.startsWith('return ') ? last.slice(7).trim() : last;
-        rewritten = code.slice(0, code.lastIndexOf(last)) + `const __natlangResult = (${terminal});`;
-      }
-      // Pending locals are computations, not JavaScript nulls.  They are not
-      // injected into pure eval, so they must not be captured back as null and
-      // overwrite the useful quiescence note either.
-      const captureNames = [...new Set([
-        ...Object.entries(this.lam.let).filter(([, value]) => !pending(value)).map(([name]) => name),
-        ...names, 'result'])];
-      const captures = captureNames.map(name => `${JSON.stringify(name)}: (typeof ${name} === 'undefined' ? null : ${name})`).join(', ');
-      const body = `${this.scopePrefix(!names.includes('result'))}\n${rewritten}\nreturn { bindings: {${captures}}, result: ${terminal ? '__natlangResult' : 'null'} };`;
-      const output = this.runtime.evalFor(this.lam, body, true, 'eval', this.scopeView()).result as
-        { bindings: Record<string, unknown>; result: unknown };
-      const annotations = new Map(declarations.map(match => [match[1]!, match[2]?.trim()]));
-      const initializers = new Map(declarations.map(match => [match[1]!, match[3]!.trim()]));
-      const inferred: Record<string, Type> = { ...this.lam.letTypes };
-      const staged: [string, Type, Value][] = captureNames.flatMap(name => {
-        if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
-          throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
-        const value = output.bindings[name];
-        if (name === 'result' && value === null && !Object.hasOwn(this.lam.let, name) && !annotations.has(name)) return [];
-        let type = this.lam.letTypes[name] && !annotations.get(name) ? this.lam.letTypes[name]! : undefined;
-        if (!type && annotations.get(name)) type = parseType(annotations.get(name)!);
-        if (!type && initializers.has(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
-        if (!type) type = parseType(this.inferScopeType(value));
-        inferred[name] = type;
-        return [[name, type, coerce(value, type, this.env, `let/${name}`)]];
-      });
-      for (const [name, type, value] of staged) { this.lam.letTypes[name] = type; this.lam.let[name] = value; }
-      const text = JSON.stringify(output.result);
-      return { kind: 'ok', text: text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`,
-        value: output.result as Value };
-    } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
-    }
   }
 
   private checkEffects(value: Value, path: string): void {
@@ -1743,7 +1547,7 @@ export class NativeSession {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
-      return this.record(name, args, await this.scopeEval(String(args.code ?? '')));
+      return this.record(name, args, await this.scopeEvalNative(String(args.code ?? '')));
     }
     if (['run_function', 'for_each', 'fold', 'repeat'].includes(name)) {
       const functionName = String(args.function ?? '');
@@ -1935,7 +1739,7 @@ export class NativeSession {
         }
       }
       const leaf = { type: typeText, [kind]: definition[kind],
-        ...(kind === 'code' && definition.engine && definition.engine !== 'quickjs-isolated' ?
+        ...(kind === 'code' && definition.engine && definition.engine !== 'typescript-host' ?
           { engine: definition.engine } : {}), args: values, types: definition.types ?? {},
         effects: definition.effects ?? [], codebase: definition.codebase ?? {}, function: functionName,
         subtype: definition.subtype ?? 'function' };
@@ -1954,7 +1758,7 @@ export class NativeSession {
           state_name: stateName, check_name: checkName,
           step: { $lambda: leaf }, check: { $lambda: { type: `Lambda<{ ${checkName}: ${checkArgs[checkName]} }, ${check.returns}>`,
             [checkKind]: check[checkKind],
-            ...(checkKind === 'code' && check.engine && check.engine !== 'quickjs-isolated' ?
+            ...(checkKind === 'code' && check.engine && check.engine !== 'typescript-host' ?
               { engine: check.engine } : {}), function: String(args.until) } } } };
         destination = stateType;
       } else if (over !== undefined && init !== undefined) {

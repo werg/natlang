@@ -274,7 +274,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const prologue = [inputNames.length ? `const { ${inputNames.join(', ')} } = __inputs;` : '',
     ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
-    ...helperNames.map(name => `const ${name} = (...args: unknown[]) => __invoke(${JSON.stringify(name)}, args);`),
+    ...helperNames.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +
+      `__invoke(${JSON.stringify(name)}, args), { __natlangFunction: ${JSON.stringify(name)} });`),
     `const __natlang_finish = (result: unknown) => ({ result, bindings: ${capture} });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +

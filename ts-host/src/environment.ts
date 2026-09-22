@@ -12,7 +12,7 @@ const prelude = readFileSync(fileURLToPath(new URL('../prelude.js', import.meta.
 function snapshot(value: unknown): unknown {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
-  if (Array.isArray(value)) return Object.freeze(value.map(snapshot));
+  if (Array.isArray(value)) return Object.freeze(Array.from(value, snapshot));
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     const out: Record<string, unknown> = Object.create(null);
     for (const [key, item] of Object.entries(value)) out[key] = snapshot(item);
@@ -29,7 +29,7 @@ export function portable(value: unknown, seen = new Set<object>()): unknown {
   if (seen.has(value)) throw new TypeError('eval result contains a cycle');
   seen.add(value);
   if (Array.isArray(value)) {
-    const out = value.map(item => portable(item, seen));
+    const out = Array.from(value, item => portable(item, seen));
     seen.delete(value); return out;
   }
   if (Object.prototype.toString.call(value) !== '[object Object]')

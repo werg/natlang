@@ -27,7 +27,7 @@ function inline(def: FileDefinition): Record<string, unknown> {
   if (Object.keys(def.types).length) doc.types = def.types;
   if (def.effects?.length) doc.effects = def.effects;
   if (def.subtype !== 'function') doc.subtype = def.subtype;
-  if (kind === 'code' && def.engine && def.engine !== 'quickjs-isolated') doc.engine = def.engine;
+  if (kind === 'code' && def.engine && def.engine !== 'typescript-host') doc.engine = def.engine;
   if (Object.keys(def.codebase).length) doc.codebase = Object.fromEntries(Object.entries(def.codebase)
     .map(([name, child]) => [name, inline(child)]));
   return doc;
@@ -108,7 +108,7 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
       const body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
         returns: meta.returns, [ts ? 'code' : 'instructions']: body,
-        engine: String(meta.engine ?? 'quickjs-isolated'), types,
+        engine: String(meta.engine ?? 'typescript-host'), types,
         effects: meta.effects as string[] ?? [], codebase: children, function: functionName,
         subtype: subtype as FileDefinition['subtype'] };
     } finally { active.delete(file); }
@@ -137,7 +137,7 @@ function sourceDefinition(node: LambdaNode): Record<string, unknown> {
   if (Object.keys(node.typesSrc).length) definition.types = node.typesSrc;
   if (node.effects.length) definition.effects = node.effects;
   if (node.subtype !== 'function') definition.kind = node.subtype;
-  if (node.kind === 'code' && node.engine !== 'quickjs-isolated') definition.engine = node.engine;
+  if (node.kind === 'code' && node.engine !== 'typescript-host') definition.engine = node.engine;
   if (Object.keys(node.codebase).length) definition.codebase = node.codebase;
   return definition;
 }

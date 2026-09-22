@@ -52,8 +52,8 @@ test('native default tools-v4 prompt stays aligned with Python explicit tool age
   assert.equal(EXPLICIT_TOOLS_PROMPT, reference);
   for (const tool of ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'])
     assert.match(EXPLICIT_TOOLS_PROMPT, new RegExp(tool));
-  assert.match(EXPLICIT_TOOLS_PROMPT, /only filesystem interfaces/);
-  assert.match(EXPLICIT_TOOLS_PROMPT, /Never import `fs`/);
+  assert.match(EXPLICIT_TOOLS_PROMPT, /injects the scoped `fs` object/);
+  assert.match(EXPLICIT_TOOLS_PROMPT, /never import Node filesystem modules/);
   assert.match(EXPLICIT_TOOLS_PROMPT, /may not create, delete, rename, or move codebase files/);
   let seen;
   const agent = new NativeToolAgent(request => { seen = request.messages[0].content;
@@ -562,7 +562,7 @@ test('native trace preserves declared effect order before a failed eval', { skip
   assertTraceParity(runtime.trace.events.slice(1).map(event => {
     if (event.kind !== 'eval' || event.phase !== 'start') return event;
     const { declared_engine, ...rest } = event;
-    return { ...rest, engine: declared_engine };
+    return { ...rest, engine: declared_engine ?? 'quickjs-isolated' };
   }), expected.trace);
   assert.deepEqual(runtime.trace.reconstruct(), runtime.trace.finalState());
 });
@@ -578,7 +578,7 @@ test('native finite crisp reduction trace matches Python events apart from execu
   const actual = runtime.trace.events.slice(1).map(event => {
     if (event.kind !== 'eval' || event.phase !== 'start') return event;
     const { declared_engine, ...rest } = event;
-    return { ...rest, engine: declared_engine };
+    return { ...rest, engine: declared_engine ?? 'quickjs-isolated' };
   });
   assertTraceParity(actual, expected);
 });
@@ -715,7 +715,7 @@ test('native live Fold stream matches Python waiting and resumed trace', { skip:
   const actual = runtime.trace.events.slice(1).map(event => {
     if (event.kind !== 'eval' || event.phase !== 'start') return event;
     const { declared_engine, ...rest } = event;
-    return { ...rest, engine: declared_engine };
+    return { ...rest, engine: declared_engine ?? 'quickjs-isolated' };
   });
   assertTraceParity(actual, expected);
 });
