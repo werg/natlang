@@ -8,5 +8,5 @@ returns: IncidentState
 uses:
   step: ./step.nl
 ---
-function reduce(state, event) -> IncidentState
-  return step(state, event)
+function reduce(state, event, files) -> IncidentState
+  return step(state, event, files)

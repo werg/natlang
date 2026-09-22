@@ -30,7 +30,7 @@ export async function runSemanticTerminal({ root = resolve(here, '..'), sessionP
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
-    inputs: { files: new NodeFileTree(root) },
+    reducerInputs: () => ({ files: new NodeFileTree(root) }),
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, seedRoot, traceDirectory, modelTurn,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });

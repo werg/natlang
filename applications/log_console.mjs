@@ -11,7 +11,8 @@ export const emptyIncidentState = () => ({ cursor: -1, observed: 0, alerts: [], 
 
 /** Consume a real async log source through the shared terminal lifecycle. */
 export async function runLogConsole({ events, modelTurn, sessionPath, traceDirectory,
-  logs = new LogWorkspace(), output = process.stdout, seedRoot = 17 } = {}) {
+  logs = new LogWorkspace(), output = process.stdout, seedRoot = 17,
+  root = process.cwd() } = {}) {
   if (!events || !modelTurn) throw new Error('log console requires events and modelTurn');
   const host = new NatlangHost({ host: { logs, drainEvents: () => logs.drainEvents() }, mode: 'retained' });
   const store = sessionPath ? new TerminalSessionStore(sessionPath) : null;
@@ -20,7 +21,7 @@ export async function runLogConsole({ events, modelTurn, sessionPath, traceDirec
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
-    inputs: { files: new NodeFileTree(process.cwd()) },
+    reducerInputs: () => ({ files: new NodeFileTree(root) }),
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, modelTurn, seedRoot, traceDirectory,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });
@@ -40,6 +41,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
   }
   await runLogConsole({ events: jsonLines(), modelTurn: modelTurnFromCli(args),
+    root: resolve(cliFlag(args, '--root', '.')),
     sessionPath: resolve(cliFlag(args, '--session', '.natlang/log-session.json')),
     traceDirectory: resolve(cliFlag(args, '--traces', '.natlang/log-traces')) });
 }

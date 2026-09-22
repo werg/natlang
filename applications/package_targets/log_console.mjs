@@ -16,7 +16,7 @@ export function createTarget(context) {
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: join(context.package.root, ...context.target.reducer.split('/')),
       view: join(context.package.root, ...context.target.view.split('/')) }, initialState: checkpoint.state,
-    inputs: { files: new NodeFileTree(context.workspace) },
+    reducerInputs: () => ({ files: new NodeFileTree(context.workspace) }),
     initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
     modelTurn: context.modelTurn, seedRoot: 17, traceDirectory: context.traceDirectory,
     onCommit: commit => store.commit(commit, app.seenEventIds) });

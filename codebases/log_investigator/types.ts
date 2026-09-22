@@ -1,5 +1,5 @@
 export type LogEvent = { kind: Text, id: Text, cursor: Num, occurred_at: Num, arrived_at: Num, service: Text, code: Text, level: Text, message: Text };
-export type File = { kind: Text, text?: Text, bytes: Num };
+export type File = { kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num };
 export type Observation = { id: Text, status: Text, service: Text, code: Text, occurred_at: Num, count: Num, late: Bool };
 export type Evidence = { id: Text, occurred_at: Num, level: Text, message: Text };
 export type Judgement = { action: Text, severity: Text, claim: Text, uncertainty: Text };

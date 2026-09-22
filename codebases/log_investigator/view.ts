@@ -2,7 +2,6 @@
 engine: typescript-host
 args:
   state: IncidentState
-  files?: Dict<File>
 returns: TerminalView
 ---*/
 const state = args.state;

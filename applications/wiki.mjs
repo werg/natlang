@@ -6,12 +6,13 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 const validId = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]*$/.test(value);
 
 export class WikiWorkspace {
-  constructor(page, { profile, modelTurn } = {}) {
+  constructor(page, { profile, modelTurn, files } = {}) {
     if (!validId(page.id) || !Array.isArray(page.blocks) ||
         !profile?.model || !profile?.source || !Number.isSafeInteger(profile?.seed))
       throw new Error('invalid page or merge profile');
     this.profile = structuredClone(profile);
     this.modelTurn = modelTurn;
+    this.files = files;
     this.page = structuredClone(page);
     this.page.revision = hash(this.page.blocks);
     this.outputs = new Map(); this.events = [];
@@ -32,7 +33,10 @@ export class WikiWorkspace {
     if (!['quickjs', 'natlang'].includes(block.language) ||
         !['Text', 'Num', 'Bool'].includes(block.returns))
       throw new Error('invalid cell language or return type');
-    const definition = { args: { input: 'Text' }, returns: block.returns,
+    const withFiles = this.files && block.language === 'natlang';
+    const definition = { args: { input: 'Text', ...(withFiles ? { files: 'Dict<File>' } : {}) },
+      ...(withFiles ? { types: { File: '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }' } } : {}),
+      returns: block.returns,
       ...(block.language === 'natlang' ? { instructions: block.text } : { code: block.text }) };
     return new NativeSourceWorkspace({ cell: definition }, 'cell');
   }
@@ -96,7 +100,8 @@ export class WikiWorkspace {
     const block = this.page.blocks.find(row => row.id === blockId && row.kind === 'cell');
     if (!block) throw new Error('unknown cell');
     const source = this.#cell(block);
-    const result = await source.invoke('cell', { input }, { modelTurn: this.modelTurn,
+    const provider = block.language === 'natlang' && (typeof this.files === 'function' ? this.files() : this.files);
+    const result = await source.invoke('cell', { input, ...(provider ? { files: provider } : {}) }, { modelTurn: this.modelTurn,
       seedPolicy: { mode: 'derived', root: this.profile.seed } });
     const status = this.page.revision === pageRevision ? result.outcome : 'stale';
     const record = { status, page_revision: pageRevision,

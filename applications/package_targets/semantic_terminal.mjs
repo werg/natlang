@@ -24,7 +24,7 @@ export async function createTarget(context) {
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: join(context.package.root, ...context.target.reducer.split('/')),
       view: join(context.package.root, ...context.target.view.split('/')) },
-    inputs: { files: new NodeFileTree(context.workspace) },
+    reducerInputs: () => ({ files: new NodeFileTree(context.workspace) }),
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, seedRoot: 17, traceDirectory: context.traceDirectory,
     modelTurn: context.modelTurn, onCommit: commit => store.commit(commit, app.seenEventIds) });

@@ -1,6 +1,8 @@
 export { BrowserNatlangHost } from './host.js';
 export { BrowserNatlangClient } from './client.js';
 export { BrowserNatlangApplication, BrowserDomRenderer } from './application.js';
+export { resolveApplicationInputs } from '../application-inputs.js';
+export type { ApplicationInputs } from '../application-inputs.js';
 export type { BrowserAppEvent, BrowserAppSource, BrowserAppTransition,
   BrowserAppFailure, BrowserAppCommit, BrowserAppOptions, UiNode, UiAction } from './application.js';
 export type { BrowserModelSource, BrowserClientLoadOptions, BrowserClientModelStatus,

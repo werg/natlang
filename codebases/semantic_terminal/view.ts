@@ -2,7 +2,6 @@
 engine: typescript-host
 args:
   state: Session
-  files?: Dict<File>
 returns: TerminalView
 ---*/
 const state = args.state;

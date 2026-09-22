@@ -6,9 +6,9 @@ args:
   files?: Dict<File>
 returns: State
 ---
-function build(goal, tasks) -> State
+function build(goal, tasks, files) -> State
   initial = prepare(goal, tasks)
   if finished(initial):
     return initial
   else:
-    return repeat step(initial), until finished(state), at most one round per declared task
+    return repeat step(initial, files), until finished(state), at most one round per declared task

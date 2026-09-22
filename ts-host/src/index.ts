@@ -1,6 +1,8 @@
 export { TypeScriptEnvironment, portable } from './environment.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './environment.js';
 export type { ModelTurn, ModelTurnRequest, RunOptions, RunRequest, RunResult, Source } from './contracts.js';
+export { resolveApplicationInputs } from './application-inputs.js';
+export type { ApplicationInputs } from './application-inputs.js';
 export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
 export { TypeEnv, TypeSyntaxError, LOOP_VERDICT, parseType, formatType, fitsType, resultType } from './native/types.js';

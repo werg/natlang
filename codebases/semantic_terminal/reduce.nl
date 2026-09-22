@@ -8,5 +8,5 @@ returns: Session
 uses:
   step: ./step.nl
 ---
-function reduce(state, event) -> Session
-  return step(state, event)
+function reduce(state, event, files) -> Session
+  return step(state, event, files)

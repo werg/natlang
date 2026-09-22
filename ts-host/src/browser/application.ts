@@ -1,5 +1,6 @@
 import type { BrowserNatlangClient, BrowserClientRun } from './client.js';
 import type { BrowserRunRequest } from './host.js';
+import { resolveApplicationInputs, type ApplicationInputs } from '../application-inputs.js';
 
 export type BrowserAppEvent = { id: string; kind: string; value?: string };
 export type BrowserAppSource = { files: Record<string, string>; reducer: string; view: string };
@@ -12,6 +13,12 @@ export type BrowserAppFailure = { event: BrowserAppEvent | null;
 export type BrowserAppCommit<S> = { event: BrowserAppEvent; revision: number; state: S; reducerRun: BrowserClientRun };
 export type BrowserAppOptions<S, V> = { client: Pick<BrowserNatlangClient, 'run'>;
   source: BrowserAppSource; initialState: S;
+  /** Inputs supplied to both reducer and view runs; factories are evaluated per run. */
+  inputs?: ApplicationInputs;
+  /** Inputs supplied only to the semantic reducer; factories are evaluated per run. */
+  reducerInputs?: ApplicationInputs;
+  /** Inputs supplied only to the view; factories are evaluated per run. */
+  viewInputs?: ApplicationInputs;
   initialRevision?: number;
   /** Persist a completed reduction before publishing it or computing its view. */
   onCommit?: (commit: BrowserAppCommit<S>) => void | Promise<void>;
@@ -76,12 +83,14 @@ export class BrowserNatlangApplication<S, V> {
   }
 
   private async run(root: string, inputs: Record<string, unknown>,
-    revision: number, eventId: string): Promise<BrowserClientRun> {
+    revision: number, eventId: string, stage: 'reduce' | 'view'): Promise<BrowserClientRun> {
     const controller = new AbortController();
     this.active = controller;
     try {
       return await this.client.run({
-        source: { kind: 'files', root, files: this.source.files }, inputs,
+        source: { kind: 'files', root, files: this.source.files }, inputs: {
+          ...resolveApplicationInputs(this.options.inputs),
+          ...resolveApplicationInputs(stage === 'reduce' ? this.options.reducerInputs : this.options.viewInputs), ...inputs },
         modelTurn: this.options.modelTurn, validationFeedback: this.options.validationFeedback ?? 'local',
         signal: controller.signal,
         options: { ...this.options.runOptions,
@@ -102,7 +111,7 @@ export class BrowserNatlangApplication<S, V> {
     reducerRun: BrowserClientRun | null): Promise<BrowserAppTransition<S, V>> {
     let viewRun: BrowserClientRun;
     try { viewRun = await this.run(this.source.view, { state: structuredClone(this.stateValue) },
-      this.revisionValue, event?.id ?? 'initial-view'); }
+      this.revisionValue, event?.id ?? 'initial-view', 'view'); }
     catch (error) { return this.fail(event, 'view', null, String(error)); }
     if (viewRun.outcome.kind !== 'done')
       return this.fail(event, 'view', viewRun, viewRun.outcome.detail);
@@ -132,7 +141,7 @@ export class BrowserNatlangApplication<S, V> {
       let reducerRun: BrowserClientRun;
       try { reducerRun = await this.run(this.source.reducer, {
         state: structuredClone(this.stateValue), event: structuredClone(event),
-      }, this.revisionValue, event.id); }
+      }, this.revisionValue, event.id, 'reduce'); }
       catch (error) { return this.fail(event, 'reduce', null, String(error)); }
       if (reducerRun.outcome.kind !== 'done')
         return this.fail(event, 'reduce', reducerRun, reducerRun.outcome.detail);

@@ -1,8 +1,7 @@
 ---
-description: Check and run a pinned source revision as a child programme, using files for project context when required.
+description: Check and run a pinned source revision as a child programme.
 args:
   input: Text
-  files?: Dict<File>
 returns: RunReport
 ---
 function run(input) -> RunReport

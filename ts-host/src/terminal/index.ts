@@ -1,6 +1,7 @@
 export { TerminalNatlangApplication, createTerminalHost } from './application.js';
 export type { TerminalEvent, TerminalSource, TerminalTransition, TerminalFailure,
   TerminalCommit, TerminalRunner, TerminalApplicationOptions } from './application.js';
+export type { ApplicationInputs } from '../application-inputs.js';
 export { TerminalSessionStore } from './session.js';
 export type { TerminalCheckpoint } from './session.js';
 export { renderTerminalView } from './view.js';

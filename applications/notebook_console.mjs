@@ -11,7 +11,8 @@ const source = name => fileURLToPath(new URL(`../codebases/notebook_console/${na
 const empty = () => ({ requests: [], runs: [], status: 'idle' });
 
 export async function runNotebookConsole({ cells = STARTER_NOTEBOOK.cells, tables = STARTER_NOTEBOOK.tables, workspace,
-  modelTurn, sessionPath, traceDirectory, input, output, seedRoot = 17 } = {}) {
+  modelTurn, sessionPath, traceDirectory, input, output, seedRoot = 17,
+  root = process.cwd() } = {}) {
   if (!modelTurn || (!workspace && !Array.isArray(cells)))
     throw new Error('notebook console needs a modelTurn driver and a valid workspace or cell collection');
   const notebook = workspace ?? new NotebookWorkspace(cells, tables, { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
@@ -21,7 +22,7 @@ export async function runNotebookConsole({ cells = STARTER_NOTEBOOK.cells, table
   let app;
   app = new TerminalNatlangApplication({ runner: host,
     source: { reducer: source('reduce.nl'), view: source('view.ts') },
-    inputs: { files: new NodeFileTree(process.cwd()) },
+    reducerInputs: () => ({ files: new NodeFileTree(root) }),
     initialState: checkpoint.state, initialRevision: checkpoint.revision,
     seenEventIds: checkpoint.seen_event_ids, modelTurn, traceDirectory, seedRoot,
     onCommit: commit => store?.commit(commit, app.seenEventIds) });
@@ -44,6 +45,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const config = path ? JSON.parse(readFileSync(resolve(path), 'utf8')) : STARTER_NOTEBOOK;
   await runNotebookConsole({ cells: config.cells, tables: config.tables ?? {},
     modelTurn: modelTurnFromCli(args),
+    root: resolve(cliFlag(args, '--root', '.')),
     sessionPath: resolve(cliFlag(args, '--session', '.natlang/notebook-session.json')),
     traceDirectory: resolve(cliFlag(args, '--traces', '.natlang/notebook-traces')) });
 }

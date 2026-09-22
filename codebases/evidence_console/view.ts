@@ -2,7 +2,6 @@
 engine: typescript-host
 args:
   state: ConsoleState
-  files?: Dict<File>
 returns: TerminalView
 ---*/
 const state = args.state, answer = state.answers.at(-1), question = state.questions.at(-1);

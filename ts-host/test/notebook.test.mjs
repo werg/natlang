@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NatlangHost, TypeScriptEnvironment } from '../dist/index.js';
+import { NatlangHost, NodeFileTree, TypeScriptEnvironment } from '../dist/index.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { fileURLToPath } from 'node:url';
 
 const path = fileURLToPath(new URL('../../codebases/notebook/run.nl', import.meta.url));
 
 test('natlang orders SQL and TypeScript cells, then explains the checked samples', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-notebook-files-'));
+  writeFileSync(join(folder, 'schema.md'), 'facts has category and amount columns.');
   const notebook = new NotebookWorkspace([
     { id: 'totals', engine: 'sqlite', needs: [], description: 'aggregate amounts by category',
       source: 'SELECT category, SUM(amount) AS total FROM facts GROUP BY category ORDER BY category' },
@@ -28,16 +33,16 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
     if (prompt.includes('function run(')) return { calls: [
       ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal' } }],
-      ['call', { function: 'step', to: 'let/finished', until: 'complete', init: 'let/initial', max: 3 }],
+      ['call', { function: 'step', to: 'let/finished', until: 'complete', init: 'let/initial', max: 3, inputs: { files: 'args/files' } }],
       ['call', { function: 'explain', to: 'let/answer', inputs: {
-        question: 'args/question', state: 'let/finished' } }],
+        question: 'args/question', state: 'let/finished', files: 'args/files' } }],
       ['call', { function: 'attach', to: 'return', inputs: {
         state: 'let/finished', answer: 'let/answer' } }],
     ], completion_tokens: 1 };
     if (prompt.includes('function step(')) return { calls: [
       ['call', { function: 'ready_cells', to: 'let/ready', inputs: { state: 'args/state' } }],
       ['call', { function: 'choose', to: 'let/chosen', inputs: {
-        ready: 'let/ready', goal: 'args/state/goal' } }],
+        ready: 'let/ready', goal: 'args/state/goal', files: 'args/files' } }],
       ['call', { function: 'advance', to: 'return', inputs: {
         state: 'args/state', chosen: 'let/chosen' } }],
     ], completion_tokens: 1 };
@@ -51,7 +56,7 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
   };
   try {
     const result = await host.run({ source: { kind: 'file', path },
-      inputs: { goal: 'view', question: 'What are the category totals?' }, modelTurn,
+      inputs: { goal: 'view', question: 'What are the category totals?', files: new NodeFileTree(folder) }, modelTurn,
       options: { model: { segment_turns: 2 } } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'done');
@@ -66,7 +71,7 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
     assert.equal((await notebook.execute('view')).status, 'ok');
     assert.deepEqual(notebook.outputs.get('view').value, [
       { label: 'ALPHA', total: 3 }, { label: 'BETA', total: 4 } ]);
-  } finally { host.close(); notebook.close(); }
+  } finally { host.close(); notebook.close(); rmSync(folder, { recursive: true, force: true }); }
 });
 
 test('SQL cells reject writes and preserve NULL distinctly from empty text', async () => {

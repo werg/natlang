@@ -29,7 +29,7 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
         if (prompt.includes('function build(')) return { calls: [
           ['read', { path: 'args/files/input.txt/text' }],
           ['call', { function: 'prepare', to: 'let/initial', inputs: { goal: 'args/goal', tasks: 'args/tasks' } }],
-          ['call', { function: 'step', to: 'return', until: 'finished', init: 'let/initial', max: Math.max(1, tasks.length) }],
+          ['call', { function: 'step', to: 'return', until: 'finished', init: 'let/initial', max: Math.max(1, tasks.length), inputs: { files: 'args/files' } }],
         ], completion_tokens: 1 };
         if (prompt.includes('function step(')) return { calls: cyclic ? [
           ['call', { function: 'ready_tasks', to: 'let/ready', inputs: { state: 'args/state' } }],

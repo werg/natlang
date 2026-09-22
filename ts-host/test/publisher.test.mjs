@@ -28,11 +28,11 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
         span_ids: 'args/span_ids', collection_revision: 'args/collection_revision' } }],
       ['call', { function: 'plan', to: 'let/outline', inputs: {
         brief: 'args/brief', passages: 'let/passages', table_ids: 'args/table_ids',
-        asset_ids: 'args/asset_ids' } }],
+        asset_ids: 'args/asset_ids', files: 'args/files' } }],
       ['call', { function: 'compose', to: 'let/document', inputs: {
         brief: 'args/brief', outline: 'let/outline', passages: 'let/passages',
         collection_revision: 'args/collection_revision', table_ids: 'args/table_ids',
-        asset_ids: 'args/asset_ids' } }],
+        asset_ids: 'args/asset_ids', files: 'args/files' } }],
       ['call', { function: 'check', to: 'let/checked', inputs: { document: 'let/document' } }],
       ['call', { function: 'prepare', to: 'return', inputs: {
         document: 'let/document', target: 'args/target' } }],

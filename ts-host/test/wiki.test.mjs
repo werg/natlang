@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NatlangHost } from '../dist/index.js';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { NatlangHost, NodeFileTree } from '../dist/index.js';
 import { WikiWorkspace } from '../../applications/wiki.mjs';
 
 const mergePath = fileURLToPath(new URL('../../codebases/wiki/merge_page.nl', import.meta.url));
@@ -62,6 +65,28 @@ test('natlang merges two page edits and runs a pinned, limited child cell', asyn
     assert.equal(cell.value.value_text, '"HELLO"');
     assert.ok(wiki.trace('demo').length > 0);
   } finally { host.close(); }
+});
+
+test('wiki binds files only to natlang cells and refreshes the provider per run', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-wiki-files-'));
+  writeFileSync(join(folder, 'note.txt'), 'first note');
+  let turns = 0;
+  const wiki = new WikiWorkspace({ id: 'files', blocks: [
+    { id: 'quick', kind: 'cell', language: 'quickjs', returns: 'Text', text: 'return args.input;' },
+    { id: 'natural', kind: 'cell', language: 'natlang', returns: 'Text', text: 'Read the named project note and return its text.' },
+  ] }, { profile, files: () => new NodeFileTree(folder), modelTurn: request => {
+    if (/return: (?:complete|written)/.test(String(request.messages.at(-1)?.content ?? '')))
+      return { calls: [], text: 'done', completion_tokens: 1 };
+    turns++;
+    if (turns % 2 === 1) return { calls: [['read', { path: 'args/files/note.txt/text' }]], completion_tokens: 1 };
+    return { calls: [['write', { path: 'return', value: turns === 2 ? 'first note' : 'second note', done: 1 }]], completion_tokens: 1 };
+  } });
+  try {
+    assert.equal((await wiki.runCell('quick', 'quick value')).value_text, '"quick value"');
+    assert.equal((await wiki.runCell('natural', 'question')).value_text, '"first note"');
+    writeFileSync(join(folder, 'note.txt'), 'second note');
+    assert.equal((await wiki.runCell('natural', 'question')).value_text, '"second note"');
+  } finally { wiki.close?.(); rmSync(folder, { recursive: true, force: true }); }
 });
 
 test('mismatched profiles, missing updates and invalid merged cells are rejected', async () => {

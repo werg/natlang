@@ -60,6 +60,35 @@ test('natlang can generate the view while the app contract remains independent o
   } finally { await app.close(); await client.close(); }
 });
 
+test('browser semantic reducer receives per-run textFileTree while crisp view remains portable', async () => {
+  const api = await import('../dist/browser/natlang.js');
+  const project = {
+    'types.ts': 'export type Counter = { count: Num, note: Text }; export type UiEvent = { id: Text, kind: Text }; export type View = { text: Text }; export type File = { kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num };',
+    'reduce.nl': '---\nargs:\n  state: Counter\n  event: UiEvent\n  files: Dict<File>\nreturns: Counter\n---\nRead args/files/note.txt/text and retain it while incrementing the count.',
+    'view.ts': '/*---\nengine: typescript-host\nargs:\n  state: Counter\nreturns: View\n---*/\nreturn { text: `${args.state.count}:${args.state.note}` };',
+    'note.txt': 'first note',
+  };
+  let calls = 0;
+  const client = new api.BrowserNatlangClient();
+  const app = new api.BrowserNatlangApplication({ client,
+    source: { files: project, reducer: 'reduce.nl', view: 'view.ts' },
+    initialState: { count: 0, note: '' }, reducerInputs: () => ({ files: api.textFileTree(project) }),
+    modelTurn: request => {
+      if (String(request.messages.at(-1)?.content ?? '').includes('return: complete'))
+        return { calls: [], text: 'done', completion_tokens: 1 };
+      calls++;
+      if (calls % 2 === 0) return { calls: [['write', { path: 'return', value:
+        calls === 2 ? { count: 1, note: 'first note' } : { count: 2, note: 'second note' }, done: 1 }]], completion_tokens: 1 };
+      return { calls: [['read', { path: 'args/files/note.txt/text' }]], completion_tokens: 1 };
+    } });
+  try {
+    assert.equal((await app.start()).view.text, '0:');
+    assert.equal((await app.dispatch({ id: 'one', kind: 'request' })).view.text, '1:first note');
+    project['note.txt'] = 'second note';
+    assert.equal((await app.dispatch({ id: 'two', kind: 'request' })).view.text, '2:second note');
+  } finally { await app.close(); await client.close(); }
+});
+
 test('applications repair validation locally by default and may opt into caller feedback', async () => {
   const { BrowserNatlangApplication } = await api();
   const requests = [];

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PassThrough, Writable } from 'node:stream';
 import { NatlangHost, TerminalEventQueue, TerminalNatlangApplication, TerminalSessionStore,
-  TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView, runTerminalShell } from '../dist/index.js';
+  NodeFileTree, TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView, runTerminalShell } from '../dist/index.js';
 import { RecipeTerminal } from '../../applications/semantic_terminal.mjs';
 import { NotebookWorkspace } from '../../applications/notebook.mjs';
 import { CommandRecipeLibrary } from '../../applications/terminal_recipes.mjs';
@@ -64,6 +64,35 @@ test('terminal application serializes events, persists state, and restores dupli
     assert.equal(saved.revision, 2); assert.equal(saved.state.count, 2);
     assert.deepEqual(saved.seen_event_ids, ['one', 'two']);
     assert.equal(readFileSync(`${store.path}.events.jsonl`, 'utf8').trim().split('\n').length, 2);
+  } finally { await app.close(); host.close(); rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('terminal reducer gets a fresh lazy file view while crisp view stays file-free', async () => {
+  const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-files-'));
+  const types = join(folder, 'types.ts'), reducer = join(folder, 'reduce.nl'), view = join(folder, 'view.ts');
+  writeFileSync(join(folder, 'note.txt'), 'first note');
+  writeFileSync(types, 'export type State = { count: Num, note: Text }; export type Event = { id: Text, kind: Text }; export type View = { text: Text }; export type File = { kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num };');
+  writeFileSync(reducer, '---\nargs:\n  state: State\n  event: Event\n  files: Dict<File>\nreturns: State\n---\nRead args/files/note.txt/text and retain it while incrementing the count.');
+  writeFileSync(view, '/*---\nengine: typescript-host\nargs:\n  state: State\nreturns: View\n---*/\nreturn { text: `${args.state.count}:${args.state.note}` };');
+  const host = new NatlangHost(), seen = [];
+  let turn = 0;
+  const app = new TerminalNatlangApplication({ runner: host, source: { reducer, view },
+    initialState: { count: 0, note: '' }, reducerInputs: () => ({ files: new NodeFileTree(folder) }),
+    modelTurn: request => {
+      seen.push(JSON.stringify(request.messages));
+      turn++;
+      if (String(request.messages.at(-1)?.content ?? '').includes('return: complete'))
+        return { calls: [], text: 'done', completion_tokens: 1 };
+      if (turn % 2 === 0) return { calls: [['write', { path: 'return', value:
+        turn === 2 ? { count: 1, note: 'first note' } : { count: 2, note: 'second note' }, done: 1 }]], completion_tokens: 1 };
+      return { calls: [['read', { path: 'args/files/note.txt/text' }]], completion_tokens: 1 };
+    } });
+  try {
+    assert.equal((await app.start()).view.text, '0:');
+    assert.equal((await app.dispatch({ id: 'one', kind: 'request' })).view.text, '1:first note');
+    writeFileSync(join(folder, 'note.txt'), 'second note');
+    assert.equal((await app.dispatch({ id: 'two', kind: 'request' })).view.text, '2:second note');
+    assert.ok(seen.some(message => message.includes('second note')));
   } finally { await app.close(); host.close(); rmSync(folder, { recursive: true, force: true }); }
 });
 

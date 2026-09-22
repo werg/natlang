@@ -1,5 +1,4 @@
 export type EditorFile = { name: Text, kind: Text, source: Text, returns: Text };
-export type File = { kind: Text, text?: Text, bytes: Num };
 export type EditorSnapshot = { revision: Text, root: Text, files: EditorFile[] };
 export type EditPatch = { name: Text, start: Num, end: Num, text: Text,
   expected_revision: Text };

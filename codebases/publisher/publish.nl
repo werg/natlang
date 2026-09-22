@@ -10,10 +10,10 @@ args:
   files?: Dict<File>
 returns: PublishReport
 ---
-function publish(brief, span_ids, collection_revision, table_ids, asset_ids, target) -> PublishReport
+function publish(brief, span_ids, collection_revision, table_ids, asset_ids, target, files) -> PublishReport
   passages = read(span_ids, collection_revision)
-  outline = plan(brief, passages, table_ids, asset_ids)
-  document = compose(brief, outline, passages, collection_revision, table_ids, asset_ids)
+  outline = plan(brief, passages, table_ids, asset_ids, files)
+  document = compose(brief, outline, passages, collection_revision, table_ids, asset_ids, files)
   checked = check(document)
   if checked.ok:
     return prepare(document, target)

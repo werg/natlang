@@ -1,9 +1,8 @@
 ---
-description: Compose an editor view from source, diagnostics and a trace event, using files for relevant project context.
+description: Compose an editor view from source, diagnostics and a trace event.
 args:
   run_id: Text
   index: Num
-  files?: Dict<File>
 returns: Text
 ---
 function view(run_id, index) -> Text

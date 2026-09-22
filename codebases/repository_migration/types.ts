@@ -1,5 +1,4 @@
 export type FileIdentity = { path: Text, sha256: Text, lines: Num };
-export type File = { kind: Text, text?: Text, bytes: Num };
 export type RepoSnapshot = { revision: Text, files: FileIdentity[] };
 export type SearchHit = { path: Text, offset: Num, line: Num, excerpt: Text };
 export type SearchResult = { revision: Text, hits: SearchHit[] };

@@ -3,7 +3,6 @@ description: Answer a terminal question through the semantic evidence-search pro
 args:
   state: ConsoleState
   event: ConsoleEvent
-  files?: Dict<File>
 returns: ConsoleState
 uses:
   answer: ../evidence_atlas/answer.nl
