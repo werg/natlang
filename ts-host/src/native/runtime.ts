@@ -751,10 +751,18 @@ export class NativeSession {
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
     try {
-      if (name === 'write_value') return this.applyNow('write', {
-        path: args.name !== undefined ? `let/${String(args.name)}` : args.destination,
-        type: args.as_type ?? args.type ?? (args.name !== undefined ? this.inferScopeType(args.value) : undefined),
-        value: args.value });
+      if (name === 'write_value') {
+        if (args.name !== undefined) {
+          const local = String(args.name);
+          if (Object.hasOwn(this.lam.args, local) || Object.hasOwn(this.lam.let, local) ||
+              Object.hasOwn(this.lam.codebase, local))
+            throw new Reject([{ path: local, code: 'not-writable', expected: 'a new scope variable name' }]);
+        }
+        return this.applyNow('write', {
+          path: args.name !== undefined ? `let/${String(args.name)}` : args.destination,
+          type: args.as_type ?? args.type ?? (args.name !== undefined ? this.inferScopeType(args.value) : undefined),
+          value: args.value });
+      }
       if (name === 'copy_function') return this.applyNow('write', {
         path: args.save_as, type: `Function<${String(args.function ?? '')}>` });
       if (name === 'copy_value') {

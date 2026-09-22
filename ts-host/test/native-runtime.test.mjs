@@ -88,9 +88,12 @@ test('scope-eval-v1 persists locals, calls imports positionally and stages a nam
   assert.equal(sequenced.kind, 'ok'); assert.equal(sequenced.value, 2);
   const names = new NativeToolAgent(() => ({ calls: [] }), { toolSchema: 'scope-eval-v1' })
     .tools(session).map(entry => entry.function.name);
-  assert.deepEqual(names, ['eval', 'read_value', 'write_value', 'return_value', 'list_files', 'search_files',
+  assert.deepEqual(names, ['eval', 'read_value', 'return_value', 'write_value', 'list_files', 'search_files',
     'read_file', 'write_file', 'edit_file', 'diff_files', 'mark_lines',
     'report_blocker', 'report_error']);
+  const existingWrite = session.apply('write_value', { name: 'count', value: 3 });
+  assert.equal(existingWrite.kind, 'rejected');
+  assert.match(existingWrite.text, /new scope variable name/);
   const nullLam = buildPending({ $lambda: { type: 'Lambda<{}, Null>', instructions: 'Return null.' } });
   const nullSession = new NativeSession(new NativeRuntime(), nullLam, new TypeEnv());
   const nullResult = await nullSession.applyAsync('eval', { code: 'const result: Null = null; result' });
