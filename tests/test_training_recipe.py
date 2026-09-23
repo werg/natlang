@@ -20,7 +20,8 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
         'teacher', 'materialize-teacher', 'prepare-teacher', 'render-teacher', 'train-teacher',
     ]
     assert '--execute' in stages['observe-source']['command']
-    assert stages['freeze-runtime']['outputs'] == ['${run}/runtime-host/frozen-runtime.json']
+    assert '${run}/runtime-host/frozen-runtime.json' in stages['freeze-runtime']['outputs']
+    assert '${run}/runtime-host/dist' in stages['freeze-runtime']['outputs']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['observe-source']['inputs']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['synthetic']['inputs']
     assert any(value.endswith('/runtime-host/scripts/code-corpus/source-cases.mjs')
@@ -69,6 +70,20 @@ def test_recipe_applies_model_teacher_docker_and_training_overrides(tmp_path):
     assert stages['train-general']['min_free_vram_mib'] == 6144
     assert stages['teacher']['command'][stages['teacher']['command'].index('--model-id') + 1] == 'org/teacher-27b'
     assert stages['teacher']['command'][stages['teacher']['command'].index('--server') + 1] == 'http://127.0.0.1:8181'
+
+
+@pytest.mark.parametrize('model', ['LiquidAI/LFM2.5-350M', 'org/8B-A1B', '/models/local-student'])
+def test_student_selection_propagates_to_every_render_and_training_stage(tmp_path, model):
+    revision = 'a' * 40
+    stages = stages_by_id(recipe(tmp_path, model=model, revision=revision))
+    for phase in ('general', 'coding', 'teacher'):
+        for kind, revision_flag in [('render', '--revision'), ('train', '--model-revision')]:
+            command = stages[f'{kind}-{phase}']['command']
+            assert command[command.index('--model') + 1] == model
+            assert command[command.index(revision_flag) + 1] == revision
+    # Student selection never silently changes the separate teacher.
+    teacher = stages['teacher']['command']
+    assert teacher[teacher.index('--model-id') + 1] == 'Ternary-Bonsai-2-27B'
 
 
 def test_lora_stages_chain_checkpoint_adapters_in_order(tmp_path):

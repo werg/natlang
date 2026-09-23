@@ -34,8 +34,8 @@ class FakeParquet:
 
 class FakeApi:
     sha = "a" * 40
-    files = ["javascript/train-00000-of-00001.parquet", "python/train-00000-of-00001.parquet",
-             "javascript/test-00000-of-00001.parquet", "javascript/README.md"]
+    files = ["javascript/train/0000.parquet", "python/train/0000.parquet",
+             "javascript/test/0000.parquet", "javascript/README.md"]
 
     def dataset_info(self, dataset, *, revision, files_metadata):
         assert dataset == "org/dataset"
@@ -58,7 +58,7 @@ def setup_fake(tmp_path, rows):
 
     def download(**kwargs):
         assert kwargs["repo_id"] == "org/dataset"
-        assert kwargs["filename"] == "javascript/train-00000-of-00001.parquet"
+        assert kwargs["filename"] == "javascript/train/0000.parquet"
         assert kwargs["revision"] == FakeApi.sha
         assert kwargs.get("token") in (None, "test-secret")
         return parquet_path
@@ -67,7 +67,7 @@ def setup_fake(tmp_path, rows):
 
 
 def test_file_selection_is_config_and_split_specific():
-    files = ["javascript/train-00000.parquet", "javascript/test-00000.parquet",
+    files = ["javascript/train/00000.parquet", "javascript/test/00000.parquet",
              "python/train-00000.parquet", "javascript/valid.parquet", "train-00000.parquet"]
     assert matching_parquet_files(files, config="javascript", split="train") == [files[0]]
     assert matching_parquet_files(files, config="default", split="train") == [files[4]]

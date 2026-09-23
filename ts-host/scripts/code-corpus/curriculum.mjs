@@ -73,7 +73,8 @@ export function syntheticCodeTasks(seed = 0, startIndex = 0, count = 100) {
     const group = `natlang-synthetic-code:${t.name}`;
     rows.push({ version: 'natlang.code_task/1', id: `${group}:${seed}:${index}`, group_id: group, kind: 'function', language: 'javascript',
       instruction: t.instruction, source: { name: 'natlang-synthetic-code', revision: 'code-curriculum/1', path: 'generated', license: 'project-generated', split: stableSplit(group) },
-      function: { name: t.name, parameters: [{ name: t.param }], body: t.body, source: `function ${t.name}(${t.param}) ${t.body}` },
+      function: { name: t.name, parameters: [{ name: t.param, type: t.type }], return_type: t.out,
+        body: t.body, source: `function ${t.name}(${t.param}) ${t.body}` },
       cases, verification: { status: 'generated_candidate', reasons: ['deterministic_reference_outputs_require_native_replay_verification'] },
       generation: { generator: 'natlang.code_curriculum/1', seed, index, difficulty: ['basic','intermediate','intermediate','advanced','advanced','basic'][index % templates.length], boundary: t.type, output: t.out } });
   }
@@ -116,7 +117,7 @@ async function atomicCacheWrite(path, contents) {
 }
 const jsonl = rows => rows.map(row => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : '');
 let interrupted = false;
-const requestCheckpoint = signal => { interrupted = true; process.stderr.write(`\n${signal}: checkpointing after the current replay case\n`); };
+const requestCheckpoint = signal => { if (interrupted) return; interrupted = true; process.stderr.write(`\n${signal}: checkpointing after the current replay case\n`); };
 
 async function runtimeFingerprint() {
   const paths = ['dist/environment.js','dist/application-packages.js','dist/native/agent.js','dist/native/runtime.js',
@@ -124,6 +125,20 @@ async function runtimeFingerprint() {
   const files = {};
   for (const path of paths) files[path] = hashText(await readFile(new URL(`../../${path}`, import.meta.url)));
   return hashText(JSON.stringify({ node:process.version, files }));
+}
+async function toolFingerprint() {
+  const paths=['dist/native/agent.js','dist/native/prompt.js','dist/application-packages.js'];
+  const files={}; for(const path of paths) files[path]=hashText(await readFile(new URL(`../../${path}`,import.meta.url)));
+  return hashText(JSON.stringify(files));
+}
+async function outputHashes(output,names) {
+  return Object.fromEntries(await Promise.all(names.map(async name=>[name,hashText(await readFile(resolve(output,name)))])));
+}
+async function validateOutputHashes(output,hashes) {
+  for(const [name,expected] of Object.entries(hashes??{})) {
+    const actual=hashText(await readFile(resolve(output,name)));
+    if(actual!==expected) throw new Error(`completed output integrity check failed for ${name}; refusing silent repair`);
+  }
 }
 
 async function main() {
@@ -140,17 +155,21 @@ async function main() {
   const inputHashes = await Promise.all(inputs.map(async path => [resolve(path), hashText(await readFile(path))]));
   const curriculumHash = hashText(await readFile(new URL('./curriculum.mjs', import.meta.url)));
   const runtimeHash = replayEnabled ? await runtimeFingerprint() : null;
+  const toolsHash = replayEnabled ? await toolFingerprint() : digest([]);
+  const replayScriptHash = replayEnabled ? hashText(await readFile(new URL('./replay.mjs',import.meta.url))) : null;
   const config = { generator: 'natlang.code_curriculum/1', curriculum_sha256: curriculumHash, seed, start_index: start, synthetic_count: count,
-    inputs: inputHashes, replay_synthetic: replaySynthetic, replay_candidates: replayCandidates, runtime_sha256: runtimeHash,
-    tools_sha256: digest([]), prompt_sha256: hashText('Write the requested source code. Return code only.') };
+    inputs: inputHashes, replay_synthetic: replaySynthetic, replay_candidates: replayCandidates,
+    replay_sha256: replayScriptHash, cache_version:'natlang.code_curriculum_cache/2', runtime_sha256: runtimeHash,
+    tools_sha256: toolsHash, prompt_sha256: hashText('Write the requested source code. Return code only.') };
   const manifestPath = resolve(outPath, 'manifest.json');
   try {
     const previous = JSON.parse(await readFile(manifestPath, 'utf8'));
     if (JSON.stringify(previous.config) !== JSON.stringify(config)) throw new Error('output directory belongs to a different immutable curriculum configuration');
+    if (['complete','interrupted'].includes(previous.status) && previous.output_sha256) await validateOutputHashes(outPath,previous.output_sha256);
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await atomicWrite(manifestPath, `${JSON.stringify({ version: 'natlang.code_curriculum_manifest/1', config, status: 'in_progress' }, null, 2)}\n`);
-  process.once('SIGINT', () => requestCheckpoint('SIGINT'));
-  process.once('SIGTERM', () => requestCheckpoint('SIGTERM'));
+  process.on('SIGINT', () => requestCheckpoint('SIGINT'));
+  process.on('SIGTERM', () => requestCheckpoint('SIGTERM'));
   await atomicWrite(resolve(out, 'synthetic-code-tasks.jsonl'), jsonl(generated));
   const curriculum = compileCurriculum([...sourceTasks, ...generated]);
   const proposalRows = curriculum.filter(row => ['instruction_code_proposal','external_api_stub','instruction_only','rejected_inventory'].includes(row.kind));
@@ -174,10 +193,11 @@ async function main() {
       } catch (error) { projectionRejected.push({ task_id: task.id, index, error: String(error) }); }
     }
   }
+  await atomicWrite(resolve(out,'projection-rejected.jsonl'),jsonl(projectionRejected));
   await atomicWrite(resolve(out, 'teacher-programs.jsonl'), jsonl(programs));
   if (replayEnabled) {
     const cache = resolve(out, 'replay-cache'); await mkdir(cache, { recursive: true });
-    const trajectories = [];
+    const trajectories = [], replayErrors=[];
     const replayTasks = [
       ...(replayCandidates ? sourceTasks.filter(task => task.verification?.status !== 'rejected' && task.kind !== 'tool_calls' && (task.cases ?? []).some(item=>item.outcome==='return'&&item.portable!==false)).map(task=>({...task,cases:task.cases.filter(item=>item.outcome==='return'&&item.portable!==false)})) : []),
       ...(replaySynthetic ? generated : []),
@@ -185,32 +205,47 @@ async function main() {
     for (const task of replayTasks) {
       for (let i = 0; i < (task.cases ?? []).length; i++) {
         if (interrupted) break;
-        const cachePath = resolve(cache, `${digest([runtimeHash, config.tools_sha256, task.id, task.function, task.cases[i]]).slice(0,40)}.json`);
-        let row;
-        try { row = JSON.parse(await readFile(cachePath, 'utf8')); }
+        const cacheKey=digest([config,task.id,task.function,task.cases[i]]);
+        const cachePath = resolve(cache, `${cacheKey.slice(0,40)}.json`);
+        let cached;
+        try { cached = JSON.parse(await readFile(cachePath, 'utf8')); }
         catch (error) {
           if (error.code !== 'ENOENT') throw error;
-          row = await replayIsolated(task, i);
-          if (task.observation) row.provenance.source_observation = structuredClone(task.observation);
-          await atomicCacheWrite(cachePath, `${JSON.stringify(row)}\n`);
+          try {
+            const row = await replayIsolated(task, i);
+            if (task.observation) row.provenance.source_observation = structuredClone(task.observation);
+            cached={cache_key:cacheKey,row,payload_sha256:hashText(JSON.stringify(row))};
+          } catch (replayError) {
+            const errorText=String(replayError);
+            cached={cache_key:cacheKey,error:errorText,payload_sha256:hashText(errorText)};
+          }
+          await atomicCacheWrite(cachePath, `${JSON.stringify(cached)}\n`);
         }
-        trajectories.push(row);
+        const payload=cached.row ? JSON.stringify(cached.row) : String(cached.error);
+        if(cached.cache_key!==cacheKey || cached.payload_sha256!==hashText(payload))
+          throw new Error(`replay cache integrity check failed for ${task.id} case ${i}; refusing silent repair`);
+        if(cached.row) trajectories.push(cached.row);
+        else replayErrors.push({task_id:task.id,index:i,error:cached.error});
       }
       if (interrupted) break;
     }
     const materialized = await materializeCorpus(trajectories);
     await atomicWrite(resolve(out, 'replay-trajectories.jsonl'), jsonl(trajectories));
     await atomicWrite(resolve(out, 'verified-turns.jsonl'), jsonl(materialized.turns));
-    await atomicWrite(resolve(out, 'projection-rejected.jsonl'), jsonl(projectionRejected));
+    await atomicWrite(resolve(out, 'replay-errors.jsonl'),jsonl(replayErrors));
     const status = interrupted ? 'interrupted' : 'complete';
-    await atomicWrite(manifestPath, `${JSON.stringify({ version: 'natlang.code_curriculum_manifest/1', config, status,
+    const outputs=['synthetic-code-tasks.jsonl','curriculum.jsonl','general-code.jsonl','code-proposals.jsonl','teacher-programs.jsonl',
+      'projection-rejected.jsonl','replay-trajectories.jsonl','verified-turns.jsonl','replay-errors.jsonl'];
+    const hashes=await outputHashes(outPath,outputs);
+    await atomicWrite(manifestPath, `${JSON.stringify({ version: 'natlang.code_curriculum_manifest/1', config, status, output_sha256:hashes,
       synthetic_tasks: generated.length, source_tasks: sourceTasks.length, curriculum_tasks: allTasks.length,
       curriculum_by_kind: Object.fromEntries([...new Set(curriculum.map(row => row.kind))].sort().map(kind => [kind,curriculum.filter(row => row.kind === kind).length])),
       projected_programs: programs.length, general_code_proposal_turns: nativeProposals.length, trajectories: trajectories.length,
+      replay_errors:replayErrors.length,
       accepted_trajectories: trajectories.filter(row => row.outcome.accepted).length,
       accepted_source_observation_replays: trajectories.filter(row => row.provenance.source_observation && row.outcome.accepted).length,
       verified_turns: materialized.turns.length,
-      outputs: ['general-code.jsonl','code-proposals.jsonl','teacher-programs.jsonl','replay-trajectories.jsonl','verified-turns.jsonl','projection-rejected.jsonl'],
+      outputs,
       replay_cache: 'replay-cache/' }, null, 2)}\n`);
     if (interrupted) process.exitCode = 75;
     return;
@@ -219,7 +254,8 @@ async function main() {
     source_tasks: sourceTasks.length, curriculum_tasks: allTasks.length,
     curriculum_by_kind: Object.fromEntries([...new Set(curriculum.map(row => row.kind))].sort().map(kind => [kind,curriculum.filter(row => row.kind === kind).length])),
     projected_programs: programs.length, general_code_proposal_turns: nativeProposals.length, projection_rejected: projectionRejected.length,
-    outputs: ['general-code.jsonl','code-proposals.jsonl','teacher-programs.jsonl','projection-rejected.jsonl'] };
+    outputs: ['synthetic-code-tasks.jsonl','curriculum.jsonl','general-code.jsonl','code-proposals.jsonl','teacher-programs.jsonl','projection-rejected.jsonl'] };
+  manifest.output_sha256=await outputHashes(outPath,manifest.outputs);
   await atomicWrite(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   process.stdout.write(`${manifest.curriculum_tasks} curriculum tasks -> ${outPath}\n`);
 }

@@ -74,6 +74,7 @@ function portable(value, depth = 0) {
   if (typeof value === 'number') return Number.isFinite(value);
   return Array.isArray(value) && value.every(item => portable(item, depth + 1));
 }
+function samePortable(a,b) { return JSON.stringify(a)===JSON.stringify(b); }
 
 export function sourceCases(record) {
   const reason = safeRecord(record);
@@ -88,7 +89,7 @@ export function observeSourceCase(record, args, timeout = CASE_TIMEOUT_MS) {
     let settled = false;
     const finish = (error, expected) => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGKILL'); error ? reject(error) : resolvePromise(expected); };
     const timer = setTimeout(() => finish(new Error('source observation timeout')), timeout);
-    child.on('message', message => message.error ? finish(new Error(message.error)) : finish(null, message.expected));
+    child.on('message', message => message.error ? finish(new Error(message.error)) : finish(null, message.observation));
     child.on('error', finish);
     child.on('exit', code => finish(new Error(`source observer exited ${code}`)));
     child.send({ record, args });
@@ -101,13 +102,16 @@ async function executeSourceCase(record, args) {
   const fn = `function ${record.function.name || 'candidate'}(${parameters.join(',')}) ${record.function.body}`;
   const source = `${(record.function.helpers ?? []).join('\n')}\n(${fn})(...__args)`;
   const context = vm.createContext({ __args: structuredClone(args) }, { codeGeneration: { strings: false, wasm: false } });
+  const before=JSON.stringify(context.__args);
   const output = vm.runInContext(source, context, { timeout: CASE_TIMEOUT_MS });
   if (!portable(output)) throw new Error('source result is not a finite primitive/array value');
-  return structuredClone(output);
+  const inputAfter=structuredClone(context.__args);
+  if(before!==JSON.stringify(inputAfter)) throw new Error('source function mutated invocation inputs');
+  return {expected:structuredClone(output),input_after:inputAfter};
 }
 
 if (process.argv.includes('--worker')) process.once('message', async ({ record, args }) => {
-  try { process.send({ expected: await executeSourceCase(record, args) }); }
+  try { process.send({ observation: await executeSourceCase(record, args) }); }
   catch (error) { process.send({ error: String(error) }); }
 });
 
@@ -120,6 +124,15 @@ async function atomicCacheWrite(path, value) {
   const target=resolve(path), staging=`${target}.building-${randomUUID()}`;
   try { await writeFile(staging,value,{flag:'wx'}); try { await link(staging,target); } catch(error) { if(error.code!=='EEXIST') throw error; } }
   finally { await unlink(staging).catch(()=>{}); }
+}
+async function outputHashes(paths) {
+  return Object.fromEntries(await Promise.all(paths.map(async path=>[path,digest(await readFile(path))])));
+}
+async function validateOutputHashes(hashes) {
+  for(const [path,expected] of Object.entries(hashes??{})) {
+    const actual=digest(await readFile(path));
+    if(actual!==expected) throw new Error(`completed source-observation output integrity check failed for ${path}; refusing silent repair`);
+  }
 }
 
 async function main() {
@@ -137,12 +150,17 @@ async function main() {
   const sourceHash=digest(await readFile(new URL('./source-cases.mjs',import.meta.url)));
   const config={generator:'natlang.code_source_observations/1',inputs:inputHashes,limit,execute,timeout_ms:CASE_TIMEOUT_MS,source_cases_sha256:sourceHash,node:process.version,typescript:ts.version};
   const manifestPath=`${output}.manifest.json`,cacheDir=`${output}.cache`;
-  try { const prior=JSON.parse(await readFile(manifestPath,'utf8')); if(JSON.stringify(prior.config)!==JSON.stringify(config)) throw new Error('output path belongs to a different immutable source-observation configuration'); }
+  const outputPath=resolve(output),reportPath=resolve(`${output}.report.json`);
+  try {
+    const prior=JSON.parse(await readFile(manifestPath,'utf8'));
+    if(JSON.stringify(prior.config)!==JSON.stringify(config)) throw new Error('output path belongs to a different immutable source-observation configuration');
+    if(['complete','interrupted'].includes(prior.status)&&prior.output_sha256) await validateOutputHashes(prior.output_sha256);
+  }
   catch(error) { if(error.code!=='ENOENT') throw error; }
   await mkdir(cacheDir,{recursive:true});
   await atomicWrite(manifestPath,`${JSON.stringify({version:'natlang.code_source_observations_manifest/1',config,status:'in_progress'},null,2)}\n`);
-  let interrupted=false; const checkpoint=signal=>{interrupted=true;process.stderr.write(`\n${signal}: checkpointing after the current source case\n`);};
-  process.once('SIGINT',()=>checkpoint('SIGINT'));process.once('SIGTERM',()=>checkpoint('SIGTERM'));
+  let interrupted=false; const checkpoint=signal=>{if(interrupted)return;interrupted=true;process.stderr.write(`\n${signal}: checkpointing after the current source case\n`);};
+  process.on('SIGINT',()=>checkpoint('SIGINT'));process.on('SIGTERM',()=>checkpoint('SIGTERM'));
   const out = [], reasons = {}, counters = { input: tasks.length, eligible: 0, observed_tasks: 0, observed_cases: 0, rejected: 0, execution_enabled: execute };
   for (const task of tasks) {
     if (task.source?.name === 'xlam-function-calling-60k' || task.kind === 'tool_calls') { counters.rejected++; reasons.never_execute_external_api = (reasons.never_execute_external_api ?? 0) + 1; continue; }
@@ -154,17 +172,23 @@ async function main() {
     if (counters.execution_enabled) {
       for (const item of candidate.cases) {
         if(interrupted) break;
-        const cachePath=resolve(cacheDir,`${digest([config,task.id,task.function,item.args]).slice(0,40)}.json`);
-        let observed;
-        try { observed=JSON.parse(await readFile(cachePath,'utf8')); }
+        const cacheKey=digest([config,task.id,task.function,item.args]);
+        const cachePath=resolve(cacheDir,`${cacheKey.slice(0,40)}.json`);
+        let cached;
+        try { cached=JSON.parse(await readFile(cachePath,'utf8')); }
         catch(error) {
           if(error.code!=='ENOENT') throw error;
-          try { observed={expected:await observeSourceCase(task,item.args)}; }
-          catch(observationError) { observed={error:String(observationError)}; }
-          await atomicCacheWrite(cachePath,`${JSON.stringify(observed)}\n`);
+          let observation;
+          try { observation=await observeSourceCase(task,item.args); }
+          catch(observationError) { observation={error:String(observationError)}; }
+          cached={cache_key:cacheKey,observation,payload_sha256:digest(observation)};
+          await atomicCacheWrite(cachePath,`${JSON.stringify(cached)}\n`);
         }
-        if(observed.error) { reasons.execution_error=(reasons.execution_error??0)+1;row.cases=[];row.observation.rejection=observed.error;break; }
-        row.cases.push({...item,expected:observed.expected,outcome:'return',portable:true,provenance:'observed_from_original_source'});
+        if(cached.cache_key!==cacheKey||cached.payload_sha256!==digest(cached.observation))
+          throw new Error(`source-observation cache integrity check failed for ${task.id}; refusing silent repair`);
+        if(cached.observation.error) { reasons.execution_error=(reasons.execution_error??0)+1;row.cases=[];row.observation.rejection=cached.observation.error;break; }
+        if(!samePortable(item.args,cached.observation.input_after)) { reasons.input_mutation=(reasons.input_mutation??0)+1;row.cases=[];row.observation.rejection='source function mutated invocation inputs';break; }
+        row.cases.push({...item,expected:cached.observation.expected,input_after:cached.observation.input_after,outcome:'return',portable:true,provenance:'observed_from_original_source'});
       }
       if(interrupted) break;
       if (row.cases.length) { row.observation.verified = false; row.observation.kind = 'source_derived_observations'; counters.observed_tasks++; counters.observed_cases += row.cases.length; }
@@ -173,12 +197,14 @@ async function main() {
     out.push(row);
   }
   const data = out.map(row => JSON.stringify(row)).join('\n') + (out.length ? '\n' : '');
-  await atomicWrite(output, data);
+  await atomicWrite(outputPath, data);
   const report = { version:'natlang.code_source_observations/1', inputs:inputHashes.map(([path])=>path), input_sha256:digest(tasks), output:resolve(output), ...counters,
     by_source:Object.fromEntries([...new Set(tasks.map(task=>task.source?.name??'unknown'))].sort().map(name=>[name,tasks.filter(task=>task.source?.name===name).length])), rejected_by_reason:reasons,
     interpretation:counters.execution_enabled ? 'Outputs were observed by calling inspected original source in a disposable timeout process. They are not upstream test labels and require separate native replay before training admission.' : 'Dry-run eligibility report only.' };
-  await atomicWrite(`${output}.report.json`, `${JSON.stringify(report, null, 2)}\n`);
-  await atomicWrite(manifestPath,`${JSON.stringify({version:'natlang.code_source_observations_manifest/1',config,status:interrupted?'interrupted':'complete',...report},null,2)}\n`);
+  await atomicWrite(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  const status=interrupted?'interrupted':'complete';
+  await atomicWrite(manifestPath,`${JSON.stringify({version:'natlang.code_source_observations_manifest/1',config,status,...report,
+    output_sha256:await outputHashes([outputPath,reportPath])},null,2)}\n`);
   if(interrupted) process.exitCode=75;
   process.stdout.write(JSON.stringify(report)+'\n');
 }

@@ -12,6 +12,16 @@ chains adapters: coding starts from the general checkpoint adapter, and teacher
 starts from the coding checkpoint adapter. Every stage has its own optimizer and
 resumable checkpoint. Intermediate merged models are skipped.
 
+Student selection applies to every rendering and training stage: each uses the
+selected model's tokenizer/chat template and the same base revision. Use a
+separate recipe and run directory for each student; rendered token sequences
+and adapters are not interchangeable between models. The pipeline is not tied
+to the default model, but a particular architecture still needs compatible
+Transformers/PEFT support and sufficient training hardware. Set quantization,
+LoRA target modules, context length, batch sizing, and the free-VRAM gate for
+that model using the recipe options; the default settings are not a promise
+that every model fits an 8 GB GPU.
+
 ## Create and run a recipe
 
 The workspace `.venv` does not contain PyTorch. Use the existing

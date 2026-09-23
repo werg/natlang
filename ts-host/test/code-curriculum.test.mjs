@@ -56,8 +56,11 @@ test('source observations require explicit portable types and return actual sour
     cases:[],verification:{status:'inventory',reasons:[]} };
   const candidates = sourceCases(source);
   assert.equal(candidates.eligible, true);
-  const expected = await observeSourceCase(source, candidates.cases[0].args);
-  assert.equal(expected, 6);
+  const observedCase = await observeSourceCase(source, candidates.cases[0].args);
+  assert.equal(observedCase.expected, 6);
+  assert.deepEqual(observedCase.input_after,candidates.cases[0].args);
+  const mutating={...source,function:{...source.function,parameters:[{name:'items',type:'number[]'}],body:'{ items[0] = 0; return items[0]; }'}};
+  await assert.rejects(observeSourceCase(mutating,[[3]]),/mutated invocation inputs/);
   const observed = { ...source, observation:{ kind:'source_derived_observations', not_upstream_tests:true },
     cases:[{args:[3,3],expected:6,outcome:'return',portable:true}] };
   assert.equal(compileCurriculum([observed])[0].kind, 'source_observed_replay');
