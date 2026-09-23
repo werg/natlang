@@ -66,3 +66,48 @@ def test_source_order_preserves_input_offsets():
     rows = [{'offset': 20}, {'offset': 4}, {'offset': 13}]
     ordered = order_training_pairs(rows, 'source')
     assert [row['offset'] for row in ordered] == [4, 13, 20]
+
+
+def test_repeated_stop_signals_remain_deferred(monkeypatch):
+    callbacks = {}
+    monkeypatch.setattr(signal, 'signal', lambda sig, callback: callbacks.__setitem__(sig, callback))
+    stop = install_stop_handlers()
+    assert stop == {'now': False}
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGTERM, signal.SIGINT):
+        callbacks[sig](sig, None)
+        assert stop == {'now': True}
+
+
+def test_legacy_tensor_rng_checkpoint_restores_cpu_sequence():
+    original = torch.get_rng_state()
+    try:
+        torch.manual_seed(41)
+        saved = torch.get_rng_state()
+        expected = torch.rand(4)
+        torch.rand(9)
+        restore_rng_state(saved)
+        assert torch.equal(torch.rand(4), expected)
+    finally:
+        torch.set_rng_state(original)
+
+
+def test_cuda_rng_states_round_trip_without_real_gpu(monkeypatch):
+    original_torch, original_python = torch.get_rng_state(), random.getstate()
+    gpu_states = [torch.tensor([1, 2], dtype=torch.uint8), torch.tensor([3, 4], dtype=torch.uint8)]
+    restored = []
+    monkeypatch.setattr(torch.cuda, 'is_available', lambda: True)
+    monkeypatch.setattr(torch.cuda, 'get_rng_state_all', lambda: gpu_states)
+    monkeypatch.setattr(torch.cuda, 'set_rng_state_all', restored.append)
+    try:
+        saved = capture_rng_state()
+        restore_rng_state(saved)
+        assert len(restored) == 1
+        assert all(torch.equal(actual, expected) for actual, expected in zip(restored[0], gpu_states))
+        assert len(restored[0]) == len(gpu_states)
+        # A GPU-bearing checkpoint remains loadable for CPU-side inspection.
+        monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
+        restore_rng_state(saved)
+        assert len(restored) == 1
+    finally:
+        torch.set_rng_state(original_torch)
+        random.setstate(original_python)

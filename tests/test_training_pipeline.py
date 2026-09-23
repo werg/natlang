@@ -1,9 +1,12 @@
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+import fcntl
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / 'scripts' / 'run_training_pipeline.py'
@@ -23,9 +26,9 @@ def command(script):
     return [sys.executable, '-c', script]
 
 
-def run(config, root):
+def run(config, root, *, env=None):
     return subprocess.run([sys.executable, str(RUNNER), str(config), str(root)],
-                          cwd=ROOT, text=True, capture_output=True)
+                          cwd=ROOT, text=True, capture_output=True, env=env, timeout=20)
 
 
 def test_completed_stages_are_not_rerun_on_resume(tmp_path):
@@ -172,3 +175,136 @@ def test_training_state_is_a_completion_gate_and_can_resume(tmp_path):
     assert resumed.returncode == 0
     assert state['stages']['train']['status'] == 'complete'
     assert state['status'] == 'complete'
+
+
+@pytest.mark.parametrize('as_directory', [False, True])
+def test_completed_output_corruption_is_rejected(tmp_path, as_directory):
+    run_dir = tmp_path / 'run'
+    output = run_dir / 'artifact'
+    create = (f"p=Path({str(output)!r}); p.mkdir(parents=True); "
+              "(p/'part').write_text('original')" if as_directory else
+              f"Path({str(output)!r}).write_text('original')")
+    config = config_file(tmp_path, [{'id': 'build', 'command': command(
+        'from pathlib import Path; ' + create), 'outputs': [str(output)]}])
+    assert run(config, run_dir).returncode == 0
+
+    if as_directory:
+        (output / 'part').write_text('tampered')
+    else:
+        output.write_text('tampered')
+    resumed = run(config, run_dir)
+    assert resumed.returncode != 0
+    assert 'completed output changed or is missing' in resumed.stderr
+
+
+def test_missing_completed_output_fails_closed_without_rerunning_or_advancing(tmp_path):
+    run_dir = tmp_path / 'run'
+    output, downstream = run_dir / 'artifact', run_dir / 'downstream-ran'
+    first_script = (f"from pathlib import Path; Path({str(output)!r}).write_text('original')")
+    second_script = (f"from pathlib import Path; p=Path({str(downstream)!r}); "
+                     "p.write_text(p.read_text()+'x' if p.exists() else 'x')")
+    config = config_file(tmp_path, [
+        {'id': 'build', 'command': command(first_script), 'outputs': [str(output)]},
+        {'id': 'next', 'command': command(second_script), 'outputs': [str(downstream)]},
+    ])
+    assert run(config, run_dir).returncode == 0
+    output.unlink()
+
+    resumed = run(config, run_dir)
+    state = json.loads((run_dir / 'pipeline-state.json').read_text())
+    assert resumed.returncode != 0
+    assert not output.exists()
+    assert downstream.read_text() == 'x'
+    assert state['stages']['build']['attempts'] == 1
+
+
+def test_config_drift_requires_a_new_run_directory(tmp_path):
+    run_dir = tmp_path / 'run'
+    output = run_dir / 'out'
+    config = config_file(tmp_path, [{'id': 'build', 'command': command(
+        f"from pathlib import Path; Path({str(output)!r}).write_text('ok')"),
+        'outputs': [str(output)]}])
+    assert run(config, run_dir).returncode == 0
+    config_file(tmp_path, [{'id': 'build', 'command': command('pass'),
+                            'outputs': [str(output)]}])
+    resumed = run(config, run_dir)
+    assert resumed.returncode != 0
+    assert 'pipeline config changed' in resumed.stderr
+
+
+def test_until_stops_after_requested_stage_and_can_resume(tmp_path):
+    run_dir = tmp_path / 'run'
+    calls = run_dir / 'calls'
+    first, second = run_dir / 'first', run_dir / 'second'
+    def write_stage(number, path):
+        return command(f"from pathlib import Path; p=Path({str(calls)!r}); "
+                       "p.write_text((p.read_text() if p.exists() else '')+" + repr(number) + "); "
+                       f"Path({str(path)!r}).write_text('ok')")
+    config = config_file(tmp_path, [
+        {'id': 'first', 'command': write_stage('1', first), 'outputs': [str(first)]},
+        {'id': 'second', 'command': write_stage('2', second), 'outputs': [str(second)]},
+    ])
+    until = subprocess.run([sys.executable, str(RUNNER), str(config), str(run_dir),
+                            '--until', 'first'], cwd=ROOT, text=True,
+                           capture_output=True, timeout=20)
+    state = json.loads((run_dir / 'pipeline-state.json').read_text())
+    assert until.returncode == 0
+    assert state['status'] == 'ready'
+    assert state['stages']['first']['status'] == 'complete'
+    assert 'second' not in state['stages']
+
+    assert run(config, run_dir).returncode == 0
+    assert calls.read_text() == '12'
+
+
+@pytest.mark.parametrize('lock_name, expected', [
+    ('.pipeline.lock', 'another runner owns this pipeline'),
+    ('.stage-build.lock', 'stage build is still running'),
+])
+def test_existing_lock_prevents_runner_from_starting(tmp_path, lock_name, expected):
+    run_dir = tmp_path / 'run'
+    run_dir.mkdir()
+    marker = run_dir / 'child-ran'
+    config = config_file(tmp_path, [{'id': 'build', 'command': command(
+        f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')"),
+        'outputs': [str(run_dir / 'out')]}])
+    lock_path = run_dir / lock_name
+    with lock_path.open('a+') as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = run(config, run_dir)
+    assert result.returncode != 0
+    assert expected in result.stderr
+    assert not marker.exists()
+
+
+def test_gpu_resource_wait_does_not_start_stage_and_resumes_when_available(tmp_path):
+    run_dir = tmp_path / 'run'
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    memory_file = tmp_path / 'free-memory'
+    fake_smi = bin_dir / 'nvidia-smi'
+    fake_smi.write_text(f"#!/bin/sh\ncat {str(memory_file)!r}\n")
+    fake_smi.chmod(0o755)
+    memory_file.write_text('100\n99999\n')
+    calls, output = run_dir / 'calls', run_dir / 'output'
+    script = (f"from pathlib import Path; p=Path({str(calls)!r}); "
+              "p.parent.mkdir(parents=True, exist_ok=True); "
+              "p.write_text('started'); "
+              f"Path({str(output)!r}).write_text('ok')")
+    config = config_file(tmp_path, [{'id': 'gpu', 'command': command(script),
+                                     'outputs': [str(output)], 'min_free_vram_mib': 500}])
+    env = os.environ.copy()
+    env['PATH'] = str(bin_dir) + os.pathsep + env.get('PATH', '')
+
+    waiting = run(config, run_dir, env=env)
+    state = json.loads((run_dir / 'pipeline-state.json').read_text())
+    assert waiting.returncode == 75
+    assert not calls.exists()
+    assert state['status'] == 'resource_wait'
+    assert state['resource_wait'] == {'stage': 'gpu', 'free_mib': 100, 'required_mib': 500}
+
+    memory_file.write_text('600\n99999\n')
+    resumed = run(config, run_dir, env=env)
+    assert resumed.returncode == 0
+    assert calls.read_text() == 'started'
+    assert json.loads((run_dir / 'pipeline-state.json').read_text())['status'] == 'complete'
