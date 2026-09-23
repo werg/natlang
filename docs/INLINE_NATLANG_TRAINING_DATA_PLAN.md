@@ -96,7 +96,7 @@ Create these cross-cutting families, with paired worlds in which a late fact cha
 
 ### Candidate external sources and acquisition
 
-Acquire source data or environment code from the maintainers, pin a revision and hash, and verify **dataset and dependency terms** before storing derived training rows. A repository code license does not automatically cover separately hosted datasets. Keep raw downloads in an untracked cache; commit manifests and small reviewed derived fixtures. The candidates below are inputs to *new instrumented Natlang programs*, never answer strings pasted into a prompt.
+Acquire source data or environment code from the maintainers, pin a revision and hash, and verify **dataset and dependency terms** before storing derived training rows. Keep raw downloads in an untracked cache; commit manifests and small reviewed derived fixtures. The candidates below are inputs to *new instrumented Natlang programs*, never answer strings pasted into a prompt.
 
 | Source | What to acquire and transform | Oracle and split unit |
 |---|---|---|
@@ -109,7 +109,7 @@ Acquire source data or environment code from the maintainers, pin a revision and
 | [CommaQA](https://github.com/allenai/COMMAQA) | Use its compositional questions and component KBs to build applications whose callable TS/natlang specialists each expose only part of the relational evidence. | Executed multi-component answer; split by question template and underlying KB, not individual component calls. |
 | [ScienceWorld](https://github.com/allenai/ScienceWorld), [ALFWorld](https://github.com/alfworld/alfworld), [TextWorld](https://github.com/microsoft/TextWorld), [DiscoveryWorld](https://github.com/allenai/discoveryworld) | Pin environment versions, install outside the repo, and wrap observe/action APIs in typed adapters. Use task variations and generated worlds for reactive actor policies, experiments, and replanning. | Environment success/invariants plus review of action rationale; split by scenario family, seed, and world layout. Pin ScienceWorld's version because its 1.3.0 ordering change can alter trajectories. |
 
-Prioritize a small ingest from FOLIO, PrOntoQA, KQA Pro, and one interactive world, then expand the source mix. Where a source is small or its license is unclear, use it as an evaluation template or hand-reviewed inspiration until rights and contamination checks are resolved. Preserve original train/validation/test partitions and hold out entire underlying stories, worlds, and generators. Do not train on benchmark test answers, walkthroughs, gold programs, or proof text that the student might later be evaluated against. Record source URL, revision, license/terms, checksum, original split, transform version, world/seed ID, and derived case IDs in an acquisition manifest.
+Prioritize a small ingest from FOLIO, PrOntoQA, KQA Pro, and one interactive world, then expand the source mix. Where a source is small, use it as an evaluation template or hand-reviewed inspiration until rights and contamination checks are resolved. Preserve original train/validation/test partitions and hold out entire underlying stories, worlds, and generators. Do not train on benchmark test answers, walkthroughs, gold programs, or proof text that the student might later be evaluated against. Record source URL, revision, checksum, original split, transform version, world/seed ID, and derived case IDs in an acquisition manifest.
 
 ## Adaptive-iteration and monitoring families
 
@@ -146,7 +146,7 @@ Do not train only on tidy short loops. Preserve every step/check/review in IR, i
 ## Deliverables and sequence
 
 1. Versioned case schema and family catalog, with reviewed examples, proof/world oracles, and counterfactual pairs. Map them directly to the implemented compiler/runtime and IR types.
-2. Source acquisition manifest and pinned small imports from the maintainers; preserve licenses, checksums, original splits, and world IDs. Build typed graph, proof-verifier, and interactive-world adapters.
+2. Source acquisition manifest and pinned small imports from the maintainers; checksums, original splits, and world IDs. Build typed graph, proof-verifier, and interactive-world adapters.
 3. Generator and fixture builders for inline, follow-up, proof, abduction, relational, actor, and iteration families; source manifests that can be discovered during a running collection.
 4. End-to-end smoke collection on a few hundred cases; manually inspect child/parent IR, reasoning, observations, proof/world events, and admitted SFT rows before scaling.
 5. Resumable large teacher collection, independent-request batching, admission ledger, coverage dashboard, and held-out split registry. Scale until the corpus targets are met by **admitted** cases, not raw attempts.
