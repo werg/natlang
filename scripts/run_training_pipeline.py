@@ -85,6 +85,8 @@ def run_pipeline(config_path, root, *, until=None):
     config = json.loads(config_path.read_text())
     if config.get("version") != "natlang.training_pipeline/1":
         raise ValueError("unsupported pipeline config")
+    if config.get('run_directory') and Path(config['run_directory']).resolve() != root:
+        raise ValueError('pipeline recipe is bound to a different run directory')
     stages = config["stages"]
     ids = [s["id"] for s in stages]
     if len(set(ids)) != len(ids) or not stages or any(not i.replace("-", "").replace("_", "").isalnum() for i in ids):

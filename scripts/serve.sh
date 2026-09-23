@@ -29,8 +29,11 @@ if [ -n "$LORA_PATH" ]; then
   [ -f "$ROOT/$LORA_PATH" ] || { echo "missing $LORA_PATH"; exit 1; }
   LORA=(--lora "/work/$LORA_PATH")
 fi
-docker rm -f natlang-llama >/dev/null 2>&1 || true
-exec docker run --rm --name natlang-llama --gpus all \
+CONTAINER="${NATLANG_SERVER_NAME:-natlang-llama}"
+if [ -z "${NATLANG_SERVER_NAME:-}" ]; then
+  docker rm -f natlang-llama >/dev/null 2>&1 || true
+fi
+exec docker run --rm --name "$CONTAINER" --gpus all \
   -v "$ROOT:/work:ro" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" \
   "$IMAGE" \
   -m "/models/$MODEL" --host 0.0.0.0 --port 8080 --parallel "$SLOTS" -c "$CTX" -ngl 99 --cache-ram "$CACHE_RAM" --metrics --no-webui "${DRAFT[@]}" "${LORA[@]}" "${EXTRA[@]}"

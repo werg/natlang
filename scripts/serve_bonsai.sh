@@ -17,9 +17,12 @@ CACHE_RAM="${BONSAI_CACHE_RAM:-$DEFAULT_CACHE_RAM}"
 MODEL="Ternary-Bonsai-2-27B-PTQ1_0.gguf"
 [ -f "$ROOT/models/$MODEL" ] || { echo "missing models/$MODEL"; exit 1; }
 [ -x "$ROOT/vendor/prism/bin/llama-server" ] || { echo "missing vendor/prism/bin (see README)"; exit 1; }
-docker rm -f natlang-bonsai >/dev/null 2>&1 || true
+CONTAINER="${BONSAI_SERVER_NAME:-natlang-bonsai}"
+if [ -z "${BONSAI_SERVER_NAME:-}" ]; then
+  docker rm -f natlang-bonsai >/dev/null 2>&1 || true
+fi
 # --no-mmap: weights go straight to the GPU instead of staying mapped in host RAM; the memory cap protects the desktop.
-exec docker run --rm --name natlang-bonsai --gpus all --memory "${BONSAI_MEM:-5g}" --memory-swap "${BONSAI_MEM:-5g}" \
+exec docker run --rm --name "$CONTAINER" --gpus all --memory "${BONSAI_MEM:-5g}" --memory-swap "${BONSAI_MEM:-5g}" \
   -v "$ROOT/vendor/prism/bin:/prism:ro" -v "$ROOT/models:/models:ro" -e LD_LIBRARY_PATH=/prism \
   -p "127.0.0.1:$PORT:8080" natlang-prism-runtime \
   /prism/llama-server -m "/models/$MODEL" --host 0.0.0.0 --port 8080 \

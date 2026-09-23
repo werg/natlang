@@ -26,6 +26,16 @@ test('focused loader keeps source indexes and selects an exact range', async () 
   assert.equal(recordDigest(loaded[0].record).length, 64);
 });
 
+test('all-mode permits an empty hard-state queue without inventing a teacher job', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-empty-')), path = join(dir, 'empty.jsonl');
+  await writeFile(path, '');
+  assert.deepEqual(await loadRecords(path, 0, 0), []);
+  const options = config(dir);
+  const result = await collectBatch([], options, async () => { throw new Error('must not run'); });
+  assert.deepEqual(result, { completed: 0, missing: [] });
+  assert.equal(await readFile(options.output, 'utf8'), '');
+});
+
 test('parallel completion merges in source order and matching jobs resume without calls', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-resume-'));
   const records = [record('first'), record('second'), record('third')].map((value, index) => ({ index, record: value }));

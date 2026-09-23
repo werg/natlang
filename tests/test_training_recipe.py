@@ -24,6 +24,7 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
     assert '--execute' in stages['observe-source']['command']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['freeze-runtime']['outputs']
     assert '${run}/runtime-host/dist' in stages['freeze-runtime']['outputs']
+    assert '${run}/runtime-host/src' in stages['freeze-runtime']['outputs']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['observe-source']['inputs']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['synthetic']['inputs']
     assert any(value.endswith('/runtime-host/scripts/code-corpus/source-cases.mjs')

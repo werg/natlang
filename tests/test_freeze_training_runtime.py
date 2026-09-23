@@ -9,6 +9,7 @@ def make_runtime(root):
     files = {
         'dist/native/runtime.js': 'export const runtimeVersion = 1;\n',
         'dist/teacher/collector.js': 'export const collectorVersion = 1;\n',
+        'src/native/runtime.ts': 'export const runtimeVersion = 1;\n',
         'scripts/code-corpus/replay.mjs': 'export const replayVersion = 1;\n',
         'prelude.js': 'export const preludeVersion = 1;\n',
         'package.json': '{"name":"fixture","type":"module"}\n',

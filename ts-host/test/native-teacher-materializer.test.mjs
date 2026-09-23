@@ -103,3 +103,12 @@ test('unsupported row versions and missing admission decisions fail closed', () 
   delete missing.outcome.accepted;
   assert.throws(() => materializeNativeRows([missing]), /outcome.accepted must be boolean/);
 });
+
+test('oracle-accepted student decisions keep student provenance and can be rehearsed', () => {
+  const row = nativeRow('student-success');
+  row.provenance.collection_role = 'student';
+  const result = materializeNativeRows([row]);
+  assert.equal(result.turns[0].source, 'student-native');
+  assert.deepEqual(result.turns[0].gold_sources, ['checked-student-trajectory', 'exact-runtime-oracle']);
+  assert.equal(result.turns[0].training_admission.approved, true);
+});

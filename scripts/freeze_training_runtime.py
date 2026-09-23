@@ -14,7 +14,7 @@ from run_training_pipeline import atomic_json, digest_file
 
 def tree_identity(root):
     return {str(path.relative_to(root)): digest_file(path)
-            for folder in ("dist", "scripts") for path in sorted((root / folder).rglob("*")) if path.is_file()} | {
+            for folder in ("dist", "scripts", "src") for path in sorted((root / folder).rglob("*")) if path.is_file()} | {
                 name: digest_file(root / name) for name in ("prelude.js", "package.json", "package-lock.json") if (root / name).exists()}
 
 
@@ -32,7 +32,7 @@ def freeze(source, output):
         return data
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="runtime-building-", dir=output.parent))
-    for name in ("dist", "scripts"):
+    for name in ("dist", "scripts", "src"):
         shutil.copytree(source / name, staging / name)
     for name in ("prelude.js", "package.json", "package-lock.json"):
         if (source / name).exists():
