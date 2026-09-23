@@ -1,5 +1,7 @@
 # Code corpus tools
 
+**Eval rejects `var`.** Any code that becomes an eval body in training data (captured source functions, teacher repairs, synthetic implementations) must use `let`/`const`: rewrite each `var` declaration to `let` while preparing the data (the scoping differences are edge cases), rather than dropping the example.
+
 ## Latest integration
 
 Seven additional sources now have runnable adapters: CodeSearchNet JS, Magicoder
@@ -60,11 +62,11 @@ Tiny-Codes single JS/TS fences are extracted from prose while preserving raw
 responses; ambiguous multiple fences remain subject to syntax rejection.
 These additions are not execution-verified. No credentials are saved in artifacts.
 
-Runtime package installation and networking are documented in
+Package imports and networking are documented in
 [application-packages.md](../../../../docs/application-packages.md). These are
 application capabilities, not reasons to discard dependency-bearing source code.
 Replay accepts `--workspace /absolute/app-root` for dependency-bearing functions.
-Declared package imports are preserved; relative imports of application functions
+Package imports are preserved; relative imports of application functions
 are converted into nested native codebase entries (the `foo.nl` / `foo/` layout)
 only when explicit portable signatures permit it. Unsupported or recursive
 subfunction graphs are rejected, never inlined into eval. Prepare upstream

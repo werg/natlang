@@ -34,6 +34,8 @@ files. `ts-host/scripts/migrate-program-ir.mjs FILE...` upgraded the tracked
 `natlang.program/1` files (a `$lambda` root with definition-style children) once;
 new data is produced as `natlang.program/2` directly.
 
+**Eval rejects `var`.** Any code that becomes an eval body in training data (captured source functions, teacher repairs, synthetic implementations) must use `let`/`const`: rewrite each `var` declaration to `let` while preparing the data (the scoping differences are edge cases), rather than dropping the example.
+
 ## Collection, materialization, export
 
 ```bash

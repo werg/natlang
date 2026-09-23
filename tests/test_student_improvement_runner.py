@@ -69,13 +69,12 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
     programs = tmp_path / 'programs.jsonl'
     programs.write_text(json.dumps(program) + '\n')
     student, student_thread, _ = server([[('eval', {'code': 'throw new Error("wrong branch")'})], None])
-    teacher, teacher_thread, _ = server([[('eval', {'code': 'const answer: number = 1; answer'}),
-                                        ('mark_lines', {'start': 1})]])
+    teacher, teacher_thread, _ = server([[('return_result', {'value': 1})]])
     try:
         run = tmp_path / 'round'
         config = improvement_pipeline(base_recipe, base_run, programs, run,
                                       f'http://127.0.0.1:{student.server_port}', 'student',
-                                      f'http://127.0.0.1:{teacher.server_port}', 'teacher')
+                                      f'http://127.0.0.1:{teacher.server_port}', 'teacher', max_turns=2)
         config_path = tmp_path / 'round-recipe.json'
         config_path.write_text(json.dumps(config))
         assert run_pipeline(config_path, run, until='prepare-correction') == 0

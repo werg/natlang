@@ -9,7 +9,7 @@ from run_training_pipeline import atomic_json
 
 
 def improvement_pipeline(base_recipe, base_run, programs, run, student_server, student_model,
-                         teacher_server, teacher_model, *, limit=0, root_seed=42, workers=1):
+                         teacher_server, teacher_model, *, limit=0, root_seed=42, workers=1, max_turns=None):
     run = Path(run).resolve()
     programs = Path(programs).resolve()
     if not programs.is_file():
@@ -33,7 +33,7 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
                 f'{r}/{role}-jobs', output, '--model-id', model, '--server', endpoint,
                 '--root-seed', str(root_seed), '--workers', str(workers),
                 '--segment-turns', '24', '--segment-messages', '48',
-                '--collection-role', role, *extra]
+                '--collection-role', role, *(['--max-turns', str(max_turns)] if max_turns else []), *extra]
         if role == 'student':
             args += ['--all'] if limit == 0 else ['--limit', str(limit)]
         else:
@@ -94,11 +94,12 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help='student programs; zero means all')
     parser.add_argument('--root-seed', type=int, default=42)
     parser.add_argument('--workers', type=int, default=1)
+    parser.add_argument('--max-turns', type=int, help='model turns allowed per collected call (unbounded if omitted)')
     args = parser.parse_args()
     config = improvement_pipeline(args.base_recipe, args.base_run, args.programs, args.run,
                                   args.student_server, args.student_model, args.teacher_server,
                                   args.teacher_model, limit=args.limit, root_seed=args.root_seed,
-                                  workers=args.workers)
+                                  workers=args.workers, max_turns=args.max_turns)
     if args.output.exists():
         if json.loads(args.output.read_text()) != config:
             raise ValueError('refusing to replace a different improvement pipeline')

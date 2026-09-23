@@ -62,3 +62,42 @@ removal of Map/Fold/Iterate, and a two-verdict progress judge). Only implementat
 - [x] Skills, spec, README, setup, packages, and application guides rewritten
 - [ ] Open: `natlang.program/2` adapters for the retired external datasets (decisions, SCONE, SGD, FinQA, CLEVR) and the semantic-merge scenario set
 - [ ] Open: a live-model smoke of each shipped application (fixture and Chromium smokes pass)
+
+## Model surface revision (2026-09-23)
+
+Reworked against live Bonsai 27B runs (`ts-host/scripts/live-probe/`):
+
+- The opening is the call's signature and instructions, then a runtime-run eval that reads
+  the arguments with `read_inputs()` into typed consts (their values shown in the eval's
+  result), declares functions and services, and for directory reducers a prefilled
+  `list_files`.
+- Completion: the `return_result(value)` tool finishes; a top-level eval `return` or
+  `return_result(...)` inside eval stages a computed value, and a reply without a tool call
+  returns it (or, for a string-typed call, the reply text is the result). `blocked(missing)`
+  and `failed(message)` end without a result, as tools or eval functions. `mark_lines`, line
+  listings, the `result` variable, the final-expression result rule, and `commit` are removed.
+- `read_page(id, page)` reads cut-off output by a short word ID; `read_value` is removed.
+- Parameters are `const` and frozen. The `debug` binding and the failure paragraph in the
+  system prompt are removed; the system prompt is fixed for the whole call.
+- No default limits: repairs, nudges, conversation segmentation, eval time, turn tokens, and
+  sampling temperature apply only when configured. Eval accepts an optional `timeout_ms`.
+- Eval allows `try`/`catch`, classes, and Node host globals; package imports resolve from the
+  workspace like any module (the npm install layer is removed).
+
+### Training-data pipeline: state after the revision
+
+Done: collector (`maxTurns`/`--max-turns`, run ID from program and seed only), materializer
+(the durable opening includes the prefilled scope exchanges), code-corpus replay (eval then
+done), playground import (no tool calls in program IR), SFT selection (current tool names;
+`return_result` and replies are terminal turns), improvement pipeline (`--max-turns`),
+teacher and synthetic-data docs; the orphan `scripts/prompts/no_fudging.md` is removed.
+
+Still to do:
+
+- [ ] Regenerate every derived trace, turn, and SFT file under the new surface; the tracked
+      `data/direct-code-2026-09-23/` replays and turns still show `mark_lines` and the old
+      prompt. Program IR does not change.
+- [ ] Rewrite `var` to `let` in code that becomes eval bodies (see PROGRAM_IR_PIPELINE.md).
+- [ ] Re-run teacher collections with an explicit `--max-turns`.
+- [ ] Re-audit the probe families whose scoring assumed line marks (read-before-code) and the
+      student-improvement evidence kinds (`premature_reply`) against the new completion rule.

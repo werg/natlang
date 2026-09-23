@@ -9,8 +9,9 @@ default-exported TypeScript functions; natural-language functions use typed
 frontmatter and run in a persistent TypeScript scope. The model uses `eval` for
 declarations, assignments, control flow, exact work, and awaited positional
 calls to imported functions. The shared model-facing surface is `eval`,
-`read_value`, `mark_lines`, `report_blocker`, `report_error`, and function tools
-for inspecting or editing imported functions. Filesystem tools are available
+`read_page`, `return_result`, `blocked`, `failed`, and function tools
+for inspecting or editing imported functions; a reply without a tool call returns
+the staged result. Filesystem tools are available
 only inside directory reducers, with paths relative to the input folder.
 `await reducer(folder, ...args)` discards file changes; `await folder.apply(reducer,
 ...args)` retains the selected changes.
@@ -222,10 +223,10 @@ traces.
 | K8 | Interpret a nested function with its own typed parameters, imports, and private scope | reference policy |
 | K9 | Resume from persistent values and marks; correct rejected calls from their diagnostics | perturbation + reference policy |
 | K10 | Inspect or edit an imported function with function tools when the task requires a source change | reference policy |
-| K11 | Use `report_blocker` when required information is absent; never guess | construction (undetermined instances) |
+| K11 | Use `blocked` when required information is absent; never guess | construction (undetermined instances) |
 | K12 | Continue after a fresh conversation from persistent state and the effect journal | reference policy |
 | K13 | Finish only with a value matching the declared return type and all substantive lines closed | validator + reference policy |
-| K14 | Use `read_value` to inspect scope; use directory-reducer file tools only for relative paths in the supplied folder | reference policy |
+| K14 | Inspect scope with eval and read cut-off output with `read_page`; use directory-reducer file tools only for relative paths in the supplied folder | reference policy |
 
 **Leaves (L): the prompt-like tasks, kept and trained throughout**
 
@@ -837,7 +838,7 @@ finish with an incomplete return quiesces the lambda with its diagnostic,
 without another decoder request to that lambda. The caller receives the normal
 quiesced-call result. Successful partial writes remain legal. There is no
 automatic replay, rollback, or retry; already performed effects remain performed.
-`report_blocker` remains the agent's explicit failure signal. JavaScript runtime
+`blocked` remains the agent's explicit failure signal. JavaScript runtime
 errors are outside this validation-policy switch.
 
 `scripts/validation_probe.py` contains three solvable controls and six tasks
@@ -894,7 +895,7 @@ are `runs/student-v5-validation-healthy.json`,
 
 ### Explicit error tool and anti-fudging prompt (2026-09-19)
 
-Added `report_error(message=...)` alongside `report_blocker(missing=...)`. Both
+Added `failed(message=...)` alongside `blocked(missing=...)`. Both
 produce the existing blocked tool outcome and quiesced lambda; an explicit error
 has an `error:` diagnostic. No new scheduling or deterministic interpretation is
 introduced. Tests cover grammar availability, malformed diagnostics, propagation

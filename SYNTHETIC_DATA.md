@@ -11,8 +11,8 @@ items marked *[unverified]* could not be confirmed and need a second look.
 natural-language instruction lines, ordinary loops and helper calls, locals,
 and default-exported crisp `.ts` helpers. Their leaves are small prompt-like
 tasks (judge, classify, extract, rewrite). The author or synthesizer states
-the structure; the interpreter carries it out with `eval`, ordinary imports,
-`mark_lines`, and explicit blocker or error reports. Directory reducers alone
+the structure; the interpreter carries it out by judgment and `return_result`,
+or with `eval` and ordinary imports, and explicit blocker or error reports. Directory reducers alone
 receive relative-path file tools for their input folder. Leaf-only programs
 remain about a quarter of the corpus.
 Skill codes (K1–K14 interpreting, L1–L6 leaves) are those of `TRAINING.md` §2.
@@ -259,10 +259,10 @@ states (https://arxiv.org/abs/2401.09074).
 | Glue | a line of exact work no function covers | one short `eval` expression | string ops; counting long lists; rounding |
 | Branch | an `if`/`else` and the values it depends on | the condition and only its selected branch | twin with the condition flipped; empty-list conditions |
 | Return | finished locals and declared return type | a value with the required type, then line closure | optional fields, nested records |
-| Navigate | a scope value is truncated before a step needs it | `read_value(expression, start, end)` | nested values, list ranges, long strings; twin where reading is unnecessary |
+| Navigate | a scope value or output is cut off before a step needs it | `read_page(id, page)` | nested values, list ranges, long strings; twin where reading is unnecessary |
 | Resume | a function continued after a fresh context | continue from persisted scope and marks | interrupted loops and nested calls |
 | Call repair | previous helper call plus a real rejection diagnostic | corrected call | type mismatch, missing argument, invalid operation |
-| Blocker | inputs that do not determine the result | `report_blocker` with a precise note | twin where they do; a callee's blocker passed upward |
+| Blocker | inputs that do not determine the result | `blocked` with a precise note | twin where they do; a callee's blocker passed upward |
 | Copy-edit-call | a program line asking for a variation of a function | edit the imported function with function tools and call it by name | twin where an argument suffices |
 | Loop check | a state and a criterion | the `boolean` of a check function | met, nearly met, not met |
 | Leaf | item + question or rubric or record type | one complete typed return value | Y11 minimal pairs |

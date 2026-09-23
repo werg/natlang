@@ -33,20 +33,19 @@ accumulator and completed rounds.
 
 ## Keep the execution path simple
 
-- Use the interpreter's system prompt (`EXPLICIT_TOOLS_PROMPT` in
+- Use the interpreter's system prompt (`TOOLS_PROMPT` in
   `ts-host/src/native/prompt.ts`), temperature 0, low reasoning effort, and a
-  256-token thinking budget.
-- Teacher generation uses persistent typed scope through `eval`. Compute and
-  update values directly in TypeScript, call helpers with ordinary awaited
-  positional arguments, and use `mark_lines` after completing each instruction.
-  The final eval expression that matches the declared return type completes the
-  function. Use blocker and error actions to report missing information or invalid work.
-- Keep compact state and no self-review. The established leaf collector uses
-  caller validation feedback. The application evaluation harness uses local
-  validation feedback so rejected writes remain visible to the model for
-  repair; rejected and corrected turns are retained in raw audits.
-- A normal assistant reply signals successful completion. The harness checks
-  the final result and completed line marks at that boundary.
+  256-token thinking budget. Set `--max-turns` for a collection run; the runtime
+  sets no turn limit of its own.
+- Work that takes only judgment is answered directly with `return_result`.
+  Exact work runs in the persistent typed scope through `eval`: compute values in
+  TypeScript, call helpers with ordinary awaited positional arguments, and return
+  the answer with a top-level `return` (staged; a reply without a tool call then
+  finishes). Use blocker and error actions to report missing information or invalid work.
+- Keep compact state and no self-review. Rejected actions and failed evals are
+  reported to the model for repair; rejected and corrected turns are retained in raw audits.
+- A reply without a tool call ends the turn: it returns the staged result (or, for
+  a string-typed call, the reply text). The harness checks the result at that boundary.
 - Missing optional inputs are explicitly identified both in the opening state
   and during scope inspection. An actual empty string remains a valid supplied value.
 
@@ -76,7 +75,7 @@ identify the model, parser, or constrained generation as the sole cause.
 
 The audit was also corrected: a faithful attempted operation that encounters a
 genuine type conflict is an acceptable failure. The model need not anticipate
-every conflict by calling `report_error`. Redirecting the call, supplying a
+every conflict by calling `failed`. Redirecting the call, supplying a
 different value, or reporting success still fails. Equivalent numeric fold
 initializers are accepted whether passed by reference or literal.
 

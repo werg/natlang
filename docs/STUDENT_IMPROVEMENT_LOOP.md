@@ -158,7 +158,7 @@ The selection/admission rules are:
   `student-native` provenance. Failed proposals within an accepted run remain
   in the IR but are not positive targets.
 - For a teacher correction, resume from the **student's actual state** after
-  the failed tool result, with its current scope and debug snapshot. A teacher
+  the failed tool result, with its current scope and the reported error. A teacher
   solution from the original task opening is useful general SFT but is not an
   on-policy correction for that failure.
 - Admit a correction only after the exact frozen runtime executes its full

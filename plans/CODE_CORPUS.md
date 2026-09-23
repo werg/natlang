@@ -79,7 +79,7 @@ adapter signature, not an assumption about JSON object ordering at execution tim
    Run tests only in an explicitly selected disposable checkout/container. Capture
    failure must not alter test behavior. Concurrency must not corrupt JSONL records.
 5. Replay portable calls against a fresh canonical native host with a scripted
-   policy: `eval` body, then `mark_lines`. Capture exact native requests, actions and
+   policy: `eval` body (returning the value), then a done reply. Capture exact native requests, actions and
    results, verify the expected value and unchanged input state, and export the
    existing `messages/tools/target` training format. Never fabricate host feedback.
 6. Add translation jobs (Case2Code/SPoC), helper dependency contexts, portable
@@ -175,10 +175,9 @@ should require neither a GPU nor a model server.
   The mean pilot passes its source suite but yields no portable captures because
   of optional undefined/callback arguments; it contributes no positive rows.
   This is pilot coverage, not proof of repository-wide compatibility.
-- App-root `package.json` plus npm lockfile is implemented. Explicit package
-  installation, native module imports and network access are available with host
-  authority. Dependencies persist across evals; imported handles do not enter
-  portable scope. Real npm-package example runs in handwritten and NL modes.
+- Code imports packages the way a module in the app workspace would; the app
+  installs its own dependencies. Imported handles do not enter portable scope.
+  Real npm-package example runs in handwritten and NL modes.
   See `docs/application-packages.md` for the contract and limitations.
 - Dependency-bearing corpus replay accepts `--workspace`, rebases captured
   imports, and records manifest/lockfile hashes before/after plus observed host

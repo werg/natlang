@@ -14,10 +14,11 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-FAILURE_OR_REPAIR = {"report_error", "report_blocker", "edit", "edit_file", "write_file"}
-READ_SKILLS = {"read", "read_value", "read_file", "search_files", "list_files", "diff_files"}
-WRITE_SKILLS = {"write", "write_value"}
-RETURN_SKILLS = {"return_value", "commit"}
+# Skill labels are the native tool names of a turn joined by "+", or "reply" for a turn without a tool call.
+FAILURE_OR_REPAIR = {"failed", "blocked", "edit_function"}
+READ_SKILLS = {"read_page", "read_file", "search_files", "list_files", "diff_files", "read_function", "diff_functions"}
+WRITE_SKILLS = {"write_file", "edit_file"}
+RETURN_SKILLS = {"return_result"}
 
 
 def digest(path: Path) -> str:
@@ -46,15 +47,13 @@ def difficulty(row: dict) -> tuple[int, tuple[str, ...]]:
         score += 100; features.append("failure_or_repair")
     if any(marker in target for marker in ("over=", "init=", "until=", "Promise.all", ".map(", "for (", "for(")):
         score += 80; features.append("iteration")
-    if "call" in parts and "inputs=" in target and "'let/" in target:
-        score += 60; features.append("dependent_call")
     if "+" in skill:
         score += 45; features.append("multi_action")
-    if parts & {"run_code", "eval"}:
+    if "eval" in parts:
         score += 40; features.append("algorithmic_glue")
-    if "call" in parts and "to='let/" in target:
-        score += 25; features.append("local_result")
-    if context_items >= 8 and parts & ({"call", "mark_done", "mark_lines"} | WRITE_SKILLS | READ_SKILLS):
+    if "await " in target and "eval" in parts:
+        score += 25; features.append("function_call")
+    if context_items >= 8 and parts & ({"eval"} | WRITE_SKILLS | READ_SKILLS):
         score += min(30, 10 + context_items); features.append("later_state")
     return score, tuple(features)
 
@@ -62,12 +61,16 @@ def difficulty(row: dict) -> tuple[int, tuple[str, ...]]:
 def rank(row: dict) -> tuple:
     parts = set((row.get("skill") or "unknown").split("+"))
     priority = (0 if parts & FAILURE_OR_REPAIR else
-                1 if parts & {"run_code", "eval"} else 2 if parts & (READ_SKILLS | {"checkpoint"}) else
-                3 if "call" in parts else 4 if "mark_done" in parts else
-                5 if parts & WRITE_SKILLS else 6 if parts & (RETURN_SKILLS | {"reply"}) else 4)
+                1 if "eval" in parts else 2 if parts & (READ_SKILLS | {"checkpoint"}) else
+                3 if parts & WRITE_SKILLS else 4 if parts & (RETURN_SKILLS | {"reply"}) else 5)
     stable = hashlib.sha256(row["id"].encode()).hexdigest()
     score, _ = difficulty(row)
     return -score, priority, stable
+
+
+def is_terminal(row: dict) -> bool:
+    """A turn that finishes the call: return_result, or a reply without a tool call."""
+    return set((row.get("skill") or "").split("+")) <= (RETURN_SKILLS | {"reply"})
 
 
 def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminals: int):
@@ -79,7 +82,7 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
     for program in sorted(by_program):
         bucket = by_program[program]
         writes = sorted((r for r in bucket if set((r.get("skill") or "").split("+")) & WRITE_SKILLS), key=rank)
-        terminals = sorted((r for r in bucket if r.get("skill") == "reply"), key=rank)
+        terminals = sorted((r for r in bucket if is_terminal(r)), key=rank)
         reads = sorted((r for r in bucket if set((r.get("skill") or "").split("+")) & READ_SKILLS), key=rank)
         rare = [r for r in bucket if
                 set((r.get("skill") or "").split("+")) & FAILURE_OR_REPAIR
@@ -93,7 +96,7 @@ def select(rows: list[dict], max_per_program: int, max_writes: int, max_terminal
                      {r["id"] for r in rare})
         allowed = mandatory
         candidates = [r for r in bucket if (not set((r.get("skill") or "").split("+")) & WRITE_SKILLS
-                                             and r.get("skill") != "reply") or r["id"] in allowed]
+                                             and not is_terminal(r)) or r["id"] in allowed]
         required = [r for r in bucket if r["id"] in mandatory]
         optional = [r for r in sorted(candidates, key=rank) if r["id"] not in mandatory]
         chosen = required + optional[:max(0, max_per_program - len(required))]
