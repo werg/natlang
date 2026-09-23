@@ -5,8 +5,6 @@ args:
   acc: Shop
   item: Message
 returns: Shop
-effects:
-  - out.emit
 ---
 function serve(acc, item) -> Shop
 

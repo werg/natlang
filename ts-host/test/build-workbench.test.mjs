@@ -3,12 +3,10 @@ import { test } from 'node:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { NatlangHost, NodeFileTree } from '../dist/index.js';
-import { BuildWorkspace } from '../../applications/build_workbench.mjs';
-import { evalTurn } from './support/eval-turn.mjs';
+import { createNatlangRuntime, openFolder } from '../dist/index.js';
+import { BuildWorkspace, buildGoal } from '../../applications/dist/build/index.js';
+import { scriptedModel } from './support/natlang.mjs';
 
-const source = fileURLToPath(new URL('../../codebases/build_workbench/build.nl', import.meta.url));
 const node = process.execPath;
 
 async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
@@ -17,29 +15,9 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
   writeFileSync(join(folder, 'input.txt'), 'hello');
   setup(folder);
   const build = await new BuildWorkspace(folder).open();
-  const host = new NatlangHost({ host: { build, drainEvents: () => build.drainEvents() }, mode: 'retained' });
-  try {
-    const tracePath = join(folder, 'build.trace.jsonl');
-    const cyclic = tasks.every(task => task.needs.length);
-    const result = await host.run({ source: { kind: 'file', path: source },
-      inputs: { tasks, goal, files: new NodeFileTree(folder) }, tracePath,
-      modelTurn: request => {
-        const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function build(')) return evalTurn(request,
-          'const initial = await prepare(goal, tasks);\n' +
-          'let current = initial;\n' +
-          'while (!await finished(current)) current = await step(current, files);\n' +
-          'current');
-        if (prompt.includes('function step(')) return cyclic ? evalTurn(request,
-          'const ready = await ready_tasks(state);\nawait stall(state)') : evalTurn(request,
-          'const ready = await ready_tasks(state);\n' +
-          'const chosen = await choose(ready, state.goal, files);\n' +
-          'await advance(state, chosen)');
-        return evalTurn(request, JSON.stringify(choose()));
-      } });
-    const trace = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
-    return { result, folder, trace };
-  } finally { host.close(); }
+  const model = scriptedModel(() => `result = ${JSON.stringify(choose())}`);
+  const value = await createNatlangRuntime({ model: model.driver }).run(() => buildGoal(build, goal, tasks, openFolder(folder).root()));
+  return { result: { value }, folder, events: build.drainEvents(), model };
 }
 
 test('natlang builds the goal through a real serial process and records outputs', async () => {
@@ -55,16 +33,14 @@ test('natlang builds the goal through a real serial process and records outputs'
       argv: [node, '-e', 'require("fs").writeFileSync("out/unrelated.txt", "bad")'],
       inputs: [], outputs: ['out/unrelated.txt'] },
   ];
-  const { result, folder, trace } = await run(tasks, 'goal', () => n++ === 0 ? 'source' : 'goal');
+  const { result, folder, events } = await run(tasks, 'goal', () => n++ === 0 ? 'source' : 'goal');
   try {
-    assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'done');
     assert.deepEqual(Array.from(result.value.order), ['source', 'goal']);
     assert.equal(readFileSync(join(folder, 'out/goal.txt'), 'utf8'), 'HELLO');
     assert.ok(result.value.results.every(row => row.status === 'ok' &&
       row.input_sha256.length === 64 && row.output_sha256.length === 64));
-    assert.equal(trace.filter(e => e.kind === 'host' && e.event?.operation === 'build.execute').length, 2);
-    assert.ok(trace.some(e => e.kind === 'action' && e.name === 'eval'));
+    assert.equal(events.filter(e => e.operation === 'build.execute').length, 2);
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
@@ -88,11 +64,12 @@ test('cyclic dependency exposes a blocker without running a process', async () =
     { id: 'source', needs: ['goal'], description: 'source', argv: [node], inputs: [], outputs: ['out/source.txt'] },
     { id: 'goal', needs: ['source'], description: 'goal', argv: [node], inputs: [], outputs: ['out/goal.txt'] },
   ];
-  const { result, folder, trace } = await run(tasks, 'goal');
+  const { result, folder, events, model } = await run(tasks, 'goal');
   try {
     assert.equal(result.value.status, 'blocked');
+    assert.equal(model.openings.length, 0);
     assert.deepEqual(Array.from(result.value.blocked), ['goal', 'source']);
-    assert.equal(trace.filter(e => e.kind === 'host' && e.event?.operation === 'build.execute').length, 0);
+    assert.equal(events.filter(e => e.operation === 'build.execute').length, 0);
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 

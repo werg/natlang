@@ -9,9 +9,9 @@ import { preferencePairs } from '../scripts/build-preference-pairs.mjs';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, nativeJobRunner } from '../dist/teacher/collector.js';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
-const record = { version: 'natlang.program/1', id: 'student-hard-case', kind: 'lambda_source',
+const record = { version: 'natlang.program/2', id: 'student-hard-case', kind: 'lambda_source',
   source_groups: ['student-hard-case'], split: 'train', semantics: {
-    root: { $lambda: { type: '() => number', instructions: 'Return one.' } },
+    root: 'one.nl', files: { 'one.nl': '---\nargs: {}\nreturns: number\n---\nReturn one.\n' },
     inputs: {}, expected: 1, operation: 'exact' } };
 function modelServer(responses) {
   let count = 0;

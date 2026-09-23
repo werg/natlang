@@ -1,3 +1,4 @@
+import { research } from 'natlang:services';
 export default async function review_candidate(id: string): Promise<string> {
-return await host.research.reviewCandidate(id);
+return await research.reviewCandidate(id);
 }

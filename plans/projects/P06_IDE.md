@@ -1,7 +1,7 @@
 # P06 — Natlang IDE and training workbench
 
-Status: headless natlang IDE workbench in `codebases/ide/` and
-`applications/ide_workbench.mjs`, plus an interactive browser playground in
+Status: headless natlang IDE workbench in `applications/ide/` and
+`applications/ide/index.ts`, plus an interactive browser playground in
 `ts-host/playground/`. [Shared capabilities](README.md). The browser shell now
 provides multi-file editing, live source diagnostics, revision-pinned native
 runs, trace inspection, source forks, reviewed cases, IR admission, local

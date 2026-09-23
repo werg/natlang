@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { bindAwait } from '../runtime/context.js';
 import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from '../native/evaluator.js';
 
@@ -35,90 +36,69 @@ function snapshot(value: unknown): unknown {
   freeze(copy); return copy;
 }
 
-function scopeBridgeValue(value: unknown): unknown {
-  if (value === undefined || value === null || typeof value === 'string' ||
-      typeof value === 'boolean' || typeof value === 'number') return value;
-  if (Array.isArray(value)) return Array.from(value, scopeBridgeValue);
-  if (typeof value === 'object' || typeof value === 'function')
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scopeBridgeValue(item)]));
-  throw new TypeError(`scope bridge contains unsupported ${typeof value} value`);
-}
+/** Browsers have no async context: restore the natlang task frame after every await in eval code. */
+const restoreAfterAwait: ts.TransformerFactory<ts.SourceFile> = context => file => {
+  const f = context.factory;
+  const visit: ts.Visitor = node => ts.isAwaitExpression(node) ?
+    f.createCallExpression(f.createParenthesizedExpression(f.createAwaitExpression(f.createCallExpression(
+      f.createIdentifier('__natlang_bindAwait'), undefined, [ts.visitNode(node.expression, visit) as ts.Expression]))), undefined, []) :
+    ts.visitEachChild(node, visit, context);
+  return ts.visitNode(file, visit) as ts.SourceFile;
+};
 
 function compile(code: string, body: boolean, asyncBody: boolean): string {
-  const source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,fx,host)` : code;
+  const source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown) {\n${code}\n}\n__natlang_body(self)` : code;
   const result = ts.transpileModule(source, { fileName: 'natlang-eval.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
-      isolatedModules: true, removeComments: false } });
+      isolatedModules: true, removeComments: false }, transformers: { before: [restoreAfterAwait] } });
   const errors = (result.diagnostics ?? []).filter(d => d.category === ts.DiagnosticCategory.Error);
   if (errors.length) throw new SyntaxError('TypeScript: ' + errors.map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')).join('; '));
   return result.outputText;
 }
 
-/** Parse a browser-host TypeScript function body without evaluating it. */
-export function checkTypeScriptBody(code: string): string[] {
-  const source = `async function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}`;
-  const result = ts.transpileModule(source, { fileName: 'natlang-source.ts', reportDiagnostics: true,
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
-      isolatedModules: true } });
-  return (result.diagnostics ?? []).filter(d => d.category === ts.DiagnosticCategory.Error)
-    .map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
-}
+type Evaluator = (scope: Record<string, unknown>, code: string, log: (...values: unknown[]) => void,
+  live: Record<string, unknown>) => unknown;
 
-type Evaluator = (scope: Record<string, unknown>, code: string,
-  effect: (cap: string, fn: string, args: unknown[]) => unknown,
-  log: (...values: unknown[]) => void) => unknown;
-/** Trusted browser evaluator. The host object is shared by identity and may be mutated. */
+/**
+ * Browser evaluator. Portable scope data arrives as a frozen snapshot (`self`); live objects,
+ * callables, captures and the output sink arrive by reference (`__live`).
+ */
 export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-browser-host';
   readonly mode: EnvironmentMode;
-  readonly host: object;
   private evaluator?: Evaluator;
-  private effect?: (capability: string, operation: string, args: unknown[]) => unknown;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
 
-  constructor(options: { mode?: EnvironmentMode; host?: object; observe?: (event: HostEvent) => void;
-    effect?: (capability: string, operation: string, args: unknown[]) => unknown } = {}) {
-    this.mode = options.mode ?? 'fresh'; this.host = options.host ?? Object.freeze({});
-    this.observe = options.observe; this.effect = options.effect;
+  constructor(options: { mode?: EnvironmentMode; observe?: (event: HostEvent) => void } = {}) {
+    this.mode = options.mode ?? 'fresh';
+    this.observe = options.observe;
   }
 
-  bindEffect(handler: (capability: string, operation: string, args: unknown[]) => unknown): () => void {
-    const previous = this.effect; this.effect = handler;
-    return () => { if (this.effect === handler) this.effect = previous; };
-  }
-
-  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', host: this.host,
-    observe: this.observe }); }
+  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', observe: this.observe }); }
 
   private makeEvaluator(): Evaluator {
-    const prelude = __NATLANG_PRELUDE__.split('const __deepFreeze')[0];
-    const factory = new Function('host', `${prelude}\nlet self, locals;\n` +
+    const factory = new Function('__natlang_bindAwait', `${__NATLANG_PRELUDE__}\nlet self, __live;\n` +
       `function* evaluate() { let job=yield; while(true) {\n` +
-      `const {scope,code,effect,log}=job; self=scope; locals=scope.let || {};\n` +
+      `const {scope,code,log,live}=job; self=scope; __live=live;\n` +
       `const console=Object.freeze({log,info:log,warn:log,error:log});\n` +
-      `const fx=new Proxy({}, {get:(_,cap)=>new Proxy({}, {get:(_,fn)=>(...raw)=>effect(String(cap),String(fn),raw)})});\n` +
       `job=yield eval(code);\n} }\n` +
       `const runner=evaluate(); runner.next();\n` +
-      `return function(scope,code,effect,log) { return runner.next({scope,code,effect,log}).value; }`) as (host: object) => Evaluator;
-    return factory(this.host);
+      `return function(scope,code,log,live) { return runner.next({scope,code,log,live}).value; }`) as (bind: typeof bindAwait) => Evaluator;
+    return factory(bindAwait);
   }
 
   private capture(request: EvalRequest, status: string): HostEvent[] {
-    const host = this.host as { drainEvents?: () => HostEvent[] };
-    const events = typeof host.drainEvents === 'function' ? host.drainEvents() : [];
-    for (const event of events) this.observe?.(event);
-    const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body,
-      effectful: request.effectful, sharedHost: true, status, nativeEffectsReplayable: false };
-    this.observe?.(evalEvent); return [...events, evalEvent];
+    const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body, status };
+    this.observe?.(evalEvent);
+    return [evalEvent];
   }
 
-  private run(request: EvalRequest, asyncBody: boolean, logs: string[]): { value: unknown; logs: string[] } {
+  private run(request: EvalRequest, asyncBody: boolean, logs: string[]): unknown {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     const evaluator = this.mode === 'retained' ? (this.evaluator ??= this.makeEvaluator()) : this.makeEvaluator();
-    const scope = snapshot(request.scope) as Record<string, unknown>;
     const log = (...values: unknown[]) => {
       if (logs.length >= 32) return;
       const line = values.map(value => {
@@ -129,38 +109,39 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       }).join(' ');
       logs.push(line.length > 2000 ? `${line.slice(0, 2000)} …` : line);
     };
-    const value = evaluator(scope, compile(request.code, request.body, asyncBody), (cap, fn, raw) => {
-      if (!this.effect) throw new Error('NATLANG:effect-undeclared');
-      const args = cap === 'natlang' && fn === 'scope' ? scopeBridgeValue(raw) as unknown[] : portable(raw) as unknown[];
-      const result = this.effect(cap, fn, args);
-      if (result && typeof result === 'object' && typeof (result as Promise<unknown>).then === 'function')
-        return Promise.resolve(result).then(portable);
-      return portable(result);
-    }, log);
-    return { value, logs };
+    return evaluator(snapshot(request.scope) as Record<string, unknown>, compile(request.code, request.body, asyncBody),
+      log, request.live ?? {});
+  }
+
+  private failure(request: EvalRequest, error: unknown, logs: string[]): EvalFailure {
+    return new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+        error.stack : undefined, logs });
   }
 
   execute(request: EvalRequest): EvalResult {
     const logs: string[] = [];
     try {
-      const { value } = this.run(request, false, logs);
+      const value = this.run(request, false, logs);
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
-        throw new TypeError('async eval results require a host job and later poll');
-      return { result: portable(value === undefined ? null : value), events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
-      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
-        error.stack : undefined, logs }); }
+        throw new TypeError('an asynchronous result needs executeAsync');
+      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
+    } catch (error) { throw this.failure(request, error, logs); }
   }
 
   async executeAsync(request: EvalRequest): Promise<EvalResult> {
     const logs: string[] = [];
     try {
-      const { value } = this.run(request, request.body, logs);
-      const resolved = await value;
-      return { result: portable(resolved === undefined ? null : resolved), events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
-      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
-        error.stack : undefined, logs }); }
+      const value = await this.run(request, request.body, logs);
+      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
+    } catch (error) { throw this.failure(request, error, logs); }
+  }
+
+  /** Evaluate a callable-folder module body in the page realm; bindings are passed by reference. */
+  evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
+    if (this.disposed) throw new Error('TypeScript environment is disposed');
+    const names = Object.keys(bindings);
+    return new Function(...names, `"use strict";\n${code}`)(...names.map(name => bindings[name]));
   }
 
   close(): void { this.disposed = true; this.evaluator = undefined; }

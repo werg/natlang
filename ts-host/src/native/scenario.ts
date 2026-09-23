@@ -3,7 +3,7 @@ import type { NativeTraceRecorder } from './trace.js';
 export type NativeScenarioContract = { outcome: string; value?: unknown;
   effects?: [string, unknown[]][];
   requiredActions?: { name: string; arguments?: Record<string, unknown> }[];
-  constrainedCalls?: { function: string; to: string; inputs: Record<string, string> }[] };
+};
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -18,7 +18,9 @@ export function admitNativeTrace(trace: NativeTraceRecorder, contract: NativeSce
   const replay = trace.replayObservations();
   if (replay.outcome !== contract.outcome)
     throw new Error(`outcome changed: ${replay.outcome} != ${contract.outcome}`);
-  if (contract.outcome === 'done' && !same(replay.final, contract.value))
+  // The final state is the invocation's lambda; its captured value is the typed return.
+  const final = (replay.final as { $lambda?: { return?: unknown } } | null)?.$lambda?.return ?? null;
+  if (contract.outcome === 'done' && !same(final, contract.value))
     throw new Error('final captured value does not match the contract');
   const effects = replay.effects as Record<string, unknown>[];
   const requested = effects.filter(event => event.phase === 'requested');
@@ -31,12 +33,6 @@ export function admitNativeTrace(trace: NativeTraceRecorder, contract: NativeSce
       throw new Error('required effect was requested but did not complete');
   }
   const actions = replay.actions as Record<string, unknown>[];
-  for (const rule of contract.constrainedCalls ?? []) for (const action of actions) {
-    const args = action.arguments as Record<string, unknown> ?? {};
-    if (action.name === 'call' && args.function === rule.function &&
-        (args.to !== rule.to || !same(args.inputs ?? {}, rule.inputs)))
-      throw new Error('required call destination or inputs changed');
-  }
   let cursor = 0;
   for (const required of contract.requiredActions ?? []) {
     while (cursor < actions.length && (actions[cursor]!.name !== required.name ||

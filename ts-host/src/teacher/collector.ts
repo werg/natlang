@@ -6,23 +6,18 @@ import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { EXPLICIT_TOOLS_PROMPT } from '../native/prompt.js';
-import { NativeRuntime } from '../native/runtime.js';
+import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
-import { TypeEnv } from '../native/types.js';
-import { buildPending, coerce, dump, isPending } from '../native/values.js';
+import { dump } from '../native/values.js';
+import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
-const PROGRAM_VERSION = 'natlang.program/1';
 const TOOL_SCHEMA = 'scope-eval-v1';
 
-export type ProgramRecord = { version: string; id: string; kind: string;
-  semantics: { root: Record<string, unknown>; inputs: Record<string, unknown>; expected: unknown;
-    operation?: string; effects?: Record<string, unknown>; events?: unknown[];
-    failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' };
-    folder_files?: Record<string, string>; expected_files?: Record<string, string> }; [key: string]: unknown };
+export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
@@ -51,8 +46,10 @@ export const recordDigest = (record: ProgramRecord): string => sha256(canonical(
 export function validateFocusedRecord(record: ProgramRecord): void {
   if (record.version !== PROGRAM_VERSION || !['lambda_graph', 'lambda_source'].includes(record.kind))
     throw new Error(`unsupported focused program IR: ${record.version}/${record.kind}`);
-  if (!record.id || !record.semantics || typeof record.semantics !== 'object' ||
-      !record.semantics.root || !record.semantics.inputs || !Object.hasOwn(record.semantics, 'expected'))
+  if (!record.id || !record.semantics || typeof record.semantics !== 'object' || typeof record.semantics.root !== 'string' ||
+      !record.semantics.root.endsWith('.nl') || !record.semantics.files || typeof record.semantics.files !== 'object' ||
+      typeof record.semantics.files[record.semantics.root] !== 'string' || !record.semantics.inputs ||
+      !Object.hasOwn(record.semantics, 'expected'))
     throw new Error('invalid focused program IR record');
   if (record.semantics.folder_files &&
       (typeof record.semantics.folder_files !== 'object' || Array.isArray(record.semantics.folder_files) ||
@@ -218,18 +215,6 @@ function effectHarness(specs: Record<string, unknown>): {
   return { capabilities, observed, expected };
 }
 
-function bindInputs(root: ReturnType<typeof buildPending>, inputs: Record<string, unknown>): void {
-  if (!Object.keys(inputs).length) return;
-  if (!isPending(root) || root.nodeKind !== 'lambda' || root.type.kind !== 'lambda')
-    throw new TypeError('program inputs require a root Lambda');
-  const env = new TypeEnv().child(root.types);
-  for (const [name, value] of Object.entries(inputs)) {
-    const field = root.type.params.fields.find(item => item.name === name);
-    if (!field) throw new TypeError(`${name} is not a program parameter`);
-    root.args[name] = coerce(value, field.type, env, `args/${name}`);
-  }
-}
-
 function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
@@ -323,37 +308,41 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       trajectory.push(trajectoryTurn(request, response));
       return response;
     };
-    const root = buildPending(item.record.semantics.root);
-    bindInputs(root, item.record.semantics.inputs);
+    const root = programNode(item.record);
     const folderFiles = item.record.semantics.folder_files;
     if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))
       throw new Error(`${item.record.id}: folder_files requires a directory reducer root`);
     const folder = folderFiles ? Folder.fromFiles(folderFiles) : undefined;
-    if (folder && root.nodeKind === 'lambda') {
+    if (folder) {
       root.projectTransaction = await folder.beginTransaction(false);
       root.reducerMode = 'apply';
     }
     const environment = new TypeScriptEnvironment({ mode: 'fresh' });
     const effects = effectHarness(item.record.semantics.effects ?? {});
-    let streamIndex = 0;
-    const events = item.record.semantics.events;
-    const stream = events ? { poll: () => streamIndex < events.length ?
-      { kind: 'item' as const, value: structuredClone(events[streamIndex++]) } : { kind: 'closed' as const } } : undefined;
     const agent = new NativeToolAgent(driver, { systemPrompt: config.systemPrompt, temperature: 0,
       segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages,
       validationFeedback: 'caller' });
-    const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index, ...expected })).slice(0, 32);
-    const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), capabilities: effects.capabilities, stream,
+    // Seeds derive from the run ID, so it names the program and seed root only: a teacher
+    // handed a student's failed state must reproduce the student's requests exactly.
+    const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index,
+      program_ir_sha256: expected.program_ir_sha256, seed_policy: expected.seed_policy })).slice(0, 32);
+    // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
+    const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
+    for (const [name, fn] of Object.entries(effects.capabilities)) {
+      const [service, method] = name.split('.') as [string, string];
+      (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
+    }
+    const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services,
       seedPolicy: { mode: 'derived', root: config.rootSeed }, runId, signal });
     try {
-      const result = await runtime.runRoot(root), actual = dump(result.value);
+      const result = await runtime.run(root), actual = dump(result.value);
       const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
         [file.path, await folder.readText(file.path)] as const))) : undefined;
       const expectedKind = item.record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
       const seededFailure = item.record.semantics.failure_seed;
       const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
         (!seededFailure.kind || event.failure_kind === seededFailure.kind));
-      if (Object.hasOwn(effects.observed, 'out.emit')) effects.observed['out.emit'] = result.emitted;
+      
       const effectsOk = same(effects.observed, effects.expected);
       const filesOk = !folder || same(actualFiles, item.record.semantics.expected_files ?? folderFiles);
       const accepted = failureSeen && result.outcome.kind === expectedKind && effectsOk && filesOk &&
@@ -376,7 +365,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
       await removeIfPresent(partialPath);
       return row;
-    } finally { runtime.close(); environment.close(); }
+    } finally { environment.close(); }
   };
 }
 

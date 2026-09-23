@@ -1,7 +1,7 @@
 # P15 — Stateful API workflow composer
 
-Status: durable local fixture in `codebases/api_workflow/` and
-`applications/workflow_service.mjs`. [Shared capabilities](README.md).
+Status: durable local fixture in `applications/workflow/` and
+`applications/workflow/index.ts`. [Shared capabilities](README.md).
 
 `step.nl` is a natlang Fold step: it reloads the durable order, chooses the
 next operation or reconciliation action, and asks the host to apply it. The

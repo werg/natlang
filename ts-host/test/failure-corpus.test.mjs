@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { NativeRuntime } from '../dist/index.js';
+import { interpreter } from './support/natlang.mjs';
 import { NativeSession } from '../dist/native/runtime.js';
 import { TypeEnv } from '../dist/native/types.js';
 import { buildPending, MISSING } from '../dist/native/values.js';
@@ -52,8 +52,8 @@ test('teacher seed assembly puts failure cases inside a bounded collection range
 
 for (const item of failureCases) test(`${item.id}: failed eval exposes debug and repair reaches the oracle`, async () => {
   const lam = buildPending({ $lambda: { type: item.type, instructions: item.instructions, args: item.inputs } });
-  const runtime = new NativeRuntime();
-  try {
+  const runtime = interpreter();
+  {
     const session = new NativeSession(runtime, lam, new TypeEnv());
     const failed = await session.applyAsync('eval', { code: item.failed });
     assert.equal(failed.kind, 'error', failed.text);
@@ -65,7 +65,7 @@ for (const item of failureCases) test(`${item.id}: failed eval exposes debug and
     assert.equal(repaired.kind, 'ok', repaired.text);
     assert.deepEqual(lam.return, item.expected);
     assert.equal(session.failureDebug, undefined);
-  } finally { runtime.close(); }
+  }
 });
 
 test('teacher collector seeds a real failure and admits only the repair continuation', async () => {

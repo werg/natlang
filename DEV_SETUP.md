@@ -6,15 +6,13 @@ From the repository root, prepare everything with:
 scripts/setup_dev.sh
 ```
 
-Use `scripts/setup_dev.sh --node-only` when Python development is unnecessary.
-Both forms are safe to repeat. Node 22.13 or newer is required; full setup also
-needs `uv` and Python 3.12.
+Use `scripts/setup_dev.sh --node-only` when the Python training tools are
+unnecessary. Both forms are safe to repeat. Node 22.13 or newer is required;
+full setup also needs `uv` and Python 3.12.
 
 Setup installs the pinned TypeScript dependencies and builds the Node and
-browser outputs. Full setup also creates `.venv` and installs the Python project
-with its development extras, then verifies that QuickJS and the test dependencies
-can be imported. TypeScript differential tests discover this environment
-automatically. It also installs `natlang` in `~/.local/bin` as a
+browser outputs. Full setup also creates `.venv` with the Python training-data
+and fine-tuning tools and their test dependencies. It also installs `natlang` in `~/.local/bin` as a
 symlink to this checkout's source wrapper. If that directory is missing from
 `PATH`, setup prints the exact export to add to your shell profile.
 
@@ -46,84 +44,44 @@ from the selected command directory, for example with
 ## Run from source
 
 The installed `natlang` command points at `scripts/natlang`. That checkout
-wrapper rebuilds Node output whenever its TypeScript inputs are newer than the
-compiled CLI, so source edits need no manual build step. It also keeps packages,
-application state, caches, and traces under this checkout's `.natlang/` directory.
-Commands can be invoked from any working directory; relative application and
-program paths are resolved from that directory.
+wrapper rebuilds the Node output whenever its TypeScript inputs are newer than
+the compiled CLI, so source edits need no manual build step. It keeps packages,
+application state, caches, and traces under this checkout's `.natlang/`
+directory. Relative paths resolve from the working directory.
 
-Run a `.nl`, `.ts`, YAML, or JSON program directly:
+Applications are TypeScript projects. Run one by its directory or manifest; the
+project is compiled with `natlang build` into `.natlang/build`, and its entry
+function receives a target context with the configured model and runtime:
 
 ```bash
-natlang path/to/main.nl
-natlang path/to/main.nl --inputs inputs.json --trace run.jsonl --json
+natlang run applications/evidence
+natlang run applications/notebook -- --notebook notebook.json
+natlang run applications/terminal
+cat logs.jsonl | natlang run applications/logs
+natlang run path/to/main.ts                 # a TypeScript entry exporting main(context)
 ```
 
-Run a one-off natural-language instruction from a natlang codebase directory:
+Arguments after `--` belong to the application. Use `/help` inside every
+interactive application: evidence provides `/sources` and `/load PATH`, the
+notebook `/cells` and `/load FILE`, the log console `/demo` and `/load FILE`,
+and the semantic terminal `/recipes`.
+
+Check or build a project without running it, discover applications, and
+inspect how a source resolves:
 
 ```bash
-cd path/to/codebase
-natlang summarize the available functions and when to call them
+natlang check examples/triage
+natlang build applications/evidence --out /tmp/evidence
+natlang apps applications
+natlang inspect applications/evidence --json
 ```
 
-When two or more positional words, or one quoted multiword argument, do not form
-an existing path, the CLI wraps them in an anonymous
-`(files: Record<string, ProjectFile>) => string`. The working directory is its
-codebase root: every top-level `.nl` and natlang frontmatter `.ts` function is
-available by name, and those functions retain their declared companions.
-Ordinary host `.ts` files are ignored. Instruction runs accept `--profile`,
-`--trace`, `--seed`, `--timeout`, and `--json`. The file manifest is an ordinary
-typed record passed to the instruction. Directory reducers use the relative
-file API when they need model-directed filesystem changes.
-
-Run an application by giving its manifest or a directory containing
-`natlang.json`:
+Call one named natural-language function, or ask an instruction over the
+current directory and its nearest `natlang.d/`:
 
 ```bash
-natlang path/to/application
-natlang path/to/application/natlang.json
-natlang codebases/semantic_terminal
-```
-
-Discover runnable source applications without installing them:
-
-```bash
-natlang --apps
-natlang --apps codebases
-```
-
-There is no fixed or generated development application list. Each runnable
-application directory contains `natlang.json`. The CLI searches the manifest's
-directory and its ancestors for the complete source root, since an application
-may combine a natlang codebase with host adapters elsewhere in the repository.
-`--root DIR` overrides that inference.
-
-Arguments before `--` belong to natlang. Arguments after it belong to the
-application:
-
-```bash
-natlang codebases/evidence_console
-natlang codebases/notebook_console
-natlang codebases/log_investigator
-```
-
-These open with useful starter state and describe possible next actions. Use
-`/help` inside every interactive app. Evidence provides `/sources` and `/load
-PATH`; notebook provides `/cells` and `/load FILE`; the log investigator
-provides `/demo` and `/load FILE`; the semantic terminal provides `/recipes`.
-The corresponding `--documents`, `--notebook`, and piped JSONL forms remain
-available for automation and direct imports:
-
-```bash
-natlang codebases/evidence_console -- --documents evidence.json
-natlang codebases/notebook_console -- --notebook notebook.json
-cat logs.jsonl | natlang codebases/log_investigator --plain
-```
-
-Inspect a local application without installing it:
-
-```bash
-natlang --inspect codebases/semantic_terminal --json
+natlang call path/to/function.nl --inputs inputs.json --trace traces/
+natlang ask summarize the functions in natlang.d and when to call them
 ```
 
 ## Model lifecycle
@@ -135,9 +93,8 @@ inside natlang's tested range. Missing or incompatible ambient installations
 are left untouched; with consent, natlang installs its verified build beside
 them.
 
-A reducer-backed application begins these steps immediately, in parallel with
-loading its target module and state. A direct source program begins them in
-parallel with source loading:
+An application or function run begins these steps immediately, in parallel with
+building and loading its source:
 
 1. selects the statically generated project default;
 2. uses a verified checkout copy when present, otherwise downloads the verified
@@ -147,12 +104,12 @@ parallel with source loading:
 5. terminates that owned process when the command closes or receives SIGINT or
    SIGTERM.
 
-Administrative and host-only package commands do not start or download a model.
-`natlang --setup` repeats
-runtime discovery and installation, `natlang --runtime status --json` explains
-every candidate, and `natlang --runtime install` explicitly installs the managed
-build. Point at a custom compatible binary with `NATLANG_LLAMA_SERVER`.
-`natlang --doctor --json` reports whether the complete local runtime is ready.
+Administrative and package commands do not start or download a model.
+`natlang setup` repeats runtime discovery and installation, `natlang runtime
+status --json` explains every candidate, and `natlang runtime install`
+explicitly installs the managed build. Point at a custom compatible binary with
+`NATLANG_LLAMA_SERVER`. `natlang doctor --json` reports whether the complete
+local runtime is ready.
 
 Useful local overrides are:
 
@@ -207,16 +164,17 @@ latest release.
 
 ## Installed applications and packages
 
-Paths are the normal development and local authoring interface. Native packages
-are optional distribution artifacts. `natlang --apps` discovers source manifests;
-`natlang --packages` reports archives installed into the content addressed package
+Paths are the normal development and local authoring interface. Distribution
+packages are optional artifacts. `natlang apps` discovers source manifests;
+`natlang packages` reports archives installed into the content-addressed package
 store. Installed users can run a package by its name or exact target:
 
 ```bash
-natlang --package install application.nlpkg
-natlang --packages
-natlang application-name
-natlang package-name@1.0.0#target
+natlang package pack applications/evidence --out evidence.nlpkg
+natlang package install evidence.nlpkg
+natlang packages
+natlang run @natlang/evidence-console
+natlang run @natlang/evidence-console@0.3.0#console
 ```
 
 See [Native packages and executables](NATIVE_PACKAGES.md) for archive and
@@ -225,17 +183,20 @@ distribution details.
 ## Builds and tests
 
 The wrapper performs a fast Node build after TypeScript edits. Build the browser
-bundle explicitly after browser, worker, bundler, or WASM changes:
+bundle explicitly after browser, worker, bundler, or WASM changes, and the
+repository applications after changing them:
 
 ```bash
 npm --prefix ts-host run build
+npm --prefix ts-host run build:applications
 ```
 
-Run the TypeScript and Python suites with:
+Run the test suites with:
 
 ```bash
-npm --prefix ts-host test
-.venv/bin/python -m pytest -q
+npm --prefix ts-host test                   # runtime, applications, conformance
+npm --prefix ts-host run test:browser       # Chromium smoke; set NATLANG_CHROMIUM if needed
+.venv/bin/python -m pytest -q               # training tools
 ```
 
 Checkout package objects, application state, caches, and traces live under

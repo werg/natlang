@@ -1,73 +1,60 @@
 # natlang types and validation
 
-The normative type rules and diagnostics are in [`spec/SPEC.md`](spec/SPEC.md).
-This document summarizes the current clean-break TypeScript contract for
-authors and training-data builders.
+The normative rules are in [`spec/SPEC.md`](spec/SPEC.md). This page summarizes
+them for authors and training-data builders.
 
 ## Source types
 
-Function signatures use standard TypeScript types:
+Signatures use TypeScript types: `string`, `number`, `boolean`, `null`,
+records, arrays, `Record<string, T>`, literal unions, optional fields and
+parameters, aliases, and `Folder`. Named functions declare them in frontmatter;
+inline `nl` calls get them from the TypeScript checker.
 
 ```ts
-type Ticket = {
-  id: string;
-  label: "urgent" | "normal" | "spam";
-  confidence: number;
-};
+type Ticket = { id: string, label: "urgent" | "normal" | "spam", confidence: number };
 
-export default function classify(inbox: string[], rubric: string): Ticket[] {
-  // crisp helper body
-}
+const label: Ticket["label"] = await nl`Label ticket by urgency.`(ticket);
 ```
 
-Supported data shapes include `string`, `number`, `boolean`, `null`, records,
-arrays, `Record<string, T>`, named aliases, and literal unions. Ordinary crisp
-helpers are default-exported TypeScript functions. Natural-language functions
-declare typed parameters and a return type in their frontmatter; imported
-natural-language and crisp functions use ordinary awaited positional calls.
+```yaml
+args:
+  tickets: "Ticket[]"
+  rubric: string
+returns: "Ticket[]"
+```
 
-Validation is structural. Function inputs, crisp returns, committed eval
-transactions, and completed natural-language results must fit their declared
-types. A valid shape does not establish semantic truth, provenance, or effect
-completion. Applications still need domain-specific checks and real operation
-receipts where those claims matter.
+A folder's `types.ts` supplies aliases (`export type Name = ...;`) to the
+functions in and below it. Host values that are not data (class instances,
+functions, DOM nodes, native handles) cross by reference; a signature can name
+them with `Live<"T", "tag" | "class" | "shape" | "function" | "any", "detail">`,
+and the compiler maps TypeScript classes and built-ins to these contracts.
 
-## Natural-language execution
+## Validation
 
-Natural-language functions run in a persistent TypeScript scope. `eval(code)`
-executes ordinary TypeScript declarations, assignments, branches, loops, and
-function calls. `read_value(expression, start?, end?)` inspects scope values.
-Every substantive instruction line is closed after it succeeds with
-`mark_lines(start, end?, skipped?)`. `report_blocker` and `report_error` provide
-explicit exits for missing information and invalid work.
+Validation is structural. Arguments are checked when a function is called; the
+model's result is checked after each eval and at completion. A partial record
+can be built incrementally, but completion requires the declared type. Simple
+scalar mistakes (a quoted number) may be coerced when the intended type is
+unambiguous. A valid shape does not establish semantic truth, provenance, or
+effect completion.
 
-The final eval expression that fits the declared return type supplies the
-function result. The result and all substantive instruction lines must be
-complete before the call finishes. Imported helpers are ordinary names in
-scope; use `await helper(value, option)` and standard TypeScript collection
-control flow such as `for...of`, array methods, and `Promise.all`.
+## Inline signatures
 
-Normal lambdas have function tools for inspecting and editing imported
-functions. The fixed function set cannot be created, deleted, moved, or renamed
-by those tools. Inspect and improve existing function source when it helps the
-task.
+The compiler infers an inline call's signature from `nl<F>`, the contextual
+type, an immediate call, or later uses of a local, and reports:
 
-## Files and reducers
+| Code | Meaning |
+|---|---|
+| `nl-unknown-return` | Nothing determines the result type; annotate or use `nl<T>` |
+| `nl-ambiguous-signature` | Uses disagree about the signature |
+| `nl-unknown-parameter` | A parameter's type cannot be determined |
+| `nl-sync-callback` | The call is used where a synchronous function is required |
+| `nl-unknown-name` | The instructions name something that is not visible |
 
-Filesystem access is limited to directory reducers. A reducer operates on a
-writable copy of its input folder, and every file path is relative to that
-folder. It can create, edit, move, and remove files through its file tools and
-folder filesystem API.
+## Effects and files
 
-Calling `await reducer(folder, ...args)` returns the typed value and discards
-file changes. Calling `await folder.apply(reducer, ...args)` retains the
-reducer's selected changes in the folder. Ordinary functions do not receive
-model-facing file tools or ambient workspace access.
-
-## Host effects
-
-Native APIs, databases, processes, binary objects, and other host-owned values
-stay on the host side. Expose narrowly typed operations through crisp helpers
-or declared effect callbacks. A failed acknowledgement does not prove an
-external effect did not happen; preserve operation identity and observed
-receipts before retrying.
+Services, live-object writes, and folder commits are the ways a call changes
+the world; see the effect table in the
+[integration skill](skills/natlang-integration/references/recovery.md).
+Filesystem access is limited to directory reducers, whose paths are relative to
+their input folder.

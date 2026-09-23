@@ -3,7 +3,6 @@ description: Decide what to do with one email; dates from my landlord go into th
 args:
   email: string
 returns: Decision
-effects: [calendar.add]
 ---
 function handle_mail(email) -> Decision
 

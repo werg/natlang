@@ -1,26 +1,45 @@
 id: 13-crisp-lambda-produce
 title: A value that belongs in the tree is produced by a crisp function, not by tokens
 kind: program
-exercises: [code base, crisp function, large value never passes through the model]
-program:
-  $lambda:
-    type: '(emails: string[]) => string[]'
-    function: distinct_emails
-    instructions: |
-      Return `await normalize_emails(emails)` without changing its result.
-    codebase:
-      normalize_emails:
-        description: The distinct email addresses, lower-cased and sorted.
-        args: { emails: 'string[]' }
-        returns: 'string[]'
-        code: return uniq(emails.map(lower)).sort()
+exercises:
+  - code base
+  - crisp function
+  - large value never passes through the model
+root: distinct_emails.nl
+files:
+  distinct_emails.nl: |
+    ---
+    args:
+      emails: "string[]"
+    returns: "string[]"
+    ---
+    Return `await normalize_emails(emails)` without changing its result.
+  distinct_emails/normalize_emails.ts: |
+    /** The distinct email addresses, lower-cased and sorted. */
+    export default function normalize_emails(emails: string[]): string[] {
+      return [...new Set(emails.map(email => email.toLowerCase()))].sort()
+    }
 inputs:
-  emails: ["Zed@x.org", "amy@x.org", "AMY@x.org", "bob@y.com", "zed@X.org", "cy@z.net"]
+  emails:
+    - Zed@x.org
+    - amy@x.org
+    - AMY@x.org
+    - bob@y.com
+    - zed@X.org
+    - cy@z.net
 expect:
-  value: ["amy@x.org", "bob@y.com", "cy@z.net", "zed@x.org"]
+  value:
+    - amy@x.org
+    - bob@y.com
+    - cy@z.net
+    - zed@x.org
 lint:
-  must: [normalize_emails called once, with the whole list, and its result returned unchanged]
-  must_not: [the root retyping or re-emitting the list itself]
+  must:
+    - normalize_emails called once
+    - with the whole list
+    - and its result returned unchanged
+  must_not:
+    - the root retyping or re-emitting the list itself
 reference:
   distinct_emails:
     eval: await normalize_emails(emails)

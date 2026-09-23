@@ -25,7 +25,7 @@ export function parseRows(source) {
     requireValue(Array.isArray(rows) && rows.every(row => row && typeof row === 'object' && !Array.isArray(row)), 'Use a JSON array of records');
     return rows;
 }
-export const COMMON = 'revision: Num; notice: Text;';
+export const COMMON = 'revision: number; notice: string;';
 export const initial = data => ({ revision: 0, notice: 'Ready when you are.', ...data });
 export function rng(seed) { let value = seed >>> 0; return () => { value = (Math.imul(value, 1664525) + 1013904223) >>> 0; return value / 4294967296; }; }
 /** Portable structural equality; record key order is not part of a natlang value. */

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dumpNativeState, loadFunctionFile } from '../dist/index.js';
+import { PROGRAM_VERSION, programDefinition } from '../dist/teacher/program.js';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
@@ -33,30 +33,48 @@ async function tree(path) {
 }
 const seedText = await readFile(seeds, 'utf8');
 const cases = seedText.split(/\r?\n/).filter(Boolean).map(JSON.parse);
+/** A stream family runs its step function over the events, as ordinary code would. */
+const streamRoot = (stepName, state, event) => `---
+description: Apply ${stepName} to every event in order and return the final state.
+args:
+  initial: ${JSON.stringify(state)}
+  events: ${JSON.stringify(`${event}[]`)}
+returns: ${JSON.stringify(state)}
+---
+Start from initial. For each event in events, in order, the state becomes
+${stepName}(state, event). Return the final state.
+`;
 const rows = [];
 for (const seed of cases) {
   const source = sources[seed.family];
   if (!source) throw new Error(`no current source registered for ${seed.family}`);
   const [relative, shape] = source, path = resolve(repo, relative);
-  const loaded = dumpNativeState(loadFunctionFile(path));
-  let root = loaded;
-  if (shape === 'fold') {
-    const old = seed.semantics.root_template?.$fold;
-    if (!old) throw new Error(`${seed.id} needs a fold root_template`);
-    const step = loaded.$lambda;
-    root = { $fold: { type: old.type, types: step.types, over: [], init: old.init, step: loaded } };
-  }
-  const folder = dirname(path), files = await tree(folder);
-  const revision = hash(Buffer.concat(await Promise.all(files.map(async file =>
+  const folder = dirname(path), paths = (await tree(folder)).filter(file => /\.(nl|ts)$/.test(file));
+  const revision = hash(Buffer.concat(await Promise.all(paths.map(async file =>
     Buffer.concat([Buffer.from(file.slice(folder.length + 1)), Buffer.from([0]), await readFile(file), Buffer.from([0])])))));
-  const semantics = structuredClone(seed.semantics);
-  delete semantics.root_template;
-  semantics.root = root;
-  rows.push({ version: 'natlang.program/1', id: seed.id, kind: 'lambda_graph',
+  const sourceFiles = Object.fromEntries(await Promise.all(paths.map(async file => [file.slice(folder.length + 1), await readFile(file, 'utf8')])));
+  const rootName = relative.slice(relative.lastIndexOf('/') + 1);
+  const { expected, effects } = seed.semantics;
+  let semantics;
+  if (shape === 'fold') {
+    const fold = seed.semantics.root_template?.$fold;
+    if (!fold || !Array.isArray(seed.semantics.events)) throw new Error(`${seed.id} needs a fold root_template and events`);
+    // The codebase's types stay at the top so the stream root and the nested step both see them.
+    const step = programDefinition({ semantics: { root: rootName, files: sourceFiles } });
+    const [state, event] = step.params.map(param => param.type);
+    const files = { 'run.nl': streamRoot(step.name, state, event) };
+    for (const [file, text] of Object.entries(sourceFiles)) files[file === 'types.ts' ? file : `run/${file}`] = text;
+    semantics = { root: 'run.nl', files, inputs: { initial: fold.init, events: seed.semantics.events }, expected, ...(effects ? { effects } : {}) };
+  } else {
+    semantics = { root: rootName, files: sourceFiles, inputs: seed.semantics.inputs, expected, ...(effects ? { effects } : {}) };
+  }
+  const row = { version: PROGRAM_VERSION, id: seed.id, kind: 'lambda_graph',
     family: seed.family, source: 'natlang-current-source', split: seed.split,
     source_ids: [relative], source_groups: [seed.family], source_revisions: [revision],
     license: 'project-generated', gold_sources: ['frozen-reference-case'],
-    generation: { generator: 'natlang.source_case_freezer/1' }, semantics });
+    generation: { generator: 'natlang.source_case_freezer/2' }, semantics };
+  programDefinition(row);
+  rows.push(row);
 }
 const counts = Object.fromEntries(Object.keys(sources).map(family =>
   [family, rows.filter(row => row.family === family).length]));

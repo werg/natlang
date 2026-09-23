@@ -1,40 +1,58 @@
 id: 06-map-with-rubric
 title: Map a judgment with a rubric passed to every instance; enum results
 kind: program
-exercises: [code base, call over a list, named types, enum, crisp library functions]
-program:
-  $lambda:
-    type: '(tickets: string[], rubric: string) => Label[]'
-    function: label_tickets
+exercises:
+  - code base
+  - call over a list
+  - named types
+  - enum
+  - crisp library functions
+root: label_tickets.nl
+files:
+  label_tickets.nl: |
+    ---
+    args:
+      tickets: "string[]"
+      rubric: "string"
+    returns: "Label[]"
     types:
-      Label: '"billing" | "technical" | "spam"'
-    instructions: |
-      Return the result of `Promise.all(tickets.map(...))`, calling `classify(ticket, rubric)` for
-      every ticket.
-    codebase:
-      classify:
-        description: Label one ticket using the rubric.
-        args: { item: string, rubric: string }
-        returns: '"billing" | "technical" | "spam"'
-        instructions: |
-          Label the ticket in `item` according to `rubric`.
+      Label: "\"billing\" | \"technical\" | \"spam\""
+    ---
+    Return the result of `Promise.all(tickets.map(...))`, calling `classify(ticket, rubric)` for
+    every ticket.
+  label_tickets/classify.nl: |
+    ---
+    description: "Label one ticket using the rubric."
+    args:
+      item: "string"
+      rubric: "string"
+    returns: "\"billing\" | \"technical\" | \"spam\""
+    ---
+    Label the ticket in `item` according to `rubric`.
 inputs:
   rubric: |
     billing: anything about charges, invoices, refunds, or payment methods.
     technical: anything about the product not working.
     spam: unsolicited advertising or messages unrelated to our product.
   tickets:
-    - "I was charged twice for my March invoice."
-    - "The app crashes every time I open the settings page."
-    - "CHEAP WATCHES!!! Visit our store today for 90% off."
-    - "Please change the card on file, the old one expired."
-    - "Export to CSV produces an empty file."
+    - I was charged twice for my March invoice.
+    - The app crashes every time I open the settings page.
+    - CHEAP WATCHES!!! Visit our store today for 90% off.
+    - Please change the card on file, the old one expired.
+    - Export to CSV produces an empty file.
 expect:
-  value: [billing, technical, spam, billing, technical]
+  value:
+    - billing
+    - technical
+    - spam
+    - billing
+    - technical
 lint:
   must:
     - classify called once, over tickets, with rubric passed to every instance
-  must_not: [the root labelling tickets itself, one call per ticket]
+  must_not:
+    - the root labelling tickets itself
+    - one call per ticket
 reference:
   label_tickets:
     eval: await Promise.all(tickets.map(async item => await classify(item, rubric)))

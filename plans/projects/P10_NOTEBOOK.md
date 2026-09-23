@@ -1,8 +1,8 @@
 # P10 — Natlang notebook with data operations
 
 Status: local SQL/TypeScript notebook implemented in
-[`codebases/notebook`](../../codebases/notebook/README.md) and
-[`applications/notebook.mjs`](../../applications/notebook.mjs). Edits invalidate
+[`applications/notebook`](../../applications/notebook/index.ts) and
+[`applications/notebook/index.ts`](../../applications/notebook/index.ts). Edits invalidate
 transitive descendants; live streams, persistent data and teacher quality
 remain open. [Shared capabilities](README.md).
 

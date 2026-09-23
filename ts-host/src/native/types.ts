@@ -8,15 +8,38 @@ export type Type =
   | { kind: 'union'; members: Type[] }
   | { kind: 'name'; name: string }
   | { kind: 'lambda'; params: Extract<Type, { kind: 'record' }>; returns: Type }
-  | { kind: 'map'; a: Type; b: Type }
-  | { kind: 'fold'; a: Type; s: Type }
-  | { kind: 'iterate'; s: Type };
+  /** A live host object checked by contract rather than copied as data. `name` is its TypeScript text. */
+  | { kind: 'host'; name: string; contract: HostCheck };
+
+/** Runtime check for a live host value. */
+export type HostCheck =
+  | { kind: 'tag'; tag: string }
+  | { kind: 'class'; name: string }
+  | { kind: 'shape'; members: string[] }
+  | { kind: 'function' }
+  | { kind: 'any' };
+
+const BUILTIN_HOST_TAGS = new Set(['Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegExp', 'Error', 'URL',
+  'URLSearchParams', 'Uint8Array', 'ArrayBuffer', 'Headers', 'Response', 'Request']);
+
+/** Check a live value against a host contract. Built-ins use their internal tag, which works across realms. */
+export function checkHost(value: unknown, contract: HostCheck, classes?: ReadonlyMap<string, Function>): boolean {
+  if (contract.kind === 'any') return value !== undefined;
+  if (contract.kind === 'function') return typeof value === 'function';
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+  if (contract.kind === 'tag') return Object.prototype.toString.call(value) === `[object ${contract.tag}]`;
+  if (contract.kind === 'class') {
+    const constructor = classes?.get(contract.name);
+    return constructor ? value instanceof (constructor as new (...args: never[]) => unknown) :
+      (value as object).constructor?.name === contract.name;
+  }
+  return contract.members.every(member => member in (value as object));
+}
 
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
 const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
 const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'Blob', 'Folder', 'FileHandle']);
-const pendingKinds = new Set(['lambda', 'map', 'fold', 'iterate']);
 
 function tokenize(source: string): Token[] {
   const text = source.trim(), result: Token[] = [];
@@ -123,9 +146,38 @@ class Parser {
         throw new TypeSyntaxError('Record keys must be string');
       return { kind: 'dict', element: value! };
     }
-    if (token.value === 'Map') { const [a, b] = this.args(2); return { kind: 'map', a: a!, b: b! }; }
-    if (token.value === 'Fold') { const [a, s] = this.args(2); return { kind: 'fold', a: a!, s: s! }; }
-    if (token.value === 'Iterate') return { kind: 'iterate', s: this.args(1)[0]! };
+    if (token.value === 'Live' && this.peek()?.value === '<') {
+      // Live<"TypeScript text", "tag" | "class" | "shape" | "function" | "any", "detail">
+      this.eat('<');
+      const parts: string[] = [];
+      while (true) {
+        const item = this.eat();
+        if (item.kind !== 'str') throw new TypeSyntaxError('Live<...> takes string arguments');
+        parts.push(item.value);
+        if (this.peek()?.value === ',') { this.eat(','); continue; }
+        break;
+      }
+      this.eat('>');
+      const [name = 'object', kind = 'any', detail = ''] = parts;
+      const contract: HostCheck = kind === 'tag' ? { kind, tag: detail } : kind === 'class' ? { kind, name: detail } :
+        kind === 'shape' ? { kind, members: detail ? detail.split(',') : [] } : kind === 'function' ? { kind } : { kind: 'any' };
+      return { kind: 'host', name, contract };
+    }
+    if (BUILTIN_HOST_TAGS.has(token.value)) {
+      let text = token.value;
+      if (this.peek()?.value === '<') {
+        // Type arguments of a built-in are displayed but not checked element by element.
+        const start = this.index;
+        let depth = 0;
+        do {
+          const item = this.eat();
+          if (item.value === '<') depth++; else if (item.value === '>') depth--;
+        } while (depth > 0);
+        text += this.tokens.slice(start, this.index).map(item => item.kind === 'str' ? JSON.stringify(item.value) : item.value)
+          .join('').replace(/,/g, ', ');
+      }
+      return { kind: 'host', name: text, contract: { kind: 'tag', tag: token.value } };
+    }
     return { kind: 'name', name: token.value };
   }
 }
@@ -145,18 +197,16 @@ export function formatType(type: Type): string {
     case 'union': return type.members.map(formatType).join(' | ');
     case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
       formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
-    case 'map': return `Map<${formatType(type.a)}, ${formatType(type.b)}>`;
-    case 'fold': return `Fold<${formatType(type.a)}, ${formatType(type.s)}>`;
-    case 'iterate': return `Iterate<${formatType(type.s)}>`;
+    case 'host': return type.name;
   }
 }
 
-export const LOOP_VERDICT = parseType('{ reason: string, verdict: "continue" | "done" | "degenerate" }');
-
 export class TypeEnv {
-  constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) {}
+  /** Constructors used to check `class` host contracts; inherited by child environments. */
+  classes?: ReadonlyMap<string, Function>;
+  constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) { this.classes = parent?.classes; }
   child(names: Record<string, Type>): TypeEnv { return Object.keys(names).length ? new TypeEnv({ ...names }, this) : this; }
-  lookup(name: string): Type | undefined { return this.names[name] ?? this.parent?.lookup(name) ?? (name === 'LoopVerdict' ? LOOP_VERDICT : undefined); }
+  lookup(name: string): Type | undefined { return this.names[name] ?? this.parent?.lookup(name); }
   resolve(type: Type): Type {
     const seen = new Set<string>();
     while (type.kind === 'name') {
@@ -174,18 +224,9 @@ export class TypeEnv {
     if (type.kind === 'list' || type.kind === 'dict') this.checkNames(type.element);
     if (type.kind === 'union') for (const member of type.members) this.checkNames(member);
     if (type.kind === 'lambda') { this.checkNames(type.params); this.checkNames(type.returns); }
-    if (type.kind === 'map') { this.checkNames(type.a); this.checkNames(type.b); }
-    if (type.kind === 'fold') { this.checkNames(type.a); this.checkNames(type.s); }
-    if (type.kind === 'iterate') this.checkNames(type.s);
   }
 }
 
-export function resultType(type: Type): Type {
-  if (type.kind === 'lambda') return type.returns;
-  if (type.kind === 'map') return { kind: 'list', element: type.b };
-  if (type.kind === 'fold' || type.kind === 'iterate') return type.s;
-  throw new TypeError('not a pending type');
-}
 
 export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen = new Set<string>()): boolean {
   if (source.kind === 'name' && target.kind === 'name') {
@@ -195,7 +236,6 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   }
   const a = env.resolve(source), b = env.resolve(target);
   if (JSON.stringify(a) === JSON.stringify(b)) return true;
-  if (pendingKinds.has(a.kind) && !pendingKinds.has(b.kind)) return fitsType(resultType(a), b, env, seen);
   if (a.kind === 'union') return a.members.every(member => fitsType(member, b, env, seen));
   if (b.kind === 'union') return b.members.some(member => fitsType(a, member, env, seen));
   if (a.kind === 'lit' && b.kind === 'prim') return b.name === (typeof a.value === 'string' ? 'string' : 'number');
@@ -208,6 +248,9 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
     }
     return a.fields.every(field => b.fields.some(other => other.name === field.name));
   }
+  if (a.kind === 'host' && b.kind === 'host')
+    return b.contract.kind === 'any' || JSON.stringify(a.contract) === JSON.stringify(b.contract);
+  if (b.kind === 'host' && b.contract.kind === 'any') return true;
   if (a.kind === 'lambda' && b.kind === 'lambda')
     return fitsType(a.returns, b.returns, env, seen) && fitsType(b.params, a.params, env, seen);
   return false;

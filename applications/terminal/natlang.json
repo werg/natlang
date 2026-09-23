@@ -1,0 +1,10 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/semantic-terminal",
+  "version": "0.3.0",
+  "description": "A semantic terminal that runs exact workspace recipes chosen in natural language.",
+  "include": ["index.ts", "console.ts", "types.ts", "interpret.nl", "explain.nl", "tsconfig.json"],
+  "targets": { "terminal": { "entry": "console.ts", "description": "Run the natlang semantic workspace terminal.",
+    "authority": ["filesystem:workspace", "filesystem:files", "process:recipes"], "commands": ["git", "npm", "rg"] } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

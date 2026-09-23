@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { MemoryResearchAdapter } from '../studio/shared/research-workspace.mjs';
 import { ResearchRuntime } from '../studio/shared/research-runtime.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
-import { evalTurn } from './support/eval-turn.mjs';
+import { scriptedModel } from './support/natlang.mjs';
 
 const root = new URL('../studio/research/programs/', import.meta.url);
-const paths = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const paths = ['types.ts', 'reduce.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
 const files = Object.fromEntries(await Promise.all(paths.map(async path => [path, await readFile(new URL(path, root), 'utf8')])));
 async function api() { const process = globalThis.process; try {
     globalThis.process = undefined;
@@ -15,40 +15,39 @@ async function api() { const process = globalThis.process; try {
 } finally { globalThis.process = process; } }
 
 test('research reducer owns semantic state and actual source loads in the interpreter', async () => {
-    const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
-    const client = new BrowserNatlangClient({ host: { research: {} } });
+    await api();
+    const { natlangApplication } = await import('../studio/shared/natlang-app.mjs');
     const initial = { revision: 0, head: 'manifest', question: '', notice: '', active_view: '', selected: '', receipts: [] };
-    const app = new BrowserNatlangApplication({ client, source: { files, reducer: 'reduce.nl', view: 'view.ts' }, initialState: initial,
-        modelTurn: request => {
-            return evalTurn(request,
-              '({ ...state, revision: state.revision + 1, question: event.value, notice: "The question is open." })');
-        } });
+    const model = scriptedModel(() => 'result = { ...state, revision: state.revision + 1, question: event.value, notice: "The question is open." }');
+    let committed;
+    const app = natlangApplication({ source: { files, reducer: 'reduce.nl', view: 'view.ts' }, initialState: initial, seedRoot: 17,
+        model: model.driver, services: { research: {} }, onCommit: commit => { committed = commit; } });
     try {
         await app.start();
         const result = await app.dispatch({ id: 'event-1', kind: 'question', value: 'Which cohort improved?' });
         assert.equal(result.state.question, 'Which cohort improved?');
         assert.equal(result.state.revision, 1);
         assert.equal(result.view.heading, 'Which cohort improved?');
-        assert.ok(result.reducerRun.trace.length);
-    } finally { await app.close(); await client.close(); }
+        assert.ok(committed.trace.length);
+        assert.match(model.openings[0], /workspace_read\(head: string, path: string\)/);
+    } finally { await app.close(); }
 });
 
-test('a learned crisp method executes from its committed source and records the result', async () => {
-    const { BrowserNatlangHost } = await api();
+test('a learned TypeScript method executes from its committed source and records the result', async () => {
+    const natlang = await api();
     const adapter = new MemoryResearchAdapter();
     const runtime = new ResearchRuntime({ adapter, runSource: async (entries, rootName, inputs) => {
-        const host = new BrowserNatlangHost();
-        try {
-            const result = await host.run({ source: { kind: 'files', root: rootName, files: Object.fromEntries(entries.map(row => [row.id, row.source])) }, inputs });
-            if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
-            return { value: result.value, trace_id: 'actual-trace' };
-        } finally { host.close(); }
+        const run = await natlang.runPlaygroundProject(natlang.createNatlangRuntime(),
+            natlang.newPlaygroundProject('method', rootName, Object.fromEntries(entries.map(row => [row.id, row.source])), inputs),
+            { runtimeNamespace: natlang });
+        if (run.outcome.kind !== 'done') throw new Error(run.outcome.detail);
+        return { value: run.value, trace_id: 'actual-trace' };
     } });
     const manifest = await runtime.commit('', {
-        'methods/compare.ts': { kind: 'source', content: 'export default function compare(before: number, after: number): number { return after - before; }\n' },
+        'methods/compare.ts': { kind: 'source', content: 'export function main(input: { before: number, after: number }): number { return input.after - input.before; }\n' },
     });
     const receipt = await runtime.execute(manifest.id, 'methods/compare.ts', { before: 18, after: 7 }, 'trial-1');
-    assert.equal(receipt.status, 'complete');
+    assert.equal(receipt.status, 'complete', receipt.error);
     assert.equal(receipt.value, -11);
     assert.equal((await adapter.readEffect('trial-1')).trace_id, 'actual-trace');
 });

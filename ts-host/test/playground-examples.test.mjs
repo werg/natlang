@@ -26,14 +26,12 @@ test('example library is diverse, self-contained, and valid for the browser load
 });
 
 test('every crisp example executes to its advertised expected result', async () => {
-  const { BrowserNatlangHost, newPlaygroundProject, runPlaygroundProject } = await api();
-  const host = new BrowserNatlangHost();
-  try {
-    for (const item of [...crispExamples, ...interfaceExamples.filter(item => !item.modelRequired)]) {
-      const project = newPlaygroundProject(item.name, item.root, item.files, item.inputs, item.expected);
-      const run = await runPlaygroundProject(host, project);
-      assert.equal(run.outcome.kind, 'done', `${item.id}: ${run.outcome.detail}`);
-      assert.equal(run.correct, true, `${item.id}: ${JSON.stringify(run.value)}`);
-    }
-  } finally { host.close(); }
+  const natlang = await api();
+  const runtime = natlang.createNatlangRuntime();
+  for (const item of [...crispExamples, ...interfaceExamples.filter(item => !item.modelRequired)]) {
+    const project = natlang.newPlaygroundProject(item.name, item.root, item.files, item.inputs, item.expected);
+    const run = await natlang.runPlaygroundProject(runtime, project, { runtimeNamespace: natlang });
+    assert.equal(run.outcome.kind, 'done', `${item.id}: ${run.outcome.detail}`);
+    assert.equal(run.correct, true, `${item.id}: ${JSON.stringify(run.value)}`);
+  }
 });

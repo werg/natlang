@@ -25,13 +25,13 @@
 <p id="storage"></p><p id="status" role="status">Checking browser capabilities…</p>
 <pre id="diagnostics"></pre>
 <h2>Run</h2>
-<label>Single-task instructions <textarea id="task">Write the number 7 to return.</textarea></label>
+<label>Single-task instructions <textarea id="task">Return the number 7.</textarea></label>
 <button id="run" disabled>Run task</button><button id="suite" disabled>Run three-task pilot</button>
 <button id="cancel" disabled>Cancel</button><button id="download" disabled>Download report</button>
 <pre id="result"></pre>
 <script type="module">
-  import { BrowserNatlangClient, loadBrowserModelCatalog, probeBrowserGpu,
-    checkModelStorage } from '../../dist/browser/natlang.js';
+  import { createNatlangRuntime, loadBrowserLocalModel, loadBrowserModelCatalog, newPlaygroundProject,
+    runPlaygroundProject, probeBrowserGpu, checkModelStorage } from '../../dist/browser/natlang.js';
   const $ = id => document.getElementById(id);
   const mb = bytes => (bytes / 1_000_000).toFixed(1) + ' MB';
   const canonical = value => Array.isArray(value) ? value.map(canonical) :
@@ -44,10 +44,10 @@
   $('model').value = String(models.findIndex(item => item.id === catalog.defaultId));
   const chosen = () => models[Number($('model').value)];
   const status = value => { $('status').textContent = value; };
-  const client = new BrowserNatlangClient();
   let model, controller, reports = [];
-  window.natlangPilot = { get model() { return model; }, get host() { return client; },
-    get reports() { return reports; } };
+  /** Model turns go through `model.turn` at call time, so a harness may wrap it. */
+  const runtime = limits => createNatlangRuntime({ model: { driver: (request, signal) => model.turn(request, signal),
+    maxTurns: 20, maxTokens: 2048, turnTokens: 128, validationFeedback: 'local', ...limits } });
   async function inspect() {
     const spec = chosen(), storage = await checkModelStorage(spec);
     $('storage').textContent = `${mb(spec.bytes)} download; recommended free ${mb(storage.recommendedFree)}; ` +
@@ -78,46 +78,38 @@
         onProgress: ({ loaded, total }) => status(total ?
           `Downloading ${Math.round(loaded / total * 100)}% (${mb(loaded)} / ${mb(total)})` : 'Loading model…') };
       status(`Loading ${file?.name ?? chosen().label}…`);
-      const loaded = await client.loadModel(file ? { kind: 'files', files: [file],
-        id: file.name, templateUrl: chosen().templateUrl } : { kind: 'url',
-        id: chosen().id, url: chosen().url, templateUrl: chosen().templateUrl }, options);
-      model = client.model;
+      await model?.close();
+      const loaded = await loadBrowserLocalModel(file ? { kind: 'files', files: [file], id: file.name, templateUrl: chosen().templateUrl } :
+        { kind: 'url', id: chosen().id, url: chosen().url, templateUrl: chosen().templateUrl }, options);
+      model = loaded.model;
       $('cpu').disabled = true; $('run').disabled = false; $('suite').disabled = false;
       await inspect();
       status(`Model ready in ${(model.lastLoadMs / 1000).toFixed(1)} s; ${model.diagnostics.gpuSelectionReason}` +
-        (loaded.gpuFallbackReason ? ` (GPU load failed: ${loaded.gpuFallbackReason})` : ''));
+        (loaded.status.gpuFallbackReason ? ` (GPU load failed: ${loaded.status.gpuFallbackReason})` : ''));
     } catch (error) {
-      model = client.model;
       $('cpu').disabled = $('gpuLayers').value === '0';
       status(`Load failed: ${error.message}. CPU retry is available if the GPU path failed.`);
     } finally { $('load').disabled = false; }
   }
   $('load').onclick = load;
   $('cpu').onclick = () => { $('gpuLayers').value = '0'; void load(); };
+  const nl = (args, returns, instructions) => `---\nargs: ${args}\nreturns: ${returns}\n---\n${instructions}\n`;
   const tasks = [
-    { id: 'leaf', program: { $lambda: { type: 'Lambda<{}, Num>',
-      instructions: 'Write the number 7 to return.' } }, expected: 7 },
-    { id: 'record', program: { $lambda: { type: 'Lambda<{ a: Num, b: Num }, { sum: Num, larger: Num }>',
-      args: { a: 3, b: 5 }, instructions: 'Add a and b; write sum and the larger input to return.' } },
-      expected: { sum: 8, larger: 5 } },
-    { id: 'nested-map', program: { $lambda: { type: 'Lambda<{ items: Num[] }, Num[]>',
-      args: { items: [2, 3] }, instructions: 'Call double over items and write the resulting list to return.',
-      codebase: { double: { args: { item: 'Num' }, returns: 'Num',
-        instructions: 'Write twice item to return.' } } } }, expected: [4, 6] },
+    { id: 'leaf', root: 'seven.nl', files: { 'seven.nl': nl('{}', 'number', 'Return the number 7.') }, inputs: {}, expected: 7 },
+    { id: 'record', root: 'sum.nl', inputs: { a: 3, b: 5 }, expected: { sum: 8, larger: 5 },
+      files: { 'sum.nl': nl('{ a: number, b: number }', '"{ sum: number, larger: number }"', 'Add a and b; return the sum and the larger input.') } },
+    { id: 'nested-map', root: 'double_all.nl', inputs: { items: [2, 3] }, expected: [4, 6], files: {
+      'double_all.nl': nl('{ items: "number[]" }', '"number[]"', 'Call double on each of items and return the resulting list.'),
+      'double_all/double.nl': nl('{ item: number }', 'number', 'Return twice item.') } },
   ];
   async function execute(task) {
     const before = model.turnHistory.length, started = performance.now();
-    let outcome, value, trace = [], error = null;
-    try {
-      const result = await client.run({ source: { kind: 'program', program: task.program },
-        signal: controller.signal, timeoutMs: 240000, validationFeedback: 'local',
-        options: { model: { max_turns: 20, max_tokens: 2048, turn_tokens: 128 } } });
-      ({ outcome, value, trace } = result);
-    } catch (failure) { error = String(failure); }
-    const turns = model.turnHistory.slice(before);
-    return { id: task.id, expected: task.expected, outcome, value, error,
-      correct: !error && outcome?.kind === 'done' &&
-        JSON.stringify(canonical(value)) === JSON.stringify(canonical(task.expected)),
+    const run = await runPlaygroundProject(runtime(), newPlaygroundProject(task.id, task.root, task.files, task.inputs, task.expected),
+      { signal: controller.signal });
+    const trace = run.trace, turns = model.turnHistory.slice(before);
+    return { id: task.id, expected: task.expected, outcome: run.outcome, value: run.value,
+      error: run.outcome.kind === 'done' ? null : run.outcome.detail,
+      correct: run.outcome.kind === 'done' && JSON.stringify(canonical(run.value)) === JSON.stringify(canonical(task.expected)),
       total_ms: Math.round(performance.now() - started),
       prompt_tokens: turns.reduce((n, turn) => n + (turn.promptTokens ?? 0), 0),
       cached_tokens: turns.reduce((n, turn) => n + (turn.cachedTokens ?? 0), 0),
@@ -152,17 +144,25 @@
       controller = null; $('cancel').disabled = true; $('run').disabled = false; $('suite').disabled = false;
     }
   }
-  $('run').onclick = () => void run([{ id: 'single', program: { $lambda: { type: 'Lambda<{}, Num>',
-    instructions: $('task').value } }, expected: 7 }]);
+  /** The first model request of a natlang invocation, without running inference. */
+  async function captureRequest(instructions = 'Return the number 7.') {
+    let captured;
+    await runPlaygroundProject(createNatlangRuntime({ model: { driver: request => { captured ??= request;
+      return { calls: [], text: 'probe', completion_tokens: 1 }; }, maxTurns: 1 } }),
+      newPlaygroundProject('probe', 'probe.nl', { 'probe.nl': nl('{}', 'number', instructions) }));
+    return captured;
+  }
+  window.natlangPilot = { get model() { return model; }, get reports() { return reports; }, run, tasks, captureRequest };
+  $('run').onclick = () => void run([{ id: 'single', root: 'task.nl', files: { 'task.nl': nl('{}', 'number', $('task').value) },
+    inputs: {}, expected: 7 }]);
   $('suite').onclick = () => void run(tasks);
-  Object.assign(window.natlangPilot, { run, tasks });
   $('cancel').onclick = () => controller?.abort();
   $('download').onclick = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ reports }, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'natlang-browser-pilot.json';
     anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  window.addEventListener('pagehide', () => { host?.close(); void model?.close(); });
+  window.addEventListener('pagehide', () => { void model?.close(); });
   void inspect();
 </script>
 </html>

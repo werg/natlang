@@ -3,46 +3,31 @@ import { test } from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { dumpNativeState, loadFunctionFile, NatlangHost } from '../dist/index.js';
-import { WorkflowService } from '../../applications/workflow_service.mjs';
-import { evalTurn } from './support/eval-turn.mjs';
+import { createNatlangRuntime } from '../dist/index.js';
+import { WorkflowService, step } from '../../applications/dist/workflow/index.js';
+import { scriptedModel } from './support/natlang.mjs';
 
-const path = fileURLToPath(new URL('../../codebases/api_workflow/step.nl', import.meta.url));
-
-test('natlang Fold recovers a lost payment acknowledgement without a second charge', async () => {
+test('natlang recovers a lost payment acknowledgement without a second charge', async () => {
   const root = await mkdtemp(join(tmpdir(), 'natlang-workflow-'));
   const service = new WorkflowService(root);
-  const init = await service.open('order1', 1200);
-  const host = new NatlangHost({ host: { workflow: service,
-    drainEvents: () => service.drainEvents() } });
-  const step = dumpNativeState(loadFunctionFile(path));
-  const choices = ['reserve', 'charge', 'reconcile', 'ship'];
+  await service.open('order1', 1200);
+  const model = scriptedModel(() => 'const next = current.pending ? (event.kind === "reconcile" ? "reconcile" : "wait") : ' +
+    '({ new: "reserve", reserved: "charge", charged: "ship" })[current.phase] ?? "wait";\n' +
+    'result = { action: next, reason: "Follow durable workflow state" }');
+  const runtime = createNatlangRuntime({ model: model.driver });
   try {
-    const result = await host.run({ source: { kind: 'program', program: { $fold: {
-      type: 'Fold<WorkflowEvent, WorkflowState>', types: step.$lambda.types,
-      init, step, over: [{ kind: 'continue' }, { kind: 'continue', fault: 'lost_ack' },
-        { kind: 'reconcile' }, { kind: 'continue' }] } } },
-      modelTurn: turn => {
-        const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function step(')) return evalTurn(turn,
-          'const current = await inspect(acc.order_id); const decision = await choose(current, item); await apply(current, item, decision)');
-        return evalTurn(turn, `(${JSON.stringify({
-          action: choices.shift(), reason: 'Follow durable workflow state',
-        })})`);
-      } });
-    assert.equal(result.outcome.kind, 'done');
-    assert.equal(result.value.phase, 'shipped');
-    assert.equal(result.value.pending, '');
-    assert.deepEqual((await service.remoteEffects()).map(row => row.action),
-      ['reserve', 'charge', 'ship']);
+    let state;
+    for (const event of [{ kind: 'continue' }, { kind: 'continue', fault: 'lost_ack' }, { kind: 'reconcile' }, { kind: 'continue' }])
+      state = await runtime.run(() => step(service, 'order1', event));
+    assert.equal(state.phase, 'shipped');
+    assert.equal(state.pending, '');
+    assert.deepEqual((await service.remoteEffects()).map(row => row.action), ['reserve', 'charge', 'ship']);
     const restarted = new WorkflowService(root);
     assert.equal((await restarted.read('order1')).phase, 'shipped');
-    const replay = await restarted.apply('order1', 0, { kind: 'continue' },
-      { action: 'charge', reason: 'stale' });
+    const replay = await restarted.apply('order1', 0, { kind: 'continue' }, { action: 'charge', reason: 'stale' });
     assert.equal(replay.phase, 'shipped');
     assert.equal((await restarted.remoteEffects()).filter(row => row.action === 'charge').length, 1);
-  } finally { host.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('restart sees unknown charge, reconciles, and records failed compensation', async () => {

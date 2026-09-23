@@ -1,9 +1,11 @@
 # Teacher execution setup
 
-> **Current path:** use `scripts/run_teacher_generation.sh`. It collects and
-> materializes with the native Node/TypeScript runtime and resumes atomic jobs.
-> The Python commands below document historical probes and completed backfills;
-> do not use them for new teacher data.
+> **Current path:** `scripts/run_teacher_generation.sh`. It builds the program IR
+> snapshot (`natlang.program/2`), enforces coverage, collects with the Node
+> collector, and materializes and exports turns; re-running resumes atomic jobs.
+> See [PROGRAM_IR_PIPELINE.md](PROGRAM_IR_PIPELINE.md). The Python probes and
+> collectors named in the history below were removed with the Python runtime;
+> their commands are kept only as a record of how those results were produced.
 
 The teacher is Ternary Bonsai 2 27B PTQ1_0, served by llama-server on port
 8081. The probes record the actual `/v1/models` response, program, prompt,
@@ -31,8 +33,9 @@ accumulator and completed rounds.
 
 ## Keep the execution path simple
 
-- Use `natlang/prompts/tools_explicit.md`, temperature 0, low reasoning
-  effort, and a 256-token thinking budget.
+- Use the interpreter's system prompt (`EXPLICIT_TOOLS_PROMPT` in
+  `ts-host/src/native/prompt.ts`), temperature 0, low reasoning effort, and a
+  256-token thinking budget.
 - Teacher generation uses persistent typed scope through `eval`. Compute and
   update values directly in TypeScript, call helpers with ordinary awaited
   positional arguments, and use `mark_lines` after completing each instruction.
@@ -92,7 +95,7 @@ and the matching success cases completed. This addresses the observed failures
 on those instances; the latest wording has not had another complete 21-case
 run or a broad unseen-template evaluation. Keep per-sample admission checks.
 
-## Reproduce and inspect
+## Reproduce and inspect (historical Python probes, removed)
 
 ```bash
 .venv/bin/python scripts/teacher_behavior_probe.py --seed 886 --temperature 0 --reasoning-effort low --json-text-values --system-file natlang/prompts/tools_teacher_compact.md --out runs/teacher-new-check.json

@@ -1,5 +1,7 @@
 # External datasets to natlang trajectories
 
+> **Status (2026-09-23):** historical plan. Its implementation ran on the Python runtime, which has been removed; see [PROGRAM_IR_PIPELINE.md](PROGRAM_IR_PIPELINE.md#retired-sources) for what remains.
+
 Status: implementation plan, 2026-09-19. This plan uses the sources in
 `TRAINING.md` §3.3 and the Jev-like datasets investigated in September 2026.
 It does not treat a classifier response as an interpreter trace. Dataset or

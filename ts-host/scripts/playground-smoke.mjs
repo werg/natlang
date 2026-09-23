@@ -115,35 +115,31 @@ try {
   await page.locator('#compareRun').selectOption({ index: 1 });
   assert.match(await page.locator('#compareSummary').textContent(), /"sameRevision": true/);
   assert.match(await page.locator('#compareSummary').textContent(), /"sameOutput": true/);
+  // TypeScript without natural-language calls makes no natlang invocation, so its run has no trace.
   await page.locator('[data-panel=trace]').click();
-  assert.match(await page.locator('#tracePosition').textContent(), /^Event \d+ \/ \d+$/);
-  await page.locator('#tracePrev').click();
-  assert.notEqual(await page.locator('#traceSlider').inputValue(), await page.locator('#traceSlider').getAttribute('max'));
+  assert.equal(await page.locator('#traceEmpty').isVisible(), true);
   await page.locator('[data-panel=result]').click();
   await page.locator('#captureCase').click();
   await page.locator('#caseDialog button[value=confirm]').click();
   if (!(await page.locator('[data-panel=cases]').isVisible())) await page.locator('#advancedButton').click();
   await page.locator('[data-panel=cases]').click();
+  // Cases are admitted from natlang traces; a TypeScript-only run has none.
   await page.locator('.case-card').first().getByText('Accept').click();
-  await page.getByText('train · accepted').waitFor();
+  await page.waitForFunction(() => document.querySelector('#runStatus').textContent.startsWith('Cannot accept case'));
+  assert.match(await page.locator('#runStatus').textContent(), /the run made no natural-language call/);
   await page.locator('#newCase').click();
   await page.locator('#caseDialog button[value=confirm]').click();
   await page.locator('.case-card').first().getByText('Run case').click();
   await page.getByText('Case run recorded: done').waitFor();
-  await page.locator('[data-panel=cases]').click();
-  await page.locator('.case-card').first().getByText('Accept').click();
-  await page.waitForFunction(() => [...document.querySelectorAll('.case-split')]
-    .filter(element => element.textContent === 'train · accepted').length === 2);
-  assert.equal(await page.getByText('train · accepted').count(), 2);
-  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport default function summarize(a: number, b: number): Summary { return (; }');
+  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport function main(input: { a: number, b: number }): Summary { return (; }');
   await page.getByText('1 diagnostic').waitFor();
   assert.equal(await page.locator('#runButton').isDisabled(), true);
-  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport default function summarize(a: number, b: number): Summary { return { sum: 9, larger: 9 }; }');
+  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport function main(input: { a: number, b: number }): Summary { return { sum: 9, larger: 9 }; }');
   await page.getByText('No diagnostics').waitFor();
   await page.getByText('Saved locally').waitFor();
   await page.reload();
   await page.waitForFunction(() => document.querySelector('#projectSelect')?.options.length > 0);
-  assert.match(await page.locator('#editor').inputValue(), /return 9;/);
+  assert.match(await page.locator('#editor').inputValue(), /sum: 9/);
   await page.locator('#advancedButton').click();
   await page.locator('[data-panel=jobs]').click();
   await page.getByText('Local pipeline service ready').waitFor();
@@ -215,7 +211,7 @@ try {
   await page.locator('[data-panel=result]').click();
   assert.match(await page.locator('#resultValue').textContent(), /€80/);
   await page.locator('[data-panel=trace]').click();
-  assert.match(await page.locator('#tracePosition').textContent(), /^Event \d+ \/ \d+$/);
+  assert.equal(await page.locator('#traceEmpty').isVisible(), true, 'a TypeScript view makes no natlang call');
   // Small-screen access to navigation, examples, files, and advanced tools.
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -225,7 +221,7 @@ try {
   assert.equal(await page.locator('#fileList').isVisible(), true);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(errors, []);
-  console.log('PASS browser playground: edit, run, inspect, admit, persist, live UI, time travel, model gate, mobile, and local job API');
+  console.log('PASS browser playground: edit, run, cases, persist, live UI, time travel, model gate, mobile, and local job API');
 } finally {
   await browser?.close();
   server.kill('SIGTERM');

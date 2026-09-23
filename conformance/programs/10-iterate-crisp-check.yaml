@@ -1,45 +1,55 @@
 id: 10-iterate-crisp-check
 title: Refine text in a bounded TypeScript loop until a crisp check passes
 kind: program
-exercises: [code base, bounded TypeScript loop, natural-language step, crisp check]
-program:
-  $lambda:
-    type: '(text: string) => string'
-    function: shorten_text
-    instructions: |
-      Refine the text with `shorten`, checking `is_short` before each update.
-      Use a maximum of five updates and return the latest draft.
-    codebase:
-      shorten:
-        description: Make a text noticeably shorter without losing facts.
-        args: { text: string }
-        returns: string
-        instructions: |
-          Rewrite `text` to be noticeably shorter, at most 12 words. Keep every fact; drop filler.
-      is_short:
-        description: Is the text at most 12 words?
-        args: { text: string }
-        returns: boolean
-        code: return wordCount(text) <= 12
+exercises:
+  - code base
+  - bounded TypeScript loop
+  - natural-language step
+  - crisp check
+root: shorten_text.nl
+files:
+  shorten_text.nl: |
+    ---
+    args:
+      text: "string"
+    returns: "string"
+    ---
+    Refine the text with `shorten`, checking `is_short` before each update.
+    Use a maximum of five updates and return the latest draft.
+  shorten_text/shorten.nl: |
+    ---
+    description: "Make a text noticeably shorter without losing facts."
+    args:
+      text: "string"
+    returns: "string"
+    ---
+    Rewrite `text` to be noticeably shorter, at most 12 words. Keep every fact; drop filler.
+  shorten_text/is_short.ts: |
+    /** Is the text at most 12 words? */
+    export default function is_short(text: string): boolean {
+      return text.trim().split(/\s+/).filter(Boolean).length <= 12
+    }
 inputs:
-  text: "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday."
+  text: We would like to inform all of our valued customers that, due to circumstances beyond our control, the
+    shop will unfortunately be closed on Monday.
 expect:
   checks:
-    - { kind: crisp, code: "wordCount(value) <= 12" }
-    - { kind: judge, question: "Does it say the shop is closed on Monday?", answer: true }
+    - kind: crisp
+      code: value.trim().split(/\s+/).filter(Boolean).length <= 12
+    - kind: judge
+      question: Does it say the shop is closed on Monday?
+      answer: true
 lint:
-  must: [the root uses a loop capped at five updates and checks is_short]
-  must_not: [an unbounded loop]
+  must:
+    - the root uses a loop capped at five updates and checks is_short
+  must_not:
+    - an unbounded loop
 reference:
   shorten_text:
-    eval: 'const draft = "We would like to inform all of our valued customers that, due to circumstances
-      beyond our control, the shop will unfortunately be closed on Monday.";
-
+    eval: |-
+      const draft = "We would like to inform all of our valued customers that, due to circumstances beyond our control, the shop will unfortunately be closed on Monday.";
       let __state1 = draft;
-
-      for (let __i1 = 0; __i1 < 5; __i1++) { if (await is_short(__state1)) break; __state1 = await shorten(__state1);
-      }
-
-      __state1'
+      for (let __i1 = 0; __i1 < 5; __i1++) { if (await is_short(__state1)) break; __state1 = await shorten(__state1); }
+      __state1
   shorten:
     answer: The shop will be closed on Monday.

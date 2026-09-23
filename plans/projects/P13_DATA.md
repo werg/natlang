@@ -1,8 +1,9 @@
 # P13 — Data reconciliation and migration studio
 
-Status: first finite SQLite migration application implemented in
-`codebases/data_migration`, `applications/data_migration.py`, and
-`scripts/run_data_migration.py`. Live teacher mapping quality remains unmeasured.
+Status: the interactive application is Studio's P13 app
+(`ts-host/studio/apps/`); the named programs in `codebases/data_migration`
+remain as teacher corpus. The Python host application was retired with the
+Python runtime. Live teacher mapping quality remains unmeasured.
 
 ## Natlang prerequisites
 

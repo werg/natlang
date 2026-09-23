@@ -5,7 +5,6 @@ args:
   criterion: string
 returns: Report
 ---
-function review(observations, criterion) -> Report
-  assessments = for each observation in observations: assess(observation, criterion)
-  report = summarize(assessments)
-  return report
+Assess every observation against the criterion with assess; the assessments are
+independent, so they can run together. Then return summarize of the assessments,
+in the original order.

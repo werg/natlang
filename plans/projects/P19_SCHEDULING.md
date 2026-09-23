@@ -1,7 +1,7 @@
 # P19 — Scheduling and personal workflow engine
 
-Status: local scheduling application in `codebases/scheduler/` and
-`applications/scheduling.mjs`. [Shared capabilities](README.md).
+Status: local scheduling application in `applications/scheduling/` and
+`applications/scheduling/index.ts`. [Shared capabilities](README.md).
 
 Natlang chooses among host-enumerated complete feasible schedules using a
 request's soft preferences. Exact UTC-minute arithmetic checks durations,

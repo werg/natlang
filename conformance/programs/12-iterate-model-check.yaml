@@ -1,63 +1,75 @@
 id: 12-iterate-model-check
 title: A natural-language check function controls a bounded TypeScript loop
 kind: program
-exercises: [code base, bounded TypeScript loop, natural-language stop check]
-program:
-  $lambda:
-    type: '(seed: string[]) => string[]'
-    function: collect_fruits
-    instructions: |
-      Add a fruit with `add_fruit` until `has_four_distinct_fruits` says the list is complete.
-      Limit the loop to eight updates and return the current list.
-    codebase:
-      add_fruit:
-        description: Add one fruit not already in the list.
-        args: { state: 'string[]' }
-        returns: 'string[]'
-        instructions: |
-          Add one fruit that is not already in `state` to the end of the list, and return the new list.
-      has_four_distinct_fruits:
-        description: Does the list contain four different fruits?
-        args: { state: 'string[]' }
-        returns: boolean
-        instructions: |
-          Does `state` contain four different fruits? Answer true or false.
+exercises:
+  - code base
+  - bounded TypeScript loop
+  - natural-language stop check
+root: collect_fruits.nl
+files:
+  collect_fruits.nl: |
+    ---
+    args:
+      seed: "string[]"
+    returns: "string[]"
+    ---
+    Add a fruit with `add_fruit` until `has_four_distinct_fruits` says the list is complete.
+    Limit the loop to eight updates and return the current list.
+  collect_fruits/add_fruit.nl: |
+    ---
+    description: "Add one fruit not already in the list."
+    args:
+      state: "string[]"
+    returns: "string[]"
+    ---
+    Add one fruit that is not already in `state` to the end of the list, and return the new list.
+  collect_fruits/has_four_distinct_fruits.nl: |
+    ---
+    description: "Does the list contain four different fruits?"
+    args:
+      state: "string[]"
+    returns: "boolean"
+    ---
+    Does `state` contain four different fruits? Answer true or false.
 inputs:
-  seed: ["apple"]
+  seed:
+    - apple
 expect:
   checks:
-    - { kind: crisp, code: "value.length === 4 && uniq(value.map(lower)).length === 4" }
-    - { kind: crisp, code: "lower(value[0]) === 'apple'" }
-    - { kind: judge, question: "Is every item a fruit?", answer: true }
+    - kind: crisp
+      code: value.length === 4 && new Set(value.map(item => item.toLowerCase())).size === 4
+    - kind: crisp
+      code: value[0].toLowerCase() === 'apple'
+    - kind: judge
+      question: Is every item a fruit?
+      answer: true
 lint:
   must:
     - the root loops at most eight times and asks has_four_distinct_fruits whether to stop
     - has_four_distinct_fruits is a natural-language function, not crisp
-  must_not: [the root deciding when to stop itself]
+  must_not:
+    - the root deciding when to stop itself
 reference:
   collect_fruits:
-    eval: 'const start = ["apple"];
-
+    eval: |-
+      const start = ["apple"];
       let __state1 = start;
-
-      for (let __i1 = 0; __i1 < 8; __i1++) { if (await has_four_distinct_fruits(__state1)) break; __state1
-      = await add_fruit(__state1); }
-
-      __state1'
+      for (let __i1 = 0; __i1 < 8; __i1++) { if (await has_four_distinct_fruits(__state1)) break; __state1 = await add_fruit(__state1); }
+      __state1
   add_fruit:
     answer_by:
       '["apple"]':
-      - apple
-      - banana
+        - apple
+        - banana
       '["apple", "banana"]':
-      - apple
-      - banana
-      - cherry
+        - apple
+        - banana
+        - cherry
       '["apple", "banana", "cherry"]':
-      - apple
-      - banana
-      - cherry
-      - date
+        - apple
+        - banana
+        - cherry
+        - date
   has_four_distinct_fruits:
     answer_by:
       '["apple"]': false

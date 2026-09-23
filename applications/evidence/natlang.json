@@ -1,0 +1,10 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/evidence-console",
+  "version": "0.3.0",
+  "description": "Guided citation-checked question answering with built-in evidence and live source imports.",
+  "include": ["index.ts", "console.ts", "types.ts", "plan_search.nl", "select.nl", "compose.nl", "tsconfig.json"],
+  "targets": { "console": { "entry": "console.ts", "authority": ["filesystem:documents"],
+    "description": "Explore starter evidence, import sources, and ask citation-checked questions." } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

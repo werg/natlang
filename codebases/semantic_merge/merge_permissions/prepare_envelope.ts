@@ -22,7 +22,7 @@ for (const update of byId.values())
     return invalid(`Missing or self-referential parent for ${update.id}.`);
 const pending = new Map(byId);
 const ordered = [];
-while (pending.size) {
+for (const _round of [...pending.keys()]) {
   const ready = [...pending.values()].filter(u => u.parents.every(p => !pending.has(p)))
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0];
   if (!ready) return invalid("Causal parent cycle.");

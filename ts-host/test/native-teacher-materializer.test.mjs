@@ -9,7 +9,7 @@ const secondCall = { tool: 'mark_done', source_tool: 'mark_done', arguments: { s
 const schema = [{ type: 'function', function: { name: 'write', description: 'Write a value.',
   parameters: { type: 'object', properties: { path: { type: 'string' } } } } }];
 const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajectory.native/1', id,
-  task: { kind: 'whole_program', program_ir: { id: 'program-1', version: 'natlang.program/1' }, source_program_ids: ['program-1'] },
+  task: { kind: 'whole_program', program_ir: { id: 'program-1', version: 'natlang.program/2' }, source_program_ids: ['program-1'] },
   provenance: { model: 'fixture-teacher', tool_schema: 'scope-eval-v1', segment_messages: 6 },
   outcome: { status: 'done', accepted, value: 6, action_ledger: [
     { seq: 12, name: 'write', arguments: firstCall.arguments, outcome: 'ok', result_text: 'stored value' },

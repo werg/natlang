@@ -1,48 +1,66 @@
 id: 15-cold-restart
 title: A function returns analysis together with the count of emitted records
 kind: program
-exercises: [positional function calls, declared effect, typed object result]
-program:
-  $lambda:
-    type: '(alerts: Alert[]) => Result'
-    function: analyze_alerts
+exercises:
+  - positional function calls
+  - declared effect
+  - typed object result
+root: analyze_alerts.nl
+files:
+  analyze_alerts.nl: |
+    ---
+    args:
+      alerts: "Alert[]"
+    returns: "Result"
     types:
-      Alert: '{ id: string, level: string }'
-      Result: '{ emitted: number, summary: string }'
-    effects: [out.emit]
-    instructions: |
-      Call `emit_critical_alerts` to emit every critical alert and get the count.
-      Ask `summarize_alerts` for a one-line description of all alerts. Return both results together.
-    codebase:
-      emit_critical_alerts:
-        description: Emit one output record { id } for every critical alert; return how many were emitted.
-        args: { alerts: 'Alert[]' }
-        returns: number
-        effects: [out.emit]
-        code: |
-          let n = 0
-          for (const alert of alerts) {
-            if (alert.level === "critical") { fx.out.emit({ id: alert.id }); n++ }
-          }
-          return n
-      summarize_alerts:
-        description: Write one line summarizing these alerts.
-        args: { alerts: 'Alert[]' }
-        returns: string
-        instructions: Summarize the number of alerts and how many are critical in one line.
+      Alert: "{ id: string, level: string }"
+      Result: "{ emitted: number, summary: string }"
+    ---
+    Call `emit_critical_alerts` to emit every critical alert and get the count.
+    Ask `summarize_alerts` for a one-line description of all alerts. Return both results together.
+  analyze_alerts/types.ts: |
+    export type Alert = { id: string, level: string };
+    export type Result = { emitted: number, summary: string };
+  analyze_alerts/emit_critical_alerts.ts: |
+    import { out } from 'natlang:services';
+
+    /** Emit one output record { id } for every critical alert; return how many were emitted. */
+    export default function emit_critical_alerts(alerts: Alert[]): number {
+      let n = 0
+      for (const alert of alerts) {
+        if (alert.level === "critical") { out.emit({ id: alert.id }); n++ }
+      }
+      return n
+    }
+  analyze_alerts/summarize_alerts.nl: |
+    ---
+    description: "Write one line summarizing these alerts."
+    args:
+      alerts: "Alert[]"
+    returns: "string"
+    ---
+    Summarize the number of alerts and how many are critical in one line.
 inputs:
   alerts:
-    - { id: a1, level: critical }
-    - { id: a2, level: info }
-    - { id: a3, level: critical }
+    - id: a1
+      level: critical
+    - id: a2
+      level: info
+    - id: a3
+      level: critical
 expect:
   value:
     emitted: 2
-    summary: "Three alerts came in; two were critical and one was informational."
-  emitted: [{ id: a1 }, { id: a3 }]
+    summary: Three alerts came in; two were critical and one was informational.
+  emitted:
+    - id: a1
+    - id: a3
 lint:
-  must: [emit_critical_alerts emits and counts in one call, summarize_alerts supplies the prose field]
-  must_not: [the root emitting records itself]
+  must:
+    - emit_critical_alerts emits and counts in one call
+    - summarize_alerts supplies the prose field
+  must_not:
+    - the root emitting records itself
 reference:
   analyze_alerts:
     eval: |-
@@ -50,4 +68,4 @@ reference:
       const summary = await summarize_alerts(alerts);
       ({ emitted, summary })
   summarize_alerts:
-    answer: "Three alerts came in; two were critical and one was informational."
+    answer: Three alerts came in; two were critical and one was informational.

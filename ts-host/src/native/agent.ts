@@ -1,12 +1,11 @@
 import { fitsType, formatType, parseType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
-import { MISSING, dump, isPending, problems } from './values.js';
+import { MISSING, dump, isLive, isPending, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
 import type { NativeResult, NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { DIRECTORY_REDUCER_PROMPT, EXPLICIT_TOOLS_PROMPT } from './prompt.js';
-import { isLazyDict } from './host-tree.js';
 
 export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
@@ -83,18 +82,8 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
   return [...found].map(name => `type ${name} = ${definitions[name]};`);
 }
 
-function pendingLine(value: Extract<Value, { nodeKind: string }>): string {
-  let line = `${formatType(value.type)}  ${value.status}`;
-  if (value.nodeKind === 'map' && value.slots) line += `  ${value.slots.filter(item => !isPending(item)).length} of ${value.slots.length} reduced`;
-  if (value.nodeKind === 'fold' && value.acc !== MISSING) line += `  at ${value.at} of ${Array.isArray(value.over) ? value.over.length : '?'}`;
-  if (value.nodeKind === 'iterate' && value.state !== MISSING) line += `  iteration ${value.iteration} of max ${String(value.max)}`;
-  if (value.status === 'quiesced' && value.note) line += `  "${value.note.slice(0, 60)}"`;
-  return line;
-}
-
 function previewValue(value: Value): string {
-  if (isLazyDict(value)) return `[${value.label}; lazy read-only record]`;
-  if (isPending(value)) return `[${pendingLine(value)}]`;
+  if (isLive(value)) return livePreview(value as object);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
     if (text.length > 400 || lines.length > 8)
@@ -116,8 +105,25 @@ function previewValue(value: Value): string {
   return String(value);
 }
 
+/** Bounded preview of a live host value: type, stable identity, and a short observation. */
+export function livePreview(value: object): string {
+  const label = liveLabel(value), id = liveId(value);
+  let detail = '';
+  try {
+    const tag = Object.prototype.toString.call(value);
+    if (tag === '[object Date]') detail = ` ${(value as Date).toISOString()}`;
+    else if (tag === '[object Map]' || tag === '[object Set]') detail = ` size ${(value as Map<unknown, unknown>).size}`;
+    else if (typeof value === 'function') detail = (value as Function).length ? ` (${(value as Function).length} parameters)` : '';
+    else {
+      const keys = Object.keys(value).slice(0, 6);
+      if (keys.length) detail = ` { ${keys.join(', ')}${Object.keys(value).length > 6 ? ', …' : ''} }`;
+    }
+  } catch { /* an exotic object may refuse inspection */ }
+  return `[${label} #${id}${detail}; live value, use it in eval]`;
+}
+
 function scopePreviewValue(value: Value): string {
-  if (isLazyDict(value)) return `[${value.label}; inspect with read_value or use it in eval]`;
+  if (isLive(value)) return livePreview(value as object);
   if (!isPending(value)) {
     try {
       const encoded = JSON.stringify(value);
@@ -135,26 +141,6 @@ function scopeProgramListing(body: string, marks: Record<number, string>): strin
     const box = !markable ? '   ' : marks[number] === 'done' ? '[x]' : marks[number] === 'skipped' ? '[-]' : '[ ]';
     return `${String(number).padStart(width)} ${box} ${line}`.trimEnd();
   }).join('\n');
-}
-
-function stateParts(value: Value, type: Type, env: TypeEnv, path: string,
-  filled: string[], todo: string[], subs: string[], depth = 0): void {
-  if (value === MISSING) { todo.push(`${path} (${formatType(type)})`); return; }
-  if (isPending(value)) { subs.push(`${path} [${pendingLine(value)}]`); return; }
-  const resolved = env.resolve(type);
-  if (resolved.kind === 'record' && value && typeof value === 'object' && !Array.isArray(value) && depth < 3) {
-    for (const field of resolved.fields) {
-      if (Object.hasOwn(value, field.name)) stateParts((value as Record<string, Value>)[field.name]!,
-        field.type, env, `${path}/${field.name}`, filled, todo, subs, depth + 1);
-      else if (!field.optional) todo.push(`${path}/${field.name} (${formatType(field.type)})`);
-    }
-    return;
-  }
-  if (Array.isArray(value) && value.some(isPending)) {
-    subs.push(`${path} [${value.filter(item => !isPending(item)).length} of ${value.length} items done]`);
-    return;
-  }
-  filled.push(`${path} = ${previewValue(value)}`);
 }
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
@@ -262,39 +248,8 @@ export class NativeToolAgent {
   }
 
   tools(session: NativeSession): unknown[] {
-    session.surfaceName = 'scope-eval-v1';
     if (!this.missing(session) && !this.unmarkedLines(session).length) return [];
     return this.toolsScope(session);
-  }
-
-  opening(session: NativeSession): string {
-    const lam = session.lam, type = lam.type;
-    if (type.kind !== 'lambda') return 'Workspace:';
-    const lines = ['Workspace:'];
-    if (lam.continuationNote)
-      lines.push('  Earlier working note (check against the workspace): ' + lam.continuationNote);
-    if (lam.journal.length) {
-      const omitted = Math.max(0, lam.journal.length - 4);
-      lines.push(`  Effects already attempted: ${lam.journal.length}` +
-        (omitted ? ` (last 4 shown; read args@effects for all ${lam.journal.length})` : ''));
-      for (const entry of lam.journal.slice(-4)) lines.push('    ' + pythonJson(entry));
-    }
-    for (const field of type.params.fields) lines.push(`  args/${field.name} (${formatType(field.type)}, read-only): ` +
-      (Object.hasOwn(lam.args, field.name) ? previewValue(lam.args[field.name]!) : 'not supplied'));
-    for (const [name, localType] of Object.entries(lam.letTypes)) {
-      const value = lam.let[name];
-      if (value !== undefined && value !== MISSING)
-        lines.push(`  let/${name} (${name in lam.fnCopies ? `a copy of ${name}, editable` : formatType(localType)}): ` +
-          (name in lam.fnCopies ? '' : previewValue(value)));
-    }
-    const filled: string[] = [], todo: string[] = [], subs: string[] = [];
-    stateParts(lam.return, type.returns, session.env, 'return', filled, todo, subs);
-    lines.push(`  return (${formatType(type.returns)}): ` +
-      (lam.return === MISSING ? 'not written yet' : todo.length || subs.length ? 'partly written' : 'written'));
-    if (filled.length && (todo.length || subs.length)) lines.push(`    written so far: ${filled.join('; ')}`);
-    if (todo.length && lam.return !== MISSING) lines.push(`    still missing: ${todo.join(', ')}`);
-    if (subs.length) lines.push(`    sub-tasks: ${subs.join('; ')}`);
-    return lines.join('\n');
   }
 
   private scopeOpening(session: NativeSession): string {
@@ -304,20 +259,52 @@ export class NativeToolAgent {
     const program = scopeProgramListing(original, lam.marks);
     const inputs = lam.type.params.fields.map(field => `  ${field.name}: ${formatType(field.type)} = ` +
       (Object.hasOwn(lam.args, field.name) ? scopePreviewValue(lam.args[field.name]!) : 'missing'));
-    const imports = Object.entries(lam.codebase).filter(([, raw]) =>
-      lam.subtype === 'directory-reducer' || (raw as Record<string, unknown>).subtype !== 'directory-reducer').map(([name, raw]) => {
-      const fn = raw as Record<string, unknown>;
-      const kind = fn.subtype === 'directory-reducer' ? 'directory reducer' :
-        Object.hasOwn(fn, 'code') ? 'TypeScript' : 'natural language';
-      const parameters = Object.entries(fn.args as Record<string, string> ?? {})
-        .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
-      if (fn.subtype === 'directory-reducer') parameters.unshift('folder: Folder');
-      const returns = kind === 'TypeScript' && fn.async === false ? fn.returns : `Promise<${fn.returns}>`;
-      const aliases = referencedTypeAliases([...Object.values(fn.args as Record<string, string> ?? {}),
-        String(fn.returns)], fn.types as Record<string, string> ?? {});
-      return `  ${name} [${kind}] (${parameters.join(', ')}): ${returns}` +
-        (aliases.length ? '\n' + aliases.map(line => `    ${line}`).join('\n') : '');
+    const aliasLines = new Set<string>();
+    const importLines: string[] = [];
+    const params = (args: Record<string, string>) => Object.entries(args)
+      .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
+    const listImport = (name: string, raw: Record<string, unknown>, depth: number): void => {
+      const indent = '  '.repeat(depth + 1), prefix = depth ? '.' : '';
+      const children = (raw.codebase ?? {}) as Record<string, Record<string, unknown>>;
+      const types = (raw.types ?? {}) as Record<string, string>;
+      if (raw.kind === 'namespace') importLines.push(`${indent}${prefix}${name}  # folder`);
+      else if (raw.kind === 'module') {
+        const exports = (raw.exports ?? {}) as Record<string, { kind: string; args?: Record<string, string>; returns?: string; async?: boolean; type?: string }>;
+        const main = exports.default;
+        const signature = (spec: typeof main) => `(${params(spec!.args ?? {}).join(', ')}): ${spec!.async ? `Promise<${spec!.returns}>` : spec!.returns}`;
+        importLines.push(main?.kind === 'function' ? `${indent}${prefix}${name}${signature(main)}  # TypeScript` : `${indent}${prefix}${name}  # TypeScript module`);
+        for (const [exportName, spec] of Object.entries(exports)) {
+          if (exportName === 'default') continue;
+          const inner = '  '.repeat(depth + 2);
+          importLines.push(spec.kind === 'function' ? `${inner}.${exportName}${signature(spec)}  # TypeScript` :
+            `${inner}.${exportName}${spec.type ? `: ${spec.type}` : ''}  # value`);
+          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types)) aliasLines.add(line);
+        }
+        if (main?.kind === 'function')
+          for (const line of referencedTypeAliases([...Object.values(main.args ?? {}), main.returns ?? ''], types)) aliasLines.add(line);
+      } else {
+        const reducer = raw.subtype === 'directory-reducer';
+        const list = params((raw.args ?? {}) as Record<string, string>);
+        if (reducer) list.unshift('folder: Folder');
+        importLines.push(`${indent}${prefix}${name}(${list.join(', ')}): Promise<${raw.returns}>  # ${reducer ? 'directory reducer' : 'natural language'}`);
+        for (const line of referencedTypeAliases([...Object.values((raw.args ?? {}) as Record<string, string>), String(raw.returns)], types))
+          aliasLines.add(line);
+      }
+      for (const [child, item] of Object.entries(children)) listImport(child, item, depth + 1);
+    };
+    for (const [name, raw] of Object.entries(lam.codebase)) {
+      const record = raw as Record<string, unknown>;
+      if (lam.subtype !== 'directory-reducer' && record.subtype === 'directory-reducer') continue;
+      listImport(name, record, 0);
+    }
+    const imports = [...importLines, ...[...aliasLines].map(line => `  ${line}`)];
+    const captures = Object.values(lam.captures ?? {}).map(cell => {
+      let preview: string;
+      try { preview = scopePreviewValue(cell.get() as Value); } catch { preview = '(unavailable)'; }
+      return `  ${cell.name}: ${cell.type.startsWith('Live<') ? /^Live<\s*"((?:[^"\\]|\\.)*)"/.exec(cell.type)?.[1] ?? 'object' : cell.type} = ${preview}` +
+        (cell.mutable ? '  (let: assignments are written back to the caller)' : '  (const)');
     });
+    const services = Object.keys(session.runtime.services);
     const scopeTypes = referencedTypeAliases([
       ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns)
     ], lam.typesSrc);
@@ -328,7 +315,10 @@ export class NativeToolAgent {
       ' parameters',
       ...(inputs.length ? inputs : ['  (none)']),
       ...(scopeTypes.length ? [' types', ...scopeTypes.map(line => `  ${line}`)] : []),
-      ' imports (immutable live bindings)', ...(imports.length ? imports : ['  (none)']),
+      ...(captures.length ? [' captures (live bindings from the caller)', ...captures] : []),
+      ...(services.length ? [' services (host objects; calls are recorded as effects)', ...services.map(name => `  ${name}`)] : []),
+      ' imports (immutable live bindings; every natural-language function also has .iterateOn(initial, ...args))',
+      ...(imports.length ? imports : ['  (none)']),
       ' locals', ...(locals.length ? locals : ['  (none)']),
       ` result: ${formatType(lam.type.returns)} — ${lam.return === MISSING ? 'unset' : 'set'}`].join('\n');
   }
@@ -337,11 +327,10 @@ export class NativeToolAgent {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return '';
     if (lam.return === MISSING) return `\`return\` has not been written yet. Write a ${formatType(lam.type.returns)} to \`return\`.`;
-    const filled: string[] = [], todo: string[] = [], subs: string[] = [];
-    stateParts(lam.return, lam.type.returns, session.env, 'return', filled, todo, subs);
-    if (subs.length) return `A sub-task has not been run yet: ${subs.map(item => item.split(' [')[0]).join(', ')}. Run it.`;
-    return todo.length ? `\`return\` is missing: ${todo.join(', ')}.` : '';
+    const holes = problems(lam.return, lam.type.returns, session.env, 'return').holes;
+    return holes.length ? `\`return\` is missing: ${holes.map(hole => `${hole.path} (${hole.expected ?? ''})`).join(', ')}.` : '';
   }
+
 
   async run(session: NativeSession): Promise<string | void> {
     const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
@@ -388,7 +377,7 @@ export class NativeToolAgent {
           temperature: this.options.temperature ?? 0.2,
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'checkpoint', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'checkpoint', turns),
           max_tokens: checkpointLimit });
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end',
           purpose: 'checkpoint', turn: turns + 1, duration_ms: Math.round(performance.now() - started),
@@ -420,7 +409,7 @@ export class NativeToolAgent {
           temperature: this.options.temperature ?? 0.2,
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'model-turn', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
           max_tokens: limit });
       } catch (error) {
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
@@ -479,7 +468,7 @@ export class NativeToolAgent {
         const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.path, session.lam.attempts, 'review', turns),
+            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'review', turns),
           max_tokens: budget });
         turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
         const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,

@@ -1,8 +1,8 @@
 # P04 — Semantic terminal
 
 Status: shared interactive terminal application implemented in
-[`codebases/semantic_terminal`](../../codebases/semantic_terminal/README.md)
-and [`applications/semantic_terminal_cli.mjs`](../../applications/semantic_terminal_cli.mjs).
+[`applications/terminal`](../../applications/terminal/index.ts)
+and [`applications/terminal/console.ts`](../../applications/terminal/console.ts).
 It uses the shared queued reducer/view lifecycle, durable sessions, concurrent
 job completion events, structured rendering and model transport documented in
 [`TERMINAL_APPLICATIONS.md`](../../ts-host/TERMINAL_APPLICATIONS.md). Real build

@@ -1,20 +1,31 @@
 id: 01-leaf-judgment
 title: A single judgment written directly to return
 kind: program
-exercises: [leaf, finite-typed write, completion]
-program:
-  $lambda:
-    type: '(message: string) => boolean'
-    instructions: |
-      Is `message` a complaint? Answer true or false.
+exercises:
+  - leaf
+  - finite-typed write
+  - completion
+root: main.nl
+files:
+  main.nl: |
+    ---
+    args:
+      message: "string"
+    returns: "boolean"
+    ---
+    Is `message` a complaint? Answer true or false.
 inputs:
-  message: "The package arrived two weeks late and the box was crushed. I want a refund."
+  message: The package arrived two weeks late and the box was crushed. I want a refund.
 expect:
   value: true
 lint:
-  must: [single set of return, instructions emptied]
-  must_not: [construct a child, eval]
+  must:
+    - single set of return
+    - instructions emptied
+  must_not:
+    - construct a child
+    - eval
   max_actions: 3
 reference:
-  ? ''
-  : answer: true
+  main:
+    answer: true

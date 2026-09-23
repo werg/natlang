@@ -14,7 +14,7 @@ Usage: scripts/setup_dev.sh [OPTIONS]
 
 Prepare a natlang development checkout and install its `natlang` command.
 
-  --node-only        Skip the Python virtual environment and editable install.
+  --node-only        Skip the Python training-tools environment.
   --command-only     Only install the command; do not install or build dependencies.
   --no-command       Do not install the command.
   --command-dir DIR  Install the command in DIR (default: ~/.local/bin).
@@ -81,22 +81,21 @@ if [[ "$COMMAND_ONLY" -eq 0 ]]; then
   npm --prefix "$ROOT/ts-host" run build
 
   echo "==> Checking the local model runtime"
-  RUNTIME_ARGS=(--setup)
+  RUNTIME_ARGS=(setup)
   if [[ "$RUNTIME_YES" -eq 1 ]]; then RUNTIME_ARGS+=(--yes); fi
   NATLANG_RUNTIME_HOME="$ROOT/.natlang/runtime" node "$ROOT/ts-host/dist/cli/main.js" "${RUNTIME_ARGS[@]}"
 
   if [[ "$NODE_ONLY" -eq 0 ]]; then
     command -v uv >/dev/null || {
-      echo "setup_dev.sh: uv is required for the Python development environment; install uv or use --node-only" >&2
+      echo "setup_dev.sh: uv is required for the Python training tools; install uv or use --node-only" >&2
       exit 1
     }
-    echo "==> Preparing the Python development environment"
+    echo "==> Preparing the Python training tools"
     if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
       uv venv --python 3.12 "$ROOT/.venv"
     fi
-    uv pip install --python "$ROOT/.venv/bin/python" -e "$ROOT[js,dev]"
-    "$ROOT/.venv/bin/python" -c 'import quickjs, pytest, yaml'
-    echo "==> Python runtime ready: $ROOT/.venv/bin/python"
+    uv pip install --python "$ROOT/.venv/bin/python" -e "$ROOT[dev]"
+    echo "==> Python training tools ready: $ROOT/.venv/bin/python"
   fi
 fi
 
@@ -136,20 +135,20 @@ if [[ "$COMMAND_INSTALLED" -eq 1 ]]; then
   cat <<EOF
 
 Check the installation and run code from any directory:
-  natlang --doctor --json
-  natlang path/to/program.nl
-  natlang path/to/application
+  natlang doctor --json
+  natlang run applications/evidence
+  natlang call path/to/function.nl --inputs inputs.json
 EOF
 else
   cat <<EOF
 
 Run through the checkout wrapper:
   $COMMAND_TARGET doctor --json
-  $COMMAND_TARGET path/to/program.nl
-  $COMMAND_TARGET path/to/application
+  $COMMAND_TARGET run applications/evidence
+  $COMMAND_TARGET call path/to/function.nl --inputs inputs.json
 EOF
 fi
 
 cat <<EOF
-See $ROOT/DEV_SETUP.md for evidence, notebook, log, profile, and test examples.
+See $ROOT/DEV_SETUP.md for applications, model profiles, and tests.
 EOF

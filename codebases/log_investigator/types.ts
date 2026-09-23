@@ -1,9 +1,0 @@
-export type LogEvent = { kind: string, id: string, cursor: number, occurred_at: number, arrived_at: number, service: string, code: string, level: string, message: string };
-export type File = { kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number };
-export type Observation = { id: string, status: string, service: string, code: string, occurred_at: number, count: number, late: boolean };
-export type Evidence = { id: string, occurred_at: number, level: string, message: string };
-export type Judgement = { action: string, severity: string, claim: string, uncertainty: string };
-export type Alert = { status: string, key: string, detail: string };
-export type IncidentState = { cursor: number, observed: number, alerts: Alert[], unknowns: string[], status: string };
-export type ViewBlock = { kind: string, text?: string, tone?: string, items?: string[], ordered?: boolean, columns?: string[], rows?: string[][] };
-export type TerminalView = { title?: string, subtitle?: string, blocks: ViewBlock[], prompt?: string, busy?: boolean, help?: string[] };

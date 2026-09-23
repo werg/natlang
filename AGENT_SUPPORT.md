@@ -1,5 +1,7 @@
 # Agent support and review experiments
 
+> **Status (2026-09-23):** historical. These experiments ran on the Python runtime and its probes, which have been removed; the findings stand as recorded evidence. Current prompts and tools are in `ts-host/src/native/`.
+
 2026-09-19, v8 350M interpreter. No checkpoint was trained during these experiments.
 
 ## Implemented behavior

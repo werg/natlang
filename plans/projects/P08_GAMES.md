@@ -1,8 +1,8 @@
 # P08 — Economic, combat and NPC game prototypes
 
-Status: three headless prototypes in `codebases/game_economy/`,
-`codebases/game_combat/`, `codebases/game_npc/` and
-`applications/game_worlds.mjs`. [Shared capabilities](README.md).
+Status: three headless prototypes in `applications/games/`,
+`applications/games/`, `applications/games/` and
+`applications/games/index.ts`. [Shared capabilities](README.md).
 
 Natlang chooses merchant trades, fighter tactics and NPC dialogue/actions.
 The exact hosts settle seeded simultaneous trade intents with conservation,

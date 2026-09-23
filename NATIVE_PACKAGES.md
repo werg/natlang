@@ -1,48 +1,41 @@
-# Native natlang packages and executables
+# natlang packages and executables
 
-For ordinary work in this repository, start with
-[DEV_SETUP.md](DEV_SETUP.md). Its wrappers run source paths directly. This
-document describes the optional archive and distribution workflow.
+For ordinary work in this repository, start with [DEV_SETUP.md](DEV_SETUP.md);
+`natlang run` builds and runs source directories directly. This document covers
+the npm distribution and the optional `.nlpkg` archive workflow.
 
-Natlang applications can be shipped as deterministic `.nlpkg` archives. The
-format packages natlang source trees, crisp functions, adapters, and binary
-assets without adding module loading to the language core. A package may expose
-ordinary source exports and executable terminal or command targets.
-
-The distribution has three npm packages:
+## npm packages
 
 | Package | Contents |
 |---|---|
-| `@natlang/cli` | The small `natlang` executable |
-| `@natlang/core` | Platform-neutral reduction, values, traces, agent, and crisp evaluator interface |
-| `@natlang/node` | Node host, evaluator, terminal framework, model transport, and package APIs |
-| `@natlang/browser` | Browser runtime, model client, worker, and WASM assets |
+| `@natlang/cli` | The `natlang` executable |
+| `@natlang/node` | Node runtime and compiler, terminal utilities, model session, package APIs |
+| `@natlang/browser` | Browser runtime and in-page compiler, local model loader, WASM assets |
 
-This split keeps the 35 MB unpacked browser inference bundle out of Node CLI
-installs. The source checkout still builds all targets together so Node and
-browser share the reduction implementation. `npm pack` in each directory under
-`npm-packages/` creates the distribution tarball. Public registry publication
-still requires the project owner to choose a license and supply credentials.
+The browser package carries the 35 MB inference bundle, so it is separate from
+Node installs. The checkout builds both from one implementation. `npm pack` in
+each directory under `npm-packages/` stages and packs the build
+(`scripts/stage-npm-package.mjs`). Public registry publication still requires
+the project owner to choose a license and supply credentials.
 
 ## Package an application
 
-The checked schema is [package-manifest.schema.json](spec/package-manifest.schema.json).
-Paths are relative to the package root. `include` is explicit; directories are
-walked without following symbolic links. A target entry is a trusted native
-adapter, while `reducer` and `view` name the natlang application logic.
+An application is a TypeScript project with a `natlang.json` manifest (schema
+[package-manifest.schema.json](spec/package-manifest.schema.json)). Paths are
+relative to the package root; `include` is explicit. Each target names an entry
+module and the exported function (default `main`) that receives the target
+context:
 
 ```json
 {
-  "schema": "natlang.package/v1",
+  "schema": "natlang.package/v2",
   "name": "@example/reviewer",
   "version": "1.0.0",
-  "include": ["application", "program"],
+  "include": ["review.ts", "console.ts", "assess.nl", "tsconfig.json"],
   "targets": {
     "review": {
-      "kind": "terminal",
-      "entry": "application/target.mjs",
-      "reducer": "program/reduce.nl",
-      "view": "program/view.ts",
+      "entry": "console.ts",
+      "description": "Review a folder of notes.",
       "authority": ["filesystem:workspace"],
       "commands": ["git"]
     }
@@ -51,55 +44,49 @@ adapter, while `reducer` and `view` name the natlang application logic.
 }
 ```
 
-Build, verify, install, inspect, and run it:
-
-```bash
-natlang --package pack natlang.json --root . --out reviewer-1.0.0.nlpkg
-natlang --package verify reviewer-1.0.0.nlpkg --json
-natlang --package install reviewer-1.0.0.nlpkg
-natlang --inspect @example/reviewer@1.0.0#review --json
-natlang @example/reviewer@1.0.0#review --workspace . -- --application-option value
+```ts
+import type { TargetContext } from '@natlang/node';
+export async function main(context: TargetContext): Promise<number> {
+  const report = await context.runtime.run(() => review(context.args[0]!));
+  context.io.output.write(JSON.stringify(report) + '\n');
+  return 0;
+}
 ```
 
-Packaging is unnecessary during authoring. Run a program, manifest, or
-application directory directly:
+The context carries `args`, `io`, `workspace`, `stateDirectory`,
+`traceDirectory`, the configured `model`, a `runtime` using it, and the package
+and dependency identities. Build, verify, install, inspect, and run:
 
 ```bash
-natlang path/to/main.nl
-natlang path/to/application
-natlang path/to/application/natlang.json
-natlang --inspect path/to/application --json
+natlang package pack natlang.json --out reviewer-1.0.0.nlpkg
+natlang package verify reviewer-1.0.0.nlpkg --json
+natlang package install reviewer-1.0.0.nlpkg
+natlang inspect @example/reviewer@1.0.0#review --json
+natlang run @example/reviewer@1.0.0#review --workspace . -- --application-option value
 ```
 
-Local manifests are validated with the same archive rules before launch, but
-are not copied into the package store. The CLI infers the source root from the
-manifest location and its ancestors; use `--root DIR` when the source lives
-elsewhere.
-
-For interactive use, discover applications and omit the exact version when it
-is useful to follow the highest installed semantic version:
+Packaging is unnecessary during authoring: `natlang run path/to/application`
+builds the project into `.natlang/build` and runs it against this CLI's runtime.
+An installed package is built into its state directory on first run. Discover
+applications and follow the highest installed version interactively:
 
 ```bash
-natlang --packages
-natlang reviewer --workspace . -- --application-option value
-natlang --inspect reviewer --json
+natlang apps
+natlang packages
+natlang run reviewer -- --application-option value
 ```
 
-`natlang SOURCE` accepts the full package name or an unambiguous final name component.
-It selects a sole target automatically; packages with several targets require
-`--target`. Automation should use the exact `NAME@VERSION#TARGET` form.
-
-Install all archives in one command when packages depend on one another. The
-installer validates the whole candidate set before publishing new objects:
+`natlang run NAME` accepts the full package name or an unambiguous final name
+component and selects a sole target automatically; use `--target` or the exact
+`NAME@VERSION#TARGET` form in automation. Install archives that depend on each
+other in one command; the installer validates the whole set first:
 
 ```bash
-natlang --package install library-2.1.0.nlpkg app-1.0.0.nlpkg
+natlang package install library-2.1.0.nlpkg app-1.0.0.nlpkg
 ```
 
-Version 1 accepts exact versions, `*`, `latest`, caret, tilde, and `>=` ranges.
-Resolution is offline: the command considers installed packages and archives
-supplied by the caller. A registry client can later fetch candidates without
-changing archive identity or runtime semantics.
+Dependency ranges accept exact versions, `*`, `latest`, caret, tilde, and `>=`.
+Resolution is offline over installed packages and supplied archives.
 
 ## Archive and store guarantees
 
@@ -122,72 +109,44 @@ work across systems that do not support symbolic links.
 state, and cache roots. `NATLANG_RUNTIME_HOME` overrides the managed native
 runtime root.
 
-## Executable target contract
+## Authority and the model runtime
 
-The entry module exports `createTarget(context)` unless `target.export` names a
-different function. It returns an object with `run()` and optional `close()`.
-The context contains immutable package identity, package and workspace roots,
-the pinned dependency identities and roots, state and trace directories, target
-arguments, terminal streams, an optional model driver, and the installed
-runtime API.
+Entry modules are trusted application code. The manifest's `authority` and
+`commands` fields make native access inspectable and let `natlang doctor` check
+engines and executables; they are declarations, not a sandbox.
 
-Target adapters are trusted host code. The manifest’s `authority` and
-`commands` fields make native access inspectable and let `natlang --doctor` check
-engines and executable dependencies. They are declarations, not a sandbox.
-Natlang reducers own interpretation, planning, and decisions; adapters translate
-typed events and expose exact native operations.
-
-Without a profile, the CLI checks explicit, managed, and PATH
-llama.cpp executables against its tested version range. If none is compatible,
-an interactive run asks before installing the pinned official archive under the
-user data directory. Downloads are checked against a static byte length and
-SHA-256 digest, extracted atomically, and never alter a system installation.
-Use `natlang --setup` to do this ahead of time, `natlang --setup --yes` for an
-unattended install, and `natlang --runtime status --json` to inspect resolution.
-
-A target that declares a reducer starts preparing the selected server as soon
-as it is resolved. This overlaps target import and application state setup; the
-target begins its interactive run after readiness. Direct source programs also
-prepare the model immediately. Host-only executable targets do not start one.
-The CLI closes an owned server with the command. Model profiles in the platform config
-directory select externally owned services:
+Without a profile, the CLI checks explicit, managed, and PATH llama.cpp
+executables against its tested version range. If none is compatible, an
+interactive run asks before installing the pinned official archive under the
+user data directory; downloads are checked against a static byte length and
+SHA-256 digest and never alter a system installation. `natlang setup` does this
+ahead of time (`--yes` for unattended installs), and `natlang runtime status
+--json` explains resolution. A run starts preparing the model immediately,
+concurrently with building the application, and closes an owned server with the
+command. Model profiles in the platform config directory select externally
+owned services:
 
 ```json
 {
   "defaultProfile": "local",
   "profiles": {
-    "local": {
-      "endpoint": "http://127.0.0.1:8081",
-      "model": "MODEL_ID",
-      "apiKeyEnv": "NATLANG_API_KEY"
-    }
+    "local": { "endpoint": "http://127.0.0.1:8081", "model": "MODEL_ID", "apiKeyEnv": "NATLANG_API_KEY" }
   }
 }
 ```
 
 `NATLANG_SERVER`, `NATLANG_MODEL`, and `NATLANG_PROFILE` override the selected
-profile. `NATLANG_MODEL_PATH`, `NATLANG_TEMPLATE`, and
-`NATLANG_LLAMA_SERVER` customize managed local execution. Secrets remain in
-environment variables. Packaging and terminal code do not impose model turn or
-token caps.
+profile. `NATLANG_MODEL_PATH`, `NATLANG_TEMPLATE`, and `NATLANG_LLAMA_SERVER`
+customize managed local execution. Secrets remain in environment variables.
 
 ## Included packages
 
-The `natlang.json` manifests in the corresponding `codebases/` directories
-build four complete applications:
+Four applications in `applications/` ship as packages:
 
-- `@natlang/semantic-terminal`: semantic recipe selection and asynchronous job outcomes;
-- `@natlang/evidence-console`: citation checked answers over local documents;
-- `@natlang/log-console`: a JSONL event stream reduced into anomaly state;
-- `@natlang/notebook-console`: semantic cell selection over SQLite and TypeScript cells.
+- `@natlang/evidence-console` (`applications/evidence/`): citation-checked answers over local documents;
+- `@natlang/log-console` (`applications/logs/`): a JSONL event stream folded into incident state;
+- `@natlang/notebook-console` (`applications/notebook/`): natlang-chosen cell execution over SQLite and JavaScript cells;
+- `@natlang/semantic-terminal` (`applications/terminal/`): natural-language requests mapped to exact workspace recipes.
 
-Each application loads its reducer and view from its installed package object.
-Adapters receive host classes from `@natlang/node` and have no repository
-relative runtime import.
-
-All four applications open without fixture files. Their initial views explain
-what the program can do, `/help` discovers commands, and built-in examples make
-semantic behavior testable immediately. Evidence and notebook data can be
-loaded from inside the running application; the log monitor can generate a
-demonstration incident or ingest JSONL interactively. File flags and stdin stay
-available for scripted use.
+Each opens with useful starter state; `/help` lists its commands, and file flags
+and stdin stay available for scripted use.

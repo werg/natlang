@@ -14,8 +14,7 @@ function solve(goal, kb) -> Answer
   facts = select_by_flags(kb, fact_flags)
 
   start = { known: facts, derived: [], grew: true }
-  final = repeat at most 6 times, until settled(state):        # nothing new was derived in the last round
-      state = derive(state, rules)
+  final = derive.iterateOn(start, rules).withLimit({ maxSteps: 6 }).until(settled)   # stop once nothing new was derived
 
   hits = for each k in final.known: same_claim(k, goal)
   if any_true(hits): verdict = "yes"

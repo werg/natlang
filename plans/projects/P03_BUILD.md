@@ -1,8 +1,8 @@
 # P03 — Build tool with bounded self-repair
 
 Status: serial execution and exact built-in cache slice implemented in
-[`codebases/build_workbench`](../../codebases/build_workbench/README.md),
-[`applications/build_workbench.mjs`](../../applications/build_workbench.mjs), and
+[`applications/build`](../../applications/build/index.ts),
+[`applications/build/index.ts`](../../applications/build/index.ts), and
 the TypeScript host integration test. General process caching, repair, teacher quality
 and background execution remain open. [Shared capabilities](README.md).
 

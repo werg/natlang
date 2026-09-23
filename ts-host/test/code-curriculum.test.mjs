@@ -23,7 +23,7 @@ test('synthetic tasks are deterministic, source grouped, and replay to accepted 
   assert.deepEqual(tasks, syntheticCodeTasks(91, 0, 6));
   assert.equal(tasks[0].group_id, syntheticCodeTasks(927, 0, 1)[0].group_id);
   const ir = project(tasks[0], 0).program;
-  assert.equal(ir.version, 'natlang.program/1');
+  assert.equal(ir.version, 'natlang.program/2');
   assert.deepEqual(ir.source_groups, [tasks[0].group_id]);
   const trajectory = await replayIsolated(tasks[0], 0);
   assert.equal(trajectory.outcome.accepted, true, JSON.stringify(trajectory.outcome));

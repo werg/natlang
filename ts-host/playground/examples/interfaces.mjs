@@ -1,5 +1,8 @@
 import { crisp, natural, typescript } from './builders.mjs';
 
+/** The view function's source with its parameter and result typed. */
+const typedView = view => view.toString().replace(/^state =>/, '(state: State): Node =>');
+
 const types = `type State = { count: number, step: number };
 type UiEvent = { id: string, kind: string, value?: string };
 type Action = { kind: string, value?: string, from?: string };
@@ -12,7 +15,7 @@ if (event.kind === "step") {
 }
 const direction = event.kind === "increase" ? 1 : event.kind === "decrease" ? -1 : 0;
 return { ...state, count: state.count + direction * state.step };
-`);
+`, types);
 const counterView = state => ({ tag: 'section', children: [
   { tag: 'h2', text: 'Counter' },
   { tag: 'output', text: String(state.count) },
@@ -28,7 +31,7 @@ const counter = crisp({ id: 'living-counter', name: 'Counter UI', category: 'Liv
   description: 'Counter with editable view, state updates, and recorded history.',
   concepts: ['live UI', 'events', 'state', 'time travel'], root: 'ui/view.ts', args: { state: 'State' }, returns: 'Node',
   files: { 'ui/types.ts': types, 'ui/reduce.ts': reducer },
-  code: `const view = ${counterView.toString()};\nreturn view(state);`,
+  code: `const view = ${typedView(counterView)};\nreturn view(state);`,
   inputs: { state: { count: 3, step: 1 } }, expected: counterView({ count: 3, step: 1 }) });
 counter.guide = 'Click Increase, edit ui/view.ts, or scrub the timeline. Live edit keeps the current count.';
 const modelCounter = natural({ id: 'natural-interface', name: 'Generated counter UI', category: 'Live interfaces', level: 'Intermediate',
@@ -69,8 +72,8 @@ const quote = crisp({ id: 'reactive-pricing', name: 'Pricing calculator', catego
   files: { 'ui/types.ts': quoteTypes, 'ui/reduce.ts': typescript('reduce', { state: 'State', event: 'UiEvent' }, 'State', `
 if (event.kind === "billing") return { ...state, annual: !state.annual };
 const seats = Number(event.value);
-return { ...state, seats: Number.isFinite(seats) ? Math.max(1, Math.min(1000, Math.round(seats))) : state.seats };`) },
-  code: `const view = ${quoteView.toString()};\nreturn view(state);`,
+return { ...state, seats: Number.isFinite(seats) ? Math.max(1, Math.min(1000, Math.round(seats))) : state.seats };`, quoteTypes) },
+  code: `const view = ${typedView(quoteView)};\nreturn view(state);`,
   inputs: { state: { seats: 5, annual: false } }, expected: quoteView({ seats: 5, annual: false }) });
 quote.guide = 'Change the seats and switch billing. Then change the prices in ui/view.ts with live editing on. The state stays put while the calculation changes.';
 const modelQuote = natural({ id: 'natural-pricing-ui', name: 'Generated pricing UI', category: 'Live interfaces', level: 'Intermediate',

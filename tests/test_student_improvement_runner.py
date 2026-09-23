@@ -61,9 +61,10 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
     (base_run / 'pipeline-state.json').write_text(json.dumps({
         'config_sha256': hashlib.sha256(json.dumps(base_config, sort_keys=True).encode()).hexdigest(),
         'stages': {'train-teacher': {'status': 'complete'}}}))
-    program = {'version': 'natlang.program/1', 'id': 'runner-case', 'kind': 'lambda_source',
+    program = {'version': 'natlang.program/2', 'id': 'runner-case', 'kind': 'lambda_source',
                'source_groups': ['runner-case'], 'split': 'train',
-               'semantics': {'root': {'$lambda': {'type': '() => number', 'instructions': 'Return one.'}},
+               'semantics': {'root': 'one.nl',
+                             'files': {'one.nl': '---\nargs: {}\nreturns: number\n---\nReturn one.\n'},
                              'inputs': {}, 'expected': 1, 'operation': 'exact'}}
     programs = tmp_path / 'programs.jsonl'
     programs.write_text(json.dumps(program) + '\n')

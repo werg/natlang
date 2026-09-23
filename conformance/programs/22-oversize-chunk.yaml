@@ -1,31 +1,39 @@
 id: 22-oversize-chunk
 title: An input too large to read whole is split crisply and mapped
 kind: program
-exercises: [code base, crisp split, call over a list, crisp aggregate]
-program:
-  $lambda:
-    type: '(log: string) => number'
-    function: count_complaints
-    instructions: |
-      Split the log with `split_log`, classify each line with `Promise.all(lines.map(...))` and
-      `is_complaint`, then return `count_true(flags)`.
-    codebase:
-      split_log:
-        description: The log split into one entry per non-empty line.
-        args: { log: string }
-        returns: 'string[]'
-        code: return splitLines(log)
-      is_complaint:
-        description: Is this customer comment a complaint?
-        args: { line: string }
-        returns: boolean
-        instructions: |
-          Is the comment in `line` a complaint? Answer true or false.
-      count_true:
-        description: How many flags are true.
-        args: { flags: 'boolean[]' }
-        returns: number
-        code: return flags.filter(Boolean).length
+exercises:
+  - code base
+  - crisp split
+  - call over a list
+  - crisp aggregate
+root: count_complaints.nl
+files:
+  count_complaints.nl: |
+    ---
+    args:
+      log: "string"
+    returns: "number"
+    ---
+    Split the log with `split_log`, classify each line with `Promise.all(lines.map(...))` and
+    `is_complaint`, then return `count_true(flags)`.
+  count_complaints/split_log.ts: |
+    /** The log split into one entry per non-empty line. */
+    export default function split_log(log: string): string[] {
+      return log.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    }
+  count_complaints/is_complaint.nl: |
+    ---
+    description: "Is this customer comment a complaint?"
+    args:
+      line: "string"
+    returns: "boolean"
+    ---
+    Is the comment in `line` a complaint? Answer true or false.
+  count_complaints/count_true.ts: |
+    /** How many flags are true. */
+    export default function count_true(flags: boolean[]): number {
+      return flags.filter(Boolean).length
+    }
 inputs:
   log: |
     Arrived broken, very disappointed.
@@ -56,14 +64,14 @@ lint:
     - split_log is crisp and produces the lines
     - is_complaint called over the split lines
     - count_true is crisp
-  must_not: [the root reading log directly]
+  must_not:
+    - the root reading log directly
 reference:
   count_complaints:
-    eval: 'const lines = await split_log(log);
-
+    eval: |-
+      const lines = await split_log(log);
       const flags = await Promise.all(lines.map(async item => await is_complaint(item)));
-
-      await count_true(flags)'
+      await count_true(flags)
   is_complaint:
     answer_by:
       Arrived broken, very disappointed.: true

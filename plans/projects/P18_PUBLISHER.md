@@ -1,6 +1,6 @@
 # P18 — Semantic document compiler and publisher
 
-Status: local implementation in `codebases/publisher/` and `applications/publisher.mjs`.
+Status: local implementation in `applications/publisher/` and `applications/publisher/index.ts`.
 [Shared capabilities](README.md).
 
 The natlang entry point reads pinned source passages, plans an outline, composes

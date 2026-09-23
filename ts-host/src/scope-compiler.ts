@@ -1,7 +1,9 @@
 import ts from 'typescript';
+import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
+import { authoredCallables, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
-export const SCOPE_COMPILE_VERSION = 1 as const;
+export const SCOPE_COMPILE_VERSION = 2 as const;
 
 export type ScopeBinding = {
   name: string;
@@ -9,7 +11,7 @@ export type ScopeBinding = {
   mutable: boolean;
   annotation?: string;
   initializer?: string;
-  /** Module namespaces and HTTP response handles live only for this eval. */
+  /** Module namespaces, HTTP responses, and local functions live only for this eval. */
   transient?: boolean;
   start: number;
   end: number;
@@ -24,7 +26,8 @@ export type ScopeSourceSpan = {
 
 export type ScopeCompileDiagnostic = ScopeSourceSpan & {
   code: 'typescript-syntax' | 'forbidden-ambient' | 'forbidden-dynamic-code' |
-    'forbidden-control' | 'forbidden-prototype-mutation' | 'invalid-binding';
+    'forbidden-control' | 'forbidden-prototype-mutation' | 'invalid-binding' | 'forbidden-loop' | 'recursion' |
+    NatlangDiagnostic['code'];
   message: string;
 };
 
@@ -42,6 +45,14 @@ export type ScopeCompileOptions = {
   /** Enabled only when the evaluator exposes application-scoped module loading. */
   allowModules?: boolean;
   allowNetwork?: boolean;
+  /** Host services, injected as immutable named bindings. */
+  serviceBindings?: readonly string[];
+  /** Live captured bindings of an inline lambda. Const captures are immutable in eval. */
+  captureBindings?: readonly { name: string; mutable: boolean }[];
+  /** Type-checked analysis of `nl` expressions (plans and diagnostics with snippet-relative spans). */
+  analyze?: (source: string) => { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
+  /** Prefix for runtime recursion-guard IDs of functions authored in this eval. */
+  guardPrefix?: string;
 };
 
 export type ScopeExistingBinding = { name: string; mutable: boolean; annotation?: string };
@@ -60,6 +71,8 @@ export type ScopeCompileResult = {
   repairs: ScopeCompileDiagnostic[];
   /** TypeScript body after applying final-expression REPL semantics. */
   body?: string;
+  /** Inline `nl` plans, referenced by index from the lowered program. */
+  plans?: InlineLambdaPlan[];
   /** Standalone ES2022 program defining an async entrypoint returning { result, bindings }.
    * Its third argument is a host dispatcher `(name, positionalArgs) => value | Promise<value>`;
    * helper function objects never enter the portable scope snapshot.
@@ -68,7 +81,24 @@ export type ScopeCompileResult = {
 };
 
 const ENTRYPOINT = '__natlang_scope' as const;
-const PREFIX = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, __locals: Readonly<Record<string, unknown>>, __invoke: (name: string, args: unknown[]) => unknown) {\n`;
+const PREFIX = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, __locals: Readonly<Record<string, unknown>>, __captures: Readonly<Record<string, unknown>>) {\n`;
+
+/**
+ * Helpers every compiled program relies on. The runtime prepends this to eval and callable-folder
+ * TypeScript and supplies `__live` (inputs, locals, captures, callables, and the output sink) by reference.
+ */
+export const SCOPE_RUNTIME_PRELUDE = `const __natlang_plain = (value: any) => !!value && typeof value === 'object' && !Array.isArray(value) &&
+  Object.prototype.toString.call(value) === '[object Object]' &&
+  (Object.getPrototypeOf(value) === null || Object.getPrototypeOf(Object.getPrototypeOf(value)) === null);
+const __natlang_copy = (value: any): any => Array.isArray(value) ? value.map(__natlang_copy) :
+  __natlang_plain(value) ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, __natlang_copy(v)])) : value;
+const __natlang_callable = (name: string) => __live.callables[name];
+const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
+const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
+const __natlang_finite = (source: any) => __live.finite(source);
+const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
+const iterateOn = __live.iterateOn;
+`;
 const SUFFIX = '\n}\n';
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FORBIDDEN_AMBIENTS = new Set([
@@ -231,7 +261,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const localNames = localOptions.map(binding => binding.name);
   const helperNames = options.helperBindings ?? [];
   const opaqueNames = options.opaqueBindings ?? [];
-  const injectedNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames]);
+  const captureOptions = options.captureBindings ?? [];
+  const captureNames = captureOptions.map(binding => binding.name);
+  const serviceNames = options.serviceBindings ?? [];
+  const injectedNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames, ...serviceNames]);
   const redundantAliases: ScopeSourceSpan[] = [];
   const bindings: ScopeBinding[] = [];
   for (const statement of fn.body.statements) {
@@ -259,8 +292,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           (ts.isCallExpression(initial) &&
           ((options.allowModules && initial.expression.kind === ts.SyntaxKind.ImportKeyword) ||
            (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'))) ||
-          (ts.isNewExpression(initial) && ts.isIdentifier(initial.expression) &&
-           ['Set', 'Map', 'Date', 'RegExp'].includes(initial.expression.text))));
+          false));
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(transient ? { transient: true } : {}),
           ...(declaration.type && portableAnnotation(declaration.type, file) ?
@@ -279,10 +311,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   // a local from an earlier eval without reusing that earlier const/let binding.
   const shadowedLocals = new Set(bindings.map(binding => binding.name).filter(name => localNames.includes(name)));
 
-  const immutable = new Set([...helperNames, ...opaqueNames,
+  const immutable = new Set([...helperNames, ...opaqueNames, ...serviceNames,
+    ...captureOptions.filter(binding => !binding.mutable).map(binding => binding.name),
     ...localOptions.filter(binding => !binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.mutable).map(binding => binding.name)]);
-  const deeplyReadonly = new Set([...helperNames, ...opaqueNames]);
+  const deeplyReadonly = new Set([...helperNames, ...opaqueNames, ...serviceNames]);
 
   const topLevelNames = new Set<string>();
   for (const binding of bindings) {
@@ -335,11 +368,21 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   for (const statement of fn.body.statements) visit(statement);
 
-  const injected = [...inputNames, ...localNames, ...helperNames, ...opaqueNames];
+  // Constrained-source policy: finite iteration and no recursion among functions authored here.
+  const toRaw = (item: NatlangDiagnostic): ScopeCompileDiagnostic => {
+    const start = Math.max(0, item.start - PREFIX.length), end = Math.max(start, item.end - PREFIX.length);
+    return { ...rawSpan(start, end), code: item.code, message: item.message };
+  };
+  for (const item of checkConstrainedSource(file, { allowDynamicImport: true }))
+    if (item.code !== 'forbidden-dynamic-code') diagnostics.push(toRaw(item));
+  const authored = authoredCallables(file, options.guardPrefix ?? 'eval').filter(callable => callable.node !== fn);
+  for (const item of findRecursion(authored, lexicalResolver(authored))) diagnostics.push(toRaw(item));
+
+  const injected = [...inputNames, ...localNames, ...helperNames, ...opaqueNames, ...captureNames, ...serviceNames];
   const seen = new Set<string>();
   for (const name of injected) {
     if (!IDENTIFIER.test(name) || name === ENTRYPOINT || name === '__inputs' || name === '__locals' ||
-        name === '__invoke' || name === '__natlang_finish' || name === '__natlang_result') {
+        name === '__captures' || name.startsWith('__natlang_')) {
       diagnostics.push({ code: 'invalid-binding', message: `Invalid injected binding ${JSON.stringify(name)}.`,
         start: 0, end: 0, line: 1, column: 1 });
     } else if (seen.has(name)) {
@@ -358,11 +401,65 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
 
   const statements = [...fn.body.statements];
   let finalExpression: ScopeSourceSpan | undefined;
-  let body = source;
   const last = statements.at(-1);
-  if (last && ts.isExpressionStatement(last)) {
-    finalExpression = span(last.expression);
+  if (last && ts.isExpressionStatement(last)) finalExpression = span(last.expression);
+
+  // Inline `nl` analysis, only when the snippet mentions it.
+  let plans: InlineLambdaPlan[] = [];
+  if (options.analyze && /\bnl\s*(?:<[^`]*>)?\s*`/.test(source)) {
+    const analysis = options.analyze(source);
+    plans = analysis.plans;
+    for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });
   }
+
+  // Lowering edits (snippet-relative). Container edits (returns, final expression) lower their contents recursively.
+  type Edit = { start: number; end: number; text: string };
+  const primitive: Edit[] = [];
+  const rel = (node: ts.Node) => ({ start: node.getStart(file) - PREFIX.length, end: node.getEnd() - PREFIX.length });
+  const planAt = new Map(plans.map((plan, index) => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, index]));
+  const lowerNodes = (node: ts.Node): void => {
+    if (ts.isTaggedTemplateExpression(node)) {
+      const at = rel(node), index = planAt.get(`${at.start}:${at.end}`);
+      if (index !== undefined) {
+        const plan = plans[index]!;
+        const values = ts.isTemplateExpression(node.template) ?
+          node.template.templateSpans.map(item => lowerSpan(rel(item.expression).start, rel(item.expression).end)) : [];
+        const accessors = plan.captures.map(capture => capture.mutable && !immutable.has(capture.name) ?
+          `${capture.name}: [() => ${capture.name}, (__v: any) => { ${capture.name} = __v; }]` : `${capture.name}: [() => ${capture.name}]`);
+        primitive.push({ ...at, text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
+        return;
+      }
+    }
+    if (ts.isForOfStatement(node) && !node.awaitModifier) {
+      const at = rel(node.expression);
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_finite(' }, { start: at.end, end: at.end, text: ')' });
+    }
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node)) &&
+        node.body && node !== fn) {
+      const callable = authored.find(item => item.node === node);
+      if (callable && (ts.isFunctionDeclaration(node) || (node.parent && ts.isVariableDeclaration(node.parent)))) {
+        const id = JSON.stringify(callable.id);
+        const isAsync = !!node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+        const body = rel(node.body);
+        if (ts.isBlock(node.body)) {
+          primitive.push({ start: body.start + 1, end: body.start + 1, text: ` return __natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => {` },
+            { start: body.end - 1, end: body.end - 1, text: '}); ' });
+        } else {
+          primitive.push({ start: body.start, end: body.start, text: `__natlang_guard(${id}, ${isAsync ? 'async ' : ''}() => (` },
+            { start: body.end, end: body.end, text: '))' });
+        }
+      }
+    }
+    ts.forEachChild(node, lowerNodes);
+  };
+  const lowerSpan = (start: number, end: number): string => {
+    let text = source.slice(start, end);
+    const inside = primitive.filter(edit => edit.start >= start && edit.end <= end);
+    for (const edit of [...inside].sort((a, b) => b.start - a.start || b.end - a.end))
+      text = text.slice(0, edit.start - start) + edit.text + text.slice(edit.end - start);
+    return text;
+  };
+  for (const statement of statements) lowerNodes(statement);
 
   const returns: ts.ReturnStatement[] = [];
   const findReturns = (node: ts.Node): void => {
@@ -371,34 +468,36 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ts.forEachChild(node, findReturns);
   };
   for (const statement of statements) findReturns(statement);
-  const captures = [...(implicitResult ? ['result'] : []),
+  const persisted = [...(implicitResult ? ['result'] : []),
     ...localOptions.filter(binding => binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.transient).map(binding => binding.name)];
-  const capture = `{ ${captures.join(', ')} }`;
+  const capture = `{ ${persisted.join(', ')} }`;
   const assignedToResult: string[] = [];
   if (implicitResult) {
-    const visit = (node: ts.Node): void => {
+    const visitResult = (node: ts.Node): void => {
       if (ts.isFunctionLike(node)) return;
       if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
           ts.isIdentifier(node.left) && node.left.text === 'result' && ts.isIdentifier(node.right))
         assignedToResult.push(node.right.text);
-      ts.forEachChild(node, visit);
+      ts.forEachChild(node, visitResult);
     };
-    for (const statement of statements) visit(statement);
+    for (const statement of statements) visitResult(statement);
   }
-  const edits: { start: number; end: number; text: string }[] = returns.map(statement => {
-    const location = span(statement);
-    const expression = statement.expression ? statement.expression.getText(file) : 'null';
+  const containers: Edit[] = returns.map(statement => {
+    const location = rel(statement);
+    const expression = statement.expression ? lowerSpan(rel(statement.expression).start, rel(statement.expression).end) : 'null';
     const available = [...(implicitResult ? ['result'] : []),
       ...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
       ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
-    return { start: location.start, end: location.end,
-      text: `return __natlang_finish(${expression}, { ${available.join(', ')} });` };
+    return { ...location, text: `return __natlang_finish(${expression}, { ${available.join(', ')} });` };
   });
-  if (finalExpression) edits.push({ start: finalExpression.start, end: finalExpression.end,
-    text: `return __natlang_finish(${source.slice(finalExpression.start, finalExpression.end)});` });
-  for (const repair of redundantAliases) edits.push({ start: repair.start, end: repair.end, text: '' });
-  for (const edit of edits.sort((a, b) => b.start - a.start))
+  if (finalExpression) containers.push({ start: finalExpression.start, end: finalExpression.end,
+    text: `return __natlang_finish(${lowerSpan(finalExpression.start, finalExpression.end)});` });
+  for (const repair of redundantAliases) containers.push({ start: repair.start, end: repair.end, text: '' });
+  const edits = [...containers, ...primitive.filter(edit => !containers.some(container =>
+    edit.start >= container.start && edit.end <= container.end && container.text !== ''))];
+  let body = source;
+  for (const edit of edits.sort((a, b) => b.start - a.start || b.end - a.end))
     body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
 
   diagnostics.sort((a, b) => a.start - b.start || a.code.localeCompare(b.code));
@@ -410,22 +509,24 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       ? [last.expression.text] : [])))],
     entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
   if (diagnostics.length) return result;
-  const prologue = [inputNames.length ? `let { ${inputNames.join(', ')} } = ` +
-      `JSON.parse(JSON.stringify(__inputs));` : '',
+  const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
+  const prologue = [
+    inputNames.length ? `let { ${inputNames.join(', ')} } = __natlang_copy(__inputs);` : '',
     ...(implicitResult ? ['let result = __locals.result;'] : []),
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
-    ...helperNames.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +
-      `__invoke(${JSON.stringify(name)}, args), { __natlangFunction: ${JSON.stringify(name)} });`),
+    ...captureOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name} = __captures.${binding.name};`),
+    ...helperNames.map(name => `const ${name} = __natlang_callable(${JSON.stringify(name)});`),
+    ...serviceNames.map(name => `const ${name} = __live.services[${JSON.stringify(name)}];`),
     `const __natlang_present = (value: Record<string, unknown>) => Object.fromEntries(` +
       `Object.entries(value).filter(([, item]) => item !== undefined));`,
     `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}) => ` +
-      `({ result: __natlang_result === undefined ? null : __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
-      `bindings: __natlang_present(__natlang_bindings) });`,
+      `__natlang_output({ result: __natlang_result === undefined ? null : __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
+      `bindings: __natlang_present(__natlang_bindings)${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''} });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +
     `__locals: Readonly<Record<string, unknown>>, ` +
-    `__invoke: (name: string, args: unknown[]) => unknown) {\n${prologue}\n${body}\n` +
+    `__captures: Readonly<Record<string, unknown>>) {\n${prologue}\n${body}\n` +
     `return __natlang_finish(null);\n}\n`;
   const emitted = ts.transpileModule(typescript, { fileName: 'natlang-scope.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, isolatedModules: true,
@@ -438,6 +539,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     return result;
   }
   result.body = body;
+  result.plans = plans;
   result.program = emitted.outputText;
   return result;
 }

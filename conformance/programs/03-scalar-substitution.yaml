@@ -1,37 +1,49 @@
 id: 03-scalar-substitution
 title: A crisp step computes a number, a locals holds it, a crisp step formats the message
 kind: program
-exercises: [code base, crisp function, locals, conditional]
-program:
-  $lambda:
-    type: '(amounts: number[], limit: number) => string'
-    function: budget_check
-    instructions: |
-      Compute `total` with `await sum_amounts(amounts)`. If it exceeds `limit`, return
-      `await over_message(total, limit)`; otherwise return `"within budget"`.
-    codebase:
-      sum_amounts:
-        description: Add up a list of amounts.
-        args: { amounts: 'number[]' }
-        returns: number
-        code: return sum(amounts)
-      over_message:
-        description: The "over budget by N" message for an excess.
-        args: { total: number, limit: number }
-        returns: string
-        code: return `over budget by ${Math.round((total - limit) * 100) / 100}`
+exercises:
+  - code base
+  - crisp function
+  - locals
+  - conditional
+root: budget_check.nl
+files:
+  budget_check.nl: |
+    ---
+    args:
+      amounts: "number[]"
+      limit: "number"
+    returns: "string"
+    ---
+    Compute `total` with `await sum_amounts(amounts)`. If it exceeds `limit`, return
+    `await over_message(total, limit)`; otherwise return `"within budget"`.
+  budget_check/sum_amounts.ts: |
+    /** Add up a list of amounts. */
+    export default function sum_amounts(amounts: number[]): number {
+      return amounts.reduce((total, amount) => total + amount, 0)
+    }
+  budget_check/over_message.ts: |
+    /** The "over budget by N" message for an excess. */
+    export default function over_message(total: number, limit: number): string {
+      return `over budget by ${Math.round((total - limit) * 100) / 100}`
+    }
 inputs:
-  amounts: [120, 80.5, 310]
+  amounts:
+    - 120
+    - 80.5
+    - 310
   limit: 400
 expect:
-  value: "over budget by 110.5"
+  value: over budget by 110.5
 lint:
   must:
     - sum_amounts called once to get the total
     - over_message called only because the total is above the limit
-  must_not: [the root doing arithmetic itself, the root writing the message text directly]
+  must_not:
+    - the root doing arithmetic itself
+    - the root writing the message text directly
 reference:
   budget_check:
-    eval: 'const total = await sum_amounts(amounts);
-
-      total > limit ? await over_message(total, limit) : "within budget"'
+    eval: |-
+      const total = await sum_amounts(amounts);
+      total > limit ? await over_message(total, limit) : "within budget"

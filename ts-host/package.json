@@ -19,18 +19,19 @@
     "test:playground": "node scripts/playground-smoke.mjs",
     "serve:browser": "node scripts/serve-browser-local.mjs",
     "playground": "npm run build && node scripts/serve-browser-local.mjs --playground --open-gpu",
-    "test": "npm run build && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
-    "test:conformance": "node scripts/native-conformance.mjs"
+    "test": "npm run build && npm run build:applications && npm run check:browser-types && node --test test/*.test.mjs && npm run test:conformance",
+    "test:conformance": "node scripts/native-conformance.mjs",
+    "build:applications": "node scripts/build-applications.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
+    "@types/node": "^24.0.0",
     "@wllama/wllama": "^3.6.1",
     "@wllama/wllama-compat": "^3.6.1",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
     "playwright-core": "^1.55.0"
   },

@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { NatlangHost } from '../dist/index.js';
-import { ScheduleWorkspace } from '../../applications/scheduling.mjs';
-import { evalTurn } from './support/eval-turn.mjs';
+import { createNatlangRuntime } from '../dist/index.js';
+import { ScheduleWorkspace, plan } from '../../applications/dist/scheduling/index.js';
+import { scriptedModel } from './support/natlang.mjs';
 
-const path = fileURLToPath(new URL('../../codebases/scheduler/plan.nl', import.meta.url));
 const day = {
   windows: [{ start: '2026-09-21T09:00:00+02:00', end: '2026-09-21T12:00:00+02:00' }],
   fixed: [{ id: 'meeting', start: '2026-09-21T10:00:00+02:00',
@@ -18,30 +16,18 @@ const day = {
   ],
 };
 
-test('natlang ranks exact feasible schedules and host conditionally commits', async () => {
+test('natlang ranks exact feasible schedules and the workspace conditionally commits', async () => {
   const scheduler = new ScheduleWorkspace(day);
-  const option = scheduler.alternatives().options[0];
-  const host = new NatlangHost({ host: { scheduler,
-    drainEvents: () => scheduler.drainEvents() } });
-  try {
-    const result = await host.run({ source: { kind: 'file', path },
-      inputs: { request: 'Draft early, then review' },
-      modelTurn: request => {
-        const turn = request;
-        const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function plan(')) return evalTurn(turn,
-          'const snapshot = await inspect();\n' +
-          'const alternatives = await enumerate();\n' +
-          'if (alternatives.options.length === 0) { await infeasible(snapshot, alternatives); }\n' +
-          'const chosen = await rank(request, snapshot, alternatives);\n' +
-          'await commit(chosen, snapshot.revision)');
-        return evalTurn(turn, `(${JSON.stringify(option)})`);
-      } });
-    assert.equal(result.outcome.kind, 'done');
-    assert.equal(result.value.status, 'committed');
-    assert.equal(result.value.plan.length, 2);
-    assert.ok(result.value.plan[1].start >= result.value.plan[0].end);
-  } finally { host.close(); }
+  const model = scriptedModel(opening => {
+    assert.match(opening, /request: string/);
+    assert.match(opening, /alternatives: Alternatives|alternatives: \{/);
+    return 'result = alternatives.options[0]';
+  });
+  const result = await createNatlangRuntime({ model: model.driver }).run(() => plan(scheduler, 'Draft early, then review'));
+  assert.equal(result.status, 'committed', result.detail);
+  assert.equal(result.plan.length, 2);
+  assert.ok(result.plan[1].start >= result.plan[0].end);
+  assert.deepEqual(scheduler.drainEvents().map(event => event.operation), ['schedule.alternatives', 'schedule.commit']);
 });
 
 test('new observations invalidate stale proposals and impossible schedules remain explicit', () => {

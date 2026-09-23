@@ -1,26 +1,39 @@
 id: 16-quiesce-with-note
 title: Stop with a useful closing note when the inputs do not determine the answer
 kind: program
-exercises: [report_blocker, quiesced root, note quality, no guessing]
-program:
-  $lambda:
-    type: '(item: string, rubric: string) => "accept" | "reject"'
-    function: decide_claim
-    instructions: |
-      Decide `item` strictly by `rubric`. If the rubric does not cover the case,
-      call report_blocker and say what is missing.
+exercises:
+  - report_blocker
+  - quiesced root
+  - note quality
+  - no guessing
+root: decide_claim.nl
+files:
+  decide_claim.nl: |
+    ---
+    args:
+      item: "string"
+      rubric: "string"
+    returns: "\"accept\" | \"reject\""
+    ---
+    Decide `item` strictly by `rubric`. If the rubric does not cover the case,
+    call report_blocker and say what is missing.
 inputs:
   rubric: |
     accept: expense claims under 50 EUR with a receipt.
     reject: expense claims without a receipt.
-  item: "Taxi to the airport, 85 EUR, receipt attached."
+  item: Taxi to the airport, 85 EUR, receipt attached.
 expect:
   status: quiesced
   note_checks:
-    - { kind: judge, question: "Does the note say the rubric has no rule for claims of 50 EUR or more that have a receipt?", answer: true }
+    - kind: judge
+      question: Does the note say the rubric has no rule for claims of 50 EUR or more that have a receipt?
+      answer: true
 lint:
-  must: [the episode ends with report_blocker, return left unset]
-  must_not: [writing accept or reject]
+  must:
+    - the episode ends with report_blocker
+    - return left unset
+  must_not:
+    - writing accept or reject
 reference:
   decide_claim:
     blocker: The rubric has no rule for a claim of 50 EUR or more that has a receipt attached.

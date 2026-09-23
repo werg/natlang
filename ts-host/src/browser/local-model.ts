@@ -274,3 +274,55 @@ export class BrowserLocalModel {
     if (this.ownsEngine) await this.engine.exit();
   }
 }
+
+export type BrowserModelSource =
+  | { kind: 'url'; url: string; id?: string; templateUrl?: string; chatTemplate?: string }
+  | { kind: 'files'; files: Blob[]; id?: string; templateUrl?: string; chatTemplate?: string }
+  | { kind: 'huggingface'; repo: string; file?: string; quant?: string; id?: string; templateUrl?: string; chatTemplate?: string };
+export type BrowserModelStatus = { id: string; diagnostics: BrowserModelDiagnostics; loadMs: number | null; gpuFallbackReason: string | null };
+export type LoadedBrowserModel = { model: BrowserLocalModel; status: BrowserModelStatus };
+
+/**
+ * Load a local GGUF model: fetch its chat template when one is published separately, run
+ * single-threaded when the page is not cross-origin isolated, and fall back to CPU when an automatic
+ * GPU load fails (unless `cpuFallback` is false or GPU layers were chosen explicitly).
+ */
+export async function loadBrowserLocalModel(source: BrowserModelSource,
+  options: BrowserModelLoadOptions & { cpuFallback?: boolean; engine?: ConstructorParameters<typeof BrowserLocalModel>[0] } = {}): Promise<LoadedBrowserModel> {
+  if (source.kind === 'files' && !source.files.length) throw new Error('select at least one GGUF file');
+  const template = source.chatTemplate ?? (source.templateUrl ? await fetch(source.templateUrl).then(response => {
+    if (!response.ok) throw new Error(`model template unavailable: ${source.templateUrl}`);
+    return response.text();
+  }) : undefined);
+  const { cpuFallback = true, engine, ...given } = options;
+  const loadOptions: BrowserModelLoadOptions = { ...given, ...(template ? { chatTemplate: template } : {}),
+    ...(globalThis.crossOriginIsolated ? {} : { threads: given.threads ?? 1 }) };
+  if (!Number.isInteger(loadOptions.contextTokens ?? 4096) || (loadOptions.contextTokens ?? 4096) < 512)
+    throw new RangeError('contextTokens must be an integer of at least 512');
+  const attempt = async (override: Partial<BrowserModelLoadOptions> = {}): Promise<{ model: BrowserLocalModel | null; reason: string | null }> => {
+    const candidate = new BrowserLocalModel(engine);
+    try {
+      const params = { ...loadOptions, ...override };
+      if (source.kind === 'url') await candidate.loadFromUrl(source.url, params);
+      else if (source.kind === 'files') await candidate.loadFiles(source.files, params);
+      else await candidate.loadFromHuggingFace({ repo: source.repo, file: source.file, quant: source.quant }, params);
+      return { model: candidate, reason: null };
+    } catch (error) {
+      const gpuAttempted = candidate.diagnostics.requestedGpuLayers === 99999;
+      try { await candidate.close(); } catch { /* preserve the load error */ }
+      if (cpuFallback && loadOptions.gpuLayers === undefined && gpuAttempted && override.gpuLayers === undefined)
+        return { model: null, reason: String(error) };
+      throw error;
+    }
+  };
+  let first = await attempt(), gpuFallbackReason: string | null = null;
+  if (!first.model) {
+    gpuFallbackReason = first.reason;
+    first = await attempt({ gpuLayers: 0 });
+    if (!first.model) throw new Error('CPU model load failed');
+  }
+  const model = first.model;
+  const id = source.id ?? (source.kind === 'url' ? source.url : source.kind === 'files' ?
+    source.files.map(file => (file as File).name ?? 'GGUF').join(',') : `${source.repo}/${source.file ?? source.quant ?? ''}`);
+  return { model, status: { id, diagnostics: model.diagnostics, loadMs: model.lastLoadMs, gpuFallbackReason } };
+}

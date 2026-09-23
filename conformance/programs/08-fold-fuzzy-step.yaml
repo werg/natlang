@@ -1,46 +1,58 @@
 id: 08-fold-fuzzy-step
 title: A TypeScript loop threads state through a natural-language function
 kind: program
-exercises: [code base, TypeScript for...of loop, accumulator typing, natural-language function]
-program:
-  $lambda:
-    type: '(messages: string[]) => Addr'
-    function: track_address
+exercises:
+  - code base
+  - TypeScript for...of loop
+  - accumulator typing
+  - natural-language function
+root: track_address.nl
+files:
+  track_address.nl: |
+    ---
+    args:
+      messages: "string[]"
+    returns: "Addr"
     types:
-      Addr: '{ address: string, changes: number }'
-    instructions: |
-      Start with the address "unknown" and zero changes. For each message, ask `update_address`
-      for the next state. Return the final state.
-    codebase:
-      update_address:
-        description: Given the running state and one more message, the new address-tracking state.
-        args: { acc: Addr, item: string }
-        returns: '{ address: string, changes: number }'
-        instructions: |
-          `acc` holds the customer's latest known delivery address and how many times it has
-          changed. `item` is the next message. If it states a delivery address different from
-          `acc/address`, return the new address with changes increased by one. Otherwise return
-          `acc` unchanged.
+      Addr: "{ address: string, changes: number }"
+    ---
+    Start with the address "unknown" and zero changes. For each message, ask `update_address`
+    for the next state. Return the final state.
+  track_address/update_address.nl: |
+    ---
+    description: "Given the running state and one more message, the new address-tracking state."
+    args:
+      acc: "Addr"
+      item: "string"
+    returns: "{ address: string, changes: number }"
+    ---
+    `acc` holds the customer's latest known delivery address and how many times it has
+    changed. `item` is the next message. If it states a delivery address different from
+    `acc/address`, return the new address with changes increased by one. Otherwise return
+    `acc` unchanged.
 inputs:
   messages:
-    - "Hi, please send it to 12 Oak Lane, Bristol."
-    - "Any idea when it ships?"
-    - "Actually I've moved - use 4 Mill Road, Leeds instead."
-    - "Thanks!"
+    - Hi, please send it to 12 Oak Lane, Bristol.
+    - Any idea when it ships?
+    - Actually I've moved - use 4 Mill Road, Leeds instead.
+    - Thanks!
     - "Sorry, one more change: 9 Quay Street, Hull."
 expect:
-  value: { address: "9 Quay Street, Hull", changes: 3 }
+  value:
+    address: 9 Quay Street, Hull
+    changes: 3
 notes: The first address counts as a change from "unknown".
 lint:
-  must: [the root loops over messages and calls update_address with the current state and message]
-  must_not: [the root deciding which address to keep itself]
+  must:
+    - the root loops over messages and calls update_address with the current state and message
+  must_not:
+    - the root deciding which address to keep itself
 reference:
   track_address:
-    eval: 'let state = { address: "unknown", changes: 0 };
-
+    eval: |-
+      let state = { address: "unknown", changes: 0 };
       for (const message of messages) state = await update_address(state, message);
-
-      state'
+      state
   update_address:
     answer_by:
       Hi, please send it to 12 Oak Lane, Bristol.:
@@ -55,6 +67,6 @@ reference:
       Thanks!:
         address: 4 Mill Road, Leeds
         changes: 2
-      'Sorry, one more change: 9 Quay Street, Hull.':
+      "Sorry, one more change: 9 Quay Street, Hull.":
         address: 9 Quay Street, Hull
         changes: 3

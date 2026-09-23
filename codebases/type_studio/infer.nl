@@ -6,8 +6,6 @@ args:
   target: Target
   context: Context
 returns: Assessment
-effects:
-  - types.check
 ---
 function infer(target, context) -> Assessment
   candidate = propose(target, context)

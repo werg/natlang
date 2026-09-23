@@ -1,53 +1,39 @@
-import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+/** Stage the built runtime into an npm package directory under npm-packages/. */
+import { cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const kind = process.argv[2];
-if (!['core', 'node', 'browser'].includes(kind)) throw new Error('usage: stage-npm-package.mjs core|node|browser');
+if (!['node', 'browser'].includes(kind)) throw new Error('usage: stage-npm-package.mjs node|browser');
+const source = join(root, 'ts-host', 'dist');
 const destination = join(root, 'npm-packages', kind, 'dist');
 rmSync(destination, { recursive: true, force: true }); mkdirSync(destination, { recursive: true });
 
-if (kind === 'core') {
-  const source = join(root, 'ts-host', 'dist');
-  cpSync(join(source, 'contracts.d.ts'), join(destination, 'contracts.d.ts'));
-  cpSync(join(source, 'contracts.js'), join(destination, 'contracts.js'));
-  const nativeDestination = join(destination, 'native'); mkdirSync(nativeDestination, { recursive: true });
-  for (const stem of ['agent', 'codebase', 'evaluator', 'hash', 'prompt', 'runtime', 'scenario',
-    'source-core', 'trace', 'type-aliases', 'types', 'values'])
-    for (const extension of ['.js', '.d.ts']) cpSync(join(source, 'native', stem + extension),
-      join(nativeDestination, stem + extension));
-} else if (kind === 'node') {
-  const source = join(root, 'ts-host', 'dist');
+/** Copy a tree, keeping the files `keep` accepts and skipping the directories in `skip`. */
+function copyTree(from, to, keep, skip = []) {
+  for (const name of readdirSync(from)) {
+    const path = join(from, name), target = join(to, name);
+    if (skip.includes(path)) continue;
+    if (statSync(path).isDirectory()) { mkdirSync(target, { recursive: true }); copyTree(path, target, keep, skip); }
+    else if (keep(path)) cpSync(path, target);
+  }
+}
+
+if (kind === 'node') {
   const { DEFAULT_MODEL_RELEASE } = await import(new URL('../ts-host/dist/model-default.js', import.meta.url));
   if (!DEFAULT_MODEL_RELEASE.downloadUrl || new URL(DEFAULT_MODEL_RELEASE.downloadUrl).protocol !== 'https:')
     throw new Error('the published default model needs an HTTPS downloadUrl before @natlang/node can be packed');
-  for (const name of ['cli', 'model', 'native', 'package', 'terminal'])
-    cpSync(join(source, name), join(destination, name), { recursive: true });
-  for (const name of ['contracts.d.ts', 'contracts.js', 'desktop.d.ts', 'desktop.js',
-    'environment.d.ts', 'environment.js', 'index.d.ts', 'index.js', 'model-default.d.ts',
-    'model-default.js', 'llama-runtime-release.d.ts', 'llama-runtime-release.js',
-    'node-runtime.d.ts', 'node-runtime.js'])
-    cpSync(join(source, name), join(destination, name));
+  // The whole Node build, without the browser bundle and the repository's teacher tooling.
+  copyTree(source, destination, () => true, [join(source, 'browser'), join(source, 'teacher')]);
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
   rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
-  cpSync(join(root, 'models', 'templates', DEFAULT_MODEL_RELEASE.template),
-    join(modelAssets, 'default.jinja'));
+  cpSync(join(root, 'models', 'templates', DEFAULT_MODEL_RELEASE.template), join(modelAssets, 'default.jinja'));
 } else {
-  cpSync(join(root, 'ts-host', 'dist', 'browser'), destination, { recursive: true });
-  for (const name of readdirSync(destination).filter(name => name.endsWith('.js') &&
-      !['natlang.js', 'wllama-compat.js'].includes(name))) rmSync(join(destination, name));
-  // The public declarations refer to shared interpreter declaration files.
-  const nativeSource = join(root, 'ts-host', 'dist', 'native'), nativeDestination = join(destination, 'native');
-  mkdirSync(nativeDestination, { recursive: true });
-  for (const name of readdirSync(nativeSource).filter(name => name.endsWith('.d.ts')))
-    cpSync(join(nativeSource, name), join(nativeDestination, name));
-  for (const name of ['contracts.d.ts']) cpSync(join(root, 'ts-host', 'dist', name), join(destination, name));
-  // Rebase declaration paths because browser files now live at package dist root.
-  for (const name of readdirSync(destination).filter(name => name.endsWith('.d.ts'))) {
-    const path = join(destination, name);
-    writeFileSync(path, readFileSync(path, 'utf8').replaceAll("'../native/", "'./native/")
-      .replaceAll("'../contracts.js'", "'./contracts.js'"));
-  }
+  // The single-file bundle and its WASM assets at the package root; declarations keep the build's layout.
+  for (const name of readdirSync(join(source, 'browser')))
+    if (['natlang.js', 'wllama-compat.js'].includes(name) || name.endsWith('.wasm')) cpSync(join(source, 'browser', name), join(destination, name));
+  const types = join(destination, 'types'); mkdirSync(types, { recursive: true });
+  copyTree(source, types, path => path.endsWith('.d.ts'), [join(source, 'teacher')]);
 }

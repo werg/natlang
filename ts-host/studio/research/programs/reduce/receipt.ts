@@ -1,3 +1,4 @@
+import { research } from 'natlang:services';
 export default async function receipt(id: string): Promise<string> {
-return await host.research.receipt(id);
+return await research.receipt(id);
 }

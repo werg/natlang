@@ -1,0 +1,8 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "natlang-triage-example",
+  "version": "0.1.0",
+  "description": "Triage a JSON list of support tickets into a report.",
+  "include": ["main.ts", "triage.ts", "types.ts", "classify.nl", "is_urgent.nl", "tsconfig.json"],
+  "targets": { "triage": { "entry": "main.ts", "description": "natlang run examples/triage -- TICKETS.json [RUBRIC]" } }
+}

@@ -21,9 +21,10 @@ function accepts(value, type, env) {
   }
 }
 
-export function mountInputForm(container, lambda, values, onChange) {
-  const env = new TypeEnv(lambda.types);
-  const fields = lambda.type.params.fields;
+/** An input form for a root's declared fields (`projectSignature`). */
+export function mountInputForm(container, signature, values, onChange) {
+  const env = new TypeEnv(signature.types);
+  const fields = signature.fields;
   const bindings = [];
   container.replaceChildren();
 

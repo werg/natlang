@@ -29,7 +29,7 @@ async function main() {
   if (options.has('--help')) {
     process.stdout.write('usage: node ts-host/scripts/generate-synthetic-ir.mjs --out FILE [--seed N] [--start-index N] [--n N] [--families FAMILY... ]\n\n' +
       `Native families: ${NATIVE_SYNTHETIC_FAMILIES.join(', ')}\n` +
-      'The generator emits natlang.program/1 JSONL and an adjacent provenance manifest. Run npm --prefix ts-host run build:node first.\n');
+      'The generator emits natlang.program/2 JSONL and an adjacent provenance manifest. Run npm --prefix ts-host run build:node first.\n');
     return;
   }
   const outputOption = options.get('--out');
@@ -49,7 +49,7 @@ async function main() {
   await rename(staging, output);
   const manifest = { version: 'natlang.synthetic_dataset.native/1', generator: NATIVE_SYNTHETIC_GENERATOR_VERSION,
     generator_sha256: generatorSha256, seed, start_index: start, programs: count, families,
-    output_sha256: hash(bytes), ir_version: 'natlang.program/1' };
+    output_sha256: hash(bytes), ir_version: 'natlang.program/2' };
   await writeFile(`${output}.manifest.json.building`, `${JSON.stringify(manifest, null, 2)}\n`);
   await rename(`${output}.manifest.json.building`, `${output}.manifest.json`);
   process.stdout.write(`${count} programs -> ${output}\n`);

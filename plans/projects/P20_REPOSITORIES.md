@@ -1,7 +1,7 @@
 # P20 — Repository maintenance and migration agent
 
-Status: isolated migration workbench in `codebases/repository_migration/` and
-`applications/repository_migration.mjs`. [Shared capabilities](README.md).
+Status: isolated migration workbench in `applications/migration/` and
+`applications/migration/index.ts`. [Shared capabilities](README.md).
 
 Natlang searches the task manifest and proposes exact old/new patches. The
 host rejects ambiguous context, retains immutable candidate revisions, runs

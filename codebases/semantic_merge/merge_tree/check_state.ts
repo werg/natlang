@@ -7,7 +7,8 @@ const byId = new Map(nodes.map(node => [node.id, node]));
 for (const node of nodes) {
   let parent = node.parent;
   const seen = new Set([node.id]);
-  while (parent) {
+  for (const _step of nodes) {
+    if (!parent) break;
     if (!byId.has(parent) || seen.has(parent)) return false;
     seen.add(parent);
     parent = byId.get(parent).parent;

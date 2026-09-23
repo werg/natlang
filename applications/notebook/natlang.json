@@ -1,0 +1,10 @@
+{
+  "schema": "natlang.package/v2",
+  "name": "@natlang/notebook-console",
+  "version": "0.3.0",
+  "description": "A guided semantic notebook with a starter graph and live SQLite and JavaScript cells.",
+  "include": ["index.ts", "console.ts", "types.ts", "choose_goal.nl", "choose_cell.nl", "explain.nl", "tsconfig.json"],
+  "targets": { "notebook": { "entry": "console.ts", "authority": ["filesystem:notebook", "filesystem:files", "sqlite:memory"],
+    "description": "Explore, import, run, and query a dependency-aware notebook." } },
+  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
+}

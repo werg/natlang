@@ -3,54 +3,42 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { NatlangHost } from '../dist/index.js';
-import { RepositoryMigration } from '../../applications/repository_migration.mjs';
-import { evalTurn } from './support/eval-turn.mjs';
+import { createNatlangRuntime } from '../dist/index.js';
+import { RepositoryMigration, migrate } from '../../applications/dist/migration/index.js';
+import { scriptedModel } from './support/natlang.mjs';
 
-const path = fileURLToPath(new URL('../../codebases/repository_migration/migrate.nl', import.meta.url));
 const source = {
   'lib.mjs': 'export function sum(a, b) { return a + b; }\n',
   'caller.mjs': "import { sum } from './lib.mjs';\nexport const total = sum(2, 3);\n",
   'test.mjs': "import { strict as assert } from 'node:assert';\nimport { total } from './caller.mjs';\nassert.equal(total, 5);\n",
 };
 
-test('natlang plans a checked migration without editing the original repository', async () => {
+test('natlang plans, checks and repairs a migration without editing the original repository', async () => {
   const root = await mkdtemp(join(tmpdir(), 'natlang-repo-'));
   for (const [name, text] of Object.entries(source)) await writeFile(join(root, name), text);
   const repository = new RepositoryMigration(root, { files: Object.keys(source),
     checks: [{ id: 'scenario', argv: [process.execPath, '--test', 'test.mjs'] }] });
   await repository.open();
-  const host = new NatlangHost({ host: { repository,
-    drainEvents: () => repository.drainEvents() } });
+  let proposals = 0;
+  const driver = scriptedModel(opening => {
+    proposals++;
+    // The first candidate misses the callers; the repair reads the failed checks and fixes them.
+    return opening.includes('failed: Validation = missing') ?
+      'result = [{ path: "lib.mjs", old: "function sum(", new: "function add(" }]' :
+      'result = [{ path: "caller.mjs", old: "{ sum }", new: "{ add }" }, { path: "caller.mjs", old: "sum(2, 3)", new: "add(2, 3)" }]';
+  });
   try {
-    const result = await host.run({ source: { kind: 'file', path },
-      inputs: { request: 'Rename sum to add while preserving the calculation', query: 'sum' },
-      modelTurn: request => {
-        const turn = request;
-        const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes('function migrate(')) return evalTurn(turn,
-          'const snapshot = await inspect();\n' +
-          'const uses = await search(query, snapshot.revision);\n' +
-          'const patch = await propose(request, snapshot, uses);\n' +
-          'const candidate = await apply(snapshot.revision, patch);\n' +
-          'const checks = await validate(candidate.revision);\n' +
-          'await report(candidate.revision, checks)');
-        return evalTurn(turn, JSON.stringify([
-          { path: 'lib.mjs', old: 'function sum(', new: 'function add(' },
-          { path: 'caller.mjs', old: '{ sum }', new: '{ add }' },
-          { path: 'caller.mjs', old: 'sum(2, 3)', new: 'add(2, 3)' },
-        ]));
-      } });
-    assert.equal(result.outcome.kind, 'done');
-    assert.equal(result.value.status, 'reviewable');
-    assert.equal(result.value.changed.length, 2);
+    const result = await createNatlangRuntime({ model: driver.driver }).run(() =>
+      migrate(repository, 'Rename sum to add while preserving the calculation', 'sum'));
+    assert.equal(result.status, 'reviewable', JSON.stringify(result.checks));
+    assert.equal(proposals, 2);
+    assert.equal(result.changed.length, 2);
     const base = repository.snapshot().revision;
     assert.equal(await readFile(join(root, 'caller.mjs'), 'utf8'), source['caller.mjs']);
     assert.throws(() => repository.apply(base, [{ path: 'caller.mjs', old: 'sum', new: 'add' }]),
       /ambiguous/);
     assert.equal(await readFile(join(root, 'lib.mjs'), 'utf8'), source['lib.mjs']);
-  } finally { host.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('failed checks and stale patch context remain visible for repair', async () => {

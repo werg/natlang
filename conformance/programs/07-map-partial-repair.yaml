@@ -1,40 +1,52 @@
 id: 07-map-partial-repair
 title: Map judgments across a list that includes unreadable data
 kind: program
-exercises: [code base, TypeScript map, judgment with an explicit unreadable label]
-program:
-  $lambda:
-    type: '(tickets: string[]) => Label[]'
-    function: label_readable
+exercises:
+  - code base
+  - TypeScript map
+  - judgment with an explicit unreadable label
+root: label_readable.nl
+files:
+  label_readable.nl: |
+    ---
+    args:
+      tickets: "string[]"
+    returns: "Label[]"
     types:
-      Label: '"question" | "complaint" | "unreadable"'
-    instructions: |
-      Return one `classify_readable(ticket)` result for each ticket, preserving the input order.
-    codebase:
-      classify_readable:
-        description: Is this ticket a question or a complaint?
-        args: { ticket: string }
-        returns: '"question" | "complaint" | "unreadable"'
-        instructions: |
-          Is the ticket in `ticket` a question or a complaint?
-          If it cannot be read as text, return `unreadable` instead of guessing.
+      Label: "\"question\" | \"complaint\" | \"unreadable\""
+    ---
+    Return one `classify_readable(ticket)` result for each ticket, preserving the input order.
+  label_readable/classify_readable.nl: |
+    ---
+    description: "Is this ticket a question or a complaint?"
+    args:
+      ticket: "string"
+    returns: "\"question\" | \"complaint\" | \"unreadable\""
+    ---
+    Is the ticket in `ticket` a question or a complaint?
+    If it cannot be read as text, return `unreadable` instead of guessing.
 inputs:
   tickets:
-    - "Why was my order cancelled?"
+    - Why was my order cancelled?
     - "xq zzv 0x00 ###"
-    - "This is the third time the courier has lost my parcel. Unacceptable."
+    - This is the third time the courier has lost my parcel. Unacceptable.
 expect:
-  value: [question, unreadable, complaint]
+  value:
+    - question
+    - unreadable
+    - complaint
 lint:
   must:
     - classify_readable is applied to each ticket
     - unreadable data is labeled `unreadable` without guessing
-  must_not: [the root labelling tickets itself, treating unreadable data as a reason to invent a label]
+  must_not:
+    - the root labelling tickets itself
+    - treating unreadable data as a reason to invent a label
 reference:
   label_readable:
     eval: await Promise.all(tickets.map(async ticket => await classify_readable(ticket)))
   classify_readable:
     answer_by:
       Why was my order cancelled?: question
-      'xq zzv 0x00 ###': unreadable
+      "xq zzv 0x00 ###": unreadable
       This is the third time the courier has lost my parcel. Unacceptable.: complaint

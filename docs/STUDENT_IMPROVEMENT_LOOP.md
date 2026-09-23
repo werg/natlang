@@ -78,7 +78,7 @@ npm --workspace @natlang/typescript-host run build:node
 The recipe is bound to its `--run` directory. `--limit N` restricts student
 programs; the default zero means all. `--workers N` and `--root-seed N` apply
 to both collectors. The supplied program file must contain focused
-`natlang.program/1` records with exact native oracles. The base run must be
+`natlang.program/2` records with exact native oracles. The base run must be
 complete; its adapter and split registry are hashed inputs to the continuation.
 
 For a non-quantized LoRA checkpoint, `train_lora.py --merge-only` can export a

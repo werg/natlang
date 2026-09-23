@@ -3,10 +3,10 @@
 Status: native archive, immutable store, executable targets and offline
 dependency installation implemented in [`ts-host/src/package`](../../ts-host/src/package),
 with the CLI and distribution contract in
-[`NATIVE_PACKAGES.md`](../../NATIVE_PACKAGES.md). The definition-level resolver is implemented in
-[`codebases/packages`](../../codebases/packages/README.md) and
-[`applications/package_registry.mjs`](../../applications/package_registry.mjs).
-Semantic upgrade planning and a remote registry transport remain open.
+[`NATIVE_PACKAGES.md`](../../NATIVE_PACKAGES.md). Studio's P07 app resolves and
+installs example packages from that store. The earlier definition-level
+registry was removed; package resolution is the store's. Semantic upgrade
+planning and a remote registry transport remain open.
 [Shared capabilities](README.md).
 
 ## Natlang prerequisites

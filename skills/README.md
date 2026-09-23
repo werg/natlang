@@ -4,8 +4,8 @@ This repository includes two standalone skills for coding agents:
 
 | Skill | Use |
 |---|---|
-| [natlang-authoring](natlang-authoring/SKILL.md) | Create and improve TypeScript and natural-language functions |
-| [natlang-integration](natlang-integration/SKILL.md) | Embed the Node or browser runtime in an application |
+| [natlang-authoring](natlang-authoring/SKILL.md) | Write inline `nl` calls, named `.nl` functions, and callable folders |
+| [natlang-integration](natlang-integration/SKILL.md) | Build Node and browser applications on the natlang runtime |
 
 ## Install
 
@@ -22,7 +22,7 @@ Restart or refresh the agent's skill discovery after copying. To update a
 skill, compare the installed folder with the version in this checkout and copy
 the complete updated folder.
 
-The skills describe the native TypeScript runtime. `@natlang/node` and
+The skills describe the TypeScript runtime and compiler. `@natlang/node` and
 `@natlang/browser` are built from this repository; see [native packages and
 executables](../NATIVE_PACKAGES.md) for package entry points and build steps.
 
@@ -31,6 +31,7 @@ executables](../NATIVE_PACKAGES.md) for package entry points and build steps.
 - “Use `$natlang-authoring` to inspect and improve this natlang codebase.”
 - “Use `$natlang-integration` to embed the browser runtime in this app.”
 
-The authoring reference includes a small multi-file example under
-`natlang-authoring/assets/review/`. Run examples through the TypeScript host and
-check real model behavior separately from scripted runtime plumbing.
+The authoring reference includes a small named function with its callable folder
+under `natlang-authoring/assets/review/`. Run it through the runtime
+(`loadNatlang` plus `createNatlangRuntime`) and check real model behavior
+separately from scripted runtime wiring.

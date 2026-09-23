@@ -1,8 +1,8 @@
 # P14 — Evidence atlas / research notebook
 
 Status: local cited-answer workflow implemented in
-[`codebases/evidence_atlas`](../../codebases/evidence_atlas/README.md) and
-[`applications/evidence_atlas.mjs`](../../applications/evidence_atlas.mjs).
+[`applications/evidence`](../../applications/evidence/index.ts) and
+[`applications/evidence/index.ts`](../../applications/evidence/index.ts).
 Trace-corpus ingestion and live-model grounding review remain open.
 [Shared capabilities](README.md).
 

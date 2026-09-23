@@ -62,7 +62,7 @@ test('managed runtime downloads, verifies, extracts, and is rediscovered', { ski
 test('CLI setup never downloads without consent in a noninteractive process', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-llama-consent-'));
   const cli = new URL('../dist/cli/main.js', import.meta.url);
-  const result = spawnSync(process.execPath, [cli.pathname, '--setup'], {
+  const result = spawnSync(process.execPath, [cli.pathname, 'setup'], {
     env: { ...process.env, PATH: '', NATLANG_RUNTIME_HOME: root, NATLANG_HOME: join(root, 'data') },
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 10000,
   });

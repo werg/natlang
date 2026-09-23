@@ -1,5 +1,7 @@
 # Synthetic corpus IR
 
+> **Status (2026-09-23):** historical. This describes the Python `natlang.program/1` synthetic pipeline, removed with the Python runtime. Synthetic IR is now `natlang.program/2`, produced by `ts-host/scripts/generate-synthetic-ir.mjs`; see [PROGRAM_IR_PIPELINE.md](PROGRAM_IR_PIPELINE.md).
+
 The source of truth is the versioned `natlang.program/1` JSONL, not a tool
 trace or model-formatted SFT pair. `scripts/build_synthetic_ir.py` regenerates
 tasks from the current synthetic generator and freezes their source lambda or

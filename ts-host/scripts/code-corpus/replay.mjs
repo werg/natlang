@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { digest, readJsonl, writeJsonl } from './common.mjs';
 import { projectSubfunctions } from './subfunctions.mjs';
+import { PROGRAM_VERSION, definitionProject } from '../../dist/teacher/program.js';
 
 async function workspaceSnapshot(workspace) {
   if (!workspace) return null;
@@ -78,13 +79,13 @@ export function project(record, index = 0, options = {}) {
       throw error;
     }
   };
-  const fields = params.map((p, i) => `${p.name}: ${boundaryType(cases.map(c => c.args[i]), p.type)}`);
+  const args = Object.fromEntries(params.map((p, i) => [p.name, boundaryType(cases.map(c => c.args[i]), p.type)]));
   const body = record.function.body.trim().replace(/^\{/, '').replace(/\}$/, '');
   if (!body.trim()) throw new Error('missing function body');
   const subfunctions = projectSubfunctions(record, options);
   const id = `code:${digest([record.id, item.args]).slice(0, 24)}`;
   return { code: body, packageImports: subfunctions.packageImports, expected: item.expected, program: {
-    version: 'natlang.program/1', id, kind: 'lambda_source', source: record.source.name,
+    version: PROGRAM_VERSION, id, kind: 'lambda_source', source: record.source.name,
     source_ids: [record.id], source_groups: [record.group_id], license: record.source.license,
     family: record.generation?.family ?? record.family ?? 'code_corpus', generation:record.generation,
     implementation_sha256: digest(record.function),
@@ -92,9 +93,9 @@ export function project(record, index = 0, options = {}) {
       note:'Native replay checks fidelity to supplied expected values, not full specification correctness.'},
     split: Number.parseInt(digest(record.group_id).slice(0, 8), 16) % 100 < 5 ? 'test' : 'train',
     source_layout: subfunctions.sourceLayout,
-    semantics: { root: { $lambda: { type: `(${fields.join(', ')}) => ${boundaryType(cases.map(c => c.expected), record.function.return_type)}`,
-      instructions: record.instruction.replace(/\s+/g, ' ').trim(),
-      ...(Object.keys(subfunctions.codebase).length ? { codebase: subfunctions.codebase } : {}) } }, inputs: Object.fromEntries(params.map((p, i) => [p.name, item.args[i]])),
+    semantics: { ...definitionProject(subfunctions.sourceLayout.root.replace(/\.nl$/, ''), { args,
+      returns: boundaryType(cases.map(c => c.expected), record.function.return_type),
+      instructions: record.instruction.replace(/\s+/g, ' ').trim(), codebase: subfunctions.codebase }), inputs: Object.fromEntries(params.map((p, i) => [p.name, item.args[i]])),
       expected: item.expected, operation: 'exact' },
   } };
 }
@@ -105,9 +106,9 @@ export async function replayCase(record, index = 0, options = {}) {
   const { applicationCapabilityPrompt } = await import('../../dist/application-packages.js');
   const { NativeToolAgent } = await import('../../dist/native/agent.js');
   const { EXPLICIT_TOOLS_PROMPT } = await import('../../dist/native/prompt.js');
-  const { NativeRuntime } = await import('../../dist/native/runtime.js');
-  const { TypeEnv } = await import('../../dist/native/types.js');
-  const { buildPending, coerce, dump } = await import('../../dist/native/values.js');
+  const { NodeNativeRuntime } = await import('../../dist/node-runtime.js');
+  const { dump } = await import('../../dist/native/values.js');
+  const { programNode } = await import('../../dist/teacher/program.js');
   const projection = project(record, index, options);
   const { program, expected } = projection;
   let code = projection.code;
@@ -116,12 +117,7 @@ export async function replayCase(record, index = 0, options = {}) {
   // inner function; a bare block can collide with the eval scope's `result` slot.
   code = 'return await (async () => {\n'+code+'\n})();';
   if (projection.packageImports.length) code=projection.packageImports.join('\n')+'\n'+code;
-  const root = buildPending(program.semantics.root);
-  const env = new TypeEnv().child(root.types);
-  for (const [name, value] of Object.entries(program.semantics.inputs)) {
-    const field = root.type.params.fields.find(f => f.name === name);
-    root.args[name] = coerce(structuredClone(value), field.type, env, `args/${name}`);
-  }
+  const root = programNode(program);
   const trajectory = [];
   const driver = async request => {
     if (trajectory.length >= 2) throw new Error('replay exceeded two model turns');
@@ -139,9 +135,9 @@ export async function replayCase(record, index = 0, options = {}) {
     observe: event => hostEvents.push(event) });
   const agent = new NativeToolAgent(driver, { systemPrompt: EXPLICIT_TOOLS_PROMPT + applicationCapabilityPrompt(environment.scopeCapabilities,
     environment.packages?.listAvailableDependencies()), segmentTurns: 3, segmentMessages: 12, validationFeedback: 'caller' });
-  const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
+  const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
   try {
-    const result = await runtime.runRoot(root);
+    const result = await runtime.run(root);
     const actual = dump(result.value);
     return { version: 'natlang.teacher_trajectory.native/1', id: program.id,
       task: {kind:'whole_program', program_ir:program, source_program_ids:[record.id]},
@@ -152,7 +148,7 @@ export async function replayCase(record, index = 0, options = {}) {
         effects:{ host_events:hostEvents, complete:false, replayable:false },
         accepted:result.outcome.kind === 'done' && isDeepStrictEqual(actual, expected),
         action_ledger:runtime.trace.events.filter(e => e.kind === 'action') }, trajectory, capture_limits:[] };
-  } finally { runtime.close(); environment.close(); }
+  } finally { environment.close(); }
 }
 
 export function replayIsolated(record, index, timeout = 10000, options = {}) {

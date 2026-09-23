@@ -1,69 +1,56 @@
 # natlang
 
-Natlang is a TypeScript runtime for programs that combine ordinary TypeScript
-functions with natural-language functions interpreted line by line by a model.
-Both kinds of function use the same TypeScript types, positional parameters,
-imports, and `await`-based call syntax.
-
-## Get started
-
-Set up a checkout and build the Node host:
-
-```sh
-scripts/setup_dev.sh --node-only
-cd ts-host && npm test
-```
-
-The development command accepts a source file or codebase directory:
-
-```sh
-natlang --doctor --json
-natlang codebases/semantic_terminal
-natlang summarize the functions in this codebase
-```
-
-See [Development setup](DEV_SETUP.md) for model setup, CLI applications,
-browser builds, and runtime commands.
-
-## Source model
-
-Natural-language functions are `.nl` files with typed YAML frontmatter and
-instruction lines. Crisp helpers are ordinary `.ts` modules with one default
-exported function. For example:
+natlang is TypeScript with natural-language functions. A natural-language
+function is an ordinary async, typed function whose body is instructions; a
+model — possibly a small local one — executes them in a persistent TypeScript
+scope. Everything else is ordinary TypeScript.
 
 ```ts
-export default function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
+import { nl } from '@natlang/node';
+import classify from './classify.nl';          // a named natural-language function
+
+export async function triage(tickets: string[], rubric: string): Promise<Report> {
+  const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));
+  const urgent = tickets.filter((_, i) => labels[i] === 'technical');
+  const summary: string = await nl`Summarize what is going wrong across urgent, most severe first.`(urgent);
+  return { urgent: urgent.length, summary };
 }
 ```
 
-The interpreter uses `eval(code)` for TypeScript, `read_value` to inspect its
-scope, and `mark_lines` to close instruction lines after successful work.
-`report_blocker` and `report_error` provide explicit failure exits. Imported
-functions are available by name and are meant to be inspected and improved
-when that would clarify or correct the program. Function editing changes
-existing source; it does not add, move, or remove functions.
+The compiler plans every `nl` call before the model runs — its parameters,
+return type, and the variables its instructions mention — so natural-language
+calls are type-checked like any other code. A named `.nl` function may call only
+the helpers in its companion folder; inline calls in application code see the
+nearest `natlang.d/` folder. Host capabilities are typed services, and every
+invocation is traced.
 
-Directory reducers have a separate prompt and receive a writable folder API.
-Their first parameter is an explicit `Folder` value. A direct call such as
-`await reduce(folder, input)` returns the typed result and discards file edits;
-`await folder.apply(reduce, input)` retains the reducer's committed changes.
-Subfolders can be selected with `folder.dir("path")`. Paths are relative to
-the supplied folder. Ordinary functions do not receive filesystem tools.
+## Get started
 
-Read the [language specification](spec/SPEC.md), [type guide](TYPES.md), and
-[natlang skills](skills/README.md) for the complete contracts.
+```sh
+scripts/setup_dev.sh --node-only        # install and build ts-host; installs the `natlang` command
+natlang doctor
+natlang run applications/evidence       # a citation-checked question-answering console
+natlang check examples/triage           # type- and policy-check a project
+```
 
-## Project guides
+`natlang setup` prepares a managed local model runtime; see
+[development setup](DEV_SETUP.md) for model profiles, the browser build, and
+tests.
+
+## Read next
 
 | Guide | Contents |
 |---|---|
-| [Native packages](NATIVE_PACKAGES.md) | Node, browser, and core packages |
-| [Training](TRAINING.md) | Teacher data, student training, and evaluation |
-| [Teacher setup](TEACHER_SETUP.md) | Teacher runtime and collection workflow |
-| [Program IR pipeline](PROGRAM_IR_PIPELINE.md) | Portable trajectory representation and materialization |
-| [Code corpus](plans/CODE_CORPUS.md) | Application source corpus and processing |
-| [Terminal applications](ts-host/TERMINAL_APPLICATIONS.md) | CLI and terminal application framework |
+| [Language specification](spec/SPEC.md) | Functions, callable folders, captures, iteration, services, the model surface |
+| [Skills](skills/README.md) | Authoring and integration guidance for coding agents |
+| [Native packages](NATIVE_PACKAGES.md) | `@natlang/node`, `@natlang/browser`, the CLI, and distribution packages |
+| [TypeScript runtime](ts-host/README.md) | Building and using the runtime and compiler |
+| [Applications](applications/) | Wiki, notebook, evidence, logs, terminal, publisher, games, and more |
+| [Training](TRAINING.md), [teacher setup](TEACHER_SETUP.md), [program IR](PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
 
-`PLAN.md` and files under `plans/` contain research history and proposals. Use
-`spec/SPEC.md` and the current TypeScript source as the active runtime contract.
+The design notes behind the TypeScript-native runtime are in
+[`docs/TS_INLINE_HOST_INTEGRATION_PLAN.md`](docs/TS_INLINE_HOST_INTEGRATION_PLAN.md),
+[`docs/inline-natlang-lambdas.md`](docs/inline-natlang-lambdas.md), and
+[`docs/ITERATE_ON_PLAN.md`](docs/ITERATE_ON_PLAN.md). `PLAN.md` and `plans/`
+hold research history; the specification and the source are the active
+contract.

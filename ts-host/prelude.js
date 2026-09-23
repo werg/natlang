@@ -37,22 +37,3 @@ const formatDate = (s) => new Date(s).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 const hash = (x) => { const s = typeof x === "string" ? x : JSON.stringify(x); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(16); };
 const enumOf = (xs) => xs.map((x) => (typeof x === "number" ? String(x) : JSON.stringify(String(x)))).join(" | ");
-
-// Constructors for pending nodes returned from crisp lambdas (SPEC 9.3).
-const lambda = (o) => ({ $lambda: o });
-const map = (o) => ({ $map: o });
-const fold = (o) => ({ $fold: o });
-const iterate = (o) => ({ $iterate: o });
-
-const __deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(__deepFreeze); Object.freeze(o); } return o; };
-globalThis.fx = new Proxy({}, {
-  get: (_, cap) => new Proxy({}, {
-    get: (_, fn) => (...args) => {
-      const r = JSON.parse(__fx(String(cap), String(fn), JSON.stringify(args)));
-      if (r && r.__error) throw new Error("NATLANG:" + r.__error);
-      return r === null ? undefined : r.value;
-    },
-  }),
-});
-const __runExpr = (code) => { const v = (0, eval)('"use strict";' + code); return JSON.stringify(v === undefined ? null : v); };
-const __runBody = (code) => { const v = new Function("self", "args", "fx", '"use strict";' + code)(globalThis.self, globalThis.self.args, globalThis.fx); return JSON.stringify(v === undefined ? null : v); };

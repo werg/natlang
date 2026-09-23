@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { PROGRAM_VERSION, definitionProject, lambdaSignature } from '../dist/teacher/program.js';
 
 const output = resolve(process.argv[2] ?? 'data/teacher/read-before-code-probe.ir.jsonl');
 const rows = [];
 
 function add(family, index, root, inputs, expected, extra = {}) {
   const id = `read-before-code:${family}-${String(index).padStart(2, '0')}`;
-  rows.push({ version: 'natlang.program/1', id, kind: 'lambda_source',
+  const project = definitionProject(root.function, { ...lambdaSignature(root.type), instructions: root.instructions,
+    ...(root.types ? { types: root.types } : {}), ...(root.subtype ? { kind: root.subtype } : {}) });
+  rows.push({ version: PROGRAM_VERSION, id, kind: 'lambda_source',
     family: `read_before_code_${family}`, source: 'natlang-read-before-code-probe', split: 'test',
     source_ids: [id], source_groups: [id], source_revisions: ['natlang.read_before_code_probe/1'],
     license: 'project-generated', gold_sources: ['reviewed-policy-and-oracle'],
-    semantics: { root: { $lambda: root }, inputs, expected, operation: 'read_before_code', ...extra } });
+    semantics: { ...project, inputs, expected, operation: 'read_before_code', ...extra } });
 }
 
 const tablePolicies = [
@@ -224,13 +227,13 @@ const examples = [0, 5, 12, 17, 24, 29, 36, 41, 49, 54].map(index => {
   const input = s.folder_files ? Object.entries(s.folder_files).map(([path, content]) =>
     `**${path}**\n\n\`\`\`text\n${content.trimEnd()}\n\`\`\``).join('\n\n') :
     `\`\`\`json\n${JSON.stringify(s.inputs, null, 2)}\n\`\`\``;
-  return `## ${row.id}\n\n${s.root.$lambda.instructions}\n\n${input}\n\n` +
+  return `## ${row.id}\n\n${s.files[s.root].replace(/^---\n[\s\S]*?\n---\n/, '').trim()}\n\n${input}\n\n` +
     `**Expected return**\n\n\`\`\`json\n${JSON.stringify(s.expected)}\n\`\`\`\n`;
 });
 const sheet = '# Read-before-code probe: sample problems\n\n' +
   'These ten cases illustrate the 59-case [IR corpus](../data/teacher/read-before-code-probe.ir.jsonl). ' +
   'The agent sees the function instructions and typed scope. Large ordinary input batches show only their first few rows in the opening preview. ' +
-  'Folder contents must be read through file tools or `fs` in `eval`. Expected returns are oracle data, not shown to the agent.\n\n' +
+  'Folder contents must be read through the folder handle in `eval`. Expected returns are oracle data, not shown to the agent.\n\n' +
   examples.join('\n');
 await writeFile(resolve('docs/read-before-code-examples.md'), sheet);
 console.log(`${rows.length} cases across ${new Set(rows.map(row => row.family)).size} families -> ${output}`);

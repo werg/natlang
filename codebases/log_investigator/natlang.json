@@ -1,9 +1,0 @@
-{
-  "schema": "natlang.package/v1",
-  "name": "@natlang/log-console",
-  "version": "0.2.1",
-  "description": "A guided and streaming semantic log anomaly tracker.",
-  "include": ["applications/package_targets/log_console.mjs", "applications/log_investigator.mjs", "codebases/log_investigator"],
-  "targets": { "monitor": { "kind": "command", "entry": "applications/package_targets/log_console.mjs", "reducer": "codebases/log_investigator/reduce.nl", "view": "codebases/log_investigator/view.ts", "authority": ["stream:stdin", "filesystem:logs", "filesystem:files"], "description": "Explore a demo, import JSONL, enter records, or consume a stdin stream." } },
-  "engines": { "natlang": ">=0.1.0", "node": ">=22.13.0" }
-}

@@ -1,3 +1,4 @@
+import { types } from 'natlang:services';
 export default function check_candidate(target: Target, context: Context, candidate: Candidate): FitReport {
-return fx.types.check(target, context, candidate);
+return types.check(target, context, candidate);
 }

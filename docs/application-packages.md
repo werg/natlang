@@ -1,22 +1,25 @@
 # Application packages and network access
 
-A Node-backed natlang application owns a normal `package.json` and
+A Node natlang application owns a normal `package.json` and
 `package-lock.json`. Its dependencies belong to the application, not an individual
-lambda or eval session. Both handwritten `.ts` functions and generated eval code
-resolve packages through that application workspace.
+natlang call or eval session. Callable-folder TypeScript and model-authored eval
+code resolve packages through that application workspace.
 
 ```ts
-const host = new NativeNatlangHost({ workspace: '/absolute/path/to/app' });
+import { ApplicationPackages, createNatlangRuntime, loadNatlang } from '@natlang/node';
+
+const workspace = '/absolute/path/to/app';
 // Explicit preparation: npm ci when a lockfile exists, otherwise npm install.
-await host.environment.packages!.prepareDependencies();
-await host.run({ source: { kind: 'file', path: '/absolute/path/to/app/main.ts' } });
-host.close();
+await new ApplicationPackages(workspace).prepareDependencies();
+const runtime = createNatlangRuntime({ workspace, network: true, model });
+const main = loadNatlang(`${workspace}/main.nl`);
+await runtime.run(() => main('42'));
 ```
 
-An explicit workspace requires an existing package.json. Construction does not install anything.
-The `natlang` CLI finds the nearest `package.json` above a program file (or the
-current directory for an anonymous instruction); `--workspace /absolute/app-root`
-selects one explicitly. The Node eval environment also finds the current
+An explicit workspace requires an existing package.json; nothing is installed
+implicitly. Without one, the runtime uses the nearest `package.json` above the
+working directory. `natlang run --workspace /absolute/app-root` selects one for
+an application. The Node eval environment also finds the current
 project automatically; import syntax is not controlled by a workspace mode.
 If no project manifest exists, an attempted package import reports that a
 `package.json` is required.
@@ -86,5 +89,6 @@ work independently of that support. Direct HTTP module imports are not implement
 HTTP requests through fetch and npm-supported dependency URLs are available.
 
 See `examples/npm_app`: after `npm run build:node` in `ts-host`, run
-`node examples/npm_app/run.mjs --install` from the repository root. It runs both the
-handwritten and scripted natural-language versions against the same real npm package.
+`node examples/npm_app/run.mjs --install` from the repository root. It calls the
+same npm package from a handwritten callable-folder function and from a scripted
+natural-language eval.

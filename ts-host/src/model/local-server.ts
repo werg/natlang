@@ -80,6 +80,7 @@ async function ensureModel(environment: NodeJS.ProcessEnv, error: NodeJS.Writabl
 function templateCandidates(environment: NodeJS.ProcessEnv): string[] {
   return [environment.NATLANG_TEMPLATE && resolve(environment.NATLANG_TEMPLATE),
     resolve('models', 'templates', DEFAULT_LOCAL_MODEL.template),
+    fileURLToPath(new URL(`../../../models/templates/${DEFAULT_LOCAL_MODEL.template}`, import.meta.url)),
     fileURLToPath(new URL('../../model-assets/default.jinja', import.meta.url))]
     .filter((value): value is string => Boolean(value));
 }
