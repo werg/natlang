@@ -46,6 +46,31 @@ test('uses that disagree, or say nothing about fields, produce diagnostics that 
   assert.match(fields[0].message, /write `nl<\{ severity: …; reason: … \}>`/);
 });
 
+test('an awaited nl expression without a call runs the judgment in eval', async () => {
+  // Seen in a live run: `await nl`...`` awaited the function itself, so every "verdict" was truthy.
+  // Project analysis reports it; eval inserts the call.
+  const { diagnostics } = analyzeEvalSnippet('const verdict = await nl`Does ${note} describe an unresolved hazard?`;\nif (verdict) {}', scope);
+  assert.equal(diagnostics[0].code, 'nl-not-called');
+  let started = false, staged = '', child = '';
+  const model = async request => {
+    const opening = String(request.messages[1].content);
+    if (!opening.includes('Report whether note')) {
+      child = opening;
+      return { calls: [['return_result', { value: true }]] };
+    }
+    if (!started && (started = true)) return { calls: [['eval', { code:
+      'const verdict = await (nl`Does ${note} describe a safety hazard that has not been resolved?`);\nreturn verdict ? "hazard" : "fine";' }]] };
+    staged = String(request.messages.at(-1).content);
+    return { calls: [['return_result', { value: 'hazard' }]] };
+  };
+  const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
+  const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { note: string }\nreturns: string\n---\nReport whether note describes an unresolved hazard.\n' }, 'root.nl');
+  assert.equal(await runtime.run(() => fn('Workers reported unlabelled acid containers; no response yet.')), 'hazard');
+  assert.match(staged, /^"hazard"/);
+  assert.match(child, /^You are inside this call: nl@eval:1\(\): boolean$/m);
+  assert.match(child, /unlabelled acid containers/);
+});
+
 test('an inferred inline judgment runs per item with a boolean result', async () => {
   const seen = [];
   let started = false, staged = '';

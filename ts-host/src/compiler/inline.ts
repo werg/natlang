@@ -6,7 +6,7 @@ import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDes
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 
 export type NatlangDiagnostic = SourceSpan & {
-  code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
+  code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript';
@@ -169,6 +169,13 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const call = outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
       outerTag.parent : undefined;
     const signature: Signature = { origin: 'none' };
+    // `await nl`...`` waits on the function itself, which is never a judgment. (Eval inserts the call instead;
+    // see scope-compiler.ts. Project source is not rewritten, so it gets this diagnostic.)
+    if (outerTag.parent && ts.isAwaitExpression(outerTag.parent)) {
+      report(node, 'nl-not-called', 'This awaits the `nl` function itself instead of calling it: nl`...` creates a function. ' +
+        'Call it with the values it should judge, as in `await nl`...`(value)`; names its instructions mention are also visible to it.');
+      return;
+    }
 
     // 1. Explicit annotation.
     const annotation = node.typeArguments?.[0];

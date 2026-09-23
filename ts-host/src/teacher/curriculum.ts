@@ -46,6 +46,9 @@ export type Curriculum = {
   inline: 'required' | 'optional' | 'avoid';
   /** Whether a correct trajectory edits a callable function (edit_function): a real defect, or a correct helper. */
   edits?: 'required' | 'forbidden' | 'optional';
+  /** A correct trajectory calls a named callable `.nl` function (the helper that fits), or runs `iterateOn`. */
+  named?: 'required';
+  iterate?: 'required';
   world_semantics?: 'open_world' | 'closed_world' | 'defeasible';
   /** Oracle provenance: world assertions, what must be retrieved, and background knowledge that bridges them. */
   evidence: { world: string[]; retrieved: string[]; background: string[] };
@@ -55,7 +58,8 @@ export type Curriculum = {
   plausible_actions: string[];
   minimum_sequence: string[];
   /** A replayable solution: root tool calls in order, and answers for child calls keyed by fragments of the child's opening (all must appear). */
-  reference: { root: ReferenceCall[]; children?: { match: string | string[]; value: unknown }[] };
+  // A child answer with `call` answers with that tool call (such as `blocked`) instead of a value.
+  reference: { root: ReferenceCall[]; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall }[] };
 };
 export type CurriculumRecord = ProgramRecord & { curriculum: Curriculum; family: string; split: string };
 
@@ -70,6 +74,8 @@ export function validateCurriculum(record: CurriculumRecord): void {
   if (!['single_call', 'followup'].includes(c.mode)) fail(id, `unknown mode ${c.mode}`);
   if (!['required', 'optional', 'avoid'].includes(c.inline)) fail(id, `unknown inline mode ${c.inline}`);
   if (c.edits !== undefined && !['required', 'forbidden', 'optional'].includes(c.edits)) fail(id, `unknown edits mode ${c.edits}`);
+  if (c.named !== undefined && c.named !== 'required') fail(id, `unknown named mode ${c.named}`);
+  if (c.iterate !== undefined && c.iterate !== 'required') fail(id, `unknown iterate mode ${c.iterate}`);
   if (!c.family || !c.shape || !c.variant || !c.split_group) fail(id, 'family, shape, variant, and split group are required');
   if (c.mode === 'followup') {
     if (!c.decisive.length) fail(id, 'a follow-up case needs a decisive observation');
@@ -175,6 +181,8 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.inline === 'avoid' && facts.inlineCalls) reasons.push('gratuitous_inline');
   if (c.edits === 'required' && !facts.functionEdits) reasons.push('defect_not_repaired');
   if (c.edits === 'forbidden' && facts.functionEdits) reasons.push('unwarranted_edit');
+  if (c.named === 'required' && !facts.namedChildCalls) reasons.push('named_helper_unused');
+  if (c.iterate === 'required' && !facts.usesIterateOn) reasons.push('iterate_missing');
   return { id: String(row.id ?? record.id), program_id: record.id, admitted: !reasons.length, reasons, facts,
     family: c.family, slice: c.slice, domain: c.domain, mode: c.mode, inline: c.inline, pair_group: c.pair_group };
 }
@@ -215,7 +223,7 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
       const opening = openingText(context);
       const answer = record.curriculum.reference.children?.find(child =>
         (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => opening.includes(fragment)));
-      response = answer ? { calls: [['return_result', { value: answer.value }]] } :
+      response = answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { value: answer.value }]] } :
         { calls: [['failed', { message: `The reference has no answer for the child call ${name}.` }]] };
     }
     trajectory.push({ context, assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });

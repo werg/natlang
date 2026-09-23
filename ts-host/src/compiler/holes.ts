@@ -215,6 +215,8 @@ function holesIn(checker: ts.TypeChecker, type: ts.Type, depth = 0, found = new 
     const object = type as ts.ObjectType;
     if (object.objectFlags & ts.ObjectFlags.Reference)
       for (const argument of checker.getTypeArguments(type as ts.TypeReference)) holesIn(checker, argument, depth + 1, found);
+    const index = checker.getIndexInfoOfType(type, ts.IndexKind.String);
+    if (index) holesIn(checker, index.type, depth + 1, found);
     if (object.objectFlags & ts.ObjectFlags.Anonymous) {
       for (const property of type.getProperties().slice(0, 32)) holesIn(checker, checker.getTypeOfSymbol(property), depth + 1, found);
       for (const signature of type.getCallSignatures()) holesIn(checker, signature.getReturnType(), depth + 1, found);
@@ -240,7 +242,8 @@ function unify(checker: ts.TypeChecker, source: ts.Type, target: ts.Type, requir
     candidate.getCallSignatures().length ? 'function' : candidate.flags & ts.TypeFlags.Object ? 'object' : 'other';
   const kind = shape(source);
   if (target.isUnion()) {
-    const matching = target.types.filter(member => shape(member) === kind);
+    // A plain value against `T | PromiseLike<T>` (an await or async return) matches T.
+    const matching = target.types.filter(member => shape(member) === kind && !isPromiseLike(checker, member));
     if (matching.length === 1) unify(checker, source, matching[0]!, require, depth + 1);
     return;
   }
@@ -254,6 +257,9 @@ function unify(checker: ts.TypeChecker, source: ts.Type, target: ts.Type, requir
     const [from] = source.getCallSignatures(), [to] = target.getCallSignatures();
     if (from && to) unify(checker, from.getReturnType(), to.getReturnType(), require, depth + 1);
   } else if (kind === 'object') {
+    const sourceIndex = checker.getIndexInfoOfType(source, ts.IndexKind.String);
+    const targetIndex = checker.getIndexInfoOfType(target, ts.IndexKind.String);
+    if (sourceIndex && targetIndex) unify(checker, sourceIndex.type, targetIndex.type, require, depth + 1);
     for (const property of source.getProperties()) {
       const goal = target.getProperty(property.name);
       if (goal) unify(checker, checker.getTypeOfSymbol(property), checker.getTypeOfSymbol(goal), require, depth + 1);

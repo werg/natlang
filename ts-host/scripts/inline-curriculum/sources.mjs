@@ -1,9 +1,10 @@
 // Adapters from pinned external sources to curriculum cases. Source answers and formal annotations stay
 // in the oracle block; the model sees only the natural-language premises through a paged store.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
-import { factStore } from './logic.mjs';
+import { Random, curriculumCase, evalCall, literal, returnCall } from './lib.mjs';
+import { READ_ALL, factStore } from './logic.mjs';
 import { SOURCES, cachePath } from './acquire.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
@@ -60,3 +61,136 @@ verdict is "entailed" if the premises make the conclusion true, "contradicted" i
     inputs: { conclusion: row.conclusion.trim() }, expected })];
 }
 export const folioCount = () => folioRows().length;
+
+// PrOntoQA-OOD proof-only examples: fictional ontologies ("Every lempus is a gorpus."), one entity, and a goal.
+const PRONTO_FILES = ['2hop_ProofsOnly_random_noadj.json', '3hop_ProofsOnly_random_noadj.json', '4hop_ProofsOnly_random_noadj.json',
+  '1hop_ProofsOnly_5testhops_random_noadj.json', '2hop_ProofsOnly_4shot_5testhops_random_noadj.json'];
+function prontoRows() {
+  if (loaded.has('prontoqa')) return loaded.get('prontoqa');
+  const source = SOURCES.prontoqa;
+  const dir = cachePath(CACHE, 'prontoqa', source.revision, 'generated_ood_data');
+  const seen = new Set(), rows = [];
+  for (const file of PRONTO_FILES) {
+    let data;
+    try { data = JSON.parse(readFileSync(`${dir}/${file}`, 'utf8')); }
+    catch { throw new Error('PrOntoQA is not in the dataset cache; run node scripts/inline-curriculum/acquire.mjs --source prontoqa'); }
+    for (const [key, entry] of Object.entries(data)) for (const [slot, example] of Object.entries(entry)) {
+      if (seen.has(example.question)) continue;
+      seen.add(example.question);
+      rows.push({ id: `${file.replace(/\.json$/, '')}:${key}:${slot}`, file, split: slot === 'test_example' ? 'test' : 'train', ...example });
+    }
+  }
+  loaded.set('prontoqa', rows);
+  return rows;
+}
+
+/** One PrOntoQA sentence as a literal or a rule: `{ subject, predicate, negated, isClass, rule }`. */
+function prontoSentence(text) {
+  const singular = word => word.toLowerCase().replace(/uses$/, 'us');
+  let m = /^(?:Every|Each) (\w+) is (not )?(an? )?(\w+)\.$/.exec(text);
+  if (m) return { rule: true, subject: m[1], negated: !!m[2], isClass: !!m[3], predicate: m[4] };
+  m = /^(\w+) are (not )?(\w+)\.$/.exec(text);
+  if (m) return { rule: true, subject: singular(m[1]), negated: !!m[2], isClass: /uses$/.test(m[3]), predicate: singular(m[3]) };
+  m = /^([A-Z]\w+) is (not )?(an? )?(\w+)\.$/.exec(text);
+  if (m) return { rule: false, subject: m[1], negated: !!m[2], isClass: !!m[3], predicate: m[4] };
+  throw new Error(`unparsed PrOntoQA sentence: ${text}`);
+}
+
+/** Every literal about entity derivable from the facts, with the fact ids of one chain to each. */
+function prontoClosure(facts, entity) {
+  const derived = new Map();
+  const key = literal => `${literal.negated ? 'not ' : ''}${literal.isClass ? 'a ' : ''}${literal.predicate}`;
+  const queue = [];
+  for (const fact of facts) if (!fact.parsed.rule && fact.parsed.subject === entity) {
+    derived.set(key(fact.parsed), [fact.id]);
+    if (fact.parsed.isClass && !fact.parsed.negated) queue.push({ cls: fact.parsed.predicate, chain: [fact.id] });
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const { cls, chain } = queue[i];
+    for (const fact of facts) if (fact.parsed.rule && fact.parsed.subject === cls) {
+      const literal = key(fact.parsed);
+      if (derived.has(literal)) continue;
+      derived.set(literal, [...chain, fact.id]);
+      if (fact.parsed.isClass && !fact.parsed.negated) queue.push({ cls: fact.parsed.predicate, chain: [...chain, fact.id] });
+    }
+  }
+  return { derived, key };
+}
+
+/**
+ * PrOntoQA: prove a goal about an entity by submitting a chain of fact ids to a verifier. The counterpart
+ * removes one rule the proof needs (and every alternative), so the same goal is not provable from the store.
+ */
+export function prontoProof(seed, index) {
+  const rows = prontoRows();
+  const row = rows[index % rows.length];
+  const rng = new Random(seed, `pronto:${row.id}`);
+  const sentences = row.question.split(/(?<=\.) /).map(text => text.trim()).filter(Boolean);
+  const goalText = row.query.replace(/^Prove: /, '');
+  const goal = prontoSentence(goalText);
+  const entity = goal.subject;
+  const build = removed => {
+    const kept = sentences.filter(text => text !== removed);
+    return rng.shuffle(kept).map((text, i) => ({ id: `F${i + 1}`, text, parsed: prontoSentence(text) }));
+  };
+  const provable = build(null);
+  const { derived, key } = prontoClosure(provable, entity);
+  const chain = derived.get(key(goal));
+  if (!chain) throw new Error(`PrOntoQA ${row.id}: the goal is not derivable from its own theory`);
+  // Remove a rule of the proof such that nothing else derives the goal.
+  const rules = chain.slice(1).map(id => provable.find(fact => fact.id === id).text);
+  const removed = rng.shuffle(rules).find(text => !prontoClosure(build(text), entity).derived.has(key(goal)));
+  if (!removed) throw new Error(`PrOntoQA ${row.id}: every rule of the proof has an alternative`);
+  const certificate = `cert-${createHash('sha256').update(`${row.id}:${goalText}`).digest('hex').slice(0, 10)}`;
+  const shape = row.id.replace(/[^A-Za-z0-9]+/g, '_');
+  return [['provable', provable, { status: 'proved', certificate }], ['rule_removed', build(removed), { status: 'unprovable', certificate: null }]]
+    .map(([variant, facts, expected]) => {
+      const ids = facts.map(({ id, text }) => ({ id, text }));
+      const structured = Object.fromEntries(facts.map(fact => [fact.id, fact.parsed]));
+      const proofChain = variant === 'provable' ? prontoClosure(facts, entity).derived.get(key(goal)) : null;
+      const verifier = `type Parsed = { rule: boolean, subject: string, negated: boolean, isClass: boolean, predicate: string };
+const FACTS: Record<string, Parsed> = ${literal(structured)};
+const GOAL: Parsed = ${literal(goal)};
+const say = (p: Parsed) => (p.rule ? 'every ' : '') + p.subject + ' is ' + (p.negated ? 'not ' : '') + (p.isClass ? 'a ' : '') + p.predicate;
+/**
+ * Check a proof of the goal. chain lists fact ids in order: first a fact about the entity ("X is a C"), then
+ * each rule applied to the class reached so far ("Every C is a D", "Every D is E"). Returns a certificate when
+ * the chain ends in the goal, and otherwise the first problem.
+ */
+export function verify(chain: string[]): { ok: boolean, certificate: string | null, problem: string | null } {
+  const fail = (problem: string) => ({ ok: false, certificate: null, problem });
+  if (!chain.length) return fail('the chain is empty');
+  const first = FACTS[chain[0]];
+  if (!first) return fail('unknown fact id ' + chain[0]);
+  if (first.rule || first.subject !== GOAL.subject) return fail(chain[0] + ' (' + say(first) + ') is not a fact about ' + GOAL.subject);
+  let reached: Parsed = first;
+  for (const id of chain.slice(1)) {
+    const rule = FACTS[id];
+    if (!rule) return fail('unknown fact id ' + id);
+    if (!rule.rule) return fail(id + ' (' + say(rule) + ') is not a rule');
+    if (!reached.isClass || reached.negated) return fail('the chain already ended with "' + say(reached) + '"; no rule applies after it');
+    if (rule.subject !== reached.predicate) return fail(id + ' is about ' + rule.subject + ', but the chain so far shows ' + GOAL.subject + ' is a ' + reached.predicate);
+    reached = { rule: false, subject: GOAL.subject, negated: rule.negated, isClass: rule.isClass, predicate: rule.predicate };
+  }
+  const ok = reached.predicate === GOAL.predicate && reached.negated === GOAL.negated && reached.isClass === GOAL.isClass;
+  return ok ? { ok, certificate: ${JSON.stringify(certificate)}, problem: null } : fail('the chain shows "' + say(reached) + '", not the goal "' + say(GOAL) + '"');
+}
+`;
+      const reference = variant === 'provable' ?
+        [evalCall(READ_ALL), evalCall(`const checked = proof.verify(${JSON.stringify(proofChain)});\nchecked`), returnCall(expected)] :
+        [evalCall(READ_ALL), returnCall(expected)];
+      return curriculumCase({ family: 'prontoqa_proof', shape, variant, pairGroup: `pronto:${shape}`,
+        splitGroup: `prontoqa:${row.file}:${row.id.split(':')[1]}`, split: row.split,
+        slice: 'observation_followup', domain: 'logic', mode: 'single_call', worldSemantics: 'open_world', inline: 'avoid',
+        evidence: { world: variant === 'provable' ? proofChain.map(id => facts.find(f => f.id === id).text) : [`removed: ${removed}`],
+          retrieved: [], background: [`source: PrOntoQA-OOD ${SOURCES.prontoqa.revision} ${row.id}`, `gold chain of thought: ${row.chain_of_thought.join(' ')}`] },
+        minimumSequence: ['read the fact store', 'find a chain from a fact about the entity through rules to the goal', 'verify it, or conclude no chain exists'],
+        reference: { root: reference },
+        root: { name: 'prove_goal', args: { goal: 'string' }, returns: 'ProofResult',
+          instructions: `Prove goal from the facts in the store (facts), using only those facts. A proof is a chain of fact ids: a fact about the entity, then each rule you apply in turn. Check it with proof.verify(chain); on success return status "proved" with the verifier's certificate. If the facts do not prove goal, return status "unprovable" with a null certificate.` },
+        files: { 'prove_goal/facts.ts': factStore(ids, 'The fact store.'), 'prove_goal/proof.ts': verifier,
+          'types.ts': 'export type ProofResult = { status: "proved" | "unprovable", certificate: string | null };\n' },
+        inputs: { goal: goalText }, expected });
+    });
+}
+export const prontoCount = () => prontoRows().length;

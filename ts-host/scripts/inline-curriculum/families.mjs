@@ -2,7 +2,10 @@
 import { abductionTest, entailmentException, proofVerifier } from './logic.mjs';
 import { childSufficiency, cohortPolicy, contractDiagnosis, folderCriteria, moduleDiscovery, pagedLateRow, reviewEach } from './applications.mjs';
 import { counterexampleRevision, idempotentRetry, inlineTypeRepair, lateBinding, liveInventory, parallelLabels, policyAfterMeasure } from './followup.mjs';
-import { folioEntailment } from './sources.mjs';
+import { folioEntailment, prontoProof } from './sources.mjs';
+import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion } from './inline.mjs';
+import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
+import { frontierSearch, lateArgmax } from './investigate.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
 
@@ -29,5 +32,16 @@ export const FAMILIES = {
   idempotent_retry: { build: idempotentRetry, weight: 2 },
   live_inventory: { build: liveInventory, weight: 1.5 },
   inline_late_binding: { build: lateBinding, weight: 1.5 },
+  inline_multi_capture: { build: releaseGate, weight: 1 },
+  inline_union_target: { build: triageUnion, weight: 1 },
+  stateful_dates: { build: followUpDue, weight: 1 },
+  inline_structured_extract: { build: receiptTotals, weight: 1 },
+  named_versus_inline: { build: namedVersusInline, weight: 1 },
+  loop_rewrite: { build: loopRewrite, weight: 1 },
+  child_opt_out: { build: childOptOut, weight: 1 },
+  event_retry: { build: eventRetry, weight: 1.5 },
+  iterate_frontier: { build: frontierSearch, weight: 1.5 },
+  relational_late_argmax: { build: lateArgmax, weight: 1.5 },
   folio_entailment: { build: folioEntailment, weight: 3, source: 'folio' },
+  prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },
 };

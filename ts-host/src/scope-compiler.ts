@@ -193,6 +193,21 @@ function assignmentTarget(node: ts.Node): ts.Expression | undefined {
 }
 
 /** Parse and compile a sandboxed TypeScript snippet without executing it. */
+/** End positions of `nl` tagged templates that are awaited without being called. */
+function uncalledInlineFunctions(file: ts.SourceFile): number[] {
+  const ends: number[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === 'nl') {
+      let outer: ts.Node = node;
+      while (outer.parent && ts.isParenthesizedExpression(outer.parent)) outer = outer.parent;
+      if (outer.parent && ts.isAwaitExpression(outer.parent)) ends.push(node.getEnd());
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return ends;
+}
+
 export function compileScopeSnippet(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
   if (typeof source !== 'string') throw new TypeError('scope source must be a string');
   if (options.allowModules) {
@@ -225,6 +240,14 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   }
   const wrapped = PREFIX + source + SUFFIX;
   const file = ts.createSourceFile('natlang-scope.ts', wrapped, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  // `await nl`...`` awaits the function nl`...` creates, which is never what is meant: it runs the judgment now,
+  // on the names its instructions mention and its interpolations, as `await nl`...`()` does.
+  const uncalled = uncalledInlineFunctions(file);
+  if (uncalled.length) {
+    let called = source;
+    for (const end of uncalled.sort((a, b) => b - a)) called = called.slice(0, end - PREFIX.length) + '()' + called.slice(end - PREFIX.length);
+    return compileScopeSnippet(called, options);
+  }
   const fn = file.statements.find(ts.isFunctionDeclaration);
   if (!fn?.body) throw new Error('internal scope compiler wrapper failure');
   const diagnostics: ScopeCompileDiagnostic[] = [];

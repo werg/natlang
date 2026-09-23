@@ -145,6 +145,9 @@ An unannotated inline `nl` gets its parameter types from its arguments and its
 result type from how the eval uses the result (a condition makes it `boolean`,
 a typed variable gives that type); when no use says it, the eval is rejected
 with a diagnostic that proposes `nl<T>`.
+In eval, awaiting an inline `nl` without calling it (`await nl`...``) calls it
+with no arguments: it judges the names its instructions mention and its
+interpolated values.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live
