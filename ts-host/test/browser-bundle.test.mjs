@@ -54,6 +54,21 @@ test('browser natural functions call synchronous TypeScript imports without awai
   } finally { host.close(); }
 });
 
+test('browser eval can assign the listed function result directly', async () => {
+  const api = await import('../dist/browser/natlang.js');
+  const host = new api.BrowserNatlangHost();
+  let turns = 0;
+  try {
+    const outcome = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: '(value: number) => number', instructions: 'Double the value.', args: { value: 4 },
+    } } }, modelTurn: () => ++turns === 1
+      ? { calls: [['eval', { code: 'result = value * 2;' }]], completion_tokens: 1 }
+      : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 } });
+    assert.equal(outcome.outcome.kind, 'done');
+    assert.equal(outcome.value, 8);
+  } finally { host.close(); }
+});
+
 test('the agent sees referenced type shapes and Promise-returning TypeScript signatures', async () => {
   const api = await import('../dist/browser/natlang.js');
   const host = new api.BrowserNatlangHost();
