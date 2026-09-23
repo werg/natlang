@@ -27,7 +27,7 @@ type IterationEvent<T> = Readonly<{
   state?: T; // exposed as a read-only observation
 }>;
 type ProgressJudge<T> = (trajectory: IterationTrajectory<T>) =>
-  Promise<{ verdict: 'continue' | 'divergent' | 'needs_help'; reason: string }>;
+  Promise<{ verdict: 'continue' | 'divergent'; reason: string }>;
 
 interface Iteration<T> {
   until(done: Done<T>): Promise<T>;
@@ -35,6 +35,7 @@ interface Iteration<T> {
   onStep(observer: (event: IterationEvent<T>) => void | Promise<void>): Iteration<T>;
   checkProgress(judge: ProgressJudge<T>): Iteration<T>;
   withSiteId(id: string): Iteration<T>;
+  withLimit(limit: { maxSteps?: number; deadlineMs?: number }): Iteration<T>;
 }
 
 declare function iterateOn<T, A extends unknown[]>(
@@ -50,11 +51,11 @@ An `Iteration<T>` is a single-use plan. `until` and `streamUntil` each start it 
 
 ## One stateful runtime path
 
-This **replaces** the existing `IterateNode` / `$iterate` / `until` path. The current node has `init`, `step`, `check`, a mandatory `max`, recent states, and a repeated-state hash. Do not keep a parallel public node or compatibility alias. Move useful repeated-state detection and trace events into the library operator, then remove the old parser/type/runtime branches, source generators, docs, and prompt references after their callers migrate. Existing serialized Iterate traces need an explicit IR migration where the step, check, and state transitions are recoverable; regenerate those that are not. No default hard max-iteration count is imposed. A caller can opt into an explicit maximum or deadline for its own application.
+This **replaces** the existing `IterateNode` / `$iterate` / `until` path. It is part of removing all bespoke loop primitives: the Map and Fold nodes and the `call` tool's `over`/`init`/`until`/`max` forms are removed at the same time, in favor of `Promise.all` and ordinary loops in TypeScript. The current node has `init`, `step`, `check`, a mandatory `max`, recent states, and a repeated-state hash. Do not keep a parallel public node or compatibility alias. Move useful repeated-state detection and trace events into the library operator, then remove the old parser/type/runtime branches, source generators, docs, and prompt references after their callers migrate. Existing serialized Iterate traces need an explicit IR migration where the step, check, and state transitions are recoverable; regenerate those that are not. No default hard max-iteration count is imposed. A caller can opt into `withLimit({ maxSteps, deadlineMs })`; exceeding it rejects with `IterationLimitError` carrying the last checked state. The model driver's per-call timeout still bounds a single step.
 
 The operator runs in the current Natlang task context: the same model driver, scoped callable namespace, live values/handles, folder authority, cancellation signal, and trace sink. A completed step is a normal child invocation and must pass the runtime `T` check before its state becomes current. The step calls are sequential and permitted by the no-recursion policy; a step that calls itself while active is still rejected. Optional directory reducer patch commits follow the existing folder semaphore. An observation callback cannot mutate the committed iteration state behind the operator; any mutation must be part of a step result or authorized folder transaction.
 
-At each boundary record `iteration_id`, `site_id`, source revision, step/predicate definition IDs, initial/current state references, fixed argument references, child call IDs, elapsed active time, cumulative model turns/tokens, state hashes, check outcome, and any external effects. Retain the **whole** trajectory. A progress judge receives a read-only `IterationTrajectory<T>` with indexed access to all states, calls, traces, and effects plus a compact summary; do not paste the whole transcript into its opening. It can page or query any part, so it genuinely has access to the entire trajectory. Store its reasoning/verdict in trace and training IR. A judge return type can be `{ verdict: 'continue' | 'divergent' | 'needs_help'; reason: string }`; `divergent` ends with a typed `IterationDivergedError` carrying the last checked state and trajectory, while `needs_help` reports a blocker to the caller. The judge is not allowed to rewrite prior steps or results.
+At each boundary record `iteration_id`, `site_id`, source revision, step/predicate definition IDs, initial/current state references, fixed argument references, child call IDs, elapsed active time, cumulative model turns/tokens, state hashes, check outcome, and any external effects. Retain the **whole** trajectory. A progress judge receives a read-only `IterationTrajectory<T>` with indexed access to all states, calls, traces, and effects plus a compact summary; do not paste the whole transcript into its opening. It can page or query any part, so it genuinely has access to the entire trajectory. Store its reasoning/verdict in trace and training IR. The judge returns `{ verdict: 'continue' | 'divergent'; reason: string }`. `continue` allows further steps; `divergent` ends the run with an `IterationDivergedError` carrying the last checked state, the trajectory, and the reason. A step or predicate failure rejects with `IterationStepError` carrying the same data. The judge is not allowed to rewrite prior steps or results.
 
 ## Call-site identity and adaptive checks
 

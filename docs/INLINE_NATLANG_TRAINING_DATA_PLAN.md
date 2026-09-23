@@ -117,7 +117,7 @@ Use the new `.iterateOn(initial, ...args).until(done)` surface, not `$iterate`. 
 
 - Initial state already done (zero steps), ordinary 1–3 step success, and longer useful progress.
 - A repeated state that indicates genuine stagnation; a repeated state that is legitimate because new external evidence arrived.
-- Oscillation among plausible designs, low-quality repeated edits, and a fundamentally impossible target. The progress judge should stop or request help with a reason.
+- Oscillation among plausible designs, low-quality repeated edits, and a fundamentally impossible target. The progress judge should return `divergent` with a reason.
 - A run beyond `mean + 1σ` that is genuinely improving. The judge should affirm continuation instead of treating statistical unusualness as failure.
 - The same call site across varied inputs, optional persisted statistics, source revision/model-cohort changes, and explicit site-ID migration.
 - `streamUntil` consumed by a UI or parent lambda; early consumer cancellation; directory reducer steps with serialized folder writes.
