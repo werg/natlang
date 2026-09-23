@@ -54,6 +54,31 @@ test('browser natural functions call synchronous TypeScript imports without awai
   } finally { host.close(); }
 });
 
+test('the agent sees referenced type shapes and Promise-returning TypeScript signatures', async () => {
+  const api = await import('../dist/browser/natlang.js');
+  const host = new api.BrowserNatlangHost();
+  const files = {
+    'main.nl': 'import prepare from "./prepare.ts";\n---\nargs:\n  value: number\nreturns: State\n---\nReturn the prepared state.\n',
+    'types.ts': 'export type State = { count: number, label: string };',
+    'prepare.ts': 'import type { State } from "./types";\nexport default function prepare(value: number): Promise<State> { return Promise.resolve({ count: value, label: "ok" }); }',
+  };
+  let turns = 0;
+  try {
+    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
+      inputs: { value: 3 }, modelTurn: request => {
+        if (!turns++) {
+          const opening = String(request.messages.find(message => message.role === 'user')?.content);
+          assert.match(opening, /prepare \[TypeScript\] \(value: number\): Promise<State>/);
+          assert.match(opening, /type State = \{ count: number, label: string \};/);
+          return { calls: [['eval', { code: 'const result = await prepare(value);' }]], completion_tokens: 1 };
+        }
+        return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+      } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.deepEqual(result.value, { count: 3, label: 'ok' });
+  } finally { host.close(); }
+});
+
 test('browser retained eval preserves variables between tool calls', async () => {
   const nodeProcess = globalThis.process;
   let api;

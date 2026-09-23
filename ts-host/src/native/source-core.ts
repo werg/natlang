@@ -91,15 +91,16 @@ export function parseCrispModule(source: string, file: string, options: { packag
     args[parameter.name.text + (parameter.questionToken ? '?' : '')] = parameter.type.getText(parsed);
   }
   let returns = fn.type.getText(parsed);
-  if (ts.isTypeReferenceNode(fn.type) && ts.isIdentifier(fn.type.typeName) && fn.type.typeName.text === 'Promise' &&
-      fn.type.typeArguments?.length === 1) returns = fn.type.typeArguments[0]!.getText(parsed);
+  const returnsPromise = ts.isTypeReferenceNode(fn.type) && ts.isIdentifier(fn.type.typeName) &&
+    fn.type.typeName.text === 'Promise' && fn.type.typeArguments?.length === 1;
+  if (returnsPromise) returns = fn.type.typeArguments![0]!.getText(parsed);
   const code = source.slice(fn.body.getStart(parsed) + 1, fn.body.getEnd() - 1).replace(/^\s*\n|\s+$/g, '') + '\n';
   const effects = [...code.matchAll(/\bfx\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)/g)]
     .map(match => `${match[1]}.${match[2]}`);
   return { imports, args, returns,
     code: runtimeImports.length ? runtimeImports.join('\n') + '\n' + code : code,
     effects: [...new Set(effects)], types: readTypeAliases(source),
-    async: !!fn.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) };
+    async: returnsPromise || !!fn.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) };
 }
 
 function fileFor(path: string, files: SourceFiles): string {

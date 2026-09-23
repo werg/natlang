@@ -70,6 +70,19 @@ function pythonJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function referencedTypeAliases(signatures: string[], definitions: Record<string, string>): string[] {
+  const found = new Set<string>();
+  const visit = (text: string): void => {
+    for (const name of Object.keys(definitions)) {
+      if (found.has(name) || !new RegExp(`\\b${name}\\b`).test(text)) continue;
+      found.add(name);
+      visit(definitions[name]!);
+    }
+  };
+  for (const signature of signatures) visit(signature);
+  return [...found].map(name => `type ${name} = ${definitions[name]};`);
+}
+
 function pendingLine(value: Extract<Value, { nodeKind: string }>): string {
   let line = `${formatType(value.type)}  ${value.status}`;
   if (value.nodeKind === 'map' && value.slots) line += `  ${value.slots.filter(item => !isPending(item)).length} of ${value.slots.length} reduced`;
@@ -292,14 +305,21 @@ export class NativeToolAgent {
         .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
       if (fn.subtype === 'directory-reducer') parameters.unshift('folder: Folder');
       const returns = kind === 'TypeScript' && fn.async === false ? fn.returns : `Promise<${fn.returns}>`;
-      return `  ${name} [${kind}] (${parameters.join(', ')}): ${returns}`;
+      const aliases = referencedTypeAliases([...Object.values(fn.args as Record<string, string> ?? {}),
+        String(fn.returns)], fn.types as Record<string, string> ?? {});
+      return `  ${name} [${kind}] (${parameters.join(', ')}): ${returns}` +
+        (aliases.length ? '\n' + aliases.map(line => `    ${line}`).join('\n') : '');
     });
+    const scopeTypes = referencedTypeAliases([
+      ...lam.type.params.fields.map(field => formatType(field.type)), formatType(lam.type.returns)
+    ], lam.typesSrc);
     const locals = Object.entries(lam.let).map(([name, value]) =>
       `  ${name}: ${formatType(lam.letTypes[name]!)} = ${scopePreviewValue(value)}`);
     return ['Execute the natural-language function line by line.', '', 'Program:', program, '',
       'Scope:',
       ' parameters',
       ...(inputs.length ? inputs : ['  (none)']),
+      ...(scopeTypes.length ? [' types', ...scopeTypes.map(line => `  ${line}`)] : []),
       ' imports (immutable live bindings)', ...(imports.length ? imports : ['  (none)']),
       ' locals', ...(locals.length ? locals : ['  (none)']),
       ` result: ${formatType(lam.type.returns)} — ${lam.return === MISSING ? 'unset' : 'set'}`].join('\n');
