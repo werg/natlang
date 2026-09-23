@@ -48,7 +48,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     add("assemble", ["node", f"{p}/ts-host/scripts/code-corpus/assemble-shards.mjs", f"{r}/bundle", f"{r}/sources", *inventories],
         [f"{r}/sources/manifest.json", f"{p}/ts-host/scripts/code-corpus/assemble.mjs", *inventories], [f"{r}/bundle/complete.jsonl", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f'{r}/bundle/rejected.jsonl'])
     add("freeze-runtime", [python, f"{p}/scripts/freeze_training_runtime.py", f"{p}/ts-host", f"{r}/runtime-host"],
-        [f"{p}/scripts/freeze_training_runtime.py"], [f"{r}/runtime-host/frozen-runtime.json", f"{r}/runtime-host/dist", f"{r}/runtime-host/scripts", f"{r}/runtime-host/prelude.js"])
+        [f"{p}/scripts/freeze_training_runtime.py"], [f"{r}/runtime-host/frozen-runtime.json", f"{r}/runtime-host/dist", f"{r}/runtime-host/scripts", f"{r}/runtime-host/src", f"{r}/runtime-host/prelude.js"])
     failure_cases = f"{r}/failure-repair-cases.jsonl"
     add("freeze-failure-corpus", ["node", f"{r}/runtime-host/scripts/failure-corpus/freeze.mjs", failure_cases],
         [f"{r}/runtime-host/frozen-runtime.json", f"{r}/runtime-host/scripts/failure-corpus/cases.mjs",

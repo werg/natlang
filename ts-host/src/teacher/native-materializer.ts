@@ -115,6 +115,7 @@ export function materializeNativeRows(input: unknown[]): {
     const row = validateRow(candidate);
     if (!row.outcome.accepted) { rejectedRows++; continue; }
     acceptedRows++;
+    const student = row.provenance.collection_role === 'student';
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     let actionIndex = 0, segment = 0;
@@ -155,7 +156,9 @@ export function materializeNativeRows(input: unknown[]): {
       const skill = phase === 'checkpoint' ? 'checkpoint' :
         (calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply');
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed']);
-      const decisionApproved = calls.every(call =>
+      const handoff = row.handoff as Dict | undefined;
+      const fromStudentPrefix = handoff !== undefined && index < Number(handoff.handoff_at);
+      const decisionApproved = !fromStudentPrefix && calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
           .some(code => String(code).startsWith('coerced-')));
@@ -166,13 +169,13 @@ export function materializeNativeRows(input: unknown[]): {
         provenance: structuredClone(row.provenance),
         task: structuredClone(row.task),
         program_id: programId,
-        family: 'teacher_program',
+        family: student ? 'student_program' : 'teacher_program',
         skill,
         provisional_gold: false,
         source_program_ids: programId === null ? [] : [programId],
         source_groups: programId === null ? [] : [programId],
-        source: 'teacher-native',
-        gold_sources: ['checked-teacher-trajectory', 'exact-runtime-oracle'],
+        source: student ? 'student-native' : 'teacher-native',
+        gold_sources: [student ? 'checked-student-trajectory' : 'checked-teacher-trajectory', 'exact-runtime-oracle'],
         license: 'project-generated',
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
@@ -181,7 +184,8 @@ export function materializeNativeRows(input: unknown[]): {
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: nativeRowDigest(row),
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
-          ...(decisionApproved ? {} : { reason: 'decision contains a failed or unexecuted proposal' }) },
+          ...(decisionApproved ? {} : { reason: fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
+            'decision contains a failed or unexecuted proposal' }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: nativeRowDigest(row.outcome) },
         decision: { index, segment, phase,

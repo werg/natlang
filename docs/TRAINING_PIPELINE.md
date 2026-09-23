@@ -5,6 +5,12 @@ curriculum, then trains one adapter through the general code, coding, and teache
 stages in sequence. The recipe does not launch baseline runs, ablations, or
 comparison runs, and creating the recipe does not launch any work.
 
+For verified student-failure corrections after that initial curriculum, use the
+separate, resumable continuation described in
+[Student improvement loop](STUDENT_IMPROVEMENT_LOOP.md). That document also
+documents student-state collection, exact replay-and-handoff, and managed
+single-GPU model swapping.
+
 The base model defaults to `LiquidAI/LFM2.5-350M`. The teacher collector defaults
 to model id `Ternary-Bonsai-2-27B` at `http://127.0.0.1:8081`. Both can be
 configured. The recipe preserves the configured split registry across stages and
@@ -85,7 +91,8 @@ flowchart LR
 ```
 
 `freeze-runtime` snapshots the already-built `ts-host/dist`, `ts-host/scripts`,
-`prelude.js`, and package metadata into `${run}/runtime-host`. Subsequent source
+the TypeScript source used to fingerprint the tool surface, `prelude.js`, and
+package metadata into `${run}/runtime-host`. Subsequent source
 observation, replay, and teacher commands use that snapshot, so a concurrent
 clean or build cannot remove or replace the runtime files they are using. Its
 `node_modules` entry is a symlink to the source installation, so keep installed

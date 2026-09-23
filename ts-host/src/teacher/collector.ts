@@ -26,7 +26,13 @@ export type ProgramRecord = { version: string; id: string; kind: string;
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
-  endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean };
+  endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean;
+  handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
+export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
+  program_ir_sha256: string; student_trajectory_id: string; student_trajectory_sha256: string;
+  handoff_at: number; target_request_sha256: string;
+  prefix: { request_sha256: string; response: ModelTurn }[]; failure: Record<string, unknown>;
+  student_provenance: Record<string, unknown> };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number };
 export type TeacherRow = Record<string, unknown> & { task: { program_ir: ProgramRecord };
@@ -62,17 +68,17 @@ export function validateFocusedRecord(record: ProgramRecord): void {
 }
 
 export async function loadRecords(path: string, start = 0, limit = 10): Promise<IndexedRecord[]> {
-  if (!Number.isInteger(start) || start < 0 || !Number.isInteger(limit) || limit < 1)
-    throw new RangeError('start must be nonnegative and limit must be positive');
+  if (!Number.isInteger(start) || start < 0 || !Number.isInteger(limit) || limit < 0)
+    throw new RangeError('start must be nonnegative and limit must be nonnegative (zero means all)');
   const lines = (await readFile(path, 'utf8')).split(/\r?\n/);
   const records: IndexedRecord[] = [];
-  for (let index = start; index < lines.length && records.length < limit; index++) {
+  for (let index = start; index < lines.length && (limit === 0 || records.length < limit); index++) {
     if (!lines[index]!.trim()) continue;
     const record = JSON.parse(lines[index]!) as ProgramRecord;
     validateFocusedRecord(record);
     records.push({ index, record });
   }
-  if (records.length !== limit) throw new Error('requested source range exceeds the frozen batch');
+  if (limit !== 0 && records.length !== limit) throw new Error('requested source range exceeds the frozen batch');
   return records;
 }
 
@@ -81,12 +87,16 @@ export function jobKey({ index, record }: IndexedRecord): string {
 }
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
+  const handoff = options.handoffs?.get(record.id);
+  if (options.handoffs && !handoff) throw new Error(`${record.id}: missing student handoff`);
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
     runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), segment_turns: options.segmentTurns,
     segment_messages: options.segmentMessages, transport: 'openai-compatible',
-    ...(options.cacheStableTools ? { cache_stable_tools: true } : {}) };
+    ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
+    collection_role: options.collectionRole ?? 'teacher',
+    ...(handoff ? { handoff_sha256: sha256(canonical(handoff)) } : {}) };
 }
 
 export function resultMatches(row: unknown, record: ProgramRecord, expected: Record<string, unknown>): row is TeacherRow {
@@ -224,6 +234,11 @@ function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
   return { phase: request.tools.length ? 'action' : 'checkpoint', context: structuredClone(request.messages),
+    request_sha256: sha256(canonical(request)),
+    model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
+      raw_calls: structuredClone(response.raw_calls ?? []),
+      ...(response.completion_tokens === undefined ? {} : { completion_tokens: response.completion_tokens }),
+      ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }) },
     tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
       reasoning: message.reasoning_content ?? message.reasoning ?? message.thinking ?? null,
       calls: (response.calls ?? []).map(([tool, args]) => ({ tool, source_tool: tool, arguments: args, call_id: null })) },
@@ -255,6 +270,21 @@ async function removeIfPresent(path: string): Promise<void> {
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint) throw new Error('endpoint is required for native teacher collection');
   return async (item, expected, signal) => {
+    const handoff = config.handoffs?.get(item.record.id);
+    if (config.handoffs && (!handoff || handoff.program_ir_sha256 !== recordDigest(item.record) ||
+        handoff.handoff_at !== handoff.prefix.length || !handoff.target_request_sha256))
+      throw new Error(`${item.record.id}: invalid or missing student handoff`);
+    if (handoff && (!handoff.student_provenance ||
+        handoff.student_provenance.tool_surface_sha256 !== config.toolSurfaceSha256 ||
+        handoff.student_provenance.system_prompt_sha256 !== sha256(config.systemPrompt) ||
+        handoff.student_provenance.collection_role !== 'student' ||
+        handoff.student_provenance.runtime !== 'typescript-native' ||
+        handoff.student_provenance.tool_schema !== TOOL_SCHEMA ||
+        handoff.student_provenance.program_ir_sha256 !== recordDigest(item.record) ||
+        (handoff.student_provenance.seed_policy as Record<string, unknown>)?.root !== config.rootSeed ||
+        handoff.student_provenance.segment_turns !== config.segmentTurns ||
+        handoff.student_provenance.segment_messages !== config.segmentMessages))
+      throw new Error(`${item.record.id}: student handoff runtime/prompt/seed settings differ`);
     const transport = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     const trajectory: Record<string, unknown>[] = [];
@@ -272,7 +302,16 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           throw new Error(`partial teacher replay diverged at model turn ${replayIndex}`);
         response = structuredClone(recorded.response);
       } else {
-        response = replayIndex === 0 && item.record.semantics.failure_seed ?
+        if (handoff && replayIndex < handoff.prefix.length) {
+          const prefix = handoff.prefix[replayIndex]!;
+          if (prefix.request_sha256 !== requestSha256)
+            throw new Error(`student prefix replay diverged at model turn ${replayIndex}`);
+          response = structuredClone(prefix.response);
+        } else if (handoff && replayIndex === handoff.prefix.length) {
+          if (handoff.target_request_sha256 !== requestSha256)
+            throw new Error(`teacher handoff request diverged at model turn ${replayIndex}`);
+          response = await transport(request);
+        } else response = replayIndex === 0 && item.record.semantics.failure_seed ?
           { calls: [['eval', { code: item.record.semantics.failure_seed.code }]], completion_tokens: 1 } :
           await transport(request);
         partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
@@ -326,7 +365,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           trace_sha256: sha256(canonical(runtime.trace.events)) }, outcome: { status: result.outcome.kind,
           detail: result.outcome.detail, value: actual, effects: effects.observed,
           ...(actualFiles ? { files: actualFiles } : {}), accepted,
-          action_ledger: runtime.trace.events.filter(event => event.kind === 'action') }, trajectory,
+          action_ledger: runtime.trace.events.filter(event => event.kind === 'action'),
+          scope_failures: runtime.trace.events.filter(event => event.kind === 'scope_failure'),
+          host_events: runtime.trace.events.filter(event => event.kind === 'host') }, trajectory,
+        ...(handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
+          student_trajectory_sha256: handoff.student_trajectory_sha256,
+          handoff_at: handoff.handoff_at, failure: handoff.failure } } : {}),
         capture_limits: [] };
       await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
         runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
