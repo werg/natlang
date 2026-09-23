@@ -1,6 +1,7 @@
 # Inline natural-language lambdas in `eval`
 
 For the project-wide TypeScript compiler, host, portability, application, and documentation migration, see [TypeScript-native natlang integration](TS_INLINE_HOST_INTEGRATION_PLAN.md).
+Compiled natlang callables also provide the standard monitored iteration method specified in [`iterateOn`](ITERATE_ON_PLAN.md).
 
 ## Surface and intended use
 
