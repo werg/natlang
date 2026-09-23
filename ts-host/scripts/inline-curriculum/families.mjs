@@ -6,6 +6,7 @@ import { folioEntailment, prontoProof } from './sources.mjs';
 import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion } from './inline.mjs';
 import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
 import { frontierSearch, lateArgmax } from './investigate.mjs';
+import { kqaQuestion } from './kqapro.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
 
@@ -44,4 +45,5 @@ export const FAMILIES = {
   relational_late_argmax: { build: lateArgmax, weight: 1.5 },
   folio_entailment: { build: folioEntailment, weight: 3, source: 'folio' },
   prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },
+  kqapro_question: { build: kqaQuestion, weight: 2, source: 'kqapro' },
 };
