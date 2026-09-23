@@ -1543,7 +1543,11 @@ export class NativeSession {
 
   private functionSource(name: string): { key: string; path: string; folder: Folder } {
     const folder = this.editableCodebase();
-    const key = name.trim().replace(/\./g, '/');
+    let key = name.trim().replace(/\./g, '/');
+    if (!this.lam.codebasePaths[key] && !key.includes('/')) {
+      const matches = Object.keys(this.lam.codebasePaths).filter(candidate => candidate.endsWith(`/${key}`));
+      if (matches.length === 1) key = matches[0]!;
+    }
     const path = this.lam.codebasePaths[key];
     if (!path) throw new Reject([{ path: name, code: 'no-such-function',
       expected: Object.keys(this.lam.codebasePaths).map(item => item.replace(/\//g, '.')).join(', ') }]);

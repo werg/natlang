@@ -289,6 +289,8 @@ test('native codebase folder exposes and live edits nested lexical sources', asy
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
   assert.match((await session.applyAsync('read_function', { name: 'outer' })).value,
     /import inner from "\.\/outer\/inner\.ts";/);
+  assert.match((await session.applyAsync('read_function', { name: 'inner' })).value,
+    /return "old";/);
   assert.equal((await session.applyAsync('edit_function', { name: 'outer.inner', find: 'return "old";',
     replace_with: 'return "new";' })).kind, 'ok');
   assert.equal(lam.codebase.outer.codebase.inner.code, 'return "new";\n');
