@@ -39,6 +39,18 @@ test('a compatible result assignment supplies the function value without an extr
   assert.deepEqual(lam.return, ['a', 'b']);
 });
 
+test('the listed result slot accepts direct assignment and persists its value', async () => {
+  const lam = buildPending({ $lambda: { type: '(value: number) => number',
+    instructions: 'Double the value.', args: { value: 7 } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const written = await session.applyAsync('eval', { code: 'result = value * 2;' });
+  assert.equal(written.kind, 'ok');
+  assert.equal(lam.return, 14);
+  const inspected = await session.applyAsync('eval', { code: 'result' });
+  assert.equal(inspected.kind, 'ok');
+  assert.equal(inspected.value, 14);
+});
+
 test('native collection temporaries can support a portable result within one eval', async () => {
   const lam = buildPending({ $lambda: { type: '(items: string[]) => string[]',
     instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } } });

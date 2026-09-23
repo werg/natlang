@@ -101,7 +101,27 @@ def _as_turn(row: dict[str, Any]) -> dict[str, Any]:
 
 def _call_template(tokenizer: Any, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
                    add_generation_prompt: bool) -> str:
-    rendered = tokenizer.apply_chat_template(messages, tools=tools or None, tokenize=False,
+    template_messages = []
+    for message in messages:
+        normalized = dict(message)
+        if isinstance(message.get('tool_calls'), list):
+            calls = []
+            for call in message['tool_calls']:
+                normalized_call = dict(call)
+                if isinstance(call.get('function'), dict):
+                    function = dict(call['function'])
+                    if isinstance(function.get('arguments'), str):
+                        try:
+                            function['arguments'] = json.loads(function['arguments'])
+                        except json.JSONDecodeError as exc:
+                            raise ValueError('tool call arguments are not valid JSON') from exc
+                    if not isinstance(function.get('arguments'), dict):
+                        raise ValueError('tool call arguments must be a JSON object')
+                    normalized_call['function'] = function
+                calls.append(normalized_call)
+            normalized['tool_calls'] = calls
+        template_messages.append(normalized)
+    rendered = tokenizer.apply_chat_template(template_messages, tools=tools or None, tokenize=False,
                                                add_generation_prompt=add_generation_prompt)
     if not isinstance(rendered, str):
         raise ValueError("tokenizer chat template did not return text")

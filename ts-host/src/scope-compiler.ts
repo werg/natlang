@@ -37,6 +37,8 @@ export type ScopeCompileOptions = {
   helperBindings?: readonly string[];
   /** Opaque host values supplied by the runtime outside the portable snapshot. */
   opaqueBindings?: readonly string[];
+  /** Expose the function's result slot as a mutable eval binding unless declared locally. */
+  resultBinding?: boolean;
   /** Enabled only when the evaluator exposes application-scoped module loading. */
   allowModules?: boolean;
   allowNetwork?: boolean;
@@ -289,6 +291,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       diagnostics.push({ code: 'forbidden-control', message: 'Persistent eval bindings must use const or let, not var.',
         ...rawSpan(binding.start, binding.end) });
   }
+  const implicitResult = options.resultBinding === true && !injectedNames.has('result') &&
+    !topLevelNames.has('result');
 
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node) ||
@@ -364,13 +368,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ts.forEachChild(node, findReturns);
   };
   for (const statement of statements) findReturns(statement);
-  const captures = [...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
+  const captures = [...(implicitResult ? ['result'] : []),
+    ...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
     ...bindings.filter(binding => !binding.transient).map(binding => binding.name)];
   const capture = `{ ${captures.join(', ')} }`;
   const edits: { start: number; end: number; text: string }[] = returns.map(statement => {
     const location = span(statement);
     const expression = statement.expression ? statement.expression.getText(file) : 'null';
-    const available = [...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
+    const available = [...(implicitResult ? ['result'] : []),
+      ...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
       ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
     return { start: location.start, end: location.end,
       text: `return __natlang_finish(${expression}, { ${available.join(', ')} });` };
@@ -392,6 +398,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   if (diagnostics.length) return result;
   const prologue = [inputNames.length ? `let { ${inputNames.join(', ')} } = ` +
       `JSON.parse(JSON.stringify(__inputs));` : '',
+    ...(implicitResult ? ['let result = __locals.result;'] : []),
     ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
     ...helperNames.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +

@@ -282,6 +282,8 @@ def main():
     ap.add_argument("out", type=Path)
     ap.add_argument("--model", default="LiquidAI/LFM2.5-350M")
     ap.add_argument("--model-revision", help="immutable Hugging Face commit or tag for the base model")
+    ap.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
+                    help="execution device; auto uses CUDA when available")
     schedule = ap.add_mutually_exclusive_group()
     schedule.add_argument("--steps", type=int, help="optimizer steps in total (default: 300)")
     schedule.add_argument("--epochs", type=float,
@@ -380,7 +382,7 @@ def main():
         a.steps = math.ceil(target_examples / a.accum)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
-                    "model_revision": a.model_revision, "accum": a.accum,
+                    "model_revision": a.model_revision, "device": a.device, "accum": a.accum,
                     "microbatch": a.microbatch, "batch_tokens": a.batch_tokens,
                     "seed": a.seed, "data_order": a.data_order,
                     "target_examples": target_examples, "steps": a.steps, "lr": a.lr,
@@ -431,6 +433,13 @@ def main():
         from unsloth import FastLanguageModel
     from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    device = "cuda" if a.device == "auto" and torch.cuda.is_available() else a.device
+    if device == "auto":
+        device = "cpu"
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but is unavailable")
+    if device == "cpu" and (a.load_in_4bit or use_unsloth):
+        raise ValueError("4-bit and Unsloth training require CUDA")
 
     base_src = str(ckpt / "weights") if (resume and a.full) else a.model
     if use_unsloth:
@@ -448,7 +457,7 @@ def main():
         tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision)
         if audit_manifest is not None:
             validate_training_audit_tokenizer(audit_manifest, tok, a.model, a.model_revision)
-        load_options = {"dtype": torch.bfloat16}
+        load_options = {"dtype": torch.bfloat16 if device == "cuda" else torch.float32}
         if a.model_revision:
             load_options["revision"] = a.model_revision
         if a.load_in_4bit:
@@ -457,7 +466,7 @@ def main():
                 bnb_4bit_compute_dtype=torch.bfloat16)})
         model = AutoModelForCausalLM.from_pretrained(base_src, **load_options)
         if not a.load_in_4bit:
-            model = model.cuda()
+            model = model.to(device)
     if a.gradient_checkpointing:
         model.gradient_checkpointing_enable()
     model.config.use_cache = False
@@ -542,7 +551,7 @@ def main():
                     break
                 e = encode(p, phase="heldout")
                 if e:
-                    tot += batch_completion_loss(model, collate_completions([e])).item(); n += 1
+                    tot += batch_completion_loss(model, collate_completions([e], device=device)).item(); n += 1
         finally:
             model.train()
             restore_rng_state(eval_rng)
@@ -555,7 +564,7 @@ def main():
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=a.lr, weight_decay=0.0)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / 20) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / a.steps))))
     if resume:
-        opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location="cuda"))
+        opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location=device))
         sched.load_state_dict(torch.load(ckpt / "scheduler.pt"))
         restore_rng_state(torch.load(ckpt / "rng.pt", map_location="cpu", weights_only=False))
         print(f"resumed from step {state['step']} (pair {state['cursor']})", flush=True)
@@ -586,7 +595,8 @@ def main():
 
     a.out.mkdir(parents=True, exist_ok=True)
     model.train()
-    torch.cuda.synchronize()
+    if device == "cuda":
+        torch.cuda.synchronize()
     t0 = time.time()
     metrics_file = a.out / "throughput.json"
     metrics = ([m for m in json.loads(metrics_file.read_text())["steps"] if m["step"] <= state["step"]]
@@ -602,9 +612,11 @@ def main():
     def save_metrics():
         tmp = metrics_file.with_suffix(".tmp")
         tmp.write_text(json.dumps({"args": {k: str(v) for k, v in vars(a).items()}, "corpus": state["corpus"],
-            "packages": packages, "gpu": torch.cuda.get_device_name(),
-            "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
-            "peak_reserved_bytes": torch.cuda.max_memory_reserved(), "steps": metrics}, indent=2) + "\n")
+            "packages": packages, "device": device,
+            "gpu": torch.cuda.get_device_name() if device == "cuda" else None,
+            "peak_allocated_bytes": torch.cuda.max_memory_allocated() if device == "cuda" else 0,
+            "peak_reserved_bytes": torch.cuda.max_memory_reserved() if device == "cuda" else 0,
+            "steps": metrics}, indent=2) + "\n")
         tmp.replace(metrics_file)
 
     def save_metrics_at_boundary():
@@ -635,11 +647,11 @@ def main():
                     state["skipped"] += e is None
                 examples.append(e)
             ready = time.perf_counter()
-            running = torch.zeros((), device="cuda")
+            running = torch.zeros((), device=device)
             batches = 0
             padded_tokens = 0
             for batch in microbatches(examples, a.microbatch, a.batch_tokens):
-                encoded = collate_completions(batch, pad_id=tok.pad_token_id or 0)
+                encoded = collate_completions(batch, pad_id=tok.pad_token_id or 0, device=device)
                 want_checkpointing = a.gradient_checkpointing and encoded["input_ids"].numel() > a.checkpoint_above_tokens
                 if want_checkpointing != model.is_gradient_checkpointing:
                     set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
@@ -675,7 +687,7 @@ def main():
             save_metrics_at_boundary()
             state["log"].append([state["step"], round(running, 4)])
             print(f"step {state['step']:4d}  loss {running:.4f}  lr {sched.get_last_lr()[0]:.2e}  "
-                  f"mem {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB  {time.time() - t0:.0f}s "
+                  f"mem {(torch.cuda.max_memory_allocated() / 2**30 if device == 'cuda' else 0):.1f} GiB  {time.time() - t0:.0f}s "
                   f"overlength={state.get('overlength_encounters', {})}", flush=True)
         if not a.benchmark_steps and state["step"] % a.save_every == 0:
             save_checkpoint()

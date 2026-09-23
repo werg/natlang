@@ -47,6 +47,25 @@ def test_render_native_turn_preserves_provenance_and_uses_assistant_generation_p
         assert pair[key] == row[key]
 
 
+def test_render_decodes_tool_arguments_for_templates_without_changing_ir():
+    class MappingTokenizer(MockTokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            for message in messages:
+                for call in message.get('tool_calls', []):
+                    assert call['function']['arguments'] == {'code': '1 + 1'}
+            return super().apply_chat_template(messages, **kwargs)
+
+    raw_call = {'id': 'source-call', 'type': 'function',
+                'function': {'name': 'eval', 'arguments': '{"code":"1 + 1"}'}}
+    row = {'id': 'tool', 'messages': [{'role': 'user', 'content': 'Compute.'},
+                                     {'role': 'assistant', 'content': '', 'tool_calls': [raw_call]},
+                                     {'role': 'tool', 'tool_call_id': 'source-call', 'content': '2'}],
+           'tools': [], 'target': {'role': 'assistant', 'content': '', 'tool_calls': [raw_call]},
+           'training_admission': {'approved': True}}
+    assert render_turn(row, MappingTokenizer(), '<eos>') is not None
+    assert raw_call['function']['arguments'] == '{"code":"1 + 1"}'
+
+
 def test_target_prefix_and_end_token_are_required():
     row = {"id": "bad", "messages": [{"role": "user", "content": "x"}], "tools": [],
            "target": {"role": "assistant", "content": "answer"},

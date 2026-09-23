@@ -1142,8 +1142,10 @@ export class NativeSession {
   }
 
   private scopeView(): Record<string, unknown> {
-    return { args: inlineEvalView(this.lam.args as Value), inputs: inlineEvalView(this.lam.args as Value), locals: inlineEvalView(Object.fromEntries(
-      Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
+    const locals = Object.fromEntries(Object.entries(this.lam.let).filter(([, value]) => !pending(value)));
+    if (!Object.hasOwn(locals, 'result') && this.lam.return !== MISSING) locals.result = this.lam.return;
+    return { args: inlineEvalView(this.lam.args as Value), inputs: inlineEvalView(this.lam.args as Value),
+      locals: inlineEvalView(locals as Value) };
   }
 
   scopeBridge(operation: string, raw: unknown[]): unknown {
@@ -1377,7 +1379,7 @@ export class NativeSession {
     const opaqueNames = [...opaqueInputs, ...opaqueLocals].map(([name]) => name);
     if (this.lam.projectTransaction) opaqueNames.push('folder', 'fs');
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: helperNames,
-      opaqueBindings: opaqueNames,
+      opaqueBindings: opaqueNames, resultBinding: true,
       ...this.runtime.environment.scopeCapabilities });
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item =>
