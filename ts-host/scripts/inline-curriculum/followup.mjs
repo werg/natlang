@@ -286,7 +286,7 @@ return rounds;`;
     reference: { root: [evalCall(code), returnCall(expected)],
       children: limits.flatMap(limit => applications.map(a => ({ match: [JSON.stringify(a.id), `budget: number = ${limit}`], value: a.total <= limit }))) },
     root: { name: 'screen_grants', args: { applications: 'Application[]', limits: 'number[]' }, returns: 'string[][]',
-      instructions: 'Screen the applications once for each budget in limits, in order. An application passes a round when everything it asks for, extras included, fits within that round\'s budget. Use one judgment of whether an application fits within the current budget for every round. Return, for each round, the ids that pass, in application order.' },
+      instructions: 'Screen the applications once for each budget in limits, in order. An application passes a round when everything it asks for, extras included, fits within that round\'s budget. Make the fit judgment with one saved inline nl function, created once, whose instructions refer to a let variable budget by name; set budget to each round\'s limit before that round, so the same function judges every round against the current budget. Return, for each round, the ids that pass, in application order.' },
     files: { 'types.ts': 'export type Application = { id: string, ask: string };\n' },
     inputs: { applications: plain, limits }, expected })];
 }
