@@ -49,7 +49,7 @@ export const SOURCES = {
   proofwriter: {
     name: 'ProofWriter', homepage: 'https://allenai.org/data/proofwriter', license: 'CC-BY-4.0',
     release: 'V2020.12.3 (AI2 public data bucket)', revision: 'V2020.12.3',
-    files: [{ path: 'proofwriter-dataset-V2020.12.3.zip', split: 'mixed', sha256: 'bbc5694901e8306d0bd659aa1ad53ccfd02c201864f4b320ffa3777827d1fc26', extract: true }],
+    files: [{ path: 'proofwriter-dataset-V2020.12.3.zip', split: 'mixed', sha256: 'bbc5694901e8306d0bd659aa1ad53ccfd02c201864f4b320ffa3777827d1fc26', extract: ['*/OWA/depth-5/meta-*.jsonl'] }],
     url: (revision, path) => `https://aristo-data-public.s3.amazonaws.com/proofwriter/${path}`,
   },
   entailmentbank: {
@@ -131,7 +131,8 @@ async function main() {
       if (recorded && recorded.revision === source.revision && recorded.sha256 !== sha256)
         throw new Error(`${url}: checksum changed since the manifest recorded it`);
       // Archives are unpacked next to themselves, into a directory named after the archive.
-      if (file.extract) execFileSync('unzip', ['-o', '-q', target, '-d', target.replace(/\.zip$/, '')]);
+      // extract: true unpacks everything; a list of patterns unpacks only the members an adapter reads.
+      if (file.extract) execFileSync('unzip', ['-o', '-q', target, ...(Array.isArray(file.extract) ? file.extract : []), '-d', target.replace(/\.zip$/, '')]);
       files.push({ path: file.path, url, revision: source.revision, split: file.split, sha256, bytes: bytes.length });
       console.log(`${key} ${file.path} ${sha256.slice(0, 12)} ${bytes.length} bytes`);
     }

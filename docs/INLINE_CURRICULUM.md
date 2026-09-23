@@ -181,7 +181,9 @@ read only the cache and keep source labels and formal annotations in the oracle 
   (`src/teacher/world-bridge.ts`); a case is accepted when the task's score reaches 100. Variations 0-2 of all 30
   tasks (90 cases; variation 2 is `test`) have gold action paths from the package, and all 90 replay to 100.
   Collection and verification need `SCIENCEWORLD_PYTHON` (default `vendor/scienceworld-venv`) and Java 11+.
-- ALFWorld is not integrated.
+- ALFWorld is not integrated: its dependencies and game data need several gigabytes, and the disk was full on
+  2026-09-24. It would use the same live-world bridge as ScienceWorld.
+- Acquisition extracts only the archive members an adapter reads (ProofWriter: OWA depth 5, 0.5 of 3.4 GB).
 
 ## Commands
 
