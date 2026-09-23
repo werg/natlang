@@ -1,5 +1,7 @@
 # Inline natural-language lambdas in `eval`
 
+For the project-wide TypeScript compiler, host, portability, application, and documentation migration, see [TypeScript-native natlang integration](TS_INLINE_HOST_INTEGRATION_PLAN.md).
+
 ## Surface and intended use
 
 `nl` is a compiler-recognized tagged template expression that creates an anonymous asynchronous natural-language function. It needs no codebase file or generated name. It can be called immediately, assigned to a local, or passed where a typed asynchronous callback is expected. Its child runs through the ordinary lambda interpreter, with its own line marks, checked return, trace, and training segment.
@@ -36,7 +38,7 @@ Here `reviewEach` must declare its callback parameter as `(note: string) => Prom
 
 ## Lexical closure and implicit mention
 
-The compiler enumerates value bindings visible at the `nl` expression: parent parameters, persistent eval locals, earlier declarations in the current eval, and bindings in surrounding blocks. Normal lexical shadowing applies. A later declaration, an out-of-scope block local, and a type-only alias cannot be captured. Named codebase functions remain available through the existing import bridge. The explicit positional parameters of a call shadow captured names, just as function parameters shadow outer variables.
+The compiler enumerates value bindings visible at the `nl` expression: parent parameters, persistent eval locals, earlier declarations in the current eval, and bindings in surrounding blocks. Normal lexical shadowing applies. A later declaration, an out-of-scope block local, and a type-only alias cannot be captured. When created during a named `foo.nl` invocation, the anonymous lambda sees the same callable items under `foo/` as its parent. Callable TypeScript files there may import siblings in that folder. The explicit positional parameters of a call shadow captured names, just as function parameters shadow outer variables.
 
 **Exact mentions in the English instruction select captures.** First infer the explicit parameter names, then tokenize the raw template text against the remaining names in the lexical symbol table, using case-sensitive JavaScript identifier boundaries. In `Judge note against threshold and policy`, `threshold` and `policy` are captured when those exact names are in scope; `note` is the explicit callback parameter and therefore is not captured. Backtick-delimited identifiers are also exact mentions and can produce a useful unknown-name diagnostic. References inside `${expression}` are found through the TypeScript AST. Ordinary interpolation still evaluates at template creation, as JavaScript requires; the referenced binding can also be captured for the child's use by name. Unknown ordinary English words remain prose, not unresolved-variable errors. Prompt the agent to use exact variable names when it wants an implicit capture. This intentionally accepts an occasional false match; the capture list is visible in the child opening and trace.
 

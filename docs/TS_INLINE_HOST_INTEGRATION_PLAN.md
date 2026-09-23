@@ -1,0 +1,116 @@
+# TypeScript-native natlang integration: implementation plan
+
+## Target contract
+
+A TypeScript project can use natural-language functions at any expression site:
+
+```ts
+import { nl, createNatlangRuntime } from '@natlang/node';
+
+const runtime = createNatlangRuntime({ model: teacher, trace: traceSink });
+
+await runtime.run(async () => {
+  let policy = loadPolicy();
+  const verdict: Verdict = await nl`
+    Read evidence against policy. Return a Verdict and explain uncertainty.
+  `(evidence);
+  await saveVerdict(verdict);
+});
+```
+
+The `nl` expression is a real asynchronous callable. Its explicit inputs come from the call; exact mentions of visible lexical names capture live bindings. The compiler obtains its input and return target from TypeScript context **before** the model runs. The existing lambda interpreter still owns line discharge, typed return validation, traces, errors, and child execution. `nl` uses stock TypeScript syntax and needs a natlang-aware compile/check step, as specified in [Inline natural-language lambdas](inline-natlang-lambdas.md).
+
+`runtime.run` in this sketch establishes a context for an ordinary TypeScript task. It is **not** a second way to run a natlang program or an instruction to put one root lambda around an app. An application can call compiled `nl` functions anywhere in that task, including in a handler, library, callback, test, or another natlang lambda. A project-level runtime can create many independent tasks and dispose of its owned resources. The browser API has the same shape and semantics; its model configuration differs.
+
+**Keep scoped callable items.** A named `foo.nl` lambda has a callable namespace made only from items in its sibling `foo/` directory. It cannot directly call a natlang function elsewhere in the project, even when host TypeScript could import that function. This is an authority rule enforced by the compiler/linker and runtime, not only a prompt convention. An anonymous `nl` created during `foo.nl` execution sees **the same callable context** as `foo.nl`, including its children; it is not given an empty or narrower list. A callable TypeScript file inside `foo/` may import its siblings there, so helper composition works inside the same scoped module family. Ordinary TypeScript dependencies still work; these imports do not add outside natlang callables to the interpreting agent's namespace. The compiler checks natlang callable references through aliases and captures so they cannot widen that namespace. Host-authored TypeScript outside a natlang invocation can import named lambdas from elsewhere in the project and call them, subject to its application authority. Keep `.nl` as the named, scoped, agent-editable lambda source form; the new inline form complements it rather than erasing it.
+
+**Disallow recursion.** Reject direct and indirect cycles among named and inline natlang calls, including a cycle reached through a higher-order callback, captured callable, or `folder.apply`. Statically diagnose cycles when the compiler can see the call graph; at runtime, check active definition IDs and return a clear cycle error before entering a repeated definition. Repeated sequential calls after a prior call completes are allowed. No depth limit is presented as a substitute for this rule.
+
+For a directory reducer, keep the same callable and interpreter. Its extra authority is an explicit `Folder` argument and the `commit` tool. A folder-authorized caller can use `const value = await folder.apply(reducer, ...inputs)` to obtain the typed return while the folder handle receives the committed change, or `const value = await reducer(folder, ...inputs)` when it wants the typed return only. An ordinary lambda without folder authority cannot call a directory reducer. `return` and `commit` have the same completion point; `commit` also extracts the patch. Folder writes serialize at the folder authority boundary. The ordinary codebase remains readable and content-editable through its separate codebase tools; it cannot add, move, or delete codebase files. This distinction is in the invocation's authority, not a second execution engine.
+
+## What to retire
+
+| Current integration | Decision | Replacement |
+|---|---|---|
+| Node `NativeNatlangHost.run({ source, inputs, modelTurn })` and browser `BrowserNatlangHost.run(...)` as the normal application API | Retire after migration | A configured runtime context and direct calls of compiled TypeScript `nl` functions |
+| Separate `program`, `definitions`, `files`, and path-root request variants | Retire from the public app API | TypeScript modules and typed calls; fixtures and IR can enter the private invocation kernel |
+| `BrowserNatlangClient` as an app-facing run-by-file transport | Retire | Browser runtime binding plus a model transport; worker messaging remains an implementation detail |
+| Terminal and browser reducer/view root frameworks | Retire as natlang-specific integration styles | Ordinary TypeScript state/event/view code calling `nl` wherever semantic work belongs |
+| `.nl` path loading as a **root application entry**, plus mandatory default-export `.ts` app source trees | Retire as entry formats | Ordinary TypeScript app entry modules calling inline or imported named lambdas |
+| `foo.nl` plus sibling `foo/` callable items | Keep and strengthen | Named, agent-editable lambdas with a compiler/runtime-enforced child callable namespace |
+| `.nlpkg` archives and CLI launches | Retain only as distribution and process adapters | Package and launch compiled TypeScript entry modules; no reducer/view names or alternate program execution protocol in the manifest |
+| Node and browser runtime cores | Keep **one shared invocation kernel** | Platform adapters supply model, filesystem, module loading, and capabilities |
+
+The archive can still pin dependencies and declare authority. The CLI can still launch an app. Neither should define a second language surface. During implementation, old paths may exist on a branch so migration can be checked; the release cutover removes them rather than leaving permanent compatibility branches. Do not keep a generic YAML or `Pending` root request in the supported SDK just to preserve old examples. Internal research fixtures may call the kernel directly.
+
+This simplification also removes the current global `running` guards on Node/browser hosts as an application concurrency policy. Independent TypeScript tasks should run concurrently. Only writes to a shared live capture or folder need serialization. A model backend may impose a separate queue, but that is resource scheduling, not a semantic ban on concurrent natlang calls. The scoped `foo.nl` loader remains, but it becomes a module/function loader rather than a whole-application runner.
+
+## One execution model and portability fix
+
+Today the Node and browser eval bridges use `transpileModule`, copy values through `scopeBridgeValue`, and require JSON-like `portable()` / `coerce()` data. That strips function identity and prototypes and rejects common JS values such as `Date`, `Map`, class instances, cycles, and callbacks. The root host then dumps the result. This is a poor match for TypeScript functions with closures.
+
+Replace that boundary with a **live value bridge** inside one invocation context:
+
+1. Keep primitive and plain data values directly when possible. Give objects, arrays, functions, folders, and captured variable cells opaque session-scoped IDs. Preserve identity, prototypes, receiver binding, cycles, and current values. Capture descriptors are getters and, for mutable bindings, setters; capture at each call, not at tag creation. A child may inspect or call a handle only through an authorized operation.
+2. Separate model-visible observations from underlying values. A prompt/trace shows type, stable handle ID, and a bounded preview. `eval`/`read_value` can inspect or page large values. Never serialize an arbitrary host object just to cross from `eval` to the runtime. Do not use a JSON snapshot as the source of truth for a live closure.
+3. Compile a TypeScript type into both a child prompt description and a runtime check. Reuse the current portable checker for serializable shapes, then extend validation for host objects via constructors, predicates, or structural property access through the handle. `any` and unconstrained `unknown` cannot silently become typed natlang return targets. A type string alone is insufficient validation.
+4. Define the action boundary: child edits to captured `let` cells and object properties become visible after a successful atomic action; rebinding a captured `const` fails. Serialize conflicting mutable capture/folder operations. On a failed action, rollback supported internal writes; label external side effects that cannot be rolled back. A child error rejects its awaited TypeScript call, so the parent can catch it normally.
+5. Keep closure-owning JavaScript in its originating realm. Model inference can run in another thread/process, but the natlang interpreter operation that reads or writes a capture must be dispatched back to the owner. For Studio's dedicated Web Workers, either run the owning TS task and interpreter in the same worker or use an ID-based RPC to the owner. A structured clone is never assumed to preserve a closure or arbitrary JSO.
+6. Scope handles to a task/session; release them on completion or cancellation. A retained inline callable holds its owner frame while that session lives. Durable replay of an external object requires a registered reconstruction recipe; traces record observations and effects, not a fictional portable copy. Do not promise replay for an unreconstructable object.
+
+The shared **invocation kernel** takes a compiled lambda definition, typed positional inputs, capture cells, authority, execution context, and model driver. It creates the familiar child session and returns the checked value or throws. The old `runRoot` path ceases to be its organizing abstraction. The named `.nl` module loader feeds this kernel with its scoped callable manifest. Node and browser adapters differ only in host capabilities, filesystem implementation, module resolution, and model transport. Keep the eval implementation and prompts semantically identical across both.
+
+The app-facing runtime owns model configuration, trace sink, cancellation, limits, and authority. Context propagation is explicit in the generated `nl` callable or a bound task context: Node may use `AsyncLocalStorage` internally, but browser behavior must not depend on a Node global. A call without a bound runtime fails with an actionable error. Nested child calls inherit context and narrower authority. Abort an awaited child on task cancellation, close handles, and preserve its trace. Avoid an app-visible `resume` tool or per-call `modelTurn` wiring.
+
+## Compiler, build, and editor
+
+The natlang compiler is the authoritative build/check path for files containing `nl`:
+
+1. Build a TypeScript `Program`/`TypeChecker` over the whole project, including imports and project references. Find `nl` tags by resolved symbol, not spelling alone. Resolve exact English mentions to lexical symbols and lower each tag to a JS callable with live capture accessors. Infer call-site input types and contextual return target, including the enclosing natlang `result` slot. Emit source-span diagnostics for unknown or conflicting types. Treat imported named `.nl` lambdas as typed modules, and compile each named lambda's `foo/` callable manifest separately from the host project's unrestricted import graph. Give inline lambdas created by `foo.nl` that same manifest. Resolve imports among callable `.ts` siblings under `foo/`; ordinary TS dependencies remain valid, while out-of-family natlang callable references are rejected.
+2. Emit normal JS, declaration files, source maps, and a stable definition manifest. Reuse incremental TypeScript compilation, invalidating a plan when its source, referenced types, or captures change. Generated plans identify source revision, position, type signature, and capture manifest. A changed codebase module is imported at its new revision for subsequent calls.
+3. Ship `natlang check` and `natlang build` first; CI must run `natlang check`. Supply one build adapter for the repository's browser toolchain and one Node development path that both call this compiler. Vite's plugin API and esbuild's plugin API provide transform integration, but their ordinary per-file hooks do not replace whole-project type analysis. The core compiler is shared, with adapters feeding compiled output to those tools.
+4. Provide approximate declarations for ordinary TypeScript editing, plus an optional TypeScript language-service plugin for natlang diagnostics, inferred capture/target display, and navigation. It is an editor aid: TypeScript's own documentation says language-service plugins do not run in `tsc` and cannot change its emit/typechecking. Plain `tsc` remains useful for non-natlang files, but it is not a complete checker/build for a project using this extension.
+5. Make the compiler work for packages, aliases, monorepo references, watch/HMR, browser builds, and Node ESM. Specify versioned compile output so a package cannot silently run source compiled by an incompatible runtime. No runtime evaluation of raw `nl` text as a fallback if a file missed the transform.
+
+The present scope `eval` compiler should use the same type/plan machinery. TypeScript source files and agent-authored `eval` are two front ends to the same kernel, not separate natlang languages. Keep the existing iterative `eval` and `console.log` observation behavior inside interpreted lambdas. Arbitrary host TS code uses the project's normal compiler and runtime.
+
+## Host, package, and app refactor
+
+**Host SDK.** Replace the root request shape in `ts-host/src/native/host.ts`, `ts-host/src/browser/host.ts`, `ts-host/src/browser/client.ts`, `ts-host/src/native/runtime.ts`, and the Node/browser environment bridges with context creation, inline invocation, live handles, and the shared kernel. Factor common request/agent setup once; remove duplicated root parsing and browser's `as never` environment cast. Retain a single typed trace/result contract. Expose model transports as configuration; allow a task to select its model without embedding transport arguments in every call.
+
+**Application adapters.** Refactor `ts-host/src/terminal/application.ts`, `ts-host/src/browser/application.ts`, and Studio's runner/worker code into ordinary TypeScript application code. A reducer or view may still be a useful application function name, but it is a TS function that calls `nl` when needed, not a special run mode. Browser workers must preserve capture ownership as described above. Simplify manifests in `ts-host/src/package/` and `spec/package-manifest.schema.json` to point to compiled TS entry modules and authority, then update the CLI. Keep packaging security checks and package pinning.
+
+**Examples and corpus.** Refactor `examples/triage`, `examples/npm_app`, `ts-host/examples/browser-board`, Studio's generated programs and research app, and all shipped `codebases/*` applications. Keep named `.nl` lambdas and their `foo/` callable folders where that scoped authoring model is valuable. Migrate each application's entry, state wiring, and host calls to TypeScript; add inline `nl` calls where semantic work naturally appears in host code. Crisp modules become ordinary TypeScript with sync or async implementations as appropriate, while their placement under `foo/` still controls which named lambda may call them. Rewrite app scaffolds to show inline calls in handlers, libraries, callbacks, and ordinary business logic. Update generators/materializers so new apps emit TS entry modules and scoped named `.nl` modules when needed. Do not hand-edit generated Studio copies without changing their generator. Retire `.nl` root-app launch fixtures only when equivalent TS-entry fixtures cover their behavior.
+
+**Authoring and integration guidance.** Rewrite `skills/natlang-authoring/SKILL.md` and all its references, and `skills/natlang-integration/SKILL.md` plus `references/{hosts,frontend,terminal,recovery,delivery}.md`. Teach plain TS app imports/exports and inline `nl` placement, while retaining the `foo.nl`/`foo/` scoped callable rule for named lambdas. Explain contextual type inference, capture-by-mention, direct/nested calls, forbidden recursion, folder reducers, live codebase editing, typed returns, and error handling. Remove instructions about path-root **application** calls, `source` variants, reducer/view run requests, and legacy aliases. Reconcile the current contradictory guidance on mutating parameters. Update `spec/SPEC.md`, type spec, `README.md`, `ts-host/README.md`, `DEV_SETUP.md`, `NATIVE_PACKAGES.md`, browser/terminal application docs, package docs, and all copyable examples. The skills and docs are release gates, not follow-up polish.
+
+**IR and training.** Add inline definition/call, source span, inferred target, parameter mapping, capture references and observed versions, parent call, reasoning/actions, checked result, and errors to the shared IR. Keep captures as references to live values in execution; record replayable observations separately. Export both the parent's choice to construct/call `nl` and the child's trajectory. Migrate existing teacher IR when its semantics can be mapped unambiguously; mark irrecoverable old path-specific traces for regeneration. Update teacher collectors, synthetic generators, materializers, and SFT export only after the new kernel and source format stabilize. Do not flatten child decisions into one final answer.
+
+## Delivery order and gates
+
+1. **Freeze the target contract.** Add executable examples for immediate calls, typed callbacks, closure reads/writes, nested calls, a directory reducer, scoped `foo.nl` children, rejected out-of-scope calls, recursion errors, and Node/browser parity. Update the spec with the new source and invocation contract. Gate: every example has a pre-run target type and one expected trace shape.
+2. **Build compiler/checker.** Implement whole-project symbol/capture analysis, type constraints, diagnostics, lowering, manifests, and source maps. Gate: check/build work on a standalone TS consumer and in repo, including incremental rebuild and project references.
+3. **Unify invocation and fix portability.** Add live handles/cells, typed checks, owner-realm routing, concurrency locks, cancellation, and child traces to the shared kernel. Adapt `eval` to call it. Gate: Node and browser conformance covers objects/functions/cycles, mutable closure behavior, class instances, nested calls, failures, and folder writes.
+4. **Refactor public hosts.** Introduce project runtime context, model binding, and direct compiled `nl` calls. Move CLI/package to TS entry modules. Gate: independent concurrent app tasks work; model queueing and folder/capture serialization are correct; no application code needs `host.run`.
+5. **Migrate every app and producer.** Move examples, codebases, Studio, browser board, package manifests, app generators, teacher source producers, and model prompts together. Keep useful named `.nl`/child-folder authoring; migrate application orchestration to TS. Gate: every shipped app builds and passes a meaningful smoke run with its actual model path, not only a mocked unit run.
+6. **Migrate IR/data and teaching surface.** Update trace/IR/export, rescue mappable teacher trajectories, regenerate the rest, and rewrite skills, spec, and documentation. Gate: a small new-teacher collection exports valid bounded training trajectories with captured decisions and a smoke student-training export; both skills lead an agent through a working TS app.
+7. **Remove old interfaces.** Delete public root request variants, root-app file launchers, reducer/view frameworks, stale examples, and unused compatibility glue. Preserve the scoped named `.nl` module loader. Gate: repository search and package exports show one supported TS application integration path, while named callable scoping, no-recursion checks, Node/browser parity, package verification, full tests, and app smoke checks remain green.
+
+Build the full system before judging whether models use the inline form well. Once it works, run teacher probes on semantic decisions, conversions, and multi-value inference, then adjust prompts and training data based on observed traces. This follows the project's preference to give the architecture a fair implementation rather than making an early small comparison the go/no-go gate.
+
+## Known implementation risks and chosen defaults
+
+- **Type inference:** use the TypeScript checker plus natlang constraints; reject ambiguous targets with a local diagnostic and allow `nl<T>` as an explicit escape hatch. Never infer the target from the child's output.
+- **Portability:** keep live values in the owner realm; use handles/RPC only when crossing a worker or process. Do not pretend structured clone or JSON supports arbitrary closures.
+- **Effect atomicity:** serialize conflicting internal writes; external effects may not roll back, so trace and surface them. Folder reduction keeps its existing semaphore semantics.
+- **Security:** an inline natlang function receives only the capabilities and folder/codebase authority granted by its creating task. A live handle must not silently grant arbitrary global host access; method invocation passes through authority checks.
+- **Callable scope:** a named `.nl` lambda and its inline descendants see the same callable items under its companion folder. Callable `.ts` items can import siblings in that folder. The compiler's import graph cannot broaden that namespace, and runtime checks reject forged or aliased out-of-scope handles.
+- **Recursion:** reject active definition-ID cycles at runtime as well as statically visible cycles at build time. Ordinary sequential reuse remains valid.
+- **Build adoption:** require the natlang compiler for `nl` files and fail loudly when it has not run. Editor integration cannot substitute for that compiler.
+
+## Relevant external interfaces
+
+- [TypeScript language-service plugin limits](https://github.com/microsoft/TypeScript/wiki/Writing-a-Language-Service-Plugin)
+- [Vite plugin API](https://vite.dev/guide/api-plugin)
+- [esbuild plugin API](https://esbuild.github.io/plugins/)
+- [Node module customization hooks](https://nodejs.org/api/module.html#customization-hooks)
