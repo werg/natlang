@@ -236,3 +236,11 @@ not transactionally reversible in memory; recover from the prior disk checkpoint
 This CPU gate does not certify GPU kernels, GPU memory fit, or every student
 architecture. No teacher process is stopped and no GPU training is performed by
 these checks.
+
+Native teacher IR keeps the teacher's original tool calls, arguments, reasoning,
+decision order, and execution outcomes. Failed proposals remain in the IR but
+are denied positive SFT admission. The training renderer converts JSON-encoded
+tool arguments to objects when the selected tokenizer's chat template requires
+that shape; it does not change the stored IR. For a small end-to-end CPU smoke
+run, pass `--device cpu` to `train_lora.py` with an audited corpus. Production
+training still defaults to CUDA.

@@ -282,8 +282,8 @@ def main():
     ap.add_argument("out", type=Path)
     ap.add_argument("--model", default="LiquidAI/LFM2.5-350M")
     ap.add_argument("--model-revision", help="immutable Hugging Face commit or tag for the base model")
-    ap.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto",
-                    help="execution device; auto uses CUDA when available")
+    ap.add_argument("--device", choices=("cuda", "cpu"), default="cuda",
+                    help="execution device; CPU is useful for small pipeline smoke runs")
     schedule = ap.add_mutually_exclusive_group()
     schedule.add_argument("--steps", type=int, help="optimizer steps in total (default: 300)")
     schedule.add_argument("--epochs", type=float,
@@ -382,7 +382,7 @@ def main():
         a.steps = math.ceil(target_examples / a.accum)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
-                    "model_revision": a.model_revision, "device": a.device, "accum": a.accum,
+                    "model_revision": a.model_revision, "accum": a.accum,
                     "microbatch": a.microbatch, "batch_tokens": a.batch_tokens,
                     "seed": a.seed, "data_order": a.data_order,
                     "target_examples": target_examples, "steps": a.steps, "lr": a.lr,
@@ -397,6 +397,8 @@ def main():
                     "require_audit": a.require_audit}
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
+        if a.device != "cuda":
+            identity["device"] = a.device
         if a.init_adapter is not None:
             identity["init_adapter"] = {"path": str(a.init_adapter),
                                         "sha256": directory_digest(a.init_adapter)}
@@ -433,9 +435,7 @@ def main():
         from unsloth import FastLanguageModel
     from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-    device = "cuda" if a.device == "auto" and torch.cuda.is_available() else a.device
-    if device == "auto":
-        device = "cpu"
+    device = a.device
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is unavailable")
     if device == "cpu" and (a.load_in_4bit or use_unsloth):
