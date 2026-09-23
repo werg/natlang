@@ -78,6 +78,15 @@ export const SOURCES = {
       [new URL('./textworld_export.py', import.meta.url).pathname, join(target, 'games'), '--seeds', '1-300'], { stdio: 'inherit' }),
     files: [],
   },
+  scienceworld: {
+    name: 'ScienceWorld', homepage: 'https://github.com/allenai/ScienceWorld', license: 'Apache-2.0',
+    release: 'scienceworld 1.2.2 (pinned below 1.3.0, whose action-ordering change alters trajectories); tasks, descriptions, and gold paths for variations 0-2 of every task',
+    revision: 'scienceworld-1.2.2-v0-2',
+    // Generated from the pinned package: SCIENCEWORLD_PYTHON is a Python with scienceworld==1.2.2 installed (Java 11+).
+    generate: target => execFileSync(process.env.SCIENCEWORLD_PYTHON ?? '../vendor/scienceworld-venv/bin/python',
+      [new URL('./scienceworld_bridge.py', import.meta.url).pathname, 'export', join(target, 'tasks.json'), '--variations', '3'], { stdio: 'inherit' }),
+    files: [],
+  },
   commaqa: {
     name: 'CommaQA', homepage: 'https://github.com/allenai/CommaQA', license: 'Apache-2.0',
     release: 'v1 (AI2 public datasets bucket)', revision: 'v1',

@@ -11,6 +11,7 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
+import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
@@ -362,6 +363,10 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const [service, method] = name.split('.') as [string, string];
     (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
   }
+  // An interactive world in its own process becomes the service `world`; the task is done when its score reaches 100.
+  const worldSpec = (record.semantics as { world?: WorldSpec }).world;
+  const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
+  if (world) services.world = world.service();
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services,
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
   try {
@@ -379,15 +384,18 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const filesOk = !folder || (authoring ? authoring.ok : same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
-    const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk &&
-      (expectedKind !== 'done' || !!authoring || same(actual, record.semantics.expected));
+    const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
+    const worldOk = !worldScore || worldScore.score >= 100;
+    const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk && worldOk &&
+      (expectedKind !== 'done' || !!authoring || !!world || same(actual, record.semantics.expected));
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
-      effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}), accepted,
+      effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
+      ...(worldScore ? { world: worldScore } : {}), accepted,
       action_ledger: trace.filter(event => event.kind === 'action'),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
       host_events: trace.filter(event => event.kind === 'host') } };
-  } finally { environment.close(); }
+  } finally { environment.close(); world?.close(); }
 }
 
 export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..', import.meta.url))): Promise<string> {

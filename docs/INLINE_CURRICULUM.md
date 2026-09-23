@@ -81,6 +81,7 @@ running out of turns also quiesces a call and was previously accepted.
 | `commaqa_numeric` | nested | relational | single call | CommaQA numeric: per-item specialist questions, with the arithmetic (min, max, differences, thresholds) left to the root |
 | `textworld_quest` | follow-up | actor | single call | A generated TextWorld quest played through look/commands/act; the counterpart lacks the needed object (blocked) |
 | `textworld_iterate` | iterate | actor | single call | The same quests played by an inline nl step run with iterateOn; without the object, the progress review stops the loop |
+| `scienceworld_task` | follow-up | actor | single call | A ScienceWorld task (boiling, chemistry, biology, ...) played through the `world` service until the score reaches 100 |
 | `child_sufficiency` | nested | logic | follow-up | A named child finds the first records sufficient, needs the detailed records, or neither suffices (blocked) |
 | `relational_multihop_qualifier` | nested | relational | single call | Paged two-hop graph with temporal qualifiers: base, divestment, a hire on a later page, a departure |
 | `relational_policy_inline` | inline | relational | single call | Exact candidate retrieval, then per-candidate policy judgments through a typed `review_each` callback |
@@ -174,8 +175,13 @@ read only the cache and keep source labels and formal annotations in the oracle 
   states only the last action) and exported by `textworld_export.py` with the game's own action rules, types,
   facts, and win condition. A callable module runs them with an iterative rule engine, so preconditions and
   effects are exactly TextWorld's; every game's own winning commands are checked to win. 236 games have a
-  counterpart without the object the win condition needs (provably impossible, so blocked). ScienceWorld and
-  ALFWorld are not integrated.
+  counterpart without the object the win condition needs (provably impossible, so blocked).
+- **ScienceWorld** (Apache-2.0, scienceworld 1.2.2, pinned below 1.3.0 whose action ordering changed): the
+  simulator runs in its own process (`scienceworld_bridge.py serve`) and is the program's `world` service
+  (`src/teacher/world-bridge.ts`); a case is accepted when the task's score reaches 100. Variations 0-2 of all 30
+  tasks (90 cases; variation 2 is `test`) have gold action paths from the package, and all 90 replay to 100.
+  Collection and verification need `SCIENCEWORLD_PYTHON` (default `vendor/scienceworld-venv`) and Java 11+.
+- ALFWorld is not integrated.
 
 ## Commands
 
