@@ -74,6 +74,10 @@ running out of turns also quiesces a call and was previously accepted.
 | `prontoqa_proof` | follow-up | logic | single call | A PrOntoQA proof as a chain of fact ids checked by a verifier; the counterpart lacks a rule the proof needs |
 | `prontoqa_search` | iterate | logic | single call | The same proofs found by forward search with `iterateOn` |
 | `kqapro_question` | nested | relational | single call | A KQA Pro question over a paged knowledge-base module holding what its gold program touches, plus decoys |
+| `proofwriter_question` | follow-up | logic | single call | Open-world true/false/unknown over a paged theory; the counterpart removes a fact the only proof uses |
+| `entailment_premises` | follow-up | logic | single call | Premise selection for a science hypothesis among distractors, checked by a verifier; the counterpart lacks a needed premise |
+| `anli_batch` | inline | logic | single call | Five αNLI stories, each judged in its own inline child |
+| `commaqa_question` | nested | relational | single call | A CommaQA question answered through a table specialist and a text specialist |
 | `child_sufficiency` | nested | logic | follow-up | A named child finds the first records sufficient, needs the detailed records, or neither suffices (blocked) |
 | `relational_multihop_qualifier` | nested | relational | single call | Paged two-hop graph with temporal qualifiers: base, divestment, a hire on a later page, a departure |
 | `relational_policy_inline` | inline | relational | single call | Exact candidate retrieval, then per-candidate policy judgments through a typed `review_each` callback |
@@ -124,6 +128,19 @@ read only the cache and keep source labels and formal annotations in the oracle 
   rows, so review this before training on them. Each question's gold program is translated into TypeScript
   over a paged `kb` API and run against the full knowledge base; only questions whose run reproduces the
   dataset answer are used, and the translated program is the reference. Validation questions are `test`.
+- **ProofWriter** (CC BY 4.0, V2020.12.3, open-world depth-5): deep questions with a single proof, paired with the
+  same theory missing a fact that proof uses (so the statement becomes unknown). Dev and test theories are `test`.
+- **EntailmentBank** (CC BY 4.0, task 2 with distractors, via the Hugging Face mirror
+  `ariesutiono/entailment-bank-v3`; the official copy is a Google Drive folder): select the premises of a
+  hypothesis, checked by a verifier that accepts the gold premises plus at most two others; paired with a needed
+  premise removed.
+- **αNLI** (Apache-2.0, data-only archive): five stories per case, each judged by its own inline child (which
+  hypothesis better explains the ending); one hypothesis pair per story.
+- **CommaQA** (Apache-2.0, explicit v1): each question is answered through two named specialists, a table expert
+  and a text expert, each holding half of a world's evidence; the decomposition's step answers are their
+  reference answers. The numeric variant is acquired but not yet adapted.
+- Sources whose maintainers publish no checksums had them recorded on first acquisition and pinned in
+  `acquire.mjs`. The manifest (`data/teacher/inline-curriculum/sources.manifest.json`) is committed.
 - An interactive world (ScienceWorld, ALFWorld, TextWorld) is not integrated yet; they are Python environments
   that need a process bridge. The actor domain uses the project's own simulators meanwhile.
 

@@ -45,6 +45,36 @@ export const SOURCES = {
     ],
     url: (revision, path) => `https://huggingface.co/datasets/drt/kqa_pro/resolve/${revision}/${path}`,
   },
+  // Checksums below were recorded on first acquisition (2026-09-24); the maintainers publish none.
+  proofwriter: {
+    name: 'ProofWriter', homepage: 'https://allenai.org/data/proofwriter', license: 'CC-BY-4.0',
+    release: 'V2020.12.3 (AI2 public data bucket)', revision: 'V2020.12.3',
+    files: [{ path: 'proofwriter-dataset-V2020.12.3.zip', split: 'mixed', sha256: 'bbc5694901e8306d0bd659aa1ad53ccfd02c201864f4b320ffa3777827d1fc26', extract: true }],
+    url: (revision, path) => `https://aristo-data-public.s3.amazonaws.com/proofwriter/${path}`,
+  },
+  entailmentbank: {
+    name: 'EntailmentBank', homepage: 'https://allenai.org/data/entailmentbank', license: 'CC-BY-4.0',
+    release: 'v3 via the Hugging Face mirror ariesutiono/entailment-bank-v3 (the official copy is a Google Drive folder)',
+    revision: '2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e',
+    files: [
+      { path: 'task2_train.jsonl', split: 'train', sha256: '36cdb362c24755b9640ed54e671fc9c72427b6c918f79429551a0800e9055a1b' },
+      { path: 'task2_dev.jsonl', split: 'validation', sha256: '3271adc67c65149780adbd3729f6b19404ff288e1849905fc16c1c22814a28f7' },
+      { path: 'task2_test.jsonl', split: 'test', sha256: '8bba350ef207f92f9d153e3b1651d90535586a157e444fe037756a8c1cb84f0f' },
+    ],
+    url: (revision, path) => `https://huggingface.co/datasets/ariesutiono/entailment-bank-v3/resolve/${revision}/${path}`,
+  },
+  anli: {
+    name: 'Abductive NLI (αNLI)', homepage: 'https://github.com/allenai/abductive-commonsense-reasoning', license: 'Apache-2.0',
+    release: 'anli.zip (data only), ICLR 2020 release', revision: 'iclr2020',
+    files: [{ path: 'anli.zip', split: 'mixed', sha256: '4e00551fd9ee04c92e823a8fe078e017c78b35739b36e8f9f122b4bf8a84b16b', extract: true }],
+    url: (revision, path) => `https://storage.googleapis.com/ai2-mosaic/public/abductive-commonsense-reasoning-iclr2020/${path}`,
+  },
+  commaqa: {
+    name: 'CommaQA', homepage: 'https://github.com/allenai/CommaQA', license: 'Apache-2.0',
+    release: 'v1 (AI2 public datasets bucket)', revision: 'v1',
+    files: [{ path: 'commaqa_explicit.zip', split: 'mixed', sha256: '5305ad2cdf471a358fbb3ef57e5b19024761e910e2a94def10bd19847f3314a0', extract: true }, { path: 'commaqa_numeric.zip', split: 'mixed', sha256: 'b296251c9cd9d63469a88cb44e1048f9050d8bc2866f9f3d87af4180a4ddfdbe', extract: true }],
+    url: (revision, path) => `https://ai2-public-datasets.s3.amazonaws.com/commaqa/${revision}/${path}`,
+  },
 };
 
 export const cachePath = (cache, source, revision, path) => join(cache, source, revision, path);

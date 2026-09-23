@@ -7,6 +7,7 @@ import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion
 import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
+import { anliBatch, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
 
@@ -49,4 +50,8 @@ export const FAMILIES = {
   prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },
   prontoqa_search: { build: prontoSearch, weight: 2, source: 'prontoqa' },
   kqapro_question: { build: kqaQuestion, weight: 2, source: 'kqapro' },
+  proofwriter_question: { build: proofwriterQuestion, weight: 2, source: 'proofwriter' },
+  entailment_premises: { build: entailmentPremises, weight: 2, source: 'entailmentbank' },
+  anli_batch: { build: anliBatch, weight: 2, source: 'anli' },
+  commaqa_question: { build: commaqaQuestion, weight: 2, source: 'commaqa' },
 };

@@ -34,11 +34,15 @@ for (const name of selected) {
       record.source_groups = [record.curriculum.split_group];
       if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;
     }
+    // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.
+    // Generated families must never repeat an id.
+    if (records.some(other => other.id === record.id)) {
+      if (family.source) continue;
+      throw new Error(`duplicate case id ${record.id}`);
+    }
     records.push(record);
   }
 }
-const ids = new Set();
-for (const record of records) { if (ids.has(record.id)) throw new Error(`duplicate case id ${record.id}`); ids.add(record.id); }
 
 const verification = await verifyCases(records, TOOLS_PROMPT);
 const failures = verification.filter(item => !item.ok);

@@ -1,0 +1,179 @@
+{
+  "version": "natlang.curriculum_sources/1",
+  "sources": {
+    "folio": {
+      "name": "FOLIO",
+      "homepage": "https://github.com/Yale-LILY/FOLIO",
+      "license": "MIT",
+      "release": "v0.0 (GitHub); v2 on Hugging Face is preferred once its terms are accepted",
+      "revision": "5d7bb84c7edab3fb358e057d2807f19cf5cf5e2d",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "data/v0.0/folio-train.jsonl",
+          "url": "https://raw.githubusercontent.com/Yale-LILY/FOLIO/5d7bb84c7edab3fb358e057d2807f19cf5cf5e2d/data/v0.0/folio-train.jsonl",
+          "revision": "5d7bb84c7edab3fb358e057d2807f19cf5cf5e2d",
+          "split": "train",
+          "sha256": "008d34b750d31fa7f014e953228adf4db81ec34bbda9e7f67c96c60438d1e6b2",
+          "bytes": 787496
+        },
+        {
+          "path": "data/v0.0/folio-validation.jsonl",
+          "url": "https://raw.githubusercontent.com/Yale-LILY/FOLIO/5d7bb84c7edab3fb358e057d2807f19cf5cf5e2d/data/v0.0/folio-validation.jsonl",
+          "revision": "5d7bb84c7edab3fb358e057d2807f19cf5cf5e2d",
+          "split": "validation",
+          "sha256": "6922c988ef10987bd6545568ee8e63e897af80994591fa20539767da58f8e3d1",
+          "bytes": 173456
+        }
+      ]
+    },
+    "prontoqa": {
+      "name": "PrOntoQA-OOD",
+      "homepage": "https://github.com/asaparov/prontoqa",
+      "license": "Apache-2.0",
+      "release": "generated_ood_data.zip as regenerated on 2024-10-17",
+      "revision": "0a6412b6fddf46324a1cb96e066dd7b3d89b87d6",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "generated_ood_data.zip",
+          "url": "https://raw.githubusercontent.com/asaparov/prontoqa/0a6412b6fddf46324a1cb96e066dd7b3d89b87d6/generated_ood_data.zip",
+          "revision": "0a6412b6fddf46324a1cb96e066dd7b3d89b87d6",
+          "split": "mixed",
+          "sha256": "0becba04e1e1eb80593709c6a3db2a46badd5587a29587ffaeb68ed5068c9de9",
+          "bytes": 5431791
+        }
+      ]
+    },
+    "kqapro": {
+      "name": "KQA Pro",
+      "homepage": "https://github.com/shijx12/KQAPro_Baselines",
+      "license": "CC-BY-SA-4.0",
+      "release": "Hugging Face mirror drt/kqa_pro (the maintainers' Tsinghua cloud link no longer serves the archive)",
+      "revision": "0b26da66cec9a4d1e42bde3560aeae9f89f6433b",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "kb.json",
+          "url": "https://huggingface.co/datasets/drt/kqa_pro/resolve/0b26da66cec9a4d1e42bde3560aeae9f89f6433b/kb.json",
+          "revision": "0b26da66cec9a4d1e42bde3560aeae9f89f6433b",
+          "split": "kb",
+          "sha256": "04da7408320c5cb7023c44372cce32846d56d369d8865d2e61a18c3956661a7c",
+          "bytes": 79341787
+        },
+        {
+          "path": "train.json",
+          "url": "https://huggingface.co/datasets/drt/kqa_pro/resolve/0b26da66cec9a4d1e42bde3560aeae9f89f6433b/train.json",
+          "revision": "0b26da66cec9a4d1e42bde3560aeae9f89f6433b",
+          "split": "train",
+          "sha256": "e9fbe4c1cdf207aac83ae0d5e4a1a53a9965a2b13b403de699ca6d5dae6e4510",
+          "bytes": 88119411
+        },
+        {
+          "path": "val.json",
+          "url": "https://huggingface.co/datasets/drt/kqa_pro/resolve/0b26da66cec9a4d1e42bde3560aeae9f89f6433b/val.json",
+          "revision": "0b26da66cec9a4d1e42bde3560aeae9f89f6433b",
+          "split": "validation",
+          "sha256": "b4aed6ab3d7ad071722064fe3bb02bc028cfbeb15da5f7115d57a1e2d198f3bb",
+          "bytes": 11047970
+        }
+      ]
+    },
+    "proofwriter": {
+      "name": "ProofWriter",
+      "homepage": "https://allenai.org/data/proofwriter",
+      "license": "CC-BY-4.0",
+      "release": "V2020.12.3 (AI2 public data bucket)",
+      "revision": "V2020.12.3",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "proofwriter-dataset-V2020.12.3.zip",
+          "url": "https://aristo-data-public.s3.amazonaws.com/proofwriter/proofwriter-dataset-V2020.12.3.zip",
+          "revision": "V2020.12.3",
+          "split": "mixed",
+          "sha256": "bbc5694901e8306d0bd659aa1ad53ccfd02c201864f4b320ffa3777827d1fc26",
+          "bytes": 214185889
+        }
+      ]
+    },
+    "entailmentbank": {
+      "name": "EntailmentBank",
+      "homepage": "https://allenai.org/data/entailmentbank",
+      "license": "CC-BY-4.0",
+      "release": "v3 via the Hugging Face mirror ariesutiono/entailment-bank-v3 (the official copy is a Google Drive folder)",
+      "revision": "2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "task2_train.jsonl",
+          "url": "https://huggingface.co/datasets/ariesutiono/entailment-bank-v3/resolve/2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e/task2_train.jsonl",
+          "revision": "2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e",
+          "split": "train",
+          "sha256": "36cdb362c24755b9640ed54e671fc9c72427b6c918f79429551a0800e9055a1b",
+          "bytes": 10867722
+        },
+        {
+          "path": "task2_dev.jsonl",
+          "url": "https://huggingface.co/datasets/ariesutiono/entailment-bank-v3/resolve/2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e/task2_dev.jsonl",
+          "revision": "2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e",
+          "split": "validation",
+          "sha256": "3271adc67c65149780adbd3729f6b19404ff288e1849905fc16c1c22814a28f7",
+          "bytes": 1537951
+        },
+        {
+          "path": "task2_test.jsonl",
+          "url": "https://huggingface.co/datasets/ariesutiono/entailment-bank-v3/resolve/2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e/task2_test.jsonl",
+          "revision": "2d1b8010d08c2e6ce17c4879447b9a3ce7531d5e",
+          "split": "test",
+          "sha256": "8bba350ef207f92f9d153e3b1651d90535586a157e444fe037756a8c1cb84f0f",
+          "bytes": 2872524
+        }
+      ]
+    },
+    "anli": {
+      "name": "Abductive NLI (αNLI)",
+      "homepage": "https://github.com/allenai/abductive-commonsense-reasoning",
+      "license": "Apache-2.0",
+      "release": "anli.zip (data only), ICLR 2020 release",
+      "revision": "iclr2020",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "anli.zip",
+          "url": "https://storage.googleapis.com/ai2-mosaic/public/abductive-commonsense-reasoning-iclr2020/anli.zip",
+          "revision": "iclr2020",
+          "split": "mixed",
+          "sha256": "4e00551fd9ee04c92e823a8fe078e017c78b35739b36e8f9f122b4bf8a84b16b",
+          "bytes": 5415361
+        }
+      ]
+    },
+    "commaqa": {
+      "name": "CommaQA",
+      "homepage": "https://github.com/allenai/CommaQA",
+      "license": "Apache-2.0",
+      "release": "v1 (AI2 public datasets bucket)",
+      "revision": "v1",
+      "acquired": "2026-09-23",
+      "files": [
+        {
+          "path": "commaqa_explicit.zip",
+          "url": "https://ai2-public-datasets.s3.amazonaws.com/commaqa/v1/commaqa_explicit.zip",
+          "revision": "v1",
+          "split": "mixed",
+          "sha256": "5305ad2cdf471a358fbb3ef57e5b19024761e910e2a94def10bd19847f3314a0",
+          "bytes": 16388254
+        },
+        {
+          "path": "commaqa_numeric.zip",
+          "url": "https://ai2-public-datasets.s3.amazonaws.com/commaqa/v1/commaqa_numeric.zip",
+          "revision": "v1",
+          "split": "mixed",
+          "sha256": "b296251c9cd9d63469a88cb44e1048f9050d8bc2866f9f3d87af4180a4ddfdbe",
+          "bytes": 12486571
+        }
+      ]
+    }
+  }
+}
