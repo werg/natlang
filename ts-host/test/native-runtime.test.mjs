@@ -176,6 +176,18 @@ test('scope eval preserves static type when copying an ambiguous value', async (
   assert.ok(lam.letTypes.state);
 });
 
+test('scope eval infers a numeric result from a sliced string reduction', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: string[]) => number',
+    instructions: 'Count adjacent changes.', args: { items: ['a', 'a', 'b', 'c'] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code:
+    'let result = items.slice(1).reduce((count, value, i) => count + (value !== items[i] ? 1 : 0), 0); result' });
+  assert.equal(result.kind, 'ok');
+  assert.equal(result.value, 2);
+  assert.equal(lam.letTypes.result.kind, 'prim');
+  assert.equal(lam.letTypes.result.name, 'number');
+});
+
 test('scope eval uses a checked helper return type for nested empty collections', async () => {
   const lam = buildPending({ $lambda: {
     type: '(values: string[]) => State', types: { State: '{ values: string[], done: string[] }' },

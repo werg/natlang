@@ -1084,6 +1084,8 @@ export class NativeSession {
 
   private scopeInitializerType(expression: string, locals: Record<string, Type>): Type | undefined {
     const source = expression.trim();
+    // A reduce result has the accumulator's type, which need not match its list.
+    if (/\.(?:reduce|reduceRight)\s*\(/.test(source)) return;
     const directCall = /^(?:await\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(source);
     if (directCall && Object.hasOwn(this.lam.codebase, directCall[1]!)) {
       const definition = this.lam.codebase[directCall[1]!] as Record<string, unknown>;
