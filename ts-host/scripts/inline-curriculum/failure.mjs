@@ -1,6 +1,6 @@
 // Failure-and-repair families: a rejected loop rewritten within the eval rules, a child that honestly cannot
 // answer, and an application event that must not be applied twice when only its view failed.
-import { blockedCall, curriculumCase, evalCall, failedCall, literal, nonceWords, Random, returnCall } from './lib.mjs';
+import { blockedCall, curriculumCase, evalCall, failedCall, literal, nlFile, nonceWords, Random, returnCall } from './lib.mjs';
 
 /**
  * A seeded eval pages through a ledger with a `while` loop, which eval rejects. With a page count the repair is a
@@ -163,5 +163,96 @@ return { revision: view2.revision, column: view2.cards.find(item => item.id === 
         instructions: `Move card ${card} to column "${column}" with board.commit_move, then render the board with board.render() and return the rendered revision and the card's column. The move must be applied exactly once.` },
       files: { 'move_card/board.ts': module },
       inputs: {}, expected: spec.expected, ...(spec.operation ? { operation: spec.operation } : {}) });
+  });
+}
+
+/**
+ * A seeded eval measures an org chart's depth with a recursive helper, which natlang code rejects; the repair
+ * walks the chart with an explicit work list (a counted loop over the known size, or iterateOn).
+ */
+export function recursionRewrite(seed, index) {
+  const rng = new Random(seed, `recursion:${index}`);
+  const shape = `org${index}`;
+  const build = depth => {
+    const people = nonceWords(rng, 14).map(word => word[0].toUpperCase() + word.slice(1));
+    const nodes = [{ name: people[0], manager: null }];
+    // A spine of the given depth, then the rest attached at random above it.
+    for (let i = 1; i < depth; i++) nodes.push({ name: people[i], manager: people[i - 1] });
+    for (let i = depth; i < people.length; i++) nodes.push({ name: people[i], manager: rng.pick(nodes.slice(0, Math.max(1, depth - 2))).name });
+    return rng.shuffle(nodes);
+  };
+  const depthOf = nodes => {
+    const manager = Object.fromEntries(nodes.map(n => [n.name, n.manager]));
+    return Math.max(...nodes.map(n => { let d = 1, m = manager[n.name]; while (m) { d++; m = manager[m]; } return d; }));
+  };
+  const seedCode = `const chart = org.people();
+const levels = (name: string): number => {
+  const reports = chart.filter(p => p.manager === name);
+  return reports.length ? 1 + Math.max(...reports.map(r => levels(r.name))) : 1;
+};
+levels(chart.find(p => p.manager === null)!.name)`;
+  return [['shallow', build(rng.int(3, 4))], ['deep', build(rng.int(6, 8))]].map(([variant, nodes]) => {
+    const expected = depthOf(nodes);
+    return curriculumCase({ family: 'recursion_rewrite', shape, variant, pairGroup: `recursion:${shape}`,
+      slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'avoid',
+      evidence: { world: [`depth ${expected}`], retrieved: ['the recursion rejection'], background: [] },
+      decisive: [{ marker: 'recursion is not allowed', source: 'error', note: 'natlang code rejects the recursive helper' }],
+      plausibleActions: ['retry the recursive helper', 'rewrite it with an explicit work list', 'guess the depth'],
+      minimumSequence: ['read the rejection', 'compute each person\'s chain length with a bounded loop'],
+      reference: { root: [evalCall(`const chart = org.people();
+const managerOf: Record<string, string | null> = {};
+for (const p of chart) managerOf[p.name] = p.manager;
+let deepest = 0;
+for (const p of chart) {
+  let length = 1;
+  let manager = managerOf[p.name];
+  for (let step = 0; step < chart.length && manager !== null; step++) { length++; manager = managerOf[manager]; }
+  deepest = Math.max(deepest, length);
+}
+return deepest;`), returnCall(expected)] },
+      root: { name: 'chart_depth', args: {}, returns: 'number',
+        instructions: 'How many levels does the organisation chart in org.people() have? The top person has no manager and is level 1; each report is one level below their manager.' },
+      files: { 'chart_depth/org.ts': `const PEOPLE = ${literal(nodes)};\n/** Everyone in the organisation and their manager (null for the top). */\nexport function people(): { name: string, manager: string | null }[] { return PEOPLE; }\n` },
+      inputs: {}, expected, failureSeed: { kind: 'compile', code: seedCode } });
+  });
+}
+
+/**
+ * A directory reducer applied to the one subfolder a semantic reading selects: the release notes say which
+ * package changed, and only that package's version is bumped (by the bump_version reducer, run on its folder).
+ */
+export function reducerApply(seed, index) {
+  const rng = new Random(seed, `reducer:${index}`);
+  const packages = rng.sample(['api', 'web', 'worker', 'cli', 'sdk'], 3);
+  const versions = Object.fromEntries(packages.map(name => [name, `1.${rng.int(0, 9)}.${rng.int(0, 9)}`]));
+  const bump = version => version.replace(/\d+$/, n => String(Number(n) + 1));
+  const manifest = name => `{\n  "name": "@acme/${name}",\n  "version": "${versions[name]}"\n}\n`;
+  const shape = `repo${index}`;
+  const changes = {
+    [packages[0]]: `Fixed a crash in @acme/${packages[0]} when the request body is empty. Documentation for @acme/${packages[1]} was proofread (no code change).`,
+    [packages[1]]: `@acme/${packages[1]} now retries failed uploads. The @acme/${packages[0]} README gained a diagram (no code change).`,
+  };
+  // Both variants' notes have the same size: a directory reducer's opening lists file sizes.
+  const width = Math.max(...Object.values(changes).map(text => text.length));
+  return Object.entries(changes).map(([changed, notes]) => {
+    const folderFiles = { 'RELEASE_NOTES.md': `# Unreleased\n\n${notes}\n${' '.repeat(width - notes.length)}`, ...Object.fromEntries(packages.map(name => [`packages/${name}/package.json`, manifest(name)])) };
+    const expectedFiles = { ...folderFiles, [`packages/${changed}/package.json`]: manifest(changed).replace(versions[changed], bump(versions[changed])) };
+    return curriculumCase({ family: 'reducer_apply', shape, variant: changed, pairGroup: `reducer:${shape}`,
+      slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'avoid', named: 'required',
+      evidence: { world: [notes], retrieved: ['the release notes'], background: [] },
+      decisive: [{ marker: notes.slice(0, 40), source: 'file', note: 'the notes say which package changed code' }],
+      plausibleActions: ['bump every package', 'bump the package named first', 'bump only the package with a code change'],
+      minimumSequence: ['read the release notes', 'decide which package changed code', 'apply bump_version to that package\'s folder'],
+      reference: { root: [['read_file', { path: 'RELEASE_NOTES.md' }], evalCall(`await folder.dir("packages/${changed}").apply(bump_version)`),
+        returnCall(`packages/${changed}`)],
+        children: [{ match: ['You are inside this call: bump_version'], calls: [
+          ['edit_file', { path: 'package.json', find: `"version": "${versions[changed]}"`, replace_with: `"version": "${bump(versions[changed])}"` }]],
+          value: bump(versions[changed]) }] },
+      root: { name: 'release', kind: 'directory-reducer', args: {}, returns: 'string',
+        instructions: 'Prepare the release: RELEASE_NOTES.md describes the unreleased changes. Bump the version of each package whose code changed, and only those, by applying bump_version to that package\'s folder (packages/<name>). Return the folder of each bumped package (for one package, just its path).' },
+      files: { 'release/bump_version.nl': nlFile({ kind: 'directory-reducer', args: {}, returns: 'string',
+        description: 'Bump the patch version in this package\'s package.json.',
+        instructions: 'Increase the last number of "version" in package.json by one, and return the new version.' }) },
+      folderFiles, expectedFiles, inputs: {}, expected: `packages/${changed}` });
   });
 }

@@ -4,7 +4,7 @@ import { childSufficiency, cohortPolicy, contractDiagnosis, folderCriteria, modu
 import { counterexampleRevision, idempotentRetry, inlineTypeRepair, lateBinding, liveInventory, parallelLabels, policyAfterMeasure } from './followup.mjs';
 import { folioBatch, folioEntailment, prontoProof, prontoSearch } from './sources.mjs';
 import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion } from './inline.mjs';
-import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
+import { childOptOut, eventRetry, loopRewrite, recursionRewrite, reducerApply } from './failure.mjs';
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
 import { textworldIterate, textworldQuest } from './textworld.mjs';
@@ -44,6 +44,8 @@ export const FAMILIES = {
   loop_rewrite: { build: loopRewrite, weight: 2 },
   child_opt_out: { build: childOptOut, weight: 1 },
   event_retry: { build: eventRetry, weight: 3 },
+  recursion_rewrite: { build: recursionRewrite, weight: 2 },
+  reducer_apply: { build: reducerApply, weight: 2 },
   iterate_frontier: { build: frontierSearch, weight: 1.5 },
   relational_late_argmax: { build: lateArgmax, weight: 1.5 },
   actor_greenhouse: { build: greenhouseControl, weight: 2 },

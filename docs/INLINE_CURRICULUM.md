@@ -107,6 +107,8 @@ running out of turns also quiesces a call and was previously accepted.
 | `inline_structured_extract` | inline | other | single call | Each receipt's total and currency need a typed record (`nl<Amount>`), then exact sums per currency |
 | `named_versus_inline` | nested / inline | other | single call | The folder's `urgency` function fits (a new inline function is gratuitous), or no helper fits (judge inline) |
 | `loop_rewrite` | failure | other | follow-up | A seeded `while` loop is rejected: rewrite as a counted loop (page count known) or with `iterateOn` (until an empty page) |
+| `recursion_rewrite` | failure | other | follow-up | A seeded recursive org-chart depth is rejected; rewrite with an explicit bounded walk |
+| `reducer_apply` | failure | other | follow-up | Release notes decide which package changed code; `bump_version` is applied to that package's folder only |
 | `child_opt_out` | nested | other | single call | One invoice states no total: its child reports blocked and the parent records null, never a computed figure |
 | `event_retry` | failure | actor | follow-up | A committed event whose view times out is rendered again, not re-applied; a rejected event is reported |
 | `iterate_frontier` | iterate | relational | single call | Breadth-first search link by link with `iterateOn`: near, far (past the progress review), or unreachable |
