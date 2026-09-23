@@ -159,7 +159,7 @@ export class NativeToolAgent {
   readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; systemPrompt?: string;
+      temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string);
       validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
       segmentTurns?: number | null; segmentMessages?: number | null } = {}) {
     if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
@@ -336,9 +336,11 @@ export class NativeToolAgent {
   }
 
   async run(session: NativeSession): Promise<string | void> {
+    const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
+      ? this.options.systemPrompt() : this.options.systemPrompt ?? EXPLICIT_TOOLS_PROMPT) +
+      (session.lam.subtype === 'directory-reducer' ? DIRECTORY_REDUCER_PROMPT : '');
     const openingMessages = (): Record<string, unknown>[] => [
-      { role: 'system', content: (this.options.systemPrompt ?? EXPLICIT_TOOLS_PROMPT) +
-        (session.lam.subtype === 'directory-reducer' ? DIRECTORY_REDUCER_PROMPT : '') },
+      { role: 'system', content: systemPrompt() },
       { role: 'user', content: this.scopeOpening(session) },
     ];
     const messages = openingMessages();
@@ -356,6 +358,7 @@ export class NativeToolAgent {
     };
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
+      messages[0]!.content = systemPrompt();
       const rollover = this.options.segmentTurns === undefined ? 6 : this.options.segmentTurns;
       const itemLimit = this.options.segmentMessages === undefined ? 12 : this.options.segmentMessages;
       if (((rollover !== null && segmentTurns >= rollover) ||

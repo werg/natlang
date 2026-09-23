@@ -1,21 +1,15 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import type { HostEvent } from './native/evaluator.js';
+export { applicationCapabilityPrompt } from './application-capabilities.js';
 
 const execute = promisify(execFile);
 const queues = new Map<string, Promise<unknown>>();
 const hash = (path: string) => existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
-
-/** Shared by live inference and corpus replay so capability instructions do not drift. */
-export function applicationCapabilityPrompt(capabilities: { allowModules: boolean; allowNetwork: boolean }): string {
-  return (capabilities.allowModules ?
-    '\nApplication packages are resolved from the configured app workspace. In eval, use await installPackages(["package@version"]) to update package.json and package-lock.json. Imports never install packages implicitly. Static imports and await import("package") are supported; imported bindings are local to the current eval, so re-import in later calls. Relative imports resolve from the application root. Package installation has external effects that are not rolled back on eval failure.\n' : '') +
-    (capabilities.allowNetwork ? '\nNetwork access is available through fetch; consume responses into portable values before returning. HTTP response handles are local to the current eval.\n' : '');
-}
 
 /** Application-scoped npm state. This runs with host authority, NOT in a security sandbox. */
 export class ApplicationPackages {
@@ -32,6 +26,31 @@ export class ApplicationPackages {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid application package.json');
     return value;
   }
+  private dependencyNames(): string[] {
+    const manifest = JSON.parse(readFileSync(join(this.workspace, 'package.json'), 'utf8')) as Record<string, unknown>;
+    const names = new Set<string>();
+    for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      const values = manifest[section];
+      if (values && typeof values === 'object' && !Array.isArray(values))
+        for (const name of Object.keys(values)) names.add(name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }
+  /** Directly declared dependencies with an installed package directory resolvable from this workspace. */
+  listAvailableDependencies(): string[] {
+    const available = (name: string) => {
+      let directory = this.workspace;
+      for (;;) {
+        if (existsSync(join(directory, 'node_modules', name))) return true;
+        const parent = dirname(directory);
+        if (parent === directory) return false;
+        directory = parent;
+      }
+    };
+    return this.dependencyNames().filter(available);
+  }
+  /** Direct package.json dependencies, including declarations that still need installation. */
+  listDeclaredDependencies(): string[] { return this.dependencyNames(); }
   async installPackages(specifiers: string[] = [], frozen = false): Promise<{ stdout: string; stderr: string; lockfileSha256: string | null }> {
     if (!Array.isArray(specifiers) || specifiers.some(s => typeof s !== 'string' || !s.trim() || s.startsWith('-')))
       throw new Error('Package installation requires package specifiers, not npm options');

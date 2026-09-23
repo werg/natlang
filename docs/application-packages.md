@@ -14,6 +14,10 @@ host.close();
 ```
 
 Construction requires an existing package.json. It does not install anything.
+The `natlang` CLI finds the nearest `package.json` above a program file (or the
+current directory for an anonymous instruction); `--workspace /absolute/app-root`
+selects one explicitly. A file outside any Node project keeps the package-free
+environment.
 `prepareDependencies()` respects the existing lockfile. `installPackages(specs)`
 runs npm install and updates package.json and package-lock.json. Concurrent installs
 in the same workspace are serialized within the host process. npm lifecycle scripts
@@ -40,6 +44,10 @@ are imported as modules, not misinterpreted as native function files.
 
 Imported bindings are temporary within one eval and are not serialized into the
 portable scope. Re-import in subsequent evals; the application installation persists.
+The model's system prompt lists installed direct dependencies from `package.json`
+(including scoped package names). The list refreshes between model turns after
+`installPackages` succeeds, and is also supplied to child source-workspace calls.
+Transitive or merely declared-but-not-installed packages are not advertised.
 HTTP Response handles have the same lifetime. Consume them before returning:
 
 ```ts

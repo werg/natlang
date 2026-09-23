@@ -73,12 +73,12 @@ test('dependency-bearing corpus replay imports installed local packages from the
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'corpus-replay-package-fixture', private: true, type: 'module' }));
   await mkdir(join(root, 'fixture-pkg'));
   await writeFile(join(root, 'fixture-pkg', 'package.json'), JSON.stringify({ name: 'corpus-replay-local', version: '1.0.0', type: 'module', exports: './index.js' }));
-  await writeFile(join(root, 'fixture-pkg', 'index.js'), 'export const triple = value => value * 3;\n');
+  await writeFile(join(root, 'fixture-pkg', 'index.js'), 'export class LocalBox { constructor(value) { this.value = value; } triple() { return this.value * 3; } }\n');
   await new ApplicationPackages(root).installPackages(['file:./fixture-pkg']);
   const record = task();
   record.source.path = 'src/main.ts';
-  record.function.imports = [{ specifier: 'corpus-replay-local', source: "import { triple } from 'corpus-replay-local';" }];
-  record.function.body = '{ return triple(x); }';
+  record.function.imports = [{ specifier: 'corpus-replay-local', source: "import { LocalBox } from 'corpus-replay-local';" }];
+  record.function.body = '{ const box = new LocalBox(x); return box.triple(); }';
   record.cases = [{ args: [3], expected: 9, outcome: 'return' }, { args: [4], expected: 12, outcome: 'return' }];
   const row = await replayIsolated(record, 0, 10000, { workspace: root });
   assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome));
@@ -88,6 +88,7 @@ test('dependency-bearing corpus replay imports installed local packages from the
   assert.ok(row.provenance.workspace_before.hashes['package-lock.json']);
   assert.ok(row.provenance.workspace_after.hashes['package-lock.json']);
   assert.ok(row.outcome.effects.host_events.some(event => event.operation === 'packages.import' && event.specifier === 'corpus-replay-local'));
+  assert.match(row.trajectory[0].context[0].content, /Importable application dependencies from package\.json:\n- "corpus-replay-local"/);
 });
 test('JSONL is bounded, atomic and refuses replacement', async () => {
   const dir=await mkdtemp(join(tmpdir(),'corpus-common-'));

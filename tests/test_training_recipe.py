@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import json
 
 import pytest
 
@@ -134,3 +136,75 @@ def test_existing_test_captures_are_inputs_to_observation(tmp_path):
     observer = stages_by_id(recipe(tmp_path, captures_override=[explicit]))['observe-source']
     assert str(explicit) in observer['inputs']
     assert str(captured) not in observer['inputs']
+
+
+def test_verified_unit_test_turns_enter_coding_stage(tmp_path):
+    turns = tmp_path / 'data/direct-code-2026-09-23/d3-transpose-pilot-final/native-replay.jsonl.turns.jsonl'
+    turns.parent.mkdir(parents=True)
+    turns.write_text('')
+    prepared = stages_by_id(recipe(tmp_path))['prepare']
+    assert str(turns) in prepared['inputs']
+    command = prepared['command']
+    assert command[command.index('--native') + 1:command.index('--split-records')] == [
+        '${run}/synthetic/verified-turns.jsonl', '${run}/synthetic/code-proposals.jsonl', str(turns),
+    ]
+    explicit = tmp_path / 'extra/native-turns.jsonl'
+    prepared = stages_by_id(recipe(tmp_path, verified_turns_override=[explicit]))['prepare']
+    assert str(explicit) in prepared['inputs']
+    assert str(turns) not in prepared['inputs']
+
+
+def test_workspace_unit_test_capture_runs_before_coding_and_uses_frozen_runtime(tmp_path):
+    workspace = tmp_path / 'app'
+    (workspace / 'src').mkdir(parents=True)
+    (workspace / 'test').mkdir()
+    (workspace / 'package.json').write_text('{"name":"app"}')
+    (workspace / 'src/main.mjs').write_text('export function main() { return 1 }')
+    (workspace / 'test/main.test.mjs').write_text('')
+    case = tmp_path / 'case.json'
+    case.write_text(json.dumps({'workspace': str(workspace), 'source': 'src/main.mjs',
+                                'test': 'test/main.test.mjs', 'functions': ['main', 'other'],
+                                'instruction': 'Return one.'}))
+    stages = stages_by_id(recipe(tmp_path, workspace_cases=[case]))
+    capture = stages['capture-unit-test-0000']
+    assert capture['command'][:2] == ['node', '${run}/runtime-host/scripts/code-corpus/workspace-pilot.mjs']
+    assert '--execute' in capture['command']
+    assert '--instruction' in capture['command']
+    assert capture['command'].count('--function') == 2
+    assert '${run}/runtime-host/frozen-runtime.json' in capture['inputs']
+    assert '${run}/captured-unit-tests/0000/native-replay.jsonl.turns.jsonl' in stages['prepare']['inputs']
+    assert list(stages).index('capture-unit-test-0000') < list(stages).index('prepare')
+
+
+def test_workspace_unit_test_case_cannot_escape_project(tmp_path):
+    workspace = tmp_path / 'app'
+    workspace.mkdir()
+    (workspace / 'package.json').write_text('{"name":"app"}')
+    outside = tmp_path / 'outside.mjs'
+    outside.write_text('')
+    case = tmp_path / 'case.json'
+    case.write_text(json.dumps({'workspace': str(workspace), 'source': '../outside.mjs',
+                                'test': '../outside.mjs', 'function': 'main'}))
+    with pytest.raises(ValueError, match='workspace-relative'):
+        recipe(tmp_path, workspace_cases=[case])
+
+
+def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
+    corpus = tmp_path / 'data/direct-code-2026-09-23/unit-test-corpus'
+    accepted = corpus / 'accepted'
+    accepted.mkdir(parents=True)
+    turns = accepted / 'native-replay.jsonl.turns.jsonl'
+    turns.write_text('{"id":"accepted"}\n')
+    (accepted / 'manifest.json').write_text(json.dumps({'native_replay': {
+        'accepted': 1, 'turns_sha256': hashlib.sha256(turns.read_bytes()).hexdigest(),
+    }}))
+    rejected = corpus / 'rejected'
+    rejected.mkdir()
+    (rejected / 'native-replay.jsonl.turns.jsonl').write_text('')
+    (rejected / 'manifest.json').write_text(json.dumps({'native_replay': {'accepted': 0}}))
+    prepared = stages_by_id(recipe(tmp_path))['prepare']
+    assert str(turns) in prepared['inputs']
+    assert str(rejected / 'native-replay.jsonl.turns.jsonl') not in prepared['inputs']
+    turns.write_text('tampered\n')
+    with pytest.raises(ValueError, match='do not match capture manifest'):
+        recipe(tmp_path)

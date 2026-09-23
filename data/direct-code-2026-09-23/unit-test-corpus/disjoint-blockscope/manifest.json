@@ -1,0 +1,119 @@
+{
+  "pilot": "d3-array/disjoint",
+  "functions": [
+    "disjoint"
+  ],
+  "workspace": "/home/werg/natlang/data/direct-code-2026-09-23/d3-array",
+  "revision": "be0ae0d2b36ab91b833294ad2cfc5d5905acbd0f",
+  "source": {
+    "path": "src/disjoint.js",
+    "sha256": "ced922da3b0d61353310fac8f3b32bb799a17ff343df2f24058b260ce9e3eecb"
+  },
+  "test": {
+    "path": "test/disjoint-test.js",
+    "sha256": "2c9b5b0f1c7dda2593c97b44ed80003ed8f50b1294dc25e3e8b9677763c76380"
+  },
+  "package": {
+    "name": "d3-array",
+    "version": "3.2.4",
+    "license": "ISC",
+    "manifest_sha256": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+    "lockfile_sha256": {
+      "package.json": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+      "package-lock.json": null,
+      "npm-shrinkwrap.json": null,
+      "yarn.lock": "d29a463fac2ef263cbb4ea5741af8611cdee5834f529be2ddd8794ae80f6b55a",
+      "pnpm-lock.yaml": null
+    }
+  },
+  "imports_by_function": {
+    "disjoint": [
+      {
+        "specifier": "internmap",
+        "source": "import {InternSet} from \"internmap\";"
+      }
+    ]
+  },
+  "preserved_paths": [
+    "src/array.js",
+    "src/ascending.js",
+    "src/bin.js",
+    "src/bisect.js",
+    "src/bisector.js",
+    "src/blur.js",
+    "src/constant.js",
+    "src/count.js",
+    "src/cross.js",
+    "src/cumsum.js",
+    "src/descending.js",
+    "src/deviation.js",
+    "src/difference.js",
+    "src/disjoint.js",
+    "src/every.js",
+    "src/extent.js",
+    "src/filter.js",
+    "src/fsum.js",
+    "src/greatest.js",
+    "src/greatestIndex.js",
+    "src/group.js",
+    "src/groupSort.js",
+    "src/identity.js",
+    "src/index.js",
+    "src/intersection.js",
+    "src/least.js",
+    "src/leastIndex.js",
+    "src/map.js",
+    "src/max.js",
+    "src/maxIndex.js",
+    "src/mean.js",
+    "src/median.js",
+    "src/merge.js",
+    "src/min.js",
+    "src/minIndex.js",
+    "src/mode.js",
+    "src/nice.js",
+    "src/number.js",
+    "src/pairs.js",
+    "src/permute.js",
+    "src/quantile.js",
+    "src/quickselect.js",
+    "src/range.js",
+    "src/rank.js",
+    "src/reduce.js",
+    "src/reverse.js",
+    "src/scan.js",
+    "src/shuffle.js",
+    "src/some.js",
+    "src/sort.js",
+    "src/subset.js",
+    "src/sum.js",
+    "src/superset.js",
+    "src/threshold/freedmanDiaconis.js",
+    "src/threshold/scott.js",
+    "src/threshold/sturges.js",
+    "src/ticks.js",
+    "src/transpose.js",
+    "src/union.js",
+    "src/variance.js",
+    "src/zip.js",
+    "test/disjoint-test.js"
+  ],
+  "execution": {
+    "command": "node --test --test-isolation=none --import ./.code-corpus-test-setup.mjs test/disjoint-test.js",
+    "exit_code": 0,
+    "captured_calls": 8,
+    "selected_function_captures": 8,
+    "portable": 3,
+    "nonportable": 5
+  },
+  "native_replay": {
+    "tasks": 1,
+    "trajectories": 3,
+    "accepted": 3,
+    "turns": 6,
+    "rejected": 0,
+    "rows_sha256": "608971904df73163c58237d1dfb60c90e6b358873a4d0a71e1f4690b75a77293",
+    "turns_sha256": "1b75f6aa55064ac3848c3c80d4b81496bebef56422eef03524ee3c22945c3e80"
+  },
+  "dependency_evidence": "package and lockfile hashes recorded; local workspace node_modules linked read-only by convention; source/test ran from a disposable copy"
+}

@@ -1,0 +1,119 @@
+{
+  "pilot": "d3-array/nice",
+  "functions": [
+    "nice"
+  ],
+  "workspace": "/home/werg/natlang/data/direct-code-2026-09-23/d3-array",
+  "revision": "be0ae0d2b36ab91b833294ad2cfc5d5905acbd0f",
+  "source": {
+    "path": "src/nice.js",
+    "sha256": "4e541dbb6222cac88cb7a9290164cf13b254855a589f824b3447e633d3be24b6"
+  },
+  "test": {
+    "path": "test/nice-test.js",
+    "sha256": "ef16663f97aa6b31921eefcccd60f6fbcfd7872caba0fc0668825d96a794a0df"
+  },
+  "package": {
+    "name": "d3-array",
+    "version": "3.2.4",
+    "license": "ISC",
+    "manifest_sha256": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+    "lockfile_sha256": {
+      "package.json": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+      "package-lock.json": null,
+      "npm-shrinkwrap.json": null,
+      "yarn.lock": "d29a463fac2ef263cbb4ea5741af8611cdee5834f529be2ddd8794ae80f6b55a",
+      "pnpm-lock.yaml": null
+    }
+  },
+  "imports_by_function": {
+    "nice": [
+      {
+        "specifier": "./ticks.js",
+        "source": "import {tickIncrement} from \"./ticks.js\";"
+      }
+    ]
+  },
+  "preserved_paths": [
+    "src/array.js",
+    "src/ascending.js",
+    "src/bin.js",
+    "src/bisect.js",
+    "src/bisector.js",
+    "src/blur.js",
+    "src/constant.js",
+    "src/count.js",
+    "src/cross.js",
+    "src/cumsum.js",
+    "src/descending.js",
+    "src/deviation.js",
+    "src/difference.js",
+    "src/disjoint.js",
+    "src/every.js",
+    "src/extent.js",
+    "src/filter.js",
+    "src/fsum.js",
+    "src/greatest.js",
+    "src/greatestIndex.js",
+    "src/group.js",
+    "src/groupSort.js",
+    "src/identity.js",
+    "src/index.js",
+    "src/intersection.js",
+    "src/least.js",
+    "src/leastIndex.js",
+    "src/map.js",
+    "src/max.js",
+    "src/maxIndex.js",
+    "src/mean.js",
+    "src/median.js",
+    "src/merge.js",
+    "src/min.js",
+    "src/minIndex.js",
+    "src/mode.js",
+    "src/nice.js",
+    "src/number.js",
+    "src/pairs.js",
+    "src/permute.js",
+    "src/quantile.js",
+    "src/quickselect.js",
+    "src/range.js",
+    "src/rank.js",
+    "src/reduce.js",
+    "src/reverse.js",
+    "src/scan.js",
+    "src/shuffle.js",
+    "src/some.js",
+    "src/sort.js",
+    "src/subset.js",
+    "src/sum.js",
+    "src/superset.js",
+    "src/threshold/freedmanDiaconis.js",
+    "src/threshold/scott.js",
+    "src/threshold/sturges.js",
+    "src/ticks.js",
+    "src/transpose.js",
+    "src/union.js",
+    "src/variance.js",
+    "src/zip.js",
+    "test/nice-test.js"
+  ],
+  "execution": {
+    "command": "node --test --test-isolation=none --import ./.code-corpus-test-setup.mjs test/nice-test.js",
+    "exit_code": 0,
+    "captured_calls": 29,
+    "selected_function_captures": 29,
+    "portable": 20,
+    "nonportable": 9
+  },
+  "native_replay": {
+    "tasks": 1,
+    "trajectories": 20,
+    "accepted": 20,
+    "turns": 40,
+    "rejected": 0,
+    "rows_sha256": "f371d00d62ae5d1dad43686ab4a6a3aefee40d8586537926d3a7d0dcb60d0977",
+    "turns_sha256": "b62456647b6f3b39e962a8e76430b7f6bb53424e807323efb05ae74a5113adfa"
+  },
+  "dependency_evidence": "package and lockfile hashes recorded; local workspace node_modules linked read-only by convention; source/test ran from a disposable copy"
+}

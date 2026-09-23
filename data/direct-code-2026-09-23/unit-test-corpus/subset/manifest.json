@@ -1,0 +1,119 @@
+{
+  "pilot": "d3-array/subset",
+  "functions": [
+    "subset"
+  ],
+  "workspace": "/home/werg/natlang/data/direct-code-2026-09-23/d3-array",
+  "revision": "be0ae0d2b36ab91b833294ad2cfc5d5905acbd0f",
+  "source": {
+    "path": "src/subset.js",
+    "sha256": "c814b3b9539a5f4d2c54ad0565c0848278e986e147d33fa664f06c18c2df8757"
+  },
+  "test": {
+    "path": "test/subset-test.js",
+    "sha256": "a70eafbd8c34dbb920f66544a4d1a55526940fc244b89d3a9d84011dd020514d"
+  },
+  "package": {
+    "name": "d3-array",
+    "version": "3.2.4",
+    "license": "ISC",
+    "manifest_sha256": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+    "lockfile_sha256": {
+      "package.json": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+      "package-lock.json": null,
+      "npm-shrinkwrap.json": null,
+      "yarn.lock": "d29a463fac2ef263cbb4ea5741af8611cdee5834f529be2ddd8794ae80f6b55a",
+      "pnpm-lock.yaml": null
+    }
+  },
+  "imports_by_function": {
+    "subset": [
+      {
+        "specifier": "./superset.js",
+        "source": "import superset from \"./superset.js\";"
+      }
+    ]
+  },
+  "preserved_paths": [
+    "src/array.js",
+    "src/ascending.js",
+    "src/bin.js",
+    "src/bisect.js",
+    "src/bisector.js",
+    "src/blur.js",
+    "src/constant.js",
+    "src/count.js",
+    "src/cross.js",
+    "src/cumsum.js",
+    "src/descending.js",
+    "src/deviation.js",
+    "src/difference.js",
+    "src/disjoint.js",
+    "src/every.js",
+    "src/extent.js",
+    "src/filter.js",
+    "src/fsum.js",
+    "src/greatest.js",
+    "src/greatestIndex.js",
+    "src/group.js",
+    "src/groupSort.js",
+    "src/identity.js",
+    "src/index.js",
+    "src/intersection.js",
+    "src/least.js",
+    "src/leastIndex.js",
+    "src/map.js",
+    "src/max.js",
+    "src/maxIndex.js",
+    "src/mean.js",
+    "src/median.js",
+    "src/merge.js",
+    "src/min.js",
+    "src/minIndex.js",
+    "src/mode.js",
+    "src/nice.js",
+    "src/number.js",
+    "src/pairs.js",
+    "src/permute.js",
+    "src/quantile.js",
+    "src/quickselect.js",
+    "src/range.js",
+    "src/rank.js",
+    "src/reduce.js",
+    "src/reverse.js",
+    "src/scan.js",
+    "src/shuffle.js",
+    "src/some.js",
+    "src/sort.js",
+    "src/subset.js",
+    "src/sum.js",
+    "src/superset.js",
+    "src/threshold/freedmanDiaconis.js",
+    "src/threshold/scott.js",
+    "src/threshold/sturges.js",
+    "src/ticks.js",
+    "src/transpose.js",
+    "src/union.js",
+    "src/variance.js",
+    "src/zip.js",
+    "test/subset-test.js"
+  ],
+  "execution": {
+    "command": "node --test --test-isolation=none --import ./.code-corpus-test-setup.mjs test/subset-test.js",
+    "exit_code": 0,
+    "captured_calls": 6,
+    "selected_function_captures": 6,
+    "portable": 3,
+    "nonportable": 3
+  },
+  "native_replay": {
+    "tasks": 1,
+    "trajectories": 3,
+    "accepted": 3,
+    "turns": 6,
+    "rejected": 0,
+    "rows_sha256": "3b3f7ae5fc36499ad435ecad8d206cfca90ddf9f5597f2476986d12aeff631fd",
+    "turns_sha256": "724f3937f7f01cbea23071fd64e9254a0c597d6e5e54032a2e8ebcec23f95279"
+  },
+  "dependency_evidence": "package and lockfile hashes recorded; local workspace node_modules linked read-only by convention; source/test ran from a disposable copy"
+}

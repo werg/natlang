@@ -76,6 +76,35 @@ test('workspace installPackages installs a local package into its package manife
   assert.equal(result.result, 42);
 });
 
+test('workspace dependencies resolve in dynamic and static eval imports and project TypeScript from any process cwd', async t => {
+  const path = await workspace(t);
+  const fixture = join(path, 'fixture-pkg');
+  await mkdir(fixture);
+  await writeFile(join(fixture, 'package.json'), JSON.stringify({ name: '@natlang/fixture', version: '1.0.0', type: 'module', exports: './index.js' }));
+  await writeFile(join(fixture, 'index.js'), 'export const answer = 42; export default value => value + 1;\n');
+  const environment = new TypeScriptEnvironment({ workspace: path });
+  t.after(() => environment.close());
+  await environment.installPackages(['file:./fixture-pkg']);
+  assert.deepEqual(environment.packages.listDeclaredDependencies(), ['@natlang/fixture']);
+  assert.deepEqual(environment.packages.listAvailableDependencies(), ['@natlang/fixture']);
+  const previousCwd = process.cwd();
+  process.chdir(tmpdir());
+  try {
+    const dynamic = await environment.executeAsync(evalRequest("const pkg = await import('@natlang/fixture'); return pkg.answer;"));
+    assert.equal(dynamic.result, 42);
+    const staticallyImported = await environment.executeAsync(evalRequest("import { answer as result } from '@natlang/fixture'; return result;"));
+    assert.equal(staticallyImported.result, 42);
+    const nested = join(path, 'src', 'nested');
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(nested, 'main.ts'), "import { answer } from '@natlang/fixture';\nexport default function main(): number { return answer; }\n");
+    const host = new NativeNatlangHost({ workspace: path });
+    t.after(() => host.close());
+    const result = await host.run({ source: { kind: 'file', path: join(nested, 'main.ts') } });
+    assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
+    assert.equal(result.value, 42);
+  } finally { process.chdir(previousCwd); }
+});
+
 test('native host runs an application file importing an installed local package', async t => {
   const path = await workspace(t);
   const fixture = join(path, 'fixture-pkg');

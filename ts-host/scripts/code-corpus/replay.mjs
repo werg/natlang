@@ -110,9 +110,12 @@ export async function replayCase(record, index = 0, options = {}) {
   if (record.function.helpers?.length) {
     const helpers = record.function.helpers.join('\n');
     if (record.function.helpers.length > 32 || helpers.length > 32000) throw new Error('sibling helper context exceeds replay budget');
-    // Block-local declarations preserve hoisting without persisting function handles.
-    code = '{\n'+helpers+'\n'+code+'\n}';
+    code = helpers+'\n'+code;
   }
+  // The captured body is one function invocation, not a persistent eval session.
+  // Keep its locals (including nonportable imported package objects) within an
+  // inner function; a bare block can collide with the eval scope's `result` slot.
+  code = 'return await (async () => {\n'+code+'\n})();';
   if (record.function.imports?.length) {
     if (!options.workspace) throw new Error('dependency-bearing replay requires --workspace');
     const base = dirname(resolve(options.workspace,record.source.path));
@@ -148,14 +151,15 @@ export async function replayCase(record, index = 0, options = {}) {
   const hostEvents = [];
   const environment = new TypeScriptEnvironment({ mode: 'fresh', workspace: options.workspace, network: options.network,
     observe: event => hostEvents.push(event) });
-  const agent = new NativeToolAgent(driver, { systemPrompt: EXPLICIT_TOOLS_PROMPT + applicationCapabilityPrompt(environment.scopeCapabilities), segmentTurns: 3, segmentMessages: 12, validationFeedback: 'caller' });
+  const agent = new NativeToolAgent(driver, { systemPrompt: EXPLICIT_TOOLS_PROMPT + applicationCapabilityPrompt(environment.scopeCapabilities,
+    environment.packages?.listAvailableDependencies()), segmentTurns: 3, segmentMessages: 12, validationFeedback: 'caller' });
   const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
   try {
     const result = await runtime.runRoot(root);
     const actual = dump(result.value);
     return { version: 'natlang.teacher_trajectory.native/1', id: program.id,
       task: {kind:'whole_program', program_ir:program, source_program_ids:[record.id]},
-      provenance: { source:record.source, code_task_sha256:digest(record), runtime:'typescript-native', tool_schema:'scope-eval-v1', projection:'captured-bound-arguments/body-v1',
+      provenance: { source:record.source, code_task_sha256:digest(record), runtime:'typescript-native', tool_schema:'scope-eval-v1', projection:'captured-bound-arguments/function-scope-v2',
         workspace_before: workspaceBefore, workspace_after: await workspaceSnapshot(options.workspace),
         capabilities: environment.scopeCapabilities, verification: 'observed-output-equality' },
       outcome: { status:result.outcome.kind, detail:result.outcome.detail, value:actual,

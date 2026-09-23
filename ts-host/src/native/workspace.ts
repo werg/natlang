@@ -1,8 +1,10 @@
 import { TypeScriptEnvironment } from '../environment.js';
+import { applicationCapabilityPrompt } from '../application-capabilities.js';
 import type { ModelTurnRequest, ModelTurn } from '../contracts.js';
 import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
 import { checkedDefinitions, type NativeDefinition } from './codebase.js';
 import { NativeRuntime } from './runtime.js';
+import { EXPLICIT_TOOLS_PROMPT } from './prompt.js';
 import { fitsType, formatType, parseType, TypeEnv } from './types.js';
 import { dump } from './values.js';
 
@@ -64,8 +66,10 @@ export class NativeSourceWorkspace {
         (parent?.options.maxEpisodes !== undefined && maxEpisodes > parent.options.maxEpisodes)))
       throw new RangeError('child episode budget must be positive and bounded by explicit parent budget');
     const graph = checkedDefinitions(this.definitions, name);
-    const agent = options.modelTurn ? new NativeToolAgent(options.modelTurn, { review: options.review }) : undefined;
     const environment = options.environment ?? new TypeScriptEnvironment();
+    const agent = options.modelTurn ? new NativeToolAgent(options.modelTurn, { review: options.review,
+      systemPrompt: () => EXPLICIT_TOOLS_PROMPT + applicationCapabilityPrompt(environment.scopeCapabilities,
+        environment.packages?.listAvailableDependencies()) }) : undefined;
     const runtime = new NativeRuntime({ environment, agent: agent ? session => agent.run(session) : undefined,
       capabilities: options.capabilities, maxEpisodes,
       maxDepth: options.maxDepth ?? parent?.options.maxDepth,

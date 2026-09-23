@@ -83,6 +83,68 @@ The real dependency-and-helper pilot can be reproduced with:
 node scripts/code-corpus/direct-pilot.mjs --execute --function transpose --output /absolute/new-pilot-dir
 ```
 
+For an already installed local project using Node's built-in test runner, capture
+documented functions from one source file directly with the adapter:
+
+```sh
+node scripts/code-corpus/workspace-pilot.mjs --execute \
+  --workspace /absolute/app-root --source src/math.ts --test test/math.test.ts \
+  --function sum --function mean --output /absolute/new-workspace-pilot
+```
+
+The adapter requires `package.json`, an existing `node_modules`, and a test file
+that runs with `node --test`. It instruments a disposable copy, runs that actual
+test file with Node test isolation disabled so capture state is shared, then
+replays the captured calls with the installed workspace and imports enabled.
+The output contains selected `tasks.jsonl`, runtime `captures.jsonl`, replay
+trajectories, materialized `.turns.jsonl`, a manifest with package/lock hashes,
+and the source/test plus their relative import closure under `upstream/`.
+Package dependencies are identified by the preserved package manifests and
+lockfile hashes; node_modules itself is not copied. This adapter supports a
+single selected source module and Node's built-in test runner; it does not claim
+support for Jest, Vitest, arbitrary test commands, or source files outside that
+module. Review trusted project code before opting into `--execute`; test capture
+and native replay are not security sandboxes.
+
+The training recipe accepts repeatable `--workspace-case` JSON specs. Each spec
+selects one source/test pair and one or more functions from that source; use
+multiple case files for additional source or test files. The recipe freezes the runtime first, runs capture stages before recipe
+preparation, and adds each generated verified-turn file to preparation inputs.
+For example, save this as `/absolute/cases/double.json`:
+
+```json
+{
+  "workspace": "/absolute/app-root",
+  "source": "src/math.ts",
+  "test": "test/math.test.ts",
+  "functions": ["double", "mean"],
+  "instruction": "Return twice the input.",
+  "license": "MIT"
+}
+```
+
+For a single function, `"function": "double"` is also accepted. Then pass the
+spec to recipe creation (repeat the flag for additional source/test pairs):
+
+```sh
+python scripts/create_training_pipeline.py --output /absolute/recipe.json \
+  --workspace-case /absolute/cases/math.json
+```
+
+The workspace must be local, contain `package.json` and installed `node_modules`,
+and the selected tests must run under Node's built-in test runner. Source and test
+paths must stay inside the workspace. Capture records actual calls made by those
+tests; the pipeline does not synthesize extra cases or claim more verified
+examples than the replay outputs admit. Its verified counts are available in
+each `captured-unit-tests/NNNN/manifest.json` and `.turns.jsonl` artifact.
+The default coding recipe also admits the retained execution-verified pilots and
+accepted `data/direct-code-2026-09-23/unit-test-corpus/*` captures. It verifies
+each new capture's turns hash against its manifest and skips zero-accepted runs.
+At the current retained snapshot, the three original final pilots contribute
+70 turns and eight additional d3-array functions contribute 128 turns (64 accepted
+test inputs), for 198 distinct prepared coding decisions before fresh synthetic
+generation. These are eleven source functions, not 198 independent implementations.
+
 The measured `d3-transpose-pilot-final` has 22 portable upstream-test captures,
 7 accepted distinct native cases and 14 materialized turns. Combined with the
 chunk and ascending pilots, that is 70 verified turns across three functions.

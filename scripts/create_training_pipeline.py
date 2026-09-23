@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Create the single production curriculum recipe; does not launch training."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -11,7 +12,7 @@ from run_training_pipeline import atomic_json
 
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,
            source_limit=25000, synthetic=1000, teacher_programs=1000,
-           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None):
+           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -54,6 +55,23 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         observation_inputs = inventories
     captures = ([str(Path(path).resolve()) for path in captures_override] if captures_override is not None else
                 sorted(str(path) for path in (repo / 'data/direct-code-2026-09-23').glob('*/captures.jsonl')))
+    proven_pilots = (
+        repo / 'data/direct-code-2026-09-23/chunk-native-final.jsonl.turns.jsonl',
+        repo / 'data/direct-code-2026-09-23/d3-pilot/native-replay.jsonl.turns.jsonl',
+        repo / 'data/direct-code-2026-09-23/d3-transpose-pilot-final/native-replay.jsonl.turns.jsonl',
+    )
+    new_unit_turns = []
+    for manifest_path in sorted((repo / 'data/direct-code-2026-09-23/unit-test-corpus').glob('*/manifest.json')):
+        manifest = json.loads(manifest_path.read_text())
+        turns = manifest_path.parent / 'native-replay.jsonl.turns.jsonl'
+        replay = manifest.get('native_replay', {})
+        if replay.get('accepted', 0) < 1 or not turns.is_file():
+            continue
+        if hashlib.sha256(turns.read_bytes()).hexdigest() != replay.get('turns_sha256'):
+            raise ValueError(f'unit-test turns do not match capture manifest: {turns}')
+        new_unit_turns.append(turns)
+    verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else
+                      [str(path) for path in (*proven_pilots, *new_unit_turns) if path.exists()])
     add("observe-source", ["node", f"{p}/ts-host/scripts/code-corpus/source-cases.mjs", "--output", f"{r}/source-observations.jsonl", "--execute", "--limit", "5000",
                            *[arg for path in observation_inputs for arg in ("--input", path)],
                            *[arg for path in captures for arg in ('--captures', path)]],
@@ -63,12 +81,43 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         [f"{p}/ts-host/scripts/code-corpus/curriculum.mjs", f"{p}/ts-host/scripts/code-corpus/replay.mjs", f"{p}/ts-host/dist/native/runtime.js", f"{r}/source-observations.jsonl"],
         [f"{r}/synthetic/manifest.json", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/synthetic/code-proposals.jsonl",
          f'{r}/synthetic/projection-rejected.jsonl', f'{r}/synthetic/replay-errors.jsonl'])
+    for index, case_file in enumerate(workspace_cases):
+        case_path = Path(case_file).resolve()
+        case = json.loads(case_path.read_text())
+        required = ('workspace', 'source', 'test')
+        if not isinstance(case, dict) or any(not isinstance(case.get(key), str) or not case[key] for key in required):
+            raise ValueError(f'unit-test case {case_path} needs nonempty workspace, source, test strings')
+        functions = case.get('functions', [case.get('function')])
+        if not isinstance(functions, list) or not functions or any(not isinstance(name, str) or not name for name in functions):
+            raise ValueError(f'unit-test case {case_path} needs a function or nonempty functions list')
+        workspace_setting = Path(case['workspace'])
+        workspace = (workspace_setting if workspace_setting.is_absolute() else case_path.parent / workspace_setting).resolve()
+        if not workspace.is_dir():
+            raise ValueError(f'unit-test workspace does not exist: {workspace}')
+        for key in ('source', 'test'):
+            target = (workspace / case[key]).resolve()
+            if not target.is_relative_to(workspace) or not target.is_file():
+                raise ValueError(f'unit-test {key} must be an existing workspace-relative file: {case[key]}')
+        case_out = f'{r}/captured-unit-tests/{index:04d}'
+        command = ['node', f'{p}/ts-host/scripts/code-corpus/workspace-pilot.mjs', '--execute',
+                   '--workspace', str(workspace), '--source', case['source'], '--test', case['test'],
+                   *[arg for name in functions for arg in ('--function', name)], '--output', case_out]
+        for option in ('license', 'instruction'):
+            if case.get(option):
+                command += [f'--{option}', case[option]]
+        add(f'capture-unit-test-{index:04d}', command,
+            [str(case_path), str(workspace / 'package.json'), str(workspace / case['source']),
+             str(workspace / case['test']), *[str(workspace / name) for name in ('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml') if (workspace / name).exists()],
+             f'{p}/ts-host/scripts/code-corpus/workspace-pilot.mjs', f'{p}/ts-host/scripts/code-corpus/replay.mjs'],
+            [f'{case_out}/manifest.json', f'{case_out}/native-replay.jsonl.turns.jsonl'])
+        verified_turns.append(f'{case_out}/native-replay.jsonl.turns.jsonl')
     add("teacher-seeds", ["node", f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl", str(teacher_programs), "42"],
         [f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{p}/ts-host/dist/teacher/synthetic-generator.js", f"{r}/synthetic/teacher-programs.jsonl"],
         [f"{r}/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl.manifest.jsonl"])
     add("prepare", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared", "--code", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl",
-                       "--native", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", "--split-records", f"{r}/teacher-programs.jsonl"]),
-        [f"{p}/scripts/prepare_training_stages.py", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", f"{r}/teacher-programs.jsonl"],
+                       "--native", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns,
+                       "--split-records", f"{r}/teacher-programs.jsonl"]),
+        [f"{p}/scripts/prepare_training_stages.py", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns, f"{r}/teacher-programs.jsonl"],
         [f"{r}/prepared/manifest.json", f"{r}/prepared/general.jsonl", f"{r}/prepared/coding.jsonl", f"{r}/prepared/splits.json"])
     model_args = ["--model", model] + (["--revision", revision] if revision else [])
     train_model_args = ["--model", model] + (["--model-revision", revision] if revision else [])
@@ -121,7 +170,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     # All source observation/replay/teacher work uses one frozen interpreter build.
     frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher"}
     for stage in stages:
-        if stage["id"] in frozen_stages:
+        if stage["id"] in frozen_stages or stage['id'].startswith('capture-unit-test-'):
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
@@ -144,6 +193,8 @@ def main():
     parser.add_argument("--init-adapter", type=Path)
     parser.add_argument("--inventory", action="append", type=Path, help="explicit existing repository task file (repeatable); defaults to collected repository snapshots")
     parser.add_argument('--captures', action='append', type=Path, help='captured upstream-test calls (repeatable); defaults to existing repository capture snapshots')
+    parser.add_argument('--verified-turns', action='append', type=Path, help='execution-verified native turns from unit-test replay (repeatable); defaults to existing repository pilot snapshots')
+    parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
     parser.add_argument("--min-free-vram-mib", type=int, default=2048, help="GPU 0 availability gate; raise this for larger models")
     parser.add_argument("--train-arg", action="append", default=[], help="repeat as --train-arg=--load-in-4bit or --train-arg=VALUE to pass trainer options")
     args = parser.parse_args()
@@ -151,7 +202,8 @@ def main():
                     source_limit=args.source_limit, synthetic=args.synthetic, teacher_programs=args.teacher_programs,
                     teacher_model=args.teacher_model, teacher_server=args.teacher_server, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
-                    inventories_override=args.inventory, captures_override=args.captures)
+                    inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
+                    workspace_cases=args.workspace_case)
     if args.output.exists():
         if json.loads(args.output.read_text()) != config:
             raise ValueError("refusing to replace a different recipe")

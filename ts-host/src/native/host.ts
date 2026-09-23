@@ -77,7 +77,8 @@ export class NativeNatlangHost {
         catch (error) { return { kind: 'failed', detail: error instanceof Error ? error.message : String(error) }; }
       } };
       const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
-        systemPrompt: TOOLS_PROMPT + applicationCapabilityPrompt(this.environment.scopeCapabilities),
+        systemPrompt: () => TOOLS_PROMPT + applicationCapabilityPrompt(this.environment.scopeCapabilities,
+          this.environment.packages?.listAvailableDependencies()),
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
         segmentTurns: request.options?.model?.segment_turns,

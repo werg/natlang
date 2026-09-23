@@ -371,6 +371,17 @@ async function runLocalApplication(parsed: Parsed, value: string): Promise<numbe
   return executeTarget(parsed, installed, archive.manifest, target, true);
 }
 
+/** Nearest Node project owns imports for a source file or cwd instruction. */
+export function findPackageWorkspace(start: string): string | undefined {
+  let directory = resolve(start);
+  for (;;) {
+    if (existsSync(join(directory, 'package.json'))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
 async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   const path = resolve(value);
   const inputsPath = option(parsed, '--inputs');
@@ -378,7 +389,7 @@ async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   if (inputs !== undefined && (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)))
     throw new Error('--inputs must contain a JSON object');
   const timeoutMs = numericOption(parsed, '--timeout', 1), seed = numericOption(parsed, '--seed', 0);
-  const host = new NativeNatlangHost();
+  const host = new NativeNatlangHost({ workspace: option(parsed, '--workspace') ?? findPackageWorkspace(dirname(path)) });
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
     const preparation = model.prepare();
@@ -396,10 +407,10 @@ async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
 }
 
 async function runAnonymousInstruction(parsed: Parsed, instruction: string): Promise<number> {
-  acceptOptions(parsed, ['--profile', '--trace', '--json', '--timeout', '--seed', '--yes']);
+  acceptOptions(parsed, ['--profile', '--trace', '--json', '--timeout', '--seed', '--yes', '--workspace']);
   noTrailingArguments(parsed);
   const timeoutMs = numericOption(parsed, '--timeout', 1), seed = numericOption(parsed, '--seed', 0);
-  const host = new NativeNatlangHost();
+  const host = new NativeNatlangHost({ workspace: option(parsed, '--workspace') ?? findPackageWorkspace(process.cwd()) });
   const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
   try {
     const preparation = model.prepare();
@@ -422,7 +433,7 @@ async function runAnonymousInstruction(parsed: Parsed, instruction: string): Pro
   } finally { host.close(); await model.close(); }
 }
 
-const programOptions = ['--inputs', '--profile', '--trace', '--json', '--timeout', '--seed', '--yes'];
+const programOptions = ['--inputs', '--profile', '--trace', '--json', '--timeout', '--seed', '--yes', '--workspace'];
 const applicationOptions = ['--root', '--target', '--profile', '--workspace', '--state', '--traces',
   '--store', '--plain', '--no-color', '--yes'];
 
