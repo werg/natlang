@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Select a balanced shard from verified case pools.
-// node scripts/inline-curriculum/select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S] [--split train|test] [--track interpreter|authoring]
+// node scripts/inline-curriculum/select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S] [--split train|test] [--track interpreter|authoring] [--no-balance]
 // Counterfactual groups stay whole. Domains and slices are filled up to the plan's shares of the shard size
 // (by default the largest shard whose shares all stay within three points of target), preferring the categories
 // with the most room left and spreading picks across families.
@@ -10,7 +10,7 @@ import { DOMAIN_TARGETS, SLICE_TARGETS } from '../../dist/teacher/curriculum.js'
 import { Random } from './lib.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  out: { type: 'string' }, size: { type: 'string' }, seed: { type: 'string', default: '1' }, split: { type: 'string' }, track: { type: 'string', default: 'interpreter' } } });
+  out: { type: 'string' }, size: { type: 'string' }, seed: { type: 'string', default: '1' }, split: { type: 'string' }, track: { type: 'string', default: 'interpreter' }, 'no-balance': { type: 'boolean', default: false } } });
 if (!positionals.length || !values.out) throw new Error('usage: select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S]');
 
 const records = positionals.flatMap(path => readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)));
@@ -69,8 +69,9 @@ function fill(size) {
 const near = list => list.length > 0 && ['domain', 'slice'].every(axis => Object.entries(targets[axis])
   .every(([key, share]) => Math.abs((count(list, axis)[key] ?? 0) / list.length - share) <= 0.03));
 let size = values.size ? Number(values.size) : bound;
-let chosen = fill(size);
-while (!values.size && !near(chosen) && size > 10) chosen = fill(size = Math.floor(size * 0.98));
+// --no-balance keeps every case (small held-out or authoring pools, whose shares cannot follow the targets).
+let chosen = values['no-balance'] ? unique : fill(size);
+while (!values['no-balance'] && !values.size && !near(chosen) && size > 10) chosen = fill(size = Math.floor(size * 0.98));
 writeFileSync(values.out, chosen.map(record => JSON.stringify(record)).join('\n') + '\n');
 const shares = axis => Object.fromEntries(Object.entries(count(chosen, axis)).map(([key, n]) => [key, `${(n / chosen.length * 100).toFixed(1)}% (target ${(targets[axis][key] * 100).toFixed(0)}%)`]));
 console.log(JSON.stringify({ pool: unique.length, bound, selected: chosen.length, families: new Set(chosen.map(r => r.curriculum.family)).size,

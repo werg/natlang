@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Build and verify a shard of the inline-natlang curriculum.
-// node scripts/inline-curriculum/build.mjs --seed 1 --shapes 4 [--start 0] [--families a,b] --out ../data/teacher/inline-curriculum/s1.ir.jsonl
+// node scripts/inline-curriculum/build.mjs --seed 1 --shapes 4 [--start 0] [--families a,b] [--split test] --out ../data/teacher/inline-curriculum/s1.ir.jsonl
 // Every case is validated, its decisive observations are checked to be absent from its opening, its
 // reference solution is replayed through the collector's execution path and admitted, and every
 // counterfactual group is checked to share one opening with differing results. A shard is written
@@ -14,7 +14,9 @@ import { FAMILIES } from './families.mjs';
 
 const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
   start: { type: 'string', default: '0' },
-  families: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false } } });
+  families: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
+  // Held-out generated problems: --split test marks this build's synthetic cases as test (use a seed no training build uses).
+  split: { type: 'string', default: 'train' } } });
 if (!values.out) throw new Error('--out FILE is required');
 const seed = Number(values.seed), shapes = Number(values.shapes), start = Number(values.start);
 const selected = values.families ? values.families.split(',') : Object.keys(FAMILIES);
@@ -30,6 +32,7 @@ for (const name of selected) {
     record.id = record.id.replace('inline-curriculum:', `inline-curriculum:${tag}:`);
     record.source_ids = [record.id];
     if (!family.source) {
+      record.split = values.split;
       record.curriculum.split_group = `s${seed}:${record.curriculum.split_group}`;
       record.source_groups = [record.curriculum.split_group];
       if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;

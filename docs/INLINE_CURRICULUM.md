@@ -190,10 +190,13 @@ node scripts/inline-curriculum/admit.mjs ../runs/ic.results.jsonl --ledger ../ru
 ```
 
 `--shapes` scales every family by its weight; `--start` offsets the shape index so shards are disjoint.
-`select.mjs POOL.jsonl --out SHARD.jsonl [--split train|test]` picks the largest shard whose domain and slice
+`build.mjs --split test` marks a build's synthetic cases as held out (use a seed no training build uses; sources keep
+their original splits). `select.mjs POOL.jsonl --out SHARD.jsonl [--split train|test] [--track authoring] [--no-balance]` picks the largest shard whose domain and slice
 shares are all within three points of the plan's targets, keeping counterfactual groups whole and spreading
 picks across families: from a 2,580-case pool (seed 102, `--shapes 20`, about 30 s) it selects 1,455 cases
-from all 39 families, the largest family at 7%.
+from all 39 families, the largest family at 7%. With 53 families, the seed-102 pool (`--shapes 20`, 3,268 cases,
+47 s) gives a 1,702-case train shard over 48 families; a seed-900 held-out build plus the sources' test splits
+gives a 310-case test shard; the authoring track has 100 cases.
 Synthetic case ids and groups carry the seed; source cases are grouped by source story across shards.
 Admitted rows are ordinary collector rows and go through `materialize-native-teacher.mjs` unchanged.
 
