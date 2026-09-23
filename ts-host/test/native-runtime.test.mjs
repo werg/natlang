@@ -39,6 +39,17 @@ test('a compatible result assignment supplies the function value without an extr
   assert.deepEqual(lam.return, ['a', 'b']);
 });
 
+test('native collection temporaries can support a portable result within one eval', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: string[]) => string[]',
+    instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const outcome = await session.applyAsync('eval', { code:
+    'const seen = new Set<string>(); const result = items.filter(x => !seen.has(x) && Boolean(seen.add(x))); result' });
+  assert.equal(outcome.kind, 'ok');
+  assert.deepEqual(outcome.value, ['a', 'b']);
+  assert.equal(Object.hasOwn(lam.let, 'seen'), false);
+});
+
 test('native reads may inspect read-only inputs', () => {
   const lam = buildPending({ $lambda: { type: '(state: { head: string }) => string',
     instructions: 'Inspect the state.', args: { state: { head: 'manifest-1' } } } });

@@ -253,9 +253,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
         let initial = declaration.initializer;
         while (initial && (ts.isAwaitExpression(initial) || ts.isParenthesizedExpression(initial) || ts.isPropertyAccessExpression(initial))) initial = initial.expression;
-        const transient = initial && ts.isCallExpression(initial) &&
+        const transient = !!(initial && ((ts.isCallExpression(initial) &&
           ((options.allowModules && initial.expression.kind === ts.SyntaxKind.ImportKeyword) ||
-           (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'));
+           (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'))) ||
+          (ts.isNewExpression(initial) && ts.isIdentifier(initial.expression) &&
+           ['Set', 'Map', 'Date', 'RegExp'].includes(initial.expression.text))));
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
           ...(transient ? { transient: true } : {}),
           ...(declaration.type && portableAnnotation(declaration.type, file) ?
