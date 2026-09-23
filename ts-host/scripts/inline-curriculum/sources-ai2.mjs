@@ -195,9 +195,9 @@ return Object.fromEntries(stories.map((story, i) => [story.id, choices[i]]));`),
 
 // CommaQA --------------------------------------------------------------------------------------------------
 
-function commaqaRows() {
-  return once('commaqa', () => {
-    const dir = findDir(cachePath(CACHE, 'commaqa', SOURCES.commaqa.revision, 'commaqa_explicit'), 'train.json');
+function commaqaRows(variant = 'explicit') {
+  return once(`commaqa:${variant}`, () => {
+    const dir = findDir(cachePath(CACHE, 'commaqa', SOURCES.commaqa.revision, `commaqa_${variant}`), 'train.json');
     if (!dir) throw missing('commaqa');
     const rows = [];
     for (const [name, split] of [['train', 'train'], ['dev', 'test'], ['test', 'test']]) {
@@ -218,36 +218,57 @@ function commaqaRows() {
  * tables, the other the text passages. The decomposition's per-step answers are the specialists' reference
  * answers; the model never sees the decomposition.
  */
-export function commaqaQuestion(seed, index) {
-  const rows = commaqaRows();
+export function commaqaQuestion(seed, index, variant = 'explicit') {
+  const rows = commaqaRows(variant);
   const row = rows[(index * 7919) % rows.length];
-  const rng = new Random(seed, `commaqa:${row.id}`);
+  const rng = new Random(seed, `commaqa:${variant}:${row.id}`);
   const steps = row.qa.decomposition;
   const results = [];
   const lines = [], children = [];
+  const show = value => Array.isArray(value) ? value.map(item => Array.isArray(item) ? item[0] : item).join(' and ') : String(value);
   steps.forEach((step, i) => {
-    // `#k` refers to an earlier step's answers.
-    const question = step.q.replace(/#(\d+)/g, (_, k) => results[Number(k) - 1].join(' and '));
-    const expert = step.m === 'table' ? 'table_expert' : 'text_expert';
-    lines.push(`const step${i + 1} = await ${expert}(${JSON.stringify(question)});`);
-    children.push({ match: [`You are inside this call: ${expert}`, JSON.stringify(question)], value: step.a });
+    const expert = step.m === 'table' ? 'table_expert' : step.m === 'text' ? 'text_expert' : null;
+    if (!expert) {
+      // Arithmetic (min, max, difference, threshold filters) is the root's own work; its result feeds later steps.
+      lines.push(`// ${step.q.replace(/#(\d+)/g, (_, k) => `step${k}`)}\nconst step${i + 1} = ${JSON.stringify(step.a)};`);
+    } else if (step.op === 'project') {
+      // The same question for each item of an earlier step; the answer pairs each item with its values.
+      const ref = Number(/#(\d+)/.exec(step.q)[1]);
+      lines.push(`const step${i + 1}: [string, string[]][] = [];`);
+      for (const [item, values] of step.a) {
+        const question = step.q.replace(/#\d+/, item);
+        lines.push(`step${i + 1}.push([${JSON.stringify(item)}, await ${expert}(${JSON.stringify(question)})]);`);
+        children.push({ match: [`You are inside this call: ${expert}`, JSON.stringify(question)], value: values });
+      }
+      void ref;
+    } else {
+      // `#k` refers to an earlier step's answers.
+      const question = step.q.replace(/#(\d+)/g, (_, k) => show(results[Number(k) - 1]));
+      lines.push(`const step${i + 1} = await ${expert}(${JSON.stringify(question)});`);
+      children.push({ match: [`You are inside this call: ${expert}`, JSON.stringify(question)], value: step.a });
+    }
     results.push(step.a);
   });
-  const answer = [...row.qa.answer].sort();
-  lines.push(`return [...new Set(step${steps.length})].sort();`);
+  const numeric = typeof row.qa.answer === 'number';
+  const answer = numeric ? Math.round(row.qa.answer * 10) / 10 : [...row.qa.answer].map(String).sort();
+  lines.push(numeric ? `return ${answer};` : `return [...new Set(step${steps.length} as string[])].sort();`);
   const store = (facts, what) => factStore(rng.shuffle(facts).map((text, i) => ({ id: `${what[0].toUpperCase()}${i + 1}`, text })), `The ${what}.`);
   const expertFile = (what, source) => nlFile({ args: { question: 'string' }, returns: 'string[]',
     description: `Answer a question from the ${what} alone.`,
     instructions: `Answer question using only the ${what} in ${source}.page(n). Return every name that answers it (an empty list when none does).` });
-  return [curriculumCase({ family: 'commaqa_question', shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${row.world}`,
+  const family = variant === 'explicit' ? 'commaqa_question' : 'commaqa_numeric';
+  return [curriculumCase({ family, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
     split: row.split, slice: 'nested_scoped', domain: 'relational', mode: 'single_call', inline: 'avoid', named: 'required',
     worldSemantics: 'closed_world',
-    evidence: { world: row.qa.facts_used, retrieved: [], background: [`source: CommaQA explicit ${SOURCES.commaqa.revision} ${row.id}`,
-      `decomposition: ${steps.map(s => `[${s.m}] ${s.q} => ${s.a.join(', ')}`).join(' | ')}`] },
+    evidence: { world: row.qa.facts_used ?? [], retrieved: [], background: [`source: CommaQA ${variant} ${SOURCES.commaqa.revision} ${row.id}`,
+      `decomposition: ${steps.map(s => `[${s.m}] ${s.q} => ${JSON.stringify(s.a)}`).join(' | ')}`] },
     minimumSequence: ['split the question into steps', 'ask the specialist that holds each step\'s evidence', 'feed each answer into the next step'],
     reference: { root: [evalCall(lines.join('\n')), returnCall(answer)], children },
-    root: { name: 'answer_question', args: { question: 'string' }, returns: 'string[]',
-      instructions: 'Answer question about the movie world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other\'s evidence. Ask them the steps the question needs, feeding each answer into the next. Return the answer names, sorted alphabetically, without duplicates.' },
+    root: numeric ?
+      { name: 'answer_question', args: { question: 'string' }, returns: 'number',
+        instructions: 'Answer question about the athletics world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other\'s evidence, and neither does arithmetic. Ask them the steps the question needs, feeding each answer into the next, and do the arithmetic yourself. Return the number, rounded to one decimal.' } :
+      { name: 'answer_question', args: { question: 'string' }, returns: 'string[]',
+        instructions: `Answer question about the ${variant === 'explicit' ? 'movie' : 'athletics'} world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other's evidence${variant === 'explicit' ? '' : ', and neither does arithmetic'}. Ask them the steps the question needs, feeding each answer into the next${variant === 'explicit' ? '' : ', and do any arithmetic yourself'}. Return the answer names, sorted alphabetically, without duplicates.` },
     files: {
       'answer_question/table_expert.nl': expertFile('tables', 'tables'),
       'answer_question/table_expert/tables.ts': store(row.tables, 'table rows'),
@@ -256,3 +277,6 @@ export function commaqaQuestion(seed, index) {
     },
     inputs: { question: row.qa.question }, expected: answer })];
 }
+
+/** CommaQA numeric: the same specialists, with arithmetic (min, max, differences, thresholds) left to the root. */
+export const commaqaNumeric = (seed, index) => commaqaQuestion(seed, index, 'numeric');
