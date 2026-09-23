@@ -28,6 +28,32 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
   } finally { host.close(); }
 });
 
+test('browser natural functions call synchronous TypeScript imports without await', async () => {
+  const nodeProcess = globalThis.process;
+  let api;
+  try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
+  finally { globalThis.process = nodeProcess; }
+  const host = new api.BrowserNatlangHost();
+  const files = {
+    'main.nl': 'import double from "./double.ts";\n---\nargs:\n  value: number\nreturns: number\n---\nReturn double(value).\n',
+    'double.ts': 'export default function double(value: number): number { return value * 2; }',
+  };
+  let turns = 0;
+  try {
+    const result = await host.run({ source: { kind: 'files', root: 'main.nl', files },
+      inputs: { value: 7 }, modelTurn: request => {
+        if (!turns++) {
+          assert.match(String(request.messages.find(message => message.role === 'user')?.content),
+            /double \[TypeScript\] \(value: number\): number/);
+          return { calls: [['eval', { code: 'double(value)' }]], completion_tokens: 1 };
+        }
+        return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+      } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, 14);
+  } finally { host.close(); }
+});
+
 test('browser retained eval preserves variables between tool calls', async () => {
   const nodeProcess = globalThis.process;
   let api;

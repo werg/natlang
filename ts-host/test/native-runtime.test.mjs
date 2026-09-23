@@ -61,6 +61,7 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
   assert.equal(pure.kind, 'ok'); assert.equal(pure.value, true); assert.equal(lam.let.first, true);
   const call = await session.applyAsync('eval', { code: 'const count = await count_true(flags);\ncount' });
   assert.equal(call.kind, 'ok'); assert.equal(call.value, 2); assert.equal(lam.let.count, 2);
+  assert.match(call.text, /Stored local count = 2\./);
   const resultLocal = await session.applyAsync('eval', {
     code: 'const result = await count_true(flags);\nresult' });
   assert.equal(resultLocal.kind, 'ok'); assert.equal(resultLocal.value, 2);
@@ -94,6 +95,19 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
   assert.equal(nullLam.return, null);
   nullSession.apply('mark_lines', { start: 1 });
   assert.deepEqual(new NativeToolAgent(() => ({ calls: [] })).tools(nullSession), []);
+});
+
+test('ordinary synchronous TypeScript imports return values without await, including nested imports', async () => {
+  const lam = buildPending({ $lambda: { type: '(value: number) => number',
+    instructions: 'Compute the adjusted value.', args: { value: 4 },
+    codebase: { adjusted: { args: { value: 'number' }, returns: 'number', async: false,
+      code: 'return double(value) + 1;', codebase: { double: { args: { value: 'number' },
+        returns: 'number', async: false, code: 'return value * 2;' } } } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'const answer = adjusted(value); answer' });
+  assert.equal(result.kind, 'ok');
+  assert.equal(result.value, 9);
+  assert.equal(lam.return, 9);
 });
 
 test('failed scope child bubbles to eval without leaving a resumable model-facing local', async () => {

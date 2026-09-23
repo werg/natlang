@@ -54,6 +54,7 @@ function inlineCodebase(entries: unknown, inherited: Record<string, string>): Re
     if (Object.keys(types).length) doc.types = types;
     if (Array.isArray(raw.effects) && raw.effects.length) doc.effects = raw.effects;
     if (raw.subtype === 'directory-reducer') doc.subtype = raw.subtype;
+    if (kind === 'code' && typeof raw.async === 'boolean') doc.async = raw.async;
     if (kind === 'code' && raw.engine && raw.engine !== 'typescript-host') doc.engine = raw.engine;
     const children = inlineCodebase(raw.codebase, types);
     if (Object.keys(children).length) doc.codebase = children;

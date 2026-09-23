@@ -294,6 +294,30 @@ export class NativeRuntime {
     } finally { this.scopeBridges.delete(token); }
   }
 
+  evalScopeForSync(node: LambdaNode, code: string, path: string, scope: Record<string, unknown>,
+    bridge: (operation: string, args: unknown[]) => unknown) {
+    const token = `${this.options.runId}:scope:${++this.scopeBridgeSequence}`;
+    this.scopeBridges.set(token, bridge);
+    const isolated = this.environment.fork();
+    const release = isolated.bindEffect((cap, fn, args) => this.effect(cap, fn, args));
+    const previous = this.acting;
+    this.acting = node;
+    try {
+      const result = isolated.execute({ code, body: true, path,
+        effectful: node.effects.length > 0, scope: { ...scope, __natlangScopeToken: token } });
+      this.recordHostEvents(path, result.events);
+      return result;
+    } catch (error) {
+      if (error instanceof EvalFailure) this.recordHostEvents(path, error.events);
+      throw error;
+    } finally {
+      this.acting = previous;
+      release();
+      isolated.close();
+      this.scopeBridges.delete(token);
+    }
+  }
+
   private recordHostEvents(path: string, events: HostEvent[]): void {
     this.events.push(...events);
     for (const event of events) if (event.operation !== 'typescript.eval')
@@ -1108,7 +1132,7 @@ export class NativeSession {
       Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
   }
 
-  async scopeBridge(operation: string, raw: unknown[]): Promise<unknown> {
+  scopeBridge(operation: string, raw: unknown[]): unknown {
     if (operation === 'fs') return this.scopeFsBridge(String(raw[0] ?? ''), raw.slice(1));
     if (operation === 'handle') return this.scopeHandleBridge(raw[0], String(raw[1] ?? ''), raw.slice(2));
     if (operation === 'directory') return this.scopeDirectoryBridge(String(raw[0] ?? ''), raw[1],
@@ -1119,7 +1143,9 @@ export class NativeSession {
     const rawPositional = raw[1];
     if (!Array.isArray(rawPositional))
       throw new Reject([{ path: 'code', code: 'bad-call', expected: 'positional function arguments' }]);
-    const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
+    const definition = functionName.split('.').reduce<Record<string, unknown> | undefined>((definition, part) =>
+      (definition?.codebase as Record<string, unknown> | undefined ?? definition)?.[part] as Record<string, unknown> | undefined,
+      this.lam.codebase as Record<string, unknown>);
     if (!definition)
       throw new Reject([{ path: functionName, code: 'no-such-function' }]);
     if (definition.subtype === 'directory-reducer') {
@@ -1146,15 +1172,32 @@ export class NativeSession {
       }
       return [[parameter.replace(/\?$/, ''), value]];
     }));
+    if (Object.hasOwn(definition, 'code') && definition.async === false &&
+        !/\bawait\b/.test(String(definition.code))) {
+      const names = declared.map(name => name.replace(/\?$/, ''));
+      const children = Object.keys(definition.codebase as Record<string, unknown> ?? {});
+      const helpers = children.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +
+        `fx.natlang.scope(self.__natlangScopeToken, "call", ` +
+        `[${JSON.stringify(`${functionName}.${name}`)}, args]), ` +
+        `{ __natlangFunction: ${JSON.stringify(`${functionName}.${name}`)} });`).join('\n');
+      const source = `${names.length ? `let { ${names.join(', ')} } = self.inputs;` : ''}\n${helpers}\n` +
+        `return (() => {\n${String(definition.code)}\n})();`;
+      const result = this.runtime.evalScopeForSync(this.lam, source, `function/${functionName}`,
+        { inputs: jsView(values as Value) }, (op, args) => this.scopeBridge(op, args));
+      const named = Object.fromEntries(Object.entries(definition.types as Record<string, string> ?? {})
+        .map(([name, type]) => [name, parseType(type)]));
+      return dump(coerce(result.result, parseType(String(definition.returns)), this.env.child(named),
+        `function/${functionName}`));
+    }
     const hidden = `__scope_call_${++this.scopeCallSequence}`;
-    try {
+    return (async () => { try {
       const outcome = await this.applyAsync('call', { function: functionName, to: `let/${hidden}`, values });
       if (outcome.kind !== 'done') throw new Error(`${functionName}: ${outcome.kind}: ${outcome.text}`);
       return dump(this.lam.let[hidden]!) as Value;
     } finally {
       delete this.lam.let[hidden];
       delete this.lam.letTypes[hidden];
-    }
+    } })();
   }
 
   private isScopeHandle(value: unknown): value is { __natlangHandle: Record<string, unknown> } {
@@ -1419,7 +1462,11 @@ export class NativeSession {
       const open = functionResult === undefined ? [] : pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks);
       const status = functionResult === undefined ? '' : open.length ?
         `\nFunction result set; lines still open: ${open.join(', ')}.` : '\nFunction result set.';
-      return { kind: 'ok', text: rendered + status,
+      const stored = [
+        ...staged.map(([name, , value]) => `local ${name} = ${oneLine(value)}`),
+      ];
+      const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
+      return { kind: 'ok', text: rendered + storedStatus + status,
         value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
@@ -1440,7 +1487,7 @@ export class NativeSession {
     if (kind !== 'code') return `---\n${front}\n---\n${body}`;
     const parameters = Object.entries(definition.args as Record<string, string> ?? {}).map(([raw, type]) =>
       `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
-    const isAsync = /\bawait\b/.test(body), returns = String(definition.returns);
+    const isAsync = definition.async === true || /\bawait\b/.test(body), returns = String(definition.returns);
     return `export default ${isAsync ? 'async ' : ''}function ${name}(${parameters}): ` +
       `${isAsync ? `Promise<${returns}>` : returns} {\n${body}}\n`;
   }
@@ -1497,7 +1544,7 @@ export class NativeSession {
       const module = parseCrispModule(source, path);
       imports.push(...module.imports.map(([alias, exported, specifier]) => ({ alias, exported, specifier })));
       meta = { args: module.args, returns: module.returns, effects: module.effects,
-        kind: previous.subtype ?? 'function' };
+        kind: previous.subtype ?? 'function', async: module.async };
       body = module.code;
     } else {
       let moduleSource = source;
@@ -1539,6 +1586,7 @@ export class NativeSession {
         body, types: meta.types ?? previous.types ?? {},
       effects: meta.effects ?? [], subtype, codebase: {} };
     if (isCode) updated.engine = String(meta.engine ?? 'typescript-host');
+    if (isCode) updated.async = meta.async === true;
     // Parse all declared types before making the edited binding live.
     const env = this.env.child(Object.fromEntries(Object.entries(updated.types as Record<string, string>)
       .map(([key, value]) => [key, parseType(value)])));
@@ -1596,7 +1644,7 @@ export class NativeSession {
           let explanation = '';
           if (source.path.endsWith('.nl') && !this.explainedNaturalFunctions.has(source.key)) {
             this.explainedNaturalFunctions.add(source.key);
-            explanation = 'Natural-language function source: the YAML frontmatter declares its parameter and return types; the body contains the instructions executed line by line.\n\n';
+            explanation = 'Natural-language function source: its frontmatter declares parameter and return types; the body contains instructions executed line by line.\n\n';
           }
           return this.record(name, args, { kind: 'ok', text: explanation + content, value: content });
         }

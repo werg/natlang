@@ -18,7 +18,7 @@ export type SourceFiles = {
 };
 
 type FileDefinition = { description: string; args: Record<string, string>; returns: string;
-  instructions?: string; code?: string; engine?: string; types: Record<string, string>;
+  instructions?: string; code?: string; async?: boolean; engine?: string; types: Record<string, string>;
   effects?: string[]; codebase: Record<string, FileDefinition>; function: string;
   subtype: 'function' | 'directory-reducer' };
 function inline(def: FileDefinition): Record<string, unknown> {
@@ -29,6 +29,7 @@ function inline(def: FileDefinition): Record<string, unknown> {
   if (def.effects?.length) doc.effects = def.effects;
   if (def.subtype !== 'function') doc.subtype = def.subtype;
   if (kind === 'code' && def.engine && def.engine !== 'typescript-host') doc.engine = def.engine;
+  if (kind === 'code') doc.async = def.async === true;
   if (Object.keys(def.codebase).length) doc.codebase = Object.fromEntries(Object.entries(def.codebase)
     .map(([name, child]) => [name, inline(child)]));
   return doc;
@@ -51,7 +52,7 @@ function splitImports(source: string): { imports: [string, string, string][]; so
 export function parseCrispModule(source: string, file: string, options: { packageImports?: boolean;
   resolveImport?: (specifier: string) => string } = {}): { imports: [string, string, string][];
   args: Record<string, string>; returns: string; code: string; effects: string[];
-  types: Record<string, string> } {
+  types: Record<string, string>; async: boolean } {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const errors = (parsed as unknown as { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }).parseDiagnostics ?? [];
   if (errors.length) throw new Reject([{ path: file, code: 'typescript-syntax',
@@ -97,7 +98,8 @@ export function parseCrispModule(source: string, file: string, options: { packag
     .map(match => `${match[1]}.${match[2]}`);
   return { imports, args, returns,
     code: runtimeImports.length ? runtimeImports.join('\n') + '\n' + code : code,
-    effects: [...new Set(effects)], types: readTypeAliases(source) };
+    effects: [...new Set(effects)], types: readTypeAliases(source),
+    async: !!fn.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) };
 }
 
 function fileFor(path: string, files: SourceFiles): string {
@@ -160,6 +162,7 @@ export function loadFunctionSource(path: string, files: SourceFiles, options: { 
       const body = isTs ? module!.code : match![2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
         returns: meta.returns, [isTs ? 'code' : 'instructions']: body,
+        ...(isTs ? { async: module!.async } : {}),
         engine: String(meta.engine ?? 'typescript-host'), types,
         effects: meta.effects as string[] ?? [], codebase: children, function: functionName,
         subtype: subtype as FileDefinition['subtype'] };
@@ -214,7 +217,9 @@ export function loadCodebaseSource(path: string, files: SourceFiles): Record<str
     const functionName = files.basename(name, extension);
     if (Object.hasOwn(entries, functionName))
       throw new Reject([{ path: file, code: 'duplicate-path', got: functionName }]);
-    entries[functionName] = sourceDefinition(loadFunctionSource(file, files));
+    const definition = sourceDefinition(loadFunctionSource(file, files));
+    if (extension === '.ts') definition.async = parseCrispModule(files.read(file), file).async;
+    entries[functionName] = definition;
   }
   return entries;
 }

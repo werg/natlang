@@ -289,9 +289,10 @@ export class NativeToolAgent {
       const kind = fn.subtype === 'directory-reducer' ? 'directory reducer' :
         Object.hasOwn(fn, 'code') ? 'TypeScript' : 'natural language';
       const parameters = Object.entries(fn.args as Record<string, string> ?? {})
-        .map(([key, value]) => `${key.replace(/\?$/, '')}: ${value}`);
+        .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
       if (fn.subtype === 'directory-reducer') parameters.unshift('folder: Folder');
-      return `  ${name} [${kind}] (${parameters.join(', ')}): Promise<${fn.returns}>`;
+      const returns = kind === 'TypeScript' && fn.async === false ? fn.returns : `Promise<${fn.returns}>`;
+      return `  ${name} [${kind}] (${parameters.join(', ')}): ${returns}`;
     });
     const locals = Object.entries(lam.let).map(([name, value]) =>
       `  ${name}: ${formatType(lam.letTypes[name]!)} = ${scopePreviewValue(value)}`);
