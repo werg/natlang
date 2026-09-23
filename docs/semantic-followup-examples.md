@@ -2,6 +2,10 @@
 
 These are 16 representative cases from the [96-case IR corpus](../data/teacher/semantic-followup-probe.ir.jsonl). The agent sees the instructions, typed inputs, and imported function signatures. It obtains the report or investigation note only by calling the imported lookup function (or reading its source). `expected` and `generation` metadata are oracle data and are not shown to the agent.
 
+## Pilot outcome
+
+On 2026-09-23, Bonsai accepted all 10 sampled report cases and all 6 sampled composite cases after `eval` gained console observations and local helper support. The composite cases used 3–6 `eval` calls: computation, note retrieval, and a subsequent semantic decision. This is a targeted pilot, not a result for all 96 cases. The first composite attempt failed 0/6 because the evaluator rejected the model's `console.log` calls.
+
 ## semantic-followup:incident-00
 
 **Family:** `semantic_followup_incident`
