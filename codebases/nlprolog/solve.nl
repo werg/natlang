@@ -1,9 +1,3 @@
-import derive from "./solve/derive";
-import is_rule from "./solve/is_rule";
-import same_claim from "./solve/same_claim";
-import settled from "./solve/settled";
-import select_by_flags from "../std/select_by_flags";
-import any_true from "../std/any_true";
 ---
 description: Can the goal be derived from a knowledge base of prose facts and
   rules? Forward chaining to a fixed point.

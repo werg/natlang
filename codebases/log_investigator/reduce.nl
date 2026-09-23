@@ -1,4 +1,3 @@
-import step from "./step";
 ---
 description: Reduce one log stream event through the semantic incident investigator.
 args:

@@ -1,4 +1,3 @@
-import type { Case, Plan, Candidate, Trial, Metric, Analysis, Report } from "../types.js";
 export default function summarize(candidates: Candidate[], trials: Trial[]): Metric[] {
 return candidates.map(candidate => {
   const runs = trials.filter(t => t.candidate === candidate.id);

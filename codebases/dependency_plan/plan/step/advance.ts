@@ -1,4 +1,3 @@
-import type { Task, State } from "../../types.js";
 export default function advance(state: State, chosen: string): State {
 const task = state.tasks.find(t => t.id === chosen);
 if (!task || state.order.includes(task.id) || !task.needs.every(n => state.order.includes(n)))

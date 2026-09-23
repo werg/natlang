@@ -1,5 +1,3 @@
-import type { LogEvent, File, Observation, Evidence, Judgement, Alert, IncidentState, ViewBlock, TerminalView } from "./types.js";
-
 export default function view(_state: IncidentState): TerminalView {
 const state = _state;
 return { title: 'Natlang Log Investigator', subtitle: `${state.observed} records observed through cursor ${state.cursor}`,

@@ -1,5 +1,3 @@
-import type { Request, File, Clip, Plan, Receipt, Inspection, Assessment, MediaResult } from "../types.js";
-
 export default function source_failure(request: Request, source: Clip): MediaResult {
 const receipt = { status: 'failed', output: request.output, exit_code: -1, sha256: '', detail: source.detail };
 const inspection = { status: 'unavailable', width: 0, height: 0, duration: 0, has_audio: false,

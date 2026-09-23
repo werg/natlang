@@ -1,5 +1,3 @@
-import append from "./reduce/append";
-import answer from "../evidence_atlas/answer";
 ---
 description: Answer a terminal question through the semantic evidence-search program.
 args:

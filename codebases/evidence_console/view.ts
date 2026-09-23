@@ -1,5 +1,3 @@
-import type { Claim, EvidenceAnswer, ConsoleEvent, ConsoleState, ViewBlock, TerminalView } from "./types.js";
-
 export default function view(_state: ConsoleState): TerminalView {
 const state = _state, answer = state.answers.at(-1), question = state.questions.at(-1);
 const blocks = answer ? [

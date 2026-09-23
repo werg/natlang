@@ -28,15 +28,15 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
   } finally { host.close(); }
 });
 
-test('browser natural functions call synchronous TypeScript imports without await', async () => {
+test('browser natural functions call companion TypeScript subfunctions without await', async () => {
   const nodeProcess = globalThis.process;
   let api;
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
   const host = new api.BrowserNatlangHost();
   const files = {
-    'main.nl': 'import double from "./double.ts";\n---\nargs:\n  value: number\nreturns: number\n---\nReturn double(value).\n',
-    'double.ts': 'export default function double(value: number): number { return value * 2; }',
+    'main.nl': '---\nargs:\n  value: number\nreturns: number\n---\nReturn double(value).\n',
+    'main/double.ts': 'export default function double(value: number): number { return value * 2; }',
   };
   let turns = 0;
   try {
@@ -73,9 +73,9 @@ test('the agent sees referenced type shapes and Promise-returning TypeScript sig
   const api = await import('../dist/browser/natlang.js');
   const host = new api.BrowserNatlangHost();
   const files = {
-    'main.nl': 'import prepare from "./prepare.ts";\n---\nargs:\n  value: number\nreturns: State\n---\nReturn the prepared state.\n',
+    'main.nl': '---\nargs:\n  value: number\nreturns: State\n---\nReturn the prepared state.\n',
     'types.ts': 'export type State = { count: number, label: string };',
-    'prepare.ts': 'import type { State } from "./types";\nexport default function prepare(value: number): Promise<State> { return Promise.resolve({ count: value, label: "ok" }); }',
+    'main/prepare.ts': 'export default function prepare(value: number): Promise<State> { return Promise.resolve({ count: value, label: "ok" }); }',
   };
   let turns = 0;
   try {
@@ -114,7 +114,7 @@ test('browser loads file source, lexical types, companions, and inputs from virt
   try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = nodeProcess; }
   const files = {
-    'tasks/add.ts': 'import type { Result } from "../types";\nimport label from "./add/label";\nexport default function add(x: number): Result { label(x + 2); return x + 2; }',
+    'tasks/add.ts': 'export default function add(x: number): Result { label(x + 2); return x + 2; }',
     'tasks/types.ts': 'export type Result = number;',
     'tasks/add/label.ts': 'export default function label(result: number): string { return String(result); }',
   };

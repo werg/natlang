@@ -5,11 +5,22 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import type { HostEvent } from './native/evaluator.js';
+import { packageNameFromSpecifier } from './package-specifier.js';
 export { applicationCapabilityPrompt } from './application-capabilities.js';
 
 const execute = promisify(execFile);
 const queues = new Map<string, Promise<unknown>>();
 const hash = (path: string) => existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : null;
+
+export function findPackageWorkspace(start: string): string | undefined {
+  let directory = resolve(start);
+  for (;;) {
+    if (existsSync(join(directory, 'package.json'))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
 
 /** Application-scoped npm state. This runs with host authority, NOT in a security sandbox. */
 export class ApplicationPackages {
@@ -51,6 +62,13 @@ export class ApplicationPackages {
   }
   /** Direct package.json dependencies, including declarations that still need installation. */
   listDeclaredDependencies(): string[] { return this.dependencyNames(); }
+  validateImportSpecifier(specifier: string): void {
+    const name = packageNameFromSpecifier(specifier);
+    if (!this.dependencyNames().includes(name))
+      throw new Error(`Package ${name} is not declared in application package.json`);
+    if (!this.listAvailableDependencies().includes(name))
+      throw new Error(`Package ${name} is declared but not installed; run installPackages([])`);
+  }
   async installPackages(specifiers: string[] = [], frozen = false): Promise<{ stdout: string; stderr: string; lockfileSha256: string | null }> {
     if (!Array.isArray(specifiers) || specifiers.some(s => typeof s !== 'string' || !s.trim() || s.startsWith('-')))
       throw new Error('Package installation requires package specifiers, not npm options');
@@ -80,18 +98,16 @@ export class ApplicationPackages {
     return this.installPackages([], existsSync(join(this.workspace, 'package-lock.json')));
   }
   async importModule(specifier: string): Promise<unknown> {
-    if (typeof specifier !== 'string' || !specifier) throw new Error('Module specifier must be a nonempty string');
+    this.validateImportSpecifier(specifier);
     // A real ESM loader rooted below the app preserves Node's import export-condition semantics.
-    // Imports never implicitly install a package. Node builtins and installed package code have host authority.
+    // Imports never implicitly install a package. Installed package code has host authority.
     this.loader ??= (async () => {
       const directory = join(this.workspace, '.natlang'); mkdirSync(directory, { recursive: true });
       const path = join(directory, `module-loader-${randomUUID()}.mjs`);
       writeFileSync(path, 'export const load = specifier => import(specifier);\n', { flag: 'wx' });
       return import(pathToFileURL(path).href) as Promise<{ load: (specifier: string) => Promise<unknown> }>;
     })();
-    const resolved = specifier.startsWith('.') || specifier.startsWith('/')
-      ? pathToFileURL(resolve(this.workspace, specifier)).href : specifier;
-    const result = await (await this.loader).load(resolved);
+    const result = await (await this.loader).load(specifier);
     this.observe({ operation: 'packages.import', specifier, workspace: this.workspace });
     return result;
   }

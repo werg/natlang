@@ -1,5 +1,3 @@
-import type { Event, File, Recipe, Job, Outcome, Session, ViewBlock, TerminalView } from "./types.js";
-
 export default function view(state: Session): TerminalView {
 const latest = state.messages.slice(-8);
 const blocks = [

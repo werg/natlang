@@ -1,7 +1,3 @@
-import check_state from "./merge_graph/check_state";
-import interpret from "./merge_graph/interpret";
-import prepare_envelope from "./prepare_envelope";
-import validate_claims from "./validate_claims";
 ---
 description: Merge a knowledge or dependency graph with semantic node identity
   and edge meaning.

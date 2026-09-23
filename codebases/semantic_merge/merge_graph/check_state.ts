@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function check_state(state: State): boolean {
 const ids = state.nodes.map(node => node.id);
 const known = new Set(ids);

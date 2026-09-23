@@ -45,5 +45,5 @@ export function loadFunctionFiles(root: string, source: Record<string, string>):
         .map(key => key.slice(prefix.length).split('/')[0]!).filter(Boolean))];
     },
   };
-  return loadFunctionSource(root, ops);
+  return loadFunctionSource(root, ops, () => { throw new Error('Browser projects have no installed package dependencies'); });
 }

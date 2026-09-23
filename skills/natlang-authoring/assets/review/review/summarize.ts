@@ -1,5 +1,3 @@
-import type { Assessment, Report } from "../types.js";
-
 export default function summarize(assessments: Assessment[]): Report {
 return {
   assessments: assessments,

@@ -1,4 +1,3 @@
-import step from "./step";
 ---
 description: Reduce one interactive terminal event through the semantic terminal program.
 args:

@@ -1,5 +1,3 @@
-import conclusions from "./derive/conclusions";
-import merge from "./derive/merge";
 ---
 description: One round of forward chaining - apply every rule to what is known.
 args:

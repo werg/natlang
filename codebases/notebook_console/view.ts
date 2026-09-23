@@ -1,5 +1,3 @@
-import type { Cell, CellResult, NotebookState, ConsoleEvent, File, ConsoleState, ViewBlock, TerminalView } from "./types.js";
-
 export default function view(state: ConsoleState): TerminalView {
 const run = state.runs.at(-1), request = state.requests.at(-1);
 const blocks = run ? [

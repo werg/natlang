@@ -1,4 +1,3 @@
-import type { Message, Shop, Intent, Action } from "../types.js";
 export default function apply_action(acc: Shop, action: Action, customer: string): Shop {
 const a = action
 if (!a.code.startsWith("sell")) return { ...acc, ledger: acc.ledger.concat([`${customer}: ${a.code}`]).slice(-100) }

@@ -1,5 +1,3 @@
-import type { PackageRequest, Pin, Lock, Resolution, InstallCheck, InstallReport } from "../types.js";
-
 export default function finalize(request: PackageRequest, locks: Lock[], selected: string): Resolution {
 const lock = locks.find(row => row.id === selected);
 if (!lock) return { status: 'invalid-selection',

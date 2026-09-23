@@ -1,4 +1,3 @@
-import type { Actor, World, Rules, Effect, Plan, Interpretation, CastResult } from "../types.js";
 export default function resolve(observation: World, rules: Rules, _meaning: Interpretation): CastResult {
 const original = observation;
 const meaning = _meaning;

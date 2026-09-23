@@ -1,6 +1,3 @@
-import apply from "./reduce/apply";
-import choose from "./reduce/choose";
-import finish from "./reduce/finish";
 ---
 description: Reduce a Atelier event into typed application state.
 args:

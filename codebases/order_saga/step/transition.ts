@@ -1,4 +1,3 @@
-import type { Event, Kind, Order, Command, State } from "../types.js";
 export default function transition(acc: State, item: Event, kind: Kind): State {
 const orders = Object.assign(Object.create(null), acc.orders);
 const old = orders[item.order]; let state = old; let operations = [];

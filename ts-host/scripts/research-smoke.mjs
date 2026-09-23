@@ -50,7 +50,7 @@ try {
         const allowed = await runChild({ cell, deps: { id }, researchNative: [id] });
         const authored = await runChild({ request: {
             source: { kind: 'files', root: 'methods/native_length.ts', files: {
-                'methods/native_length.ts': 'import { host } from "natlang:runtime";\n\nexport default async function native_length(id: string): Promise<number> { return (await host.research.readNative(id)).length; }',
+                'methods/native_length.ts': 'export default async function native_length(id: string): Promise<number> { return (await host.research.readNative(id)).length; }',
             } }, inputs: { id }, options: { seed: { mode: 'derived', root: 7 } },
         }, researchNative: [id] });
         let rejected = false;

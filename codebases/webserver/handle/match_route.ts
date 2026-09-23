@@ -1,4 +1,3 @@
-import type { Request, Parsed, Route, RouteDef, Entry, Session, Site, Review, Response } from "../types.js";
 export default function match_route(routes: RouteDef[], req: Parsed): Route {
 const hit = routes.find(r => r.path === req.path)
 if (!hit) return { kind: "not_found", name: req.path, purpose: "", asset: "" }

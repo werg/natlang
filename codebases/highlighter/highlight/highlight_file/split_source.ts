@@ -1,4 +1,3 @@
-import type { SourceFile, Role, Parts, Highlighted } from "../../types.js";
 export default function split_source(file: SourceFile): Parts {
 const text = file.text
 const isCode = file.path.endsWith(".ts")

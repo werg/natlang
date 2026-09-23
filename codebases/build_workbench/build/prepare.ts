@@ -1,5 +1,3 @@
-import type { Task, File, TaskResult, State } from "../types.js";
-
 export default function prepare(goal: string, tasks: Task[]): State {
 const ids = new Set(tasks.map(t => t.id));
 const outputs = tasks.flatMap(t => t.outputs);

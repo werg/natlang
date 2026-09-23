@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function reject(base: Document, prepared: Prepared): MergeResult {
 return { status: "rejected", text: base.text, applied: [],
          alternatives: prepared.updates.map(u => ({ update_ids: [u.id], proposal: u.text,

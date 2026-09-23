@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function finish(base: Document, prepared: Prepared, draft: Draft): MergeResult {
 const ids = prepared.updates.map(u => u.id);
 const claims = [...draft.applied, ...draft.alternatives.flatMap(a => a.update_ids)];

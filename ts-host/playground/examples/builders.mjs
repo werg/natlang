@@ -14,8 +14,6 @@ export const crisp = ({ id, name, category, level, description, concepts, root, 
   let module = typescript(root.split('/').at(-1).replace(/\.ts$/, ''), args, returns, code);
   if (typeof sourceFiles[typePath] === 'string') {
     sourceFiles[typePath] = sourceFiles[typePath].replace(/^(?!export\s+)type\s+/gm, 'export type ');
-    const names = [...sourceFiles[typePath].matchAll(/^export\s+type\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1]);
-    if (names.length) module = `import type { ${names.join(', ')} } from "./types.js";\n\n${module}`;
   }
   return { id, name, category, level, description, concepts, modelRequired: false, root,
     files: { [root]: module, ...sourceFiles }, inputs, expected };

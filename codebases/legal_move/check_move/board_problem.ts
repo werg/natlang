@@ -1,4 +1,3 @@
-import type { Mark, Cell, Verdict } from "../types.js";
 export default function board_problem(cells: Cell[], player: Mark): string {
 const c = cells
 if (c.length !== 9) return `a board has 9 cells, this one has ${c.length}`

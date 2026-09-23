@@ -1,6 +1,3 @@
-import apply from "./reduce/apply";
-import choose from "./reduce/choose";
-import finish from "./reduce/finish";
 ---
 description: Reduce a Patchwork event into typed application state.
 args:

@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function check_state(state: State): boolean {
 const ids = state.events.map(event => event.id);
 const utc = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;

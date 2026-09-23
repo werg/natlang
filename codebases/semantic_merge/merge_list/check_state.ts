@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function check_state(state: State): boolean {
 const ids = state.items.map(item => item.id);
 return Number.isSafeInteger(state.revision) && state.revision >= 0 &&

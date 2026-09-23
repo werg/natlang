@@ -1,5 +1,3 @@
-import type { Request, File, Clip, Plan, Receipt, Inspection, Assessment, MediaResult } from "../types.js";
-
 export default function finalize(request: Request, source: Clip, plan: Plan, receipt: Receipt, inspection: Inspection, assessment: Assessment): MediaResult {
 const p = plan, s = source, r = receipt, i = inspection, a = assessment;
 const expectedWidth = p.kind === 'crop' || p.kind === 'scale' ? p.width : s.width;

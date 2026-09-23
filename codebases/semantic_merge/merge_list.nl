@@ -1,7 +1,3 @@
-import check_state from "./merge_list/check_state";
-import interpret from "./merge_list/interpret";
-import prepare_envelope from "./prepare_envelope";
-import validate_claims from "./validate_claims";
 ---
 description: Merge ordered task or paragraph lists with insert, move, split and
   delete intent.

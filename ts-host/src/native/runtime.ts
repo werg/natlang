@@ -1521,17 +1521,13 @@ export class NativeSession {
           const definition = raw as Record<string, unknown>, extension = Object.hasOwn(definition, 'code') ? '.ts' : '.nl';
           const key = [...prefix, name].join('/'), path = [...prefix, `${name}${extension}`].join('/');
           const nested = definition.codebase as Record<string, unknown> | undefined;
-          const imports = Object.entries(nested ?? {}).map(([childName, childRaw]) => {
-            const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
-            return `import ${childName} from "./${name}/${childName}${childExtension}";`;
-          });
           this.lam.codebasePaths[key] = path;
           this.lam.codebaseFiles[path] = definition;
           this.lam.codebaseImports[path] = Object.fromEntries(Object.entries(nested ?? {}).map(([childName, childRaw]) => {
             const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
             return [childName, [...prefix, name, `${childName}${childExtension}`].join('/')];
           }));
-          files[path] = `${imports.length ? `${imports.join('\n')}\n\n` : ''}${this.editableDefinitionSource(name, definition)}`;
+          files[path] = this.editableDefinitionSource(name, definition);
           if (!ancestors.has(definition)) {
             if (nested) add(nested, [...prefix, name], new Set([...ancestors, definition]));
           }
@@ -1562,26 +1558,22 @@ export class NativeSession {
     const [binding] = entry, parts = binding.split('/');
     const previous = this.lam.codebaseFiles[path] as Record<string, unknown>;
     const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
-    const imports: Array<{ alias: string; exported: string; specifier: string }> = [];
     const isCode = path.endsWith('.ts');
     let meta: Record<string, unknown>, body: string;
     if (isCode) {
-      const module = parseCrispModule(source, path);
-      imports.push(...module.imports.map(([alias, exported, specifier]) => ({ alias, exported, specifier })));
+      const module = parseCrispModule(source, path, specifier => {
+        const packages = (this.runtime.environment as EvalEnvironment & { packages?: {
+          validateImportSpecifier(specifier: string): void } }).packages;
+        if (!packages) throw new Error('Package imports require a project package.json');
+        packages.validateImportSpecifier(specifier);
+      });
       meta = { args: module.args, returns: module.returns, effects: module.effects,
         kind: previous.subtype ?? 'function', async: module.async };
       body = module.code;
     } else {
-      let moduleSource = source;
-      const importLine = /^import\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"']+)["'];?\s*\r?\n/;
-      while (moduleSource.startsWith('import')) {
-        const imported = importLine.exec(moduleSource);
-        if (!imported) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'one default relative import per line' }]);
-        imports.push({ exported: '', alias: imported[1]!, specifier: imported[2]! });
-        moduleSource = moduleSource.slice(imported[0].length);
-      }
-      moduleSource = moduleSource.replace(/^\r?\n/, '');
-      const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(moduleSource);
+      if (/^\s*import\s/m.test(source)) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import',
+        expected: 'application subfunctions in the companion folder; no source imports' }]);
+      const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(source);
       if (!match) throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'natural-language frontmatter between --- lines' }]);
       meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
       body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
@@ -1590,22 +1582,6 @@ export class NativeSession {
     const subtype = String(meta.kind ?? 'function');
     if (!['function', 'directory-reducer'].includes(subtype))
       throw new Reject([{ path: `codebase/${path}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer' }]);
-    const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-    const linkedPaths: Record<string, string> = {};
-    for (const item of imports) {
-      if (!item.specifier.startsWith('.'))
-        throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'a relative import within codebase/' }]);
-      const pieces: string[] = [];
-      for (const piece of `${base}/${item.specifier}`.split('/')) {
-        if (!piece || piece === '.') continue;
-        if (piece === '..') { if (!pieces.length) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'a relative import within codebase/' }]); pieces.pop(); }
-        else pieces.push(piece);
-      }
-      const target = pieces.join('/'), candidates = /\.[A-Za-z0-9]+$/.test(target) ? [target] : [`${target}.nl`, `${target}.ts`];
-      const targetEntry = Object.entries(this.lam.codebasePaths).find(([, candidate]) => candidates.includes(candidate));
-      if (!targetEntry) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'an existing associated codebase file', got: item.specifier }]);
-      linkedPaths[item.alias] = this.lam.codebasePaths[targetEntry[0]]!;
-    }
     const updated: Record<string, unknown> = { description: String(meta.description ?? ''),
       args: meta.args ?? {}, returns: meta.returns, [isCode ? 'code' : 'instructions']:
         body, types: meta.types ?? previous.types ?? {},
@@ -1618,7 +1594,6 @@ export class NativeSession {
     env.checkNames(parseType(`(${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
       `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')}) => ${updated.returns}`));
     this.lam.codebaseFiles[path] = updated;
-    this.lam.codebaseImports[path] = linkedPaths;
     const memo = new Map<string, Record<string, unknown>>();
     const link = (sourcePath: string): Record<string, unknown> => {
       const existing = memo.get(sourcePath); if (existing) return existing;

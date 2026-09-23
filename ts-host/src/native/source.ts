@@ -13,8 +13,8 @@ const nodeFiles: SourceFiles = {
 };
 
 /** Load frontmatter, companion functions, lexical types, and explicit uses. */
-export function loadFunctionFile(path: string, options: { packageImports?: boolean } = {}): LambdaNode {
-  return loadFunctionSource(path, nodeFiles, options);
+export function loadFunctionFile(path: string, validateImport?: (specifier: string) => void): LambdaNode {
+  return loadFunctionSource(path, nodeFiles, validateImport);
 }
 
 /** Load the top-level .nl/.ts functions rooted in a native directory. */

@@ -1,4 +1,3 @@
-import type { SourceFile, Role, Parts, Highlighted } from "../../types.js";
 export default function render_html(file: SourceFile, parts: Parts, roles: Role[]): string {
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 const fns = new Set(parts.functions)

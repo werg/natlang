@@ -1,7 +1,3 @@
-import check from "./run/check";
-import execute from "./run/execute";
-import inspect from "./run/inspect";
-import invalid from "./run/invalid";
 ---
 description: Check and run a pinned source revision as a child programme.
 args:

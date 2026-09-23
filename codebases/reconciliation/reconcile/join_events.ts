@@ -1,4 +1,3 @@
-import type { Customer, Event, Joined, Join, Label, Report } from "../types.js";
 export default function join_events(_customers: Customer[], events: Event[]): Join {
 const customers = new Map(_customers.map(c => [c.id, c]));
 const seen = new Set(); const rows = []; let duplicates = 0;

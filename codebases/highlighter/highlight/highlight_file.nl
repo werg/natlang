@@ -1,6 +1,3 @@
-import line_role from "./highlight_file/line_role";
-import render_html from "./highlight_file/render_html";
-import split_source from "./highlight_file/split_source";
 ---
 description: Highlight one source file - split it exactly, judge the role of every line, render HTML exactly.
 args:

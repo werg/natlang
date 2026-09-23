@@ -48,7 +48,10 @@ export class NativeNatlangHost {
       else if (request.source.kind === 'definitions') root = checkedDefinitions(
         request.source.entries as Parameters<typeof checkedDefinitions>[0], request.source.root).instantiate(request.inputs);
       else if (['.nl', '.ts'].includes(extname(request.source.path))) root = loadFunctionFile(request.source.path,
-        { packageImports: this.environment.scopeCapabilities.allowModules });
+        specifier => {
+          if (!this.environment.packages) throw new Error('Package imports require a project package.json');
+          this.environment.packages.validateImportSpecifier(specifier);
+        });
       else {
         const doc = YAML.parse(readFileSync(request.source.path, 'utf8')) as Record<string, unknown>;
         root = buildPending(doc.program ?? doc);

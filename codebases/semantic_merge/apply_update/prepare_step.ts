@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function prepare_step(base: Document, _current: MergeResult, _update: Update): Step {
 const current = _current;
 const update = _update;

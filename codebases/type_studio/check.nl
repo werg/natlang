@@ -1,6 +1,3 @@
-import assemble from "./check/assemble";
-import check_calls from "./check/check_calls";
-import identify_calls from "./check/identify_calls";
 ---
 description: Explore possible calls in a natlang body and separate witnessed
   mismatches from hypotheses. Read files for source context when the bounded

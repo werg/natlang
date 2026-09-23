@@ -1,4 +1,3 @@
-import type { Request, Parsed, Route, RouteDef, Entry, Session, Site, Review, Response } from "../types.js";
 export default function session_for(acc: Site, req: Parsed): Session {
 const old = acc.sessions[req.session_id]
 if (old) return { ...old, visits: old.visits + 1 }

@@ -1,4 +1,3 @@
-import type { Message, Shop, Intent, Action } from "../types.js";
 export default function legal_actions(acc: Shop, intent: Intent): Action[] {
 const i = intent, out = [{ code: "decline", good: "", qty: 0, price: 0 }]
 const price = acc.prices[i.good], have = acc.stock[i.good] || 0

@@ -1,6 +1,6 @@
 # Application packages and network access
 
-A Node-backed natlang application can own a normal `package.json` and
+A Node-backed natlang application owns a normal `package.json` and
 `package-lock.json`. Its dependencies belong to the application, not an individual
 lambda or eval session. Both handwritten `.ts` functions and generated eval code
 resolve packages through that application workspace.
@@ -13,11 +13,13 @@ await host.run({ source: { kind: 'file', path: '/absolute/path/to/app/main.ts' }
 host.close();
 ```
 
-Construction requires an existing package.json. It does not install anything.
+An explicit workspace requires an existing package.json. Construction does not install anything.
 The `natlang` CLI finds the nearest `package.json` above a program file (or the
 current directory for an anonymous instruction); `--workspace /absolute/app-root`
-selects one explicitly. A file outside any Node project keeps the package-free
-environment.
+selects one explicitly. The Node eval environment also finds the current
+project automatically; import syntax is not controlled by a workspace mode.
+If no project manifest exists, an attempted package import reports that a
+`package.json` is required.
 `prepareDependencies()` respects the existing lockfile. `installPackages(specs)`
 runs npm install and updates package.json and package-lock.json. Concurrent installs
 in the same workspace are serialized within the host process. npm lifecycle scripts
@@ -34,13 +36,17 @@ return isNumber(value);
 ```
 
 Static default, named and namespace imports and dynamic `await import(...)` are
-supported with an application workspace. Native Node ESM resolution loads installed
-packages (including CommonJS packages), Node builtins and local modules. Relative
-imports in eval resolve from the application root; relative imports in loaded
-handwritten function files resolve from the source file. Existing native `.nl`/`.ts`
-default-import companion-function behavior is retained. The native file format still
-requires a default function with explicit boundary types; arbitrary library files
-are imported as modules, not misinterpreted as native function files.
+supported for installed dependencies explicitly declared in the project's
+`package.json`, including exported package subpaths. Undeclared/transitive
+packages, local relative/absolute files, URL imports, and `node:` built-ins are
+not importable from natlang eval or source functions. Imported package code may
+itself use Node's normal module resolution internally.
+
+Application subfunctions use the source tree, not import statements. `foo.nl` or
+`foo.ts` automatically sees functions in `foo/`; `foo/bar.nl` sees functions in
+`foo/bar/`. Runtime source imports between application files are rejected.
+The native file format still requires a default function with explicit boundary
+types. Recursive subfunction graphs are not admitted to unit-test training data.
 
 Imported bindings are temporary within one eval and are not serialized into the
 portable scope. Re-import in subsequent evals; the application installation persists.
@@ -55,9 +61,8 @@ const response = await fetch('https://example.com/data.json');
 return await response.json();
 ```
 
-Network access defaults on for an application workspace; `network: true` can also
-enable fetch without a package workspace. The default environment without either
-option retains its previous restricted eval surface. `network: false` only removes
+Network access defaults on when a project manifest is found; `network: true` can also
+enable fetch without one. `network: false` only removes
 the provided fetch global—it cannot prevent installed Node packages from networking.
 
 ## Execution authority and reproducibility

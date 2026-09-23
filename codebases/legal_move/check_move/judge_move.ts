@@ -1,4 +1,3 @@
-import type { Mark, Cell, Verdict } from "../types.js";
 export default function judge_move(cells: Cell[], target: number, player: Mark): Verdict {
 const draw = c => [0, 3, 6].map(i => c.slice(i, i + 3).map(v => v === "empty" ? "." : v).join(" ")).join("\n")
 const t = target

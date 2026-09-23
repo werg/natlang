@@ -16,6 +16,7 @@ import { loadAnonymousInstruction, loadFunctionFile } from '../native/source.js'
 import { FILE_TREE_LEAF_TYPE, NodeFileTree } from '../native/node-files.js';
 import { formatType } from '../native/types.js';
 import { TypeScriptEnvironment } from '../environment.js';
+import { findPackageWorkspace } from '../application-packages.js';
 import { TerminalNatlangApplication } from '../terminal/application.js';
 import { TerminalSessionStore } from '../terminal/session.js';
 import { TerminalEventQueue } from '../terminal/events.js';
@@ -371,16 +372,7 @@ async function runLocalApplication(parsed: Parsed, value: string): Promise<numbe
   return executeTarget(parsed, installed, archive.manifest, target, true);
 }
 
-/** Nearest Node project owns imports for a source file or cwd instruction. */
-export function findPackageWorkspace(start: string): string | undefined {
-  let directory = resolve(start);
-  for (;;) {
-    if (existsSync(join(directory, 'package.json'))) return directory;
-    const parent = dirname(directory);
-    if (parent === directory) return undefined;
-    directory = parent;
-  }
-}
+export { findPackageWorkspace } from '../application-packages.js';
 
 async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
   const path = resolve(value);

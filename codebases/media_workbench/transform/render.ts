@@ -1,6 +1,3 @@
-import type { Request, File, Clip, Plan, Receipt, Inspection, Assessment, MediaResult } from "../types.js";
-import { host } from "natlang:runtime";
-
 export default async function render(request: Request, source: Clip, plan: Plan): Promise<Receipt> {
 if (plan.input !== request.input || plan.output !== request.output ||
     source.id !== request.input || source.status !== 'ok')

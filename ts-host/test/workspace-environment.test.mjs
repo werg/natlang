@@ -15,32 +15,39 @@ async function workspace(t) {
 
 const evalRequest = code => ({ code, body: true, scope: { let: {} }, path: 'test', effectful: false });
 
-test('workspace environment imports a local module and returns only portable values', async t => {
+test('project eval rejects local application imports in both forms', async t => {
   const path = await workspace(t);
   await writeFile(join(path, 'helper.mjs'), 'export const double = value => value * 2;\n');
   const environment = new TypeScriptEnvironment({ workspace: path });
   t.after(() => environment.close());
-  const result = await environment.executeAsync(evalRequest("const mod = await import('./helper.mjs'); return mod.double(3);"));
-  assert.equal(result.result, 6);
+  await assert.rejects(environment.executeAsync(evalRequest("const mod = await import('./helper.mjs'); return mod.double(3);")), /Only declared package imports/);
+  await assert.rejects(environment.executeAsync(evalRequest("import { double } from './helper.mjs'; return double(3);")), /Only declared package imports/);
+  await assert.rejects(environment.executeAsync(evalRequest("const fs = await import('node:fs'); return true;")), /Only declared package imports/);
 });
 
-test('workspace eval erases type-only imports without resolving packages', async t => {
+test('workspace eval validates type-only imports before erasing them', async t => {
   const path = await workspace(t);
   const environment = new TypeScriptEnvironment({ workspace: path });
   t.after(() => environment.close());
-  const result = await environment.executeAsync(evalRequest("import type { X } from 'not-installed'; import { type Y } from 'also-not-installed'; return 1;"));
-  assert.equal(result.result, 1);
+  await assert.rejects(environment.executeAsync(evalRequest("import type { X } from './local'; return 1;")), /Only declared package imports/);
+  await assert.rejects(environment.executeAsync(evalRequest("import { type Y } from 'not-installed'; return 1;")), /not declared in application package.json/);
 });
 
-test('native host runs an application main.ts with a relative JavaScript import', async t => {
+test('native host rejects local imports from application TypeScript', async t => {
   const path = await workspace(t);
   await writeFile(join(path, 'helper.mjs'), 'export const double = value => value * 2;\n');
   await writeFile(join(path, 'main.ts'), "import { double } from './helper.mjs';\nexport default function main(): number { return double(3); }\n");
   const host = new NativeNatlangHost({ workspace: path });
   t.after(() => host.close());
-  const result = await host.run({ source: { kind: 'file', path: join(path, 'main.ts') } });
-  assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
-  assert.equal(result.value, 6);
+  await assert.rejects(host.run({ source: { kind: 'file', path: join(path, 'main.ts') } }), /bad-import/);
+});
+
+test('native host rejects undeclared type-only package imports', async t => {
+  const path = await workspace(t);
+  await writeFile(join(path, 'main.ts'), "import type { Value } from 'undeclared';\nexport default function main(): number { return 3; }\n");
+  const host = new NativeNatlangHost({ workspace: path });
+  t.after(() => host.close());
+  await assert.rejects(host.run({ source: { kind: 'file', path: join(path, 'main.ts') } }), /bad-import/);
 });
 
 test('workspace network capability fetches JSON and returns a portable value', async t => {
@@ -74,6 +81,10 @@ test('workspace installPackages installs a local package into its package manife
   assert.deepEqual(JSON.parse(await readFile(join(path, 'package.json'), 'utf8')).dependencies, { 'natlang-local-fixture': 'file:fixture-pkg' });
   const result = await environment.executeAsync(evalRequest("const pkg = await import('natlang-local-fixture'); return pkg.answer;"));
   assert.equal(result.result, 42);
+  await mkdir(join(path, 'node_modules', 'undeclared'));
+  await writeFile(join(path, 'node_modules', 'undeclared', 'package.json'), JSON.stringify({ name: 'undeclared', version: '1.0.0', type: 'module', exports: './index.js' }));
+  await writeFile(join(path, 'node_modules', 'undeclared', 'index.js'), 'export const answer = 99;\n');
+  await assert.rejects(environment.executeAsync(evalRequest("return (await import('undeclared')).answer;")), /not declared in application package.json/);
 });
 
 test('workspace dependencies resolve in dynamic and static eval imports and project TypeScript from any process cwd', async t => {
@@ -122,39 +133,6 @@ test('native host runs an application file importing an installed local package'
   assert.equal(result.value, 42);
 });
 
-test('native model loop can evaluate a workspace import then mark its instruction complete', async t => {
-  const path = await workspace(t);
-  await writeFile(join(path, 'helper.mjs'), 'export const double = value => value * 2;\n');
-  const environment = new TypeScriptEnvironment({ workspace: path });
-  const host = new NativeNatlangHost({ environment });
-  t.after(() => { host.close(); environment.close(); });
-  let turn = 0;
-  const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-    type: '() => number', instructions: 'Import helper.mjs, double 3, and return the result.'
-  } } }, modelTurn: () => ++turn === 1
-    ? { calls: [['eval', { code: "const mod = await import('./helper.mjs'); return mod.double(3);" }]], completion_tokens: 1 }
-    : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 }, options: { model: { max_turns: 3 } } });
-  assert.equal(result.outcome.kind, 'done');
-  assert.equal(result.value, 6);
-  assert.equal(turn, 2);
-});
-
-test('native model eval supports a static import declaration from the application workspace', async t => {
-  const path = await workspace(t);
-  await writeFile(join(path, 'helper.mjs'), 'export const double = value => value * 2;\n');
-  const environment = new TypeScriptEnvironment({ workspace: path });
-  const host = new NativeNatlangHost({ environment });
-  t.after(() => { host.close(); environment.close(); });
-  let turn = 0;
-  const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-    type: '() => number', instructions: 'Import the helper, double 3, and return the result.'
-  } } }, modelTurn: () => ++turn === 1
-    ? { calls: [['eval', { code: "import { double } from './helper.mjs'; return double(3);" }]], completion_tokens: 1 }
-    : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 }, options: { model: { max_turns: 3 } } });
-  assert.equal(result.outcome.kind, 'done');
-  assert.equal(result.value, 6);
-});
-
 test('native model eval erases type-only imports without package resolution', async t => {
   const path = await workspace(t);
   const environment = new TypeScriptEnvironment({ workspace: path });
@@ -199,10 +177,13 @@ test('native eval consumes imported namespaces and fetch responses within each c
   assert.equal(turn, 3);
 });
 
-test('default TypeScript environment continues to reject imports and fetch', async () => {
+test('default TypeScript environment uses the current project without an import mode', async () => {
   const environment = new TypeScriptEnvironment();
   try {
-    await assert.rejects(environment.executeAsync(evalRequest("const mod = await import('./helper.mjs'); return 1;")), /import|module|workspace|disabled/i);
-    await assert.rejects(environment.executeAsync(evalRequest("const response = await fetch('https://example.test'); return 1;")), /fetch|network|disabled|not defined/i);
+    assert.equal(environment.scopeCapabilities.allowModules, true);
+    assert.ok(environment.packages?.listAvailableDependencies().includes('yaml'));
+    const result = await environment.executeAsync(evalRequest("import YAML from 'yaml'; return typeof YAML.parse;"));
+    assert.equal(result.result, 'function');
+    await assert.rejects(environment.executeAsync(evalRequest("return (await import('node:fs')).existsSync;")), /Only declared package imports/);
   } finally { environment.close(); }
 });

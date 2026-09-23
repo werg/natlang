@@ -3,6 +3,7 @@ import YAML from 'yaml';
 import ts from 'typescript';
 import { Reject, buildPending, type LambdaNode } from './values.js';
 import { formatType } from './types.js';
+import { packageNameFromSpecifier } from '../package-specifier.js';
 
 export type SourceFiles = {
   resolve(path: string): string;
@@ -49,8 +50,8 @@ function splitImports(source: string): { imports: [string, string, string][]; so
   return { imports, source: lines.slice(at).join('') };
 }
 
-export function parseCrispModule(source: string, file: string, options: { packageImports?: boolean;
-  resolveImport?: (specifier: string) => string } = {}): { imports: [string, string, string][];
+export function parseCrispModule(source: string, file: string,
+  validateImport?: (specifier: string) => void): { imports: [string, string, string][];
   args: Record<string, string>; returns: string; code: string; effects: string[];
   types: Record<string, string>; async: boolean } {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
@@ -61,18 +62,14 @@ export function parseCrispModule(source: string, file: string, options: { packag
   const runtimeImports: string[] = [];
   for (const statement of parsed.statements) if (ts.isImportDeclaration(statement)) {
     const specifier = ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : '';
-    if (statement.importClause?.isTypeOnly) continue;
-    if (specifier === 'natlang:runtime') continue;
-    if (options.packageImports && (!specifier.startsWith('.') || statement.importClause?.namedBindings || /\.[cm]?js$/.test(specifier))) {
-      const rewritten = options.resolveImport?.(specifier) ?? specifier;
-      runtimeImports.push(ts.createPrinter().printNode(ts.EmitHint.Unspecified,
-        ts.factory.updateImportDeclaration(statement, statement.modifiers, statement.importClause,
-          ts.factory.createStringLiteral(rewritten), statement.attributes), parsed));
-      continue;
+    try { packageNameFromSpecifier(specifier); }
+    catch { throw new Reject([{ path: file, code: 'bad-import', expected: 'a declared package import; application subfunctions belong in the companion folder', got: specifier }]); }
+    if (validateImport) {
+      try { validateImport(specifier); }
+      catch (error) { throw new Reject([{ path: file, code: 'bad-import',
+        expected: 'a declared and installed package dependency', got: error instanceof Error ? error.message : String(error) }]); }
     }
-    if (!specifier.startsWith('.') || !statement.importClause?.name || statement.importClause.namedBindings)
-      throw new Reject([{ path: file, code: 'bad-import', expected: 'a default import from a relative .ts or .nl module' }]);
-    imports.push([statement.importClause.name.text, '', specifier]);
+    if (!statement.importClause?.isTypeOnly) runtimeImports.push(statement.getText(parsed));
   }
   const functions = parsed.statements.filter(ts.isFunctionDeclaration).filter(statement =>
     statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword));
@@ -111,7 +108,8 @@ function fileFor(path: string, files: SourceFiles): string {
 }
 
 /** Load frontmatter, companion functions, lexical types, and explicit uses without Python. */
-export function loadFunctionSource(path: string, files: SourceFiles, options: { packageImports?: boolean } = {}): LambdaNode {
+export function loadFunctionSource(path: string, files: SourceFiles,
+  validateImport?: (specifier: string) => void): LambdaNode {
   const active = new Set<string>();
   function read(name: string, inherited: Record<string, string>): FileDefinition {
     const file = fileFor(name, files);
@@ -120,9 +118,10 @@ export function loadFunctionSource(path: string, files: SourceFiles, options: { 
     try {
       const isTs = files.extname(file) === '.ts';
       const raw = files.read(file);
-      const module = isTs ? parseCrispModule(raw, file, { ...options,
-        resolveImport: specifier => specifier.startsWith('.') ? files.resolve(files.join(files.dirname(file), specifier)) : specifier }) : undefined;
+      const module = isTs ? parseCrispModule(raw, file, validateImport) : undefined;
       const parsed = isTs ? { imports: module!.imports, source: raw } : splitImports(raw);
+      if (parsed.imports.length) throw new Reject([{ path: file, code: 'bad-import',
+        expected: 'application subfunctions in the companion folder; no source imports' }]);
       const match = isTs ? undefined : frontNl.exec(parsed.source);
       if (!isTs && !match) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
       const meta = isTs ? { args: module!.args, returns: module!.returns, effects: module!.effects,
@@ -145,20 +144,11 @@ export function loadFunctionSource(path: string, files: SourceFiles, options: { 
       const types = { ...inherited, ...localTypes, ...meta.types as Record<string, string> ?? {} };
       const children: Record<string, FileDefinition> = {};
       const companion = files.join(files.dirname(file), functionName);
-      if (!parsed.imports.length && files.isDirectory(companion)) {
+      if (files.isDirectory(companion)) {
         for (const child of files.list(companion).sort()) {
           if (!['.nl', '.ts'].includes(files.extname(child)) || child === 'types.ts') continue;
           children[files.basename(child, files.extname(child))] = read(files.join(companion, child), types);
         }
-      }
-      for (const [binding, exported, specifier] of parsed.imports) {
-        if (!specifier.startsWith('.')) throw new Reject([{ path: file, code: 'no-such-path',
-          expected: 'a relative natlang module import', got: specifier }]);
-        const child = read(files.join(files.dirname(file), specifier), types);
-        if (exported && child.function !== exported) throw new Reject([{ path: file, code: 'bad-import',
-          expected: `export {${child.function}} from ${specifier}`, got: exported }]);
-        if (Object.hasOwn(children, binding)) throw new Reject([{ path: file, code: 'duplicate-path', got: binding }]);
-        children[binding] = child;
       }
       const body = isTs ? module!.code : match![2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},

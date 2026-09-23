@@ -299,22 +299,22 @@ test('native codebase folder exposes and live edits nested lexical sources', asy
     codebase: { outer: { args: {}, returns: 'string', instructions: 'Call inner.', codebase: {
       inner: { args: {}, returns: 'string', code: 'return "old";' } } } } } });
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
-  assert.match((await session.applyAsync('read_function', { name: 'outer' })).value,
-    /import inner from "\.\/outer\/inner\.ts";/);
+  assert.doesNotMatch((await session.applyAsync('read_function', { name: 'outer' })).value,
+    /import inner from/);
   assert.match((await session.applyAsync('read_function', { name: 'inner' })).value,
     /return "old";/);
   assert.equal((await session.applyAsync('edit_function', { name: 'outer.inner', find: 'return "old";',
     replace_with: 'return "new";' })).kind, 'ok');
   assert.equal(lam.codebase.outer.codebase.inner.code, 'return "new";\n');
-  assert.equal((await session.applyAsync('edit_function', { name: 'outer', find: 'import inner from',
-    replace_with: 'import renamed from' })).kind, 'ok');
-  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['renamed']);
+  assert.equal((await session.applyAsync('edit_function', { name: 'outer', find: 'Call inner.',
+    replace_with: 'Call the companion inner function.' })).kind, 'ok');
+  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['inner']);
   assert.equal((await session.applyAsync('edit_function', { name: 'outer.inner', find: 'return "new";',
     replace_with: 'return "newer";' })).kind, 'ok');
-  assert.equal(lam.codebase.outer.codebase.renamed.code, 'return "newer";\n');
-  assert.equal((await session.applyAsync('edit_function', { name: 'outer', find: './outer/inner.ts',
-    replace_with: './missing.ts' })).kind, 'rejected');
-  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['renamed']);
+  assert.equal(lam.codebase.outer.codebase.inner.code, 'return "newer";\n');
+  assert.equal((await session.applyAsync('edit_function', { name: 'outer', find: 'Call the companion inner function.',
+    replace_with: 'import inner from "./outer/inner.ts";\nCall inner.' })).kind, 'rejected');
+  assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['inner']);
 });
 
 test('normal lambdas edit imports as functions rather than through a filesystem', async () => {

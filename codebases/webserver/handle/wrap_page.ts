@@ -1,4 +1,3 @@
-import type { Request, Parsed, Route, RouteDef, Entry, Session, Site, Review, Response } from "../types.js";
 export default function wrap_page(acc: Site, route: Route, content: string, session: Session): Response {
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 const safe = content.replace(/<\s*script[\s\S]*?<\s*\/\s*script\s*>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")

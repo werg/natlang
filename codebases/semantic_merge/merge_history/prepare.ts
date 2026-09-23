@@ -1,4 +1,3 @@
-import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
 export default function prepare(base: Document, updates: Update[]): Prepared {
 const invalid = error => ({ valid: false, error, updates: updates, presentation: "" });
 if (!Number.isSafeInteger(base.revision) || base.revision < 0)

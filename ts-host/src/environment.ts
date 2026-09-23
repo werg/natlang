@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext, type Context } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { ApplicationPackages } from './application-packages.js';
+import { ApplicationPackages, findPackageWorkspace } from './application-packages.js';
 import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './native/evaluator.js';
 export { EvalFailure } from './native/evaluator.js';
@@ -55,11 +55,13 @@ export function portable(value: unknown, seen = new Set<object>(), path = '$'): 
   return out;
 }
 
-function lowerStaticImports(source: string): string {
+function lowerStaticImports(source: string, validateImport: (specifier: string) => void): string {
   const file = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.Latest, true);
   const edits: { start: number; end: number; text: string }[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isImportDeclaration(node)) {
+      if (!ts.isStringLiteral(node.moduleSpecifier)) throw new Error('Package import must use a string literal');
+      validateImport(node.moduleSpecifier.text);
       const clause = node.importClause;
       const call = `await __natlang_import(${node.moduleSpecifier.getText(file)})`;
       const fields: string[] = [];
@@ -83,10 +85,11 @@ function lowerStaticImports(source: string): string {
   return source;
 }
 
-function compile(code: string, body: boolean, asyncBody = false, modules = false): string {
+function compile(code: string, body: boolean, asyncBody = false, modules = false,
+  validateImport: (specifier: string) => void = () => {}): string {
   let source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,fx,host)` : code;
   // Reparse lowered imports before TS binding; otherwise TS rewrites uses to removed import aliases.
-  if (modules) source = lowerStaticImports(source);
+  if (modules) source = lowerStaticImports(source, validateImport);
   const result = ts.transpileModule(source, {
     fileName: 'natlang-eval.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
@@ -130,9 +133,9 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     this.timeoutMs = options.timeoutMs ?? 2000;
     this.observe = options.observe;
     this.effect = options.effect;
-    this.workspace = options.workspace;
-    this.scopeCapabilities = { allowModules: !!options.workspace, allowNetwork: options.network ?? !!options.workspace };
-    if (options.workspace) this.packages = new ApplicationPackages(options.workspace, event => this.packageEvents.push(event));
+    this.workspace = options.workspace ?? findPackageWorkspace(process.cwd());
+    this.scopeCapabilities = { allowModules: true, allowNetwork: options.network ?? !!this.workspace };
+    if (this.workspace) this.packages = new ApplicationPackages(this.workspace, event => this.packageEvents.push(event));
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new RangeError('timeoutMs must be positive');
   }
 
@@ -158,8 +161,11 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     },
       console: undefined });
     runInContext(prelude, context, { timeout: this.timeoutMs });
+    context.__natlang_import = (specifier: string) => {
+      if (!this.packages) throw new Error('Package imports require a project package.json');
+      return this.packages.importModule(specifier);
+    };
     if (this.packages) {
-      context.__natlang_import = (specifier: string) => this.packages!.importModule(specifier);
       context.installPackages = (specifiers: string[]) => this.installPackages(specifiers);
     }
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
@@ -218,7 +224,10 @@ export class TypeScriptEnvironment implements EvalEnvironment {
           return portable(result);
         },
       }) });
-      const code = '"use strict";\n' + compile(request.code, request.body, request.body, !!this.packages);
+      const code = '"use strict";\n' + compile(request.code, request.body, request.body, true, specifier => {
+        if (!this.packages) throw new Error('Package imports require a project package.json');
+        this.packages.validateImportSpecifier(specifier);
+      });
       try {
         const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
         const value = await pending;

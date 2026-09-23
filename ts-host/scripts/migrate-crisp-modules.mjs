@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { basename, dirname, extname, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, resolve } from 'node:path';
 import YAML from 'yaml';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const roots = process.argv.slice(2).map(path => resolve(path));
 if (!roots.length) throw new Error('usage: migrate-crisp-modules.mjs <root>...');
@@ -16,23 +18,6 @@ function files(path) {
     return statSync(child).isDirectory() ? files(child) : [child];
   });
 }
-function nearestTypes(file) {
-  let at = dirname(file);
-  while (roots.some(root => at === root || at.startsWith(root + sep))) {
-    const candidate = resolve(at, 'types.ts');
-    if (candidate !== file && existsSync(candidate)) return candidate;
-    const parent = dirname(at); if (parent === at) break; at = parent;
-  }
-}
-function typeNames(file) {
-  if (!file) return [];
-  return [...readFileSync(file, 'utf8').matchAll(/\bexport\s+type\s+([A-Za-z_$][\w$]*)\s*=/g)].map(match => match[1]);
-}
-function specifier(from, to) {
-  let path = relative(dirname(from), to).replaceAll(sep, '/').replace(/\.ts$/, '.js');
-  if (!path.startsWith('.')) path = './' + path;
-  return path;
-}
 function importsOf(block) {
   return block.trim().split(/\r?\n/).filter(Boolean).map(line => {
     const match = namedImport.exec(line.trim());
@@ -45,11 +30,6 @@ function migrateTs(file) {
   const match = front.exec(source);
   if (!match) {
     if (/\bexport\s+default\s+(?:async\s+)?function\b/.test(source)) {
-      const typesFile = nearestTypes(file), names = typeNames(typesFile);
-      if (typesFile && names.length) {
-        const statement = `import type { ${names.join(', ')} } from ${JSON.stringify(specifier(file, typesFile))};`;
-        if (!source.includes(`from ${JSON.stringify(specifier(file, typesFile))}`)) writeFileSync(file, statement + '\n' + source);
-      }
       return;
     }
     if (basename(file) === 'types.ts') return;
@@ -66,10 +46,6 @@ function migrateTs(file) {
   let migrated = body;
   for (const [name, parameter] of chosen) migrated = migrated.replace(new RegExp(`\\bargs\\.${name}\\b`, 'g'), parameter);
   const imports = importsOf(match[1]);
-  const typesFile = nearestTypes(file), names = typeNames(typesFile);
-  if (typesFile && names.length) imports.push(`import type { ${names.join(', ')} } from ${JSON.stringify(specifier(file, typesFile))};`);
-  if (/\bhost\./.test(migrated)) imports.push('import { host } from "natlang:runtime";');
-  if (/\bfx\./.test(migrated)) imports.push('import { effects as fx } from "natlang:runtime";');
   const parameters = declared.map(([raw, type]) => {
     const name = raw.replace(/\?$/, ''), optional = raw.endsWith('?') ? '?' : '';
     return `${chosen.get(name)}${optional}: ${type}`;
@@ -112,3 +88,6 @@ for (const file of all) {
   if (file.endsWith('.ts') && basename(file) !== 'types.ts') migrateTs(file);
   else if (file.endsWith('.nl')) migrateNl(file);
 }
+// The current source format resolves local functions through companion folders only.
+execFileSync(process.execPath, [fileURLToPath(new URL('../../scripts/migrate_companion_imports.mjs', import.meta.url)), ...roots],
+  { stdio: 'inherit' });

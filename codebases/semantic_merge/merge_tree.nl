@@ -1,7 +1,3 @@
-import check_state from "./merge_tree/check_state";
-import interpret from "./merge_tree/interpret";
-import prepare_envelope from "./prepare_envelope";
-import validate_claims from "./validate_claims";
 ---
 description: Merge a nested outline or folder tree, including subtree moves and
   rename conflicts.

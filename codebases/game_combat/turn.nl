@@ -1,6 +1,3 @@
-import choose from "./turn/choose";
-import observe from "./turn/observe";
-import submit from "./turn/submit";
 ---
 description: Choose a fighter tactic at a round boundary.
 args:

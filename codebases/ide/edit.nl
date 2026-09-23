@@ -1,6 +1,3 @@
-import apply from "./edit/apply";
-import inspect from "./edit/inspect";
-import interpret from "./edit/interpret";
 ---
 description: Interpret one editor request against a pinned source revision.
 args:

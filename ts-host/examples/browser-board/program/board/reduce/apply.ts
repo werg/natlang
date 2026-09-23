@@ -1,5 +1,3 @@
-import type { Task, Board, UiEvent, Decision, TaskGroup, ViewPlan, UiAction, UiNode } from "../types.js";
-
 export default function apply(_state: Board, event: UiEvent, _decision: Decision): Board {
 const state = _state;
 const decision = _decision;

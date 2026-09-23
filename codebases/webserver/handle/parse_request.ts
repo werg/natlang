@@ -1,4 +1,3 @@
-import type { Request, Parsed, Route, RouteDef, Entry, Session, Site, Review, Response } from "../types.js";
 export default function parse_request(item: Request): Parsed {
 const dec = s => { try { return decodeURIComponent(s.replace(/\+/g, " ")) } catch (e) { return s } }
 const pairs = s => Object.fromEntries((s || "").split("&").filter(Boolean).map(p => { const i = p.indexOf("="); return i < 0 ? [dec(p), ""] : [dec(p.slice(0, i)), dec(p.slice(i + 1))] }))
