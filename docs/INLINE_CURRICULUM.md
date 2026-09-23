@@ -198,7 +198,10 @@ from all 39 families, the largest family at 7%. With 53 families, the seed-102 p
 47 s) gives a 1,702-case train shard over 48 families; a seed-900 held-out build plus the sources' test splits
 gives a 310-case test shard; the authoring track has 100 cases.
 Synthetic case ids and groups carry the seed; source cases are grouped by source story across shards.
-Admitted rows are ordinary collector rows and go through `materialize-native-teacher.mjs` unchanged.
+Admitted rows are ordinary collector rows and go through `materialize-native-teacher.mjs` unchanged. (Pilot 4's 37
+admitted rows gave 169 training decisions.) Materialized rows keep the program IR, oracle block included, as
+provenance; `export-native-sft.mjs` builds model input from `messages`, `tools`, and `target` only, so no oracle
+field reaches training input.
 
 ## Model-surface changes made for this curriculum
 
