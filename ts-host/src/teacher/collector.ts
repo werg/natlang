@@ -311,64 +311,79 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       trajectory.push(trajectoryTurn(request, response));
       return response;
     };
-    const root = programNode(item.record);
-    const folderFiles = item.record.semantics.folder_files;
-    if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))
-      throw new Error(`${item.record.id}: folder_files requires a directory reducer root`);
-    const folder = folderFiles ? Folder.fromFiles(folderFiles) : undefined;
-    if (folder) {
-      root.projectTransaction = await folder.beginTransaction(false);
-      root.reducerMode = 'apply';
-    }
-    const environment = new TypeScriptEnvironment({ mode: 'fresh' });
-    const effects = effectHarness(item.record.semantics.effects ?? {});
-    const agent = new NativeToolAgent(driver, { systemPrompt: config.systemPrompt, temperature: 0,
-      segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages, maxTurns: config.maxTurns });
     // Seeds derive from the run ID, so it names the program and seed root only: a teacher
     // handed a student's failed state must reproduce the student's requests exactly.
     const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index,
       program_ir_sha256: expected.program_ir_sha256, seed_policy: expected.seed_policy })).slice(0, 32);
-    // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
-    const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
-    for (const [name, fn] of Object.entries(effects.capabilities)) {
-      const [service, method] = name.split('.') as [string, string];
-      (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
-    }
-    const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services,
-      seedPolicy: { mode: 'derived', root: config.rootSeed }, runId, signal });
-    try {
-      const result = await runtime.run(root), actual = dump(result.value);
-      const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
-        [file.path, await folder.readText(file.path)] as const))) : undefined;
-      const expectedKind = item.record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
-      const seededFailure = item.record.semantics.failure_seed;
-      const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
-        (!seededFailure.kind || event.failure_kind === seededFailure.kind));
-      
-      const effectsOk = same(effects.observed, effects.expected);
-      const filesOk = !folder || same(actualFiles, item.record.semantics.expected_files ?? folderFiles);
-      const accepted = failureSeen && result.outcome.kind === expectedKind && effectsOk && filesOk &&
-        (expectedKind !== 'done' || same(actual, item.record.semantics.expected));
-      const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
-        id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,
-        task: { kind: 'whole_program', program_ir: item.record,
-          source_program_ids: [item.record.id] } as TeacherRow['task'], provenance: { ...expected,
-          trace_sha256: sha256(canonical(runtime.trace.events)) }, outcome: { status: result.outcome.kind,
-          detail: result.outcome.detail, value: actual, effects: effects.observed,
-          ...(actualFiles ? { files: actualFiles } : {}), accepted,
-          action_ledger: runtime.trace.events.filter(event => event.kind === 'action'),
-          scope_failures: runtime.trace.events.filter(event => event.kind === 'scope_failure'),
-          host_events: runtime.trace.events.filter(event => event.kind === 'host') }, trajectory,
-        ...(handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
-          student_trajectory_sha256: handoff.student_trajectory_sha256,
-          handoff_at: handoff.handoff_at, failure: handoff.failure } } : {}),
-        capture_limits: [] };
-      await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
-        runtime.trace.events.map(event => JSON.stringify(event)).join('\n') + '\n');
-      await removeIfPresent(partialPath);
-      return row;
-    } finally { environment.close(); }
+    const run = await executeProgram(item.record, driver, { ...config, runId, signal });
+    const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
+      id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,
+      task: { kind: 'whole_program', program_ir: item.record,
+        source_program_ids: [item.record.id] } as TeacherRow['task'], provenance: { ...expected,
+        trace_sha256: sha256(canonical(run.trace)) }, outcome: run.outcome, trajectory,
+      ...(handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
+        student_trajectory_sha256: handoff.student_trajectory_sha256,
+        handoff_at: handoff.handoff_at, failure: handoff.failure } } : {}),
+      capture_limits: [] };
+    await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
+      run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
+    await removeIfPresent(partialPath);
+    return row;
   };
+}
+
+export type ExecuteOptions = { systemPrompt: string; segmentTurns: number; segmentMessages: number;
+  maxTurns?: number; rootSeed: number; runId: string; signal?: AbortSignal };
+export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
+
+/**
+ * Run a program's root invocation with a model driver in a fresh environment and check the result,
+ * effects, and folder against its contract. The collector and reference replays share this path.
+ */
+export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
+  options: ExecuteOptions): Promise<ProgramRun> {
+  const root = programNode(record);
+  const folderFiles = record.semantics.folder_files;
+  if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))
+    throw new Error(`${record.id}: folder_files requires a directory reducer root`);
+  const folder = folderFiles ? Folder.fromFiles(folderFiles) : undefined;
+  if (folder) {
+    root.projectTransaction = await folder.beginTransaction(false);
+    root.reducerMode = 'apply';
+  }
+  const environment = new TypeScriptEnvironment({ mode: 'fresh' });
+  const effects = effectHarness(record.semantics.effects ?? {});
+  const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: 0,
+    segmentTurns: options.segmentTurns, segmentMessages: options.segmentMessages, maxTurns: options.maxTurns });
+  // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
+  const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
+  for (const [name, fn] of Object.entries(effects.capabilities)) {
+    const [service, method] = name.split('.') as [string, string];
+    (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
+  }
+  const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services,
+    seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
+  try {
+    const result = await runtime.run(root), actual = dump(result.value);
+    const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
+      [file.path, await folder.readText(file.path)] as const))) : undefined;
+    const expectedKind = record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
+    const seededFailure = record.semantics.failure_seed;
+    const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
+      (!seededFailure.kind || event.failure_kind === seededFailure.kind));
+    const effectsOk = same(effects.observed, effects.expected);
+    const filesOk = !folder || same(actualFiles, record.semantics.expected_files ?? folderFiles);
+    // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
+    const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
+    const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk &&
+      (expectedKind !== 'done' || same(actual, record.semantics.expected));
+    const trace = runtime.trace.events as unknown as Record<string, unknown>[];
+    return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
+      effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), accepted,
+      action_ledger: trace.filter(event => event.kind === 'action'),
+      scope_failures: trace.filter(event => event.kind === 'scope_failure'),
+      host_events: trace.filter(event => event.kind === 'host') } };
+  } finally { environment.close(); }
 }
 
 export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..', import.meta.url))): Promise<string> {
