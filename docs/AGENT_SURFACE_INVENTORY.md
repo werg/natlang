@@ -1,20 +1,20 @@
 # Agent-facing surface and observed failures
 
 > **Current interface (`scope-eval-v1`, 2026-09-22).** The model uses a
-> persistent TypeScript evaluation scope in the same Node host as crisp code. `eval(code)` supports
-> declarations, assignments, control flow, exact work, and ordinary awaited
-> positional calls to imported natlang or crisp functions. The auxiliary
-> actions are `read_value`, `write_value`, `return_value`, `mark_lines`,
-> `report_blocker`, and `report_error`, plus `list_files`, `search_files`,
-> `read_file`, `write_file`, `edit_file`, and `diff_files` for files. Directory
-> reducers additionally receive `commit`.
+> persistent TypeScript evaluation scope in the same host as crisp code. `eval(code)` supports
+> declarations, assignments, control flow, exact work, and positional calls
+> to imported functions. Synchronous TypeScript imports return directly;
+> asynchronous TypeScript and natural-language imports return promises. The
+> auxiliary actions are `read_value`, `mark_lines`, `report_blocker`, and
+> `report_error`, plus `read_function`, `edit_function`, and `diff_functions`
+> when functions are imported. Directory reducers additionally receive file
+> tools and `commit`.
 >
-> Scope values and files are separate. The recursive `codebase/` overlay has a
-> fixed manifest: existing file contents may be edited and imports relinked;
-> creating, moving, and deleting codebase files is forbidden. Directory
-> reducers use writable `project/` semantics, where normal file creation,
-> editing, moving, and deletion are allowed; `commit` selects changes and
-> `folder.apply` retains them.
+> Imported function sources have a fixed file set: their contents may be
+> edited and imports relinked; creating, moving, and deleting function files is
+> forbidden. Directory reducers receive a writable folder whose paths are
+> relative to its root. `commit` selects changes and `folder.apply` retains
+> them.
 >
 > The remainder of this file is historical inventory material from the
 > pre-`scope-eval-v1` protocol. Its slash-path names and eight-tool lists

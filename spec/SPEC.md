@@ -64,9 +64,11 @@ A final expression or top-level return is displayed as the eval tool result. If
 that value fits the function return type, it also becomes the function result.
 A later compatible eval value may replace it until the function completes.
 
-Imported natlang and crisp functions are called with `await` and positional
-values. Collection control flow uses normal TypeScript loops, array methods,
-and `Promise.all`.
+Imported functions take positional values. A synchronous TypeScript default
+export returns its value directly; an asynchronous TypeScript export and a
+natural-language function return promises and are called with `await`.
+Collection control flow uses normal TypeScript loops, array methods, and
+`Promise.all` when the mapped calls are asynchronous.
 
 ## Instruction lines and completion
 

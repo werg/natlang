@@ -10,7 +10,9 @@ A natlang program is a set of typed functions. Crisp helpers are ordinary
 TypeScript functions, normally written as default exports. Natural-language
 functions declare typed parameters and a return type in frontmatter and
 contain instructions executed line by line. Both kinds of imported function
-use the same names and ordinary awaited positional calls.
+use the same names and positional calls. Synchronous TypeScript functions
+return directly; asynchronous TypeScript and natural-language functions return
+promises.
 
 Authored signatures use standard TypeScript data types: `string`, `number`,
 `boolean`, `null`, records, arrays, `Record<string, T>`, named aliases, and

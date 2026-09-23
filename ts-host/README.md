@@ -33,7 +33,8 @@ export default function countWords(text: string): number {
 
 Natural-language functions use typed frontmatter and instruction lines in a
 `.nl` file. Both kinds of function use standard TypeScript types, positional
-parameters, imports, and `await` calls. Refer to [the specification](../spec/SPEC.md)
+parameters, and imports. Call synchronous TypeScript functions directly and
+await asynchronous TypeScript or natural-language functions. Refer to [the specification](../spec/SPEC.md)
 for source, type, and completion rules.
 
 ## Run
