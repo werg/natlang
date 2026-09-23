@@ -1,8 +1,9 @@
 # P17 — Living specification and test explorer
 
-Status: finite dependency-plan explorer implemented in `codebases/test_explorer`,
-`applications/test_explorer.py`, and `scripts/run_test_explorer.py`. Teacher runs
-and multi-target exploration remain unmeasured.
+Status: the interactive application is Studio's P17 app
+(`ts-host/studio/apps/`); the named programs in `codebases/test_explorer` remain
+as teacher corpus. The Python host application was retired with the Python
+runtime. Teacher runs and multi-target exploration remain unmeasured.
 
 ## Natlang prerequisites
 

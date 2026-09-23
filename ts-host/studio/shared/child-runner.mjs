@@ -20,7 +20,7 @@ export function runChild(payload, { model, signal, onProgress = () => { } } = {}
                 try {
                     if (!model)
                         throw new Error('This child program needs a loaded interpreter model');
-                    const result = await model.turn(data.request, signal);
+                    const result = await model(data.request, signal);
                     if (!settled)
                         worker.postMessage({ kind: 'model-result', id: data.id, result });
                 }

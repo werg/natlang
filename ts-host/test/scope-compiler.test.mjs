@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compileScopeSnippet, SCOPE_COMPILE_VERSION } from '../dist/index.js';
+import { compileScopeSnippet, SCOPE_COMPILE_VERSION, SCOPE_RUNTIME_PRELUDE } from '../dist/scope-compiler.js';
 
+import ts from 'typescript';
+const prelude = ts.transpileModule(SCOPE_RUNTIME_PRELUDE, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+
+/** Run a compiled program under the runtime contract: helpers and output flow through `__live`. */
 function load(result) {
   assert.equal(result.ok, true, JSON.stringify(result.diagnostics));
-  return Function(`${result.program}\nreturn ${result.entrypoint};`)();
+  return async (inputs, locals, callables = {}) => {
+    let output;
+    const live = { callables, finish: value => { output = value; } };
+    const entry = Function('__live', `${prelude}\n${result.program}\nreturn ${result.entrypoint};`)(live);
+    await entry(inputs, locals, {});
+    return output;
+  };
 }
 
 test('scope compiler records top-level bindings and preserves final-expression REPL semantics', async () => {
@@ -40,9 +50,9 @@ test('scope compiler injects async checked-helper placeholders with ordinary cal
   });
   const calls = [];
   const run = load(compiled);
-  assert.deepEqual(await run({ value: 7 }, {}, async (name, args) => {
-    calls.push([name, args]); return args[0] * 2;
-  }),
+  assert.deepEqual(await run({ value: 7 }, {}, { double: async (...args) => {
+    calls.push(['double', args]); return args[0] * 2;
+  } }),
     { result: 14, inputs: { value: 7 }, bindings: { answer: 14 } });
   assert.deepEqual(calls, [['double', [7]]]);
 });

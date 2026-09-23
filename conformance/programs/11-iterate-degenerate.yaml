@@ -1,38 +1,59 @@
 id: 11-iterate-degenerate
 title: Ordinary TypeScript control flow detects that an update made no progress
 kind: program
-exercises: [code base, bounded TypeScript loop, no-progress detection, typed result]
-program:
-  $lambda:
-    type: '(text: string) => Result'
-    function: trim_long_words
+exercises:
+  - code base
+  - bounded TypeScript loop
+  - no-progress detection
+  - typed result
+root: trim_long_words.nl
+files:
+  trim_long_words.nl: |
+    ---
+    args:
+      text: "string"
+    returns: "Result"
     types:
-      Result: '{ text: string, gave_up: boolean }'
-    instructions: |
-      Use a TypeScript loop to call `remove_long_words` at most six times.
-      Stop once the text has fewer than three words. If an update leaves the text unchanged,
-      return the original text with `gave_up: true`. Otherwise return the trimmed text.
-    codebase:
-      remove_long_words:
-        description: Remove every word longer than 20 letters from the text.
-        args: { state: string }
-        returns: string
-        code: return state.split(/\s+/).filter(w => w.length <= 20).join(" ")
-      short_enough:
-        description: Does the text have fewer than 3 words?
-        args: { state: string }
-        returns: boolean
-        code: return state.trim().split(/\s+/).length < 3
+      Result: "{ text: string, gave_up: boolean }"
+    ---
+    Use a TypeScript loop to call `remove_long_words` at most six times.
+    Stop once the text has fewer than three words. If an update leaves the text unchanged,
+    return the original text with `gave_up: true`. Otherwise return the trimmed text.
+  trim_long_words/types.ts: |
+    export type Result = { text: string, gave_up: boolean };
+  trim_long_words/remove_long_words.ts: |
+    /** Remove every word longer than 20 letters from the text. */
+    export default function remove_long_words(state: string): string {
+      return state.split(/\s+/).filter(w => w.length <= 20).join(" ")
+    }
+  trim_long_words/short_enough.ts: |
+    /** Does the text have fewer than 3 words? */
+    export default function short_enough(state: string): boolean {
+      return state.trim().split(/\s+/).length < 3
+    }
 inputs:
-  text: "the quick brown fox"
+  text: the quick brown fox
 expect:
-  value: { text: "the quick brown fox", gave_up: true }
+  value:
+    text: the quick brown fox
+    gave_up: true
 notes: No word is longer than 20 letters, so the first update leaves the state unchanged.
 lint:
-  must: [a bounded TypeScript loop calls remove_long_words, unchanged state sets gave_up]
-  must_not: [an unbounded loop, claiming to have shortened text when nothing changed]
+  must:
+    - a bounded TypeScript loop calls remove_long_words
+    - unchanged state sets gave_up
+  must_not:
+    - an unbounded loop
+    - claiming to have shortened text when nothing changed
 reference:
   trim_long_words:
-    eval: "let state = text;\nlet gaveUp = false;\nfor (let i = 0; i < 6; i++) {\n  const next = await remove_long_words(state);\n\
-      \  if (next === state) { gaveUp = true; break; }\n  state = next;\n  if (await short_enough(state))\
-      \ break;\n}\n({ text: gaveUp ? text : state, gave_up: gaveUp })"
+    eval: |-
+      let state = text;
+      let gaveUp = false;
+      for (let i = 0; i < 6; i++) {
+        const next = await remove_long_words(state);
+        if (next === state) { gaveUp = true; break; }
+        state = next;
+        if (await short_enough(state)) break;
+      }
+      ({ text: gaveUp ? text : state, gave_up: gaveUp })

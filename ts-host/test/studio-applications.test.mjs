@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { evalTurn } from './support/eval-turn.mjs';
+import { scriptedModel } from './support/natlang.mjs';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { simulateInventory } from '../studio/apps/worlds.mjs';
@@ -31,26 +31,26 @@ function cellHost(executed=[]){const values=new Map();return {
  cell:async(cell,deps)=>{executed.push(cell.id);const value=cell.id==='numbers'?[2,3,5,7,11]:deps.numbers.reduce((a,b)=>a+b,0);const id='value-'+values.size;values.set(id,value);return {id,preview:JSON.stringify(value)};}
 };}
 const sourceFor = spec => loadProgram(spec, path => readFile(new URL('../studio/' + path.replace('./', ''), import.meta.url), 'utf8'));
+const { natlangApplication } = await (async () => { await api(); return import('../studio/shared/natlang-app.mjs'); })();
 for (const spec of apps)
     test(`${spec.project} ${spec.id}: real natlang source, typed operation and view`, async () => {
-        const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
         const event = { id: 'event-1', kind: spec.smoke.action, value: JSON.stringify(spec.smoke) };
         const source = await sourceFor(spec);
-        const client = new BrowserNatlangClient({ host: { studio: { apply: (state, event, decision) => applyOperation(spec, state, decision, services) } } });
-        let app;
-        app = new BrowserNatlangApplication({ client, source, initialState: spec.initial(), modelTurn: fixtureTurn(spec, () => app.state, () => event), seedRoot: 17 });
+        let app, committed;
+        app = natlangApplication({ source, initialState: spec.initial(), seedRoot: 17,
+            services: { studio: { apply: (state, event, decision) => applyOperation(spec, state, decision, services) } },
+            model: fixtureTurn(spec, () => app.state, () => event), onCommit: commit => { committed = commit; } });
         try {
             await app.start();
             const result = await app.dispatch(event);
             assert.equal(result.state.revision, 1);
             assert.deepEqual(result.view.focus, spec.panelIds);
-            assert.ok(result.reducerRun.trace.length);
+            assert.ok(committed.trace.length);
             assert.equal(spec.panels(result.state).length, spec.panelIds.length);
             assert.equal(new Set(spec.panels(result.state).map(p => p.id)).size, spec.panelIds.length);
         }
         finally {
             await app.close();
-            await client.close();
         }
     });
 test('cash, inventory, schedule, citations and workflow invariants reject invalid operations', async () => {
@@ -91,20 +91,14 @@ test('notebook host executes exactly one cell and rejects unmet dependencies', a
     assert.equal(edited.state.cells[1].result, '');
 });
 test('natlang can drive multiple inspected operations within a single UI interaction', async () => {
-    const { BrowserNatlangClient, BrowserNatlangApplication } = await api();
     const spec = appById.get('notebook');
     const source = await sourceFor(spec);
-    const calls = [],cells=cellHost();
-    const client = new BrowserNatlangClient({ host: { studio: { apply: (state, event, d) => { calls.push(d.target); return applyOperation(spec, state, d, cells); } } } });
-    const modelTurn = turn => {
-        const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
-        if (prompt.includes(`Drive the ${spec.title} interaction to completion.`))
-            return evalTurn(turn,
-                'const first = await apply(state, event, { action: "execute", target: "numbers" }); const next = await apply(first.state, event, { action: "execute", target: "total" }); await finish(next)');
-        return evalTurn(turn, `(${JSON.stringify({ heading: spec.title,
-            summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] })})`);
-    };
-    const app = new BrowserNatlangApplication({ client, source, initialState: spec.initial(), modelTurn });
+    const calls = [], cells = cellHost();
+    const model = scriptedModel(opening => opening.includes(`Drive the ${spec.title} interaction to completion.`) ?
+        'const first = await perform(state, event, { action: "execute", target: "numbers" }); const next = await perform(first.state, event, { action: "execute", target: "total" }); result = await finish(next)' :
+        `result = ${JSON.stringify({ heading: spec.title, summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] })}`);
+    const app = natlangApplication({ source, initialState: spec.initial(), seedRoot: 17, model: model.driver,
+        services: { studio: { apply: (state, event, d) => { calls.push(d.target); return applyOperation(spec, state, d, cells); } } } });
     try {
         await app.start();
         const result = await app.dispatch({ id: 'multi', kind: 'run', value: '{"target":"total"}' });
@@ -113,6 +107,5 @@ test('natlang can drive multiple inspected operations within a single UI interac
     }
     finally {
         await app.close();
-        await client.close();
     }
 });

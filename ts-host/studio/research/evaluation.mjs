@@ -22,7 +22,7 @@ export async function auditResearchBundle(bundle, scenarioId) {
     if (!['irrelevant_update', 'incompatible_merges'].includes(scenario.id))
         checks.push({ name: 'actual execution receipts', pass: completed.length > 0 });
     if (scenario.capability === 'learn') checks.push(
-        { name: 'new executable method', pass: entries.some(row => row.kind === 'source' && !row.path.startsWith('reduce/') && !['reduce.nl','view.nl','view.ts'].includes(row.path) && !['learn.nl','revise_schema.nl','invent_interaction.nl','preserve_intent.nl','investigate_beliefs.nl'].includes(row.path)) },
+        { name: 'new executable method', pass: entries.some(row => row.kind === 'source' && !row.path.startsWith('reduce/') && !['reduce.nl','view.ts'].includes(row.path) && !['learn.nl','revise_schema.nl','invent_interaction.nl','preserve_intent.nl','investigate_beliefs.nl'].includes(row.path)) },
         { name: 'method described', pass: (kinds.method?.length ?? 0) > 0 });
     if (scenario.capability === 'schema') checks.push(
         { name: 'migration source or record', pass: (kinds.migration?.length ?? 0) > 0 },

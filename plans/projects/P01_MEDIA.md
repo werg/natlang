@@ -1,8 +1,8 @@
 # P01 — Semantic media workbench
 
 Status: CPU-backed batch workbench implemented in
-[`codebases/media_workbench`](../../codebases/media_workbench/README.md) and
-[`applications/media_workbench.mjs`](../../applications/media_workbench.mjs).
+[`applications/media`](../../applications/media/index.ts) and
+[`applications/media/index.ts`](../../applications/media/index.ts).
 Interactive jobs, bounded revision and live-model quality remain open.
 [Shared capability definitions and conventions](README.md). Product scope remains in the [catalogue](../AMBITIOUS_PROJECTS.md#p01-semantic-media-workbench).
 

@@ -19,6 +19,7 @@ async function api() {
   try { globalThis.process = undefined; return await import('../dist/browser/natlang.js'); }
   finally { globalThis.process = processValue; }
 }
+const { natlangApplication } = await (async () => { await api(); return import('../studio/shared/natlang-app.mjs'); })();
 
 function services() {
   const values = new Map();
@@ -118,25 +119,25 @@ async function runCase(frozen, options, bindings, partial, partialPath) {
     value: JSON.stringify({ ...JSON.parse(frozen.event.value), application: spec.id }) };
   const host = services();
   host.studio.apply = (state, rawEvent, decision) => applyOperation(spec, state, decision, host);
-  const client = new bindings.BrowserNatlangClient({ host });
-  let app;
-  app = new bindings.BrowserNatlangApplication({ client, source: await sourceFor(spec),
+  let committed = null;
+  const app = natlangApplication({ source: await sourceFor(spec), services: host,
     initialState: frozen.initial_state, seedRoot: options.seed,
-    runOptions: { model: { tool_schema: 'scope-eval-v1' } },
-    modelTurn: teacherDriver({ server: options.server, exchanges, partial, partialPath }) });
+    model: teacherDriver({ server: options.server, exchanges, partial, partialPath }),
+    onCommit: commit => { committed = commit; } });
   try {
     await app.start();
-    const transition = await app.dispatch(event);
-    const actual = { state: transition.state, ok: transition.reducerRun.outcome.kind === 'done',
-      detail: transition.state.notice };
+    let transition = null;
+    try { transition = await app.dispatch(event); } catch { /* a failed reduction is a rejected trajectory */ }
+    const actual = { state: transition?.state ?? frozen.initial_state, ok: Boolean(transition),
+      detail: transition?.state.notice ?? '' };
     const accepted = isDeepStrictEqual(actual.state, frozen.expected.state) && actual.ok === frozen.expected.ok;
     return { schema: 'natlang.studio_teacher_trajectory/1', id: `teacher:${frozen.id}:${options.seed}`,
       case: frozen, provenance: { model: options.model, seed: options.seed,
         source_revision: frozen.source_revision, transport: 'openai-chat/tools-v1', tool_schema: 'scope-eval-v1',
         tool_surface_sha256: options.toolSurfaceRevision },
       outcome: { accepted, expected: frozen.expected, actual },
-      runs: { reducer: transition.reducerRun, view: transition.viewRun }, exchanges };
-  } finally { await app.close(); await client.close(); }
+      runs: { reducer: committed?.trace ?? [], invocations: committed?.invocations ?? [] }, exchanges };
+  } finally { await app.close(); }
 }
 
 async function writeAtomic(path, value) {

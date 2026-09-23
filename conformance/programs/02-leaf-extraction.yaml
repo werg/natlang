@@ -1,26 +1,37 @@
 id: 02-leaf-extraction
 title: Extract a typed record; an absent optional field stays absent
 kind: program
-exercises: [leaf, record return, optional field, type-directed YAML parsing]
-program:
-  $lambda:
-    type: '(note: string) => { customer: string, order_id: string, amount: number, phone?: string }'
-    instructions: |
-      Extract the customer name, the order id, and the refund amount from `note`.
-      Include the phone number only if one is given.
+exercises:
+  - leaf
+  - record return
+  - optional field
+  - type-directed YAML parsing
+root: main.nl
+files:
+  main.nl: |
+    ---
+    args:
+      note: "string"
+    returns: "{ customer: string, order_id: string, amount: number, phone?: string }"
+    ---
+    Extract the customer name, the order id, and the refund amount from `note`.
+    Include the phone number only if one is given.
 inputs:
-  note: "Spoke to Dana Whitfield about order no. 0077 - she is owed 42.50 back. She prefers email."
+  note: Spoke to Dana Whitfield about order no. 0077 - she is owed 42.50 back. She prefers email.
 expect:
-  value: { customer: "Dana Whitfield", order_id: "0077", amount: 42.5 }
-notes: >
-  order_id must stay the string "0077", not the number 77: parsing is
-  type-directed. phone must be absent, not invented and not null.
+  value:
+    customer: Dana Whitfield
+    order_id: "0077"
+    amount: 42.5
+notes: |
+  order_id must stay the string "0077", not the number 77: parsing is type-directed. phone must be absent, not invented and not null.
 lint:
-  must_not: [construct a child]
+  must_not:
+    - construct a child
   max_actions: 3
 reference:
-  ? ''
-  : answer:
+  main:
+    answer:
       customer: Dana Whitfield
-      order_id: '0077'
+      order_id: "0077"
       amount: 42.5

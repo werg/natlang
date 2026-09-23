@@ -9,7 +9,7 @@ test('native coverage selection balances and interleaves every family determinis
   const root = await mkdtemp(join(tmpdir(), 'natlang-coverage-'));
   const source = join(root, 'source.jsonl'), rows = [];
   for (const family of ['b', 'a']) for (let index = 0; index < 3; index++)
-    rows.push({ version: 'natlang.program/1', id: `${family}-${index}`, kind: 'lambda_graph',
+    rows.push({ version: 'natlang.program/2', id: `${family}-${index}`, kind: 'lambda_graph',
       family, split: 'train', semantics: { root: {}, inputs: {}, expected: index } });
   await writeFile(source, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
   const first = await buildSelection([source], { perFamily: 2, seed: 7 });

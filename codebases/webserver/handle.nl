@@ -1,12 +1,10 @@
 ---
 description: Handle one HTTP request against the site state; respond; return the
-  new site state. The step of a fold over requests.
+  new site state. Called once per request, in arrival order.
 args:
   acc: Site
   item: Request
 returns: Site
-effects:
-  - http.respond
 ---
 function handle(acc, item) -> Site
 

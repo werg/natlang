@@ -38,7 +38,7 @@ return { discount, due: Math.max(0, Math.round((amount - discount) * 100) / 100)
     level: 'Intermediate', description: 'Normalize words and count their frequency.',
     concepts: ['dictionary', 'tokenization'], root: 'text/histogram.ts',
     args: { text: 'string' }, returns: 'Record<string, number>',
-    code: `const counts = {};
+    code: `const counts: Record<string, number> = {};
 for (const word of text.toLowerCase().match(/[a-z]+/g) ?? []) counts[word] = (counts[word] ?? 0) + 1;
 return counts;`,
     inputs: { text: 'Cats, cats and dogs!' }, expected: { cats: 2, and: 1, dogs: 1 } }),
@@ -80,8 +80,8 @@ return out;`,
     concepts: ['stack', 'state'], root: 'algorithms/brackets.ts',
     args: { text: 'string' }, returns: 'boolean',
     code: `const opens = new Set(['(', '[', '{']);
-const closing = { ')': '(', ']': '[', '}': '{' };
-const stack = [];
+const closing: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+const stack: string[] = [];
 for (const char of text) {
   if (opens.has(char)) stack.push(char);
   else if (closing[char] && stack.pop() !== closing[char]) return false;
@@ -110,7 +110,7 @@ return [];`,
     args: { tasks: 'Task[]' }, returns: 'string[]',
     files: { 'algorithms/types.ts': 'type Task = { id: string, needs: string[] };\n' },
     code: `const pending = new Map(tasks.map(task => [task.id, task.needs]));
-const order = [];
+const order: string[] = [];
 while (pending.size) {
   const ready = [...pending].filter(([, needs]) => needs.every(id => order.includes(id))).map(([id]) => id).sort();
   if (!ready.length) throw new Error('dependency cycle or missing task');
@@ -216,7 +216,7 @@ return { added: Object.keys(right).filter(key => !(key in left)).sort(),
     level: 'Beginner', description: 'Return field errors for a signup form.',
     concepts: ['validation', 'structured errors'], root: 'forms/validate.ts',
     args: { name: 'string', email: 'string', age: 'number' }, returns: 'Record<string, string>',
-    code: String.raw`const errors = {};
+    code: String.raw`const errors: Record<string, string> = {};
 if (!name.trim()) errors.name = 'required';
 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.email = 'invalid email';
 if (age < 18) errors.age = 'must be 18 or older';

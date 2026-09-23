@@ -1,96 +1,50 @@
-# TypeScript runtime for natlang
+# natlang TypeScript runtime and compiler
 
-The Node and browser runtimes share a TypeScript implementation of source
-loading, typed function calls, model tools, and directory reducer behavior.
-Node applications import `NatlangHost` from `@natlang/node`; browser
-applications use `@natlang/browser`. See [native packages and
-executables](../NATIVE_PACKAGES.md) and [development setup](../DEV_SETUP.md).
+This package builds `@natlang/node`, `@natlang/browser`, and the `natlang` CLI.
+It contains the compiler (inline `nl` planning, callable-folder checks,
+lowering), the runtime (tasks, the invocation kernel, callables, `iterateOn`),
+the interpreter (the model's eval session), and the application utilities
+(`EventLoop`, terminal shell, DOM renderer, playground projects). See
+[native packages](../NATIVE_PACKAGES.md) and [development setup](../DEV_SETUP.md).
 
-## Build
+## Build and test
 
 ```sh
 cd ts-host
 npm ci
-npm run build
-npm test
+npm run build              # Node build, then the browser bundle
+npm test                   # build, applications, type checks, tests, conformance
+npm run test:browser       # real Chromium smoke (needs a Playwright browser)
 ```
 
-Node 22.13 or newer is required. The runtime uses TypeScript's compiler API to
-transpile crisp modules and eval snippets. Eval snippets are checked against
-the shared runtime value model at transaction and function boundaries; the
-runtime does not promise full TypeScript type checking for model-generated
-snippets.
+Node 22.13 or newer is required. `docs/TS_NATIVE_IMPLEMENTATION_STATUS.md` maps
+the source modules.
 
-## Source files
-
-A crisp module is ordinary TypeScript with one default-exported function:
+## Use
 
 ```ts
-export default function countWords(text: string): number {
-  return text.trim().split(/\\s+/).filter(Boolean).length;
-}
+import { createNatlangRuntime, loadNatlang, openAICompatibleModelTurn } from '@natlang/node';
+import { handle } from './app.js';                       // compiled with `natlang build`
+
+const runtime = createNatlangRuntime({ model: openAICompatibleModelTurn({ endpoint, model }), services: { wiki } });
+const report = await runtime.run(() => handle(ticket));   // natlang calls inside find this task
+
+const review = loadNatlang('review/review.nl');           // a named function, without a build
+await runtime.run(() => review(observations, criterion));
 ```
 
-Natural-language functions use typed frontmatter and instruction lines in a
-`.nl` file. Both kinds of function use standard TypeScript types, positional
-parameters, and imports. Call synchronous TypeScript functions directly and
-await asynchronous TypeScript or natural-language functions. Refer to [the specification](../spec/SPEC.md)
-for source, type, and completion rules.
+- `natlang build` / `buildProject` compile a project: they check types and callable folders, plan `nl` calls, generate `foo.d.nl.ts`, and emit JavaScript bound to a runtime. `compileVirtualProject` does the same in memory (browser pages, workers, tests).
+- `runtime.run(fn, options)` creates a task; `runtime.bind(fn)` carries it into callbacks from uncompiled code.
+- A failed call rejects with `NatlangCallError`; traces are delivered to the `trace` sink.
+- `defineNatlang(source)` creates a natural-language function from `.nl` text at run time.
 
-## Run
+## Trust
 
-```ts
-import { NatlangHost } from '@natlang/node';
+Eval runs trusted code in the application's process; it is not a sandbox.
+Services and live values are passed by reference, and their effects are not
+rolled back. Keep operation identities and observations in the application
+when retrying external effects.
 
-const host = new NatlangHost();
-try {
-  const result = await host.run({
-    source: { kind: 'file', path: 'inspect.nl' },
-    inputs: { text: 'The trial improved response times.' },
-    modelTurn,
-  });
-  console.log(result.outcome, result.value);
-} finally {
-  host.close();
-}
-```
-
-The model receives `eval`, `read_value`, and `mark_lines`, plus blocker/error
-reporting and function inspection/editing tools. Parameters, imported
-functions, and persistent locals are lexical names in eval. Imported natural
-language and TypeScript functions are called normally.
-
-## Codebase editing and directory reducers
-
-Models are encouraged to inspect and improve existing imported instructions
-and TypeScript helpers through the function editing tools. The set of
-codebase functions stays fixed during a run: those tools edit existing source
-but do not add, delete, move, or rename functions.
-
-Only directory reducers receive model-facing filesystem tools. The reducer's
-first parameter is an explicit `Folder`; inside the reducer it is available as
-`folder`. Paths are relative to that folder, with no root prefix. A direct
-`await reducer(folder, ...args)` returns its typed value and discards edits.
-`await folder.apply(reducer, ...args)` retains committed edits. To delegate a
-subdirectory, use `await folder.dir('subdirectory').apply(reducer, ...args)`.
-The child receives that subdirectory as its own `folder` root. Reducers may
-also be called directly when only their typed return is needed.
-
-The detailed file API and reducer call behavior are in the reducer-specific
-prompt at `natlang/prompts/tools_directory_reducer.md`. Normal lambdas do not
-receive that API.
-
-## Browser
-
-Use [`BROWSER_CLIENT.md`](BROWSER_CLIENT.md) for local model loading, WebGPU,
-asset hosting, and browser lifecycle. Use
-[`TERMINAL_APPLICATIONS.md`](TERMINAL_APPLICATIONS.md) for Node CLI and
-terminal application patterns.
-
-## Trust and host effects
-
-The TypeScript evaluator executes trusted application code and is not a
-sandbox. Host objects passed into the environment remain accessible by
-identity. A failed eval, validation error, or cancellation cannot undo a native
-operation that already occurred. Keep effect identity and observations in the
-application when retrying external operations.
+Browser specifics: [`BROWSER_CLIENT.md`](BROWSER_CLIENT.md) and
+[`FRONTEND_APPLICATIONS.md`](FRONTEND_APPLICATIONS.md). Terminal applications:
+[`TERMINAL_APPLICATIONS.md`](TERMINAL_APPLICATIONS.md).

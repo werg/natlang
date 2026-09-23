@@ -1,69 +1,85 @@
 id: 19-recursion-tree
 title: A recursive named type is flattened crisply, then mapped and counted
 kind: program
-exercises: [recursive named type, crisp function recursing in code, call over a list, crisp combine]
-notes: >
-  natlang functions may never call themselves (the loader rejects any cycle): there is no way for the
-  interpreter to author a recursive decomposition. A crisp function is plain code, though, and may
-  recurse internally to flatten a recursive value; the interpreter never has to reduce the tree by hand.
-program:
-  $lambda:
-    type: '(root: Unit) => number'
-    function: count_fruit_units
+exercises:
+  - recursive named type
+  - crisp function recursing in code
+  - call over a list
+  - crisp combine
+root: count_fruit_units.nl
+files:
+  count_fruit_units.nl: |
+    ---
+    args:
+      root: "Unit"
+    returns: "number"
     types:
       Unit: "{ name: string, reports: Unit[] }"
-    instructions: |
-      Flatten the tree with `flatten_tree`, extract names with `unit_names`, and classify each name
-      with `Promise.all(names.map(...))` and `is_fruit_name`. Return `count_true(flags)`.
-    codebase:
-      flatten_tree:
-        description: Every unit in the tree, at any depth, as a flat list.
-        args: { root: Unit }
-        returns: 'Unit[]'
-        code: |
-          const out = []
-          const visit = (u) => { out.push(u); for (const r of u.reports) visit(r) }
-          visit(root)
-          return out
-      unit_names:
-        description: The name of every unit in a list.
-        args: { units: 'Unit[]' }
-        returns: 'string[]'
-        code: return units.map(u => u.name)
-      is_fruit_name:
-        description: Is this name a fruit?
-        args: { name: string }
-        returns: boolean
-        code: return ["apple", "pear", "mango", "cherry", "plum", "banana"].includes(name.toLowerCase())
-      count_true:
-        description: How many flags are true.
-        args: { flags: 'boolean[]' }
-        returns: number
-        code: return flags.filter(Boolean).length
+    ---
+    Flatten the tree with `flatten_tree`, extract names with `unit_names`, and classify each name
+    with `Promise.all(names.map(...))` and `is_fruit_name`. Return `count_true(flags)`.
+  count_fruit_units/types.ts: |
+    export type Unit = { name: string, reports: Unit[] };
+  count_fruit_units/flatten_tree.ts: |
+    /** Every unit in the tree, at any depth, as a flat list. */
+    export default function flatten_tree(root: Unit): Unit[] {
+      const out: Unit[] = [root];
+      let frontier: Unit[] = [root];
+      // Trees are at most 64 levels deep; a bounded loop replaces recursion.
+      for (let depth = 0; depth < 64; depth++) {
+        frontier = frontier.flatMap(unit => unit.reports);
+        if (!frontier.length) break;
+        out.push(...frontier);
+      }
+      return out
+    }
+  count_fruit_units/unit_names.ts: |
+    /** The name of every unit in a list. */
+    export default function unit_names(units: Unit[]): string[] {
+      return units.map(u => u.name)
+    }
+  count_fruit_units/is_fruit_name.ts: |
+    /** Is this name a fruit? */
+    export default function is_fruit_name(name: string): boolean {
+      return ["apple", "pear", "mango", "cherry", "plum", "banana"].includes(name.toLowerCase())
+    }
+  count_fruit_units/count_true.ts: |
+    /** How many flags are true. */
+    export default function count_true(flags: boolean[]): number {
+      return flags.filter(Boolean).length
+    }
+notes: |
+  natlang functions may never call themselves (the loader rejects any cycle): there is no way for the interpreter to author a recursive decomposition. A crisp function is plain code, though, and may recurse internally to flatten a recursive value; the interpreter never has to reduce the tree by hand.
 inputs:
   root:
-    name: "Head Office"
+    name: Head Office
     reports:
-      - name: "Apple"
+      - name: Apple
         reports:
-          - { name: "Logistics", reports: [] }
-          - { name: "Mango", reports: [] }
-      - name: "Finance"
+          - name: Logistics
+            reports: []
+          - name: Mango
+            reports: []
+      - name: Finance
         reports:
-          - name: "Cherry"
+          - name: Cherry
             reports:
-              - { name: "Plum", reports: [] }
+              - name: Plum
+                reports: []
 expect:
   value: 4
 lint:
-  must: [flatten_tree used to reach every depth crisply, is_fruit_name called over the flattened names, count_true is crisp]
-  must_not: [the root reading the tree level by level itself, a natlang function calling itself]
+  must:
+    - flatten_tree used to reach every depth crisply
+    - is_fruit_name called over the flattened names
+    - count_true is crisp
+  must_not:
+    - the root reading the tree level by level itself
+    - a natlang function calling itself
 reference:
   count_fruit_units:
-    eval: 'const units = await flatten_tree(root);
-
+    eval: |-
+      const units = await flatten_tree(root);
       const names = await unit_names(units);
-
       const flags = await Promise.all(names.map(async item => await is_fruit_name(item)));
-
-      await count_true(flags)'
+      await count_true(flags)

@@ -1,34 +1,25 @@
 # `@natlang/cli`
 
-The native natlang command line. It installs content addressed `.nlpkg` archives and launches their declared executable targets.
+The natlang command line: build, check, and run natlang TypeScript applications,
+call natural-language functions, and manage optional `.nlpkg` distribution
+packages and the local model runtime.
 
 ```sh
 npm install --global @natlang/cli
-natlang --setup
-natlang --help
-natlang path/to/program.nl
-natlang path/to/application
-natlang summarize the available codebase functions
-natlang --apps
-natlang semantic-terminal
+natlang setup                           # prepare the managed local model runtime
+natlang doctor
+natlang run path/to/application         # a directory with natlang.json, or a TS entry module
+natlang check path/to/project
+natlang call path/to/function.nl --inputs inputs.json
+natlang ask summarize the functions in natlang.d
+natlang apps
+natlang package install application.nlpkg && natlang run application-name
 ```
 
-Multiple words that do not resolve to a path execute as an anonymous
-`(files: Record<string, ProjectFile>) => string` natural-language function.
-It can call the current directory's top-level natlang functions and receives
-the declared file manifest as an ordinary typed record. Directory reducers
-provide the model-facing filesystem tools for relative-path operations.
-
-`natlang --setup` validates an explicit or PATH `llama-server` and, when needed,
-asks before installing natlang's pinned, hash checked runtime in the user data
-directory. It never replaces a system installation. Use `natlang --setup --yes`
-in unattended environments. The first source or reducer-backed application run
-offers the same setup when it has an interactive terminal.
-
-Source paths require no package installation. A reducer-backed application
-starts preparing its selected local server immediately, concurrently with
-target initialization, and opens after readiness. Source execution through this
-CLI also prepares the model immediately; only the lower-level embeddable model
-session remains lazy until its caller invokes `prepare()` or `turn()`. The CLI
-stops an owned server when the command exits.
-`natlang --runtime status --json` reports discovery and compatibility details.
+`natlang run` compiles the project with `natlang build` and calls the entry's
+exported `main(context)` with the configured model and runtime. `natlang setup`
+validates an explicit or PATH `llama-server` and, when needed, asks before
+installing natlang's pinned, hash-checked runtime in the user data directory;
+`natlang setup --yes` approves it unattended. The CLI starts an owned model
+server only for commands that need one and stops it when the command exits.
+`natlang runtime status --json` reports discovery and compatibility details.

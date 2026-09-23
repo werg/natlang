@@ -4,17 +4,21 @@
 <style>body { font: 22px system-ui; padding: 2rem; }</style>
 <main id="result">RUNNING</main>
 <script type="module">
-  import { BrowserNatlangHost } from '../dist/browser/natlang.js';
-  const application = { count: 2 };
-  const host = new BrowserNatlangHost({ host: application });
+  import * as natlang from '../dist/browser/natlang.js';
+  // A scripted model: the check is the in-page compiler, runtime, eval, and service wiring, not inference.
+  const model = ({ messages }) => messages.length > 2 ? { text: 'done' } :
+    { calls: [['eval', { code: 'result = counter.add(3)' }], ['mark_lines', { start: 1 }]] };
+  const counter = { count: 2, add(amount) { this.count += amount; return this.count; } };
   try {
-    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: '() => number', code: 'host.count += 3; return host.count;'
-    } } } });
-    document.getElementById('result').textContent = result.outcome.kind === 'done' &&
-      result.value === 5 && application.count === 5 ? 'PASS browser interpreter' :
-      `FAIL ${JSON.stringify(result)}`;
+    const project = natlang.compileVirtualProject({ files: { 'main.ts': "import { nl } from '@natlang/browser';\n" +
+      'export async function main(): Promise<number> {\n  await new Promise(resolve => setTimeout(resolve, 1));\n' +
+      '  return await nl<number>`Add three to the counter and return it.`();\n}\n' } }, natlang);
+    if (!project.ok) throw new Error(natlang.formatDiagnostics(project.diagnostics));
+    const runtime = natlang.createNatlangRuntime({ model, services: { counter } });
+    const value = await runtime.run(() => project.require('main.ts').main());
+    document.getElementById('result').textContent = value === 5 && counter.count === 5 ? 'PASS browser interpreter' :
+      `FAIL ${JSON.stringify({ value, counter })}`;
   } catch (error) {
     document.getElementById('result').textContent = `FAIL ${error}`;
-  } finally { host.close(); }
+  }
 </script>

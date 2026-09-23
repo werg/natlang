@@ -10,4 +10,4 @@ function plan(tasks) -> State
   if initial.finished:
     return initial
   else:
-    return repeat step(initial), until finished(state), at most 16 rounds
+    return step.iterateOn(initial).withLimit({ maxSteps: 16 }).until(finished)

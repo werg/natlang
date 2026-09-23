@@ -23,12 +23,12 @@ export const operationFields = {
   packages: {browse:[],resolve:['target','text'],install:['target']},
   repositories: {propose:['text','secondary'],check:[],reset:[]},
 };
-const types={amount:'Num',count:'Num',ids:'Text[]'};
+const types={amount:'number',count:'number',ids:'string[]'};
 export function decisionType(id) {
   const operations=operationFields[id];
   if(!operations)throw new Error(`Missing operation signatures for ${id}`);
   return 'export type Decision = '+Object.entries(operations).map(([action,fields])=>
-    `{ action: ${JSON.stringify(action)}; ${fields.map(field=>`${field}: ${types[field.replace('?','')]??'Text'};`).join(' ')} }`).join(' | ')+';';
+    `{ action: ${JSON.stringify(action)}; ${fields.map(field=>`${field}: ${types[field.replace('?','')]??'string'};`).join(' ')} }`).join(' | ')+';';
 }
 export function controlDecision(spec,event) {
   const fields=operationFields[spec.id][event.kind];

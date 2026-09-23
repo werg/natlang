@@ -18,7 +18,7 @@ test('replay produces real eval and mark_lines turns with source-level split gro
   assert.deepEqual(result.turns[0].source_groups,['fixture:double']);
   assert.equal(result.turns[0].license,'MIT');
   assert.equal(project(a,0).program.split,project(a,1).program.split);
-  assert.equal(project(a).program.semantics.root.$lambda.type,'(x: number) => number');
+  assert.match(project(a).program.semantics.files[project(a).program.semantics.root],/args:\n  x: "number"\nreturns: "number"/);
 });
 test('wrong outputs are not admitted, mutation and nonportable shapes are rejected', async () => {
   const a = task(); a.cases[0].expected=7;
@@ -29,7 +29,7 @@ test('wrong outputs are not admitted, mutation and nonportable shapes are reject
   const c=task(); c.cases[1].args=[3]; assert.throws(()=>project(c),/conflicting outputs/);
 });
 test('runaway code is terminated', async () => {
-  const a=task(); a.function.body='{ while (true) {} }';
+  const a=task(); a.function.body='{ for (let i = 0; i < 1e15; i++) {} return x; }';
   await assert.rejects(replayIsolated(a,0,500),/timeout/);
 });
 test('nested arrays replay using native list type syntax', async () => {
@@ -51,8 +51,7 @@ test('extracted sibling function closure replays without module initializers', a
   assert.equal(record.function.helpers.length, 2);
   assert.doesNotMatch(record.function.helpers.join('\n'), /export|secretState|launchExternalEffect/);
   const projected = project(record, 0);
-  assert.deepEqual(Object.keys(projected.program.semantics.root.$lambda.codebase), ['helper']);
-  assert.deepEqual(Object.keys(projected.program.semantics.root.$lambda.codebase.helper.codebase), ['add']);
+  assert.deepEqual(Object.keys(projected.program.semantics.files).sort(), ['twice.nl', 'twice/helper.ts', 'twice/helper/add.ts']);
   assert.equal(projected.program.source_layout.subfunctions.add, 'twice/helper/add.ts');
   const row = await replayIsolated(record, 0);
   assert.equal(row.outcome.accepted, true);
@@ -82,7 +81,7 @@ test('dependency-bearing corpus replay resolves captured relative imports from t
   const row = await replayIsolated(record, 0, 10000, { workspace: root });
   assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome));
   assert.equal(row.outcome.value, 6);
-  assert.deepEqual(Object.keys(row.task.program_ir.semantics.root.$lambda.codebase), ['double']);
+  assert.deepEqual(Object.keys(row.task.program_ir.semantics.files).sort(), ['f.nl', 'f/double.ts']);
   assert.doesNotMatch(row.trajectory[0].assistant.calls[0].arguments.code, /import double/);
 });
 test('dependency-bearing corpus replay imports installed local packages from the workspace', async t => {

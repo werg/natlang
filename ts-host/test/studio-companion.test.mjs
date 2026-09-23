@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('local companion runs real operations, verifies cache and journals cancella
         const second = await run('build.run', { source: 'a careful build', operation: 'uppercase' });
         assert.equal(second.detail, 'cache hit');
         const registry = await run('packages.resolve', { name: 'greetings', range: '^1.0.0' });
-        assert.equal(registry.locks[0].packages[0].version, '1.1.0');
+        assert.equal(registry.locks[0].version, '1.1.0');
         const installed = await run('packages.install', { lock: registry.locks[0], target: 'test_greetings' });
         assert.equal(installed.status, 'installed');
         const before = 'export const greet = name => "Hello, " + name;\n';
@@ -61,6 +62,8 @@ test('local companion runs real operations, verifies cache and journals cancella
     }
     finally {
         await studio.close();
+        // Installed packages are read-only; make the store writable before removing it.
+        execFileSync('chmod', ['-R', 'u+w', root]);
         await rm(root, { recursive: true, force: true });
     }
 });

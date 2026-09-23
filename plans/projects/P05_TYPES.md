@@ -1,8 +1,9 @@
 # P05 — Natlang type inference and checking
 
-Status: first finite application implemented in `codebases/type_studio`,
-`applications/type_studio.py`, and `scripts/run_type_studio.py`. Live teacher
-quality and broader type diagnostic calibration remain unmeasured.
+Status: the interactive application is Studio's P05 app
+(`ts-host/studio/apps/`); the named programs in `codebases/type_studio` remain
+as teacher corpus. The Python host application was retired with the Python
+runtime. Live teacher quality and type diagnostic calibration remain unmeasured.
 
 ## Natlang prerequisites
 

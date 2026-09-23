@@ -1,45 +1,62 @@
 id: 20-reactive-fold
 title: TypeScript event processing threads state and emits one reply per input
 kind: program
-exercises: [TypeScript for...of loop, positional function call, state threading, declared effects]
-program:
-  $lambda:
-    type: '(events: Event[]) => Shop'
-    function: handle_events
+exercises:
+  - TypeScript for...of loop
+  - positional function call
+  - state threading
+  - declared effects
+root: handle_events.nl
+files:
+  handle_events.nl: |
+    ---
+    args:
+      events: "Event[]"
+    returns: "Shop"
     types:
-      Event: '{ text: string }'
-      Shop: '{ stock: Record<string, number>, coins: number }'
-    effects: [out.emit]
-    instructions: |
-      Start with no apples, three pears, and zero coins. For each event, call `decide_and_apply`
-      with the current state and event text. Return the final state.
-    codebase:
-      decide_and_apply:
-        description: Decide what to do about the customer message, emit a reply record, and return the new shop state.
-        args: { acc: Shop, text: string }
-        returns: Shop
-        effects: [out.emit]
-        code: |
-          const wants = Object.keys(acc.stock).find(k => text.toLowerCase().includes(k))
-          const canSell = wants && acc.stock[wants] > 0
-          const action = canSell ? "sell_" + wants : "decline"
-          fx.out.emit({ action, text: canSell ? `One ${wants}, coming up!` : "Sorry, I can't help with that." })
-          if (!canSell) return acc
-          return { stock: { ...acc.stock, [wants]: acc.stock[wants] - 1 }, coins: acc.coins + 2 }
+      Event: "{ text: string }"
+      Shop: "{ stock: Record<string, number>, coins: number }"
+    ---
+    Start with no apples, three pears, and zero coins. For each event, call `decide_and_apply`
+    with the current state and event text. Return the final state.
+  handle_events/types.ts: |
+    export type Event = { text: string };
+    export type Shop = { stock: Record<string, number>, coins: number };
+  handle_events/decide_and_apply.ts: |
+    import { out } from 'natlang:services';
+
+    /** Decide what to do about the customer message, emit a reply record, and return the new shop state. */
+    export default function decide_and_apply(acc: Shop, text: string): Shop {
+      const wants = Object.keys(acc.stock).find(k => text.toLowerCase().includes(k))
+      const canSell = wants && acc.stock[wants] > 0
+      const action = canSell ? "sell_" + wants : "decline"
+      out.emit({ action, text: canSell ? `One ${wants}, coming up!` : "Sorry, I can't help with that." })
+      if (!canSell) return acc
+      return { stock: { ...acc.stock, [wants]: acc.stock[wants] - 1 }, coins: acc.coins + 2 }
+    }
 inputs:
   events:
-    - { text: "A pear, please." }
-    - { text: "Got any apples?" }
-    - { text: "One more pear." }
+    - text: A pear, please.
+    - text: Got any apples?
+    - text: One more pear.
 expect:
-  value: { stock: { apple: 0, pear: 1 }, coins: 4 }
+  value:
+    stock:
+      apple: 0
+      pear: 1
+    coins: 4
   emitted:
-    - { action: sell_pear, text: "One pear, coming up!" }
-    - { action: decline, text: "Sorry, I can't help with that." }
-    - { action: sell_pear, text: "One pear, coming up!" }
+    - action: sell_pear
+      text: One pear, coming up!
+    - action: decline
+      text: Sorry, I can't help with that.
+    - action: sell_pear
+      text: One pear, coming up!
 lint:
-  must: [the root loops over events and calls decide_and_apply with the current state]
-  must_not: [the root reading or writing outside its own scope]
+  must:
+    - the root loops over events and calls decide_and_apply with the current state
+  must_not:
+    - the root reading or writing outside its own scope
 reference:
   handle_events:
     eval: |-

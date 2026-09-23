@@ -1,37 +1,38 @@
 ---
 name: natlang-authoring
-description: Author, refactor, review, and validate natlang codebases with typed .nl functions and crisp .ts helpers. Use when implementing semantic algorithms, state reducers, generated programs, or application logic in natlang, including long-running programs intended for small interpreter models.
+description: Author, refactor, review, and validate natlang code — inline `nl` calls in TypeScript, named `.nl` functions with their callable folders, and `natlang.d/` application context. Use when implementing semantic algorithms, reducers, generated programs, or application logic with natlang, including long-running work intended for small interpreter models.
 ---
 
-# Author natlang codebases
+# Author natlang code
 
-You are the capable program author. The interpreter may be a small model. Put the algorithm, decomposition, data contracts, and recovery decisions in source so execution does not depend on the interpreter inventing an architecture.
+You are the capable program author; the interpreter may be a small model. Put the algorithm, decomposition, data contracts, and recovery decisions in source so execution does not depend on the interpreter inventing an architecture.
 
-Natlang should own meaningful decisions and control flow: interpretation, planning, semantic merging, iteration, inspection of results, and revision. Crisp helpers supply useful exact computations and host operations. A host that computes the whole workflow before asking natlang to approve it defeats this design. Equally, making the model multiply numbers by hand wastes its context. Choose the boundary deliberately for the task.
+Natlang is TypeScript with natural-language functions. Ordinary TypeScript owns exact computation, I/O, and orchestration. A natural-language function owns a judgment: interpretation, planning, semantic merging, choosing among options, explaining. Choose the boundary deliberately. A host that computes everything and asks natlang to approve wastes it; making the model do arithmetic by hand wastes its context.
 
 ## Establish the contract
 
-Locate the natlang checkout or installed host version before editing. If working outside a checkout, use these bundled references and the installed package's declarations; do not assume `../../spec` exists next to this installed skill. Record the chosen source revision and host. Use current source and tests to establish what runs; flag disagreement with prose specifications rather than silently inventing behavior.
+Locate the natlang checkout or installed `@natlang/node` / `@natlang/browser` version first. Use its declarations (`dist/index.d.ts`), tests, and `natlang check` as the authority; if prose here disagrees with executable behavior, flag the disagreement rather than inventing behavior. Outside a checkout, rely on these bundled references and the installed package.
 
-Read [language and authoring](references/language.md) when creating or restructuring code. Read [algorithm patterns](references/patterns.md) for loops, stateful applications, semantic reconciliation, and generated methods. Read [verification and diagnosis](references/verification.md) when testing or debugging. The self-contained [review example](assets/review/review.nl) demonstrates a natural-language orchestrator, a semantic leaf, and exact aggregation; copy the whole `assets/review/` directory, including its `types.ts` and companion folder.
+Read [language and source contracts](references/language.md) before creating or restructuring code, [algorithm patterns](references/patterns.md) for loops, reducers, reconciliation, and generated methods, and [verification and diagnosis](references/verification.md) when testing or debugging. The [review example](assets/review/review.nl) shows a named function whose callable folder holds a semantic helper and an exact aggregation; copy the whole `assets/review/` directory.
 
 ## Build a real program
 
-1. Express the required behavior as typed inputs, results, and observable scenarios. Include ambiguous evidence, empty inputs, and partial failure when relevant. Structural types cannot establish semantic correctness.
-2. Write the main algorithm in `.nl`: explicit helper calls, order dependencies, branches, iteration state, completion conditions, and what happens when evidence is insufficient. Use prose for semantic judgments whose criteria cannot be reduced to exact rules.
-3. Give each helper one coherent responsibility and a precise signature. Bind its lexical dependencies through companion files or `uses`. Keep intermediate data in typed locals. Use `Record<string, T>` for keyed data passed as ordinary typed values. Directory reducers use their relative-path file API for files in the input folder.
-4. Implement crisp `.ts` helpers where exactness, I/O, presentation, or native libraries help. Check the selected executor; a `.ts` extension does not imply Node, npm imports, SQL, shell, or a sandbox. Prefer portable helpers when they suffice.
-5. Exercise the actual source through the runtime. Distinguish loader/type tests, scripted interpreter wiring, live model execution, and semantic evaluation. Fix framework defects in the framework when they are the cause.
+1. State the behavior as typed inputs, results, and observable scenarios, including ambiguity, empty inputs, and partial failure. Types check structure, not meaning.
+2. Write the orchestration in TypeScript. Call natural language where judgment is needed: inline with `` nl`…` `` for a one-off decision, or a named `.nl` function when the instruction deserves its own file, its own helpers, or reuse.
+3. Give each natural-language function one coherent responsibility, a precise signature, and the helpers it may call in its callable folder (`foo/` beside `foo.nl`, or `natlang.d/` for inline calls in application code).
+4. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
+5. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
 
 ## Preserve the execution model
 
-- `args` are readable and immutable. Use the persistent typed eval scope for ordinary locals. The final eval expression that matches the declared return type completes the function. Each callee has private state and its own lexical codebase.
-- Imported natlang functions and crisp helpers use ordinary awaited positional calls. Values are passed as values; file names and scope variables are never conflated.
-- Use ordinary TypeScript types (`string`, `number`, `boolean`, `null`, records, arrays, `Record<string, T>`, aliases, and unions) in function signatures and shared `types.ts` files.
-- Functions can call checked named helpers through normal imports. Use ordinary loops, array methods, and `Promise.all` for repeated work; crisp helpers own exact operations.
-- `eval` runs TypeScript in a persistent scope across turns. An expression matching the declared return type completes the function. Close each substantive instruction line with `mark_lines`; use `report_blocker` for missing information and `report_error` for invalid work.
-- Parameters are ordinary local bindings and may be reassigned or mutated. Imported functions can be inspected and edited through function tools; use those tools whenever changing an instruction or helper would make the program clearer or more correct. The fixed codebase function set cannot be created, deleted, moved, or renamed through those tools. Directory reducers alone receive file tools and a writable copy of their input folder. Their first parameter is the explicit `Folder` being reduced; paths are relative to it. A direct call returns its typed result and discards file changes. `folder.apply(reducer, ...args)` retains the reducer's committed changes, and `folder.dir(path)` selects a subfolder.
-- Long productive runs are intended. Do not add arbitrary codebase, nesting, local, turn, or token limits to make a test finish. Explicit deployment budgets are a host policy. Conversation rollover is compatible with long runs: preserve progress in program state.
-- Report real blockers and unresolved semantics. Do not return invented success, manufacture receipts, weaken assertions, or turn unknown effect outcomes into failures that are safe to retry.
+- A natural-language call is an ordinary awaited function call returning a checked, typed value; a failure rejects with `NatlangCallError` (`outcome`, `detail`, `trace`). Catch it where the application can recover.
+- An inline `nl` reads the variables its instructions mention by exact name, live at call time. Mutable captures (`let`) are written back after a successful eval; a concurrent change makes that eval fail with `capture-conflict` so it retries against the current value. Rebinding a captured `const` is a compile error.
+- Signatures are inferred before the model runs: from the contextual type, immediate call arguments, and later uses. When nothing determines the result type, `natlang check` reports `nl-unknown-return`; annotate the binding or use `nl<T>`.
+- A function may not appear in its own chain of callers: no direct or mutual recursion among natural-language functions and callable-folder TypeScript. Concurrent sibling calls (`Promise.all`) and repeated sequential calls are fine.
+- Callable-folder TypeScript and eval code use finite iteration: `for...of`, counted `for (let i = 0; i < n; i++)`, and array methods. `while`, `do`, `for...in`, open `for(;;)`, and generators are rejected. Open-ended refinement uses `iterateOn`, which records every step and reviews progress.
+- Host capabilities come from services: `import { wiki } from 'natlang:services'` in callable-folder code, or the same names as bindings inside eval. Every service call is traced as an effect and is not rolled back.
+- Directory reducers (`kind: directory-reducer`) receive a `Folder` as their first argument and file tools rooted there. A direct call returns the typed value and discards file changes; `folder.apply(reducer, ...args)` retains the committed changes.
+- Long productive runs are intended. Do not add arbitrary turn, token, or nesting limits to make a test finish; deployment budgets are runtime options.
+- Report real blockers. Do not return invented success, manufacture receipts, weaken assertions, or treat an unknown effect outcome as safe to retry.
 
-For embedding, pair this skill with `natlang-integration` when available. Authoring does not require that skill to be installed: the language and testing references here are standalone.
+For embedding in an application, pair this skill with `natlang-integration` when available; this skill is usable on its own.

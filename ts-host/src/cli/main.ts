@@ -2,29 +2,107 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
   writePackageArchive, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
-import type { PackageTargetContext, PackageTargetFactory } from '../package/target.js';
+import type { NatlangTarget } from '../package/manifest.js';
+import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
 import { createManagedModelSession, DEFAULT_LOCAL_MODEL, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
   type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/index.js';
-import { NativeNatlangHost } from '../native/host.js';
-import { loadAnonymousInstruction, loadFunctionFile } from '../native/source.js';
-import { FILE_TREE_LEAF_TYPE, NodeFileTree } from '../native/node-files.js';
-import { formatType } from '../native/types.js';
-import { TypeScriptEnvironment } from '../environment.js';
-import { findPackageWorkspace } from '../application-packages.js';
-import { TerminalNatlangApplication } from '../terminal/application.js';
-import { TerminalSessionStore } from '../terminal/session.js';
-import { TerminalEventQueue } from '../terminal/events.js';
-import { runTerminalShell } from '../terminal/shell.js';
-import { renderTerminalView } from '../terminal/view.js';
+import { openFolder } from '../native/node-files.js';
+import { formatDiagnostics } from '../compiler/project.js';
+import { buildProject } from '../compiler/node-project.js';
+import { createNatlangRuntime, type ModelDriver, type NatlangRuntime } from '../runtime/runtime.js';
+import { fileTraceSink, applicationContextRecords, loadNatlang } from '../runtime/node-files.js';
+import { invokeDefinition } from '../runtime/kernel.js';
+import { resolveFrame } from '../runtime/runtime.js';
+import '../runtime/node.js';
 
-export const NATLANG_CLI_VERSION = '0.1.0';
+export const NATLANG_CLI_VERSION = '0.2.0';
+/** The runtime module this CLI runs; compiled apps are bound to it so they share one runtime instance. */
+const RUNTIME_MODULE = { url: new URL('../index.js', import.meta.url).href, path: fileURLToPath(new URL('../index.js', import.meta.url)),
+  types: fileURLToPath(new URL('../index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
 
+function help(): string { return `natlang ${NATLANG_CLI_VERSION}
+
+Usage:
+  natlang run [SOURCE] [OPTIONS] [-- ARGS]   Build and run an application or TS entry module.
+  natlang check [PROJECT]                    Type-check and natlang-check a project.
+  natlang build [PROJECT] [--out DIR]        Compile a project (lowering nl, embedding .nl functions).
+  natlang call FILE.nl [--inputs FILE]       Call one named natural-language function.
+  natlang ask INSTRUCTION...                 Answer an instruction over the local natlang.d/ and files.
+  natlang apps [DIRECTORY]                   Find runnable applications (natlang.json).
+  natlang inspect SOURCE                     Explain how a source resolves without running it.
+  natlang packages                           List installed distribution packages.
+  natlang package pack|verify|install ...    Pack, verify, or install a distribution archive.
+  natlang setup                              Prepare the local model runtime.
+  natlang runtime status|install             Inspect or install the model runtime.
+  natlang doctor                             Check this natlang installation.
+
+Run natlang help COMMAND for focused usage and options.`; }
+
+function topicHelp(topic: string): string {
+  if (topic === 'run') return `Build and run an application:
+  natlang run [SOURCE] [OPTIONS] [-- APPLICATION_ARGS...]
+
+SOURCE is an application directory or natlang.json manifest (default: .), a
+TypeScript entry module, NAME, or NAME@VERSION#TARGET of an installed package.
+The project is compiled with natlang build into .natlang/build and the entry's
+exported function (default main) receives the target context: args, io,
+workspace, state and trace directories, the configured model, and a runtime.
+
+Options:
+  --target NAME       Select one target when the manifest has several.
+  --export NAME       Entry function for a TypeScript entry module (default main).
+  --workspace DIR     Set the application's working directory.
+  --state DIRECTORY   Override durable application state.
+  --traces DIRECTORY  Override application trace storage.
+  --profile NAME      Select a model profile.
+  --store DIR         Package store for installed applications.
+  --plain             Disable interactive terminal formatting.
+  --no-color          Disable terminal color.
+  --yes               Permit a required managed runtime download.`;
+  if (topic === 'check' || topic === 'build') return `Check or compile a project:
+  natlang check [PROJECT] [--json]
+  natlang build [PROJECT] [--out DIR] [--target node|browser] [--json]
+
+PROJECT is a directory or tsconfig.json (default: .). Both commands write a
+typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.`;
+  if (topic === 'call') return `Call one named natural-language function:
+  natlang call FILE.nl [--inputs FILE] [--trace DIR] [--profile NAME] [--json]
+
+--inputs is a JSON object keyed by parameter name.`;
+  if (topic === 'ask') return `Answer an instruction:
+  natlang ask INSTRUCTION... [--trace DIR] [--profile NAME]
+
+The instruction runs as an inline natural-language function over the nearest
+natlang.d/ callable folder and a read-only view of the current directory's files.`;
+  if (topic === 'apps') return `Discover applications:
+  natlang apps [DIRECTORY] [--json]`;
+  if (topic === 'inspect') return `Resolve a source without running it:
+  natlang inspect SOURCE [--target NAME] [--store DIR] [--json]`;
+  if (topic === 'packages' || topic === 'package') return `Distribution packages are optional deployment artifacts:
+  natlang package pack MANIFEST_OR_DIRECTORY [--out FILE]
+  natlang package verify ARCHIVE [--json]
+  natlang package install ARCHIVE... [--store DIR] [--json]
+  natlang packages [--store DIR] [--json]`;
+  if (topic === 'runtime' || topic === 'setup') return `Model runtime commands:
+  natlang setup [--yes] [--json]
+  natlang runtime status [--json]
+  natlang runtime install [--yes] [--json]
+
+Setup reuses a compatible explicit, managed, or PATH llama-server. If none is
+compatible, interactive use asks before installing the verified managed build.
+Profiles live in ~/.config/natlang/config.json. Environment overrides are
+NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH, NATLANG_LLAMA_SERVER,
+NATLANG_RUNTIME_HOME, and NATLANG_API_KEY.`;
+  if (topic === 'doctor') return `Check the natlang installation and model configuration:
+  natlang doctor [--profile NAME] [--store DIR] [--json]`;
+  throw new Error(`unknown help topic ${topic}`);
+}
 type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
@@ -72,105 +150,22 @@ function acceptOptions(parsed: Parsed, allowed: readonly string[]): void {
   if (unknown.length) throw new Error(`option ${unknown[0]} is not valid here`);
 }
 function noTrailingArguments(parsed: Parsed): void {
-  if (parsed.rest.length) throw new Error('arguments after -- are only valid for applications');
+  if (parsed.rest.length) throw new Error('arguments after -- are only valid for natlang run');
 }
 
-function help(): string { return `natlang ${NATLANG_CLI_VERSION}
-
-Usage:
-  natlang SOURCE [OPTIONS]       Run a program file, application directory,
-                                 manifest, or installed application.
-  natlang --apps [DIRECTORY]     Find runnable source applications.
-  natlang --inspect SOURCE       Explain how a source resolves without running it.
-  natlang --packages             List installed distribution packages.
-  natlang --package COMMAND      Pack, verify, or install a distribution archive.
-  natlang --setup                Prepare the local model runtime.
-  natlang --runtime COMMAND      Inspect or install the model runtime.
-  natlang --doctor               Check this natlang installation.
-
-Examples:
-  natlang examples/triage/main.nl --inputs inputs.json
-  natlang codebases/semantic_terminal
-  natlang summarize the available codebase functions
-  natlang --apps codebases
-  natlang --inspect codebases/semantic_terminal
-
-Run natlang --help COMMAND for focused usage and options.
-
-Source execution and reducer-backed applications immediately prepare and own
-their configured local model server. Run natlang --setup to prepare it ahead of
-the command when desired.`; }
-
-function topicHelp(topic: string): string {
-  if (topic === 'source') return `Run source or an installed application:
-  natlang SOURCE [OPTIONS] [-- APPLICATION_ARGS...]
-
-SOURCE may be a .nl, .ts, .json, or .yaml program, an application directory
-containing natlang.json, a manifest file, NAME, or NAME@VERSION#TARGET.
-Two or more words, or one quoted multiword argument, which do not form an
-existing path become an anonymous (files: Record<string, ProjectFile>) => string
-instruction over the current directory's top-level functions and lazy file tree.
-
-Program options:
-  --inputs FILE       JSON object containing function inputs.
-  --trace FILE        Write the execution trace as JSONL.
-  --seed NUMBER       Root seed for deterministic model turns.
-  --timeout MS        Explicit execution timeout.
-  --profile NAME      Select a model profile.
-  --json              Print the complete run result.
-
-Application options:
-  --target NAME       Select one target when the manifest has several.
-  --root DIRECTORY    Override source-root inference for a local manifest.
-  --workspace DIR     Set the application's working directory.
-  --state DIRECTORY   Override durable application state.
-  --traces DIRECTORY  Override application trace storage.
-  --profile NAME      Select a model profile.
-  --plain             Disable interactive terminal formatting.
-  --no-color          Disable terminal color.
-  --yes               Permit a required managed runtime download.`;
-  if (topic === 'apps') return `Discover source applications:
-  natlang --apps [DIRECTORY] [--json]
-
-This recursively finds natlang.json manifests. It does not read the installed
-package store and does not require applications to be packaged first.`;
-  if (topic === 'inspect') return `Resolve source without running it:
-  natlang --inspect SOURCE [--target NAME] [--root DIR] [--store DIR] [--json]
-
-Programs report their function signature and implementation. Applications
-report their selected target, requested host authority, commands, and engines.`;
-  if (topic === 'packages') return `List installed distribution packages:
-  natlang --packages [--store DIR] [--json]
-
-This reads the content addressed package store. Use natlang --apps to find local
-source applications.`;
-  if (topic === 'package') return `Distribution packages are optional deployment artifacts:
-  natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]
-  natlang --package verify ARCHIVE [--json]
-  natlang --package install ARCHIVE... [--store DIR] [--json]
-  natlang --packages [--store DIR] [--json]
-
-Source programs and applications do not need to be packaged before running.`;
-  if (topic === 'runtime') return `Model runtime commands:
-  natlang --setup [--yes] [--json]
-  natlang --runtime status [--json]
-  natlang --runtime install [--yes] [--json]
-
-Setup reuses a compatible explicit, managed, or PATH llama-server. If none is
-compatible, interactive use asks before installing the verified managed build.
-Profiles live in ~/.config/natlang/config.json. Environment overrides are
-NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH, NATLANG_LLAMA_SERVER,
-NATLANG_RUNTIME_HOME, and NATLANG_API_KEY.`;
-  if (topic === 'doctor') return `Check the natlang installation and model configuration:
-  natlang --doctor [--profile NAME] [--store DIR] [--json]
-
-Use natlang --inspect SOURCE for source and application checks.`;
-  throw new Error(`unknown help topic ${topic}; choose SOURCE, apps, inspect, packages, package, runtime, or doctor`);
-}
 
 function output(value: unknown, json: boolean): void {
   process.stdout.write(json ? JSON.stringify(value, null, 2) + '\n' : typeof value === 'string' ? value + '\n' :
-    Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${String(item)}`).join('\n') + '\n');
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${text(item)}`).join('\n') + '\n');
+}
+/** One line of plain output: scalars as text, lists joined, records as `key=value` pairs. */
+function text(item: unknown): string {
+  if (Array.isArray(item)) return item.map(text).join(', ') || '(none)';
+  if (item && typeof item === 'object') {
+    const entries = Object.entries(item);
+    return entries.length ? entries.map(([key, child]) => `${key}=${typeof child === 'object' && child ? JSON.stringify(child) : String(child)}`).join(', ') : '(none)';
+  }
+  return String(item);
 }
 
 type Profile = { endpoint?: string; model?: string; apiKeyEnv?: string; headers?: Record<string, string>;
@@ -227,8 +222,6 @@ function modelSession(profileName?: string, assumeYes = false) {
   { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes) });
 }
 
-type RunnablePackage = { name: string; version: string; digest: string; root: string;
-  dependencies: Record<string, { name: string; version: string; digest: string; root: string }> };
 
 function selectTarget(manifest: { name: string; targets?: Record<string, unknown> }, requested?: string): string {
   const targets = Object.keys(manifest.targets ?? {});
@@ -238,85 +231,6 @@ function selectTarget(manifest: { name: string; targets?: Record<string, unknown
   return selected;
 }
 
-async function executeTarget(parsed: Parsed, installed: RunnablePackage,
-  manifest: ReturnType<NatlangPackageStore['manifest']>, targetName: string, local = false): Promise<number> {
-  checkEngines(manifest.engines);
-  const target = manifest.targets?.[targetName];
-  if (!target) throw new Error(`unknown target ${targetName} in ${manifest.name}`);
-  const stateVersion = local ? `${installed.version}-local.${installed.digest.slice(0, 12)}` : installed.version;
-  const stateDirectory = resolve(option(parsed, '--state') ?? join(defaultNatlangStateDirectory(),
-    encodeURIComponent(installed.name), stateVersion, targetName));
-  const traceDirectory = resolve(option(parsed, '--traces') ?? join(stateDirectory, 'traces'));
-  const workspace = resolve(option(parsed, '--workspace') ?? '.');
-  const entry = join(installed.root, ...target.entry.split('/'));
-  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
-  const modelPreparation = target.reducer ? model.prepare() : null;
-  try {
-    const module = await import(pathToFileURL(entry).href) as Record<string, unknown>;
-    const factoryName = target.export ?? 'createTarget', factory = module[factoryName];
-    if (typeof factory !== 'function') throw new Error(`target entry does not export ${factoryName}()`);
-    const context: PackageTargetContext = { package: installed, dependencies: installed.dependencies,
-      targetName, target, workspace,
-      stateDirectory, traceDirectory, args: parsed.rest, io: { input: process.stdin, output: process.stdout,
-        error: process.stderr, color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
-      modelTurn: request => model.turn(request), runtime: Object.freeze({ NativeNatlangHost,
-        TypeScriptEnvironment, TerminalNatlangApplication, TerminalSessionStore, TerminalEventQueue,
-        NodeFileTree, runTerminalShell, renderTerminalView }) };
-    const executable = await (factory as PackageTargetFactory)(context);
-    if (!executable || typeof executable.run !== 'function') throw new Error('target factory must return an executable with run()');
-    try {
-      await modelPreparation;
-      return Number(await executable.run() ?? 0);
-    }
-    finally { await executable.close?.(); }
-  } finally { await model.close(); }
-}
-
-async function runTarget(parsed: Parsed, specifier: string): Promise<number> {
-  const marker = specifier.lastIndexOf('#');
-  if (marker < 1 || marker === specifier.length - 1) throw new Error('run specifier must be NAME@VERSION#TARGET');
-  const packageSpecifier = specifier.slice(0, marker), targetName = specifier.slice(marker + 1);
-  const store = new NatlangPackageStore(option(parsed, '--store'));
-  const installed = store.resolve(packageSpecifier), manifest = store.manifest(packageSpecifier);
-  return executeTarget(parsed, installed, manifest, targetName);
-}
-
-function localManifestPath(value: string): string {
-  const path = resolve(value);
-  if (!existsSync(path)) throw new Error(`application path does not exist: ${value}`);
-  const status = statSync(path);
-  if (status.isFile()) return path;
-  if (!status.isDirectory()) throw new Error(`application path is neither a file nor directory: ${value}`);
-  const candidate = join(path, 'natlang.json');
-  if (!isApplicationManifest(candidate))
-    throw new Error(`application directory does not contain a valid natlang.json: ${value}`);
-  return candidate;
-}
-
-type LocalSource = { kind: 'application'; path: string } | { kind: 'program'; path: string };
-function isApplicationManifest(path: string): boolean {
-  if (!existsSync(path) || !lstatSync(path).isFile()) return false;
-  try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    return value.schema === 'natlang.package/v1' && Boolean(value.targets && typeof value.targets === 'object');
-  } catch { return false; }
-}
-function resolveLocalSource(value: string): LocalSource | null {
-  const path = resolve(value);
-  if (!existsSync(path)) return null;
-  const status = statSync(path);
-  if (status.isFile()) return isApplicationManifest(path) ? { kind: 'application', path } : { kind: 'program', path };
-  if (!status.isDirectory()) throw new Error(`source is neither a file nor directory: ${value}`);
-  const manifest = join(path, 'natlang.json');
-  if (isApplicationManifest(manifest)) return { kind: 'application', path: manifest };
-  for (const name of ['main.nl', 'main.ts', 'index.nl', 'index.ts']) {
-    const entry = join(path, name); if (existsSync(entry)) return { kind: 'program', path: entry };
-  }
-  const functions = readdirSync(path).filter(name => name !== 'types.ts' && ['.nl', '.ts'].includes(name.slice(name.lastIndexOf('.'))));
-  if (functions.length === 1) return { kind: 'program', path: join(path, functions[0]!) };
-  const detail = functions.length ? ` Found function files: ${functions.sort().join(', ')}.` : '';
-  throw new Error(`directory is not directly runnable: ${value}. Add natlang.json for an application or main.nl for a program.${detail}`);
-}
 
 function discoverLocalApplications(value = '.'): Array<{ path: string; name: string; version: string;
   targets: string[]; description: string }> {
@@ -339,140 +253,6 @@ function discoverLocalApplications(value = '.'): Array<{ path: string; name: str
   }).sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function loadLocalApplication(parsed: Parsed, value: string) {
-  const manifestPath = localManifestPath(value);
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  const explicitRoot = option(parsed, '--root');
-  const roots: string[] = [];
-  if (explicitRoot) roots.push(resolve(explicitRoot));
-  else {
-    let candidate = dirname(manifestPath);
-    while (true) {
-      roots.push(candidate);
-      const parent = dirname(candidate);
-      if (parent === candidate) break;
-      candidate = parent;
-    }
-  }
-  let failure: unknown;
-  for (const root of roots) {
-    try { return { archive: createPackageArchive(manifest, root), root, manifestPath }; }
-    catch (error) { failure = error; }
-  }
-  const detail = failure instanceof Error ? failure.message : String(failure);
-  throw new Error(`cannot load application ${manifestPath}: ${detail}${explicitRoot ? '' : '; pass --root if its source root is elsewhere'}`);
-}
-
-async function runLocalApplication(parsed: Parsed, value: string): Promise<number> {
-  const { archive, root } = loadLocalApplication(parsed, value);
-  const store = new NatlangPackageStore(option(parsed, '--store'));
-  const installed: RunnablePackage = { name: archive.manifest.name, version: archive.manifest.version,
-    digest: archive.digest, root, dependencies: store.resolveDependencies(archive.manifest.dependencies) };
-  const target = selectTarget(archive.manifest, option(parsed, '--target'));
-  return executeTarget(parsed, installed, archive.manifest, target, true);
-}
-
-export { findPackageWorkspace } from '../application-packages.js';
-
-async function runProgramPath(parsed: Parsed, value: string): Promise<number> {
-  const path = resolve(value);
-  const inputsPath = option(parsed, '--inputs');
-  const inputs = inputsPath ? JSON.parse(readFileSync(resolve(inputsPath), 'utf8')) as Record<string, unknown> : undefined;
-  if (inputs !== undefined && (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)))
-    throw new Error('--inputs must contain a JSON object');
-  const timeoutMs = numericOption(parsed, '--timeout', 1), seed = numericOption(parsed, '--seed', 0);
-  const host = new NativeNatlangHost({ workspace: option(parsed, '--workspace') ?? findPackageWorkspace(dirname(path)) });
-  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
-  try {
-    const preparation = model.prepare();
-    const run = host.run({ source: { kind: 'file', path }, inputs,
-      modelTurn: request => model.turn(request),
-      tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
-      timeoutMs,
-      options: seed === undefined ? undefined : { seed: { mode: 'derived', root: seed } } });
-    const [, result] = await Promise.all([preparation, run]);
-    if (parsed.options.has('--json')) output(result, true);
-    else process.stdout.write(JSON.stringify(result.value, null, 2) + '\n');
-    if (result.outcome.kind !== 'done') process.stderr.write(`natlang: ${result.outcome.kind}: ${result.outcome.detail}\n`);
-    return result.outcome.kind === 'done' ? 0 : 1;
-  } finally { host.close(); await model.close(); }
-}
-
-async function runAnonymousInstruction(parsed: Parsed, instruction: string): Promise<number> {
-  acceptOptions(parsed, ['--profile', '--trace', '--json', '--timeout', '--seed', '--yes', '--workspace']);
-  noTrailingArguments(parsed);
-  const timeoutMs = numericOption(parsed, '--timeout', 1), seed = numericOption(parsed, '--seed', 0);
-  const host = new NativeNatlangHost({ workspace: option(parsed, '--workspace') ?? findPackageWorkspace(process.cwd()) });
-  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
-  try {
-    const preparation = model.prepare();
-    const program = loadAnonymousInstruction(process.cwd(), instruction);
-    const body = program.$lambda as Record<string, unknown>;
-    body.type = '(files: Record<string, ProjectFile>) => string';
-    body.types = { ...body.types as Record<string, string> ?? {}, ProjectFile: FILE_TREE_LEAF_TYPE };
-    const run = host.run({ source: { kind: 'program', program },
-      inputs: { files: new NodeFileTree(process.cwd()) },
-      modelTurn: request => model.turn(request),
-      tracePath: option(parsed, '--trace') ? resolve(option(parsed, '--trace')!) : undefined,
-      timeoutMs,
-      options: seed === undefined ? undefined : { seed: { mode: 'derived', root: seed } } });
-    const [, result] = await Promise.all([preparation, run]);
-    if (parsed.options.has('--json')) output(result, true);
-    else if (typeof result.value === 'string') process.stdout.write(result.value + (result.value.endsWith('\n') ? '' : '\n'));
-    else process.stdout.write(JSON.stringify(result.value, null, 2) + '\n');
-    if (result.outcome.kind !== 'done') process.stderr.write(`natlang: ${result.outcome.kind}: ${result.outcome.detail}\n`);
-    return result.outcome.kind === 'done' ? 0 : 1;
-  } finally { host.close(); await model.close(); }
-}
-
-const programOptions = ['--inputs', '--profile', '--trace', '--json', '--timeout', '--seed', '--yes', '--workspace'];
-const applicationOptions = ['--root', '--target', '--profile', '--workspace', '--state', '--traces',
-  '--store', '--plain', '--no-color', '--yes'];
-
-async function runSource(parsed: Parsed, value: string): Promise<number> {
-  const local = resolveLocalSource(value);
-  if (local?.kind === 'application') {
-    acceptOptions(parsed, applicationOptions);
-    return runLocalApplication(parsed, local.path);
-  }
-  if (local?.kind === 'program') {
-    acceptOptions(parsed, programOptions); noTrailingArguments(parsed);
-    return runProgramPath(parsed, local.path);
-  }
-  if (value.startsWith('.') || value.startsWith('/') || (!value.startsWith('@') && value.includes('/')) ||
-      /\.(?:nl|ts|json|ya?ml)$/.test(value)) throw new Error(`source path does not exist: ${value}`);
-  acceptOptions(parsed, applicationOptions.filter(name => name !== '--root'));
-  return runTarget(parsed, value.includes('#') ? value : applicationSpecifier(
-    new NatlangPackageStore(option(parsed, '--store')), value, option(parsed, '--target')));
-}
-
-function inspectSource(parsed: Parsed, value: string): Record<string, unknown> {
-  noTrailingArguments(parsed);
-  const local = resolveLocalSource(value);
-  if (local?.kind === 'program') {
-    acceptOptions(parsed, ['--json']);
-    const source = loadFunctionFile(local.path);
-    return { kind: 'program', path: local.path, function: source.functionName,
-      signature: formatType(source.type), implementation: source.kind, engine: source.engine,
-      effects: source.effects, functions: Object.keys(source.codebase) };
-  }
-  if (local?.kind === 'application') {
-    acceptOptions(parsed, ['--root', '--target', '--json']);
-    const { archive, root, manifestPath } = loadLocalApplication(parsed, local.path);
-    const targetName = selectTarget(archive.manifest, option(parsed, '--target'));
-    return { kind: 'application', path: manifestPath, root, name: archive.manifest.name,
-      version: archive.manifest.version, ...inspectTarget(archive.manifest, targetName, manifestPath) };
-  }
-  acceptOptions(parsed, ['--target', '--store', '--json']);
-  const store = new NatlangPackageStore(option(parsed, '--store'));
-  const specifier = value.includes('#') ? value : applicationSpecifier(store, value, option(parsed, '--target'));
-  const marker = specifier.lastIndexOf('#');
-  if (marker < 1) throw new Error('installed source must resolve to NAME@VERSION#TARGET');
-  const packageSpecifier = specifier.slice(0, marker), targetName = specifier.slice(marker + 1);
-  const manifest = store.manifest(packageSpecifier), installed = store.resolve(packageSpecifier);
-  return { kind: 'installed-application', root: installed.root,
-    ...inspectTarget(manifest, targetName, packageSpecifier) };
-}
 
 function checkEngines(engines: { node?: string; natlang?: string } | undefined): void {
   if (engines?.node && !satisfiesVersion(process.versions.node, engines.node))
@@ -485,17 +265,6 @@ function commandAvailable(command: string): boolean {
   return probe.status === 0;
 }
 
-function inspectTarget(manifest: ReturnType<NatlangPackageStore['manifest']>, targetName: string,
-  packageLabel: string): Record<string, unknown> {
-  const target = manifest.targets?.[targetName];
-  if (!target) throw new Error(`unknown target ${targetName} in ${packageLabel}`);
-  let engineError: string | null = null;
-  try { checkEngines(manifest.engines); }
-  catch (error) { engineError = error instanceof Error ? error.message : String(error); }
-  return { package: packageLabel, target: targetName, authority: target.authority ?? [],
-    commands: Object.fromEntries((target.commands ?? []).map(command => [command, commandAvailable(command)])),
-    engines: manifest.engines ?? {}, engineError };
-}
 
 function doctorReport(parsed: Parsed, store: NatlangPackageStore): { report: Record<string, unknown>; okay: boolean } {
   const selected = loadProfile(option(parsed, '--profile'));
@@ -531,33 +300,200 @@ function applicationSpecifier(store: NatlangPackageStore, query: string, request
   return `${selected.name}@${selected.version}#${target}`;
 }
 
-export async function main(argv = process.argv.slice(2)): Promise<number> {
-  const administrativeCommands = new Map([
-    ['--apps', 'apps'], ['--inspect', 'inspect'], ['--packages', 'packages'],
-    ['--package', 'package'], ['--setup', 'setup'], ['--runtime', 'runtime'], ['--doctor', 'doctor'],
-  ]);
-  const administrativeCommand = administrativeCommands.get(argv[0] ?? '');
-  const parsed = parseArgs(administrativeCommand ? [administrativeCommand, ...argv.slice(1)] : argv);
-  const json = parsed.options.has('--json');
-  if (parsed.options.has('--version')) { output(NATLANG_CLI_VERSION, false); return 0; }
-  if (parsed.options.has('--help') || parsed.options.has('-h')) {
-    const topic = parsed.words[0]?.toLowerCase();
-    output(topic && ['apps', 'inspect', 'packages', 'package', 'runtime', 'setup', 'doctor'].includes(topic) ?
-      topicHelp(topic === 'setup' ? 'runtime' : topic) :
-      topic ? topicHelp('source') : help(), false); return 0;
+
+function isApplicationManifest(path: string): boolean {
+  if (!existsSync(path) || !lstatSync(path).isFile()) return false;
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    return value.schema === 'natlang.package/v2' && Boolean(value.targets && typeof value.targets === 'object');
+  } catch { return false; }
+}
+
+/** Nearest directory at or above `start` holding a project marker. */
+function projectRoot(start: string): string {
+  let dir = statSync(start).isDirectory() ? start : dirname(start);
+  while (true) {
+    if (['tsconfig.json', 'natlang.json', 'package.json'].some(name => existsSync(join(dir, name)))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return statSync(start).isDirectory() ? start : dirname(start);
+    dir = parent;
   }
-  if (!parsed.words.length) { acceptOptions(parsed, []); output(help(), false); return 0; }
-  if (administrativeCommand && (parsed.words[0] === 'setup' || parsed.words[0] === 'runtime')) {
-    const action = parsed.words[0] === 'setup' ? 'ensure' : parsed.words[1] ?? 'status';
-    if (parsed.words[0] === 'setup') {
-      acceptOptions(parsed, ['--yes', '--json', '--profile']);
-      if (parsed.words.length !== 1) throw new Error('usage: natlang --setup [--yes] [--json]');
-    } else {
-      acceptOptions(parsed, action === 'install' ? ['--yes', '--json'] : ['--json']);
-      if (parsed.words.length > 2) throw new Error('usage: natlang --runtime status|install');
+}
+
+/** Compile a project for this process's runtime; returns the emitted path of `entry`. */
+function compileFor(root: string, entry: string, outDir: string, installed: boolean): string {
+  const result = buildProject({ project: root, outDir, runtimeModule: RUNTIME_MODULE, writeDeclarations: !installed });
+  if (!result.ok) throw new Error(`natlang build failed:\n${formatDiagnostics(result.diagnostics)}`);
+  if (/\.(?:m?js)$/.test(entry)) return entry;
+  const emitted = join(outDir, relative(root, entry)).replace(/\.m?ts$/, '.js');
+  if (!existsSync(emitted)) throw new Error(`the build did not emit ${relative(root, entry)}`);
+  return emitted;
+}
+
+type Launch = { root: string; target: NatlangTarget; targetName: string; installed?: boolean;
+  package?: TargetContext['package']; dependencies: TargetContext['dependencies']; stateKey: string };
+
+async function launch(parsed: Parsed, spec: Launch): Promise<number> {
+  const stateDirectory = resolve(option(parsed, '--state') ?? join(defaultNatlangStateDirectory(),
+    encodeURIComponent(spec.stateKey), spec.targetName));
+  const traceDirectory = resolve(option(parsed, '--traces') ?? join(stateDirectory, 'traces'));
+  const workspace = resolve(option(parsed, '--workspace') ?? '.');
+  const entry = join(spec.root, ...spec.target.entry.split('/'));
+  const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
+    join(spec.root, '.natlang', 'build'), spec.installed === true);
+  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  const driver: ModelDriver = request => model.turn(request);
+  const runtime = createNatlangRuntime({ model: driver, trace: fileTraceSink(traceDirectory) });
+  try {
+    const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
+    const name = spec.target.export ?? 'main', main = module[name];
+    if (typeof main !== 'function') throw new Error(`${spec.target.entry} does not export ${name}()`);
+    const context: TargetContext = { package: spec.package, dependencies: spec.dependencies, targetName: spec.targetName,
+      target: spec.target, workspace, stateDirectory, traceDirectory, args: parsed.rest,
+      io: { input: process.stdin, output: process.stdout, error: process.stderr,
+        color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
+      model: driver, runtime };
+    const value = await (main as TargetMain)(context);
+    if (value && typeof value === 'object' && typeof (value as TargetExecutable).run === 'function') {
+      const executable = value as TargetExecutable;
+      try { return Number(await executable.run() ?? 0); } finally { await executable.close?.(); }
     }
+    return Number(value ?? 0);
+  } finally { runtime.close(); await model.close(); }
+}
+
+async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
+  acceptOptions(parsed, ['--target', '--export', '--profile', '--workspace', '--state', '--traces', '--store',
+    '--plain', '--no-color', '--yes']);
+  const path = resolve(value);
+  if (existsSync(path) && statSync(path).isFile() && /\.(?:m?ts|m?js)$/.test(path)) {
+    const root = projectRoot(path);
+    return launch(parsed, { root, targetName: 'main', dependencies: {}, stateKey: basename(root),
+      target: { entry: relative(root, path).split('\\').join('/'), ...(option(parsed, '--export') ? { export: option(parsed, '--export')! } : {}) } });
+  }
+  if (existsSync(path)) {
+    const manifestPath = statSync(path).isDirectory() ? join(path, 'natlang.json') : path;
+    if (!isApplicationManifest(manifestPath)) throw new Error(`${value} has no natlang.package/v2 natlang.json manifest`);
+    const root = dirname(manifestPath);
+    const archive = createPackageArchive(JSON.parse(readFileSync(manifestPath, 'utf8')), root);
+    const store = new NatlangPackageStore(option(parsed, '--store'));
+    const targetName = selectTarget(archive.manifest, option(parsed, '--target'));
+    return launch(parsed, { root, targetName, target: archive.manifest.targets![targetName]!,
+      package: { name: archive.manifest.name, version: archive.manifest.version, digest: archive.digest, root },
+      dependencies: store.resolveDependencies(archive.manifest.dependencies),
+      stateKey: `${archive.manifest.name}/${archive.manifest.version}-local.${archive.digest.slice(0, 12)}` });
+  }
+  const store = new NatlangPackageStore(option(parsed, '--store'));
+  const specifier = value.includes('#') ? value : applicationSpecifier(store, value, option(parsed, '--target'));
+  const marker = specifier.lastIndexOf('#');
+  const packageSpecifier = specifier.slice(0, marker), targetName = specifier.slice(marker + 1);
+  const installed = store.resolve(packageSpecifier), manifest = store.manifest(packageSpecifier);
+  checkEngines(manifest.engines);
+  const target = manifest.targets?.[targetName];
+  if (!target) throw new Error(`unknown target ${targetName} in ${manifest.name}`);
+  return launch(parsed, { root: installed.root, targetName, target, installed: true,
+    package: { name: installed.name, version: installed.version, digest: installed.digest, root: installed.root },
+    dependencies: installed.dependencies, stateKey: `${installed.name}/${installed.version}` });
+}
+
+async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
+  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  const trace = option(parsed, '--trace');
+  const runtime = createNatlangRuntime({ model: request => model.turn(request), ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
+  try { await model.prepare(); return await fn(runtime); }
+  finally { runtime.close(); await model.close(); }
+}
+
+async function callCommand(parsed: Parsed, file: string): Promise<number> {
+  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--json', '--yes']); noTrailingArguments(parsed);
+  const fn = loadNatlang(resolve(file));
+  const inputsPath = option(parsed, '--inputs');
+  const inputs = inputsPath ? JSON.parse(readFileSync(resolve(inputsPath), 'utf8')) as Record<string, unknown> : {};
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('--inputs must contain a JSON object');
+  const record = (fn as unknown as { [key: symbol]: { definition: { params: { name: string }[] } } })[Symbol.for('natlang.callable')]!;
+  const args = record.definition.params.map(parameter => inputs[parameter.name]);
+  const value = await withModelRuntime(parsed, runtime => runtime.run(() => fn(...args)));
+  output(value, true);
+  return 0;
+}
+
+async function askCommand(parsed: Parsed, instruction: string): Promise<number> {
+  acceptOptions(parsed, ['--trace', '--profile', '--yes']); noTrailingArguments(parsed);
+  const context = applicationContextRecords(process.cwd());
+  const value = await withModelRuntime(parsed, runtime => runtime.run(() => invokeDefinition(resolveFrame(), {
+    id: 'natlang:ask', name: 'ask', body: `${instruction.trim()}\n`,
+    params: [{ name: 'project', type: 'Folder' }], returns: 'string',
+    types: {}, codebase: context?.records ?? {}, subtype: 'function' },
+    [openFolder(process.cwd()).root()])));
+  process.stdout.write(`${String(value).replace(/\n?$/, '\n')}`);
+  return 0;
+}
+
+function inspectCommand(parsed: Parsed, value: string): Record<string, unknown> {
+  acceptOptions(parsed, ['--target', '--store', '--json']); noTrailingArguments(parsed);
+  const path = resolve(value);
+  if (existsSync(path) && path.endsWith('.nl')) {
+    const fn = loadNatlang(path) as unknown as Record<symbol, { definition: { name: string; params: unknown[]; returns: string; codebase: object } }>;
+    const definition = fn[Symbol.for('natlang.callable')]!.definition;
+    return { kind: 'function', path, function: definition.name, params: definition.params, returns: definition.returns,
+      children: Object.keys(definition.codebase) };
+  }
+  if (existsSync(path)) {
+    const manifestPath = statSync(path).isDirectory() ? join(path, 'natlang.json') : path;
+    if (!isApplicationManifest(manifestPath)) throw new Error(`${value} has no natlang.package/v2 manifest`);
+    const archive = createPackageArchive(JSON.parse(readFileSync(manifestPath, 'utf8')), dirname(manifestPath));
+    const targetName = selectTarget(archive.manifest, option(parsed, '--target'));
+    return { kind: 'application', path: manifestPath, name: archive.manifest.name, version: archive.manifest.version,
+      ...inspectTarget(archive.manifest, targetName, manifestPath) };
+  }
+  const store = new NatlangPackageStore(option(parsed, '--store'));
+  const specifier = value.includes('#') ? value : applicationSpecifier(store, value, option(parsed, '--target'));
+  const marker = specifier.lastIndexOf('#');
+  const packageSpecifier = specifier.slice(0, marker), targetName = specifier.slice(marker + 1);
+  const manifest = store.manifest(packageSpecifier), installed = store.resolve(packageSpecifier);
+  return { kind: 'installed-application', root: installed.root, ...inspectTarget(manifest, targetName, packageSpecifier) };
+}
+
+function inspectTarget(manifest: ReturnType<NatlangPackageStore['manifest']>, targetName: string, label: string): Record<string, unknown> {
+  const target = manifest.targets?.[targetName];
+  if (!target) throw new Error(`unknown target ${targetName} in ${label}`);
+  let engineError: string | null = null;
+  try { checkEngines(manifest.engines); } catch (error) { engineError = error instanceof Error ? error.message : String(error); }
+  return { package: label, target: targetName, entry: target.entry, export: target.export ?? 'main',
+    authority: target.authority ?? [],
+    commands: Object.fromEntries((target.commands ?? []).map(command => [command, commandAvailable(command)])),
+    engines: manifest.engines ?? {}, engineError };
+}
+
+export async function main(argv = process.argv.slice(2)): Promise<number> {
+  const parsed = parseArgs(argv);
+  const json = parsed.options.has('--json');
+  const [command, ...words] = parsed.words;
+  if (parsed.options.has('--version')) { output(NATLANG_CLI_VERSION, false); return 0; }
+  if (!command || command === 'help' || parsed.options.has('--help') || parsed.options.has('-h')) {
+    const topic = command === 'help' ? words[0] : command;
+    output(topic ? topicHelp(topic) : help(), false); return 0;
+  }
+  if (command === 'check' || command === 'build') {
+    acceptOptions(parsed, command === 'build' ? ['--out', '--target', '--json'] : ['--json']); noTrailingArguments(parsed);
+    const target = option(parsed, '--target');
+    if (target && target !== 'node' && target !== 'browser') throw new Error('--target must be node or browser');
+    const result = buildProject({ project: words[0] ?? '.', emit: command === 'build', outDir: option(parsed, '--out'),
+      runtimeTypes: { specifiers: RUNTIME_MODULE.specifiers, types: RUNTIME_MODULE.types },
+      ...(target ? { target: target as 'node' | 'browser' } : {}) });
+    if (json) output({ ok: result.ok, diagnostics: result.diagnostics, outDir: result.outDir, manifest: result.manifest }, true);
+    else output(result.ok ? `${command === 'build' ? `built ${Object.keys(result.outputs).length} files into ${result.outDir}` : 'ok'}` :
+      formatDiagnostics(result.diagnostics), false);
+    return result.ok ? 0 : 1;
+  }
+  if (command === 'run') return runCommand(parsed, words[0]);
+  if (command === 'call') { if (words.length !== 1) throw new Error('usage: natlang call FILE.nl [--inputs FILE]'); return callCommand(parsed, words[0]!); }
+  if (command === 'ask') { if (!words.length) throw new Error('usage: natlang ask INSTRUCTION...'); return askCommand(parsed, words.join(' ')); }
+  if (command === 'setup' || command === 'runtime') {
+    const action = command === 'setup' ? 'ensure' : words[0] ?? 'status';
+    acceptOptions(parsed, command === 'setup' ? ['--yes', '--json', '--profile'] : action === 'install' ? ['--yes', '--json'] : ['--json']);
     noTrailingArguments(parsed);
-    if (parsed.words[0] === 'setup') {
+    if (command === 'setup') {
       const selected = loadProfile(option(parsed, '--profile'));
       if (selected.profile.endpoint) {
         const report = { ok: true, modelSource: 'external', endpoint: selected.profile.endpoint,
@@ -566,83 +502,65 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return 0;
       }
     }
-    if (action === 'status') {
-      const discovery = discoverLlamaRuntime(); outputRuntime(discovery, json);
-      return discovery.selected ? 0 : 1;
-    }
+    if (action === 'status') { const discovery = discoverLlamaRuntime(); outputRuntime(discovery, json); return discovery.selected ? 0 : 1; }
     if (action === 'ensure' || action === 'install') {
       const discovery = discoverLlamaRuntime();
       const selected = await ensureRuntime(discovery, parsed.options.has('--yes'), action === 'install');
       if (!selected && action === 'ensure') { outputRuntime(discovery, json); return 0; }
-      if (!selected) throw new Error('llama.cpp installation was declined; run natlang --setup when ready');
+      if (!selected) throw new Error('llama.cpp installation was declined; run natlang setup when ready');
       outputRuntime(discoverLlamaRuntime(), json); return 0;
     }
-    throw new Error('unknown runtime command; run natlang --help');
+    throw new Error('usage: natlang runtime status|install');
   }
-  if (administrativeCommand === 'apps') {
+  if (command === 'apps') {
     acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);
-    if (parsed.words.length > 2) throw new Error('usage: natlang --apps [DIRECTORY] [--json]');
-    const root = parsed.words[1] ?? '.', rows = discoverLocalApplications(root).map(item => ({ ...item,
+    const root = words[0] ?? '.', rows = discoverLocalApplications(root).map(item => ({ ...item,
       path: relative(process.cwd(), item.path) || basename(item.path) }));
     output(json ? rows : rows.length ? rows.map(item =>
       `${item.path}\n  ${item.name}@${item.version}  targets: ${item.targets.join(', ')}${item.description ? `\n  ${item.description}` : ''}`).join('\n') :
       `No natlang applications found under ${resolve(root)}. Applications contain a natlang.json manifest.`, json);
     return 0;
   }
-  if (administrativeCommand === 'packages') {
+  if (command === 'packages') {
     acceptOptions(parsed, ['--store', '--json']); noTrailingArguments(parsed);
-    if (parsed.words.length !== 1) throw new Error('usage: natlang --packages [--store DIR] [--json]');
     const store = new NatlangPackageStore(option(parsed, '--store')), rows = store.list();
     output(json ? rows : rows.length ? rows.map(row => `${row.name}@${row.version} ${row.digest}`).join('\n') :
-      `No distribution packages are installed in ${store.root}. Source applications can run without installation.`, json);
+      `No distribution packages are installed in ${store.root}.`, json);
     return 0;
   }
-  if (administrativeCommand === 'inspect') {
-    if (parsed.words.length !== 2) throw new Error('usage: natlang --inspect SOURCE [--json]');
-    output(inspectSource(parsed, parsed.words[1]!), json); return 0;
+  if (command === 'inspect') {
+    if (words.length !== 1) throw new Error('usage: natlang inspect SOURCE [--json]');
+    output(inspectCommand(parsed, words[0]!), json); return 0;
   }
-  if (administrativeCommand === 'package') {
-    const action = parsed.words[1], argument = parsed.words[2];
-    if (action === 'pack' && !argument) throw new Error('usage: natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
-    if (action === 'verify' && !argument) throw new Error('usage: natlang --package verify ARCHIVE [--json]');
-    if (action === 'install' && !argument) throw new Error('usage: natlang --package install ARCHIVE... [--store DIR] [--json]');
+  if (command === 'package') {
+    const [action, argument] = words;
     if (action === 'pack' && argument) {
-      acceptOptions(parsed, ['--root', '--out', '--json']); noTrailingArguments(parsed);
-      if (parsed.words.length !== 3) throw new Error('usage: natlang --package pack MANIFEST_OR_DIRECTORY [--root DIR] [--out FILE]');
-      const { archive } = loadLocalApplication(parsed, argument);
+      acceptOptions(parsed, ['--out', '--json']); noTrailingArguments(parsed);
+      const path = resolve(argument), manifestPath = statSync(path).isDirectory() ? join(path, 'natlang.json') : path;
+      const archive = createPackageArchive(JSON.parse(readFileSync(manifestPath, 'utf8')), dirname(manifestPath));
       const out = resolve(option(parsed, '--out') ?? `${archive.manifest.name.replace('/', '-')}-${archive.manifest.version}.nlpkg`);
-      writePackageArchive(out, archive); output({ archive: out, digest: archive.digest,
-        name: archive.manifest.name, version: archive.manifest.version }, json); return 0;
+      writePackageArchive(out, archive);
+      output({ archive: out, digest: archive.digest, name: archive.manifest.name, version: archive.manifest.version }, json); return 0;
     }
     if (action === 'verify' && argument) {
       acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);
-      if (parsed.words.length !== 3) throw new Error('usage: natlang --package verify ARCHIVE [--json]');
-      const archive = readPackageArchive(resolve(argument)); output({ valid: true, digest: archive.digest,
-        name: archive.manifest.name, version: archive.manifest.version, files: archive.files.length }, json); return 0;
+      const archive = readPackageArchive(resolve(argument));
+      output({ valid: true, digest: archive.digest, name: archive.manifest.name, version: archive.manifest.version, files: archive.files.length }, json);
+      return 0;
     }
-    const store = new NatlangPackageStore(option(parsed, '--store'));
     if (action === 'install' && argument) {
       acceptOptions(parsed, ['--store', '--json']); noTrailingArguments(parsed);
-      const installed = store.installMany(parsed.words.slice(2).map(path => resolve(path)));
+      const installed = new NatlangPackageStore(option(parsed, '--store')).installMany(words.slice(1).map(path => resolve(path)));
       output(installed.length === 1 ? installed[0] : installed, json); return 0;
     }
-    if (action === 'list') throw new Error('use `natlang --packages`');
-    if (action === 'inspect') throw new Error('use `natlang --inspect SOURCE`');
-    throw new Error('unknown package command; choose pack, verify, or install');
+    throw new Error('usage: natlang package pack|verify|install ...');
   }
-  if (administrativeCommand === 'doctor') {
+  if (command === 'doctor') {
     acceptOptions(parsed, ['--store', '--profile', '--json']); noTrailingArguments(parsed);
-    if (parsed.words.length !== 1) throw new Error('use `natlang --inspect SOURCE` to inspect a program or application');
-    const store = new NatlangPackageStore(option(parsed, '--store'));
-    const { report, okay } = doctorReport(parsed, store);
+    const { report, okay } = doctorReport(parsed, new NatlangPackageStore(option(parsed, '--store')));
     output(report, json); return okay ? 0 : 1;
   }
-  if (parsed.words.length > 1 || /\s/.test(parsed.words[0]!)) {
-    const value = parsed.words.join(' ');
-    if (existsSync(resolve(value))) return runSource(parsed, value);
-    return runAnonymousInstruction(parsed, value);
-  }
-  return runSource(parsed, parsed.words[0]!);
+  throw new Error(`unknown command ${command}; run natlang help`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)

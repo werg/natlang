@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NativeRuntime } from '../dist/index.js';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { buildProject, createNatlangRuntime } from '../dist/index.js';
+import { scriptedModel } from './support/natlang.mjs';
 
-test('triage algorithm runs as TypeScript with lexical function imports', async () => {
+const runtimeModule = { url: new URL('../dist/index.js', import.meta.url).href, path: fileURLToPath(new URL('../dist/index.js', import.meta.url)),
+  types: fileURLToPath(new URL('../dist/index.d.ts', import.meta.url)), specifiers: ['@natlang/node'] };
+
+test('the triage example classifies in parallel, counts exactly, and shortens its summary with iterateOn', async () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'natlang-triage-'));
+  const built = buildProject({ project: fileURLToPath(new URL('../../examples/triage', import.meta.url)), outDir, runtimeModule,
+    writeDeclarations: false });
+  assert.equal(built.ok, true, JSON.stringify(built.diagnostics));
+  const { triage } = await import(pathToFileURL(join(outDir, 'triage.js')).href);
   const tickets = [
     'I was charged twice for my March invoice.',
     'CHEAP WATCHES!!! Visit our store today for 90% off.',
@@ -10,37 +23,17 @@ test('triage algorithm runs as TypeScript with lexical function imports', async 
     'Export to CSV produces an empty file, no rush.',
     'Payments are failing for every customer right now.',
   ];
-  const source = { $lambda: {
-    type: '(tickets: string[], rubric: string) => Report',
-    types: { Report: '{ urgent: number, by_label: Record<string, number>, summary: string }' },
-    instructions: 'Classify the tickets, select urgent real issues, and report the totals.',
-    args: { tickets, rubric: 'billing: charges and payments; technical: outages; spam: advertising' },
-    codebase: {
-      classify: { args: { ticket: 'string', rubric: 'string' }, returns: 'string',
-        code: 'return /WATCHES/.test(ticket) ? "spam" : /charged|Payments/.test(ticket) ? "billing" : "technical";' },
-      is_urgent: { args: { ticket: 'string' }, returns: 'boolean',
-        code: 'return /DOWN|Payments are failing/.test(ticket);' },
-      summarize: { args: { tickets: 'string[]' }, returns: 'string',
-        code: 'return tickets.join(" ").split(/\\s+/).slice(0, 60).join(" ");' },
-    },
-  } };
-  const runtime = new NativeRuntime({ agent: async session => {
-    const execution = await session.applyAsync('eval', { code:
-      'const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));\n' +
-      'const real = tickets.filter((ticket, index) => labels[index] !== "spam");\n' +
-      'const urgentFlags = await Promise.all(real.map(ticket => is_urgent(ticket)));\n' +
-      'const urgentTickets = real.filter((ticket, index) => urgentFlags[index]);\n' +
-      'const by_label = Object.fromEntries([...new Set(labels)].map(label => [label, labels.filter(item => item === label).length]));\n' +
-      'const summary = urgentTickets.length ? await summarize(urgentTickets) : "Nothing urgent today.";\n' +
-      '({ urgent: urgentTickets.length, by_label, summary })' });
-    assert.equal(execution.kind, 'ok', execution.text);
-    const marked = session.apply('mark_lines', { start: 1, end: 1 });
-    assert.equal(marked.kind, 'ok', marked.text);
-  } });
-  const result = await runtime.runRoot(source);
-  assert.equal(result.outcome.kind, 'done', result.outcome.detail);
-  assert.equal(result.value.urgent, 2);
-  assert.deepEqual(result.value.by_label, { billing: 2, spam: 1, technical: 2 });
-  assert.ok(result.value.summary.includes('cannot log in') && result.value.summary.includes('Payments are failing'));
-  assert.ok(result.value.summary.split(/\s+/).length <= 60);
+  const model = scriptedModel(opening => {
+    if (opening.includes('Pick the label')) return 'result = /WATCHES/.test(ticket) ? "spam" : /charged|Payments/.test(ticket) ? "billing" : "technical"';
+    if (opening.includes('attention within the hour') || opening.includes('A ticket is urgent')) return 'result = /DOWN|Payments are failing/.test(ticket)';
+    if (opening.includes('Write one paragraph')) return 'result = (tickets.join(" ") + " ").repeat(4).trim()';
+    if (opening.includes('noticeably shorter')) return 'result = text.split(/\\s+/).slice(0, Math.ceil(text.split(/\\s+/).length / 2)).join(" ")';
+    return null;
+  });
+  const report = await createNatlangRuntime({ model: model.driver }).run(() => triage(tickets, 'billing, technical, spam'));
+  assert.equal(report.urgent, 2);
+  assert.deepEqual(report.by_label, { billing: 2, spam: 1, technical: 2 });
+  assert.match(report.summary, /cannot log in/);
+  assert.ok(report.summary.split(/\s+/).length <= 60, report.summary);
+  assert.ok(model.openings.filter(opening => opening.includes('noticeably shorter')).length >= 1);
 });

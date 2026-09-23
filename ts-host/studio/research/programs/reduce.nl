@@ -27,8 +27,10 @@ preserve_intent, and investigate_beliefs with selected source/evidence. They
 return candidate artifact edits and checks. Inspect and revise their proposals;
 they do not commit on your behalf. You may invoke several of them in one event.
 
-Use `execute` to run a .nl or .ts source in a pinned manifest. You can write new
-natlang source, include crisp functions using a declared engine, run it, inspect
+Use `execute` to run a .nl or .ts source in a pinned manifest. A .nl source is
+called with its arguments taken from inputs by name; a .ts source exports
+`main(inputs)`. You can write new
+natlang or TypeScript source, run it, inspect
 the receipt, revise it and retain the useful method. `execute` takes a stable
 event-specific call ID; repeat that ID only for the identical invocation. Each
 actual result, including a failure, is recorded. Add useful receipt IDs to
@@ -85,10 +87,11 @@ convergence rule or activate a stale candidate as if it were rebased.
 Keep full data in artifacts or native values and read selectively. Use
 native_read and native_search for evidence artifacts with native_id; the
 artifact preview is only a preview, and search hits need full-context reading.
-An authored TypeScript method running in a pinned child manifest can also call
-`await host.research.readNative(id)` to process its full text. The ID must be
+An authored TypeScript method running in a pinned child manifest can also
+`import { research } from 'natlang:services'` and call
+`await research.readNative(id)` to process its full text. The ID must be
 referenced by an artifact in that manifest. The method shares selected host
-authority through its eval environment; treat external effects explicitly.
+authority through that service; treat external effects explicitly.
 Continue a long investigation through the recorded State; productive algorithmic
 work need not fit into one short turn. On a concrete blocker, preserve the work
 and explain it.

@@ -6,14 +6,17 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
   satisfiesVersion, writePackageArchive } from '../dist/index.js';
-import { main as cliMain } from '../dist/cli/main.js';
+import { createServer } from 'node:http';
+import { promisify } from 'node:util';
+import { execFile as execFileCallback } from 'node:child_process';
+const execFile = promisify(execFileCallback);
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'natlang-package-'));
   mkdirSync(join(root, 'program'), { recursive: true });
   writeFileSync(join(root, 'program', 'main.nl'), 'function main: () => string\nreturn "hello"\n');
   writeFileSync(join(root, 'program', 'pixel.bin'), Buffer.from([0, 255, 17, 128]));
-  const manifest = { schema: 'natlang.package/v1', name: 'example', version: '1.2.3',
+  const manifest = { schema: 'natlang.package/v2', name: 'example', version: '1.2.3',
     include: ['program'], exports: { main: 'program/main.nl' } };
   return { root, manifest };
 }
@@ -55,7 +58,7 @@ test('store resolution detects changed installed content', () => {
 test('dependency ranges are checked before a package is installed', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-dependencies-'));
   writeFileSync(join(root, 'main.nl'), 'return null');
-  const make = (name, version, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v1',
+  const make = (name, version, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v2',
     name, version, dependencies, include: ['main.nl'] }, root);
   const store = new NatlangPackageStore(join(root, 'store'));
   assert.throws(() => store.install(make('app', '1.0.0', { library: '^2.0.0' })), /needs library/);
@@ -70,7 +73,7 @@ test('dependency ranges are checked before a package is installed', () => {
 test('dependency locks choose a stable version and cycles are rejected', () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-locks-'));
   writeFileSync(join(root, 'main.nl'), 'return null');
-  const make = (name, packageVersion, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v1',
+  const make = (name, packageVersion, dependencies = {}) => createPackageArchive({ schema: 'natlang.package/v2',
     name, version: packageVersion, dependencies, include: ['main.nl'] }, root);
   const store = new NatlangPackageStore(join(root, 'store'));
   store.installMany([make('library', '1.0.0'), make('library', '1.4.0'),
@@ -82,88 +85,63 @@ test('dependency locks choose a stable version and cycles are rejected', () => {
     make('b', '1.0.0', { a: '*' })]), /dependency cycle/);
 });
 
-test('CLI packs, installs, and runs a target from the content store', async t => {
-  const previousServer = process.env.NATLANG_SERVER, previousModel = process.env.NATLANG_MODEL;
-  process.env.NATLANG_SERVER = 'http://model.test'; process.env.NATLANG_MODEL = 'fixture';
-  t.after(() => {
-    if (previousServer === undefined) delete process.env.NATLANG_SERVER; else process.env.NATLANG_SERVER = previousServer;
-    if (previousModel === undefined) delete process.env.NATLANG_MODEL; else process.env.NATLANG_MODEL = previousModel;
+async function modelServer(t, respond) {
+  const wire = [];
+  const server = createServer(async (request, response) => {
+    let text = ''; for await (const chunk of request) text += chunk;
+    const body = JSON.parse(text); wire.push(body);
+    const call = respond(body);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{ id: `call-${wire.length}`, type: 'function',
+      function: { name: call[0], arguments: JSON.stringify(call[1]) } }] : [] } }], usage: { completion_tokens: 1 } }));
   });
-  const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
-  writeFileSync(join(root, 'direct.ts'), 'export default function direct(): number { return 7; }\n');
-  writeFileSync(join(root, 'helper.ts'), 'export default function helper(): string { return "local helper"; }\n');
-  writeFileSync(join(root, 'ordinary.ts'), 'export const ordinaryHostCode = true;\n');
-  writeFileSync(join(root, 'project-notes.txt'), 'non-source project context');
-  const administrativeNames = ['apps', 'inspect', 'packages', 'package', 'setup', 'runtime', 'doctor'];
-  for (const name of administrativeNames) {
-    mkdirSync(join(root, name));
-    writeFileSync(join(root, name, 'main.ts'), `export default function main(): string { return "source named ${name}"; }\n`);
-  }
-  writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
-    return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length + ':' + typeof context.runtime.NodeFileTree); } };
-  }`);
-  writeFileSync(join(root, 'natlang.json'), JSON.stringify({ schema: 'natlang.package/v1',
-    name: 'cli-fixture', version: '1.0.0', include: ['target.mjs'], targets: {
-      hello: { kind: 'command', entry: 'target.mjs' },
-    } }));
-  const archive = join(root, 'fixture.nlpkg'), store = join(root, 'store');
-  const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
-  const help = execFileSync(process.execPath, [cli], { encoding: 'utf8' });
-  assert.match(help, /natlang SOURCE/); assert.doesNotMatch(help, /natlang app run/);
-  const empty = execFileSync(process.execPath, [cli, '--packages', '--store', store], { encoding: 'utf8' });
-  assert.match(empty, /No distribution packages are installed/);
-  const direct = execFileSync(process.execPath, [cli, join(root, 'direct.ts')], { encoding: 'utf8' });
-  assert.equal(direct, '7\n');
-  for (const name of administrativeNames) {
-    const collidingPath = execFileSync(process.execPath, [cli, name], { encoding: 'utf8', cwd: root });
-    assert.equal(collidingPath, `"source named ${name}"\n`);
-  }
-  const originalFetch = globalThis.fetch, originalWrite = process.stdout.write, originalCwd = process.cwd();
-  let wire, anonymousOutput = '', anonymousTurn = 0;
-  globalThis.fetch = async (_url, init) => {
-    wire = JSON.parse(init.body);
-    anonymousTurn++;
-    const call = anonymousTurn === 1 ? { name: 'read_value', arguments: JSON.stringify({ expression: 'files["project-notes.txt"].text' }) } :
-      anonymousTurn === 2 ? { name: 'eval', arguments: JSON.stringify({ code: '"anonymous result"' }) } :
-      anonymousTurn === 3 ? { name: 'mark_lines', arguments: JSON.stringify({ start: 1 }) } : undefined;
-    return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{
-      id: `anonymous-${anonymousTurn}`, type: 'function', function: call }] : [] } }], usage: { completion_tokens: 1 } }), { status: 200,
-      headers: { 'content-type': 'application/json' } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  return { wire, env: { ...process.env, NATLANG_SERVER: `http://127.0.0.1:${server.address().port}`, NATLANG_MODEL: 'fixture' } };
+}
+
+test('CLI builds and runs TypeScript entries, packs and installs applications, and answers instructions', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'natlang-cli-'));
+  const files = {
+    'package.json': JSON.stringify({ name: 'cli-fixture-app', private: true, type: 'module' }),
+    'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext',
+      strict: true, skipLibCheck: true, outDir: 'dist' }, include: ['*.ts', 'natlang.d/**/*.ts'] }),
+    'main.ts': "import { nl } from '@natlang/node';\nimport type { TargetContext } from '@natlang/node';\n" +
+      'export async function main(context: TargetContext): Promise<number> {\n' +
+      '  const greeting = await context.runtime.run(() => nl<string>`Greet the people named in context.args.`(context.args));\n' +
+      '  context.io.output.write(greeting);\n  return 0;\n}\n',
+    'natlang.d/helper.ts': 'export function helper(): string { return "local helper"; }\n',
+    'project-notes.txt': 'non-source project context',
+    'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', name: 'cli-fixture', version: '1.0.0',
+      include: ['main.ts', 'natlang.d', 'package.json', 'tsconfig.json'], targets: { hello: { entry: 'main.ts', description: 'Greets.' } } }),
   };
-  process.stdout.write = chunk => { anonymousOutput += String(chunk); return true; };
-  process.chdir(root);
-  try { assert.equal(await cliMain(['answer from this codebase', '--timeout', '5000']), 0); }
-  finally {
-    process.chdir(originalCwd); process.stdout.write = originalWrite; globalThis.fetch = originalFetch;
-  }
-  assert.equal(anonymousOutput, 'anonymous result\n');
-  assert.match(JSON.stringify(wire), /answer from this codebase/);
-  assert.match(JSON.stringify(wire), /helper/);
-  assert.match(JSON.stringify(wire), /non-source project context/);
-  const local = execFileSync(process.execPath, [cli, root, '--', 'local'], { encoding: 'utf8' });
-  assert.equal(local, 'cli-fixture:local:0:function');
-  const localManifest = execFileSync(process.execPath, [cli, join(root, 'natlang.json'), '--', 'path'],
-    { encoding: 'utf8', cwd: tmpdir() });
-  assert.equal(localManifest, 'cli-fixture:path:0:function');
-  const inspected = JSON.parse(execFileSync(process.execPath, [cli, '--inspect', root, '--json'], { encoding: 'utf8' }));
-  assert.equal(inspected.target, 'hello');
-  const discovered = JSON.parse(execFileSync(process.execPath, [cli, '--apps', root, '--json'], { encoding: 'utf8' }));
+  for (const [path, text] of Object.entries(files)) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); }
+  const { wire, env } = await modelServer(t, body => {
+    const opening = String(body.messages[1]?.content ?? ''), turn = body.messages.length;
+    const code = opening.includes('Greet the people') ? 'result = "hello " + input.join(" and ")' :
+      opening.includes('answer from this codebase') ? 'result = helper.helper() + ": " + (await project.file("project-notes.txt").readText())' : undefined;
+    if (!code) return null;
+    return turn === 2 ? ['eval', { code }] : turn === 4 ? ['mark_lines', { start: 1 }] : null;
+  });
+  const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
+  const natlang = (args, options = {}) => execFile(process.execPath, [cli, ...args], { encoding: 'utf8', env, ...options }).then(result => result.stdout);
+  const help = await natlang([]);
+  assert.match(help, /natlang run \[SOURCE\]/); assert.match(help, /natlang check \[PROJECT\]/);
+  assert.equal(await natlang(['check', root]), 'ok\n');
+  assert.equal(await natlang(['run', root, '--', 'Ada', 'Grace']), 'hello Ada and Grace');
+  assert.equal(await natlang(['run', join(root, 'main.ts'), '--', 'Linus']), 'hello Linus');
+  assert.equal(await natlang(['ask', 'answer from this codebase'], { cwd: root }), 'local helper: non-source project context\n');
+  assert.ok(wire.some(body => /helper\(\): string {2}# TypeScript/.test(JSON.stringify(body))), 'natlang.d is listed for ask');
+  const inspected = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', root, '--json'], { encoding: 'utf8' }));
+  assert.equal(inspected.target, 'hello'); assert.equal(inspected.entry, 'main.ts');
+  const discovered = JSON.parse(execFileSync(process.execPath, [cli, 'apps', root, '--json'], { encoding: 'utf8' }));
   assert.equal(discovered[0].name, 'cli-fixture');
-  const ignored = spawnSync(process.execPath, [cli, '--apps', root, '--store', store], { encoding: 'utf8' });
-  assert.equal(ignored.status, 1); assert.match(ignored.stderr, /option --store is not valid here/);
-  const emptyDirectory = join(root, 'not-an-app'); mkdirSync(emptyDirectory);
-  const invalidApp = spawnSync(process.execPath, [cli, '--package', 'pack', emptyDirectory], { encoding: 'utf8' });
-  assert.equal(invalidApp.status, 1);
-  assert.match(invalidApp.stderr, /does not contain a valid natlang\.json/);
-  assert.doesNotMatch(invalidApp.stderr, /EISDIR/);
-  execFileSync(process.execPath, [cli, '--package', 'pack', join(root, 'natlang.json'), '--out', archive]);
-  execFileSync(process.execPath, [cli, '--package', 'install', archive, '--store', store]);
-  const listing = execFileSync(process.execPath, [cli, '--packages', '--store', store], { encoding: 'utf8' });
-  assert.match(listing, /cli-fixture@1\.0\.0/);
-  const result = execFileSync(process.execPath, [cli, 'cli-fixture@1.0.0#hello',
-    '--store', store, '--', 'one', 'two'], { encoding: 'utf8' });
-  assert.equal(result, 'cli-fixture:one,two:0:function');
-  const convenient = execFileSync(process.execPath, [cli, 'cli-fixture',
-    '--store', store, '--', 'three'], { encoding: 'utf8' });
-  assert.equal(convenient, 'cli-fixture:three:0:function');
+  const store = join(root, 'store'), archive = join(root, 'fixture.nlpkg');
+  assert.match(execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' }), /No distribution packages/);
+  execFileSync(process.execPath, [cli, 'package', 'pack', root, '--out', archive]);
+  execFileSync(process.execPath, [cli, 'package', 'install', archive, '--store', store]);
+  assert.match(execFileSync(process.execPath, [cli, 'packages', '--store', store], { encoding: 'utf8' }), /cli-fixture@1\.0\.0/);
+  assert.equal(await natlang(['run', 'cli-fixture@1.0.0#hello', '--store', store, '--', 'Barbara']), 'hello Barbara');
+  const bad = spawnSync(process.execPath, [cli, 'apps', root, '--store', store], { encoding: 'utf8' });
+  assert.equal(bad.status, 1); assert.match(bad.stderr, /option --store is not valid here/);
 });

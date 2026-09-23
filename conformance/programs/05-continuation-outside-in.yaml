@@ -1,43 +1,52 @@
 id: 05-continuation-outside-in
 title: A count computed over a map feeds a later crisp decision
 kind: program
-exercises: [code base, call over a list, crisp aggregate, locals feeding a later call, conditional]
-program:
-  $lambda:
-    type: '(tickets: string[]) => string'
-    function: ticket_alert
-    instructions: |
-      Use `Promise.all(tickets.map(...))` with `is_urgent` to get one flag per ticket.
-      Count the true flags with `count_true`. Return `alert_message(n)` when the count is above five;
-      otherwise return `"ok"`.
-    codebase:
-      is_urgent:
-        description: Is this ticket urgent?
-        args: { ticket: string }
-        returns: boolean
-        instructions: |
-          Is the ticket in `ticket` urgent: are people blocked, is money being lost, or is security at
-          risk, right now? Answer true or false.
-      count_true:
-        description: How many flags are true.
-        args: { flags: 'boolean[]' }
-        returns: number
-        code: return flags.filter(Boolean).length
-      alert_message:
-        description: 'The "ALERT: N urgent" message for a count.'
-        args: { n: number }
-        returns: string
-        code: 'return `ALERT: ${n} urgent`'
+exercises:
+  - code base
+  - call over a list
+  - crisp aggregate
+  - locals feeding a later call
+  - conditional
+root: ticket_alert.nl
+files:
+  ticket_alert.nl: |
+    ---
+    args:
+      tickets: "string[]"
+    returns: "string"
+    ---
+    Use `Promise.all(tickets.map(...))` with `is_urgent` to get one flag per ticket.
+    Count the true flags with `count_true`. Return `alert_message(n)` when the count is above five;
+    otherwise return `"ok"`.
+  ticket_alert/is_urgent.nl: |
+    ---
+    description: "Is this ticket urgent?"
+    args:
+      ticket: "string"
+    returns: "boolean"
+    ---
+    Is the ticket in `ticket` urgent: are people blocked, is money being lost, or is security at
+    risk, right now? Answer true or false.
+  ticket_alert/count_true.ts: |
+    /** How many flags are true. */
+    export default function count_true(flags: boolean[]): number {
+      return flags.filter(Boolean).length
+    }
+  ticket_alert/alert_message.ts: |
+    /** The "ALERT: N urgent" message for a count. */
+    export default function alert_message(n: number): string {
+      return `ALERT: ${n} urgent`
+    }
 inputs:
   tickets:
-    - "PRODUCTION IS DOWN. Customers cannot log in at all."
-    - "Could you update the logo in the footer when you get a chance?"
-    - "Payments are failing for every customer right now, we are losing sales by the minute."
-    - "Database is corrupting orders as we speak - need someone immediately."
-    - "Typo on the About page."
+    - PRODUCTION IS DOWN. Customers cannot log in at all.
+    - Could you update the logo in the footer when you get a chance?
+    - Payments are failing for every customer right now, we are losing sales by the minute.
+    - Database is corrupting orders as we speak - need someone immediately.
+    - Typo on the About page.
     - "Security breach: admin passwords were leaked publicly an hour ago."
-    - "All outgoing email has stopped; password resets are impossible for everyone."
-    - "Site is returning 500 errors on checkout for all users since 09:00."
+    - All outgoing email has stopped; password resets are impossible for everyone.
+    - Site is returning 500 errors on checkout for all users since 09:00.
 expect:
   value: "ALERT: 6 urgent"
 lint:
@@ -45,14 +54,15 @@ lint:
     - is_urgent called once, over tickets, not per-ticket by hand
     - count_true computes n crisply
     - alert_message called only because n is above 5
-  must_not: [the root judging urgency itself, the root doing the count itself]
+  must_not:
+    - the root judging urgency itself
+    - the root doing the count itself
 reference:
   ticket_alert:
-    eval: 'const flags = await Promise.all(tickets.map(async ticket => await is_urgent(ticket)));
-
+    eval: |-
+      const flags = await Promise.all(tickets.map(async ticket => await is_urgent(ticket)));
       const n = await count_true(flags);
-
-      n > 5 ? await alert_message(n) : "ok"'
+      n > 5 ? await alert_message(n) : "ok"
   is_urgent:
     answer_by:
       PRODUCTION IS DOWN. Customers cannot log in at all.: true
@@ -60,6 +70,6 @@ reference:
       Payments are failing for every customer right now, we are losing sales by the minute.: true
       Database is corrupting orders as we speak - need someone immediately.: true
       Typo on the About page.: false
-      'Security breach: admin passwords were leaked publicly an hour ago.': true
+      "Security breach: admin passwords were leaked publicly an hour ago.": true
       All outgoing email has stopped; password resets are impossible for everyone.: true
       Site is returning 500 errors on checkout for all users since 09:00.: true

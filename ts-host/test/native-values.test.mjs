@@ -13,15 +13,21 @@ test('native values distinguish missing, null and empty records', () => {
   assert.notEqual(MISSING, null);
 });
 
-test('native pending construction preserves typed Lambda and combinator parts', () => {
-  const lam = buildPending({ $lambda: { type: '(item: number) => number', code: 'return item * 2;' } });
+test('lambda construction keeps typed parameters, instructions, and a record codebase', () => {
+  const lam = buildPending({ $lambda: { type: '(item: number) => number', instructions: 'Double the item.' } });
   assert.equal(lam.nodeKind, 'lambda');
-  assert.equal(lam.body, 'return item * 2;\n');
+  assert.equal(lam.body, 'Double the item.\n');
   assert.deepEqual(unboundParts(lam, new TypeEnv(), '').map(d => d.path), ['/args/item']);
-  const map = buildPending({ $map: { type: 'Map<number, number>', over: [1, 2],
-    fn: { $lambda: { type: '(item: number) => number', code: 'return item * 2;' } } } });
-  assert.equal(map.nodeKind, 'map');
-  assert.equal(map.fn.nodeKind, 'lambda');
-  assert.equal(dump(map).$map.type, 'Map<number, number>');
-  assert.throws(() => buildPending({ $map: { type: 'Map<number, number>', over: ['x'] } }), Reject);
+  assert.equal(dump(lam).$lambda.instructions, 'Double the item.\n');
+  for (const removed of ['$map', '$fold', '$iterate']) assert.throws(() => buildPending({ [removed]: { type: 'number' } }), Reject);
+  assert.throws(() => buildPending({ $lambda: { type: '() => number', code: 'return 1;' } }), Reject);
+});
+
+test('function-typed slots hold live functions and live values dump by identity', () => {
+  const fn = () => 1;
+  assert.equal(coerce(fn, parseType('(x: number) => number'), new TypeEnv()), fn);
+  assert.throws(() => coerce({ $lambda: {} }, parseType('() => number'), new TypeEnv()), Reject);
+  const when = new Date(0);
+  assert.equal(coerce(when, parseType('Date'), new TypeEnv()), when);
+  assert.match(JSON.stringify(dump({ when })), /"\$live":\{"type":"Date","id":\d+\}/);
 });

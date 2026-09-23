@@ -1,4 +1,4 @@
-import { natural, typescript } from './builders.mjs';
+import { natural, helper } from './builders.mjs';
 
 export const naturalExamples = [
   natural({ id: 'natural-seven', name: 'Return seven', level: 'Beginner',
@@ -160,7 +160,7 @@ types:
 ---
 Call gate with tests_passed. Call summarize with notes. Write both results to return without changing the gate decision.`,
     files: {
-      'release/review/gate.ts': typescript('gate', { tests_passed: 'boolean' }, 'boolean',
+      'release/review/gate.ts': helper('gate', { tests_passed: 'boolean' }, 'boolean',
         'return tests_passed;'),
       'release/review/summarize.nl': `---
 args:
@@ -203,9 +203,11 @@ types:
   Task: '{ id: string, needs: string[] }'
 ---
 Call order_tasks with tasks. Write the returned order to return. If dependencies are impossible, report an error rather than guessing.`,
-    files: { 'migration/plan/order_tasks.ts': typescript('order_tasks', { tasks: 'Task[]' }, 'string[]', `
-const done = [], pending = new Map(tasks.map(task => [task.id, task.needs]));
-while (pending.size) {
+    files: { 'migration/plan/order_tasks.ts': helper('order_tasks', { tasks: 'Task[]' }, 'string[]', `
+const done: string[] = [], pending = new Map(tasks.map(task => [task.id, task.needs]));
+// Each round places at least one task, so there are at most tasks.length rounds.
+for (let round = 0; round < tasks.length; round++) {
+  if (!pending.size) break;
   const ready = [...pending].filter(([, needs]) => needs.every(id => done.includes(id))).map(([id]) => id).sort();
   if (!ready.length) throw new Error('dependency cycle');
   for (const id of ready) { done.push(id); pending.delete(id); }

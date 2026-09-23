@@ -1,4 +1,5 @@
-import { BrowserNatlangClient, BrowserNatlangApplication, loadBrowserModelCatalog } from '../dist/browser/natlang.js';
+import { loadBrowserModelCatalog } from '../dist/browser/natlang.js';
+import { StudioModel, natlangApplication } from './shared/natlang-app.mjs';
 import { apps, appById } from './apps/index.mjs';
 import { loadProgram, fixtureTurn } from './shared/program.mjs';
 import { runChild } from './shared/child-runner.mjs';
@@ -30,11 +31,11 @@ const host = { studio: { async apply(state, event, decision) {
             await store.effect({ ...identity, status: result.ok ? 'complete' : 'failed', before, state: result.state, detail: result.detail });
             return result;
         } } };
-const client = new BrowserNatlangClient({ host, mode: 'retained', wasmUrl: '/ts-host/dist/browser/wllama.wasm', compatWorkerUrl: '/ts-host/dist/browser/wllama-compat.js', compatWasmUrl: '/ts-host/dist/browser/wllama-compat.wasm' });
+const studioModel = new StudioModel();
 async function runSource(files, root, inputs) {
-    const result = await runChild({ request: { source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) }, inputs, options: { seed: { mode: 'derived', root: Number($('seed').value) } } } }, { model: client.model, signal: abort?.signal, onProgress: status });
+    const result = await runChild({ request: { root, files: Object.fromEntries(files.map(row => [row.id, row.source])), inputs, seed: { mode: 'derived', root: Number($('seed').value) } } }, { model: studioModel.loaded ? studioModel.turn : null, signal: abort?.signal, onProgress: status });
     const id = crypto.randomUUID();
-    await store.put('child_runs', id, { ...result, source: files, root, inputs, model: client.modelStatus?.id ?? mode, seed: Number($('seed').value) });
+    await store.put('child_runs', id, { ...result, source: files, root, inputs, model: studioModel.id ?? mode, seed: Number($('seed').value) });
     return { value: result.value, trace_id: id, trace_count: result.trace.length };
 }
 async function inspectTrace(id, index) { const run = await store.get('child_runs', id); if (!run || !Number.isSafeInteger(index) || index < 0 || index >= run.trace.length)
@@ -44,7 +45,7 @@ async function evaluateCell(cell, deps) {
         const result = await companion.run('notebook.query', { source: cell.source, ...(Object.keys(deps).length ? { tables: deps } : {}) }, `${currentEvent.id}-${opIndex}-sql`, abort.signal);
         return result.rows;
     }
-    if (cell.engine === 'typescript-host')
+    if (cell.engine === 'typescript')
         return (await runChild({ cell, deps }, { signal: abort.signal, onProgress: status })).value;
     return (await runSource([{ id: 'cell.nl', source: cell.source }], 'cell.nl', { deps })).value;
 }
@@ -90,7 +91,7 @@ function home(category = 'All') { const root = $('home'); root.replaceChildren()
 function setBusy(value) { busy = value; document.querySelector('.statusbar').classList.toggle('busy', value); $('cancel').hidden = !value; $('command-form').querySelector('button').disabled = value; $('model-settings').disabled = value; $('refresh').disabled = value; $('history-button').disabled = value || !spec; }
 function ctx() { return { app: spec.id, drafts, draft: (key, value) => { drafts[key] = value; store.put('drafts', spec.id, { ...drafts }).catch(fail); }, dispatch, error: fail, assetUrl: asset => companion.assetUrl(asset), downloadValue:async id=>download('cell-result.json',json(await readValue(id)),'application/json'), upload: async (file) => { const result = await companion.upload(file); await dispatch('import', { target: result.asset }); } }; }
 function paint(state, view) { $('app-title').textContent = view.heading; $('app-summary').textContent = view.summary; renderPanels($('panels'), spec.panels(state), view, ctx()); $('suggestions').replaceChildren(...view.suggestions.map(text => { const b = el('button', '', text); b.onclick = () => { $('command').value = text; $('command').focus(); }; return b; })); $('revision').textContent = `${spec.project} · event ${app?.revision??0} · state ${state.revision}`; }
-function snapshot(state, revision, extra = {}) { return { version: spec.version, branch, state, revision, at: new Date().toISOString(), model: client.modelStatus?.id ?? mode, seed: Number($('seed').value), source: source?.files, ...extra }; }
+function snapshot(state, revision, extra = {}) { return { version: spec.version, branch, state, revision, at: new Date().toISOString(), model: studioModel.id ?? mode, seed: Number($('seed').value), source: source?.files, ...extra }; }
 async function mount(record) {
     if (app)
         await app.close();
@@ -107,10 +108,11 @@ async function mount(record) {
         return;
     }
     paint(state,{heading:spec.title,summary:spec.subtitle,focus:spec.panelIds,suggestions:[]});
-    app = new BrowserNatlangApplication({ client, source, initialState: state, initialRevision: record?.revision ?? 0, seedRoot: Number($('seed').value), ...(mode === 'fixture' ? { modelTurn: fixtureTurn(spec, () => app?.state ?? state, () => currentEvent) } : {}),
+    app = natlangApplication({ source, services: host, seedRoot: Number($('seed').value), initialState: state, initialRevision: record?.revision ?? 0,
+        model: mode === 'fixture' ? fixtureTurn(spec, () => app?.state ?? state, () => currentEvent) : studioModel.turn,
         onCommit: async (commit) => { if (!sameValue(commit.state, operationState))
-            throw new Error('Final state must match acknowledged operations'); await store.commit(spec.id, snapshot(commit.state, commit.revision, { event: commit.event, trace: commit.reducerRun.trace, run: commit.reducerRun.run_id })); },
-        onTransition: transition => { paint(transition.state, transition.view); status(transition.state.notice); }, onFailure: failure => { lastFailure = failure; if(failure.stage==='view')paint(app.state,{heading:spec.title,summary:app.state.notice,focus:spec.panelIds,suggestions:[]}); fail(`${failure.stage}: ${failure.detail}${failure.stage==='view'?' · State is available; refresh the view.':''}`); },
+            throw new Error('Final state must match acknowledged operations'); await store.commit(spec.id, snapshot(commit.state, commit.revision, { event: commit.event, trace: commit.trace, run: commit.invocations.find(call => call.parentCallId === null)?.callId })); },
+        onTransition: transition => { paint(transition.state, transition.view); status(transition.state.notice); }, onFailure: failure => { lastFailure = failure; const detail = failure.error instanceof Error ? failure.error.message : String(failure.error); if(failure.stage==='view')paint(app.state,{heading:spec.title,summary:app.state.notice,focus:spec.panelIds,suggestions:[]}); fail(`${failure.stage}: ${detail}${failure.stage==='view'?' · State is available; refresh the view.':''}`); },
     });
     await app.start();
 }
@@ -212,7 +214,7 @@ setNavigation(false);
 $('model-settings').onclick = () => $('settings').showModal();
 $('fixture').onclick = async () => { mode = 'fixture'; $('mode').textContent = 'Controls · no model'; $('mode').className = 'badge fixture'; $('settings').close(); await enqueueRoute(); };
 $('load-model').onclick = async () => { const model = selectedModel(); $('load-model').disabled = true; $('fixture').disabled = true; $('model-status').textContent = 'Loading model…'; setBusy(true); try {
-    await client.loadModel({ kind: 'url', id: model.id, url: model.url, templateUrl: model.templateUrl }, { contextTokens: Number($('context').value), gpuLayers: $('compute').value === 'gpu' ? 99999 : 0 });
+    await studioModel.load(model, { contextTokens: Number($('context').value), gpuLayers: $('compute').value === 'gpu' ? 99999 : 0 });
     mode = 'model';
     $('mode').textContent = 'Local interpreter';
     $('mode').className = 'badge';
@@ -306,4 +308,4 @@ if (mode === 'fixture') {
 }
 await companion.connect().catch(() => { });
 await enqueueRoute();
-window.natlangStudio = { client, store, companion, get lastFailure() { return lastFailure; }, get app() { return app; }, get spec() { return spec; }, dispatch };
+window.natlangStudio = { model: studioModel, store, companion, get lastFailure() { return lastFailure; }, get app() { return app; }, get spec() { return spec; }, dispatch };

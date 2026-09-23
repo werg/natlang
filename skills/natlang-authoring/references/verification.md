@@ -4,55 +4,44 @@
 
 | Evidence | Establishes | Does not establish |
 |---|---|---|
-| Load/type check | Source graph and signatures are accepted | The model follows the algorithm |
-| Scripted interpreter run | Real runtime plumbing and selected tool sequences work | Semantic quality of a teacher/student |
-| Exact oracle/effect assertions | Computation, IDs, counts, or requested operations match expectations | Interpretations outside the assertions |
-| Live interpreter trajectory | A particular model executed a particular scenario | General reliability or cross-platform determinism |
-| Independent semantic review | Evidence supports the evaluated meaning | Correctness for unseen scenarios |
+| `natlang check` | Types, `nl` signatures, callable scoping, loop and recursion policy | That the model follows the instructions |
+| Scripted interpreter run | Real runtime wiring: calls, captures, effects, completion | Semantic quality of any model |
+| Exact oracle and effect assertions | Computation, IDs, counts, requested operations | Interpretations outside the assertions |
+| Live interpreter run | One model executed one scenario | General reliability or cross-backend determinism |
+| Independent semantic review | Evidence supports the evaluated meaning | Correctness on unseen scenarios |
 
-Load the bundled review example through the TypeScript host:
+Run the bundled review example through the runtime with a scripted model driver (label it as wiring evidence):
 
 ```ts
-const result = await host.run({
-  source: { kind: 'file', path: 'review/review.nl' },
-  inputs: {
-    observations: ['The trial improved response times.'],
-    criterion: 'Evidence of improved response times',
-  },
-  modelTurn,
-});
+import { createNatlangRuntime, loadNatlang } from '@natlang/node';
+
+const review = loadNatlang('review/review.nl');
+const runtime = createNatlangRuntime({ model: scriptedDriver });   // or a real model driver
+const report = await runtime.run(() => review(['The trial improved response times.'], 'Improved response times'));
 ```
 
-This loads source and executes a run. For a fixture run use a scripted session agent and label it as such. Crisp helpers can execute without a model. For a live run supply the selected model driver and record its actual identity; never use fixture answers to claim model success.
+A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns `{ calls: [['eval', { code }], ['mark_lines', { start, end }]] }` or `{ text }`. For live runs, record the model identity and settings; never use fixture answers to claim model success.
 
 ## Scenario design
 
-Use scenarios tied to desired behavior rather than only a happy-path demo. Cover ambiguity, conflicting evidence, missing information, zero/one/many items, order-sensitive updates, and interruptions where applicable. Include a case requiring multiple inspected operations. For stateful systems verify actual receipts and committed state; a model's prose about a completed effect is insufficient.
+Tie scenarios to desired behavior: ambiguity, conflicting evidence, missing information, zero/one/many items, order-sensitive updates, interruptions, and a case that needs several inspected operations. For stateful systems verify receipts and committed state, not the model's prose. For directory reducers verify that paths stay in the folder, a direct call discards changes, and `folder.apply` keeps only the committed ones. For stochastic behavior pin source, model, template, seed, sampling, and input order, and report trial counts.
 
-For filesystem work, verify that ordinary lambdas have no file tools, reducer
-paths stay within the supplied folder, direct reducer calls discard changes,
-and `folder.apply` retains only the selected changes. For typed keyed inputs,
-verify both empty and populated `Record<string, T>` values at function
-boundaries.
+In a checkout: `npm --prefix ts-host run build`, then the relevant `ts-host/test/*.test.mjs`, `npm --prefix ts-host run test:conformance`, and `natlang check` on the project you changed.
 
-For stochastic behavior pin source, model/template, seeds, sampling, and ordered inputs, and report how many trials were run. Keep model sampling randomness separate from game/world randomness. Classify failures: source/loader, schema/transport, runtime, continuation, host/effect, model semantics, environment capacity.
+## Diagnose before changing policy
 
-In a checkout, build with `npm --prefix ts-host run build` and run the applicable files under `ts-host/test/`. Run checks relevant to the change plus required project gates.
+- `nl-unknown-return` or `nl-ambiguous-signature`: add the missing annotation or `nl<T>`; do not widen to `any` to silence it.
+- `capture-conflict`: another task changed a captured `let` during the call. The model retries its eval; if it recurs, make the state a parameter or a returned value instead of a shared variable.
+- Recursion error: a function reached itself through its callers. Restructure into iteration (`iterateOn`) or split the responsibility.
+- Loop policy error in callable-folder code: rewrite as `for...of`, a counted loop, an array method, or `iterateOn`.
+- Correct type, wrong answer: improve instructions, evidence access, or decomposition; structural validation is working.
+- Growing prompts: inspect repeated data and live-value previews, not just source length.
+- Repeated work after conversation rollover: check that progress lives in the scope and line marks, and that effects are not restarted.
 
-## Diagnose before modifying policy
-
-- Failed eval or function call: use its diagnostic and the typed source contract to correct the operation. Do not revive path-based scope binding or unwrap malformed values to make the call pass.
-- Correct return type, wrong answer: improve semantic criteria, algorithm, evidence access, or model; structural validation is working as intended.
-- Growing prompt: inspect presented schemas and repeated data, not just source length. Compact representation before adding language size limits.
-- Unexpected assignment or mutation failure: check the declared value shape and eval diagnostic; function parameters and locals are mutable within their call.
-- Repeated work after rollover: check durable locals, restored pending nodes, marks, notes, and effect observations. Do not restart effects merely because conversation history changed.
-- Capacity failure: inspect actual loaded context per server slot, model limits, and simultaneous workloads. A configured total context may be divided across slots. Never infer ownership or queue position from aggregate metrics alone.
-- Low throughput: measure inference, waiting, host I/O, and context reconstruction separately. Avoid repeatedly announcing speculative progress from a quiet process.
-
-`local` validation feedback lets the model inspect rejected actions and repair; `caller` returns diagnostics to the caller. This is a policy decision, not a correctness bypass. Neither repairs an external effect nor rolls it back. Record the selected policy for model studies.
+`validationFeedback: 'local'` lets the model see rejected actions and repair; `'caller'` returns diagnostics to the caller. Neither rolls back an external effect. Record the policy used in any model study.
 
 ## Training handoff
 
-Capture source revision, typed inputs, exact presented messages/tools, actions, observations, seeds, continuations, model identity/settings, engine authority, and actual effects. Retain failed examples with clear labels. Do not automatically admit a trace because it parses, reaches `done`, or passes structural checks. Independently evaluate semantics and verify provenance. Split related variants by source program/family to avoid train/test leakage.
+Traces (`runtime.run(fn, { trace })`, or `fileTraceSink(dir)`) record the presented messages and tools, actions, observations, effects, seeds, and outcomes of every invocation. Teacher tasks are program IR projects (`natlang.program/2`: root `.nl`, files, inputs, expected). Do not admit a trajectory because it parses or reaches `done`; evaluate semantics independently and split related variants by source family.
 
-Repository anchors: `ts-host/src/native/scenario.ts`, `ts-host/studio/research/evaluation.mjs`, `PROGRAM_IR_PIPELINE.md`, and `TEACHER_SETUP.md`. Use current runner flags rather than copying historical model-specific launch commands.
+Anchors: `ts-host/src/teacher/`, `ts-host/scripts/teacher-collector.mjs`, `PROGRAM_IR_PIPELINE.md`, `TEACHER_SETUP.md`.

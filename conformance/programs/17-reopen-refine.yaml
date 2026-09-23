@@ -1,38 +1,50 @@
 id: 17-reopen-refine
 title: An imported natural-language function is edited when its first draft is too long
 kind: program
-exercises: [inspect and edit an imported function, call it again, crisp check]
-program:
-  $lambda:
-    type: '(report: string) => string'
-    function: headline_for
-    instructions: |
-      Call `write_headline` and check the result with `too_long`.
-      If it is too long, edit the existing imported function's instructions to require at most eight words,
-      then call it again. Return the final headline.
-    codebase:
-      write_headline:
-        description: A headline for a report.
-        args: { report: string }
-        returns: string
-        instructions: |
-          Write a headline for `report`, at most 15 words.
-      too_long:
-        description: Is the text more than 8 words?
-        args: { text: string }
-        returns: boolean
-        code: return wordCount(text) > 8
+exercises:
+  - inspect and edit an imported function
+  - call it again
+  - crisp check
+root: headline_for.nl
+files:
+  headline_for.nl: |
+    ---
+    args:
+      report: "string"
+    returns: "string"
+    ---
+    Call `write_headline` and check the result with `too_long`.
+    If it is too long, edit the existing imported function's instructions to require at most eight words,
+    then call it again. Return the final headline.
+  headline_for/write_headline.nl: |
+    ---
+    description: "A headline for a report."
+    args:
+      report: "string"
+    returns: "string"
+    ---
+    Write a headline for `report`, at most 15 words.
+  headline_for/too_long.ts: |
+    /** Is the text more than 8 words? */
+    export default function too_long(text: string): boolean {
+      return text.trim().split(/\s+/).filter(Boolean).length > 8
+    }
 inputs:
-  report: "Quarterly revenue grew by four percent, driven mainly by strong sales in the northern region, while costs remained flat compared with the previous quarter."
+  report: Quarterly revenue grew by four percent, driven mainly by strong sales in the northern region, while
+    costs remained flat compared with the previous quarter.
 expect:
   checks:
-    - { kind: crisp, code: "wordCount(value) <= 8" }
-    - { kind: judge, question: "Is it a headline about revenue growth?", answer: true }
+    - kind: crisp
+      code: value.trim().split(/\s+/).filter(Boolean).length <= 8
+    - kind: judge
+      question: Is it a headline about revenue growth?
+      answer: true
 lint:
   must:
     - a first headline produced by write_headline, checked crisply with too_long
     - if too long, edit write_headline and call it again
-  must_not: [the root rewriting the headline itself]
+  must_not:
+    - the root rewriting the headline itself
 reference:
   headline_for:
     steps:
@@ -42,8 +54,8 @@ reference:
           ({ headline, bad })
       - edit_function:
           name: write_headline
-          find: "Write a headline for `report`, at most 15 words."
-          replace_with: "Write a headline for `report`, at most 8 words."
+          find: Write a headline for `report`, at most 15 words.
+          replace_with: Write a headline for `report`, at most 8 words.
       - eval: await write_headline(report)
   write_headline:
     variants:

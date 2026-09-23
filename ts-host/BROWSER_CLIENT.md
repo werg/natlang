@@ -1,61 +1,55 @@
-# Reusing natlang in browser applications
+# Running natlang in the browser
 
-For natlang-driven event reducers and view plans, see
-[Frontend applications](FRONTEND_APPLICATIONS.md).
+For event-driven interfaces, see [frontend applications](FRONTEND_APPLICATIONS.md).
 
-`BrowserNatlangClient` is the application-level browser API. It owns one local GGUF model, loads its tool-call template, probes and selects WebGPU, optionally retries loading on CPU, runs natlang programs, captures per-run model metrics, and closes resources. The lower-level `BrowserLocalModel` and `BrowserNatlangHost` remain available when an application needs custom inference or runtime wiring.
+The browser build (`@natlang/browser`, `dist/browser/natlang.js`) is the same
+runtime and compiler as Node, with a local model loader. Natural-language calls
+run in the page (or a worker you own); only inference runs in the model's
+WebAssembly worker.
 
 ## Build and serve assets
 
-Build `ts-host` with `npm ci && npm run build`. A web app needs the browser entrypoint and its worker assets from `ts-host/dist/browser/`:
+Build `ts-host` with `npm ci && npm run build`. Serve these from
+`ts-host/dist/browser/` (or the package's `dist/`):
 
 | Asset | Purpose |
 | --- | --- |
-| `natlang.js` | Browser runtime and model adapter |
-| `wllama.wasm` | Main Wllama backend |
+| `natlang.js` | Runtime, compiler, and model loader |
+| `wllama.wasm` | Main inference backend |
 | `wllama-compat.js` | Safari/Firefox compatibility worker |
 | `wllama-compat.wasm` | Compatibility backend |
 
-When using `@natlang/browser`, copy the three Wllama assets into your public directory and pass their deployed URLs to the client. This avoids assumptions about where a bundler emits JavaScript. Serve WASM with `application/wasm`. Use HTTPS in production or localhost during development. Cross-origin isolation headers (COOP/COEP) enable multi-threaded WASM CPU inference; the client chooses one CPU thread when those headers are absent. Serve GGUF downloads from the same origin when possible and support byte ranges for large files. Put the model's official tool-call template at a reachable URL or pass its text as `chatTemplate`.
+Serve WASM as `application/wasm`, use HTTPS in production or localhost in
+development, and serve GGUF files with byte-range support. Cross-origin
+isolation headers (COOP/COEP) enable multithreaded CPU inference; without them
+the loader uses one thread. Publish the model's tool-call template beside it.
+
+## Load a model and run natlang
 
 ```ts
-import { BrowserNatlangClient } from '@natlang/browser';
+import * as natlang from '@natlang/browser';
 
-const appState = { count: 4 };
-const client = new BrowserNatlangClient({
-  host: appState, mode: 'retained',
-  wasmUrl: '/natlang-runtime/wllama.wasm',
-  compatWorkerUrl: '/natlang-runtime/wllama-compat.js',
-  compatWasmUrl: '/natlang-runtime/wllama-compat.wasm',
-});
+const { model, status } = await natlang.loadBrowserLocalModel(
+  { kind: 'url', id: 'my-checkpoint', url: '/models/my-checkpoint.gguf', templateUrl: '/models/my-checkpoint.jinja' },
+  { contextTokens: 8192, onProgress: ({ loaded, total }) => console.log(loaded, total) });
+console.log(status.diagnostics.gpuSelectionReason, status.gpuFallbackReason);
 
-const loaded = await client.loadModel({
-  kind: 'url', id: 'my-checkpoint', url: '/models/my-checkpoint.gguf',
-  templateUrl: '/models/my-checkpoint.jinja',
-}, {
-  contextTokens: 8192,
-  onProgress: ({ loaded, total }) => console.log(loaded, total),
-});
-console.log(loaded.diagnostics.gpuSelectionReason, loaded.gpuFallbackReason);
-
-const controller = new AbortController();
-const result = await client.run({
-  source: { kind: 'files', root: 'main.nl', files: {
-    'main.nl': '---\nargs: {}\nreturns: number\n---\nSet the result to 7.\n',
-  } },
-  signal: controller.signal,
-  options: { seed: { mode: 'compatibility' } },
-});
-console.log(result.outcome, result.value, result.trace, result.model?.turns);
-await client.close();
+const runtime = natlang.createNatlangRuntime({ model: model.turn, services: { appState } });
+const project = natlang.compileVirtualProject({ files: { 'main.ts':
+  "import { nl } from '@natlang/browser';\nexport async function main(): Promise<number> { return await nl<number>`Return seven.`(); }\n" } }, natlang);
+const value = await runtime.run(() => project.require('main.ts').main());
 ```
 
-The source can be a checked virtual file tree, a program value, or named definitions. Crisp TypeScript runs without loading a model. A `host` object is available by identity to crisp eval as `host`; its mutations are live application mutations. Pass an existing `TypeScriptEnvironment` when multiple clients or runs must share the same eval context; the caller owns that environment. `mode: 'retained'` retains one eval environment across runs for that client's lifetime. Runs are serialized per client. A client will reject model replacement or close while a run is active.
+- Sources: `{ kind: 'url' }`, `{ kind: 'files', files: [file] }` for a user-selected GGUF, or `{ kind: 'huggingface', repo, file, quant }`, each with an optional `templateUrl` or `chatTemplate`.
+- By default the loader requests full GPU offload on a capable adapter and retries on CPU if loading fails (`cpuFallback: false` disables the retry; `gpuLayers: 0` selects CPU). Diagnostics report the requested layers; the backend does not report actual residency.
+- `loadBrowserModelCatalog()` reads `/models/browser-catalog.json` (the published default and alternatives) for a model picker.
+- `model.turnHistory` and `model.lastTurn` record per-turn duration, token counts, schema size, and malformed-call retries.
+- Named functions load with `loadVirtualNatlang(files, 'main.nl')`; playground utilities (`runPlaygroundProject`, `projectEntry`, `traceFrame`) run and inspect small projects.
 
-`loadModel` also accepts `{ kind: 'files', files: [file] }` for user-selected local GGUFs and `{ kind: 'huggingface', repo, file, quant }`. `chatTemplate` or `templateUrl` can be supplied with any source. By default the client requests all layers on a capable WebGPU adapter and retries on CPU if model loading fails. Set `cpuFallback: false` to require the automatic GPU attempt to succeed; set `gpuLayers: 0` to choose CPU or a positive count to request partial GPU offload. The returned diagnostics report requested layers and probe details; Wllama currently does not expose an authoritative actual layer count. Use a fresh client or `unloadModel()` to release weights. Pass `signal` to a run for cancellation (the current client load options do not expose a load AbortSignal); cancellation cannot undo external effects already performed by a crisp function.
+Compiled browser code restores the natlang task after every `await`, so calls in
+ordinary async code find their task. Wrap callbacks invoked by uncompiled code
+with `runtime.bind(fn)`.
 
-Applications can call `await client.loadDefaultModel({ contextTokens: 8192 })` to use the current published checkpoint. It reads `/models/browser-catalog.json` and loads the catalog's `defaultId`, GGUF URL, and chat template. Pass a custom catalog URL as the second argument if the application serves models elsewhere. `loadBrowserModelCatalog()` exposes the same catalog for a model picker. The local training wrappers and playground Jobs tab update the catalog after successful conversion; deploy the JSON, weight, and template files together. If the JSON has not yet been published, the loader uses the built-in v8 pilot catalog.
-
-`client.run()` adds `{ model: { id, diagnostics, loadMs, gpuFallbackReason, turns } }` to the native run result. Each turn records duration, token counts when supplied by the backend, tool schema size, and malformed-call retries. The result trace is portable JSON. No chat-template-specific messages are stored in source programs. For reviewed browser test cases and local training jobs, see the [playground](playground/README.md).
-
-The eval environment executes trusted application code. Do not give untrusted scripts access to privileged `host` objects or assume that stopping a run rolls back a browser API call.
+Eval executes trusted application code in the page. Do not give untrusted
+scripts privileged services, and do not assume that cancelling a call rolls back
+a browser API call it already made.

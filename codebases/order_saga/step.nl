@@ -3,8 +3,6 @@ args:
   acc: State
   item: Event
 returns: State
-effects:
-  - queue.send
 description: Process an event stream with duplicate suppression, an outbox,
   idempotent delivery and compensation.
 ---

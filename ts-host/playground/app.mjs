@@ -1,12 +1,12 @@
-import { BrowserNatlangClient, BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage,
-  probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject,
-  validProjectPath, validatePlaygroundProject, loadFunctionFiles, runPlaygroundProject, traceFrame,
-  admitPlaygroundRun } from '../dist/browser/natlang.js';
+import * as natlang from '../dist/browser/natlang.js';
 import { applicationSource, createLivePreview } from './live.mjs';
 import { mountInputForm } from './input-form.mjs';
 import { storage } from './storage.mjs';
 import { examples, exampleCategories } from './examples.mjs';
 
+const { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, loadBrowserLocalModel, checkModelStorage, createNatlangRuntime,
+  probeBrowserGpu, newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, validProjectPath,
+  validatePlaygroundProject, projectSignature, runPlaygroundProject, traceFrame, admitPlaygroundRun } = natlang;
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value).replace(/[&<>"']/g, ch =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -27,7 +27,9 @@ const sameJSON = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 let projects = [], project = null, selectedFile = null, runs = [], cases = [], selectedRun = null;
 let diagnostics = [], model = null, modelSpec = null, abort = null, checkTimer = null;
-const client = new BrowserNatlangClient();
+/** A runtime for one execution; model turns resolve `model` at call time. */
+const runtime = () => createNatlangRuntime({ seed: { mode: 'compatibility' },
+  model: (request, signal) => { if (!model?.loaded) throw new Error('Load a local model to run natural instructions'); return model.turn(request, signal); } });
 let cursor = 0, importMode = 'project', busy = false, editingCase = null, caseFromRun = false, playTimer = null;
 let jobToken = null, jobs = [], selectedJobId = null, jobCatalog = null, jobTimer = null;
 let modelCatalog = { defaultId: BROWSER_MODEL_CATALOG[0].id, models: [...BROWSER_MODEL_CATALOG] };
@@ -36,7 +38,7 @@ window.natlangPlayground = { get project() { return project; }, get runs() { ret
   get selectedRun() { return selectedRun; }, get model() { return model; } };
 
 let autoTimer = null, pendingExecution = null, inputForm = null, rawInputsDirty = false;
-const live = createLivePreview({ client,
+const live = createLivePreview({ runtime, runtimeNamespace: natlang,
   onBusy: value => {
     busy = value; $('stopButton').disabled = !value;
     for (const id of ['projectSelect', 'newProject', 'deleteProject', 'importProject', 'rootSelect', 'modelButton', 'loadModel']) $(id).disabled = value;
@@ -122,8 +124,7 @@ function replaceProject(next) {
 }
 function renderInputFields() {
   try {
-    const lambda = loadFunctionFiles(project.root, project.files);
-    inputForm = mountInputForm($('inputFields'), lambda, project.inputs, () => {
+    inputForm = mountInputForm($('inputFields'), projectSignature(project.files, project.root), project.inputs, () => {
       try {
         const inputs = inputForm.read();
         $('inputError').hidden = true;
@@ -470,11 +471,10 @@ function renderExamples() {
 }
 
 function verifyCase(item) {
-  if (!item.trace?.length) throw new Error('No recorded trace; run the scenario first');
-  return admitPlaygroundRun({ schema: 'natlang.playground.run/1', trace: item.trace }, {
+  if (!item.trace) throw new Error('No recorded run; run the scenario first');
+  return admitPlaygroundRun({ schema: 'natlang.playground.run/2', trace: item.trace }, {
     outcome: item.expected.kind, value: item.expected.value,
     requiredActions: item.requiredActions ?? [], effects: item.effects ?? [],
-    constrainedCalls: item.constrainedCalls ?? [],
   });
 }
 
@@ -556,8 +556,8 @@ async function executeProject(snapshot) {
     busy = true; abort = new AbortController();
     $('runButton').disabled = true; $('stopButton').disabled = false;
     message(`Running revision ${snapshot.revision.slice(0, 8)}…`);
-    return runPlaygroundProject(client, snapshot, { signal: abort.signal,
-      runOptions: { seed: { mode: 'compatibility' } } });
+    return runPlaygroundProject(runtime(), snapshot, { signal: abort.signal, runtimeNamespace: natlang,
+      ...(model?.loaded ? { model: { id: modelSpec?.id ?? 'local', diagnostics: model.diagnostics } } : {}) });
 }
 
 async function runCase(item) {
@@ -609,10 +609,11 @@ async function loadModel() {
       ...(gpuLayers === undefined ? {} : { gpuLayers }),
       onProgress: ({ loaded, total }) => { $('modelProgress').textContent = total ?
         `Downloading ${Math.round(100 * loaded / total)}%` : 'Loading model…'; } };
-    const status = await client.loadModel(file ? { kind: 'files', files: [file], id: `file:${file.name}`,
+    await model?.close(); model = null;
+    const { model: loaded, status } = await loadBrowserLocalModel(file ? { kind: 'files', files: [file], id: `file:${file.name}`,
       templateUrl: spec?.templateUrl } : { kind: 'url', url: spec.url, id: spec.id,
       templateUrl: spec.templateUrl }, options);
-    model = client.model;
+    model = loaded;
     modelSpec = file ? { id: `file:${file.name}`, label: file.name } : spec;
     $('modelButton').classList.add('loaded'); $('modelLabel').textContent = modelSpec.label;
     $('modelProgress').textContent = `Ready · ${model.diagnostics.gpuSelectionReason}` +
@@ -623,7 +624,7 @@ async function loadModel() {
     const resume = pendingExecution; pendingExecution = null;
     if ($('modelDialog').open) $('modelDialog').close();
     if (resume) queueMicrotask(() => void resume());
-  } catch (error) { model = client.model;
+  } catch (error) {
     if (!model?.loaded) { modelSpec = null; $('modelButton').classList.remove('loaded');
       $('modelLabel').textContent = 'Set up a model'; }
     $('modelProgress').textContent = `Load failed: ${error.message}`; }

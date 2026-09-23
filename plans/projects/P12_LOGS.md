@@ -1,8 +1,8 @@
 # P12 — Log anomaly tracker and investigator
 
 Status: finite Fold replay and host evidence index implemented in
-[`codebases/log_investigator`](../../codebases/log_investigator/README.md) and
-[`applications/log_investigator.mjs`](../../applications/log_investigator.mjs).
+[`applications/logs`](../../applications/logs/index.ts) and
+[`applications/logs/index.ts`](../../applications/logs/index.ts).
 Live source buffering, durable receipts and teacher quality remain open.
 [Shared capabilities](README.md).
 

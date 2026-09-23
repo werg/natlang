@@ -1,3 +1,4 @@
+import { research } from 'natlang:services';
 export default async function branches(): Promise<Branch[]> {
-return await host.research.branches();
+return await research.branches();
 }

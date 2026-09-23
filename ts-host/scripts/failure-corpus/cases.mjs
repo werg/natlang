@@ -1,4 +1,5 @@
 /** Hand-authored semantic repair cases. The bad eval must fail in the native runtime. */
+import { definitionProject, lambdaSignature } from '../../dist/teacher/program.js';
 export const failureCases = [
   {
     id: 'customer-foreign-key', family: 'relational-join',
@@ -108,11 +109,11 @@ export const failureCases = [
 
 export function failureProgramRecords() {
   return failureCases.map(item => ({
-    version: 'natlang.program/1', id: `failure-repair:${item.id}`, kind: 'lambda_graph',
+    version: 'natlang.program/2', id: `failure-repair:${item.id}`, kind: 'lambda_graph',
     family: `failure_repair/${item.family}`, split: 'train', source_groups: [`failure-repair:${item.id}`],
     curriculum_evidence: 'native_failed_eval_then_verified_teacher_repair',
     failure_insight: item.insight,
-    semantics: { root: { $lambda: { type: item.type, instructions: item.instructions } },
+    semantics: { ...definitionProject(item.id.replace(/-/g, '_'), { ...lambdaSignature(item.type), instructions: item.instructions }),
       inputs: item.inputs, expected: item.expected,
       failure_seed: { code: item.failed, kind: 'runtime' } },
   }));

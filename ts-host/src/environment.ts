@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createContext, runInContext, type Context } from 'node:vm';
+import { createContext, runInContext, runInThisContext, type Context } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { ApplicationPackages, findPackageWorkspace } from './application-packages.js';
@@ -20,15 +20,6 @@ function snapshot(value: unknown): unknown {
     return Object.freeze(out);
   }
   throw new TypeError('eval scope contains a nonportable value');
-}
-
-function scopeBridgeValue(value: unknown): unknown {
-  if (value === undefined || value === null || typeof value === 'string' ||
-      typeof value === 'boolean' || typeof value === 'number') return value;
-  if (Array.isArray(value)) return Array.from(value, scopeBridgeValue);
-  if (typeof value === 'object' || typeof value === 'function')
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scopeBridgeValue(item)]));
-  throw new TypeError(`scope bridge contains unsupported ${typeof value} value`);
 }
 
 export function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown {
@@ -87,7 +78,7 @@ function lowerStaticImports(source: string, validateImport: (specifier: string) 
 
 function compile(code: string, body: boolean, asyncBody = false, modules = false,
   validateImport: (specifier: string) => void = () => {}): string {
-  let source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,fx,host)` : code;
+  let source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown) {\n${code}\n}\n__natlang_body(self)` : code;
   // Reparse lowered imports before TS binding; otherwise TS rewrites uses to removed import aliases.
   if (modules) source = lowerStaticImports(source, validateImport);
   const result = ts.transpileModule(source, {
@@ -109,11 +100,13 @@ function compile(code: string, body: boolean, asyncBody = false, modules = false
   return result.outputText;
 }
 
-/** Trusted VM context. `host` is a direct reference to caller-owned native objects. */
+/**
+ * Node evaluator: a `vm` context in this process. Portable scope data arrives as a frozen snapshot
+ * (`self`); live objects, callables, captures and the output sink arrive by reference (`__live`).
+ */
 export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-node-host';
   readonly mode: EnvironmentMode;
-  readonly host: object;
   readonly timeoutMs: number;
   readonly scopeCapabilities: { allowModules: boolean; allowNetwork: boolean };
   readonly packages?: ApplicationPackages;
@@ -122,30 +115,19 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   private context?: Context;
   private disposed = false;
   private readonly observe?: (event: HostEvent) => void;
-  private effect?: (capability: string, operation: string, args: unknown[]) => unknown;
 
-  constructor(options: { mode?: EnvironmentMode; host?: object; timeoutMs?: number;
-    observe?: (event: HostEvent) => void;
-    effect?: (capability: string, operation: string, args: unknown[]) => unknown;
+  constructor(options: { mode?: EnvironmentMode; timeoutMs?: number; observe?: (event: HostEvent) => void;
     workspace?: string; network?: boolean } = {}) {
     this.mode = options.mode ?? 'fresh';
-    this.host = options.host ?? Object.freeze({});
     this.timeoutMs = options.timeoutMs ?? 2000;
     this.observe = options.observe;
-    this.effect = options.effect;
     this.workspace = options.workspace ?? findPackageWorkspace(process.cwd());
     this.scopeCapabilities = { allowModules: true, allowNetwork: options.network ?? !!this.workspace };
     if (this.workspace) this.packages = new ApplicationPackages(this.workspace, event => this.packageEvents.push(event));
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1) throw new RangeError('timeoutMs must be positive');
   }
 
-  bindEffect(handler: (capability: string, operation: string, args: unknown[]) => unknown): () => void {
-    const prior = this.effect;
-    this.effect = handler;
-    return () => { if (this.effect === handler) this.effect = prior; };
-  }
-
-  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh', host: this.host,
+  fork(): TypeScriptEnvironment { return new TypeScriptEnvironment({ mode: 'fresh',
     timeoutMs: this.timeoutMs, observe: this.observe, workspace: this.workspace, network: this.scopeCapabilities.allowNetwork }); }
 
   installPackages(specifiers: string[]): ReturnType<ApplicationPackages['installPackages']> {
@@ -154,20 +136,13 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   }
 
   private makeContext(): Context {
-    const context = createContext({ host: this.host, __fx: (cap: string, fn: string, raw: string) => {
-      if (!this.effect) return JSON.stringify({ __error: 'effect-undeclared' });
-      try { return JSON.stringify({ value: portable(this.effect(cap, fn, JSON.parse(raw))) }); }
-      catch (error) { return JSON.stringify({ __error: error instanceof Error ? error.message : String(error) }); }
-    },
-      console: undefined });
+    const context = createContext({ console: undefined });
     runInContext(prelude, context, { timeout: this.timeoutMs });
     context.__natlang_import = (specifier: string) => {
       if (!this.packages) throw new Error('Package imports require a project package.json');
       return this.packages.importModule(specifier);
     };
-    if (this.packages) {
-      context.installPackages = (specifiers: string[]) => this.installPackages(specifiers);
-    }
+    if (this.packages) context.installPackages = (specifiers: string[]) => this.installPackages(specifiers);
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
@@ -199,76 +174,67 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return logs;
   }
 
-  execute(request: EvalRequest): EvalResult {
+  private prepare(request: EvalRequest): { context: Context; logs: string[] } {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
+    const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
+    const logs = this.captureConsole(context);
+    const scope = snapshot(request.scope) as Record<string, unknown>;
+    context.self = scope;
+    context.__live = request.live ?? {};
+    return { context, logs };
+  }
+
+  private failure(request: EvalRequest, error: unknown, logs: string[]): EvalFailure {
+    return new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+        error.stack : undefined, logs });
+  }
+
+  execute(request: EvalRequest): EvalResult {
     let logs: string[] = [];
     try {
-      const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
-      logs = this.captureConsole(context);
-      const scope = snapshot(request.scope) as Record<string, unknown>;
-      context.self = scope;
-      context.locals = scope.let ?? {};
+      const prepared = this.prepare(request); logs = prepared.logs;
       const code = '"use strict";\n' + compile(request.code, request.body);
-      const value = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
+      const value = runInContext(code, prepared.context, { timeout: this.timeoutMs, displayErrors: true });
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
-        throw new TypeError('async eval results require a host job and later poll');
-      const result = portable(value === undefined ? null : value);
-      return { result, events: this.capture(request, 'completed'), logs };
-    } catch (error) {
-      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
-        { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
-          error.stack : undefined, logs });
-    }
+        throw new TypeError('an asynchronous result needs executeAsync');
+      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
+    } catch (error) { throw this.failure(request, error, logs); }
   }
 
   async executeAsync(request: EvalRequest): Promise<EvalResult> {
-    if (this.disposed) throw new Error('TypeScript environment is disposed');
-    if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
-      throw new TypeError('invalid eval request');
     let logs: string[] = [];
     try {
-      const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
-      logs = this.captureConsole(context);
-      const scope = snapshot(request.scope) as Record<string, unknown>;
-      context.self = scope; context.locals = scope.let ?? {};
-      const previousFx = context.fx;
-      context.fx = new Proxy({}, { get: (_, capability) => new Proxy({}, {
-        get: (_, operation) => (...rawArgs: unknown[]) => {
-          if (!this.effect) throw new Error('NATLANG:effect-undeclared');
-          const internalScope = capability === 'natlang' && operation === 'scope';
-          const args = internalScope ? scopeBridgeValue(rawArgs) as unknown[] :
-            JSON.parse(JSON.stringify(portable(rawArgs))) as unknown[];
-          const result = this.effect(String(capability), String(operation), args);
-          if (result && typeof result === 'object' && typeof (result as Promise<unknown>).then === 'function')
-            return Promise.resolve(result).then(portable);
-          return portable(result);
-        },
-      }) });
+      const prepared = this.prepare(request); logs = prepared.logs;
       const code = '"use strict";\n' + compile(request.code, request.body, request.body, true, specifier => {
         if (!this.packages) throw new Error('Package imports require a project package.json');
         this.packages.validateImportSpecifier(specifier);
       });
-      try {
-        const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
-        const value = await pending;
-        const result = portable(value === undefined ? null : value);
-        return { result, events: this.capture(request, 'completed'), logs };
-      } finally { context.fx = previousFx; }
-    } catch (error) {
-      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
-        { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
-          error.stack : undefined, logs });
-    }
+      const value = await runInContext(code, prepared.context, { timeout: this.timeoutMs, displayErrors: true });
+      return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
+    } catch (error) { throw this.failure(request, error, logs); }
   }
 
+  /**
+   * Evaluate a callable-folder module body in the host realm, so its values interoperate with
+   * application code (arrays, classes, Promises). Bindings are passed by reference.
+   */
+  evaluateModule(code: string, bindings: Record<string, unknown>): unknown {
+    if (this.disposed) throw new Error('TypeScript environment is disposed');
+    const names = Object.keys(bindings);
+    const factory = runInThisContext(`(function (${names.join(', ')}) {\n"use strict";\n${code}\n})`,
+      { displayErrors: true }) as (...values: unknown[]) => unknown;
+    return factory(...names.map(name => bindings[name]));
+  }
+
+
+
   private capture(request: EvalRequest, status: string): HostEvent[] {
-    const host = this.host as { drainEvents?: () => HostEvent[] };
-    const events = [...(typeof host.drainEvents === 'function' ? host.drainEvents() : []), ...this.packageEvents.splice(0)];
+    const events = this.packageEvents.splice(0);
     for (const event of events) this.observe?.(event);
-    const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body,
-      effectful: request.effectful, sharedHost: true, status, nativeEffectsReplayable: false };
+    const evalEvent = { operation: 'typescript.eval', mode: this.mode, body: request.body, status };
     this.observe?.(evalEvent);
     return [...events, evalEvent];
   }

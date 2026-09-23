@@ -6,8 +6,6 @@ args:
   target: Target
   context: Context
 returns: CheckReport
-effects:
-  - types.calls
 ---
 function check(target, context) -> CheckReport
   claims = identify_calls(target, context)

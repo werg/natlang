@@ -1,10 +1,9 @@
 import { createInterface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
-import type { TerminalEvent, TerminalNatlangApplication } from './application.js';
-import { TerminalEventQueue } from './events.js';
+import { EventQueue, type AppEvent, type EventLoop } from '../app/event-loop.js';
 import { renderTerminalView, type TerminalView } from './view.js';
 
-export type TerminalShellOptions<E extends TerminalEvent> = {
+export type TerminalShellOptions<E extends AppEvent> = {
   input?: Readable; output?: Writable; color?: boolean; width?: number;
   prompt?: string; event: (line: string, id: string) => E;
   events?: AsyncIterable<E>;
@@ -13,8 +12,8 @@ export type TerminalShellOptions<E extends TerminalEvent> = {
 };
 
 /** Interactive line transport. Slash commands control presentation/lifecycle only. */
-export async function runTerminalShell<S, E extends TerminalEvent>(
-  app: TerminalNatlangApplication<S, TerminalView, E>, options: TerminalShellOptions<E>): Promise<void> {
+export async function runTerminalShell<S, E extends AppEvent>(
+  app: EventLoop<S, TerminalView, E>, options: TerminalShellOptions<E>): Promise<void> {
   const input = options.input ?? process.stdin, output = options.output ?? process.stdout;
   const show = (view: TerminalView): void => {
     output.write(renderTerminalView(view, {
@@ -24,11 +23,11 @@ export async function runTerminalShell<S, E extends TerminalEvent>(
   };
   show((await app.start()).view);
   const lines = createInterface({ input, output, terminal: Boolean((output as NodeJS.WriteStream).isTTY) });
-  const queue = new TerminalEventQueue<E>();
+  const queue = new EventQueue<E>();
   let sequence = 0;
   const writeNote = (text: string): void => { output.write(text.trimEnd() + '\n\n'); };
   const help = (): void => {
-    const rows = ['/help show commands', '/refresh redraw', '/interrupt abort current inference',
+    const rows = ['/help show commands', '/refresh redraw', '/interrupt abort the current step',
       '/cancel request application cancellation', '/quit exit',
       ...Object.entries(options.commands ?? {}).map(([name, command]) => `/${name} ${command.description}`),
       ...(app.view?.help ?? [])];
@@ -40,15 +39,15 @@ export async function runTerminalShell<S, E extends TerminalEvent>(
     try { for await (const event of options.events!) queue.push(event); }
     catch (error) { queue.fail(error); }
   })() : Promise.resolve();
+  // The iterator buffers lines that arrive during a step (piped input) and ends at EOF.
+  const received = lines[Symbol.asyncIterator]();
   try {
     while (true) {
-      let line: string;
-      try { line = await lines.question(app.view?.prompt ?? options.prompt ?? '> '); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ERR_USE_AFTER_CLOSE') break;
-        throw error;
-      }
-      const value = line.trim();
+      lines.setPrompt(app.view?.prompt ?? options.prompt ?? '> ');
+      lines.prompt();
+      const next = await received.next();
+      if (next.done) break;
+      const value = next.value.trim();
       if (!value) continue;
       if (value === '/quit' || value === '/exit') break;
       if (value === '/help') { help(); continue; }

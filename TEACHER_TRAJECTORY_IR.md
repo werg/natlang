@@ -28,7 +28,10 @@ coverage program and Studio application, rescans for new sources between waves,
 and resumes per-case atomic jobs after interruption. See
 `ts-host/TEACHER_MATERIALIZATION.md` for the native record contract.
 
-## Legacy trajectory migration
+## Legacy trajectory migration (historical)
+
+> The Python scripts below were removed with the Python runtime. This section
+> records how the legacy trajectories and their archive were produced.
 
 The teacher's decisions are durable source data. `scripts/teacher_leaves.py --ir`
 records the complete server replies, exposed reasoning, pre-action message

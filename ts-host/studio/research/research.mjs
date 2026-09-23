@@ -1,4 +1,5 @@
-import { BrowserNatlangClient, BrowserNatlangApplication, BrowserDomRenderer, loadBrowserModelCatalog } from '../../dist/browser/natlang.js';
+import { BrowserDomRenderer, loadBrowserModelCatalog } from '../../dist/browser/natlang.js';
+import { StudioModel, natlangApplication } from '../shared/natlang-app.mjs';
 import { StudioStore } from '../shared/store.mjs';
 import { runChild } from '../shared/child-runner.mjs';
 import { download } from '../shared/render.mjs';
@@ -6,23 +7,24 @@ import { GeneratedModuleRenderer } from '../shared/generated-module.mjs';
 import { ResearchHost } from './host.mjs';
 
 const $ = id => document.getElementById(id);
-const programFiles = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
-const obsoleteProgramFiles = ['reduce/read.ts'];
+const programFiles = ['types.ts', 'reduce.nl', 'view.ts', 'learn.nl', 'revise_schema.nl', 'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl', 'reduce/list.ts', 'reduce/search.ts', 'reduce/workspace_read.ts', 'reduce/commit.ts', 'reduce/execute.ts', 'reduce/diff.ts', 'reduce/review_candidate.ts', 'reduce/review_reconciliation.ts', 'reduce/propose.ts', 'reduce/activate.ts', 'reduce/receipt.ts', 'reduce/branches.ts', 'reduce/belief_graph.ts', 'reduce/affected.ts', 'reduce/audit_migration.ts', 'reduce/native_read.ts', 'reduce/native_search.ts'];
+const obsoleteProgramFiles = ['reduce/read.ts', 'view.nl'];
 const store = await StudioStore.open();
-let client, app, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
+const studioModel = new StudioModel();
+let app, lastTrace, controllerHead = '', abort, busy = false, renderer, currentInteraction, state, generatedDrafts = {};
 let selectedMethod = '';
 let reviewedCandidate = '';
 const selectedBranches = new Set();
 const status = (message, error = false) => { $('status').textContent = String(message); $('status').style.color = error ? '#9b442e' : ''; };
 const initial = head => ({ revision: 0, head, question: '', notice: 'Ready to investigate.', active_view: '', selected: '', receipts: [] });
 const research = new ResearchHost({ store, runContext: () => ({
-    model: client?.modelStatus?.id ?? '', seed: { mode: 'derived', root: Number($('seed').value) },
-    evaluator: 'typescript-host/browser',
+    model: studioModel.id ?? '', seed: { mode: 'derived', root: Number($('seed').value) },
+    evaluator: 'natlang-browser',
 }), runSource: async (files, root, inputs, options) => {
     const provenance = options.provenance;
-    const result = await runChild({ request: { source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) }, inputs,
-        options: { seed: provenance.seed } }, researchNative: options?.native_ids ?? [] },
-    { model: client?.model, signal: abort?.signal, onProgress: status });
+    const result = await runChild({ request: { root, files: Object.fromEntries(files.map(row => [row.id, row.source])), inputs,
+        seed: provenance.seed }, researchNative: options?.native_ids ?? [] },
+    { model: studioModel.loaded ? studioModel.turn : null, signal: abort?.signal, onProgress: status });
     const trace_id = crypto.randomUUID();
     await store.put('child_runs', trace_id, { ...result, files, root, inputs, provenance });
     return { value: result.value, trace_id };
@@ -37,8 +39,6 @@ async function recover(current) {
     await store.put('states', 'research', { state: next, revision: next.revision, recovery: true });
     return next;
 }
-client = new BrowserNatlangClient({ host: { research: research.api() }, mode: 'retained',
-    wasmUrl: '/ts-host/dist/browser/wllama.wasm', compatWorkerUrl: '/ts-host/dist/browser/wllama-compat.js', compatWasmUrl: '/ts-host/dist/browser/wllama-compat.wasm' });
 
 async function bootstrap() {
     let head = await research.runtime.workspace.head();
@@ -57,7 +57,10 @@ async function bootstrap() {
         head = await research.runtime.commit('', edits, { message: 'Initial research program and example evidence' });
     } else {
         const existing = new Set((await research.runtime.list(head.id)).map(row => row.path));
-        const missing = programFiles.filter(path => !existing.has(path));
+        // Controller sources written for the retired `host` binding are replaced with the shipped ones.
+        const retired = (await Promise.all(programFiles.filter(path => existing.has(path)).map(async path =>
+            /\bhost\.research\./.test((await research.runtime.read(head.id, path)).content) ? path : null))).filter(Boolean);
+        const missing = [...programFiles.filter(path => !existing.has(path)), ...retired];
         const obsolete = obsoleteProgramFiles.filter(path => existing.has(path));
         if (missing.length || obsolete.length) {
             const edits = Object.fromEntries(await Promise.all(missing.map(async path => {
@@ -89,16 +92,17 @@ async function sourceAt(head) {
 async function mount() {
     if (app) await app.close();
     controllerHead = state.head;
-    app = new BrowserNatlangApplication({ client, source: await sourceAt(state.head), initialState: state,
-        initialRevision: state.revision, seedRoot: Number($('seed').value),
+    app = natlangApplication({ source: await sourceAt(state.head), initialState: state, model: studioModel.turn,
+        services: { research: research.api() }, initialRevision: state.revision, seedRoot: Number($('seed').value),
         onCommit: async commit => {
             await research.verifyCommit(state, commit.state);
             state = commit.state;
             await store.commit('research', { state, revision: state.revision, event: commit.event,
-                trace: commit.reducerRun.trace, sourceHead: controllerHead, model: client.modelStatus?.id ?? '', seed: Number($('seed').value) });
+                trace: commit.trace, sourceHead: controllerHead, model: studioModel.id ?? '', seed: Number($('seed').value) });
+            lastTrace = commit.trace;
         },
-        onTransition: transition => { state = transition.state; void paint(state, transition.view, transition.reducerRun?.trace); },
-        onFailure: failure => status(`${failure.stage}: ${failure.detail}`, true),
+        onTransition: transition => { state = transition.state; void paint(state, transition.view, transition.event ? lastTrace : undefined); },
+        onFailure: failure => status(`${failure.stage}: ${failure.error instanceof Error ? failure.error.message : String(failure.error)}`, true),
     });
     await app.start();
 }
@@ -261,7 +265,7 @@ async function onGenerated(pinned, event) {
 async function submit(kind, value) {
     const run = async () => {
         if (busy) throw new Error('An investigation is already running');
-        if (!client.model) throw new Error('Load the interpreter to investigate');
+        if (!studioModel.loaded) throw new Error('Load the interpreter to investigate');
         const recovered = await recover(state);
         if (recovered.head !== state.head || recovered.receipts.length !== state.receipts.length) {
             state = recovered; await paint(state); await mount();
@@ -290,8 +294,7 @@ $('load-model').onclick = async () => {
     try {
         setBusy(true); status('Loading local interpreter…');
         const model = catalog.models.find(row => row.id === $('model').value);
-        await client.loadModel({ kind: 'url', id: model.id, url: model.url, templateUrl: model.templateUrl },
-            { contextTokens: model.contextTokens ?? 32768, gpuLayers: $('compute').value === 'gpu' ? 99999 : 0 });
+        await studioModel.load(model, { contextTokens: model.contextTokens ?? 32768, gpuLayers: $('compute').value === 'gpu' ? 99999 : 0 });
         $('model-state').textContent = model.label;
         await mount(); status('Interpreter ready.');
     }
@@ -371,7 +374,7 @@ $('export').onclick = async () => {
     }
     download('natlang-research.json', JSON.stringify({ format: 1, workspace, state,
         history: await store.history('research'), child_runs, native_values,
-        export_profile: { model: client.modelStatus?.id ?? '', seed: Number($('seed').value) } }, null, 2), 'application/json');
+        export_profile: { model: studioModel.id ?? '', seed: Number($('seed').value) } }, null, 2), 'application/json');
 };
 $('import').onclick = () => $('import-file').click();
 $('import-file').onchange = async () => {

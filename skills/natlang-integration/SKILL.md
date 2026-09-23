@@ -1,32 +1,31 @@
 ---
 name: natlang-integration
-description: Embed natlang in Node/TypeScript and browser applications. Use when wiring model drivers, crisp functions, host objects, event streams, directory reducers, persistence, traces, or application evaluations.
+description: Embed natlang in Node/TypeScript and browser applications. Use when wiring the runtime, model drivers, host services, compiled `nl` calls, event loops, terminal or browser interfaces, directory reducers, packages, persistence, traces, or application evaluations.
 ---
 
 # Integrate natlang applications
 
-Build an application in which natlang can drive operations, inspect their results, and choose what happens next. Use the host for concrete execution, storage, presentation, and transport. Do not reduce natlang to a classifier attached to a host-authored workflow unless that is the requested product.
+Build an application in which natlang makes the judgments and ordinary TypeScript does the rest: storage, transport, exact operations, and presentation. Natural-language functions are ordinary async functions in the application; there is no separate program runner.
 
-Start by locating the installed natlang version or source checkout and existing embedding. Reuse its shared runtime and model lifecycle. The supplied references travel with this skill; repository paths mentioned inside them are lookup hints relative to a natlang checkout, not paths relative to the installed skill.
+Start by locating the installed `@natlang/node` / `@natlang/browser` version or the checkout and any existing embedding. Reuse its runtime and model lifecycle. Repository paths in the references are lookup hints relative to a natlang checkout.
 
 ## Choose the smallest adequate boundary
 
-Read [hosts and model adapters](references/hosts.md) for Node/browser and driver contracts; [frontend applications](references/frontend.md) for browser model loading, event reducers, and generated interfaces; [terminal applications](references/terminal.md) for native CLIs, event queues, structured views and durable sessions; [effects and recovery](references/recovery.md) for native objects, streams, traces, concurrency, and durability. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
+Read [hosts and model drivers](references/hosts.md) for the runtime, compilation, services, and model transport; [frontend applications](references/frontend.md) for browser models, event loops, and generated interfaces; [terminal applications](references/terminal.md) for CLIs, packages, sessions, and event streams; [effects and recovery](references/recovery.md) for native objects, concurrency, and durability. Read [delivery scenarios](references/delivery.md) before claiming an integration complete.
 
-1. Describe who owns state, the semantic algorithm, native objects, and effects. Choose the runtime, evaluator, and model independently. An engine name selects an implementation available in that embedding; it does not install a new language backend.
-2. Pass typed values or checked source definitions to the runtime. Use ordinary TypeScript values such as `Record<string, T>` for data inputs. Expose active host operations through crisp helpers or declared effect callbacks. Let natlang call them repeatedly and inspect observations. Host objects may hold databases, jobs, binary data, or a stronger model client without extending the language core. Model-directed filesystem access belongs to directory reducers and stays within their supplied folder.
-3. Define event ordering and commit points. Streams/folds or a per-event reducer are the starting point; ambient interrupts and coroutines are not prerequisites. Keep portable state explicit across conversation rollover.
-4. Implement model lifecycle, durable state, operation receipts, cancellation behavior, recovery, and the actual UI/CLI. Validate both success and partial failure. A correctly typed return does not certify the domain result.
-5. Test the target engine and transport. Compare shared contracts across supported hosts when changing infrastructure. Make general fixes available to other callers; avoid an app-local workaround around your own runtime bug.
+1. Decide who owns state, native objects, and effects. Host capabilities become typed services passed to the runtime; natlang code reaches them only through `natlang:services` or eval bindings.
+2. Write the application in TypeScript and compile it with `natlang build` (or `buildProject` / `compileVirtualProject`) so `nl` calls are planned and typed. Named `.nl` functions import like modules.
+3. Create one runtime per application (`createNatlangRuntime({ model, services })`) and run natlang work inside `runtime.run(...)`. Callbacks from uncompiled code (DOM events, timers, libraries) use `runtime.bind(fn)`.
+4. Define event ordering and commit points with ordinary code or `EventLoop`. Persist operation identities and observations for effects that must not repeat.
+5. Test the actual engine and transport, success and partial failure. Make general fixes in the shared runtime, not as app-local workarounds.
 
 ## Operational commitments
 
-- Omit arbitrary run budgets unless the deployment requires them. Support productive long trajectories with state-based continuation and efficient data access. Conversation segmentation and host context allocation are separate controls.
-- Choose the host's validation feedback policy explicitly for evaluations. Local feedback preserves type checking and successful earlier effects.
-- Shared `host` access is trusted native execution. `fresh` globals do not make a host object sandboxed. Choose isolation by actual authority and threat model; sharing may be precisely what the application needs.
-- External effects can outlive cancellation or result validation failure. Persist operation identity and observations; do not blindly retry an unknown result.
-- Sampling seeds and versioned programs support reproducibility. They do not make arbitrary native state replayable or guarantee identical decisions on different inference backends.
-- A host-backed dictionary caches observed branches and leaves for its lifetime, but its provider is not portable runtime state. Rebind it when reconstructing a run after process restart.
-- Verify live-model quality separately from fixture wiring and browser rendering. Name remaining empirical gates plainly.
+- Omit arbitrary run budgets unless deployment requires them; `limits` and model options exist for that. Conversation segmentation and backend context are separate controls.
+- Choose `validationFeedback` explicitly for evaluations.
+- Services and live values are trusted native authority passed by reference. Eval is trusted code in the application's process, not a sandbox.
+- Service calls and live-object writes happen immediately and are traced as effects; they are not rolled back when a call fails. Captured `let` variables are written back only after a successful eval.
+- Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.
+- Verify live-model quality separately from fixture wiring and rendering, and name the remaining empirical gates.
 
-Pair with `natlang-authoring` for substantial `.nl` algorithms when that skill is available. This integration skill is independently usable.
+Pair with `natlang-authoring` for substantial natural-language algorithms when that skill is available; this skill is independently usable.

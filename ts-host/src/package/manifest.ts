@@ -1,14 +1,12 @@
 import { isAbsolute, posix } from 'node:path';
 
-export const PACKAGE_SCHEMA = 'natlang.package/v1' as const;
+export const PACKAGE_SCHEMA = 'natlang.package/v2' as const;
 
-export type NatlangTargetKind = 'terminal' | 'command';
+/** A launchable application target: a TypeScript entry module and the function it exports. */
 export type NatlangTarget = {
-  kind: NatlangTargetKind;
   entry: string;
+  /** Exported function receiving the target context; default `main`. */
   export?: string;
-  reducer?: string;
-  view?: string;
   description?: string;
   authority?: string[];
   commands?: string[];
@@ -65,17 +63,12 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
       if (!/^[a-z0-9][a-z0-9._-]*$/.test(name) || !item || typeof item !== 'object' || Array.isArray(item))
         throw new TypeError(`invalid target ${name}`);
       const target = item as Record<string, unknown>;
-      const targetKnown = new Set(['kind', 'entry', 'export', 'reducer', 'view', 'description', 'authority', 'commands']);
+      const targetKnown = new Set(['entry', 'export', 'description', 'authority', 'commands']);
       for (const key of Object.keys(target)) if (!targetKnown.has(key)) throw new TypeError(`unknown field in target ${name}: ${key}`);
-      if (target.kind !== 'terminal' && target.kind !== 'command') throw new TypeError(`target ${name} has unsupported kind`);
-      if (target.kind === 'terminal' && (target.reducer === undefined || target.view === undefined))
-        throw new TypeError(`terminal target ${name} needs reducer and view paths`);
       const authority = target.authority === undefined ? undefined : requireStrings(target.authority, `target ${name} authority`);
       const commands = target.commands === undefined ? undefined : requireStrings(target.commands, `target ${name} commands`);
-      targets[name] = { kind: target.kind, entry: packagePath(target.entry, `target ${name} entry`),
+      targets[name] = { entry: packagePath(target.entry, `target ${name} entry`),
         ...(target.export === undefined ? {} : { export: requireString(target.export, `target ${name} export`) }),
-        ...(target.reducer === undefined ? {} : { reducer: packagePath(target.reducer, `target ${name} reducer`) }),
-        ...(target.view === undefined ? {} : { view: packagePath(target.view, `target ${name} view`) }),
         ...(target.description === undefined ? {} : { description: requireString(target.description, `target ${name} description`) }),
         ...(authority ? { authority } : {}), ...(commands ? { commands } : {}) };
     }

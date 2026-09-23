@@ -3,18 +3,33 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { BuildWorkspace } from '../../applications/build_workbench.mjs';
-import { MediaWorkspace } from '../../applications/media_workbench.mjs';
-import { NotebookWorkspace } from '../../applications/notebook.mjs';
-import { PackageRegistry } from '../../applications/package_registry.mjs';
-import { RepositoryMigration } from '../../applications/repository_migration.mjs';
+import { BuildWorkspace } from '../../applications/dist/build/index.js';
+import { MediaWorkspace } from '../../applications/dist/media/index.js';
+import { NotebookWorkspace } from '../../applications/dist/notebook/index.js';
+import { RepositoryMigration } from '../../applications/dist/migration/index.js';
+import { NatlangPackageStore, createPackageArchive, compareVersions, satisfiesVersion } from '../dist/index.js';
 const hash = text => createHash('sha256').update(text).digest('hex');
 const assert = (test, message) => { if (!test)
     throw new Error(message); };
-const packages = [
-    { name: 'greetings', version: '1.0.0', description: 'A small greeting function', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'string' }, returns: 'string', engine: 'typescript-host', code: 'return "Hello, " + name;' } } },
-    { name: 'greetings', version: '1.1.0', description: 'A punctuated greeting', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'string' }, returns: 'string', engine: 'typescript-host', code: 'return "Hello, " + name + "!";' } } },
+/** Example packages shipped with the Studio registry; each exports `greet(name)`. */
+const examplePackages = [
+    { version: '1.0.0', description: 'A small greeting function', source: 'export function greet(name: string): string { return "Hello, " + name; }\n' },
+    { version: '1.1.0', description: 'A punctuated greeting', source: 'export function greet(name: string): string { return "Hello, " + name + "!"; }\n' },
 ];
+/** The local package store, seeded once with the example packages. */
+async function packageStore(root) {
+    const store = new NatlangPackageStore(join(root, 'packages', 'store'));
+    const installed = new Set(store.list().map(row => `${row.name}@${row.version}`));
+    for (const example of examplePackages) {
+        if (installed.has(`greetings@${example.version}`)) continue;
+        const source = join(root, 'packages', 'sources', example.version);
+        await mkdir(source, { recursive: true });
+        await writeFile(join(source, 'greet.ts'), example.source);
+        store.install(createPackageArchive({ schema: 'natlang.package/v2', name: 'greetings', version: example.version,
+            description: example.description, include: ['greet.ts'], exports: { greet: 'greet.ts' } }, source));
+    }
+    return store;
+}
 let nextProgress=0;
 const progressWaiters=new Map();
 async function command(argv, cwd) {
@@ -54,7 +69,7 @@ export async function studioOperation(operation, payload, root) {
         await mkdir(folder, { recursive: true });
         await writeFile(join(folder, 'input.txt'), payload.source);
         const build = await new BuildWorkspace(folder, { cacheDir: join(root, 'build-cache') }).open();
-        const result = await build.execute({ id: 'transform', argv: ['@builtin', payload.operation], inputs: ['input.txt'], outputs: ['output.txt'] });
+        const result = await build.execute({ id: 'transform', needs: [], description: 'transform', argv: ['@builtin', payload.operation], inputs: ['input.txt'], outputs: ['output.txt'] });
         assert(result.status === 'ok', result.detail);
         return { ...result, output: await readFile(join(folder, 'output.txt'), 'utf8'), events: build.drainEvents() };
     }
@@ -76,13 +91,23 @@ export async function studioOperation(operation, payload, root) {
         return { asset, receipt: result, inspection: await media.inspect({ text: 'Studio transformation' }, plan, result), events: media.drainEvents() };
     }
     if (operation.startsWith('packages.')) {
-        const registry = new PackageRegistry(packages, join(root, 'packages'));
+        const store = await packageStore(root), aliases = join(root, 'packages', 'installations.json');
         if (operation === 'packages.catalog')
-            return { catalog: registry.catalog() };
+            return { catalog: store.list().map(row => ({ name: row.name, version: row.version, digest: row.digest,
+                description: store.manifest(`${row.name}@${row.version}`).description ?? '' })) };
         if (operation === 'packages.resolve')
-            return { locks: registry.solutions({ name: payload.name, range: payload.range, engine: 'typescript-host' }) };
-        if (operation === 'packages.install')
-            return { ...await registry.install(payload.lock, payload.target), events: registry.drainEvents() };
+            return { locks: store.list().filter(row => row.name === payload.name && satisfiesVersion(row.version, payload.range))
+                .sort((a, b) => compareVersions(b.version, a.version)).map(row => ({ id: `${row.name}@${row.version}`, name: row.name, version: row.version, digest: row.digest })) };
+        if (operation === 'packages.install') {
+            assert(/^[a-z][a-z0-9_]*$/.test(payload.target ?? ''), 'Invalid installation name');
+            const installed = store.resolve(payload.lock.id);
+            assert(installed.digest === payload.lock.digest, 'Package content changed since it was resolved');
+            const current = JSON.parse(await readFile(aliases, 'utf8').catch(() => '{}'));
+            assert(!Object.hasOwn(current, payload.target), `Installation name already in use: ${payload.target}`);
+            current[payload.target] = { id: payload.lock.id, digest: installed.digest };
+            await writeFile(aliases, JSON.stringify(current, null, 2));
+            return { status: 'installed', target: payload.target, revision: installed.digest, detail: '' };
+        }
     }
     if (operation === 'repository.check') {
         assert(typeof payload.before === 'string' && typeof payload.after === 'string', 'Source required');

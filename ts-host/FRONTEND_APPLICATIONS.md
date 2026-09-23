@@ -1,119 +1,48 @@
 # Natlang-driven browser applications
 
-`BrowserNatlangClient` loads a local model and runs natlang. The new
-`BrowserNatlangApplication` uses that API to run a typed reducer and a view
-function for each UI event. It is a library for browser applications, not a
-new language primitive or a universal component framework.
+A browser application is ordinary TypeScript whose reducer and view call
+natural-language functions where judgment is needed. `EventLoop` gives one state
+owner an explicit event order; `BrowserDomRenderer` turns checked view trees into
+controls that emit the next events. Neither is a language primitive.
 
 ```ts
-import { BrowserNatlangApplication, textFileTree } from '@natlang/browser';
+import * as natlang from '@natlang/browser';
 
-const app = new BrowserNatlangApplication({
-  client,
-  source: { files, reducer: 'board/reduce.nl', view: 'board/view.nl' },
-  reducerInputs: () => ({ files: textFileTree(projectFiles) }),
-  initialState,
-  seedRoot: 17,
-  onTransition: ({ view }) => renderer.render(view),
+const board = natlang.compileVirtualProject({ files: { 'board.ts': source } }, natlang).require('board.ts');
+const runtime = natlang.createNatlangRuntime({ model: model.turn });
+const loop = new natlang.EventLoop({
+  initialState: board.initialBoard(), reduce: board.reduce, view: board.view,
+  step: (fn, context) => runtime.run(fn, { signal: context.signal }),
+  onCommit: commit => journal.persist(commit),
+  onTransition: transition => renderer.render(transition.view),
+  onFailure: failure => showFailure(failure.stage, failure.error),
 });
-await app.start();
-// Browser controls, WebSocket messages and timers all enter the same queue:
-await app.dispatch({ id: 'event-1', kind: 'command', value: 'Add a task' });
+const renderer = new natlang.BrowserDomRenderer(root, event => loop.dispatch(event));
+await loop.start();
 ```
 
-`inputs` supplies values to both reducer and view runs. Use `reducerInputs` or
-`viewInputs` when only one stage declares a value. All three options accept a
-record or a per-run factory. A browser project that changes over time should
-build a fresh `textFileTree` in the factory from the current file map: this
-preserves stable lazy reads inside one reduction and exposes the latest
-snapshot to the next event. A crisp view should not declare a lazy dictionary
-argument.
+## Ordering and durability
 
-The application queue gives one state owner an explicit event order. Each
-completed reducer invocation is one Fold-like step. The new state commits only
-when its natlang run completes with a typed value. A view is then computed
-from that state. Events arriving during a model turn wait in the queue; they
-do not interrupt or rewrite the active lambda. Failures preserve the last
-committed state. An observer receives each run and its trace, then decides
-whether to persist it. The wrapper does not retain full traces indefinitely.
-
-The current browser host can consume an open stream Fold, but `run()` returns
-its result when the stream closes. That shape is useful for batch reduction;
-it does not give a frontend a view after every incoming event. The per-event
-application wrapper supplies that presentation boundary without changing Fold
-or adding ambient interrupts. An eventual host step callback could let one
-open Fold stream publish intermediate snapshots, if a real application needs
-it. The event queue is the simpler first contract.
-
-The shared application defaults to `validationFeedback: 'local'`: rejected tool
-actions return diagnostics to the model for repair. Set `'caller'` explicitly to
-end the episode on validation failure. The lower-level host retains its caller
-default. Neither mode rolls back native effects.
+- Events are applied one at a time in arrival order. Events that arrive during a step wait; they never rewrite a running call.
+- An event ID is applied at most once per loop; restore `seenEventIds`, the state, and `initialRevision` from your journal for durable deduplication.
+- `onCommit` is awaited before the new state is published or viewed. A failed commit leaves the previous state.
+- A failed view leaves the committed state; `refresh()` recomputes the view without replaying the event.
+- `cancel()` aborts the active step; `close()` stops the loop.
+- Failed reductions can still have effects (service calls); preserving the previous state is not a rollback.
 
 ## UI choices
 
-1. **Natlang reducer, crisp view.** Use for high-rate controls and exact
-   layout. Natlang still owns application state transitions.
-2. **Natlang reducer and view plan, crisp renderer.** A natlang function
-   chooses grouping, wording and visible actions. A crisp helper checks IDs,
-   data coverage and control wiring, then produces DOM data. The
-   [browser task board](examples/browser-board/) demonstrates this option.
-3. **Natlang-generated view tree.** The optional `BrowserDomRenderer` accepts
-   a small tree of permitted tags and emits typed events from controls. It
-   creates nodes with `textContent`; raw HTML and JavaScript attributes are
-   outside the view type. This is useful for experiments, though generating
-   a large tree on every keystroke would be slow and difficult for a small
-   interpreter model.
+1. **Natlang reducer, exact view.** High-rate controls and exact layout; natlang interprets the events.
+2. **Natlang view plan, exact renderer.** Natlang chooses grouping, wording, and visible actions; exact code checks IDs and coverage and builds the tree. The [task board](examples/browser-board/) works this way.
+3. **Generated interfaces.** Natlang writes a view or module whose controls emit events to real, versioned handlers (the Studio research lab's generated modules run in an isolated iframe).
 
-Application-specific view schemas can be passed to another renderer such as
-React or a canvas host. The client and application queue have no dependency
-on the DOM renderer. Inquiry Lab additionally provides generated HTML/JS modules
-with pinned event bindings in `studio/shared/generated-module.mjs`; this is an
-application library, not an implicit capability of every browser client. Native DOM, model, editor and media objects may live in
-the selected browser eval environment; portable state and view descriptions
-cross the natlang boundary. A page-authored programme should get a separate
-host environment with only its intended capabilities.
+`BrowserDomRenderer` accepts `UiNode` trees (`tag`, `text`, `value`, `label`, `action`, `children`), renders text as text nodes, rejects executable tags, and emits typed `{ kind, value }` events. Keep keystrokes and animation exact; let natlang decide what submitted events mean.
 
-## Operational details
+## Examples
 
-- Give each event a stable ID. The application suppresses duplicate IDs for
-  its lifetime; a durable application needs a host-owned event journal and
-  recovery contract. The queue records arrival order through reducer runs.
-- Supply a root seed to derive an invocation seed from the event ID and state
-  revision. Reproducing a model decision also requires the same checkpoint,
-  source, prompt context, engine bindings and ordered events.
-- A `retained` browser client now keeps one eval environment across its runs.
-  This retains explicitly shared browser host objects while the client lives.
-  App state still travels as a typed reducer value, so it can be inspected
-  and recovered independently of native objects.
-- Render controls through the optional DOM adapter or an application renderer.
-  A button can read a named input and emit one typed command; inputs can also
-  emit `change`. Both avoid a model call on every keystroke. Frequent
-  pointer/motion/scroll events should stay in crisp
-  browser code and become occasional semantic events at decision boundaries.
-- Keep model loading, UI shell, accessibility, storage and transport in
-  ordinary browser code. Natlang drives state and may generate the view plan.
+- `examples/browser-board/` — a TypeScript module with inline `nl` calls, compiled in the page (`?fixture` for scripted wiring).
+- `examples/browser-local/` — model loading, diagnostics, and a three-task pilot.
+- `playground/` — edit, run, and inspect projects with live interfaces and time travel.
+- `studio/` — twenty-two applications and the research lab on one runtime, with a durable operation journal.
 
-The task board runs with a browser-local GGUF model selected from the catalog.
-Its `?fixture` mode uses scripted model turns to verify wiring without model
-weights. CPU-side tests execute the actual `.nl` source, event queue and DOM
-projection. A Chromium end-to-end smoke is available through
-`node scripts/browser-pilot.mjs --application`; it passed with hardware GPU
-paths disabled. Live GGUF interpretation and GPU inference were not exercised
-in that smoke. An earlier browser attempt coincided with an AMD display-driver
-failure on this workstation; the kernel log did not establish causation.
-
-## Application studio
-
-The [studio](studio/README.md) now contains 22 application interfaces covering
-P01–P20. An interaction can make many natlang-directed operation calls; the host
-executes individual mechanics rather than owning the workflow. In particular,
-notebook dependency traversal and case-collection iteration live in natlang.
-See the [frontend delivery ledger](../plans/projects/FRONTEND_STATUS.md) for
-verified integrations and outstanding product gates.
-
-The shared application API now accepts `initialRevision` and an awaited
-`onCommit` observer. A completed reduction is durably recorded before view
-computation. `refresh()` retries only the view, and `cancel()` aborts the active
-run. The studio supplies IndexedDB journals and worker-owned child execution
-as application libraries; they are not new language-runtime requirements.
+Run `npm run test:browser` for the real-Chromium smoke of the board and runtime.

@@ -1,3 +1,6 @@
 # `@natlang/browser`
 
-Browser runtime, WebGPU model loader, and UI application framework for natlang. The package includes its worker and WASM assets so applications can serve them from the same origin.
+The browser runtime and in-page compiler for natlang, with the local WebGPU/WASM
+model loader (`loadBrowserLocalModel`), `EventLoop`, `BrowserDomRenderer`, and
+playground project utilities. Serve `natlang.js` with its sibling `wllama.wasm`,
+`wllama-compat.js`, and `wllama-compat.wasm` from the same origin.

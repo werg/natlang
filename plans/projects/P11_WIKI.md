@@ -1,7 +1,7 @@
 # P11 — Collaborative executable wiki
 
-Status: local collaborative wiki slice in `codebases/wiki/` and
-`applications/wiki.mjs`. [Shared capabilities](README.md).
+Status: local collaborative wiki slice in `applications/wiki/` and
+`applications/wiki/index.ts`. [Shared capabilities](README.md).
 
 Natlang composes the meaning of concurrent stable-block edits. The host pins
 the merge model/source/seed profile, validates update IDs and coverage, checks

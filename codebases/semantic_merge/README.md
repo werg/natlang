@@ -24,18 +24,13 @@ To regenerate the scenario inputs:
 .venv/bin/python scripts/generate_semantic_merge_cases.py
 ```
 
-With a pinned teacher server available, collect a small pilot by naming the exact model:
-
-```bash
-.venv/bin/python scripts/collect_semantic_merge_teacher.py \
-  codebases/semantic_merge/scenarios/cases.jsonl runs/semantic-merge-teacher.jsonl \
-  --model-id MODEL-AND-CHECKPOINT --limit 4
-```
-
-The collector stores raw turns and a reduction trace for each case. Its mechanical checks
-cover typed completion, source-ID coverage, conflict shape and trace reconstruction.
-`semantic_review` remains pending until a reviewer checks the case rubric and the actual
-merged meaning. No collected run is automatically admitted as a training reference.
+The Python collector that ran these cases was removed with the Python runtime.
+Collecting them again needs a `natlang.program/2` adapter that turns each case
+into a project (the entry point's files plus inputs), after which the Node
+collector applies (see [PROGRAM_IR_PIPELINE.md](../../PROGRAM_IR_PIPELINE.md)).
+Mechanical checks cover typed completion, source-ID coverage, and conflict
+shape; `semantic_review` stays pending until a reviewer checks the case rubric
+and the merged meaning. No run is automatically admitted as a training reference.
 
 This is a notional CRDT experiment, with no algebraic convergence claim. Replicas must pin
 the same model, source, profile, context presentation and root seed before repeatability can

@@ -1,56 +1,42 @@
-# Native CLI and terminal applications
+# Terminal applications and packages
 
-Use `TerminalNatlangApplication` from the TypeScript host for a native CLI with
-the same reducer shape as a browser application:
+## A console application
 
-```text
-reduce(state: State, event: Event) -> State
-view(state: State) -> TerminalView
+```ts
+import { EventLoop, TerminalSessionStore, runTerminalShell, type TargetContext, type TerminalView } from '@natlang/node';
+
+export default async function main(context: TargetContext): Promise<number> {
+  const store = new TerminalSessionStore<State, Request>(join(context.stateDirectory, 'session.json'));
+  const checkpoint = store.load(initialState());
+  const loop: EventLoop<State, TerminalView, Request> = new EventLoop({
+    initialState: checkpoint.state, initialRevision: checkpoint.revision, seenEventIds: checkpoint.seen_event_ids,
+    reduce: (state, event) => answer(state, event),            // ordinary code that calls natlang
+    view, step: fn => context.runtime.run(fn),
+    onCommit: commit => store.commit(commit, loop.seenEventIds) });
+  try {
+    await runTerminalShell(loop, { input: context.io.input, output: context.io.output,
+      event: (value, id) => ({ id, kind: 'request', value }), commands: { /* /slash commands */ } });
+  } finally { await loop.close(); }
+  return 0;
+}
 ```
 
-Natlang should interpret requests, select and compose operations, inspect
-results, explain failures and decide recovery. The framework serializes reducer
-runs, commits state before presentation, derives event seeds, suppresses
-committed event IDs and retries the view independently. Crisp helpers own exact
-process/file/database calls and typed result checks.
+- `TerminalSessionStore` is a single-writer checkpoint and event journal; restore state, revision, and `seen_event_ids` together. Native processes and handles are not restored: reduce a recovery event to an honest unknown outcome before retrying.
+- `EventQueue` merges readline input with job completions, watchers, or sockets; events are reduced in queue order while each step runs.
+- `TerminalView` blocks (text, status, list, table, code) render through `renderTerminalView`, which strips control characters. A failed event is reported at the prompt; the committed state remains.
+- Return a job ID promptly for long work and publish its actual outcome as an event.
 
-When a workspace operation needs model-directed filesystem access, implement
-it as a directory reducer. Its file tools and `folder.fs` API use paths
-relative to the supplied folder. A direct call `await reducer(folder, ...args)`
-returns the typed result and discards edits; `await folder.apply(reducer, ...args)`
-retains the selected edits. Ordinary event reducers and views do not receive
-filesystem tools.
+## Packages and `natlang run`
 
-Use `TerminalEventQueue` to combine readline input, job completions, watchers or
-sockets. Producers may be concurrent, but events wait while one lambda runs and
-are reduced in queue order. This gives responsive jobs without a coroutine or
-interrupt primitive in the language. Completion, cancellation and restart are
-explicit typed events.
+A `natlang.json` (`natlang.package/v2`) names the package, its included files, and targets: `{ entry, export?, description, authority, commands }`. The entry module's function (default `main`) receives a `TargetContext`: `args`, `io`, `workspace`, `stateDirectory`, `traceDirectory`, `model`, a configured `runtime`, and package identity.
 
-Use `TerminalSessionStore` for a local single-writer portable checkpoint and
-event journal. Restore state, revision and `seen_event_ids` together. Native
-processes and database handles are not restored. If a saved state names a
-running operation, reconcile it through the host when possible or reduce a
-recovery event to an honest unknown outcome before retrying.
+```sh
+natlang run applications/evidence -- --documents notes/   # build and run a package in place
+natlang package pack natlang.json --root . --out app.nlpkg
+natlang package install app.nlpkg && natlang run @scope/app
+natlang setup && natlang doctor                             # managed local model runtime
+```
 
-Use `TerminalView` blocks for text, status, lists, tables and code, rendered by
-`renderTerminalView`. The renderer owns ANSI/layout and strips supplied control
-characters. Natlang can choose grouping and content in its view program. A
-crisp view is appropriate when it only projects semantic state.
+The launcher builds the package against its own runtime, so the application and launcher share one runtime instance. `natlang call FILE.nl --inputs FILE` calls one named function; `natlang ask` answers an instruction over the working directory and the nearest `natlang.d/`.
 
-`runTerminalShell` maps input lines to application-defined events. Slash
-commands control redraw, inference cancellation, semantic job cancellation and
-exit. For jobs, return an ID promptly and publish their actual outcomes through
-an event source. Shutdown must abort or transfer ownership of native work.
-One failed event is reported at the prompt without terminating the shell; the
-last committed state remains available for a corrected request or `/refresh`.
-
-`openAICompatibleModelTurn` keeps endpoint/model aliases and raw exchanges in a
-transport adapter. Configure it for the actual endpoint; do not copy those
-quirks into `.nl` source. It deliberately does not start a server or impose
-trajectory limits.
-
-In a checkout, consult `ts-host/TERMINAL_APPLICATIONS.md`,
-`ts-host/src/terminal/`, `applications/semantic_terminal_cli.mjs`,
-`applications/log_console.mjs`, `applications/evidence_console.mjs`, and
-`applications/notebook_console.mjs`.
+Anchors: `applications/{evidence,logs,notebook,terminal}/`, `ts-host/src/terminal/`, `ts-host/src/package/`, `ts-host/src/cli/main.ts`, `NATIVE_PACKAGES.md`.

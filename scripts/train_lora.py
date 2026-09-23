@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Supervised fine-tuning of the interpreter on exported pairs (scripts/export_sft.py), completion-only loss.
+"""Supervised fine-tuning of the interpreter on exported pairs (ts-host/scripts/export-native-sft.mjs), completion-only loss.
 
 LoRA adapters on a bf16 base, optional gradient checkpointing, length-aware microbatches,
 completion-only loss, and optional persistent token caching. --accum counts sequences per optimizer step. `--full` trains all
@@ -21,7 +21,7 @@ from importlib.metadata import version, PackageNotFoundError
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from natlang.corpus import split_programs, file_digest, digest, index_pairs
+from scripts.corpus import split_programs, file_digest, digest, index_pairs
 from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_loss,
                                         validate_training_audit,
                                         validate_training_audit_tokenizer)

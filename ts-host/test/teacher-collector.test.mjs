@@ -7,9 +7,9 @@ import { createServer } from 'node:http';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
   loadRecords, nativeJobRunner, recordDigest } from '../dist/teacher/collector.js';
 
-const record = id => ({ version: 'natlang.program/1', id, kind: 'lambda_source', source: 'fixture',
+const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source', source: 'fixture',
   split: 'test', source_ids: [id], source_groups: [id], license: 'test', semantics: {
-    root: { $lambda: { type: '() => number', instructions: 'Return one.' } }, inputs: {}, expected: 1,
+    root: 'one.nl', files: { 'one.nl': '---\nargs: {}\nreturns: number\n---\nReturn one.\n' }, inputs: {}, expected: 1,
     operation: 'exact' } });
 const config = (dir, surface = 'surface-a') => ({ jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'),
   workers: 2, modelId: 'teacher', rootSeed: 7, systemPrompt: 'prompt', segmentTurns: 3,

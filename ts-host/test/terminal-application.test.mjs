@@ -3,14 +3,11 @@ import { test } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { PassThrough, Writable } from 'node:stream';
-import { NatlangHost, TerminalEventQueue, TerminalNatlangApplication, TerminalSessionStore,
-  NodeFileTree, TypeScriptEnvironment, openAICompatibleModelTurn, renderTerminalView, runTerminalShell } from '../dist/index.js';
-import { RecipeTerminal } from '../../applications/semantic_terminal.mjs';
-import { NotebookWorkspace } from '../../applications/notebook.mjs';
-import { CommandRecipeLibrary } from '../../applications/terminal_recipes.mjs';
-import { readEvidencePath, STARTER_EVIDENCE } from '../../applications/package_targets/evidence_console.mjs';
+import { EventLoop, TerminalSessionStore, createNatlangRuntime, loadNatlang, openAICompatibleModelTurn,
+  renderTerminalView, runTerminalShell } from '../dist/index.js';
+import { CommandRecipeLibrary } from '../../applications/dist/terminal/index.js';
+import { readEvidencePath, STARTER_EVIDENCE } from '../../applications/dist/evidence/index.js';
 
 test('terminal shell exposes built-in and application discovery commands', async () => {
   let text = '';
@@ -32,6 +29,19 @@ test('terminal shell exposes built-in and application discovery commands', async
   assert.match(text, /welcome\nworkflow/);
 });
 
+test('terminal shell keeps piped lines that arrive during a step and returns at end of input', async () => {
+  const output = new Writable({ write(_chunk, _encoding, done) { done(); } });
+  output.isTTY = false; output.columns = 80;
+  const view = { title: 'Piped', blocks: [] }, seen = [];
+  const app = { view, async start() { return { view }; }, async refresh() { return { view }; },
+    async consume(events) { for await (const event of events) { seen.push(event.value); await new Promise(done => setTimeout(done, 20)); } },
+    cancel() {}, async close() {} };
+  const input = new PassThrough();
+  input.end('first\nsecond\n');
+  await runTerminalShell(app, { input, output, event: (value, id) => ({ id, value }) });
+  assert.deepEqual(seen, ['first', 'second']);
+});
+
 test('evidence console has starter material and can discover a source directory', () => {
   assert.ok(STARTER_EVIDENCE.length >= 3);
   const folder = mkdtempSync(join(tmpdir(), 'natlang-evidence-onboarding-'));
@@ -43,68 +53,62 @@ test('evidence console has starter material and can discover a source directory'
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('terminal application serializes events, persists state, and restores duplicate suppression', async () => {
+test('a terminal session store persists committed state and restores duplicate suppression', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-terminal-app-'));
-  const types = join(folder, 'types.ts'), reducer = join(folder, 'reduce.ts'), view = join(folder, 'view.ts');
-  writeFileSync(types, 'export type State = { count: number };\nexport type Event = { id: string, kind: string };\nexport type Block = { kind: string, text: string };\nexport type View = { blocks: Block[] };');
-  writeFileSync(reducer, 'export default function reduce(state: State, event: Event): State {\n  return {count: state.count + 1};\n}');
-  writeFileSync(view, 'export default function view(state: State): View {\n  return {blocks:[{kind:"text",text:`Count ${state.count}`}]};\n}');
   const store = new TerminalSessionStore(join(folder, 'session.json'));
-  const host = new NatlangHost(); let app;
-  app = new TerminalNatlangApplication({ runner: host, source: { reducer, view }, initialState: { count: 0 },
-    onCommit: commit => store.commit(commit, app.seenEventIds) });
+  const make = checkpoint => {
+    const loop = new EventLoop({ initialState: checkpoint.state, initialRevision: checkpoint.revision,
+      seenEventIds: checkpoint.seen_event_ids, reduce: state => ({ count: state.count + 1 }),
+      view: state => ({ blocks: [{ kind: 'text', text: `Count ${state.count}` }] }),
+      onCommit: commit => store.commit(commit, loop.seenEventIds) });
+    return loop;
+  };
+  const loop = make(store.load({ count: 0 }));
   try {
-    assert.match((await app.start()).view.blocks[0].text, /0/);
-    const results = await Promise.all([app.dispatch({ id: 'one', kind: 'add' }),
-      app.dispatch({ id: 'two', kind: 'add' })]);
+    assert.match((await loop.start()).view.blocks[0].text, /0/);
+    const results = await Promise.all([loop.dispatch({ id: 'one', kind: 'add' }), loop.dispatch({ id: 'two', kind: 'add' })]);
     assert.deepEqual(results.map(result => result.revision), [1, 2]);
-    assert.equal(app.state.count, 2);
-    assert.equal(await app.dispatch({ id: 'one', kind: 'add' }), null);
     const saved = store.load({ count: -1 });
     assert.equal(saved.revision, 2); assert.equal(saved.state.count, 2);
     assert.deepEqual(saved.seen_event_ids, ['one', 'two']);
     assert.equal(readFileSync(`${store.path}.events.jsonl`, 'utf8').trim().split('\n').length, 2);
-  } finally { await app.close(); host.close(); rmSync(folder, { recursive: true, force: true }); }
+    const restored = make(saved);
+    await restored.start();
+    assert.equal(await restored.dispatch({ id: 'one', kind: 'add' }), null);
+    assert.equal(restored.state.count, 2);
+    await restored.close();
+  } finally { await loop.close(); rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('terminal event consumption reports a failed reduction and continues with later events', async () => {
+test('event consumption reports a failed reduction and continues with later events', async () => {
   let reductions = 0;
-  const runner = { async run(request) {
-    if (request.source.path === 'reduce') {
-      if (reductions++ === 0) throw new Error('malformed model turn');
-      return { outcome: { kind: 'done' }, value: { count: 1 } };
-    }
-    return { outcome: { kind: 'done' }, value: { blocks: [] } };
-  } };
-  const app = new TerminalNatlangApplication({ runner,
-    source: { reducer: 'reduce', view: 'view' }, initialState: { count: 0 } });
+  const loop = new EventLoop({ initialState: { count: 0 }, view: () => ({ blocks: [] }), reduce: () => {
+    if (reductions++ === 0) throw new Error('malformed model turn');
+    return { count: 1 };
+  } });
   const failures = [], transitions = [];
-  async function* events() {
-    yield { id: 'bad', kind: 'request' };
-    yield { id: 'good', kind: 'request' };
-  }
+  async function* events() { yield { id: 'bad', kind: 'request' }; yield { id: 'good', kind: 'request' }; }
   try {
-    await app.start();
-    await app.consume(events(), transition => transitions.push(transition),
-      (error, event) => failures.push({ error: String(error), id: event.id }));
-    assert.deepEqual(failures, [{ error: 'Error: reduce failed: Error: malformed model turn', id: 'bad' }]);
+    await loop.start();
+    await loop.consume(events(), transition => transitions.push(transition), (error, event) => failures.push({ error: String(error), id: event.id }));
+    assert.deepEqual(failures, [{ error: 'Error: malformed model turn', id: 'bad' }]);
     assert.equal(transitions.length, 1);
-    assert.equal(app.state.count, 1);
-  } finally { await app.close(); }
+    assert.equal(loop.state.count, 1);
+  } finally { await loop.close(); }
 });
 
-test('native host preserves a trace when the model transport fails', async () => {
+test('a failed model transport still delivers the invocation trace', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-failed-trace-'));
-  const source = join(folder, 'main.nl'), tracePath = join(folder, 'failed.jsonl');
-  writeFileSync(source, '---\nargs: {}\nreturns: string\n---\nReturn a short greeting.');
-  const host = new NatlangHost();
+  writeFileSync(join(folder, 'main.nl'), '---\nargs: {}\nreturns: string\n---\nReturn a short greeting.\n');
+  const traces = [];
+  const runtime = createNatlangRuntime({ trace: trace => traces.push(trace),
+    model: () => { throw new SyntaxError('malformed tool arguments'); } });
   try {
-    await assert.rejects(host.run({ source: { kind: 'file', path: source }, tracePath,
-      modelTurn: () => { throw new SyntaxError('malformed tool arguments'); } }), /malformed tool arguments/);
-    const events = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.ok(events.some(event => event.kind === 'model_request' && event.phase === 'error' &&
+    await assert.rejects(runtime.run(() => loadNatlang(join(folder, 'main.nl'))()), /malformed tool arguments/);
+    assert.equal(traces.length, 1);
+    assert.ok(traces[0].events.some(event => event.kind === 'model_request' && event.phase === 'error' &&
       String(event.error).includes('malformed tool arguments')));
-  } finally { host.close(); rmSync(folder, { recursive: true, force: true }); }
+  } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
 test('terminal renderer checks tables and strips view-supplied control characters', () => {
@@ -198,20 +202,4 @@ test('command recipes use argv, contain cwd, bound output, and propagate abort',
     const cancelled = await waiting;
     assert.equal(cancelled.status, 'unknown'); assert.match(cancelled.detail, /Cancellation requested/);
   } finally { rmSync(folder, { recursive: true, force: true }); }
-});
-
-test('notebook can import cells and tables after startup without a fixture restart', async () => {
-  const notebook = new NotebookWorkspace([], {},
-    { environment: new TypeScriptEnvironment({ mode: 'fresh' }) });
-  try {
-    const loaded = notebook.importConfig({ tables: { measurements: [{ amount: 2 }, { amount: 5 }] }, cells: [
-      { id: 'total', engine: 'sqlite', needs: [], description: 'sum values',
-        source: 'SELECT SUM(amount) AS total FROM measurements' },
-    ] });
-    assert.deepEqual(loaded.tables, ['measurements']);
-    assert.equal(notebook.catalog()[0].id, 'total');
-    assert.match((await notebook.execute('total')).sample, /7/);
-    notebook.importConfig({ tables: { measurements: [{ amount: 11 }] }, cells: [] });
-    assert.match((await notebook.execute('total')).sample, /11/);
-  } finally { notebook.close(); }
 });

@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { TerminalCommit, TerminalEvent } from './application.js';
+import type { AppEvent, Commit } from '../app/event-loop.js';
 
 export type TerminalCheckpoint<S> = { schema: 'natlang-terminal-session/v1';
   revision: number; state: S; seen_event_ids: string[]; updated_at: string };
 
 /** Single-writer durable state with an append-only reduction journal. */
-export class TerminalSessionStore<S, E extends TerminalEvent = TerminalEvent> {
+export class TerminalSessionStore<S, E extends AppEvent = AppEvent> {
   constructor(readonly path: string) {
     if (!path) throw new Error('session path is required');
   }
@@ -19,7 +19,7 @@ export class TerminalSessionStore<S, E extends TerminalEvent = TerminalEvent> {
         value.revision < 0 || !Array.isArray(value.seen_event_ids)) throw new Error('invalid terminal session checkpoint');
     return structuredClone(value);
   }
-  commit(commit: TerminalCommit<S, E>, priorSeen: Iterable<string>): void {
+  commit(commit: Commit<S, E>, priorSeen: Iterable<string>): void {
     mkdirSync(dirname(this.path), { recursive: true });
     const current = this.load(commit.state);
     if (current.revision !== commit.revision - 1)
@@ -32,8 +32,7 @@ export class TerminalSessionStore<S, E extends TerminalEvent = TerminalEvent> {
     writeFileSync(temporary, JSON.stringify(checkpoint, null, 2) + '\n', { flag: 'wx' });
     try {
       appendFileSync(`${this.path}.events.jsonl`, JSON.stringify({ schema: 'natlang-terminal-event/v1',
-        revision: commit.revision, event: commit.event, run_id: commit.reducerRun.run_id,
-        outcome: commit.reducerRun.outcome, phase: 'prepared', at: checkpoint.updated_at }) + '\n');
+        revision: commit.revision, event: commit.event, phase: 'prepared', at: checkpoint.updated_at }) + '\n');
       renameSync(temporary, this.path);
     } catch (error) { try { unlinkSync(temporary); } catch {} throw error; }
   }

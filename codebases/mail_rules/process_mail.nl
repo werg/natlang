@@ -4,8 +4,6 @@ description: Personal mail rules - what my landlord dates go into the calendar,
 args:
   emails: string[]
 returns: MailReport
-effects:
-  - calendar.add
 ---
 function process_mail(emails) -> MailReport
 

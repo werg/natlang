@@ -9,7 +9,8 @@ async function browserApi() {
 }
 
 test('browser local inference drives the native tool loop without a server', async () => {
-  const { BrowserLocalModel, BrowserNatlangHost } = await browserApi();
+  const api = await browserApi();
+  const { BrowserLocalModel, createNatlangRuntime, compileVirtualProject } = api;
   const requests = [];
   const fake = {
     isSupportWebGPU: () => true,
@@ -35,13 +36,13 @@ test('browser local inference drives the native tool loop without a server', asy
   };
   const model = new BrowserLocalModel({ engine: fake });
   assert.equal(model.supportsWebGPU, true);
-  const host = new BrowserNatlangHost({ model });
+  const runtime = createNatlangRuntime({ model: request => model.turn(request), seed: { mode: 'compatibility' } });
+  const project = compileVirtualProject({ files: { 'main.ts':
+    "import { nl } from '@natlang/browser';\nexport async function main(): Promise<number> { return await nl<number>`Write seven.`(); }\n" } }, api);
+  assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
   try {
-    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
-      type: '() => number', instructions: 'Write seven.' } } },
-    options: { seed: { mode: 'compatibility' } } });
-    assert.equal(result.outcome.kind, 'done');
-    assert.equal(result.value, 7);
+    const value = await runtime.run(() => project.require('main.ts').main());
+    assert.equal(value, 7);
     assert.equal(requests.length, 2);
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
@@ -52,7 +53,7 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
     assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments, { code: '7' });
-  } finally { host.close(); await model.close(); }
+  } finally { runtime.close(); await model.close(); }
 });
 
 test('local model validates calls and exposes local loading options', async () => {

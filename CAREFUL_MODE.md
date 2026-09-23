@@ -1,5 +1,7 @@
 # Pending writes and confidence-triggered review
 
+> **Status (2026-09-23):** historical. Measured on the Python runtime and its probes, which have been removed; the findings stand as recorded evidence. Current tools and validation feedback are in `ts-host/src/native/`.
+
 Implemented and tested on the v8 350M interpreter, 2026-09-19.
 
 For subsequent action review, withdrawal, prompt experiments, and state-view

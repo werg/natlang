@@ -33,7 +33,7 @@ a model; individual cell controls remain available for wiring tests.
 Natlang owns an interaction, including its algorithm, operation order,
 interpretation of results, revisions and completion. A submitted event enters
 `programs/<app>/reduce.nl`. That programme can call helpers repeatedly before
-returning the final state. `choose.nl` interprets a request; `apply.ts` exposes
+returning the final state. `choose.nl` interprets a request; `perform.ts` exposes
 one domain operation and returns a typed `Step { state, ok, detail }`.
 Natlang inspects that Step and decides what to do next. `finish.ts` returns
 the chosen final Step's state.

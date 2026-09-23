@@ -21,7 +21,7 @@ for (const update of byId.values())
     return invalid(`Missing or self-referential causal parent for ${update.id}.`);
 const remaining = new Map(byId);
 const ordered = [];
-while (remaining.size) {
+for (const _round of [...remaining.keys()]) {
   const next = [...remaining.values()].filter(u => u.parents.every(p => !remaining.has(p)))
     .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0];
   if (!next) return invalid("Causal parent cycle.");

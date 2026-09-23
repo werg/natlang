@@ -27,7 +27,7 @@ after publishing a case result.
 The output contains one record for each teacher decision (which can contain one
 or more actions) or checkpoint response. In addition to the lossless semantic
 `decision` object, each record has the standard template-neutral
-`messages`/`tools`/`target` fields consumed by `scripts/export_sft.py`.
+`messages`/`tools`/`target` fields consumed by `scripts/export-native-sft.mjs`.
 Every record retains the source task, program IR, provenance, raw response hash,
 teacher text and exposed reasoning. Offered function schemas are normalized to
 `{name, description, parameters}`. Assistant calls retain their source tool name

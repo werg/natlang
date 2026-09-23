@@ -105,14 +105,7 @@ try {
         const model = window.natlangPilot.model;
         const started = performance.now();
         let request;
-        if (kind.startsWith('natlang')) {
-          await window.natlangPilot.host.run({
-            source: { kind: 'program', program: { $lambda: {
-              type: '() => number', instructions: 'Return the number 7.' } } },
-            modelTurn: async turn => { request = turn; return { calls: [], text: 'probe', completion_tokens: 1 }; },
-            options: { model: { max_turns: 1 } },
-          });
-        }
+        if (kind.startsWith('natlang')) request = await window.natlangPilot.captureRequest();
         const tools = kind === 'tool' ? [{ type: 'function', function: { name: 'answer',
           description: 'Answer with a number', parameters: { type: 'object',
             properties: { value: { type: 'number' } }, required: ['value'] } } }] : [];

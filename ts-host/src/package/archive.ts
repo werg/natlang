@@ -39,7 +39,7 @@ export function createPackageArchive(manifestValue: unknown, rootDirectory: stri
     for (const file of filesBelow(root, absolute)) paths.add(packagePath(relative(root, file).split(sep).join('/'), 'file path'));
   }
   for (const [name, target] of Object.entries(manifest.targets ?? {})) {
-    for (const path of [target.entry, target.reducer, target.view].filter(Boolean) as string[])
+    for (const path of [target.entry])
       if (!paths.has(path)) throw new TypeError(`target ${name} references a file outside include: ${path}`);
   }
   for (const [name, path] of Object.entries(manifest.exports ?? {}))

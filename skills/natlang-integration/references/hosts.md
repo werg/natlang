@@ -1,88 +1,58 @@
-# Hosts and model adapters
+# Hosts and model drivers
 
-## Pick the host
+## One runtime, ordinary calls
 
-| Target | Public API | Model execution |
+| Target | Package | Context propagation |
 |---|---|---|
-| Node | `NatlangHost` from `@natlang/node` | Supplied `modelTurn` or a configured local model driver |
-| Browser | `BrowserNatlangClient` and `BrowserNatlangApplication` from `@natlang/browser` | Local browser model or supplied `modelTurn` |
-
-The packages are built from this repository. See [native packages and
-executables](../../../NATIVE_PACKAGES.md) for installation and package details.
-For checkout development, run `scripts/setup_dev.sh --node-only` and
-`npm --prefix ts-host run build`.
-
-## Node
+| Node | `@natlang/node` | `AsyncLocalStorage` |
+| Browser | `@natlang/browser` | Compiled code restores the task after each `await`; `runtime.bind` for uncompiled callbacks |
 
 ```ts
-import { NatlangHost } from '@natlang/node';
+import { createNatlangRuntime, fileTraceSink, openAICompatibleModelTurn } from '@natlang/node';
+import { handle } from './app.js';               // compiled with natlang build
 
-const host = new NatlangHost();
-try {
-  const result = await host.run({
-    source: { kind: 'file', path: 'inspect.nl' },
-    inputs: { text: 'The trial improved response times.' },
-    modelTurn,
-  });
-  if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
-  return result.value;
-} finally {
-  host.close();
-}
+const runtime = createNatlangRuntime({
+  model: openAICompatibleModelTurn({ endpoint: 'http://127.0.0.1:8080', model: 'natlang' }),
+  services: { wiki },                            // host capabilities, see below
+  trace: fileTraceSink('.natlang/traces'),       // optional: one JSONL per invocation
+});
+const report = await runtime.run(() => handle(ticket));
 ```
 
-Node also accepts checked definition graphs and program values. Provide
-application data as ordinary typed values, including `Record<string, T>`.
-For filesystem work, call a directory reducer with an explicit `Folder`
-argument. The supplied folder is the reducer's writable root; paths are
-relative to it. A direct call `await reducer(folder, ...args)` returns its
-typed value and discards its edits. `await folder.apply(reducer, ...args)`
-retains the reducer's committed changes. A selected subdirectory can be passed
-with `folder.dir('subdirectory')`.
+`runtime.run(fn, { services, signal, trace, name })` creates a task: the natlang calls made anywhere inside `fn` (including in libraries and callbacks) find it. Tasks run concurrently. A natlang call with no task fails with an error naming `runtime.run` and `runtime.bind`. Model options: `model` may be a driver function or `{ driver, maxTurns, maxTokens, turnTokens, temperature, validationFeedback, … }`; `limits`, `seed`, `workspace`, `network`, `statistics`, and `progressJudge` are runtime options.
 
-## Browser
+## Compile the application
 
-The browser source map defines natlang source files; it is not automatically a
-semantic input. Pass application data through `inputs`. Browser source files
-may include ordinary default-exported TypeScript helpers and natural-language
-`.nl` functions. Reducer folder handles are provided by the application when a
-directory reducer is called.
+`natlang build [PROJECT]` type-checks the project, plans every `nl` expression, checks callable folders, generates `foo.d.nl.ts` for each `.nl` file, and emits JavaScript. `natlang check` does the same without emitting. `buildProject({ project, runtimeModule })` and `checkProject` are the programmatic forms; `compileVirtualProject({ files }, runtimeNamespace)` compiles an in-memory project (browser pages, workers, tests). Uncompiled `nl` calls fail.
 
-Use `BrowserNatlangClient` for model loading and one-run execution. Use
-`BrowserNatlangApplication` when state updates, rendering, and event ordering
-belong to a UI lifecycle. Supply `modelTurn` to connect a different backend or
-a scripted fixture. Label fixtures distinctly from live-model results.
+Named functions can also be loaded directly: `loadNatlang('review.nl')` (Node), `loadVirtualNatlang(files, 'review.nl')`, or `defineNatlang(nlSourceText)` for functions authored at run time (notebook cells, generated tools). `loadCallables('natlang.d')` loads a callable folder as a record.
+
+## Services
+
+```ts
+// app types (once):
+declare module 'natlang:services' { export const wiki: WikiWorkspace; }
+// callable-folder code:
+import { wiki } from 'natlang:services';
+```
+
+Services are ordinary objects with methods, supplied per runtime or per task. Callable-folder TypeScript imports them from `natlang:services`; in eval they are named bindings, shown to the model with their types. Every method call is traced as an effect. Services are read-only bindings: the model calls methods, it does not reassign properties.
 
 ## Model transport
 
-The TypeScript `modelTurn` callback receives `messages`, `tools`, `temperature`,
-`seed`, and `max_tokens`. It returns ordered tool calls and optional text and
-usage fields:
+A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns ordered tool calls plus optional text and usage:
 
 ```ts
-{
-  calls: [['eval', { code: 'const result = await helper(sample); result' }]],
-  text: '',
-  completion_tokens: 42,
-  prompt_tokens: 700,
-}
+{ calls: [['eval', { code: 'result = await helper(sample)' }], ['mark_lines', { start: 1, end: 2 }]],
+  text: '', completion_tokens: 42, prompt_tokens: 700 }
 ```
 
-Return the provider's actual output and preserve call order, IDs, and tool
-results. Keep provider-specific formatting in the model adapter. The program
-surface remains TypeScript `eval`, scope inspection, line marking, and normal
-function calls.
+`openAICompatibleModelTurn` adapts an OpenAI-compatible server (aliases, retries of malformed tool calls, raw exchanges via `onExchange`). `createManagedModelSession` and `natlang setup` run the managed local llama.cpp runtime. Keep provider quirks in the driver, not in `.nl` source. If `max_tokens` is null, omit a provider field that requires an integer.
 
-If `max_tokens` is absent or null, omit a provider field that requires an
-integer. Record actual usage and finish reasons where available. Forward
-cancellation when supported; provider cancellation and host-effect
-cancellation are separate operations.
+## Folders
 
-## Host authority
+A directory reducer's first parameter is a `Folder` (or a `FolderHandle` from `folder.dir(path)`). Node's `openFolder(dir)` fronts a directory lazily; `saveFolder(dir, folder)` writes its committed changes back atomically. A direct reducer call returns its typed value and discards file changes; `folder.apply(reducer, ...args)` keeps the committed ones.
 
-Native APIs, databases, processes, and other host objects remain owned by the
-embedding. Expose them through ordinary crisp helpers or declared effect
-callbacks. The shared TypeScript evaluator is trusted application code, not a
-sandbox. A timeout or failed result cannot undo a host mutation that already
-occurred. Persist operation identities and observations when a retry could
-duplicate an external effect.
+## Authority
+
+Services, live values, and packages available to eval run with the application's authority. `workspace` selects the `package.json` whose dependencies eval and callable-folder code may import; `network` allows `fetch` in eval. A timeout or failed validation cannot undo an effect that already happened.

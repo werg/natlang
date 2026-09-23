@@ -8,7 +8,7 @@ returns: State
 Drive the Patchwork interaction to completion. You own the algorithm and may
 call helpers repeatedly; one UI event is not limited to one operation.
 
-Use choose for semantic interpretation when needed. apply performs one concrete
+Use choose for semantic interpretation when needed. perform carries out one concrete
 operation and returns Step { state, ok, detail }. Inspect that result. Continue
 from its state, preserving successful work, until the user goal is fulfilled or
 a concrete blocker remains. On failure, inspect detail and decide whether a

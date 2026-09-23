@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { PROGRAM_VERSION, definitionProject, lambdaSignature, type FunctionSpec } from './program.js';
 
-export const SYNTHETIC_IR_VERSION = 'natlang.program/1';
+export const SYNTHETIC_IR_VERSION = PROGRAM_VERSION;
 export const NATIVE_SYNTHETIC_GENERATOR_VERSION = 'natlang.synthetic_generator.native/1';
 export const NATIVE_SYNTHETIC_FAMILIES = ['array_kernel', 'staged_ranking', 'algorithm_pipeline'] as const;
 export type NativeSyntheticFamily = typeof NATIVE_SYNTHETIC_FAMILIES[number];
@@ -33,11 +34,10 @@ function record(id: string, family: string, kind: 'lambda_source' | 'lambda_grap
   return record;
 }
 
-function lambda(instructions: string, type: string, functionName: string, codebase?: Dict, types?: Dict): Dict {
-  const value: Dict = { type, instructions, function: functionName };
-  if (codebase) value.codebase = codebase;
-  if (types) value.types = types;
-  return { $lambda: value };
+/** A project whose root natural-language function `functionName` has the given type and children. */
+function project(instructions: string, type: string, functionName: string, codebase?: Record<string, FunctionSpec>,
+  types?: Record<string, string>): { root: string; files: Record<string, string> } {
+  return definitionProject(functionName, { ...lambdaSignature(type), instructions, ...(types ? { types } : {}), ...(codebase ? { codebase } : {}) });
 }
 
 function arrayKernel(rng: Random, id: string): Dict {
@@ -90,9 +90,9 @@ function arrayKernel(rng: Random, id: string): Dict {
     const { k } = selected.inputs as { k: number };
     selected.expected = [...nums].sort((a, b) => b - a).slice(0, k);
   }
-  const root = lambda(selected.text, `(${selected.params}) => ${selected.returns}`, selected.name,
+  const program = project(selected.text, `(${selected.params}) => ${selected.returns}`, selected.name,
     undefined, selected.name === 'merge_intervals' ? { Interval: '{ start: number, end: number }' } : undefined);
-  return record(id, selected.name, 'lambda_source', { root, inputs: selected.inputs, expected: selected.expected,
+  return record(id, selected.name, 'lambda_source', { ...program, inputs: selected.inputs, expected: selected.expected,
     operation: 'algorithm', expression: selected.code, algorithm: selected.name });
 }
 
@@ -123,7 +123,7 @@ function stagedRanking(rng: Random, id: string): Dict {
     { op: 'eval', code: 'const sorted = await sort_ranked(scored)' },
     { op: 'eval', code: 'await take_ranked(sorted, k)' },
   ];
-  return record(id, 'staged_ranking', 'lambda_graph', { root: lambda(instructions,
+  return record(id, 'staged_ranking', 'lambda_graph', { ...project(instructions,
     '(candidates: Candidate[], k: number) => Ranked[]', 'rank_candidates', codebase,
     { Candidate: candidate, Ranked: ranked }), inputs: { candidates, k }, expected, operations, source_lines: [], leaf_oracles: {} });
 }
@@ -144,7 +144,7 @@ function algorithmPipeline(rng: Random, id: string): Dict {
     { op: 'eval', code: 'const totals = accounts.map(a => active.filter(x => x.account === a).reduce((sum, x) => sum + x.amount, 0))' },
     { op: 'eval', code: 'await rank_accounts(accounts, totals)' },
   ];
-  return record(id, 'algorithm_pipeline', 'lambda_graph', { root: lambda(instructions,
+  return record(id, 'algorithm_pipeline', 'lambda_graph', { ...project(instructions,
     '(transactions: Transaction[], accounts: string[]) => Summary[]', 'account_leaderboard', codebase,
     { Transaction: '{ account: string, amount: number, active: boolean }', Summary: '{ account: string, total: number }' }),
     inputs: { transactions, accounts }, expected, operations, source_lines: [], leaf_oracles: {} });
@@ -157,7 +157,7 @@ export function validateSyntheticRecord(value: unknown): asserts value is Dict {
       !['lambda_source', 'lambda_graph'].includes(String(item.kind)) || !String(item.family).startsWith('algo_'))
     throw new Error('invalid native synthetic program identity');
   const semantics = item.semantics as Dict;
-  if (!semantics || typeof semantics !== 'object' || !semantics.root || !semantics.inputs || !('expected' in semantics))
+  if (!semantics || typeof semantics !== 'object' || typeof semantics.root !== 'string' || !semantics.files || !semantics.inputs || !('expected' in semantics))
     throw new Error(`${item.id}: missing source, inputs, or expected value`);
   if (item.kind === 'lambda_graph' && (!Array.isArray(semantics.operations) || !(semantics.operations as unknown[]).length ||
       !Array.isArray(semantics.source_lines) || !semantics.leaf_oracles)) throw new Error(`${item.id}: malformed lambda graph`);

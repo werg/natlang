@@ -19,6 +19,7 @@ async function api() {
     try { globalThis.process = undefined; return await import('../dist/browser/natlang.js'); }
     finally { globalThis.process = processValue; }
 }
+const { natlangApplication } = await (async () => { await api(); return import('../studio/shared/natlang-app.mjs'); })();
 function decode(raw) { try { return JSON.parse(raw || '{}'); } catch { return { __unparsed__: raw }; } }
 function teacherDriver(server, exchanges) {
     return async request => {
@@ -55,7 +56,7 @@ class ResearchMemoryStore extends MemoryResearchAdapter {
 }
 
 async function programFiles() {
-    const names = ['types.ts', 'reduce.nl', 'view.nl', 'view.ts', 'learn.nl', 'revise_schema.nl',
+    const names = ['types.ts', 'reduce.nl', 'view.ts', 'learn.nl', 'revise_schema.nl',
         'invent_interaction.nl', 'preserve_intent.nl', 'investigate_beliefs.nl'];
     for (const name of await readdir(resolve(studio, 'programs/reduce'))) names.push(`reduce/${name}`);
     return Object.fromEntries(await Promise.all(names.sort().map(async name => [name,
@@ -65,15 +66,14 @@ async function programFiles() {
 async function runScenario({ scenario, server, model, seed }) {
     const bindings = await api(), exchanges = [], driver = teacherDriver(server, exchanges);
     const store = new ResearchMemoryStore(); let childIndex = 0, state;
-    const research = new ResearchHost({ store, runContext: () => ({ model, seed: { mode: 'derived', root: seed }, evaluator: 'typescript-host/browser' }),
+    const research = new ResearchHost({ store, runContext: () => ({ model, seed: { mode: 'derived', root: seed }, evaluator: 'natlang-browser' }),
         runSource: async (files, root, inputs, options) => {
-            const child = new bindings.BrowserNatlangClient({ host: { research: { readNative: async id => (await store.get('native_values', id))?.value } } });
-            try {
-                const result = await child.run({ source: { kind: 'files', root, files: Object.fromEntries(files.map(row => [row.id, row.source])) },
-                    inputs, modelTurn: driver, validationFeedback: 'local', options: { seed: options.provenance.seed } });
-                if (result.outcome.kind !== 'done') throw new Error(result.outcome.detail);
-                return { value: result.value, trace_id: `child-${++childIndex}` };
-            } finally { await child.close(); }
+            const runtime = bindings.createNatlangRuntime({ model: { driver, validationFeedback: 'local' }, seed: options.provenance.seed,
+                services: { research: { readNative: async id => (await store.get('native_values', id))?.value } } });
+            const run = await bindings.runPlaygroundProject(runtime, bindings.newPlaygroundProject('method', root,
+                Object.fromEntries(files.map(row => [row.id, row.source])), inputs), { runtimeNamespace: bindings });
+            if (run.outcome.kind !== 'done') throw new Error(run.outcome.detail);
+            return { value: run.value, trace_id: `child-${++childIndex}` };
         } });
     const sources = await programFiles();
     const observations = JSON.parse(await readFile(resolve(studio, 'sample/observations.json'), 'utf8'));
@@ -84,11 +84,10 @@ async function runScenario({ scenario, server, model, seed }) {
         'evidence/reliability-methods.txt': { kind: 'evidence', content: methods },
     }, { message: 'Frozen Inquiry Lab teacher scenario' });
     state = { revision: 0, head: head.id, question: '', notice: 'Ready.', active_view: '', selected: '', receipts: [] };
-    const client = new bindings.BrowserNatlangClient({ host: { research: research.api() }, mode: 'retained' });
-    const app = new bindings.BrowserNatlangApplication({ client,
-        source: { files: sources, reducer: 'reduce.nl', view: 'view.ts' }, initialState: state, seedRoot: seed, modelTurn: driver,
-        validationFeedback: 'local',
-        onCommit: async commit => { await research.verifyCommit(state, commit.state); state = commit.state; },
+    let committed = null;
+    const app = natlangApplication({ source: { files: sources, reducer: 'reduce.nl', view: 'view.ts' }, initialState: state, seedRoot: seed,
+        model: { driver, validationFeedback: 'local' }, services: { research: research.api() },
+        onCommit: async commit => { await research.verifyCommit(state, commit.state); state = commit.state; committed = commit; },
     });
     let transition, failure = '';
     const event = { id: `scenario-${scenario.id}-${seed}`, kind: 'question', value: scenario.question };
@@ -96,16 +95,16 @@ async function runScenario({ scenario, server, model, seed }) {
         await app.start(); research.begin(event); transition = await app.dispatch(event);
     } catch (error) {
         failure = String(error);
-    } finally { research.end(); await app.close(); await client.close(); }
+    } finally { research.end(); await app.close(); }
     const workspace = await research.runtime.workspace.export();
     const bundle = { format: 1, workspace, state };
     const audit = await auditResearchBundle(bundle, scenario.id);
     return { schema: 'natlang.research_teacher_trajectory/1', scenario, provenance: { model, seed, server,
-        source_manifest: head.id, evaluator: 'typescript-host/browser' },
+        source_manifest: head.id, evaluator: 'natlang-browser' },
         outcome: { completed: Boolean(transition), error: failure,
-            reduction: transition?.reducerRun?.outcome ?? null, structural: audit.structural,
+            reduction: committed ? 'done' : null, structural: audit.structural,
             semantic_review: audit.semantic_review, training_admission: audit.training_admission },
-        runs: transition ? { reducer: transition.reducerRun, view: transition.viewRun } : null, exchanges, bundle };
+        runs: committed ? { reducer: committed.trace, invocations: committed.invocations } : null, exchanges, bundle };
 }
 
 async function atomic(path, value) {

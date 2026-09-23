@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -97,6 +98,15 @@ export class ApplicationPackages {
   prepareDependencies(): ReturnType<ApplicationPackages['installPackages']> {
     return this.installPackages([], existsSync(join(this.workspace, 'package-lock.json')));
   }
+  /** Synchronous load (Node `require`, which also loads ES modules) for callable-folder module instances. */
+  requireModule(specifier: string): unknown {
+    this.validateImportSpecifier(specifier);
+    this.requirer ??= createRequire(join(this.workspace, 'package.json'));
+    const result = this.requirer(specifier);
+    this.observe({ operation: 'packages.import', specifier, workspace: this.workspace });
+    return result;
+  }
+  private requirer?: NodeJS.Require;
   async importModule(specifier: string): Promise<unknown> {
     this.validateImportSpecifier(specifier);
     // A real ESM loader rooted below the app preserves Node's import export-condition semantics.

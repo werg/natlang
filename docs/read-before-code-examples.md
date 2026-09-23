@@ -1,6 +1,6 @@
 # Read-before-code probe: sample problems
 
-These ten cases illustrate the 59-case [IR corpus](../data/teacher/read-before-code-probe.ir.jsonl). The agent sees the function instructions and typed scope. Large ordinary input batches show only their first few rows in the opening preview. Folder contents must be read through file tools or `fs` in `eval`. Expected returns are oracle data, not shown to the agent.
+These ten cases illustrate the 59-case [IR corpus](../data/teacher/read-before-code-probe.ir.jsonl). The agent sees the function instructions and typed scope. Large ordinary input batches show only their first few rows in the opening preview. Folder contents must be read through the folder handle in `eval`. Expected returns are oracle data, not shown to the agent.
 
 ## read-before-code:file_table-00
 

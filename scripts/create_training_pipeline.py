@@ -161,7 +161,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
              f'{r}/{name}.ready.jsonl.audit.json', f'{r}/{name}.ready.jsonl.rejected.jsonl'])
     def train(name, previous, lr):
         checkpoint = f"{r}/train-{name}/checkpoint/state.json"
-        inputs = [f"{r}/{name}.ready.jsonl", f"{r}/{name}.ready.jsonl.manifest.json", f"{p}/scripts/train_lora.py", f"{p}/natlang/corpus.py",
+        inputs = [f"{r}/{name}.ready.jsonl", f"{r}/{name}.ready.jsonl.manifest.json", f"{p}/scripts/train_lora.py", f"{p}/scripts/corpus.py",
                   f'{r}/training-readiness.json']
         args = [f"{p}/scripts/train_lora.py", f"{r}/{name}.ready.jsonl", f"{r}/train-{name}", *train_model_args, '--require-audit',
                 "--epochs", "1", "--lr", lr, "--rank", "32", "--accum", "16", "--microbatch", "1", "--batch-tokens", "8192", "--max-len", "8192",

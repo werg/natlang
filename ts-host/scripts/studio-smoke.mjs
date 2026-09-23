@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -71,24 +72,23 @@ try {
     assert.equal(await page.evaluate(()=>JSON.parse(window.natlangStudio.app.state.cells[0].result).length),8);
     await page.evaluate(()=>window.natlangStudio.dispatch('execute',{target:'total'}));
     assert.equal(await page.evaluate(()=>window.natlangStudio.app.state.cells[1].result),'210');
-    await page.evaluate(() => window.natlangStudio.dispatch('add', { target: 'spin', secondary: 'typescript-host', text: 'while (true) {}', ids: [] }));
+    await page.evaluate(() => window.natlangStudio.dispatch('add', { target: 'spin', secondary: 'typescript', text: 'while (true) {}', ids: [] }));
     await page.evaluate(() => { window.workerStopped = false; window.natlangStudio.dispatch('execute', { target: 'spin' }).then(() => { window.workerStopped = true; }, () => { window.workerStopped = true; }); });
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('Executing child program'));
     await page.getByRole('button', { name: 'Stop this run', exact: true }).click();
     await page.waitForFunction(() => window.workerStopped && !document.querySelector('.statusbar').classList.contains('busy'));
     await page.goto(studio.url+'?fixture#ide');
     await page.waitForFunction(()=>window.natlangStudio?.spec?.id==='ide'&&window.natlangStudio.app?.view!==null&&!document.querySelector('.statusbar').classList.contains('busy'));
-    await page.evaluate(()=>window.natlangStudio.dispatch('add',{target:'answer.ts',text:'export default function answer(): number { return 42; }'}));
+    await page.evaluate(()=>window.natlangStudio.dispatch('add',{target:'answer.ts',text:'export function main(): number { return 42; }'}));
     await page.evaluate(()=>window.natlangStudio.dispatch('run',{text:'{}'}));
     assert.equal(await page.evaluate(()=>window.natlangStudio.app.state.result),'42');
-    assert.ok(await page.evaluate(()=>window.natlangStudio.app.state.trace_count)>0);
-    await page.evaluate(()=>window.natlangStudio.dispatch('inspect',{amount:0}));
-    assert.ok(await page.evaluate(()=>window.natlangStudio.app.state.trace_frame.length)>0);
+    // TypeScript without natural-language calls runs without a natlang invocation, so there is no trace to inspect.
+    assert.equal(await page.evaluate(()=>window.natlangStudio.app.state.trace_count),0);
     const other=await page.context().newPage();
     await other.goto(studio.url+'?fixture#ide');
     await other.waitForFunction(()=>window.natlangStudio?.app?.view!==null&&window.natlangStudio?.spec?.id==='ide');
-    await page.evaluate(()=>window.natlangStudio.dispatch('inspect',{amount:0}));
-    const stale=await other.evaluate(()=>window.natlangStudio.dispatch('inspect',{amount:0}).then(()=>'',error=>error.message));
+    await page.evaluate(()=>window.natlangStudio.dispatch('run',{text:'{}'}));
+    const stale=await other.evaluate(()=>window.natlangStudio.dispatch('run',{text:'{}'}).then(()=>'',error=>error.message));
     assert.match(stale,/newer revision/);await other.close();
     await page.goto(studio.url+'?fixture#terminal');
     await page.waitForFunction(()=>window.natlangStudio?.spec?.id==='terminal'&&window.natlangStudio.app?.view!==null&&!document.querySelector('.statusbar').classList.contains('busy'));
@@ -116,5 +116,5 @@ try {
 finally {
     await browser?.close();
     await studio.close();
-    await rm(temporary, { recursive: true, force: true });
+    (execFileSync('chmod', ['-R', 'u+w', temporary]), await rm(temporary, { recursive: true, force: true }));
 }

@@ -1,36 +1,51 @@
 id: 09-fold-crisp-step
 title: A TypeScript loop threads numeric state through a crisp function
 kind: program
-exercises: [code base, TypeScript for...of loop, crisp step, accumulator update]
-program:
-  $lambda:
-    type: '(lines: Line[]) => number'
-    function: order_total
+exercises:
+  - code base
+  - TypeScript for...of loop
+  - crisp step
+  - accumulator update
+root: order_total.nl
+files:
+  order_total.nl: |
+    ---
+    args:
+      lines: "Line[]"
+    returns: "number"
     types:
-      Line: '{ sku: string, qty: number, unit_price: number }'
-    instructions: |
-      Start a total at zero. For each order line, update it with `add_line`.
-      Return the final total.
-    codebase:
-      add_line:
-        description: Running total plus one order line's amount.
-        args: { acc: number, item: Line }
-        returns: number
-        code: return acc + item.qty * item.unit_price
+      Line: "{ sku: string, qty: number, unit_price: number }"
+    ---
+    Start a total at zero. For each order line, update it with `add_line`.
+    Return the final total.
+  order_total/types.ts: |
+    export type Line = { sku: string, qty: number, unit_price: number };
+  order_total/add_line.ts: |
+    /** Running total plus one order line's amount. */
+    export default function add_line(acc: number, item: Line): number {
+      return acc + item.qty * item.unit_price
+    }
 inputs:
   lines:
-    - { sku: "A1", qty: 2, unit_price: 9.5 }
-    - { sku: "B7", qty: 1, unit_price: 120 }
-    - { sku: "C3", qty: 10, unit_price: 0.75 }
+    - sku: A1
+      qty: 2
+      unit_price: 9.5
+    - sku: B7
+      qty: 1
+      unit_price: 120
+    - sku: C3
+      qty: 10
+      unit_price: 0.75
 expect:
   value: 146.5
 lint:
-  must: [the root loops over lines and calls add_line with the total and current line]
-  must_not: [arithmetic done by the root itself]
+  must:
+    - the root loops over lines and calls add_line with the total and current line
+  must_not:
+    - arithmetic done by the root itself
 reference:
   order_total:
-    eval: 'let total = 0;
-
+    eval: |-
+      let total = 0;
       for (const line of lines) total = await add_line(total, line);
-
-      total'
+      total

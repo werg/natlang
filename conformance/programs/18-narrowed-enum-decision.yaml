@@ -1,39 +1,49 @@
 id: 18-narrowed-enum-decision
 title: A decision constrained to the legal actions, computed crisply
 kind: program
-exercises: [code base, crisp function, Dict, enum]
-program:
-  $lambda:
-    type: '(stock: Record<string, number>, request: string) => Action'
-    function: choose_action
+exercises:
+  - code base
+  - crisp function
+  - Dict
+  - enum
+root: choose_action.nl
+files:
+  choose_action.nl: |
+    ---
+    args:
+      stock: "Record<string, number>"
+      request: "string"
+    returns: "Action"
     types:
-      Action: '"sell_apple" | "sell_pear" | "decline"'
-    instructions: |
-      Return `await decide_action(stock, request)`.
-    codebase:
-      decide_action:
-        description: >
-          Choose, among the legal actions (an item can be sold only if stock has at least one; declining
-          is always legal), the one that serves the request. If what the customer wants cannot be sold,
-          decline.
-        args: { stock: 'Record<string, number>', request: string }
-        returns: '"sell_apple" | "sell_pear" | "decline"'
-        code: |
-          const legal = new Set(["decline", ...Object.keys(stock).filter(k => stock[k] > 0).map(k => "sell_" + k)])
-          const wants = Object.keys(stock).find(k => request.toLowerCase().includes(k))
-          const wanted = wants ? "sell_" + wants : "decline"
-          return legal.has(wanted) ? wanted : "decline"
+      Action: "\"sell_apple\" | \"sell_pear\" | \"decline\""
+    ---
+    Return `await decide_action(stock, request)`.
+  choose_action/types.ts: |
+    export type Action = "sell_apple" | "sell_pear" | "decline";
+  choose_action/decide_action.ts: |
+    /** Choose, among the legal actions (an item can be sold only if stock has at least one; declining is always legal), the one that serves the request. If what the customer wants cannot be sold, decline. */
+    export default function decide_action(stock: Record<string, number>, request: string): "sell_apple" | "sell_pear" | "decline" {
+      const legal = new Set(["decline", ...Object.keys(stock).filter(k => stock[k] > 0).map(k => "sell_" + k)])
+      const wants = Object.keys(stock).find(k => request.toLowerCase().includes(k))
+      const wanted = wants ? "sell_" + wants : "decline"
+      return legal.has(wanted) ? wanted : "decline"
+    }
 inputs:
-  stock: { apple: 0, pear: 3 }
-  request: "Two of your finest apples, please."
+  stock:
+    apple: 0
+    pear: 3
+  request: Two of your finest apples, please.
 expect:
   value: decline
-notes: >
-  decide_action computes the legal set and the decision together, in code, so an illegal action
-  (selling something with no stock) is never representable in the result.
+notes: |
+  decide_action computes the legal set and the decision together, in code, so an illegal action (selling something with no stock) is never representable in the result.
 lint:
-  must: [decide_action computes the legal set and the decision crisply, in one call]
-  must_not: [the root working out legality itself, the legal set typed out by the model]
+  must:
+    - decide_action computes the legal set and the decision crisply
+    - in one call
+  must_not:
+    - the root working out legality itself
+    - the legal set typed out by the model
 reference:
   choose_action:
     eval: await decide_action(stock, request)

@@ -1,51 +1,38 @@
 # Algorithm patterns
 
+## Orchestrate in code, judge in natural language
+
+Most applications are ordinary TypeScript with a few natural-language decisions at the points where meaning matters. Write the control flow, validation, and bookkeeping in code, and call `nl` (or a named `.nl` function) for the judgment:
+
+```ts
+const labels = await Promise.all(tickets.map(ticket => classify(ticket, rubric)));   // parallel siblings
+const real = tickets.filter((_, i) => labels[i] !== 'spam');                          // exact work stays exact
+```
+
+Move orchestration into a natural-language function only when the *order of operations itself* needs judgment: a notebook that decides which ready cell to run next, a research controller that chooses what to investigate. Then keep the operations exact and let natlang sequence them, inspecting each result.
+
 ## Long algorithmic work for small interpreters
 
-Make the next meaningful action apparent from the source and typed state. A long program can be simple to execute if its steps, loop state, and helper contracts are clear. Do not equate a short trajectory with a good program.
+Make the next meaningful action apparent from the instructions and typed state. A long run can be simple to execute if its steps, loop state, and helper contracts are clear. For a graph traversal keep the frontier, visited IDs, results, and unresolved dependencies in typed state; let natlang choose priorities, and let an exact helper supply adjacency and readiness. Extract a helper when it gives a meaningful contract or reduces repeated context, not for every elementary operation.
 
-For a graph traversal, store the frontier, visited IDs, accumulated results, and unresolved dependencies. State whether ordering is meaningful and how to handle cycles or unknown nodes. Let natlang choose priorities from semantic criteria; a crisp graph query can supply exact adjacency and readiness. For a notebook, natlang can traverse dependencies and choose which cells to run; the host executes a selected cell and returns a receipt. Avoid hiding traversal inside a host `doEverything()` call.
+## Monitored iteration
 
-Extract a helper when it gives a meaningful contract or reduces repeated context. Avoid splitting every elementary operation into another model episode. Keep exact projections and reusable arithmetic in crisp functions. Measure source, tool-schema, state-preview, completion, and repeated-read tokens separately when optimizing.
+Use `iterateOn` for open-ended refinement: repair until checks pass, shorten until short enough, advance until done. It records each step, reviews progress on fresh sites, and stops on a `divergent` verdict or a limit. Bound it with `withLimit` where the domain has a natural bound, and handle `IterationLimitError` deliberately (for example, keep the best honest state). Use plain finite loops for bounded work.
 
-A conversation checkpoint is not a new algorithm invocation. Preserve accumulator paths, completed iterations, source revisions, and effect observations. Working notes should carry unresolved choices, not duplicate all state. If a resumed model keeps rereading or restarts a loop, inspect the actual checkpoint and restored state before changing the algorithm. A truncated note or missing continuation data is a harness issue worth fixing.
+## Reducers and applications
 
-## Natlang applications and state reducers
+A reducer `reduce(state, event) => state` is ordinary code that may call natlang. `EventLoop` applies events serially, suppresses duplicate IDs, commits before publishing, and retries a failed view without replaying the event. Keep persistence and transport exact in host code: event IDs, storage commits, effect receipts. A single event may require many operations; natlang can inspect each observation and continue.
 
-A useful shape is `reduce(state: State, event: Event) -> State`. The natlang reducer interprets the event, calls host operations, inspects observations, revises its plan, and produces the new state. A single event can require many operations. The host need not impose a single proposed action or a plan/execute split.
-
-Keep exact persistence and transport contracts in host code: immutable source revisions, unique event IDs, storage commits, effect receipt identity, process polling. Include sufficient state to explain uncertainty and recover without the old conversation. Native objects stay accessible through crisp code; they need not be represented by a new universal language protocol.
-
-Use event streams/folds for incoming data. A frontend can queue semantic events and render after each reduction. Fine-grained cursor movement and animation may remain crisp; intent, grouping, interaction selection, and application state can be natlang-driven. A generated UI should return events to versioned natlang handlers. UI generation without working event bindings is incomplete.
+For interfaces, let natlang choose grouping, explanation, and next steps (a view *plan*), and let exact code build the safe view tree. Generated controls must emit events that real handlers reduce.
 
 ## Semantic merging, notionally CRDT-like
 
-Merging can itself be the natlang algorithm. Do not replace semantic merge with crisp convergence rules unless requested. Choose the representation for the use case: operation history, base plus competing states, structured document sections, entity graphs, schedules, inventory intent, or narrative facts.
-
-Define what the merger sees: a common base when available, both intentions, ordered/canonicalized inputs where required, and provenance. Preserve incompatible alternatives and explicit uncertainty rather than silently losing information. Test reordered delivery, duplicate events, delayed branches, contradictory updates, and replay of the same merge context. Evaluate semantic invariants for the actual domain.
-
-A shared model and random seed are necessary parts of a reproducible profile, not proof of convergence. Also pin tokenizer/template, inference configuration, source, inputs, event order, and relevant host observations. Hardware/backend differences can still change results. Report measured agreement; do not claim classical CRDT guarantees for a semantic merger.
+Merging can be the natlang algorithm. Present the common base, each intention in a canonical order, and provenance; preserve incompatible alternatives as explicit unresolved conflicts rather than losing them. Check exact invariants (every update accounted for once, IDs preserved) in code. Test reordered delivery, duplicates, contradictions, and replay. A shared model and seed are part of a reproducibility profile, not a convergence proof; report measured agreement.
 
 ## Learned methods and generated source
 
-Natlang can notice a repeated need, author a candidate method, ask the host to load/check it, execute test inputs, inspect failures, revise, and retain it. Store the method's source revision, declared types, evidence, test inputs, and actual receipts. Keep candidate and active revisions distinct when the application needs review or concurrent edits.
-
-Schema changes need executable migrations and evidence preservation. Test missing records, duplicates, unexpected IDs, and changed field meanings. Mechanical preservation audits identify differences; natlang judges whether meaning was preserved. A new schema or a syntactically valid method alone is not a completed migration.
+Natlang can author a candidate method, run it, inspect failures, revise, and retain it. Store the source revision, declared types, test inputs, and actual receipts; keep candidate and active revisions distinct when review or concurrent edits matter. Schema changes need executable migrations and preserved evidence.
 
 ## Extension decisions
 
-Before adding a runtime feature, try existing typed values, named functions,
-ordinary TypeScript control flow, the crisp evaluator, and host-owned objects.
-Search, SQL, shell commands, binary assets, stronger-model calls, and native
-jobs can often be host libraries callable from crisp code. This does not mean
-inventing a special workaround around a broken runtime contract.
-
-When a general capability is missing, identify its semantic contract and implement it in the shared TypeScript runtime and browser path. Check all application callers; a broadly useful correction should not be activated only in the motivating demo. Keep portability and small-model cognitive cost explicit.
-
-Use `Record<string, T>` when a keyed collection is an ordinary typed input.
-Keep indexed searches and native database queries in crisp helpers that return
-small typed results. Directory reducers are the only functions with model-side
-filesystem access; their relative paths resolve within the reducer's input
-folder. A direct call `await reducer(folder, ...args)` discards file changes,
-while `await folder.apply(reducer, ...args)` retains the reducer's selected
-changes.
+Before adding a runtime feature, try what exists: typed values, named functions, ordinary control flow, services, and `iterateOn`. Search, SQL, processes, binary assets, and stronger-model calls are services or callable-folder helpers. When a general capability is missing, implement it in the shared runtime for Node and browser alike rather than as an application-local workaround.
