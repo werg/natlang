@@ -15,7 +15,7 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
   writeFileSync(join(folder, 'input.txt'), 'hello');
   setup(folder);
   const build = await new BuildWorkspace(folder).open();
-  const model = scriptedModel(() => `result = ${JSON.stringify(choose())}`);
+  const model = scriptedModel(() => `return ${JSON.stringify(choose())}`);
   const value = await createNatlangRuntime({ model: model.driver }).run(() => buildGoal(build, goal, tasks, openFolder(folder).root()));
   return { result: { value }, folder, events: build.drainEvents(), model };
 }

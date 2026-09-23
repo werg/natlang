@@ -1,4 +1,4 @@
-import { loadBrowserModelCatalog } from '../dist/browser/natlang.js';
+import { loadBrowserModelCatalog, modelTurnsSoFar } from '../dist/browser/natlang.js';
 import { StudioModel, natlangApplication } from './shared/natlang-app.mjs';
 import { apps, appById } from './apps/index.mjs';
 import { loadProgram, fixtureTurn } from './shared/program.mjs';
@@ -109,7 +109,7 @@ async function mount(record) {
     }
     paint(state,{heading:spec.title,summary:spec.subtitle,focus:spec.panelIds,suggestions:[]});
     app = natlangApplication({ source, services: host, seedRoot: Number($('seed').value), initialState: state, initialRevision: record?.revision ?? 0,
-        model: mode === 'fixture' ? fixtureTurn(spec, () => app?.state ?? state, () => currentEvent) : studioModel.turn,
+        model: mode === 'fixture' ? fixtureTurn(spec, () => app?.state ?? state, () => currentEvent, modelTurnsSoFar) : studioModel.turn,
         onCommit: async (commit) => { if (!sameValue(commit.state, operationState))
             throw new Error('Final state must match acknowledged operations'); await store.commit(spec.id, snapshot(commit.state, commit.revision, { event: commit.event, trace: commit.trace, run: commit.invocations.find(call => call.parentCallId === null)?.callId })); },
         onTransition: transition => { paint(transition.state, transition.view); status(transition.state.notice); }, onFailure: failure => { lastFailure = failure; const detail = failure.error instanceof Error ? failure.error.message : String(failure.error); if(failure.stage==='view')paint(app.state,{heading:spec.title,summary:app.state.notice,focus:spec.panelIds,suggestions:[]}); fail(`${failure.stage}: ${detail}${failure.stage==='view'?' · State is available; refresh the view.':''}`); },

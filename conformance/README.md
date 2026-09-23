@@ -19,7 +19,7 @@ output.
 Reference entries use `eval` with ordinary TypeScript statements; the final expression is the
 function's result. Called functions take positional arguments. A function may instead use
 `answer`, `answer_by`, or `blocker`, supplied through the same eval or blocker tool the model has.
-The driver closes the instruction lines with `mark_lines` before ending the invocation.
+The driver returns the value with a top-level `return` in its eval; ending the invocation returns the staged value.
 
 Fixtures use ordinary TypeScript types and control flow. Callable-folder TypeScript follows the
 finite-iteration policy: bounded loops, `for...of`, and array methods, with no recursion.

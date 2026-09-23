@@ -17,7 +17,7 @@ const wikiRuntime = model => createNatlangRuntime({ model: model.driver, seed: {
 test('natlang reconciles two page edits and a JavaScript cell runs against the merged page', async () => {
   const model = scriptedModel(opening => {
     assert.match(opening, /Reconcile the meaning of the updates/);
-    return 'result = { blocks: [{ ...base.blocks[0], text: "A small engine, with a concise example." }, base.blocks[1]], ' +
+    return 'return { blocks: [{ ...base.blocks[0], text: "A small engine, with a concise example." }, base.blocks[1]], ' +
       'accounted: updates.map(update => update.id), unresolved: [] }';
   });
   const wiki = new WikiWorkspace(page, { profile, runtime: wikiRuntime(model) });
@@ -36,7 +36,7 @@ test('natlang reconciles two page edits and a JavaScript cell runs against the m
 test('natlang cells get the project folder, read fresh for each run', async () => {
   const folder = mkdtempSync(join(tmpdir(), 'natlang-wiki-files-'));
   writeFileSync(join(folder, 'note.txt'), 'first note');
-  const model = scriptedModel(() => 'result = (await files.file("note.txt").readText())');
+  const model = scriptedModel(() => 'return (await files.file("note.txt").readText())');
   const wiki = new WikiWorkspace({ id: 'files', blocks: [
     { id: 'quick', kind: 'cell', language: 'javascript', returns: 'string', text: 'return input;' },
     { id: 'natural', kind: 'cell', language: 'natlang', returns: 'string', text: 'Read the project note and return its text.' },
@@ -71,7 +71,7 @@ test('a natlang cell that finishes after the page changed is stale and not shown
   let release, entered;
   const started = new Promise(resolve => { entered = resolve; });
   const gate = new Promise(resolve => { release = resolve; });
-  const model = scriptedModel(async () => { entered(); await gate; return 'result = "Old answer"'; });
+  const model = scriptedModel(async () => { entered(); await gate; return 'return "Old answer"'; });
   const wiki = new WikiWorkspace({ id: 'live', blocks: [
     { id: 'note', kind: 'prose', text: 'Old page' },
     { id: 'answer', kind: 'cell', language: 'natlang', returns: 'string', text: 'Return a short answer to input.' },

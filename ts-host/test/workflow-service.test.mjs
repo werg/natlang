@@ -13,7 +13,7 @@ test('natlang recovers a lost payment acknowledgement without a second charge', 
   await service.open('order1', 1200);
   const model = scriptedModel(() => 'const next = current.pending ? (event.kind === "reconcile" ? "reconcile" : "wait") : ' +
     '({ new: "reserve", reserved: "charge", charged: "ship" })[current.phase] ?? "wait";\n' +
-    'result = { action: next, reason: "Follow durable workflow state" }');
+    'return { action: next, reason: "Follow durable workflow state" }');
   const runtime = createNatlangRuntime({ model: model.driver });
   try {
     let state;

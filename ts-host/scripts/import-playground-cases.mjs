@@ -37,8 +37,8 @@ export async function convertCase(caseRecord) {
     source_revisions: [String(caseRecord.revision)], license: 'user-authored', gold_sources: ['reviewed-browser-case'],
     semantics: { root: source.root, files: structuredClone(files), inputs: structuredClone(caseRecord.inputs ?? {}),
       expected: expected.kind === 'done' ? expected.value : null, operation: expected.kind === 'blocked' ? 'blocked' : 'exact',
-      contract: { required_actions: events.filter(event => event.kind === 'action').map(event => ({ tool: event.name, arguments: event.arguments })),
-        instruction_obligations: caseRecord.requiredActions ?? [] } } };
+      // The contract is semantic; recorded tool calls belong to one runtime version, not to the program.
+      contract: { instruction_obligations: caseRecord.requiredActions ?? [] } } };
   // The project must load: its root, callable folder, and declared inputs.
   const definition = programDefinition(record);
   for (const name of Object.keys(record.semantics.inputs))

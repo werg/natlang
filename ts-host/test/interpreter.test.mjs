@@ -9,19 +9,23 @@ import { interpreter, lambda, nl, session as open, ts } from './support/natlang.
 
 const run = (body, options) => interpreter(options).run(lambda(body));
 
-test('eval displays an incompatible expression without setting the typed result', async () => {
+test('a final expression is only shown; a top-level return stages a value of the declared type', async () => {
   const { lam, session } = open({ type: '() => number', instructions: 'Return nine.' });
-  const wrong = await session.applyAsync('eval', { code: '"oops"' });
-  assert.equal(wrong.kind, 'ok'); assert.equal(wrong.value, 'oops');
+  const shown = await session.applyAsync('eval', { code: '9' });
+  assert.equal(shown.kind, 'ok'); assert.equal(shown.value, 9); assert.equal(lam.return, MISSING);
+  const wrong = await session.applyAsync('eval', { code: 'return "oops"' });
+  assert.equal(wrong.kind, 'ok'); assert.match(wrong.text, /This is not a valid number, so it is not the result/);
   assert.equal(lam.return, MISSING);
-  const right = await session.applyAsync('eval', { code: '9' });
-  assert.equal(right.kind, 'ok'); assert.equal(right.value, 9); assert.equal(lam.return, 9);
+  const right = await session.applyAsync('eval', { code: 'return 9' });
+  assert.equal(right.kind, 'ok'); assert.equal(lam.return, 9); assert.match(right.text, /Staged 9 as the result\..*reply done/);
+  const callback = await session.applyAsync('eval', { code: 'const tens = [1, 2].map(value => { return value * 10; }); tens' });
+  assert.equal(callback.kind, 'ok'); assert.equal(lam.return, 9, 'a return inside a callback is ordinary JavaScript');
 });
 
 test('an empty local assigned to the typed result keeps its list type', async () => {
   const { lam, session } = open({ type: '(items: string[]) => string[]', instructions: 'Select matching items.', args: { items: ['skip'] } });
   const outcome = await session.applyAsync('eval', { code:
-    'const ids = items.filter(item => item.startsWith("take")).map(item => item.slice(5)); result = ids;' });
+    'const ids = items.filter(item => item.startsWith("take")).map(item => item.slice(5)); return ids;' });
   assert.equal(outcome.kind, 'ok', outcome.text);
   assert.deepEqual(lam.return, []); assert.deepEqual(lam.let.ids, []);
 });
@@ -30,24 +34,23 @@ test('filter then map uses the mapped element type', async () => {
   const { lam, session } = open({ type: '(items: { id: string, status: string }[]) => string[]',
     instructions: 'Select active ids.', args: { items: [{ id: 'A1', status: 'active' }, { id: 'A2', status: 'closed' }] } });
   const outcome = await session.applyAsync('eval', { code:
-    'const ids = items.filter(item => item.status === "active").map(item => item.id); result = ids;' });
+    'const ids = items.filter(item => item.status === "active").map(item => item.id); return ids;' });
   assert.equal(outcome.kind, 'ok', outcome.text);
   assert.deepEqual(lam.return, ['A1']); assert.deepEqual(lam.let.ids, ['A1']);
 });
 
 test('a later eval may redeclare a prior local while correcting the result', async () => {
   const { lam, session } = open({ type: '() => string[]', instructions: 'Return selected ids.' });
-  assert.equal((await session.applyAsync('eval', { code: 'const ids = []; result = ids;' })).kind, 'ok');
-  assert.equal((await session.applyAsync('eval', { code: 'const ids = ["A1"]; result = ids;' })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'const ids = []; return ids;' })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'const ids = ["A1"]; return ids;' })).kind, 'ok');
   assert.deepEqual(lam.return, ['A1']); assert.deepEqual(lam.let.ids, ['A1']);
 });
 
-test('read_value can inspect the immutable debug snapshot after eval fails', async () => {
+test('a failed eval reports the error and says nothing from it was kept', async () => {
   const { session } = open({ type: '() => number', instructions: 'Return a number.' });
   const failed = await session.applyAsync('eval', { code: 'const values = []; values.noSuchMethod();' });
   assert.equal(failed.kind, 'error');
-  const inspected = session.apply('read_value', { expression: `${session.failureBinding}.message` });
-  assert.equal(inspected.kind, 'ok'); assert.match(inspected.text, /noSuchMethod/);
+  assert.match(failed.text, /noSuchMethod/); assert.match(failed.text, /Nothing else from this eval was kept/);
 });
 
 test('eval returns console.log observations without changing the function result', async () => {
@@ -57,7 +60,7 @@ test('eval returns console.log observations without changing the function result
     'const average = items.reduce((sum, item) => sum + item, 0) / items.length; console.log("average", average);' });
   assert.equal(observed.kind, 'ok'); assert.match(observed.text, /console:\naverage 4/);
   assert.equal(lam.return, MISSING);
-  const finished = await session.applyAsync('eval', { code: 'result = items.reduce((sum, item) => sum + item, 0)' });
+  const finished = await session.applyAsync('eval', { code: 'return items.reduce((sum, item) => sum + item, 0)' });
   assert.equal(finished.kind, 'ok'); assert.equal(lam.return, 12); assert.doesNotMatch(finished.text, /average 4/);
 });
 
@@ -68,26 +71,39 @@ test('eval can use local functions within one call without persisting them', asy
   assert.equal(arrow.kind, 'ok'); assert.match(arrow.text, /console:\nmean 4/);
   assert.equal(Object.hasOwn(lam.let, 'avg'), false); assert.equal(lam.let.mean, 4);
   const declared = await session.applyAsync('eval', { code:
-    'function average(xs: number[]) { return xs.reduce((sum, x) => sum + x, 0) / xs.length; } result = average(items);' });
+    'function average(xs: number[]) { return xs.reduce((sum, x) => sum + x, 0) / xs.length; } return average(items);' });
   assert.equal(declared.kind, 'ok'); assert.equal(lam.return, 4); assert.equal(Object.hasOwn(lam.let, 'average'), false);
 });
 
 test('an incompatible observation does not persist in the typed result slot', async () => {
   const { lam, session } = open({ type: '() => number', instructions: 'Return a count.' });
-  assert.equal((await session.applyAsync('eval', { code: 'result = { before: 2, after: 3 }' })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'return { before: 2, after: 3 }' })).kind, 'ok');
   assert.equal(lam.return, MISSING); assert.equal(Object.hasOwn(lam.let, 'result'), false);
-  assert.equal((await session.applyAsync('eval', { code: 'result = 3' })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'return 3' })).kind, 'ok');
   assert.equal(lam.return, 3);
 });
 
-test('compatible result assignments supply the function value', async () => {
+test('return_result finishes with a typed value; an eval return only stages one', async () => {
   const unique = open({ type: '(items: string[]) => string[]', instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } });
-  assert.equal((await unique.session.applyAsync('eval', { code: 'let result = [...new Set(items)];' })).kind, 'ok');
-  assert.deepEqual(unique.lam.return, ['a', 'b']);
+  assert.equal(unique.session.apply('return_result', { value: 'not a list' }).kind, 'rejected');
+  const finished = unique.session.apply('return_result', { value: ['a', 'b'] });
+  assert.equal(finished.kind, 'completed'); assert.deepEqual(unique.lam.return, ['a', 'b']); assert.equal(unique.session.completed, true);
   const doubled = open({ type: '(value: number) => number', instructions: 'Double the value.', args: { value: 7 } });
-  assert.equal((await doubled.session.applyAsync('eval', { code: 'result = value * 2;' })).kind, 'ok');
-  assert.equal(doubled.lam.return, 14);
-  assert.equal((await doubled.session.applyAsync('eval', { code: 'result' })).value, 14);
+  assert.equal((await doubled.session.applyAsync('eval', { code: 'return value * 2;' })).kind, 'ok');
+  assert.equal(doubled.lam.return, 14); assert.equal(doubled.session.completed, false);
+});
+
+test('a final text reply is the result of a string-typed call, but never a number, and done asks for the staged value', async () => {
+  const replies = (texts, type) => { let turn = 0;
+    return run({ type, instructions: 'Answer.' }, { agent: session => new NativeToolAgent(() => ({ text: texts[turn++] ?? 'done' }), { maxTurns: 3 }).run(session) }); };
+  const label = await replies(['positive'], '() => "positive" | "negative"');
+  assert.equal(label.outcome.kind, 'done'); assert.equal(label.value, 'positive');
+  const summary = await replies(['The rollout is on track.'], '() => string');
+  assert.equal(summary.value, 'The rollout is on track.');
+  const number = await replies(['7', '7', '7'], '() => number');
+  assert.equal(number.outcome.kind, 'quiesced');
+  const early = await replies(['done', 'done', 'done'], '() => string');
+  assert.equal(early.outcome.kind, 'quiesced', 'done is not an answer');
 });
 
 test('native collection temporaries can support a portable result within one eval', async () => {
@@ -98,18 +114,12 @@ test('native collection temporaries can support a portable result within one eva
   assert.equal(Object.prototype.toString.call(lam.let.seen), '[object Set]', 'a Set local persists by reference as a live value');
 });
 
-test('read_value inspects read-only inputs', () => {
-  const { session } = open({ type: '(state: { head: string }) => string', instructions: 'Inspect the state.', args: { state: { head: 'manifest-1' } } });
-  const result = session.apply('read_value', { expression: 'state' });
-  assert.equal(result.kind, 'ok'); assert.deepEqual(result.value, { head: 'manifest-1' });
-});
-
 const counters = () => ({
   count_true: ts('count_true', 'export default function count_true(flags: boolean[]): number { return flags.filter(Boolean).length; }'),
   as_num: ts('as_num', 'export default async function as_num(flag: boolean): Promise<number> { return flag ? 1 : 0; }'),
 });
 
-test('scope eval persists locals, calls imports positionally and uses a compatible final value as the result', async () => {
+test('scope eval persists locals, calls imports positionally, and treats result as an ordinary name', async () => {
   const { lam, session } = open({ type: '(flags: boolean[]) => number',
     instructions: 'function total(flags) -> number\n  Count the true flags.\n', args: { flags: [true, false, true] }, codebase: counters() });
   const pure = await session.applyAsync('eval', { code: 'const first = flags[0];\nfirst' });
@@ -118,9 +128,7 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
   assert.equal(call.kind, 'ok', call.text); assert.equal(call.value, 2); assert.equal(lam.let.count, 2);
   assert.match(call.text, /Stored local count = 2\./);
   const resultLocal = await session.applyAsync('eval', { code: 'const result = count_true(flags);\nresult' });
-  assert.equal(resultLocal.kind, 'ok'); assert.equal(lam.let.result, 2); assert.equal(lam.return, 2);
-  assert.equal(session.apply('read_value', { expression: 'flags[1]' }).value, false);
-  assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
+  assert.equal(resultLocal.kind, 'ok'); assert.equal(lam.let.result, 2); assert.equal(lam.return, MISSING);
   const mapped = await session.applyAsync('eval', { code: 'const counts = await Promise.all(flags.map(flag => as_num(flag)));\ncounts' });
   assert.equal(mapped.kind, 'ok'); assert.deepEqual(mapped.value, [1, 0, 1]);
   const loopMapped = await session.applyAsync('eval', { code:
@@ -129,13 +137,11 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
   const repairedMap = await session.applyAsync('eval', { code: 'const repaired = flags.map(flag => await as_num(flag)); repaired' });
   assert.notEqual(repairedMap.kind, 'ok');
   const names = new NativeToolAgent(() => ({ calls: [] })).tools(session).map(entry => entry.function.name);
-  assert.deepEqual(names, ['eval', 'read_value', 'read_function', 'edit_function', 'diff_functions', 'mark_lines',
-    'report_blocker', 'report_error']);
+  assert.deepEqual(names, ['eval', 'read_page', 'read_function', 'edit_function', 'diff_functions',
+    'return_result', 'blocked', 'failed']);
   const nullCase = open({ type: '() => null', instructions: 'Return null.' });
-  assert.equal((await nullCase.session.applyAsync('eval', { code: 'const result: null = null; result' })).kind, 'ok');
+  assert.equal((await nullCase.session.applyAsync('eval', { code: 'return null' })).kind, 'ok');
   assert.equal(nullCase.lam.return, null);
-  nullCase.session.apply('mark_lines', { start: 1 });
-  assert.deepEqual(new NativeToolAgent(() => ({ calls: [] })).tools(nullCase.session), []);
 });
 
 test('synchronous TypeScript imports return values directly, including nested callable-folder imports', async () => {
@@ -143,7 +149,7 @@ test('synchronous TypeScript imports return values directly, including nested ca
     codebase: { adjusted: ts('adjusted', 'import double from "./adjusted/double.ts";\n' +
       'export default function adjusted(value: number): number { return double(value) + 1; }',
       { double: ts('double', 'export default function double(value: number): number { return value * 2; }') }) } });
-  const result = await session.applyAsync('eval', { code: 'const answer = adjusted(value); answer' });
+  const result = await session.applyAsync('eval', { code: 'const answer = adjusted(value); return answer' });
   assert.equal(result.kind, 'ok', result.text); assert.equal(result.value, 9); assert.equal(lam.return, 9);
   const child = await session.applyAsync('eval', { code: 'adjusted.double(5)' });
   assert.equal(child.kind, 'ok', child.text); assert.equal(child.value, 10);
@@ -175,13 +181,13 @@ test('a failed natlang child bubbles to eval without leaving a local', async () 
   assert.deepEqual(attempts, [1, 1]);
 });
 
-test('failed eval exposes an immutable, probeable scope and trace without committing partial locals', async () => {
+test('failed eval reports its console output and commits no partial locals', async () => {
   const { lam, session } = open({ type: '(item: { deep: { count: number } }) => number',
     instructions: 'Return the count plus one.', args: { item: { deep: { count: 4 } } } });
   assert.equal((await session.applyAsync('eval', { code: 'const earlier = item.deep.count; console.log("earlier", earlier);' })).kind, 'ok');
   const failed = await session.applyAsync('eval', { code:
     'const transient = item.deep.count * 2; console.log("before failure", transient); throw new Error("broken step");' });
-  assert.equal(failed.kind, 'error'); assert.match(failed.text, /immutable debug/);
+  assert.equal(failed.kind, 'error'); assert.match(failed.text, /broken step\nconsole:\nbefore failure 8/);
   assert.equal(Object.hasOwn(lam.let, 'transient'), false); assert.equal(lam.return, MISSING);
   assert.equal(session.failureDebug.kind, 'runtime');
   assert.equal(session.failureDebug.scope.inputs.item.deep.count, 4);
@@ -189,91 +195,95 @@ test('failed eval exposes an immutable, probeable scope and trace without commit
   assert.deepEqual(session.failureDebug.logs, ['before failure 8']);
   assert.ok(session.failureDebug.trace.some(event => event.kind === 'action'));
   assert.match(session.failureDebug.stack, /broken step/);
-  const probe = await session.applyAsync('eval', { code: 'console.log("count", debug.scope.inputs.item.deep.count); debug.kind' });
-  assert.equal(probe.kind, 'ok'); assert.match(probe.text, /count 4/);
+  assert.equal((await session.applyAsync('eval', { code: 'String(earlier)' })).value, '4');
   assert.ok(session.failureDebug);
-  assert.equal((await session.applyAsync('eval', { code: 'result = item.deep.count + 1' })).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'return item.deep.count + 1' })).kind, 'ok');
   assert.equal(lam.return, 5); assert.equal(session.failureDebug, undefined);
 });
 
-test('compile failure retains source diagnostics for a subsequent eval', async () => {
-  const { session } = open({ type: '() => number', instructions: 'Return two.' });
+test('compile failure reports source diagnostics and redeclaring a parameter says to use it', async () => {
+  const { session } = open({ type: '(ticket: string) => number', instructions: 'Return two.', args: { ticket: 'x' } });
   const failed = await session.applyAsync('eval', { code: 'const answer = ;' });
   assert.equal(failed.kind, 'rejected'); assert.equal(session.failureDebug.kind, 'compile');
-  const probe = await session.applyAsync('eval', { code: 'debug.diagnostics[0].code' });
-  assert.equal(probe.kind, 'ok'); assert.equal(probe.value, 'typescript-syntax');
-  const immutable = await session.applyAsync('eval', { code: 'debug.message = "forged";' });
-  assert.equal(immutable.kind, 'rejected'); assert.match(immutable.text, /immutable in eval/);
+  assert.match(failed.text, /typescript-syntax/);
+  const redeclared = await session.applyAsync('eval', { code: 'const ticket = "x"; return 2;' });
+  assert.equal(redeclared.kind, 'rejected');
+  assert.match(redeclared.text, /ticket is already defined in this scope; use it directly/);
 });
 
-test('failure debug uses a distinct binding when an input is named debug', async () => {
-  const { session } = open({ type: '(debug: number) => number', instructions: 'Return debug plus one.', args: { debug: 5 } });
-  assert.equal((await session.applyAsync('eval', { code: 'throw new Error("failed")' })).kind, 'error');
-  assert.equal(session.failureBinding, '__natlangDebug');
-  const probe = await session.applyAsync('eval', { code: '__natlangDebug.scope.inputs.debug' });
-  assert.equal(probe.kind, 'ok', probe.text); assert.equal(probe.value, 5);
-});
-
-test('model repairs an eval failure in caller-feedback mode using the debug snapshot', async () => {
+test('model repairs an eval failure under an unchanged system prompt', async () => {
   const requests = [];
-  const script = [['eval', { code: 'result = String(items[9].value)' }], ['eval', { code: 'debug.scope.inputs.items.length' }],
-    ['eval', { code: 'result = String(items[0].value)' }], ['mark_lines', { start: 1 }]];
+  const script = [['eval', { code: 'return String(items[9].value)' }], ['eval', { code: 'items.length' }],
+    ['eval', { code: 'return String(items[0].value)' }]];
   const agent = new NativeToolAgent(request => {
     requests.push(structuredClone(request));
-    return { calls: [script[requests.length - 1]], completion_tokens: 1 };
-  }, { validationFeedback: 'caller', maxTurns: 5 });
+    return requests.length > script.length ? { text: 'done' } : { calls: [script[requests.length - 1]], completion_tokens: 1 };
+  }, { maxTurns: 5 });
   const result = await run({ type: '(items: { value: number }[]) => string', instructions: 'Return the first value as text.',
     args: { items: [{ value: 7 }] } }, { agent: session => agent.run(session) });
   assert.equal(result.outcome.kind, 'done', result.outcome.detail); assert.equal(result.value, '7');
   assert.equal(requests.length, 4);
-  assert.match(requests[1].messages[0].content, /immutable debug/);
-  assert.match(requests[1].messages.at(-1).content, /Debug snapshot available/);
+  assert.equal(requests[1].messages[0].content, requests[0].messages[0].content);
+  assert.match(requests[1].messages.at(-1).content, /Nothing else from this eval was kept/);
 });
 
 test('repeated failed repairs stop at the configured limit, and probes do not reset it', async () => {
   let turns = 0;
   const failing = new NativeToolAgent(() => { turns++; return { calls: [['eval', { code: 'throw new Error("still broken")' }]], completion_tokens: 1 }; },
-    { validationFeedback: 'caller', maxFailureRepairs: 1 });
+    { maxFailureRepairs: 1 });
   const first = await run({ type: '() => number', instructions: 'Return one.' }, { agent: session => failing.run(session) });
   assert.equal(first.outcome.kind, 'quiesced'); assert.match(first.outcome.detail, /eval repair limit reached/); assert.equal(turns, 2);
   let probeTurns = 0;
-  const script = ['throw new Error("first failure")', 'debug.kind', 'throw new Error("second failure")'];
+  const script = ['throw new Error("first failure")', '"probe"', 'throw new Error("second failure")'];
   const probing = new NativeToolAgent(() => ({ calls: [['eval', { code: script[probeTurns++] }]], completion_tokens: 1 }),
-    { validationFeedback: 'caller', maxFailureRepairs: 1 });
+    { maxFailureRepairs: 1 });
   const second = await run({ type: '() => number', instructions: 'Return one.' }, { agent: session => probing.run(session) });
   assert.match(second.outcome.detail, /eval repair limit reached/); assert.equal(probeTurns, 3);
 });
 
-test('read_value slices text by characters and lists by items, and pages large values', () => {
-  const { session } = open({ type: '(text: string, flags: boolean[]) => string', instructions: 'Return part of the text.',
-    args: { text: 'alpha\nbeta', flags: [true, false, true] } });
-  const text = session.apply('read_value', { expression: 'text', start: 4, end: 8 });
-  assert.equal(text.value, 'a\nbe'); assert.equal(text.text, 'a\nbe');
-  assert.deepEqual(session.apply('read_value', { expression: 'flags', start: 1, end: 3 }).value, [false, true]);
-  assert.equal(session.apply('read_value', { expression: 'text', start: 2000, end: 3000 }).value, '');
-  const large = open({ type: '(text: string, items: number[], fields: Record<string, number>) => number', instructions: 'Inspect.',
-    args: { text: 'x'.repeat(5000), items: Array.from({ length: 30 }, (_, i) => i),
-      fields: Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`field${i}`, i])) } }).session;
-  const textPage = large.apply('read_value', { expression: 'text' });
-  assert.equal(textPage.value.length, 2000); assert.match(textPage.text, /characters \[0, 2000\) of 5000; next start=2000/);
-  const listPage = large.apply('read_value', { expression: 'items' });
-  assert.deepEqual(listPage.value, Array.from({ length: 12 }, (_, i) => i)); assert.match(listPage.text, /items \[0, 12\) of 30; next start=12/);
-  const recordPage = large.apply('read_value', { expression: 'fields' });
-  assert.equal(Object.keys(recordPage.value).length, 12); assert.match(recordPage.text, /fields \[0, 12\) of 25; next start=12/);
+test('empty and mixed containers persist with loose types and can be filled later', async () => {
+  const { lam, session } = open({ type: '() => number', instructions: 'Collect.' });
+  const declared = await session.applyAsync('eval', { code: 'const found = {}; const names = []; const mixed = [1, "a"];' });
+  assert.equal(declared.kind, 'ok', declared.text);
+  assert.deepEqual(Object.keys(lam.let).sort(), ['found', 'mixed', 'names']);
+  const filled = await session.applyAsync('eval', { code: 'found.port = 8080; names.push("x", 2); return names.length + mixed.length' });
+  assert.equal(filled.kind, 'ok', filled.text); assert.equal(lam.return, 4); assert.deepEqual(lam.let.found, { port: 8080 });
 });
 
-test('scope eval reports every still-open instruction line after setting the result', async () => {
-  const { lam, session } = open({ type: '() => number', instructions: 'First step.\n# explanation\nSecond step.' });
-  const result = await session.applyAsync('eval', { code: '2' });
-  assert.match(result.text, /Function result set; lines still open: 1, 3\./); assert.equal(lam.return, 2);
+test('in eval, return_result stages its value and blocked ends the call, after the eval succeeds', async () => {
+  const typed = open({ type: '() => number', instructions: 'Return seven.' });
+  const wrong = await typed.session.applyAsync('eval', { code: 'return_result("seven")' });
+  assert.equal(wrong.kind, 'rejected'); assert.match(wrong.text, /return_result: /); assert.equal(typed.session.completed, false);
+  const failed = await typed.session.applyAsync('eval', { code: 'return_result(7); throw new Error("after")' });
+  assert.equal(failed.kind, 'error'); assert.equal(typed.session.completed, false, 'a failed eval finishes nothing');
+  const staged = await typed.session.applyAsync('eval', { code: 'const n = 3 + 4; return_result(n)' });
+  assert.equal(staged.kind, 'ok'); assert.match(staged.text, /Staged 7 as the result/);
+  assert.equal(typed.lam.return, 7); assert.equal(typed.session.completed, false, 'a computed value is staged, not finished');
+  const blocked = open({ type: '() => number', instructions: 'Convert with the rate in the notes.' });
+  const reported = await blocked.session.applyAsync('eval', { code: 'blocked("No notes with an exchange rate were given.")' });
+  assert.equal(reported.kind, 'blocked'); assert.match(reported.text, /blocked: No notes/);
 });
 
-test('scope parameters are mutable function-local bindings', async () => {
-  const { lam, session } = open({ type: '(count: number, items: number[]) => number', instructions: 'Update the working inputs.',
+test('cut-off output names a word ID, and read_page shows each page of it', async () => {
+  const { session } = open({ type: '(text: string) => number', instructions: 'Inspect.', args: { text: 'x'.repeat(4500) } });
+  const shown = await session.applyAsync('eval', { code: 'text' });
+  assert.match(shown.text, /page 1 of 3 shown; read_page\("amber", 2\) for more/);
+  const second = session.apply('read_page', { id: 'amber', page: 2 });
+  assert.equal(second.kind, 'ok'); assert.match(second.text, /^x{2000}\n… \(page 2 of 3; read_page\("amber", 3\) for more\)$/);
+  assert.match(session.apply('read_page', { id: 'amber', page: 3 }).text, /\(page 3 of 3, the last\)$/);
+  assert.equal(session.apply('read_page', { id: 'amber', page: 4 }).kind, 'error');
+  const logged = await session.applyAsync('eval', { code: 'console.log("y".repeat(3000))' });
+  assert.match(logged.text, /read_page\("birch", 2\)/, 'each cut-off gets the next word');
+});
+
+test('scope parameters are const: changing one is rejected and a copy is a new variable', async () => {
+  const { lam, session } = open({ type: '(count: number, items: number[]) => number', instructions: 'Count the items.',
     args: { count: 2, items: [1] } });
-  const result = await session.applyAsync('eval', { code: 'count += 3; items.push(4); count' });
-  assert.equal(result.kind, 'ok'); assert.equal(lam.return, 5);
-  assert.equal(lam.args.count, 5); assert.deepEqual(lam.args.items, [1, 4]);
+  const rejected = await session.applyAsync('eval', { code: 'count += 3; count' });
+  assert.equal(rejected.kind, 'rejected'); assert.match(rejected.text, /count is a parameter and cannot be changed/);
+  const copied = await session.applyAsync('eval', { code: 'const more = [...items, 4]; return more.length + count' });
+  assert.equal(copied.kind, 'ok'); assert.equal(lam.return, 4);
+  assert.equal(lam.args.count, 2); assert.deepEqual(lam.args.items, [1]);
 });
 
 test('eval keeps static types for copies, reductions, helper returns and collection methods', async () => {
@@ -351,8 +361,7 @@ const directoryAgent = async session => {
   assert.equal(session.lam.subtype, 'directory-reducer');
   assert.equal((await session.applyAsync('read_file', { path: 'message.txt' })).value, 'hello\n');
   assert.equal((await session.applyAsync('edit_file', { path: 'message.txt', find: 'hello', replace_with: session.lam.args.replacement })).kind, 'ok');
-  assert.equal(session.apply('commit', { value: 'changed' }).kind, 'ok');
-  assert.equal(session.apply('mark_lines', { start: 1 }).kind, 'ok');
+  assert.equal((await session.applyAsync('eval', { code: 'return "changed"' })).kind, 'ok');
 };
 async function reducerSession(files) {
   const folder = Folder.fromFiles(files);
@@ -408,25 +417,32 @@ test('folder and file handles persist as live scope values', async () => {
   lam.projectTransaction.abort();
 });
 
-test('the model-turn loop drives tool actions and nudges locally when configured', async () => {
+test('a returned value is staged and a reply without a tool call returns it', async () => {
   let turn = 0;
-  const agent = new NativeToolAgent(() => ++turn === 1 ? { calls: [['eval', { code: '11' }]], completion_tokens: 3 } :
-    { calls: [['mark_lines', { start: 1 }]], completion_tokens: 2 });
+  const requests = [];
+  const agent = new NativeToolAgent(request => { requests.push(structuredClone(request));
+    return ++turn === 1 ? { calls: [['eval', { code: 'return 11' }]], completion_tokens: 3 } : { text: 'done', completion_tokens: 1 }; });
   const result = await run({ type: '() => number', instructions: 'Return eleven.' }, { agent: session => agent.run(session) });
   assert.equal(result.outcome.kind, 'done'); assert.equal(result.value, 11); assert.equal(turn, 2);
-  const caller = new NativeToolAgent(() => ({ calls: [], text: '7', completion_tokens: 1 }));
-  const first = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => caller.run(session) });
-  assert.match(first.outcome.detail, /validation failed: `return` has not been written yet/);
-  let localTurns = 0;
-  const local = new NativeToolAgent(() => ++localTurns === 1 ? { calls: [], text: '7', completion_tokens: 1 } :
-    localTurns === 2 ? { calls: [['eval', { code: '7' }]], completion_tokens: 1 } : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 },
-  { validationFeedback: 'local' });
-  const second = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => local.run(session) });
-  assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 7); assert.equal(localTurns, 3);
+  assert.match(requests[1].messages.at(-1).content, /Staged 11 as the result\..*reply done/);
+});
+
+test('saying done before returning a value is answered, and only budgets the caller sets end a stuck call', async () => {
+  const requests = [];
+  const chatty = new NativeToolAgent(request => { requests.push(structuredClone(request)); return { calls: [], text: '7', completion_tokens: 1 }; },
+    { maxTurns: 3 });
+  const stuck = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => chatty.run(session) });
+  assert.equal(stuck.outcome.kind, 'quiesced'); assert.match(stuck.outcome.detail, /budget exhausted/);
+  assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Call return_result with a number/);
+  let turns = 0;
+  const recovering = new NativeToolAgent(() => ++turns === 1 ? { calls: [], text: '7', completion_tokens: 1 } :
+    turns === 2 ? { calls: [['eval', { code: 'return 7' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 });
+  const second = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => recovering.run(session) });
+  assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 7); assert.equal(turns, 3);
 });
 
 test('traces reconstruct offline from their recorded events', async () => {
-  const runtime = interpreter({ agent: async session => { await session.applyAsync('eval', { code: '14' }); session.apply('mark_lines', { start: 1 }); } });
+  const runtime = interpreter({ agent: async session => { await session.applyAsync('eval', { code: 'return 14' }); } });
   const result = await runtime.run(lambda({ type: '() => number', instructions: 'Return fourteen.' }));
   assert.equal(result.outcome.kind, 'done');
   const reconstructed = runtime.trace.reconstruct();
@@ -439,7 +455,7 @@ test('model seeds follow the derivation vectors', async () => {
   const seen = [];
   const agent = new NativeToolAgent(request => {
     seen.push(request.seed);
-    return seen.length === 1 ? { calls: [['eval', { code: 'true' }]], completion_tokens: 1 } : { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
+    return seen.length === 1 ? { calls: [['eval', { code: 'return true' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 };
   });
   const runtime = interpreter({ agent: session => agent.run(session), seedPolicy: { mode: 'derived', root: 43 }, runId: 'seed-run' });
   await runtime.run(lambda({ type: '() => boolean', instructions: 'Return true.' }));

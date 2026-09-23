@@ -6,7 +6,7 @@ import { scriptedModel } from './support/natlang.mjs';
 
 /** Run one policy call with a model that answers with `choice`. */
 function policy(choice) {
-  const model = scriptedModel(() => `result = ${JSON.stringify(choice)}`);
+  const model = scriptedModel(() => `return ${JSON.stringify(choice)}`);
   return { runtime: createNatlangRuntime({ model: model.driver }), model };
 }
 

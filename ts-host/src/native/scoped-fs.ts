@@ -44,6 +44,10 @@ function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()
 
 export type EntryKind = 'file' | 'folder';
 export type EntryStat = { path: string; kind: EntryKind; bytes: number; digest: string | null };
+/** What list_files shows the model: one `path  N bytes` line per file. */
+export function fileListingText(entries: EntryStat[]): string {
+  return entries.length ? entries.map(entry => `${entry.path}  ${entry.bytes} bytes`).join('\n') : '(no files)';
+}
 export type SearchMatch = { path: string; line: number; text: string };
 export type ChangeKind = 'added' | 'modified' | 'deleted';
 export type Change = { path: string; kind: ChangeKind; before?: Uint8Array; after?: Uint8Array };
@@ -113,8 +117,17 @@ export function editTextContent(text: string, find: string, replaceWith: string,
   return text.replace(find, () => replaceWith);
 }
 
+/** The handle kind a path needs: asking for a file handle on a folder (or the reverse) is a mistake worth naming. */
+function checkedKind(folder: Folder, path: string, requested: string, want: 'file' | 'folder'): void {
+  if (want === 'file' && (requested.endsWith('/') || (path && folder.isFolder(path) && !folder.isFile(path))))
+    throw new Error(`${requested} is a folder; use dir(${JSON.stringify(requested.replace(/\/+$/, ''))})`);
+  if (want === 'folder' && folder.isFile(path)) throw new Error(`${requested} is a file; use file(${JSON.stringify(requested)})`);
+}
+
 export class EntryHandle {
-  constructor(readonly folder: Folder, readonly path: string) {}
+  // The backing folder is not enumerable, so inspecting a handle shows its path, not the store behind it.
+  declare readonly folder: Folder;
+  constructor(folder: Folder, readonly path: string) { Object.defineProperty(this, 'folder', { value: folder, enumerable: false }); }
   get name(): string { return this.path.split('/').at(-1) ?? ''; }
   get relativePath(): string { return this.path; }
   get parent(): FolderHandle | null {
@@ -124,9 +137,13 @@ export class EntryHandle {
   async exists(): Promise<boolean> { return this.folder.exists(this.path); }
   async stat(): Promise<EntryStat> { return this.folder.stat(this.path); }
   async remove(): Promise<void> { this.folder.remove(this.path); }
+  /** Move like `mv`: into a folder handle, into a path ending in "/" or naming an existing folder, else to that path. */
   async moveTo(destination: FolderHandle | FileHandle | string): Promise<void> {
-    const target = typeof destination === 'string' ? destination :
-      destination instanceof FolderHandle ? this.folder.join(destination.path, this.name) : destination.path;
+    const into = (folderPath: string) => this.folder.join(folderPath, this.name);
+    const target = typeof destination !== 'string' ?
+      (destination instanceof FolderHandle ? into(destination.path) : destination.path) :
+      destination.endsWith('/') || (this.folder.isFolder(destination) && !this.folder.isFile(destination)) ?
+        into(destination.replace(/\/+$/, '')) : destination;
     this.folder.move(this.path, target);
   }
 }
@@ -146,8 +163,16 @@ export class FileHandle extends EntryHandle {
 }
 
 export class FolderHandle extends EntryHandle {
-  dir(path: string): FolderHandle { return new FolderHandle(this.folder, this.folder.join(this.path, path)); }
-  file(path: string): FileHandle { return new FileHandle(this.folder, this.folder.join(this.path, path)); }
+  dir(path: string): FolderHandle {
+    const joined = this.folder.join(this.path, path.replace(/\/+$/, ''));
+    checkedKind(this.folder, joined, path, 'folder');
+    return new FolderHandle(this.folder, joined);
+  }
+  file(path: string): FileHandle {
+    const joined = this.folder.join(this.path, path.replace(/\/+$/, ''));
+    checkedKind(this.folder, joined, path, 'file');
+    return new FileHandle(this.folder, joined);
+  }
   entry(path: string): EntryHandle { const joined = this.folder.join(this.path, path); return this.folder.isFile(joined) ? new FileHandle(this.folder, joined) : new FolderHandle(this.folder, joined); }
   async entries(patternText?: string): Promise<EntryHandle[]> { return this.folder.list(this.path, patternText).map(item => this.folder.entry(item.path)); }
   async files(patternText?: string): Promise<FileHandle[]> { return this.folder.listFiles(this.path, patternText).map(item => new FileHandle(this.folder, item.path)); }
@@ -237,8 +262,16 @@ export class Folder {
     return new Folder(files, access);
   }
   root(): FolderHandle { return new FolderHandle(this, ''); }
-  dir(path = ''): FolderHandle { return new FolderHandle(this, cleanPath(path)); }
-  file(path: string): FileHandle { return new FileHandle(this, cleanPath(path, false)); }
+  dir(path = ''): FolderHandle {
+    const clean = cleanPath(path.replace(/\/+$/, ''));
+    checkedKind(this, clean, path, 'folder');
+    return new FolderHandle(this, clean);
+  }
+  file(path: string): FileHandle {
+    const clean = cleanPath(path.replace(/\/+$/, ''), false);
+    checkedKind(this, clean, path, 'file');
+    return new FileHandle(this, clean);
+  }
   /** Run a directory reducer on the whole folder and install its committed changes. */
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown> { return applyReducer(this.root(), reducer, args); }
   entry(path: string): EntryHandle { const clean = cleanPath(path); return this.isFile(clean) ? new FileHandle(this, clean) : new FolderHandle(this, clean); }

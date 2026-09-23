@@ -73,8 +73,7 @@ test('native collector journals model replies and replays them after an interrup
   const dir = await mkdtemp(join(tmpdir(), 'teacher-turn-resume-'));
   let requests = 0, interrupted = false;
   const replies = [
-    ['eval', { code: 'const answer: number = 1; answer' }],
-    ['mark_lines', { start: 1 }],
+    ['eval', { code: 'const answer: number = 1; return answer' }],
     null,
   ];
   const server = createServer((request, response) => {

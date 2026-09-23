@@ -18,9 +18,9 @@ test('natlang orders SQL and JavaScript cells, then explains the checked samples
     { id: 'unrelated', engine: 'javascript', needs: [], description: 'unrelated work', source: 'return 999;' },
   ], { facts: [{ category: 'alpha', amount: 2 }, { category: 'alpha', amount: 3 }, { category: 'beta', amount: 4 }] });
   const model = scriptedModel(opening => {
-    if (opening.includes('Choose one offered ready cell')) return 'result = ready[0].id';
+    if (opening.includes('Choose one offered ready cell')) return 'return ready[0].id';
     return 'const note = await files.file("schema.md").readText();\n' +
-      'result = `${run.results.map(r => r.id + "@" + r.revision + " " + r.sample).join("; ")} (${note.length} note chars)`';
+      'return `${run.results.map(r => r.id + "@" + r.revision + " " + r.sample).join("; ")} (${note.length} note chars)`';
   });
   try {
     const run = await createNatlangRuntime({ model: model.driver }).run(() =>
@@ -46,9 +46,9 @@ test('a request chooses its goal cell; a cell with no ready path is reported blo
     { id: 'orphan', engine: 'javascript', needs: ['missing'], description: 'needs a missing cell', source: 'return 0;' },
   ]);
   const model = scriptedModel(opening => {
-    if (opening.includes('Choose exactly one offered cell ID')) return 'result = request.includes("orphan") ? "orphan" : "double"';
-    if (opening.includes('Choose one offered ready cell')) return 'result = ready[0].id';
-    return 'result = run.status';
+    if (opening.includes('Choose exactly one offered cell ID')) return 'return request.includes("orphan") ? "orphan" : "double"';
+    if (opening.includes('Choose one offered ready cell')) return 'return ready[0].id';
+    return 'return run.status';
   });
   const runtime = createNatlangRuntime({ model: model.driver });
   try {

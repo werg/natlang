@@ -10,11 +10,11 @@ test('natlang edits, runs, inspects and renders a source-pinned project', async 
   const model = scriptedModel(opening => {
     if (opening.includes('Translate the request into one exact text edit')) return 'const file = snapshot.files[0];\n' +
       'const start = file.source.indexOf("toUpperCase");\n' +
-      'result = { name: file.name, start, end: start + "toUpperCase".length, text: "toLowerCase", expected_revision: snapshot.revision }';
-    if (opening.includes('Describe a useful editor view')) return 'result = { title: "IDE <view>", panels: [' +
+      'return { name: file.name, start, end: start + "toUpperCase".length, text: "toLowerCase", expected_revision: snapshot.revision }';
+    if (opening.includes('Describe a useful editor view')) return 'return { title: "IDE <view>", panels: [' +
       '{ heading: "Source", body: snapshot.files[0].source }, { heading: "Diagnostics", body: checked.status }, ' +
       '{ heading: "Trace", body: "<recorded event>" }] }';
-    if (opening.includes('Lower-case')) return 'result = text.toLowerCase()';
+    if (opening.includes('Lower-case')) return 'return text.toLowerCase()';
     return null;
   });
   const runtime = createNatlangRuntime({ model: model.driver });

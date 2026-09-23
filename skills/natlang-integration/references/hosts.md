@@ -19,7 +19,7 @@ const runtime = createNatlangRuntime({
 const report = await runtime.run(() => handle(ticket));
 ```
 
-`runtime.run(fn, { services, signal, trace, name })` creates a task: the natlang calls made anywhere inside `fn` (including in libraries and callbacks) find it. Tasks run concurrently. A natlang call with no task fails with an error naming `runtime.run` and `runtime.bind`. Model options: `model` may be a driver function or `{ driver, maxTurns, maxTokens, turnTokens, temperature, validationFeedback, … }`; `limits`, `seed`, `workspace`, `network`, `statistics`, and `progressJudge` are runtime options.
+`runtime.run(fn, { services, signal, trace, name })` creates a task: the natlang calls made anywhere inside `fn` (including in libraries and callbacks) find it. Tasks run concurrently. A natlang call with no task fails with an error naming `runtime.run` and `runtime.bind`. Model options: `model` may be a driver function or `{ driver, maxTurns, maxTokens, turnTokens, temperature, maxFailureRepairs, … }` (all optional; none is set by default); `limits`, `seed`, `workspace`, `network`, `statistics`, and `progressJudge` are runtime options.
 
 ## Compile the application
 
@@ -43,8 +43,8 @@ Services are ordinary objects with methods, supplied per runtime or per task. Ca
 A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns ordered tool calls plus optional text and usage:
 
 ```ts
-{ calls: [['eval', { code: 'result = await helper(sample)' }], ['mark_lines', { start: 1, end: 2 }]],
-  text: '', completion_tokens: 42, prompt_tokens: 700 }
+{ calls: [['eval', { code: 'return await helper(sample)' }]], text: '', completion_tokens: 42, prompt_tokens: 700 }
+// a later turn with no calls, e.g. { text: 'done' }, returns the staged value
 ```
 
 `openAICompatibleModelTurn` adapts an OpenAI-compatible server (aliases, retries of malformed tool calls, raw exchanges via `onExchange`). `createManagedModelSession` and `natlang setup` run the managed local llama.cpp runtime. Keep provider quirks in the driver, not in `.nl` source. If `max_tokens` is null, omit a provider field that requires an integer.

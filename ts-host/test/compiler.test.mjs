@@ -87,8 +87,8 @@ test('host objects become live targets; Folder is a portable handle type', () =>
 });
 
 test('eval snippets are analyzed against the declared scope, with snippet-relative spans', () => {
-  const { plans, diagnostics } = analyzeEvalSnippet('const threshold = 3;\nresult = await nl`Is note longer than threshold?`(note);',
-    { types: {}, inputs: [{ name: 'note', type: 'string' }], locals: [], captures: [], imports: [], result: 'boolean' });
+  const { plans, diagnostics } = analyzeEvalSnippet('const threshold = 3;\nreturn await nl`Is note longer than threshold?`(note);',
+    { types: {}, inputs: [{ name: 'note', type: 'string' }], locals: [], captures: [], imports: [], returns: 'boolean' });
   assert.deepEqual(diagnostics, []);
   assert.equal(plans[0].sourceSpan.line, 2);
   assert.deepEqual(summary(plans[0]), { params: ['note:string'], returns: 'boolean', captures: ['threshold'] });

@@ -20,17 +20,14 @@ test('browser local inference drives the native tool loop without a server', asy
       requests.push(request);
       const names = request.tools.map(tool => tool.function.name);
       assert.ok(names.includes('eval'));
-      assert.ok(names.includes('mark_lines'));
+      assert.ok(names.includes('return_result'));
       assert.equal(names.some(name => name.includes('_alt_')), false);
       return requests.length === 1 ? { choices: [{ finish_reason: 'tool_calls', message: {
         content: null, tool_calls: [{ id: 'local_1', type: 'function', function: {
-          name: 'eval', arguments: '{"code":"7"}',
+          name: 'eval', arguments: '{"code":"return 7"}',
         } }],
-      } }], usage: { completion_tokens: 9 } } : requests.length === 2 ?
-        { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ id: 'local_2',
-          type: 'function', function: { name: 'mark_lines', arguments: '{"start":1}' } }] } }],
-          usage: { completion_tokens: 4 } } :
-        { choices: [{ finish_reason: 'stop', message: { content: 'finished' } }],
+      } }], usage: { completion_tokens: 9 } } :
+        { choices: [{ finish_reason: 'stop', message: { content: 'done' } }],
           usage: { completion_tokens: 2 } };
     },
   };
@@ -47,12 +44,12 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_value', 'mark_lines',
-      'report_blocker', 'report_error']);
+    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'return_result',
+      'blocked', 'failed']);
     assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');
-    assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments, { code: '7' });
+    assert.deepEqual(requests[1].messages.at(-2).tool_calls[0].function.arguments, { code: 'return 7' });
   } finally { runtime.close(); await model.close(); }
 });
 
@@ -128,7 +125,7 @@ test('browser GPU selection checks adapter features and keeps CPU fallback', asy
 
 test('browser tools preserve scope-eval names and definitions', async () => {
   const { compileBrowserTools } = await browserApi();
-  const tools = ['eval', 'read_value', 'mark_lines', 'report_blocker', 'report_error'].map(name => ({
+  const tools = ['eval', 'read_page', 'return_result', 'blocked', 'failed'].map(name => ({
     type: 'function', function: { name, description: `${name} description`, parameters: {
       type: 'object', properties: { code: { type: 'string', 'x-natlang': 'private-hint' } },
       required: ['code'], additionalProperties: false } } }));

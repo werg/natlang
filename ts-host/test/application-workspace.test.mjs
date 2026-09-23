@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { findPackageWorkspace } from '../dist/application-packages.js';
+import { findPackageWorkspace } from '../dist/workspace-modules.js';
 
 test('the nearest owning package.json is the application workspace', async t => {
   const root = await mkdtemp(join(tmpdir(), 'natlang-cli-package-'));

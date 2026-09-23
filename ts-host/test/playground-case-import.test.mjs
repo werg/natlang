@@ -8,9 +8,8 @@ const baseCase = () => ({ schema: 'natlang.playground.case/1', id: 'accepted-1',
   expected: { kind: 'done', value: 'hello' },
   trace: [
     { seq: 0, version: 'reduction-trace/1', kind: 'manifest' },
-    { seq: 1, version: 'reduction-trace/1', kind: 'action', name: 'eval', arguments: { code: 'result = value' } },
-    { seq: 2, version: 'reduction-trace/1', kind: 'action', name: 'mark_lines', arguments: { start: 1 } },
-    { seq: 3, version: 'reduction-trace/1', kind: 'state', phase: 'final', outcome: 'done', value: 'hello' },
+    { seq: 1, version: 'reduction-trace/1', kind: 'action', name: 'return_result', arguments: { value: 'hello' } },
+    { seq: 2, version: 'reduction-trace/1', kind: 'state', phase: 'final', outcome: 'done', value: 'hello' },
   ] });
 
 test('the playground importer converts an admitted case into a program IR project', async () => {
@@ -20,7 +19,7 @@ test('the playground importer converts an admitted case into a program IR projec
   assert.equal(result.semantics.root, 'main.nl');
   assert.deepEqual(result.semantics.inputs, { value: 'hello' });
   assert.equal(result.semantics.expected, 'hello');
-  assert.deepEqual(result.semantics.contract.required_actions.map(action => action.tool), ['eval', 'mark_lines']);
+  assert.equal(Object.hasOwn(result.semantics.contract, 'required_actions'), false, 'no tool calls in program IR');
   const linked = baseCase();
   linked.source.files['main/child.nl'] = '---\nargs: {}\nreturns: string\n---\nDone.\n';
   assert.deepEqual(Object.keys((await convertCase(linked)).semantics.files).sort(), ['main.nl', 'main/child.nl']);

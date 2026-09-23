@@ -112,10 +112,10 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(task.services, event =>
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
-  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(environment),
+  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, segmentTurns: model.segmentTurns, segmentMessages: model.segmentMessages,
-    review: model.review, validationFeedback: model.validationFeedback }) : undefined;
+    maxFailureRepairs: model.maxFailureRepairs, review: model.review }) : undefined;
   runtime = new NativeRuntime({ environment, hooks: kernelHooks,
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,

@@ -16,7 +16,7 @@ import { namedCallable, callableTree } from './callable.js';
 let defaultRealm: (() => EvalEnvironment) | undefined;
 let moduleTarget: 'node' | 'browser' = 'node';
 let packageLoader: ((specifier: string) => unknown) | undefined;
-/** Installed by the platform: how callable-folder modules load declared packages. */
+/** Installed by the platform: how callable-folder modules load packages. */
 export function setPackageLoader(loader: (specifier: string) => unknown): void { packageLoader = loader; }
 /** Browsers restore the task context after each await in callable-folder code. */
 export function setModuleTarget(target: 'node' | 'browser'): void { moduleTarget = target; }
@@ -118,7 +118,7 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
       return { __esModule: true, ...callableTree(item.codebase as never) };
     }
     if (specifier.startsWith('.') || specifier.startsWith('/'))
-      throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: callable-folder code may import its sibling items and declared packages only`);
+      throw new NatlangSourceError(record.source, `cannot import ${JSON.stringify(specifier)}: callable-folder code may import its sibling items and packages only`);
     if (!packageLoader) throw new NatlangSourceError(record.source, `package imports are unavailable here: ${specifier}`);
     return packageLoader(specifier);
   };

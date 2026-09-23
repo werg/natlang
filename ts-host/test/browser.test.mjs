@@ -17,7 +17,7 @@ test('the browser bundle imports no Node built-ins', () => {
 
 test('browser tasks keep their own context across awaits in compiled code', async () => {
   const browser = await api();
-  const model = scriptedModel(opening => `result = "${/Label (\w+)/.exec(opening)?.[1] ?? '?'}".toUpperCase() + " " + label`);
+  const model = scriptedModel(opening => `return "${/Label (\w+)/.exec(opening)?.[1] ?? '?'}".toUpperCase() + " " + label`);
   const project = browser.compileVirtualProject({ files: { 'main.ts': `import { nl } from '@natlang/browser';
 export async function main(label: string, delay: number): Promise<string> {
   await new Promise(resolve => setTimeout(resolve, delay));
@@ -36,14 +36,14 @@ export async function main(label: string, delay: number): Promise<string> {
   assert.ok(tasks.beta.length === 1 && tasks.beta[0].startsWith('beta-'));
 });
 
-test('a browser model can probe a failed eval snapshot and repair the function', async () => {
+test('a browser model sees a failed eval and repairs the function', async () => {
   const browser = await api();
-  const script = [['eval', { code: 'result = value.missing.deep' }], ['eval', { code: 'debug.kind' }],
-    ['eval', { code: 'result = value + 1' }], ['mark_lines', { start: 1 }]];
+  const script = [['eval', { code: 'return value.missing.deep' }], ['eval', { code: 'value' }],
+    ['eval', { code: 'return value + 1' }]];
   let turns = 0;
-  const runtime = browser.createNatlangRuntime({ model: { validationFeedback: 'caller', driver: request => {
-    if (turns === 1) assert.match(request.messages[0].content, /immutable debug/);
-    return { calls: [script[turns++]], completion_tokens: 1 };
+  const runtime = browser.createNatlangRuntime({ model: { driver: request => {
+    if (turns === 1) assert.match(request.messages.at(-1).content, /Nothing else from this eval was kept/);
+    return turns < script.length ? { calls: [script[turns++]], completion_tokens: 1 } : (turns++, { text: 'done', completion_tokens: 1 });
   } } });
   const project = browser.newPlaygroundProject('Next', 'next.nl', { 'next.nl': '---\nargs:\n  value: number\nreturns: number\n---\nReturn the next number.\n' }, { value: 4 }, 5);
   const run = await browser.runPlaygroundProject(runtime, project);
@@ -53,9 +53,9 @@ test('a browser model can probe a failed eval snapshot and repair the function',
 test('browser named functions use callable folders from virtual files, with types and listings', async () => {
   const browser = await api();
   const model = scriptedModel(opening => {
-    assert.match(opening, /is_short\(text: string\): boolean {2}# TypeScript/);
+    assert.match(opening, /declare function is_short\(text: string\): boolean; {2}\/\/ TypeScript/);
     assert.match(opening, /type Summary = \{ text: string, short: boolean \}/);
-    return 'result = { text: text.trim(), short: is_short(text) }';
+    return 'return { text: text.trim(), short: is_short(text) }';
   });
   const project = browser.newPlaygroundProject('Summary', 'summarize.nl', {
     'types.ts': 'export type Summary = { text: string, short: boolean };\n',
@@ -74,7 +74,7 @@ test('playground validates edits, pins sources, navigates traces, and admits cap
   const invalid = browser.editPlaygroundProject(project, { files: { 'add.nl': 'no frontmatter' } });
   assert.notEqual(invalid.revision, project.revision);
   assert.match(browser.validatePlaygroundProject(invalid)[0].message, /frontmatter/);
-  const run = await browser.runPlaygroundProject(browser.createNatlangRuntime({ model: scriptedModel(() => 'result = a + 2').driver }), project);
+  const run = await browser.runPlaygroundProject(browser.createNatlangRuntime({ model: scriptedModel(() => 'return a + 2').driver }), project);
   assert.equal(run.value, 7); assert.equal(run.correct, true);
   const first = browser.traceFrame(run.trace, 0), final = browser.traceFrame(run.trace, run.trace.length - 1);
   assert.equal(first.event.kind, 'manifest'); assert.equal(final.state.phase, 'final');
@@ -82,7 +82,7 @@ test('playground validates edits, pins sources, navigates traces, and admits cap
   assert.throws(() => browser.admitPlaygroundRun(run, { outcome: 'done', value: 8 }), /does not match/);
   const tsProject = browser.newPlaygroundProject('Main', 'main.ts', { 'main.ts':
     "import { nl } from '@natlang/browser';\nexport async function main(input: { a: number }): Promise<number> { return await nl<number>`Double a.`(input.a); }\n" }, { a: 4 }, 8);
-  const tsRun = await browser.runPlaygroundProject(browser.createNatlangRuntime({ model: scriptedModel(() => 'result = input * 2').driver }), tsProject,
+  const tsRun = await browser.runPlaygroundProject(browser.createNatlangRuntime({ model: scriptedModel(() => 'return input * 2').driver }), tsProject,
     { runtimeNamespace: browser });
   assert.equal(tsRun.correct, true, tsRun.outcome.detail);
 });
@@ -126,7 +126,7 @@ export function view(state: Todo): { tag: string, text: string } { return { tag:
 ` } }, browser);
   assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
   const app = project.require('app.ts');
-  const runtime = browser.createNatlangRuntime({ model: scriptedModel(() => 'result = event.value.trim().toLowerCase()').driver });
+  const runtime = browser.createNatlangRuntime({ model: scriptedModel(() => 'return event.value.trim().toLowerCase()').driver });
   const loop = new browser.EventLoop({ initialState: { items: [] }, reduce: app.reduce, view: app.view,
     step: fn => runtime.run(fn) });
   await loop.start();

@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {compileScopeSnippet} from '../dist/scope-compiler.js';
 import {replayIsolated} from '../scripts/code-corpus/replay.mjs';
-test('library throw guards compile but catching runtime failures remains forbidden',()=>{
+test('library throw guards and try/catch compile',()=>{
  assert.equal(compileScopeSnippet('if (x < 0) throw new RangeError("negative"); return x;', {inputBindings:['x']}).ok,true);
- assert.equal(compileScopeSnippet('try { throw new Error("x"); } catch {}').ok,false);
+ assert.equal(compileScopeSnippet('try { throw new Error("x"); } catch {}').ok,true);
 });
 test('guarded library bodies replay on valid input and fail closed on invalid input',async()=>{
  const record={id:'guard',group_id:'guard',kind:'function',instruction:'Return nonnegative x.',source:{name:'fixture'},function:{parameters:[{name:'x'}],body:'{ if (x < 0) throw new RangeError("negative"); return x; }'},cases:[{args:[3],expected:3,outcome:'return'}]};

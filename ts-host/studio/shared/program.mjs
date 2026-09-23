@@ -10,23 +10,21 @@ export async function loadProgram(spec, read = path => fetch(path).then(response
     return { files, reducer: 'reduce.nl', view: 'view.nl' };
 }
 /** Explicit controls only: this exercises the interpreter, never imitates semantic inference. */
-export function fixtureTurn(spec, getState, getEvent) {
+export function fixtureTurn(spec, getState, getEvent, modelTurnsSoFar) {
     return turn => {
         const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
-        if (turn.messages.length > 2)
+        if (modelTurnsSoFar(turn.messages) > 0)
             return { text: 'done' };
-        const lines = [...prompt.matchAll(/^\s*(\d+) \[ \]/gm)].map(match => Number(match[1]));
-        const mark = ['mark_lines', { start: 1, end: Math.max(1, ...lines) }];
-        const evaluate = code => ({ calls: [['eval', { code }], mark], completion_tokens: 1 });
+        const evaluate = code => ({ calls: [['eval', { code }]], completion_tokens: 1 });
         if (prompt.includes(`Drive the ${spec.title} interaction to completion.`))
-            return evaluate('const decision = await choose(state, event); const step = await perform(state, event, decision); result = await finish(step)');
+            return evaluate('const decision = await choose(state, event); const step = await perform(state, event, decision); return await finish(step)');
         if (prompt.includes(spec.instructions)) {
             const event = getEvent();
             if (event.kind === 'command')
                 throw new Error('Free-form commands require a loaded model. Use the explicit controls in fixture mode.');
-            return evaluate(`result = ${JSON.stringify(controlDecision(spec, event))}`);
+            return evaluate(`return ${JSON.stringify(controlDecision(spec, event))}`);
         }
         const state = getState();
-        return evaluate(`result = ${JSON.stringify({ heading: spec.title, summary: state.notice, focus: spec.panelIds, suggestions: [] })}`);
+        return evaluate(`return ${JSON.stringify({ heading: spec.title, summary: state.notice, focus: spec.panelIds, suggestions: [] })}`);
     };
 }

@@ -20,8 +20,8 @@ function fixture() {
 
 async function transform(folder, plan, { vision = null, assessment = null } = {}) {
   const media = await new MediaWorkspace(folder, { vision }).open();
-  const model = scriptedModel(opening => opening.includes('Choose exactly one of trim') ? `result = ${JSON.stringify(plan)}` :
-    `result = ${JSON.stringify(assessment ?? { intent_met: true, needs_visual_review: false, explanation: 'The transform matches the request.' })}`);
+  const model = scriptedModel(opening => opening.includes('Choose exactly one of trim') ? `return ${JSON.stringify(plan)}` :
+    `return ${JSON.stringify(assessment ?? { intent_met: true, needs_visual_review: false, explanation: 'The transform matches the request.' })}`);
   const value = await createNatlangRuntime({ model: model.driver }).run(() => runTransform(media,
     { text: `Please ${plan.kind} the video`, input: 'input.mp4', output: plan.output }, openFolder(folder).root()));
   return { result: { value }, events: media.drainEvents() };

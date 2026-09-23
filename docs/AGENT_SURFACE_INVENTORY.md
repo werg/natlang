@@ -1,14 +1,12 @@
 # Agent-facing surface and observed failures
 
-> **Current interface (`scope-eval-v1`, 2026-09-22).** The model uses a
-> persistent TypeScript evaluation scope in the same host as crisp code. `eval(code)` supports
-> declarations, assignments, control flow, exact work, and positional calls
-> to imported functions. Synchronous TypeScript imports return directly;
-> asynchronous TypeScript and natural-language imports return promises. The
-> auxiliary actions are `read_value`, `mark_lines`, `report_blocker`, and
-> `report_error`, plus `read_function`, `edit_function`, and `diff_functions`
-> when functions are imported. Directory reducers additionally receive file
-> tools and `commit`.
+> **Current interface (2026-09-23; [`spec/SPEC.md`](../spec/SPEC.md) is normative).** The model
+> answers judgment work directly with `return_result(value)`, and uses a persistent TypeScript
+> evaluation scope for exact work, where a top-level `return` stages the result and a reply
+> without a tool call finishes. The other actions are `read_page`, `blocked`,
+> `failed`, and `read_function`, `edit_function`, and `diff_functions` when functions
+> are imported. Directory reducers additionally receive file tools. The observations below
+> were recorded against earlier surfaces.
 >
 > Imported function sources have a fixed file set: their contents may be
 > edited and imports relinked; creating, moving, and deleting function files is
@@ -48,7 +46,7 @@ The actual result is only the typed value stored at `return`.
 |---|---|---|---|
 | `tools_delegate.md` | Live delegated interpreter/student style | End without text after a valid return | Concise operational rules; explicitly discourages unnecessary reads |
 | `tools_small.md` | Reference generation and TS parity | End without text | More examples, explicit ordered-batch semantics |
-| `tools_explicit.md` | Bonsai teacher adapter | A natural reply may finish after return and line closure | Positional path calls, explicit modes, `report_error`, and `report_blocker` |
+| `tools_explicit.md` | Bonsai teacher adapter | A natural reply may finish after return and line closure | Positional path calls, explicit modes, `failed`, and `blocked` |
 
 This means teacher and student currently receive semantically close, but not byte-identical,
 instructions about the final assistant reply.
@@ -171,18 +169,18 @@ Closes one line or an inclusive line range. `skipped=true` records that a branch
 Blank lines and other non-substantive lines are not completion obligations. A valid return plus
 all substantive lines closed permits the next natural end of turn to finish.
 
-### `report_blocker`
+### `blocked`
 
 ```text
-report_blocker(missing)
+blocked(missing)
 ```
 
 Ends without a result when required information is absent or no rule covers the case.
 
-### `report_error`
+### `failed`
 
 ```text
-report_error(message)
+failed(message)
 ```
 
 Ends without a result when the instructions contradict themselves, require an invalid operation,
@@ -358,7 +356,7 @@ after the workspace is complete.
 With local validation feedback, a model can repeatedly alter proposals until one passes, which
 risks teaching it to revise requirements or fabricate a compatible value. Caller feedback makes
 bad instructions and bad actions fail cleanly, but a single correctable slip also ends the
-attempt. `report_error`, `report_blocker`, and optional careful review provide honest exits before
+attempt. `failed`, `blocked`, and optional careful review provide honest exits before
 execution, although the model still needs data showing when to use each one.
 
 ### 7.10 Guided-generation commitment

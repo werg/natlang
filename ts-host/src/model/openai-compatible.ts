@@ -34,14 +34,20 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
     let promptTokens = 0, completionTokens = 0, hasPromptTokens = false, hasCompletionTokens = false;
     while (true) {
       const wireRequest: Record<string, unknown> = { ...options.request, model: options.model,
-        messages: attemptMessages, tools, tool_choice: 'auto', temperature: request.temperature };
+        messages: attemptMessages, tools, tool_choice: 'auto' };
+      if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       if (request.seed !== null) wireRequest.seed = request.seed;
       if (request.max_tokens !== null) wireRequest.max_tokens = request.max_tokens;
-      const response = await fetch(options.endpoint.replace(/\/$/, '') + '/v1/chat/completions', {
-        method: 'POST', headers: { 'content-type': 'application/json',
+      const url = options.endpoint.replace(/\/$/, '') + '/v1/chat/completions';
+      let response: Response;
+      try {
+        response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json',
           ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}), ...options.headers },
-        body: JSON.stringify(wireRequest),
-      });
+          body: JSON.stringify(wireRequest) });
+      } catch (error) {
+        const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+        throw new Error(`model request to ${url} failed: ${cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)}`, { cause: error });
+      }
       const body = await response.json() as Record<string, unknown>;
       await options.onExchange?.({ request, wireRequest, wireResponse: body });
       if (!response.ok) throw new Error(`model HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`);
@@ -59,11 +65,17 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
           return [reverse[wireName] ?? wireName, decode(fn?.arguments)];
         });
         return { calls, text: String(message?.content ?? ''), raw_calls: rawCalls,
+          ...(choice?.finish_reason === 'length' ? { truncated: true } : {}),
           completion_tokens: hasCompletionTokens ? completionTokens : undefined,
           prompt_tokens: hasPromptTokens ? promptTokens : undefined,
           raw_response: body };
       } catch (error) {
-        if (retries >= 1 || choice?.finish_reason === 'length')
+        // A reply cut off mid tool call is a truncated turn, not a transport failure.
+        if (choice?.finish_reason === 'length')
+          return { calls: [], text: String(message?.content ?? ''), truncated: true, raw_response: body,
+            completion_tokens: hasCompletionTokens ? completionTokens : undefined,
+            prompt_tokens: hasPromptTokens ? promptTokens : undefined };
+        if (retries >= 1)
           throw new Error(`model returned malformed tool arguments after ${retries + 1} attempt${retries ? 's' : ''}: ${error instanceof Error ? error.message : String(error)}`,
             { cause: error });
         retries++;

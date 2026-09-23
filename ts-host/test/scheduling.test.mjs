@@ -21,7 +21,7 @@ test('natlang ranks exact feasible schedules and the workspace conditionally com
   const model = scriptedModel(opening => {
     assert.match(opening, /request: string/);
     assert.match(opening, /alternatives: Alternatives|alternatives: \{/);
-    return 'result = alternatives.options[0]';
+    return 'return alternatives.options[0]';
   });
   const result = await createNatlangRuntime({ model: model.driver }).run(() => plan(scheduler, 'Draft early, then review'));
   assert.equal(result.status, 'committed', result.detail);

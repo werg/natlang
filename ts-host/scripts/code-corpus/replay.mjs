@@ -103,18 +103,17 @@ export function project(record, index = 0, options = {}) {
 /** Executes trusted code. CLI isolates each invocation in a time-limited child, not a security sandbox. */
 export async function replayCase(record, index = 0, options = {}) {
   const { TypeScriptEnvironment } = await import('../../dist/environment.js');
-  const { applicationCapabilityPrompt } = await import('../../dist/application-packages.js');
   const { NativeToolAgent } = await import('../../dist/native/agent.js');
-  const { EXPLICIT_TOOLS_PROMPT } = await import('../../dist/native/prompt.js');
+  const { TOOLS_PROMPT } = await import('../../dist/native/prompt.js');
   const { NodeNativeRuntime } = await import('../../dist/node-runtime.js');
   const { dump } = await import('../../dist/native/values.js');
   const { programNode } = await import('../../dist/teacher/program.js');
   const projection = project(record, index, options);
   const { program, expected } = projection;
   let code = projection.code;
-  // The captured body is one function invocation, not a persistent eval session.
-  // Keep its locals (including nonportable imported package objects) within an
-  // inner function; a bare block can collide with the eval scope's `result` slot.
+  // The captured body is one function invocation, not a persistent eval session: its locals
+  // (including nonportable imported package objects) stay in an inner function, and the
+  // outer top-level return stages that function's value as the call's result.
   code = 'return await (async () => {\n'+code+'\n})();';
   if (projection.packageImports.length) code=projection.packageImports.join('\n')+'\n'+code;
   const root = programNode(program);
@@ -122,19 +121,20 @@ export async function replayCase(record, index = 0, options = {}) {
   const driver = async request => {
     if (trajectory.length >= 2) throw new Error('replay exceeded two model turns');
     const lastAction = runtime.trace.events.filter(e => e.kind === 'action').at(-1);
+    // The captured body runs as one eval; a second turn says done, or reports the replay failure.
     const calls = trajectory.length ? (lastAction && lastAction.outcome !== 'ok'
-      ? [['report_error', { message: `Captured implementation failed during replay: ${lastAction.result_text}` }]]
-      : [['mark_lines', { start: 1 }]]) : [['eval', { code }]];
+      ? [['failed', { message: `Captured implementation failed during replay: ${lastAction.result_text}` }]]
+      : []) : [['eval', { code }]];
+    const text = calls.length ? '' : 'done';
     trajectory.push({ phase: 'action', context: structuredClone(request.messages), tools_offered: request.tools,
-      assistant: { content: '', reasoning: null, calls: calls.map(([tool, args]) => ({tool, source_tool: tool, arguments: args, call_id: null})) }, raw_response_sha256: null });
-    return { calls };
+      assistant: { content: text, reasoning: null, calls: calls.map(([tool, args]) => ({tool, source_tool: tool, arguments: args, call_id: null})) }, raw_response_sha256: null });
+    return { calls, text };
   };
   const workspaceBefore = await workspaceSnapshot(options.workspace);
   const hostEvents = [];
   const environment = new TypeScriptEnvironment({ mode: 'fresh', workspace: options.workspace, network: options.network,
     observe: event => hostEvents.push(event) });
-  const agent = new NativeToolAgent(driver, { systemPrompt: EXPLICIT_TOOLS_PROMPT + applicationCapabilityPrompt(environment.scopeCapabilities,
-    environment.packages?.listAvailableDependencies()), segmentTurns: 3, segmentMessages: 12, validationFeedback: 'caller' });
+  const agent = new NativeToolAgent(driver, { systemPrompt: TOOLS_PROMPT, segmentTurns: 3, segmentMessages: 12 });
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
   try {
     const result = await runtime.run(root);

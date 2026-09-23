@@ -79,8 +79,8 @@ test('accepted rows with an unlinked or reordered action outcome are rejected', 
 test('failed and unexecuted proposals remain in IR but are excluded from SFT admission', () => {
   const row = nativeRow('negative-decisions');
   row.outcome.action_ledger[0].outcome = 'rejected';
-  row.trajectory[0].assistant.calls.push({ tool: 'mark_lines', source_tool: 'mark_lines',
-    arguments: { start: 99 }, call_id: null });
+  row.trajectory[0].assistant.calls.push({ tool: 'read_page', source_tool: 'read_page',
+    arguments: { id: 'amber', page: 2 }, call_id: null });
   const result = materializeNativeRows([row]);
   assert.equal(result.turns[0].training_admission.approved, false);
   assert.equal(result.turns[0].decision.assistant.calls[0].outcome.status, 'rejected');

@@ -17,8 +17,8 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
   const revision = evidence.docs.get('study').revision;
   const model = scriptedModel(opening => {
     if (opening.includes('Plan a short document')) return 'const note = await files.file("editorial.md").readText();\n' +
-      'result = { title: "Study <results>", headings: [note.includes("concise") ? "Summary" : "Details"], selected_tables: ["counts"], selected_assets: ["graph"] }';
-    return `result = { title: outline.title, evidence_revision: collection_revision, assets: ["graph"],
+      'return { title: "Study <results>", headings: [note.includes("concise") ? "Summary" : "Details"], selected_tables: ["counts"], selected_assets: ["graph"] }';
+    return `return { title: outline.title, evidence_revision: collection_revision, assets: ["graph"],
       sections: [{ heading: outline.headings[0], body: "12 samples & follow-up.", table_id: "counts",
         claims: [{ text: "The count is 12.", span_id: "study#p0", revision: ${JSON.stringify(revision)}, quote: "count is 12" }] }] }`;
   });

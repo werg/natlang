@@ -1,5 +1,6 @@
 /** Test helpers: build callable-folder records and interpreter sessions without files on disk. */
 import { NodeNativeRuntime } from '../../dist/node-runtime.js';
+import { modelTurnsSoFar } from '../../dist/native/agent.js';
 import { NativeSession } from '../../dist/native/runtime.js';
 import { TypeEnv } from '../../dist/native/types.js';
 import { buildPending } from '../../dist/native/values.js';
@@ -39,22 +40,25 @@ export { NativeSession, TypeEnv };
 
 /**
  * A scripted model: `respond(opening)` returns eval code for a natlang invocation (or null to report an
- * error). The driver evaluates it, closes every instruction line, and ends the turn.
+ * error). The driver evaluates it, then replies done.
  */
 export function scriptedModel(respond) {
   const openings = [];
   const driver = async ({ messages }) => {
-    const opening = String(messages[1].content);
+    // What the model sees first: the call and instructions, then the runtime's pre-filled scope code and its results.
+    const opening = [String(messages[1].content), ...messages.slice(2).flatMap(message =>
+      message.role === 'assistant' ? (message.tool_calls ?? []).filter(call => String(call.id).startsWith('scope_'))
+        .map(call => JSON.parse(call.function.arguments).code ?? '') :
+      message.role === 'tool' && String(message.tool_call_id).startsWith('scope_') ? [String(message.content)] : [])].join('\n');
     const last = messages.at(-1);
-    if (messages.length === 2) {
+    if (modelTurnsSoFar(messages) === 0) {
       openings.push(opening);
       const code = await respond(opening);
-      if (code === null) return { calls: [['report_error', { message: 'The scripted model has no answer for this task.' }]] };
-      const lines = [...opening.matchAll(/^\s*(\d+) \[ \]/gm)].map(match => Number(match[1]));
-      return { calls: [['eval', { code }], ...(lines.length ? [['mark_lines', { start: Math.min(...lines), end: Math.max(...lines) }]] : [])] };
+      if (code === null) return { calls: [['failed', { message: 'The scripted model has no answer for this task.' }]] };
+      return { calls: [['eval', { code }]] };
     }
-    if (last.role === 'tool' && /^(?:rejected|error)|\nerror|Debug snapshot/.test(String(last.content)))
-      return { calls: [['report_error', { message: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
+    if (last.role === 'tool' && /^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(String(last.content)))
+      return { calls: [['failed', { message: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
     return { text: 'done' };
   };
   return { driver, openings };

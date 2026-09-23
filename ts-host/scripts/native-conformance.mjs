@@ -27,12 +27,10 @@ function referenceAgent(specs) {
       return result;
     };
     const finish = async () => {
-      const body = (lam.originalBody ?? lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-      if (body.some(line => line.trim() && !line.trim().startsWith('#'))) await act('mark_lines', { start: 1, end: body.length });
       if (!session.finish()) throw new Error(`reference did not finish: ${JSON.stringify(dump(lam.return))}`);
     };
     // A reference eval ends with an expression; its value is the function's result.
-    const evaluate = code => act('eval', { code: `result = await (async () => { ${code.replace(/;?\s*$/, '').replace(/([^;\n]*)$/, 'return $1;')} })()` });
+    const evaluate = code => act('eval', { code: `return await (async () => { ${code.replace(/;?\s*$/, '').replace(/([^;\n]*)$/, 'return $1;')} })()` });
     if (spec.steps) {
       for (const step of spec.steps) {
         const [tool, args] = Object.entries(step)[0] ?? [];
@@ -49,14 +47,14 @@ function referenceAgent(specs) {
     }
     let entry = spec;
     if (spec.variants) entry = spec.variants.find(v => !v.if_body_contains || lam.body.includes(v.if_body_contains)) ?? spec.variants.at(-1);
-    if (entry.blocker) return (await act('report_blocker', { missing: entry.blocker })).text;
+    if (entry.blocker) return (await act('blocked', { missing: entry.blocker })).text;
     let value = entry.answer;
     if (spec.answer_by) {
       const key = Object.hasOwn(lam.args, 'item') ? lam.args.item : Object.values(lam.args)[0] ?? null;
       value = spec.answer_by[valueKey(key)];
     }
     if (value === undefined) throw new Error(`no answer for ${lam.functionName}`);
-    const result = await act('eval', { code: `result = ${JSON.stringify(value)}` });
+    const result = await act('eval', { code: `return ${JSON.stringify(value)}` });
     if (result.kind === 'blocked') return result.text;
     return finish();
   };

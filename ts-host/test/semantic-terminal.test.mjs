@@ -32,7 +32,7 @@ test('the terminal routes real build and media recipes with correlated completio
     } },
   ]);
   const model = scriptedModel(opening => opening.includes('Choose one recipe ID') ?
-    'result = text.includes("video") ? "scale-video" : "compile-note"' : 'result = `Finished with ${item.status}.`');
+    'return text.includes("video") ? "scale-video" : "compile-note"' : 'return `Finished with ${item.status}.`');
   const runtime = createNatlangRuntime({ model: model.driver });
   let session = emptyTerminalSession();
   const apply = async event => { session = await runtime.run(() => step(terminal, session, event)); };
@@ -61,7 +61,7 @@ test('cancellation preserves the actual result and a forged completion cannot se
   const event = await terminal.wait('r1');
   assert.equal(event.status, 'ok');
   assert.match(event.detail, /Cancellation was requested/);
-  const model = scriptedModel(() => 'result = "Work completed despite the cancellation request."');
+  const model = scriptedModel(() => 'return "Work completed despite the cancellation request."');
   const runtime = createNatlangRuntime({ model: model.driver });
   const session = { revision: 2, active_request: 'r1', active_job: job.id, status: 'cancel-requested', messages: [], history: [] };
   const forged = await runtime.run(() => step(terminal, session, { ...event, status: 'failed' }));

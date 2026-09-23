@@ -17,11 +17,13 @@ export type EvalScopeDeclarations = {
   captures: { name: string; type: string; mutable: boolean }[];
   imports: EvalImport[];
   services?: string[];
-  result?: string;
+  /** The call's return type: the type of the snippet's top-level return. */
+  returns?: string;
   opaque?: string[];
 };
 
-export const EVAL_WRAPPER_PREFIX = 'async function __natlang_scope() {\n';
+/** The snippet is checked as the body of the call it runs in, so a top-level return has the call's return type. */
+const evalWrapperPrefix = (returns?: string) => `async function __natlang_scope()${returns ? `: Promise<${returns}>` : ''} {\n`;
 const SCOPE_FILE = '/__natlang__/eval/scope.ts';
 const SNIPPET_FILE = '/__natlang__/eval/snippet.ts';
 
@@ -50,13 +52,12 @@ export function scopeDeclarations(scope: EvalScopeDeclarations): string {
   const known = new Set(Object.keys(scope.types));
   const lines: string[] = [];
   for (const [name, text] of Object.entries(scope.types)) lines.push(`type ${name} = ${typeScriptText(text, known)};`);
-  for (const input of scope.inputs) lines.push(`declare let ${input.name}: ${typeScriptText(input.type, known)};`);
+  for (const input of scope.inputs) lines.push(`declare const ${input.name}: ${typeScriptText(input.type, known)};`);
   for (const local of scope.locals) lines.push(`declare ${local.mutable ? 'let' : 'const'} ${local.name}: ${typeScriptText(local.type, known)};`);
   for (const capture of scope.captures) lines.push(`declare ${capture.mutable ? 'let' : 'const'} ${capture.name}: ${typeScriptText(capture.type, known)};`);
   for (const item of scope.imports) lines.push(`declare const ${item.name}: ${importType(item, known)};`);
   for (const name of scope.services ?? []) lines.push(`declare const ${name}: any;`);
   for (const name of scope.opaque ?? []) lines.push(`declare const ${name}: any;`);
-  if (scope.result) lines.push(`declare let result: ${typeScriptText(scope.result, known)};`);
   return lines.join('\n') + '\n';
 }
 
@@ -69,7 +70,8 @@ export const needsEvalCheck = (source: string) => /\bnl\s*(?:<[^`]*>)?\s*`|\bite
  */
 export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations): { plans: InlineLambdaPlan[];
   diagnostics: NatlangDiagnostic[] } {
-  const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${EVAL_WRAPPER_PREFIX}${source}\n}\n` },
+  const prefix = evalWrapperPrefix(scope.returns === undefined ? undefined : typeScriptText(scope.returns, new Set(Object.keys(scope.types))));
+  const program = createVirtualProgram({ [SCOPE_FILE]: scopeDeclarations(scope), [SNIPPET_FILE]: `${prefix}${source}\n}\n` },
     EVAL_COMPILER_OPTIONS);
   const snippet = program.getSourceFile(SNIPPET_FILE)!;
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
@@ -80,7 +82,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
       (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && inputs.has(declaration.name.text) ? 'input' : 'local') :
       isSnippetTopLevel(declaration) ? 'local' : 'block',
   });
-  const offset = EVAL_WRAPPER_PREFIX.length;
+  const offset = prefix.length;
   const shift = <T extends { start: number; end: number; line: number }>(item: T): T =>
     ({ ...item, start: item.start - offset, end: item.end - offset, line: Math.max(1, item.line - 1) });
   return { plans: plans.map(plan => ({ ...plan, sourceSpan: shift(plan.sourceSpan),

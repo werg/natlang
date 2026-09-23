@@ -27,9 +27,9 @@ execution tools are:
 
 - `eval(code)` for ordinary TypeScript declarations, expressions, control
   flow, and imported function calls;
-- `read_value(expression, start?, end?)` for inspecting scope values;
-- `mark_lines(start, end?, skipped?)` for closing completed instruction lines;
-- `report_blocker(missing)` and `report_error(message)` for explicit exits.
+- `read_page(id, page)` for reading output a tool result cut off;
+- `return_result(value)` for returning a typed value and finishing;
+- `blocked(missing)` and `failed(message)` for explicit exits.
 
 Normal lambdas can inspect, edit, and diff imported functions through function
 tools. They do not receive model-facing filesystem tools. A function completes
@@ -81,7 +81,7 @@ compatibility and historical trace work and is not the canonical runtime or
 teacher collection path.
 
 Training examples should reflect ordinary TypeScript imports and loops,
-`eval` and `mark_lines`, function tools for function source, and relative
+`eval` with top-level `return`, `return_result`, function tools for function source, and relative
 filesystem operations that occur only in directory reducers. Legacy path
 binding and call-combinator traces may remain as historical data only when
 labelled as such; they are not examples of the current interface.

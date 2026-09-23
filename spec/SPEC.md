@@ -114,34 +114,50 @@ not repeat an effect record operation identities and reconcile unknown outcomes.
 
 A natural-language invocation offers the model these tools:
 
-- `eval(code)`: run TypeScript in the persistent scope.
-- `read_value(expression, start?, end?)`: inspect a value.
-- `mark_lines(start, end?, skipped?)`: close completed lines and untaken branches.
-- `report_blocker(missing)`: stop because required information is absent.
-- `report_error(message)`: stop because the operation is invalid or failed.
+- `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit.
+- `read_page(id, page)`: read more of output a tool result cut off; the cut-off names the ID.
+- `return_result(value)`: return a value of the declared type and finish.
+- `blocked(missing)`: stop because required information is absent.
+- `failed(message)`: stop because the operation is invalid or failed.
 - `read_function`, `edit_function`, `diff_functions`: inspect and edit callable items.
 
 A directory reducer additionally receives `list_files`, `search_files`,
-`read_file`, `write_file`, `edit_file`, `diff_files`, and
-`commit(value, include?, exclude?)`.
+`read_file`, `write_file`, `edit_file`, and `diff_files`, and the conversation
+opens with the folder's file listing.
+
+Instructions do not all need code: an answer that takes only reading and
+judgment is given directly.
 
 ## Eval
 
 The scope holds the parameters, captures, callable items, services, and
-persistent locals. Top-level `const` and `let` declarations persist across eval
-calls. An eval is atomic: a failed compilation, execution, or type check commits
-no local or capture changes (effects already performed remain). Assigning
-`result`, or a final expression of the declared return type, supplies the
-function result; a later compatible value may replace it until completion.
-Values that are not portable data (functions, class instances, handles) are
-passed by reference as live values.
+persistent locals. Parameters are `const` and deeply frozen; derive a new
+variable instead of changing one. A `let` capture's assignments are written
+back to the caller. Top-level `const` and `let` declarations persist across eval
+calls. The conversation opens with the runtime's own eval: ambient `declare`
+lines for callable items and services, then the parameters and locals declared
+with their current values (large values cut off, with the `read_page` ID that holds them). An
+eval is atomic: a failed compilation or execution commits no local or capture
+changes (effects already performed remain). A final expression is only shown.
+A top-level `return value` stages the value as the call's result if it has the
+declared type; a later valid return replaces it. Values that are not portable
+data (functions, class instances, handles) are passed by reference as live
+values.
 
 ## Completion
 
-Every nonblank instruction line other than a comment is substantive. A function
-completes when a valid typed result exists, every substantive line is closed,
-and no call, blocker, or error remains unresolved. Completion is checked after
-each tool call; there is no separate return action.
+A call finishes in one of three ways:
+
+- `return_result(value)` with a value of the declared type;
+- a reply without a tool call, which returns the staged result, or, for a call
+  whose declared type accepts the reply's text as a string, that text (a bare
+  "done" is never the text result);
+- `blocked` or `failed`, which end the call without a result.
+
+A reply without a tool call and without a result is answered with what is
+missing, and the call continues. A directory reducer keeps the folder changes
+that exist when it finishes. Turn, token, time, and repair limits apply only
+when the caller sets them.
 
 ## Types
 
@@ -173,6 +189,6 @@ and its outcome.
 ## Continuations
 
 A long invocation may continue in a fresh model conversation. The runtime
-carries the scope, result, line marks, child state, and folder overlay; earlier
+carries the scope, staged result, child state, and folder overlay; earlier
 conversation text is not copied. A short working note may carry unresolved
 reasoning.

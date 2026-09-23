@@ -20,7 +20,7 @@ const runtime = createNatlangRuntime({ model: scriptedDriver });   // or a real 
 const report = await runtime.run(() => review(['The trial improved response times.'], 'Improved response times'));
 ```
 
-A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns `{ calls: [['eval', { code }], ['mark_lines', { start, end }]] }` or `{ text }`. For live runs, record the model identity and settings; never use fixture answers to claim model success.
+A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns `{ calls: [['eval', { code }]] }`, `{ calls: [['return_result', { value }]] }`, or `{ text }` (done, or a string result). For live runs, record the model identity and settings; never use fixture answers to claim model success.
 
 ## Scenario design
 
@@ -36,9 +36,9 @@ In a checkout: `npm --prefix ts-host run build`, then the relevant `ts-host/test
 - Loop policy error in callable-folder code: rewrite as `for...of`, a counted loop, an array method, or `iterateOn`.
 - Correct type, wrong answer: improve instructions, evidence access, or decomposition; structural validation is working.
 - Growing prompts: inspect repeated data and live-value previews, not just source length.
-- Repeated work after conversation rollover: check that progress lives in the scope and line marks, and that effects are not restarted.
+- Repeated work after conversation rollover (when segmentation is configured): check that progress lives in the scope and that effects are not restarted.
 
-`validationFeedback: 'local'` lets the model see rejected actions and repair; `'caller'` returns diagnostics to the caller. Neither rolls back an external effect. Record the policy used in any model study.
+Rejected actions and failed evals are reported to the model, which repairs them; `maxFailureRepairs` and the turn, token, and time budgets bound a call only when set. Nothing rolls back an external effect. Record the budgets used in any model study.
 
 ## Training handoff
 

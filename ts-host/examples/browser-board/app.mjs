@@ -20,7 +20,7 @@ async function program() {
 /** Scripted decisions for wiring checks (`?fixture`); they do not assess a model. */
 function fixtureModel(getState, getEvent) {
   return ({ messages }) => {
-    if (messages.length > 2) return { text: 'done' };
+    if (natlang.modelTurnsSoFar(messages) > 0) return { text: 'done' };
     const opening = String(messages[1].content);
     const event = getEvent(), state = getState();
     const value = opening.includes('Interpret the UI event') ?
@@ -29,8 +29,7 @@ function fixtureModel(getState, getEvent) {
       { title: 'Today’s board', summary: `${state.items.length} tasks`, groups: [
         { label: 'Open', ids: state.items.filter(item => !item.done).map(item => item.id) },
         { label: 'Done', ids: state.items.filter(item => item.done).map(item => item.id) }] };
-    const lines = [...opening.matchAll(/^\s*(\d+) \[ \]/gm)].map(match => Number(match[1]));
-    return { calls: [['eval', { code: `result = ${JSON.stringify(value)}` }], ['mark_lines', { start: 1, end: Math.max(1, ...lines) }]] };
+    return { calls: [['eval', { code: `return ${JSON.stringify(value)}` }]] };
   };
 }
 

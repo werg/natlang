@@ -20,7 +20,7 @@ export { openFolder, saveFolder } from './native/node-files.js';
 export type { SavedChange } from './native/node-files.js';
 export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';
-export { ApplicationPackages } from './application-packages.js';
+export { WorkspaceModules, findPackageWorkspace } from './workspace-modules.js';
 export { TypeEnv, TypeSyntaxError, parseType, formatType, fitsType } from './native/types.js';
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest } from './contracts.js';

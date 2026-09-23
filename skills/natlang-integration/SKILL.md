@@ -22,7 +22,7 @@ Read [hosts and model drivers](references/hosts.md) for the runtime, compilation
 ## Operational commitments
 
 - Omit arbitrary run budgets unless deployment requires them; `limits` and model options exist for that. Conversation segmentation and backend context are separate controls.
-- Choose `validationFeedback` explicitly for evaluations.
+- Set budgets (`maxTurns`, `maxTokens`, `maxSeconds`, `maxFailureRepairs`) explicitly for evaluations; none apply by default.
 - Services and live values are trusted native authority passed by reference. Eval is trusted code in the application's process, not a sandbox.
 - Service calls and live-object writes happen immediately and are traced as effects; they are not rolled back when a call fails. Captured `let` variables are written back only after a successful eval.
 - Seeds and pinned sources support reproducibility; they do not make native state replayable or decisions identical across inference backends.

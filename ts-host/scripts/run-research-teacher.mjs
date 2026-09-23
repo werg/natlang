@@ -68,7 +68,7 @@ async function runScenario({ scenario, server, model, seed }) {
     const store = new ResearchMemoryStore(); let childIndex = 0, state;
     const research = new ResearchHost({ store, runContext: () => ({ model, seed: { mode: 'derived', root: seed }, evaluator: 'natlang-browser' }),
         runSource: async (files, root, inputs, options) => {
-            const runtime = bindings.createNatlangRuntime({ model: { driver, validationFeedback: 'local' }, seed: options.provenance.seed,
+            const runtime = bindings.createNatlangRuntime({ model: { driver }, seed: options.provenance.seed,
                 services: { research: { readNative: async id => (await store.get('native_values', id))?.value } } });
             const run = await bindings.runPlaygroundProject(runtime, bindings.newPlaygroundProject('method', root,
                 Object.fromEntries(files.map(row => [row.id, row.source])), inputs), { runtimeNamespace: bindings });
@@ -86,7 +86,7 @@ async function runScenario({ scenario, server, model, seed }) {
     state = { revision: 0, head: head.id, question: '', notice: 'Ready.', active_view: '', selected: '', receipts: [] };
     let committed = null;
     const app = natlangApplication({ source: { files: sources, reducer: 'reduce.nl', view: 'view.ts' }, initialState: state, seedRoot: seed,
-        model: { driver, validationFeedback: 'local' }, services: { research: research.api() },
+        model: { driver }, services: { research: research.api() },
         onCommit: async commit => { await research.verifyCommit(state, commit.state); state = commit.state; committed = commit; },
     });
     let transition, failure = '';

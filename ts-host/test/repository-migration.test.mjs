@@ -23,9 +23,9 @@ test('natlang plans, checks and repairs a migration without editing the original
   const driver = scriptedModel(opening => {
     proposals++;
     // The first candidate misses the callers; the repair reads the failed checks and fixes them.
-    return opening.includes('failed: Validation = missing') ?
-      'result = [{ path: "lib.mjs", old: "function sum(", new: "function add(" }]' :
-      'result = [{ path: "caller.mjs", old: "{ sum }", new: "{ add }" }, { path: "caller.mjs", old: "sum(2, 3)", new: "add(2, 3)" }]';
+    return opening.includes('failed: Validation | undefined = undefined') ?
+      'return [{ path: "lib.mjs", old: "function sum(", new: "function add(" }]' :
+      'return [{ path: "caller.mjs", old: "{ sum }", new: "{ add }" }, { path: "caller.mjs", old: "sum(2, 3)", new: "add(2, 3)" }]';
   });
   try {
     const result = await createNatlangRuntime({ model: driver.driver }).run(() =>

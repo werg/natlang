@@ -5,14 +5,15 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
-import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
+import { EvalFailure, PAGE_CHARS, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel, problems, unboundParts,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
-import { FileHandle, Folder, FolderHandle, editTextContent } from './scoped-fs.js';
+import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
 import { livePreview } from './agent.js';
+import { PageStore } from './pages.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
@@ -71,36 +72,15 @@ function rejected(error: Reject): NativeResult {
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
-const markable = (line: string) => { const text = line.trim(); return !!text && !text.startsWith('#') && !text.startsWith('function '); };
-export function programListing(body: string, marks: Record<number, string>, window = 3): string {
-  const lines = body.replace(/^\n+|\n+$/g, '').split('\n');
-  const width = String(lines.length).length, output: string[] = [], closed: number[] = [];
-  const flush = () => {
-    if (!closed.length) return;
-    const kinds = new Set(closed.map(number => marks[number]).filter(Boolean));
-    const box = kinds.size === 1 && kinds.has('done') ? '[x]' : kinds.size === 1 && kinds.has('skipped') ? '[-]' : '[x/-]';
-    const first = closed[0]!, last = closed.at(-1)!;
-    output.push(`${String(first === last ? first : `${first}-${last}`).padStart(width)} ${box}`);
-    closed.length = 0;
-  };
-  for (const [index, raw] of lines.entries()) {
-    const number = index + 1, text = raw.trimEnd();
-    if (Object.hasOwn(marks, number) || (!markable(text) && closed.length)) { closed.push(number); continue; }
-    flush();
-    const box = markable(text) ? marks[number] === 'done' ? '[x]' : marks[number] === 'skipped' ? '[-]' : '[ ]' : '   ';
-    output.push(`${String(number).padStart(width)} ${box} ${text}`.trimEnd());
-  }
-  flush();
-  if (window) {
-    const open = output.flatMap((line, index) => line.slice(0, width + 5).includes('[ ]') ? [index] : []);
-    if (open.length > window) return [...output.slice(0, open[window]),
-      `${' '.repeat(width)} … ${open.length - window} more lines to do`].join('\n');
-  }
-  return output.join('\n');
-}
-export function pendingProgramLines(body: string, marks: Record<number, string>): number[] {
-  return body.replace(/^\n+|\n+$/g, '').split('\n').flatMap((raw, index) =>
-    markable(raw) && !Object.hasOwn(marks, index + 1) ? [index + 1] : []);
+/** What the model is told when a value is staged as the call's result. */
+const stagedMessage = (value: Value) => `\nStaged ${oneLine(value)} as the result. If this is the result of the task you were given and ` +
+  'you are satisfied with it, you can reply done (without a tool call) to return it, or keep working and return a different value later.';
+/** A deep-frozen copy of portable data; live values and handles are kept by reference. */
+function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
+  const copy = (item: unknown): unknown => Array.isArray(item) ? Object.freeze(item.map(copy)) :
+    item && typeof item === 'object' && !isLive(item) && !isHandle(item) && Object.getPrototypeOf(item) === Object.prototype ?
+      Object.freeze(Object.fromEntries(Object.entries(item).map(([key, child]) => [key, copy(child)]))) : item;
+  return copy(value) as Record<string, unknown>;
 }
 const isHandle = (value: unknown) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle;
 /** True when a value is, or contains, something that must be passed by reference. */
@@ -237,10 +217,10 @@ export class NativeRuntime {
       throw new Error('natlang run timed out; external effects may have occurred');
   }
 
-  async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>) {
+  async evaluate(node: LambdaNode, code: string, scope: Record<string, unknown>, live: Record<string, unknown>, timeoutMs?: number) {
     this.checkInterruption();
     try {
-      const request = { code, body: true, path: 'eval', scope, live };
+      const request = { code, body: true, path: 'eval', scope, live, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
       const result = await (this.frame ? runInFrame(this.frame, () => this.environment.executeAsync(request)) :
         this.environment.executeAsync(request));
       this.recordHostEvents(result.events);
@@ -312,9 +292,10 @@ export class NativeRuntime {
       this.quiesce(node, `interpreter exception: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId }); }
-    // Ending the interpreter turn is the completion signal: the runtime validates the typed result
-    // and line marks, then commits any directory-reducer transaction.
-    if (session.completed || session.finish()) {
+    // The model ending its turn is the completion signal: the runtime requires a returned value of the
+    // declared type, then commits any directory-reducer transaction.
+    // An agent that stopped with a reason (a budget, a blocker) does not return a merely staged value.
+    if (session.completed || (!note && session.finish())) {
       node.status = 'done';
       this.trace.emit('node', { transition: 'done' });
       return { kind: 'done', detail: oneLine(dump(node.return)), value: node.return };
@@ -340,21 +321,15 @@ export class NativeSession {
   private readonly explainedNaturalFunctions = new Set<string>();
   private readonly originalSources = new Map<string, string>();
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
+  /** Output cut off in this call's tool results, readable with read_page. */
+  readonly pages = new PageStore();
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
-  get failureBinding(): string | undefined {
-    if (!this.failureDebug) return;
-    const used = new Set([...Object.keys(this.lam.args), ...Object.keys(this.lam.let),
-      ...Object.keys(this.lam.codebase), ...Object.keys(this.lam.captures ?? {}), ...Object.keys(this.runtime.services),
-      'result', 'folder']);
-    for (const name of ['debug', '__natlangDebug']) if (!used.has(name)) return name;
-    let suffix = 2;
-    while (used.has(`__natlangDebug${suffix}`)) suffix++;
-    return `__natlangDebug${suffix}`;
-  }
+  /** Whether the model declared this persistent local with let (true) or const. */
+  localMutable(name: string): boolean { return this.scopeLocalMutability.get(name) ?? true; }
 
   private captureScopeFailure(kind: ScopeFailureDebug['kind'], code: string, scope: Record<string, unknown>,
-    message: string, diagnostics: Record<string, unknown>[] = [], error?: unknown): string {
+    message: string, diagnostics: Record<string, unknown>[] = [], error?: unknown, traceMark?: number): string {
     const trace = this.runtime.trace.events.filter(event =>
       ['action', 'eval', 'effect', 'host', 'node', 'invocation', 'folder'].includes(event.kind)).slice(-24)
       .map(event => {
@@ -375,20 +350,38 @@ export class NativeSession {
       ...(sourceStack ? { stack: sourceStack.split('\n').slice(0, 12).join('\n').slice(0, 4000) } : {}) };
     this.runtime.trace.emit('scope_failure', { failure_kind: kind, serial: this.failureSerial,
       message: message.slice(0, 1200), diagnostic_count: diagnostics.length });
-    return `\nDebug snapshot available as immutable ${this.failureBinding} in the next eval. ` +
-      'Inspect its scope, diagnostics, logs, stack, and trace before revising the code. Host effects may already have happened.';
+    // Report what the model needs to repair the eval: its console output and any effect that already happened.
+    const effects = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
+      .filter(event => event.kind === 'effect' || event.kind === 'host')
+      .map(event => String(event.capability ?? event.operation ?? event.kind));
+    return (logs.length ? `\nconsole:\n${this.pages.show(logs.join('\n'))}` : '') +
+      (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
+      '\nNothing else from this eval was kept.';
   }
 
-  /** Complete the invocation if the typed result is set and every instruction line is closed. */
+  /**
+   * A final reply's text as the result, for a call whose return type accepts that text (a string, or one of
+   * a union's string members). A bare "done" is never a result: it asks for the staged value.
+   */
+  acceptTextResult(text: string): boolean {
+    const answer = text.trim();
+    if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;
+    let value: Value;
+    try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { return false; }
+    // Only string-typed results: "7" is not silently a number.
+    if (typeof value !== 'string') return false;
+    this.lam.return = value;
+    return true;
+  }
+
+  /** Complete the invocation if an eval has returned a value of the declared type. */
   finish(): boolean {
     if (this.lam.return === MISSING || this.lam.type.kind !== 'lambda') return false;
-    if (pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks).length) return false;
     if (problems(this.lam.return, this.lam.type.returns, this.env, 'return').holes.length) return false;
     const tx = this.lam.projectTransaction;
     if (tx?.open) {
       const delta = tx.folder.diffSync();
-      const selected = this.lam.reducerMode === 'apply' ? tx.commitSync(this.lam.commitInclude, this.lam.commitExclude) :
-        (tx.abort(), delta);
+      const selected = this.lam.reducerMode === 'apply' ? tx.commitSync() : (tx.abort(), delta);
       this.runtime.trace.emit('folder', { call_id: this.runtime.currentCallId ?? null,
         phase: this.lam.reducerMode === 'apply' ? 'installed' : 'discarded', mode: this.lam.reducerMode,
         changes: selected.changes.map(change => ({ path: change.path, kind: change.kind })) });
@@ -402,12 +395,6 @@ export class NativeSession {
       arguments: args, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     this.runtime.observeState('after-action');
     return result;
-  }
-  private validateMark(start: unknown, end: unknown): void {
-    const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-    if (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > lines.length)
-      throw new Reject([{ path: 'start', code: 'bad-range',
-        expected: `line numbers between 1 and ${lines.length}, start <= end`, got: `${start}..${end}` }]);
   }
   private actionLimitReached(): boolean {
     return (this.runtime.options.maxActions !== undefined && this.actions >= this.runtime.options.maxActions) ||
@@ -425,16 +412,21 @@ export class NativeSession {
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    const tools = ['eval', 'read_value', 'mark_lines', 'commit', 'report_blocker', 'report_error',
+    const tools = ['eval', 'read_page', 'return_result', 'blocked', 'failed',
       'read_function', 'edit_function', 'diff_functions',
       'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
     if (!tools.includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
-    if (name !== 'mark_lines') { this.actions++; this.lam.steps++; }
+    this.actions++; this.lam.steps++;
     try {
-      if (name === 'eval') return this.record(name, args, await this.evaluate(String(args.code ?? '')));
+      if (name === 'eval') {
+        const timeout = args.timeout_ms;
+        if (timeout !== undefined && (!Number.isInteger(timeout) || (timeout as number) < 1))
+          throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive whole number of milliseconds' }]);
+        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined));
+      }
       if (['read_function', 'edit_function', 'diff_functions'].includes(name)) return this.record(name, args, this.functionTool(name, args));
       if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name))
         return this.record(name, args, await this.fileTool(name, args));
@@ -448,11 +440,11 @@ export class NativeSession {
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    if (!['read_value', 'mark_lines', 'commit', 'report_blocker', 'report_error', 'read_function', 'edit_function', 'diff_functions'].includes(name))
+    if (!['read_page', 'return_result', 'blocked', 'failed', 'read_function', 'edit_function', 'diff_functions'].includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a synchronous scope-eval tool' }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
-    if (name !== 'mark_lines') { this.actions++; this.lam.steps++; }
+    this.actions++; this.lam.steps++;
     try {
       return this.record(name, args, name.endsWith('_function') || name === 'diff_functions' ? this.functionTool(name, args) : this.scopeTool(name, args));
     } catch (error) {
@@ -462,65 +454,27 @@ export class NativeSession {
   }
 
   private scopeTool(name: string, args: Record<string, unknown>): NativeResult {
-    if (name === 'read_value') {
-      const expression = String(args.expression ?? '').trim();
-      const debugName = this.failureBinding;
-      if (debugName && (expression === debugName || expression.startsWith(`${debugName}.`))) {
-        let inspected: unknown = this.failureDebug;
-        for (const field of expression.slice(debugName.length).split('.').filter(Boolean)) {
-          if (!inspected || typeof inspected !== 'object' || !Object.hasOwn(inspected, field))
-            throw new Reject([{ path: expression, code: 'no-such-path', expected: 'a debug snapshot field' }]);
-          inspected = (inspected as Record<string, unknown>)[field];
-        }
-        const page = this.readValuePage(expression, inspected as Value, args.start, args.end);
-        if (page) return page;
-        if (args.start !== undefined || args.end !== undefined)
-          throw new Reject([{ path: expression, code: 'bad-range', expected: 'a list, text, or record value' }]);
-        return { kind: 'ok', text: typeof inspected === 'string' ? inspected : JSON.stringify(inspected), value: inspected as Value };
-      }
-      const ref = this.resolve(this.scopePath(expression));
-      const value = ref.get();
-      const page = this.readValuePage(ref.path, value, args.start, args.end);
-      if (page) return page;
-      if (args.start !== undefined || args.end !== undefined)
-        throw new Reject([{ path: ref.path, code: 'bad-range', expected: 'a list, text, or record value' }]);
-      if (isLive(value) || isHandle(value)) return { kind: 'ok', text: livePreview(value as object), value };
-      return { kind: 'ok', text: value === MISSING ? `${expression}: not supplied (missing value; not empty text)` :
-        typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1), value };
-    }
-    if (name === 'commit') {
-      if (this.lam.subtype !== 'directory-reducer' || !this.lam.projectTransaction)
-        throw new Reject([{ path: 'commit', code: 'bad-action', expected: 'a running directory reducer' }]);
-      const include = args.include, exclude = args.exclude;
-      for (const [key, selectors] of [['include', include], ['exclude', exclude]] as const)
-        if (selectors !== undefined && (!Array.isArray(selectors) || selectors.some(item =>
-          typeof item !== 'string' || !item || item.startsWith('/'))))
-          throw new Reject([{ path: key, code: 'bad-action', expected: 'relative glob patterns' }]);
-      if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'commit', code: 'bad-action', expected: 'a typed result' }]);
+    if (name === 'read_page') return { kind: 'ok', text: this.pages.read(String(args.id ?? ''), Number(args.page ?? 1)) };
+    if (name === 'return_result') {
+      if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
       let value: Value;
       try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
       catch (first) {
+        // Some models send structured values as JSON text.
         if (typeof args.value !== 'string') throw first;
         try { value = coerce(JSON.parse(args.value), this.lam.type.returns, this.env, 'return'); } catch { throw first; }
       }
       this.lam.return = value;
-      this.lam.commitInclude = include === undefined ? undefined : [...include as string[]];
-      this.lam.commitExclude = exclude === undefined ? undefined : [...exclude as string[]];
-      return { kind: 'ok', text: 'ok   return', value };
+      if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);
+      return { kind: 'completed', text: `Returned ${oneLine(value)}.`, value };
     }
-    if (name === 'report_blocker' || name === 'report_error') {
-      const message = String(args[name === 'report_blocker' ? 'missing' : 'message'] ?? '').trim();
-      if (message.length < 8) throw new Reject([{ path: name === 'report_blocker' ? 'missing' : 'message',
-        code: 'bad-action', expected: name === 'report_blocker' ? 'a sentence saying what is missing' : 'a sentence explaining the error' }]);
-      return { kind: 'blocked', text: `${name === 'report_blocker' ? 'blocked' : 'error'}: ${message}` };
+    if (name === 'blocked' || name === 'failed') {
+      const message = String(args[name === 'blocked' ? 'missing' : 'message'] ?? '').trim();
+      if (message.length < 8) throw new Reject([{ path: name === 'blocked' ? 'missing' : 'message',
+        code: 'bad-action', expected: name === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining the error' }]);
+      return { kind: 'blocked', text: `${name === 'blocked' ? 'blocked' : 'error'}: ${message}` };
     }
-    // mark_lines
-    const start = args.start, end = args.end ?? args.start;
-    this.validateMark(start, end);
-    const lines = (this.lam.originalBody ?? this.lam.body).replace(/^\n+|\n+$/g, '').split('\n');
-    for (let i = Number(start); i <= Number(end); i++)
-      if (markable(lines[i - 1]!)) this.lam.marks[i] = args.skipped === true ? 'skipped' : 'done';
-    return { kind: 'ok', text: `ok\n${programListing(this.lam.originalBody ?? this.lam.body, this.lam.marks)}` };
+    throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
 
   /** read_function, edit_function, diff_functions over the codebase record tree. */
@@ -571,7 +525,8 @@ export class NativeSession {
     else if (name === 'write_file') { folder.writeText(path, String(args.content ?? '')); value = { path, changed: true }; }
     else if (name === 'edit_file') value = await folder.editText(path, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
     else value = folder.diffSync(path);
-    return { kind: 'ok', text: typeof value === 'string' ? value : JSON.stringify(value, null, 1), value: value as Value };
+    const text = name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
+    return { kind: 'ok', text: this.pages.show(text), value: value as Value };
   }
 
   private inferScopeType(value: unknown): string {
@@ -583,15 +538,15 @@ export class NativeSession {
     if (typeof value === 'number' && Number.isFinite(value)) return 'number';
     if (typeof value === 'string') return 'string';
     if (Array.isArray(value)) {
-      if (!value.length) throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'an annotation for an empty list' }]);
+      // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
+      if (!value.length) return 'unknown[]';
       if (containsLive(value)) return 'Live<"array", "tag", "Array">';
       const types = [...new Set(value.map(item => this.inferScopeType(item)))];
-      if (types.length !== 1) throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'an annotation for a heterogeneous list' }]);
-      return `(${types[0]})[]`;
+      return types.length === 1 ? `(${types[0]})[]` : `(${types.join(' | ')})[]`;
     }
     if (value && typeof value === 'object') {
       const entries = Object.entries(value);
-      if (!entries.length) throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'an annotation for an empty record' }]);
+      if (!entries.length) return 'Record<string, unknown>';
       if (containsLive(value)) return 'Live<"object", "any", "">';
       return `{ ${entries.map(([key, item]) => `${key}: ${this.inferScopeType(item)}`).join(', ')} }`;
     }
@@ -614,38 +569,6 @@ export class NativeSession {
       else throw new Reject([{ path: 'expression', code: 'bad-action', expected: 'field and index selection without computation' }]);
     }
     return path;
-  }
-
-  private readValuePage(path: string, value: Value, startRaw?: unknown, endRaw?: unknown): NativeResult | undefined {
-    const explicit = startRaw !== undefined || endRaw !== undefined;
-    if (typeof value !== 'string' && !Array.isArray(value) &&
-        !(value && typeof value === 'object' && !isPending(value) && !isHandle(value) && !isLive(value))) return;
-    const entries = typeof value === 'string' || Array.isArray(value) ? undefined : Object.entries(value);
-    const size = typeof value === 'string' || Array.isArray(value) ? value.length : entries!.length;
-    const rendered = typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1);
-    if (!explicit && rendered.length <= 4000 && size <= 20) return;
-    const requestedStart = Number(startRaw ?? 0);
-    const pageSize = typeof value === 'string' ? 2000 : 12;
-    const requestedEnd = Number(endRaw ?? requestedStart + pageSize);
-    if (!Number.isInteger(requestedStart) || !Number.isInteger(requestedEnd) || requestedStart < 0 || requestedEnd < 0)
-      throw new Reject([{ path, code: 'bad-range', expected: 'non-negative JavaScript slice offsets' }]);
-    const start = Math.min(size, requestedStart);
-    const end = Math.min(size, Math.max(start, requestedEnd), start + pageSize);
-    const footer = `[${path}: ${typeof value === 'string' ? 'characters' : Array.isArray(value) ? 'items' : 'fields'} ` +
-      `[${start}, ${end}) of ${size}; ${end < size ? `next start=${end}` : 'end of value'}]`;
-    if (typeof value === 'string') {
-      const slice = value.slice(start, end);
-      return { kind: 'ok', text: (explicit || end === size) && size <= 4000 ? slice : `${slice}\n${footer}`, value: slice };
-    }
-    if (Array.isArray(value)) {
-      const slice = value.slice(start, end);
-      const body = slice.map((item, index) => `${start + index}: ${JSON.stringify(dump(item))}`).join('\n');
-      return { kind: 'ok', text: `${body.slice(0, 4000)}${body.length > 4000 ? '\n[CUT OFF: inspect an item by index]' : ''}\n` + footer, value: slice };
-    }
-    const selected = entries!.slice(start, end);
-    const body = selected.map(([key, item]) => `${key}: ${JSON.stringify(dump(item))}`).join('\n');
-    return { kind: 'ok', text: `${body.slice(0, 4000)}${body.length > 4000 ? '\n[CUT OFF: inspect a field by name]' : ''}\n` + footer,
-      value: Object.fromEntries(selected) as Value };
   }
 
   /** Static type of an initializer expression, for locals declared without an annotation. */
@@ -703,9 +626,9 @@ export class NativeSession {
   }
 
   /** Execute one eval action as an atomic scope transaction. */
-  private async evaluate(code: string): Promise<NativeResult> {
+  private async evaluate(code: string, timeoutMs?: number): Promise<NativeResult> {
     if (!code.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
-    const scopeBefore = this.scopeSnapshot();
+    const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const localNames = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
     const localBindings = localNames.map(name => ({ name, mutable: this.scopeLocalMutability.get(name) ?? true,
@@ -713,15 +636,26 @@ export class NativeSession {
     const callableNames = Object.keys(this.lam.codebase);
     const opaqueNames: string[] = [];
     if (this.lam.projectTransaction) opaqueNames.push('folder');
-    const debugBinding = this.failureBinding;
-    if (debugBinding) opaqueNames.push(debugBinding);
+    // read_inputs() returns the call's arguments (a frozen copy), which the opening eval also holds as `inputs`;
+    // a parameter or local of either name takes precedence.
+    const taken = (name: string) => inputNames.includes(name) || Object.hasOwn(this.lam.let, name);
+    const inputsBinding = !taken('read_inputs'), inputsObject = !taken('inputs');
+    if (inputsBinding) opaqueNames.push('read_inputs');
+    if (inputsObject) opaqueNames.push('inputs');
+    // return_result, blocked, and failed also work as functions in eval: the request is carried out,
+    // exactly as the tool would, once the eval has succeeded.
+    // A finisher name the snippet declares itself stays the snippet's own variable.
+    const declaredHere = (name: string) => new RegExp(`\\b(?:const|let|var|function|class)\\s+${name}\\b|[{,]\\s*${name}\\s*[,}=]`).test(code);
+    const finishers = ['return_result', 'blocked', 'failed'].filter(name => !taken(name) && !declaredHere(name));
+    opaqueNames.push(...finishers);
+    let requested: { tool: string; args: Record<string, unknown> } | undefined;
     const captureCells = this.lam.captures ?? {};
     const captureRead = Object.fromEntries(Object.entries(captureCells).map(([name, cell]) => [name, cell.get()]));
     const serviceNames = Object.keys(this.runtime.services).filter(name => !inputNames.includes(name) &&
       !callableNames.includes(name) && !Object.hasOwn(captureCells, name));
     const hooks = this.runtime.hooks;
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
-      opaqueBindings: opaqueNames, resultBinding: true,
+      opaqueBindings: opaqueNames,
       captureBindings: Object.values(captureCells).map(cell => ({ name: cell.name, mutable: cell.mutable })),
       serviceBindings: serviceNames, analyze: source => hooks.analyze(this, source),
       guardPrefix: `eval:${this.runtime.options.runId}`, ...this.runtime.environment.scopeCapabilities });
@@ -732,14 +666,12 @@ export class NativeSession {
     }
     const inputs = splitScope(this.lam.args);
     const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])));
-    if (this.lam.return !== MISSING && !Object.hasOwn(this.lam.let, 'result')) {
-      const result = splitScope({ result: this.lam.return });
-      Object.assign(locals.portable, result.portable); Object.assign(locals.live, result.live);
-    }
     let finished: unknown;
     const plans = compiled.plans ?? [];
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.runtime.services, folder: this.lam.projectTransaction?.folder.root(),
+      callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
+      request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
       inline: (index: number, values: unknown[], accessors: Record<string, unknown>) => {
         const plan = plans[index];
         if (!plan) throw new Error('internal error: unknown inline plan');
@@ -749,22 +681,25 @@ export class NativeSession {
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),
       finish: (value: unknown) => { finished = value; } };
     const prologue = [
-      ...(debugBinding ? [`const ${debugBinding} = self.debug;`] : []),
       ...(this.lam.projectTransaction ? ['const folder = __live.folder;'] : []),
+      ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
+      ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
+      ...finishers.map(name => `const ${name} = (argument: unknown) => { __live.request(${JSON.stringify(name)}, ` +
+        `{ ${name === 'return_result' ? 'value' : name === 'blocked' ? 'missing' : 'message'}: argument }); };`),
     ].join('\n');
     const source = `${SCOPE_RUNTIME_PRELUDE}${prologue}\n${compiled.program}\n` +
       `return await ${compiled.entrypoint}(Object.assign({}, self.inputs, __live.inputs), ` +
       `Object.assign({}, self.locals, __live.locals), __live.captures);`;
     try {
       const evaluated = await this.runtime.evaluate(this.lam, source,
-        { inputs: inputs.portable, locals: locals.portable, ...(this.failureDebug ? { debug: this.failureDebug } : {}) }, live);
-      const raw = finished as { result?: unknown; inputs?: Record<string, unknown>;
+        { inputs: inputs.portable, locals: locals.portable }, live, timeoutMs);
+      const raw = finished as { result?: unknown; returned?: boolean;
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
       if (!raw || typeof raw !== 'object' || !raw.bindings || typeof raw.bindings !== 'object')
         throw new Reject([{ path: 'code', code: 'bad-action', expected: 'an atomic scope transaction result' }]);
       // Plain data is rebuilt in this realm; captured values keep their identity for write-back.
-      const output = { ...hostCopy({ result: raw.result, inputs: raw.inputs, bindings: raw.bindings }) as
-        { result?: unknown; inputs?: Record<string, unknown>; bindings: Record<string, unknown> }, captures: raw.captures };
+      const output = { ...hostCopy({ result: raw.result, bindings: raw.bindings }) as
+        { result?: unknown; bindings: Record<string, unknown> }, captures: raw.captures };
       const thenable = (value: unknown) => !!value && (typeof value === 'object' || typeof value === 'function') &&
         typeof (value as PromiseLike<unknown>).then === 'function';
       if ([output.result, ...Object.values(output.bindings), ...Object.values(output.captures ?? {})].some(thenable))
@@ -773,21 +708,11 @@ export class NativeSession {
       const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
       const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));
       const staged: [string, Type, Value][] = [];
-      const stagedInputs: [string, Value][] = [];
       const inferred: Record<string, Type> = { ...this.lam.letTypes };
-      for (const [name, value] of Object.entries(output.inputs ?? {})) {
-        const field = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.find(item => item.name === name) : undefined;
-        if (!field || !Object.hasOwn(this.lam.args, name)) continue;
-        stagedInputs.push([name, coerce(value, field.type, this.env, `args/${name}`)]);
-      }
       for (const [name, value] of Object.entries(output.bindings)) {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
-        if (name === 'result' && this.lam.type.kind === 'lambda') {
-          try { coerce(value, this.lam.type.returns, this.env, 'return'); }
-          catch { continue; /* An intermediate observation must not change the typed result slot. */ }
-        }
-        let type = name === 'result' && this.lam.type.kind === 'lambda' ? this.lam.type.returns : this.lam.letTypes[name];
+        let type = this.lam.letTypes[name];
         const annotation = annotations.get(name);
         if (annotation) type = parseType(annotation);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
@@ -801,14 +726,13 @@ export class NativeSession {
         inferred[name] = type;
         staged.push([name, type, coerce(value, type, this.env, `let/${name}`)]);
       }
-      let functionResult: Value | undefined;
-      if (compiled.producesResult && this.lam.type.kind === 'lambda') try {
+      // A top-level return proposes the call's result; it is taken only if it has the declared type.
+      let functionResult: Value | undefined, notResult = '';
+      if (raw.returned && this.lam.type.kind === 'lambda') try {
         functionResult = coerce(output.result, this.lam.type.returns, this.env, 'return');
-      } catch { /* An intermediate expression of another type is still a useful eval result. */ }
-      if (functionResult === undefined && !compiled.producesResult && this.lam.type.kind === 'lambda') {
-        const resultBinding = staged.find(([name]) => name === 'result');
-        if (resultBinding) try { functionResult = coerce(resultBinding[2], this.lam.type.returns, this.env, 'return'); }
-        catch { /* A local named result may still be an intermediate value. */ }
+      } catch (error) {
+        notResult = `\nThis is not a valid ${formatType(this.lam.type.returns)}, so it is not the result: ` +
+          (error instanceof Reject ? error.message : error instanceof Error ? error.message : String(error));
       }
       const captureWrites: [string, unknown][] = [];
       for (const [name, value] of Object.entries(output.captures ?? {})) {
@@ -820,7 +744,10 @@ export class NativeSession {
         captureWrites.push([name, value]);
       }
       for (const [name, value] of captureWrites) captureCells[name]!.set!(value);
-      for (const [name, value] of stagedInputs) this.lam.args[name] = value;
+      // Report only locals this eval declared or changed.
+      const before = new Map(Object.entries(this.lam.let).map(([name, value]) => [name, containsLive(value) ? value : JSON.stringify(dump(value))]));
+      const changed = staged.filter(([name, , value]) => !before.has(name) ||
+        (containsLive(value) ? before.get(name) !== value : before.get(name) !== JSON.stringify(dump(value))));
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;
         this.lam.let[name] = value;
@@ -829,23 +756,44 @@ export class NativeSession {
       if (functionResult !== undefined) {
         this.lam.return = functionResult;
         this.failureDebug = undefined;
-        if (this.lam.subtype === 'directory-reducer') { this.lam.commitInclude = undefined; this.lam.commitExclude = undefined; }
       }
       const text = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object) :
         JSON.stringify(output.result ?? null) ?? 'null';
-      const rendered = text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`;
-      const open = functionResult === undefined ? [] : pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks);
-      const status = functionResult === undefined ? '' : open.length ?
-        `\nFunction result set; lines still open: ${open.join(', ')}.` : '\nFunction result set.';
-      const stored = staged.map(([name, , value]) => `local ${name} = ${oneLine(value)}`);
+      const rendered = this.pages.show(text);
+      const status = functionResult !== undefined ?
+        stagedMessage(functionResult) : notResult;
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value)}`);
       const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
-      const logStatus = evaluated.logs?.length ? `console:\n${evaluated.logs.join('\n')}\n` : '';
+      const logStatus = evaluated.logs?.length ? `console:\n${this.pages.show(evaluated.logs.join('\n'))}\n` : '';
+      // return_result in eval stages its value like a top-level return: the value was computed, so the model
+      // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
+      if (requested?.tool === 'return_result' && this.lam.type.kind === 'lambda') {
+        let staged: Value | undefined, refusal = '';
+        try { staged = coerce(requested.args.value, this.lam.type.returns, this.env, 'return'); }
+        catch (error) { refusal = error instanceof Error ? error.message : String(error); }
+        if (staged === undefined) return { kind: 'rejected', text: `${logStatus}${rendered}${storedStatus}\nreturn_result: this is not a valid ` +
+          `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
+        this.lam.return = staged;
+        this.failureDebug = undefined;
+        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${stagedMessage(staged)}`, value: staged };
+      }
+      if (requested) {
+        const shown = logStatus + rendered + storedStatus;
+        try {
+          const done = this.scopeTool(requested.tool, requested.args);
+          return { ...done, text: `${shown}\n${done.text}` };
+        } catch (error) {
+          if (!(error instanceof Reject)) throw error;
+          const refused = rejected(error);
+          return { ...refused, text: `${shown}\n${requested.tool}: ${refused.text}` };
+        }
+      }
       return { kind: 'ok', text: logStatus + rendered + storedStatus + status, value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const note = this.captureScopeFailure(error instanceof EvalFailure ? 'runtime' : 'boundary',
-        code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error);
+        code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);
       if (error instanceof Reject) { const result = rejected(error); return { ...result, text: result.text + note }; }
       return { kind: 'error', text: message + note };
     }

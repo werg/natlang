@@ -11,9 +11,9 @@ test('natlang plans search, reads versioned spans and returns citation-checked c
   ]);
   const revision = evidence.docs.get('spec').revision;
   const model = scriptedModel(opening => {
-    if (opening.includes('two or three focused search phrases')) return 'result = ["reducer consumes events", "source order"]';
-    if (opening.includes('Choose IDs of the offered hits')) return 'result = [found.hits[0].id]';
-    return `result = { answer: "A reducer consumes events in source order.", claims: [{ text: "Events arrive in source order",
+    if (opening.includes('two or three focused search phrases')) return 'return ["reducer consumes events", "source order"]';
+    if (opening.includes('Choose IDs of the offered hits')) return 'return [found.hits[0].id]';
+    return `return { answer: "A reducer consumes events in source order.", claims: [{ text: "Events arrive in source order",
       span_id: passages[0].id, revision: passages[0].revision, quote: "in the order supplied by its source" }], gaps: [] }`;
   });
   const result = await createNatlangRuntime({ model: model.driver }).run(() => answer(evidence, 'How does a reducer consume events?'));

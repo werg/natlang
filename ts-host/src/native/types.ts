@@ -1,6 +1,6 @@
 /** Native port of natlang's structural type grammar and fit relation. */
 export type Type =
-  | { kind: 'prim'; name: 'string' | 'number' | 'boolean' | 'null' | 'Blob' | 'Folder' | 'FileHandle' }
+  | { kind: 'prim'; name: 'string' | 'number' | 'boolean' | 'null' | 'Blob' | 'Folder' | 'FileHandle' | 'unknown' }
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
   | { kind: 'list'; element: Type }
@@ -39,7 +39,7 @@ export function checkHost(value: unknown, contract: HostCheck, classes?: Readonl
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
 const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
-const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'Blob', 'Folder', 'FileHandle']);
+const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'Blob', 'Folder', 'FileHandle', 'unknown']);
 
 function tokenize(source: string): Token[] {
   const text = source.trim(), result: Token[] = [];
@@ -229,6 +229,7 @@ export class TypeEnv {
 
 
 export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen = new Set<string>()): boolean {
+  if (target.kind === 'prim' && target.name === 'unknown') return true;
   if (source.kind === 'name' && target.kind === 'name') {
     const key = `${source.name}\0${target.name}`;
     if (source.name === target.name || seen.has(key)) return true;

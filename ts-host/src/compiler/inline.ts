@@ -118,6 +118,16 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
 
   /** Contextual value type for an expression whose result is awaited or returned as a promise. */
   const resultContext = (outer: ts.Node, awaited: boolean): ts.Type | undefined => {
+    // `return await nl`...`(x)` in an async function: the function's awaited return type, not `T | PromiseLike<T>`.
+    if (outer.parent && ts.isReturnStatement(outer.parent)) {
+      let fn: ts.Node | undefined = outer.parent;
+      while (fn && !ts.isFunctionLike(fn)) fn = fn.parent;
+      if (fn && ts.isFunctionLike(fn) && fn.type && ts.getCombinedModifierFlags(fn as ts.Declaration) & ts.ModifierFlags.Async) {
+        const signature = checker.getSignatureFromDeclaration(fn);
+        const declared = signature && awaitedType(checker, checker.getReturnTypeOfSignature(signature)).type;
+        if (declared && !(declared.flags & ts.TypeFlags.Any)) return declared;
+      }
+    }
     const contextual = checker.getContextualType(outer as ts.Expression);
     if (!contextual || contextual.flags & ts.TypeFlags.Any) return;
     return awaited ? contextual : awaitedType(checker, contextual).type;

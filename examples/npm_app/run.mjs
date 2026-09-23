@@ -1,16 +1,15 @@
 /**
- * An npm dependency declared in this directory's package.json, used from handwritten callable-folder
- * TypeScript (`main/is_numeric.ts`) and from a natural-language function's eval (scripted here).
+ * An npm package installed in this directory (`npm install` here first), used from handwritten
+ * callable-folder TypeScript (`main/is_numeric.ts`) and from a natural-language function's eval (scripted here).
  */
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ApplicationPackages, createNatlangRuntime, loadNatlang } from '../../ts-host/dist/index.js';
+import { createNatlangRuntime, loadNatlang } from '../../ts-host/dist/index.js';
 
 const workspace = dirname(fileURLToPath(import.meta.url));
-if (process.argv.includes('--install')) await new ApplicationPackages(workspace).prepareDependencies();
 let turn = 0;
-const runtime = createNatlangRuntime({ workspace, network: true,
-  model: () => ++turn === 1 ? { calls: [['eval', { code: 'import isNumber from "is-number"; result = isNumber(value);' }], ['mark_lines', { start: 1, end: 2 }]] }
+const runtime = createNatlangRuntime({ workspace,
+  model: () => ++turn === 1 ? { calls: [['eval', { code: 'import isNumber from "is-number"; return isNumber(value);' }]] }
     : { text: 'done' } });
 const main = loadNatlang(join(workspace, 'main.nl'));
 const handwritten = await runtime.run(() => main.is_numeric('42'));

@@ -100,6 +100,16 @@ function validateRow(raw: unknown): NativeRow {
   return row;
 }
 
+/** The system and user messages plus the runtime's pre-filled scope exchanges (tool calls with `scope_` ids). */
+function openingLength(context: Dict[]): number {
+  const calls = (message: Dict | undefined) => ((message?.tool_calls ?? []) as Dict[]);
+  let length = 2;
+  while (context[length]?.role === 'assistant' && calls(context[length]).length &&
+      calls(context[length]).every(call => String(call.id).startsWith('scope_')))
+    length += 1 + calls(context[length]).length;
+  return length;
+}
+
 /**
  * Convert accepted native teacher runs to one self-contained model decision per row.
  * Context is copied from that exact native request. It is never assembled by appending
@@ -126,7 +136,7 @@ export function materializeNativeRows(input: unknown[]): {
       const contextSource = messages(source.context, `${row.id}.trajectory[${index}].context`);
       if (!contextSource.length || contextSource[0]?.role !== 'system' || contextSource[1]?.role !== 'user')
         throw new Error(`${row.id}: decision ${index} lacks a fresh system/user opening context`);
-      if (!segmentOpening) segmentOpening = structuredClone(contextSource.slice(0, 2));
+      if (!segmentOpening) segmentOpening = structuredClone(contextSource.slice(0, openingLength(contextSource)));
 
       const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);

@@ -57,6 +57,6 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     captures: Object.values(lam.captures ?? {}).map(cell => ({ name: cell.name, type: cell.type, mutable: cell.mutable })),
     imports: Object.entries(codebase).map(([name, record]) => importOf(name, record)),
     services: Object.keys(session.runtime.services),
-    result: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
+    returns: lam.type.kind === 'lambda' ? formatType(lam.type.returns) : undefined,
     opaque: lam.projectTransaction ? ['folder'] : [] };
 }

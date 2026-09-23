@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { scriptedModel } from './support/natlang.mjs';
+import { modelTurnsSoFar } from '../dist/native/agent.js';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { simulateInventory } from '../studio/apps/worlds.mjs';
@@ -39,7 +40,7 @@ for (const spec of apps)
         let app, committed;
         app = natlangApplication({ source, initialState: spec.initial(), seedRoot: 17,
             services: { studio: { apply: (state, event, decision) => applyOperation(spec, state, decision, services) } },
-            model: fixtureTurn(spec, () => app.state, () => event), onCommit: commit => { committed = commit; } });
+            model: fixtureTurn(spec, () => app.state, () => event, modelTurnsSoFar), onCommit: commit => { committed = commit; } });
         try {
             await app.start();
             const result = await app.dispatch(event);
@@ -95,8 +96,8 @@ test('natlang can drive multiple inspected operations within a single UI interac
     const source = await sourceFor(spec);
     const calls = [], cells = cellHost();
     const model = scriptedModel(opening => opening.includes(`Drive the ${spec.title} interaction to completion.`) ?
-        'const first = await perform(state, event, { action: "execute", target: "numbers" }); const next = await perform(first.state, event, { action: "execute", target: "total" }); result = await finish(next)' :
-        `result = ${JSON.stringify({ heading: spec.title, summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] })}`);
+        'const first = await perform(state, event, { action: "execute", target: "numbers" }); const next = await perform(first.state, event, { action: "execute", target: "total" }); return await finish(next)' :
+        `return ${JSON.stringify({ heading: spec.title, summary: 'Two cells complete', focus: spec.panelIds, suggestions: [] })}`);
     const app = natlangApplication({ source, initialState: spec.initial(), seedRoot: 17, model: model.driver,
         services: { studio: { apply: (state, event, d) => { calls.push(d.target); return applyOperation(spec, state, d, cells); } } } });
     try {

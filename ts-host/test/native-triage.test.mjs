@@ -24,10 +24,10 @@ test('the triage example classifies in parallel, counts exactly, and shortens it
     'Payments are failing for every customer right now.',
   ];
   const model = scriptedModel(opening => {
-    if (opening.includes('Pick the label')) return 'result = /WATCHES/.test(ticket) ? "spam" : /charged|Payments/.test(ticket) ? "billing" : "technical"';
-    if (opening.includes('attention within the hour') || opening.includes('A ticket is urgent')) return 'result = /DOWN|Payments are failing/.test(ticket)';
-    if (opening.includes('Write one paragraph')) return 'result = (tickets.join(" ") + " ").repeat(4).trim()';
-    if (opening.includes('noticeably shorter')) return 'result = text.split(/\\s+/).slice(0, Math.ceil(text.split(/\\s+/).length / 2)).join(" ")';
+    if (opening.includes('Pick the label')) return 'return /WATCHES/.test(ticket) ? "spam" : /charged|Payments/.test(ticket) ? "billing" : "technical"';
+    if (opening.includes('attention within the hour') || opening.includes('A ticket is urgent')) return 'return /DOWN|Payments are failing/.test(ticket)';
+    if (opening.includes('Write one paragraph')) return 'return (tickets.join(" ") + " ").repeat(4).trim()';
+    if (opening.includes('noticeably shorter')) return 'return text.split(/\\s+/).slice(0, Math.ceil(text.split(/\\s+/).length / 2)).join(" ")';
     return null;
   });
   const report = await createNatlangRuntime({ model: model.driver }).run(() => triage(tickets, 'billing, technical, spam'));

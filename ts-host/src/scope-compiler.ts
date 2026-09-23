@@ -40,8 +40,6 @@ export type ScopeCompileOptions = {
   helperBindings?: readonly string[];
   /** Opaque host values supplied by the runtime outside the portable snapshot. */
   opaqueBindings?: readonly string[];
-  /** Expose the function's result slot as a mutable eval binding unless declared locally. */
-  resultBinding?: boolean;
   /** Enabled only when the evaluator exposes application-scoped module loading. */
   allowModules?: boolean;
   allowNetwork?: boolean;
@@ -92,6 +90,10 @@ export const SCOPE_RUNTIME_PRELUDE = `const __natlang_plain = (value: any) => !!
   (Object.getPrototypeOf(value) === null || Object.getPrototypeOf(Object.getPrototypeOf(value)) === null);
 const __natlang_copy = (value: any): any => Array.isArray(value) ? value.map(__natlang_copy) :
   __natlang_plain(value) ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, __natlang_copy(v)])) : value;
+const __natlang_frozen = (value: any): any => {
+  if (Array.isArray(value) || __natlang_plain(value)) { Object.freeze(value); for (const item of Object.values(value)) __natlang_frozen(item); }
+  return value;
+};
 const __natlang_callable = (name: string) => __live.callables[name];
 const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
@@ -101,12 +103,8 @@ const iterateOn = __live.iterateOn;
 `;
 const SUFFIX = '\n}\n';
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const FORBIDDEN_AMBIENTS = new Set([
-  'process', 'globalThis', 'require', 'module', 'Buffer',
-  'window', 'document', 'navigator', 'location',
-  'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource',
-  'setTimeout', 'setInterval', 'queueMicrotask',
-]);
+/** CommonJS names: eval code imports packages with `import` instead. */
+const MODULE_AMBIENTS = new Set(['require', 'module']);
 
 function namesOf(name: ts.BindingName): ts.Identifier[] {
   if (ts.isIdentifier(name)) return [name];
@@ -311,11 +309,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   // a local from an earlier eval without reusing that earlier const/let binding.
   const shadowedLocals = new Set(bindings.map(binding => binding.name).filter(name => localNames.includes(name)));
 
-  const immutable = new Set([...helperNames, ...opaqueNames, ...serviceNames,
+  const immutable = new Set([...inputNames, ...helperNames, ...opaqueNames, ...serviceNames,
     ...captureOptions.filter(binding => !binding.mutable).map(binding => binding.name),
     ...localOptions.filter(binding => !binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.mutable).map(binding => binding.name)]);
-  const deeplyReadonly = new Set([...helperNames, ...opaqueNames, ...serviceNames]);
+  const deeplyReadonly = new Set([...inputNames, ...helperNames, ...opaqueNames, ...serviceNames]);
 
   const topLevelNames = new Set<string>();
   for (const binding of bindings) {
@@ -327,8 +325,6 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       diagnostics.push({ code: 'forbidden-control', message: 'Persistent eval bindings must use const or let, not var.',
         ...rawSpan(binding.start, binding.end) });
   }
-  const implicitResult = options.resultBinding === true && !injectedNames.has('result') &&
-    !topLevelNames.has('result');
 
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node) ||
@@ -339,16 +335,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     else if (ts.isIdentifier(node) && (node.text === 'eval' || node.text === 'Function') &&
         !isPropertyName(node) && !isDeclarationName(node))
       add('forbidden-dynamic-code', `${node.text} is unavailable in eval.`, node);
-    else if (ts.isTryStatement(node))
-      add('forbidden-control', 'Eval cannot catch runtime failures; let validation bubble to the caller.', node);
-    else if (ts.isClassDeclaration(node) || ts.isClassExpression(node) || ts.isYieldExpression(node) ||
-        (ts.isFunctionLike(node) && 'asteriskToken' in node && !!node.asteriskToken))
-      add('forbidden-control', 'Classes, generators, and yield are unavailable in eval.', node);
-    else if (ts.isIdentifier(node) && FORBIDDEN_AMBIENTS.has(node.text) &&
-        !(node.text === 'fetch' && options.allowNetwork) &&
-        !topLevelNames.has(node.text) &&
-        !isPropertyName(node) && !isDeclarationName(node))
-      add('forbidden-ambient', `${node.text} is not an injected eval binding.`, node);
+    else if (ts.isIdentifier(node) && (MODULE_AMBIENTS.has(node.text) || (node.text === 'fetch' && !options.allowNetwork)) &&
+        !topLevelNames.has(node.text) && !isPropertyName(node) && !isDeclarationName(node))
+      add('forbidden-ambient', node.text === 'fetch' ? 'Network access is turned off for this runtime, so fetch is unavailable.' :
+        `${node.text} is unavailable in eval; import packages with import instead.`, node);
 
     const target = assignmentTarget(node);
     const targetProperty = target && propertyText(target);
@@ -362,7 +352,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       let root = target;
       while (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root)) root = root.expression;
       if (ts.isIdentifier(root) && (deeplyReadonly.has(root.text) || (root === target && immutable.has(root.text))))
-        add('invalid-binding', `Binding ${JSON.stringify(root.text)} is immutable in eval.`, target);
+        add('invalid-binding', inputNames.includes(root.text) ?
+          `${root.text} is a parameter and cannot be changed; declare a new variable for a changed value.` :
+          `Binding ${JSON.stringify(root.text)} is immutable in eval.`, target);
     }
     ts.forEachChild(node, visit);
   };
@@ -395,7 +387,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const name of injected) if (declared.has(name) && !shadowedLocals.has(name))
     {
       const binding = bindings.find(item => item.name === name)!;
-      diagnostics.push({ code: 'invalid-binding', message: `Top-level binding ${JSON.stringify(name)} redeclares an injected binding.`,
+      diagnostics.push({ code: 'invalid-binding', message: `${name} is already defined in this scope; use it directly instead of declaring it again.`,
         ...rawSpan(binding.start, binding.end) });
     }
 
@@ -468,28 +460,17 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ts.forEachChild(node, findReturns);
   };
   for (const statement of statements) findReturns(statement);
-  const persisted = [...(implicitResult ? ['result'] : []),
-    ...localOptions.filter(binding => binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
+  const persisted = [
+    ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.transient).map(binding => binding.name)];
   const capture = `{ ${persisted.join(', ')} }`;
-  const assignedToResult: string[] = [];
-  if (implicitResult) {
-    const visitResult = (node: ts.Node): void => {
-      if (ts.isFunctionLike(node)) return;
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-          ts.isIdentifier(node.left) && node.left.text === 'result' && ts.isIdentifier(node.right))
-        assignedToResult.push(node.right.text);
-      ts.forEachChild(node, visitResult);
-    };
-    for (const statement of statements) visitResult(statement);
-  }
   const containers: Edit[] = returns.map(statement => {
     const location = rel(statement);
     const expression = statement.expression ? lowerSpan(rel(statement.expression).start, rel(statement.expression).end) : 'null';
-    const available = [...(implicitResult ? ['result'] : []),
-      ...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
+    const available = [
+      ...localOptions.map(binding => binding.name),
       ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
-    return { ...location, text: `return __natlang_finish(${expression}, { ${available.join(', ')} });` };
+    return { ...location, text: `return __natlang_finish(${expression}, { ${available.join(', ')} }, true);` };
   });
   if (finalExpression) containers.push({ start: finalExpression.start, end: finalExpression.end,
     text: `return __natlang_finish(${lowerSpan(finalExpression.start, finalExpression.end)});` });
@@ -504,24 +485,24 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const producesResult = !!finalExpression || returns.length > 0;
   const result: ScopeCompileResult = { version: SCOPE_COMPILE_VERSION, ok: diagnostics.length === 0,
     producesResult,
-    resultBindings: [...new Set(assignedToResult.concat(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
-      ? [statement.expression.text] : []).concat(last && ts.isExpressionStatement(last) && ts.isIdentifier(last.expression)
-      ? [last.expression.text] : [])))],
+    resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
+      ? [statement.expression.text] : []))],
     entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
   if (diagnostics.length) return result;
   const mutableCaptures = captureOptions.filter(binding => binding.mutable).map(binding => binding.name);
   const prologue = [
-    inputNames.length ? `let { ${inputNames.join(', ')} } = __natlang_copy(__inputs);` : '',
-    ...(implicitResult ? ['let result = __locals.result;'] : []),
+    inputNames.length ? `const { ${inputNames.join(', ')} } = __natlang_frozen(__natlang_copy(__inputs));` : '',
+    // Your own locals come back as mutable copies (only parameters are frozen); the eval commits them when it succeeds.
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
-      `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
+      `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name});`),
     ...captureOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name} = __captures.${binding.name};`),
     ...helperNames.map(name => `const ${name} = __natlang_callable(${JSON.stringify(name)});`),
     ...serviceNames.map(name => `const ${name} = __live.services[${JSON.stringify(name)}];`),
     `const __natlang_present = (value: Record<string, unknown>) => Object.fromEntries(` +
       `Object.entries(value).filter(([, item]) => item !== undefined));`,
-    `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}) => ` +
-      `__natlang_output({ result: __natlang_result === undefined ? null : __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
+    `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}, ` +
+      `__natlang_returned = false) => __natlang_output({ result: __natlang_result === undefined ? null : __natlang_result, ` +
+      `returned: __natlang_returned, ` +
       `bindings: __natlang_present(__natlang_bindings)${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''} });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +

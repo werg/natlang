@@ -18,7 +18,7 @@ test('research reducer owns semantic state and actual source loads in the interp
     await api();
     const { natlangApplication } = await import('../studio/shared/natlang-app.mjs');
     const initial = { revision: 0, head: 'manifest', question: '', notice: '', active_view: '', selected: '', receipts: [] };
-    const model = scriptedModel(() => 'result = { ...state, revision: state.revision + 1, question: event.value, notice: "The question is open." }');
+    const model = scriptedModel(() => 'return { ...state, revision: state.revision + 1, question: event.value, notice: "The question is open." }');
     let committed;
     const app = natlangApplication({ source: { files, reducer: 'reduce.nl', view: 'view.ts' }, initialState: initial, seedRoot: 17,
         model: model.driver, services: { research: {} }, onCommit: commit => { committed = commit; } });

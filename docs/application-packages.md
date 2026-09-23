@@ -1,94 +1,38 @@
-# Application packages and network access
+# Packages and network access in natlang code
 
-A Node natlang application owns a normal `package.json` and
-`package-lock.json`. Its dependencies belong to the application, not an individual
-natlang call or eval session. Callable-folder TypeScript and model-authored eval
-code resolve packages through that application workspace.
+Natlang code imports packages the way any module in its workspace would. The
+workspace is the application directory: `createNatlangRuntime({ workspace })`,
+`natlang run --workspace DIR`, or by default the nearest `package.json` above
+the working directory. Install dependencies there with your package manager as
+usual; the runtime never installs anything.
 
-```ts
-import { ApplicationPackages, createNatlangRuntime, loadNatlang } from '@natlang/node';
+- Callable-folder TypeScript (`main/is_numeric.ts`) imports packages with normal
+  `import` statements.
+- Model-written eval code can use `import x from "pkg"` or `await import("pkg")`.
+  Imported bindings last for that eval; import again in a later eval.
+- Resolution is Node's, from the workspace, so anything the workspace can
+  resolve is importable, including subpath exports.
+- Application functions come from callable folders, not imports: `foo.nl` sees
+  the items in `foo/`. Relative and absolute file imports from callable-folder
+  code are rejected.
 
-const workspace = '/absolute/path/to/app';
-// Explicit preparation: npm ci when a lockfile exists, otherwise npm install.
-await new ApplicationPackages(workspace).prepareDependencies();
-const runtime = createNatlangRuntime({ workspace, network: true, model });
-const main = loadNatlang(`${workspace}/main.nl`);
-await runtime.run(() => main('42'));
-```
-
-An explicit workspace requires an existing package.json; nothing is installed
-implicitly. Without one, the runtime uses the nearest `package.json` above the
-working directory. `natlang run --workspace /absolute/app-root` selects one for
-an application. The Node eval environment also finds the current
-project automatically; import syntax is not controlled by a workspace mode.
-If no project manifest exists, an attempted package import reports that a
-`package.json` is required.
-`prepareDependencies()` respects the existing lockfile. `installPackages(specs)`
-runs npm install and updates package.json and package-lock.json. Concurrent installs
-in the same workspace are serialized within the host process. npm lifecycle scripts
-are enabled. Package specifiers can include versions, tags, Git URLs, and local
-packages accepted by npm; imports never install missing packages implicitly.
-Non-npm `packageManager` declarations fail explicitly; pnpm/Yarn support is pending.
-
-Inside model-authored eval:
-
-```ts
-await installPackages(['is-number@7.0.0']);
-import isNumber from 'is-number';
-return isNumber(value);
-```
-
-Static default, named and namespace imports and dynamic `await import(...)` are
-supported for installed dependencies explicitly declared in the project's
-`package.json`, including exported package subpaths. Undeclared/transitive
-packages, local relative/absolute files, URL imports, and `node:` built-ins are
-not importable from natlang eval or source functions. Imported package code may
-itself use Node's normal module resolution internally.
-
-Application subfunctions use the source tree, not import statements. `foo.nl` or
-`foo.ts` automatically sees functions in `foo/`; `foo/bar.nl` sees functions in
-`foo/bar/`. Runtime source imports between application files are rejected.
-The native file format still requires a default function with explicit boundary
-types. Recursive subfunction graphs are not admitted to unit-test training data.
-
-Imported bindings are temporary within one eval and are not serialized into the
-portable scope. Re-import in subsequent evals; the application installation persists.
-The model's system prompt lists installed direct dependencies from `package.json`
-(including scoped package names). The list refreshes between model turns after
-`installPackages` succeeds, and is also supplied to child source-workspace calls.
-Transitive or merely declared-but-not-installed packages are not advertised.
-HTTP Response handles have the same lifetime. Consume them before returning:
+`fetch` is available in eval, and `network: false` removes it. HTTP responses
+have to be consumed before the eval returns:
 
 ```ts
 const response = await fetch('https://example.com/data.json');
-return await response.json();
+result = await response.json();
 ```
 
-Network access defaults on when a project manifest is found; `network: true` can also
-enable fetch without one. `network: false` only removes
-the provided fetch global—it cannot prevent installed Node packages from networking.
+## Authority
 
-## Execution authority and reproducibility
+The Node backend runs code with the host process's permissions; it is not a
+sandbox. Package code, filesystem access and HTTP requests are not undone when
+an eval fails. Package imports and HTTP requests (origin and path only) are
+recorded in the host trace as observations, not replay fixtures. Node caches
+loaded modules; restart the process after upgrading a package that is already
+loaded.
 
-This Node backend is a **trusted host backend, not a security sandbox**. Installed
-packages, lifecycle scripts and imported Node builtins run with host process
-permissions. Run untrusted applications in an appropriately isolated process or
-container. A workspace directory does not itself provide that isolation.
-
-Installation, filesystem and HTTP effects are not rolled back when eval fails.
-Installation/import events and HTTP status events enter the host trace. HTTP logs
-omit query strings, headers and bodies; they are observations, not replay fixtures.
-Package-install records include manifest/lockfile hashes. npm has a 120-second
-operation timeout; this is not a comprehensive descendant-process/resource limit.
-Use AbortSignal timeouts for HTTP calls and outer job limits for execution.
-
-Node caches imported modules. After upgrading an already-loaded package, restart
-the execution process to guarantee the new module graph. Local `.ts` module loading
-follows the host Node version's TypeScript support; published JS package entrypoints
-work independently of that support. Direct HTTP module imports are not implemented;
-HTTP requests through fetch and npm-supported dependency URLs are available.
-
-See `examples/npm_app`: after `npm run build:node` in `ts-host`, run
-`node examples/npm_app/run.mjs --install` from the repository root. It calls the
-same npm package from a handwritten callable-folder function and from a scripted
-natural-language eval.
+See `examples/npm_app`: run `npm install` in that directory, build `ts-host`,
+then `node examples/npm_app/run.mjs`. It uses one npm package from handwritten
+callable-folder code and from a scripted natural-language eval.

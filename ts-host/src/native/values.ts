@@ -19,9 +19,9 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   body: string; originalBody?: string; args: Record<string, Value>; return: Value;
   continuationNote: string; let: Record<string, Value>; letTypes: Record<string, Type>;
   /** Callable context: the record tree of the function's callable folder (see runtime/loader.ts). */
-  codebase: Record<string, unknown>; functionName: string; marks: Record<number, string>;
+  codebase: Record<string, unknown>; functionName: string;
   subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
-  reducerMode: '' | 'apply' | 'direct'; commitInclude?: string[]; commitExclude?: string[];
+  reducerMode: '' | 'apply' | 'direct';
   captures?: Record<string, CaptureCell>;
   /** Constructors for class-typed host contracts. */
   hostClasses?: ReadonlyMap<string, Function> };
@@ -95,6 +95,8 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (wanted.kind === 'prim') {
+    // unknown holds any value, as in TypeScript; code narrows it before relying on a shape.
+    if (wanted.name === 'unknown' && raw !== undefined) return raw as Value;
     if ((wanted.name === 'string' || wanted.name === 'Blob') && typeof raw === 'string') return raw;
     if (wanted.name === 'number' && typeof raw === 'number' && Number.isFinite(raw) &&
         (!Number.isInteger(raw) || Number.isSafeInteger(raw))) return raw;
@@ -163,7 +165,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
       body: text && !text.endsWith('\n') ? text + '\n' : text, args: {}, return: MISSING,
       continuationNote: String(body.continuation_note ?? ''), let: {}, letTypes: {},
       codebase: plain(body.codebase) ? body.codebase as Record<string, unknown> : {},
-      functionName: String(body.function ?? ''), marks: structuredClone((body.marks ?? {}) as Record<number, string>),
+      functionName: String(body.function ?? ''),
       subtype: subtype as LambdaNode['subtype'], reducerMode: '' };
     for (const [name, value] of Object.entries((body.args ?? {}) as Record<string, unknown>)) {
       const field = type.params.fields.find(f => f.name === name);
@@ -244,7 +246,6 @@ export function dump(value: Value, full = false): unknown {
     if (full && Object.keys(value.codebase).length) body.codebase = value.codebase;
     if (value.functionName) body.function = value.functionName;
     if (value.subtype !== 'function') body.subtype = value.subtype;
-    if (Object.keys(value.marks).length) body.marks = value.marks;
   }
   return { $lambda: body };
 }

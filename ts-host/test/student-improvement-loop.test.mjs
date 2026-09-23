@@ -34,13 +34,12 @@ function modelServer(responses) {
 const config = (dir, endpoint, role, surface) => ({ jobs: join(dir, `${role}-jobs`),
   output: join(dir, `${role}.jsonl`), workers: 1, modelId: role, rootSeed: 7,
   systemPrompt: defaultSystemPrompt, segmentTurns: 24, segmentMessages: 48,
-  toolSurfaceSha256: surface, endpoint, collectionRole: role });
+  toolSurfaceSha256: surface, endpoint, collectionRole: role, maxTurns: 2 });
 
 test('student failure is replayed exactly, teacher repairs it, prefix is not positive SFT', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'student-handoff-'));
   const student = modelServer([[['eval', { code: 'throw new Error("wrong branch")' }]], null]);
-  const teacher = modelServer([[['eval', { code: 'const answer: number = 1; answer' }],
-    ['mark_lines', { start: 1 }]]]);
+  const teacher = modelServer([[['return_result', { value: 1 }]]]);
   await Promise.all([new Promise(resolve => student.server.listen(0, '127.0.0.1', resolve)),
     new Promise(resolve => teacher.server.listen(0, '127.0.0.1', resolve))]);
   try {
@@ -69,7 +68,6 @@ test('student failure is replayed exactly, teacher repairs it, prefix is not pos
     assert.equal(repaired.handoff.handoff_at, 1);
     assert.equal(student.count(), 2);
     assert.equal(teacher.count(), 1, 'student prefix must replay without another student or teacher decode');
-    assert.match(teacher.requests[0].messages[0].content, /last eval failed/);
     assert.match(teacher.requests[0].messages.at(-1).content, /wrong branch/);
     const { turns } = materializeNativeRows([repaired]);
     assert.equal(turns.length, 2);

@@ -79,7 +79,7 @@ Live values (functions, class instances, DOM nodes, native handles) are passed b
 
 ## What the interpreter does
 
-The model works in a persistent TypeScript eval scope. Parameters, captures, callable items (as `helper(...)` and `folder.child(...)`), and services are bindings; assigning `result` (or a final expression of the declared type) supplies the return value. It closes instruction lines with `mark_lines`, reports `report_blocker` for missing information and `report_error` for invalid work, and may inspect or edit callable items with `read_function`, `edit_function`, and `diff_functions`. Directory reducers additionally get file tools and `commit`. Write instructions so the next meaningful action is apparent from them and the typed scope.
+The model carries out the instructions for one call. Work that takes only reading and judgment it answers directly; for computation, data work, and calls it uses a persistent TypeScript eval scope, where parameters (`const`), captures, callable items (as `helper(...)` and `folder.child(...)`), and services are bindings. It finishes with `return_result(value)`, by returning a value from an eval (`return value;`, staged) and then replying done, or, for a string result, by replying with the text. It reports `blocked` for missing information and `failed` for invalid work, and may inspect or edit callable items with `read_function`, `edit_function`, and `diff_functions`. Directory reducers additionally get file tools; the folder changes present when they finish are kept. Write instructions so the next meaningful action is apparent from them and the typed scope.
 
 ## Iteration
 

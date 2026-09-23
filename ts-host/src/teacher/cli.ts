@@ -54,6 +54,7 @@ async function main(): Promise<void> {
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 1),
     segmentTurns: integer(flags, '--segment-turns', 24), segmentMessages: integer(flags, '--segment-messages', 48),
+    ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),

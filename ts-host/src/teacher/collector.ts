@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
-import { EXPLICIT_TOOLS_PROMPT } from '../native/prompt.js';
+import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
@@ -21,6 +21,8 @@ export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
+  /** Model turns allowed per call; unlimited unless set. A collection run should set one. */
+  maxTurns?: number;
   endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean;
   handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
 export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
@@ -91,6 +93,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), segment_turns: options.segmentTurns,
     segment_messages: options.segmentMessages, transport: 'openai-compatible',
+    ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     collection_role: options.collectionRole ?? 'teacher',
     ...(handoff ? { handoff_sha256: sha256(canonical(handoff)) } : {}) };
@@ -320,8 +323,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const environment = new TypeScriptEnvironment({ mode: 'fresh' });
     const effects = effectHarness(item.record.semantics.effects ?? {});
     const agent = new NativeToolAgent(driver, { systemPrompt: config.systemPrompt, temperature: 0,
-      segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages,
-      validationFeedback: 'caller' });
+      segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages, maxTurns: config.maxTurns });
     // Seeds derive from the run ID, so it names the program and seed root only: a teacher
     // handed a student's failed state must reproduce the student's requests exactly.
     const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index,
@@ -380,4 +382,4 @@ export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..
   return sha256(Buffer.concat(chunks.flatMap((chunk, index) => index ? [Buffer.from([0]), chunk] : [chunk])));
 }
 
-export const defaultSystemPrompt = EXPLICIT_TOOLS_PROMPT;
+export const defaultSystemPrompt = TOOLS_PROMPT;

@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { bindAwait } from '../runtime/context.js';
-import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
+import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from '../native/evaluator.js';
 
 declare const __NATLANG_PRELUDE__: string;
@@ -99,16 +99,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     const evaluator = this.mode === 'retained' ? (this.evaluator ??= this.makeEvaluator()) : this.makeEvaluator();
-    const log = (...values: unknown[]) => {
-      if (logs.length >= 32) return;
-      const line = values.map(value => {
-        if (typeof value === 'string') return value;
-        if (value === undefined) return 'undefined';
-        try { return JSON.stringify(portable(value)); }
-        catch { return String(value); }
-      }).join(' ');
-      logs.push(line.length > 2000 ? `${line.slice(0, 2000)} …` : line);
-    };
+    const log = consoleWriter(logs, value => { try { return JSON.stringify(portable(value)); } catch { return String(value); } });
     return evaluator(snapshot(request.scope) as Record<string, unknown>, compile(request.code, request.body, asyncBody),
       log, request.live ?? {});
   }
@@ -132,7 +123,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   async executeAsync(request: EvalRequest): Promise<EvalResult> {
     const logs: string[] = [];
     try {
-      const value = await this.run(request, request.body, logs);
+      const value = await withinTimeout(Promise.resolve(this.run(request, request.body, logs)), request.timeoutMs);
       return { result: value === undefined ? null : value, events: this.capture(request, 'completed'), logs };
     } catch (error) { throw this.failure(request, error, logs); }
   }

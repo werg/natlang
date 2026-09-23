@@ -1,9 +1,8 @@
 /** @natlang/browser: natural-language functions in browser applications. */
 import { SlotContextStore, bindAwait, setContextStore } from '../runtime/context.js';
-import { setDefaultEnvironmentFactory, setDefaultSystemPrompt } from '../runtime/runtime.js';
+import { setDefaultEnvironmentFactory } from '../runtime/runtime.js';
 import { setModuleRealm, setModuleTarget } from '../runtime/modules.js';
 import { setDefaultLibProvider } from '../compiler/host.js';
-import { TOOLS_PROMPT } from '../native/prompt.js';
 import { TypeScriptEnvironment } from './environment.js';
 
 declare const __NATLANG_TS_LIBS__: Record<string, string>;
@@ -11,7 +10,6 @@ setContextStore(new SlotContextStore());
 setDefaultEnvironmentFactory(() => new TypeScriptEnvironment());
 setModuleRealm(() => new TypeScriptEnvironment({ mode: 'retained' }));
 setModuleTarget('browser');
-setDefaultSystemPrompt(() => TOOLS_PROMPT);
 setDefaultLibProvider(name => __NATLANG_TS_LIBS__[name]);
 // Compiled browser code restores the natlang task after each await through this hook.
 Object.defineProperty(globalThis, '__natlang_bindAwait', { value: bindAwait, configurable: true });

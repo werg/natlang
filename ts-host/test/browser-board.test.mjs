@@ -16,8 +16,8 @@ test('the browser board compiles in the page, reduces commands, and renders a co
   assert.equal(compiled.ok, true, JSON.stringify(compiled.diagnostics));
   const board = compiled.require('board.ts');
   const model = scriptedModel(opening => opening.includes('Interpret the UI event') ?
-    'result = event.kind === "command" ? { kind: "add", text: event.value } : { kind: "toggle", item_id: event.value }' :
-    'result = { title: "Tasks", summary: `${state.items.length} tasks`, groups: [' +
+    'return event.kind === "command" ? { kind: "add", text: event.value } : { kind: "toggle", item_id: event.value }' :
+    'return { title: "Tasks", summary: `${state.items.length} tasks`, groups: [' +
     '{ label: "Open", ids: state.items.filter(item => !item.done).map(item => item.id) }, ' +
     '{ label: "Done", ids: state.items.filter(item => item.done).map(item => item.id) }] }');
   const runtime = natlang.createNatlangRuntime({ model: model.driver });

@@ -34,15 +34,15 @@ test('a named function exposes its callable folder as a typed hierarchy in host 
   assert.equal(summarize.textTools.rules.strict, true);
   assert.equal(typeof summarize.shorten, 'function');
   assert.equal(typeof summarize.iterateOn, 'function');
-  const model = scriptedModel(opening => opening.includes('Shorten text') ? 'result = text.split(" ")[0]' :
-    'const shortened = await shorten(text); result = { text: textTools.normalize(shortened), short: is_short(shortened) }');
+  const model = scriptedModel(opening => opening.includes('Shorten text') ? 'return text.split(" ")[0]' :
+    'const shortened = await shorten(text); return { text: textTools.normalize(shortened), short: is_short(shortened) }');
   const runtime = createNatlangRuntime({ model: model.driver });
   const value = await runtime.run(() => summarize('Hello brave new world'));
   assert.deepEqual(value, { text: 'hello', short: true });
   const listing = model.openings[0];
-  assert.match(listing, /is_short\(text: string\): boolean {2}# TypeScript\n/);
-  assert.match(listing, /shorten\(text: string\): Promise<string> {2}# natural language/);
-  assert.match(listing, /textTools {2}# TypeScript module\n\s+\.normalize\(text: string\): string {2}# TypeScript/);
+  assert.match(listing, /declare function is_short\(text: string\): boolean; {2}\/\/ TypeScript\n/);
+  assert.match(listing, /declare function shorten\(text: string\): Promise<string>; {2}\/\/ natural language/);
+  assert.match(listing, /declare namespace textTools \{\n {2}function normalize\(text: string\): string; {2}\/\/ TypeScript/);
   assert.match(listing, /type Summary = /);
   assert.equal(await runtime.run(() => summarize.shorten('Alpha beta')), 'Alpha');
 });
@@ -58,7 +58,7 @@ test('natural-language calls need a task, run concurrently as siblings, and reje
   const root = tree({ 'echo.nl': nlFile({ value: 'string' }, 'string', 'Return value.') });
   const echo = loadNatlang(join(root, 'echo.nl'));
   await assert.rejects(() => echo('x'), NatlangContextError);
-  const model = scriptedModel(() => 'result = value');
+  const model = scriptedModel(() => 'return value');
   const runtime = createNatlangRuntime({ model: model.driver });
   assert.deepEqual(await runtime.run(() => Promise.all(['a', 'b', 'c'].map(item => echo(item)))), ['a', 'b', 'c']);
   const guarded = await runtime.run(() => __natlang.guard('def:x', () => {
@@ -91,8 +91,8 @@ test('inline lambdas read live captures and write back mutable ones; a concurren
     captures: captures.map(([name, type, mutable]) => ({ name, type: { text: type, natlang: type, aliases: {} }, mutable, source: 'local', mentionSpan: 0 })),
     inheritedCodebaseRevision: '' });
   let limit = 3, tally = 0;
-  const model = scriptedModel(opening => opening.includes('Increment tally') ? 'tally = tally + limit; result = null' :
-    opening.includes('Double limit') ? 'result = limit * 2' : null);
+  const model = scriptedModel(opening => opening.includes('Increment tally') ? 'tally = tally + limit; return null' :
+    opening.includes('Double limit') ? 'return limit * 2' : null);
   const runtime = createNatlangRuntime({ model: model.driver });
   const read = __natlang.inline(plan('Double limit', 'number', [['limit', 'number', true]]), [], { limit: [() => limit, value => { limit = value; }] });
   limit = 5;
@@ -101,8 +101,8 @@ test('inline lambdas read live captures and write back mutable ones; a concurren
     { tally: [() => tally, value => { tally = value; }], limit: [() => limit] });
   await runtime.run(() => write());
   assert.equal(tally, 5);
-  assert.match(model.openings.at(-1), /captures \(live bindings from the caller\)\n {2}tally: number = 0 {2}\(let/);
-  const racing = createNatlangRuntime({ model: scriptedModel(() => 'race.bump(); tally = tally + 1; result = null').driver,
+  assert.match(model.openings.at(-1), /let tally: number = 0; \/\/ assignments are written back to the caller/);
+  const racing = createNatlangRuntime({ model: scriptedModel(() => 'race.bump(); tally = tally + 1; return null').driver,
     services: { race: { bump() { tally = 100; } } } });
   await assert.rejects(() => racing.run(() => write()), NatlangCallError);
   assert.equal(tally, 100, 'a conflicting write-back leaves the other writer\'s value');
@@ -115,7 +115,7 @@ test('services are injected into eval and callable-folder modules, and every cal
   const entries = [];
   const store = { add(value) { entries.push(value); return true; }, size() { return entries.length; } };
   const traces = [];
-  const runtime = createNatlangRuntime({ model: scriptedModel(() => 'store.add(entry); result = count()').driver,
+  const runtime = createNatlangRuntime({ model: scriptedModel(() => 'store.add(entry); return count()').driver,
     services: { store }, trace: trace => traces.push(trace) });
   assert.equal(await runtime.run(() => record('first')), 1);
   const effects = traces[0].events.filter(event => event.kind === 'effect' && event.phase === 'completed').map(event => event.capability);
@@ -127,8 +127,8 @@ test('a callable folder may import siblings, including natural-language function
     'plan/steps.ts': 'import expand from "./expand.nl";\nexport default async function steps(goal: string): Promise<string> { return (await expand(goal)).toUpperCase(); }\n',
     'plan/expand.nl': nlFile({ goal: 'string' }, 'string', 'Expand the goal.') });
   const plan = loadNatlang(join(root, 'plan.nl'));
-  const runtime = createNatlangRuntime({ model: scriptedModel(opening => opening.includes('Expand the goal') ? 'result = goal + " now"' :
-    'result = await steps(goal)').driver });
+  const runtime = createNatlangRuntime({ model: scriptedModel(opening => opening.includes('Expand the goal') ? 'return goal + " now"' :
+    'return await steps(goal)').driver });
   assert.equal(await runtime.run(() => plan('ship')), 'SHIP NOW');
 });
 
@@ -137,7 +137,7 @@ test('natlang.d folders load as callable trees for application code', async () =
     'natlang.d/labels.ts': 'export const all = ["bug", "feature"];\n' });
   const natlang = loadCallables(join(root, 'natlang.d'));
   assert.deepEqual(natlang.labels.all, ['bug', 'feature']);
-  const runtime = createNatlangRuntime({ model: scriptedModel(() => 'result = text.includes("crash") ? "bug" : "feature"').driver });
+  const runtime = createNatlangRuntime({ model: scriptedModel(() => 'return text.includes("crash") ? "bug" : "feature"').driver });
   assert.equal(await runtime.run(() => natlang.classify('it crashes')), 'bug');
   await assert.rejects(() => runtime.run(() => natlang.classify.call(null, 42)), /type-mismatch|expected string/);
 });
@@ -203,7 +203,7 @@ test('directory reducers take a Folder and folder.apply installs their committed
   const root = tree({ 'tidy.nl': nlFile({ note: 'string' }, 'string', 'Append note to log.txt and return "ok".', 'kind: directory-reducer\n') });
   const tidy = loadNatlang(join(root, 'tidy.nl'));
   const runtime = createNatlangRuntime({ model: scriptedModel(() =>
-    'const log = folder.file("log.txt"); await log.writeText((await log.readText()) + note + "\\n"); result = "ok"').driver });
+    'const log = folder.file("log.txt"); await log.writeText((await log.readText()) + note + "\\n"); return "ok"').driver });
   const folder = Folder.fromFiles({ 'log.txt': 'start\n' });
   assert.equal(await runtime.run(() => folder.apply(tidy, 'applied')), 'ok');
   assert.equal(await folder.readText('log.txt'), 'start\napplied\n');

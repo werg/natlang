@@ -70,10 +70,8 @@ for (const item of failureCases) test(`${item.id}: failed eval exposes debug and
 
 test('teacher collector seeds a real failure and admits only the repair continuation', async () => {
   const caseItem = failureCases[0], record = failureProgramRecords()[0];
-  const replies = [
-    ['eval', { code: caseItem.repaired }],
-    ['mark_lines', { start: 1 }],
-  ];
+  // The repair eval returns the value; the empty reply after it says done.
+  const replies = [['eval', { code: caseItem.repaired }]];
   let requests = 0;
   const server = createServer((request, response) => {
     request.resume(); request.on('end', () => {
@@ -96,7 +94,7 @@ test('teacher collector seeds a real failure and admits only the repair continua
     assert.equal(row.outcome.value, caseItem.expected);
     assert.equal(requests, 2, 'the seeded failure must not consume a model request');
     assert.equal(row.trajectory.length, 3);
-    assert.match(row.trajectory[1].context.at(-1).content, /Debug snapshot available/);
+    assert.match(row.trajectory[1].context.at(-1).content, /Nothing else from this eval was kept/);
     const materialized = materializeNativeRows([row]);
     assert.equal(materialized.turns[0].training_admission.approved, false);
     assert.equal(materialized.turns[1].training_admission.approved, true);

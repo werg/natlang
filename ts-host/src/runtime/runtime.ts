@@ -1,13 +1,16 @@
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import type { NativeReviewOptions } from '../native/agent.js';
+import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, currentFrame, runInFrame, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 
 export type ModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number; segmentTurns?: number | null; segmentMessages?: number | null;
-  review?: NativeReviewOptions; validationFeedback?: 'caller' | 'local' };
+  /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
+  maxFailureRepairs?: number;
+  review?: NativeReviewOptions };
 
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
@@ -31,9 +34,9 @@ export type NatlangRuntimeOptions = {
   seed?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
   /** Evaluator factory; each platform installs a default. */
   environment?: () => EvalEnvironment;
-  /** Application directory whose package.json declares importable packages (Node; default: nearest to cwd). */
+  /** Directory whose node_modules eval imports resolve from (Node; default: the nearest package.json above cwd). */
   workspace?: string;
-  /** Allow `fetch` in eval (Node default: true when a workspace exists). */
+  /** Allow `fetch` in eval (default: true). */
   network?: boolean;
   /** Extra system prompt text appended for every invocation. */
   systemPrompt?: string | (() => string);
@@ -44,10 +47,8 @@ export type NatlangRuntimeOptions = {
 export type TaskOptions = { services?: Services; signal?: AbortSignal; trace?: TraceSink; name?: string };
 
 let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
-let defaultPrompt: (environment: EvalEnvironment) => string = () => '';
 /** Installed by the Node and browser entry points. */
 export function setDefaultEnvironmentFactory(factory: (options: NatlangRuntimeOptions) => EvalEnvironment): void { defaultEnvironment = factory; }
-export function setDefaultSystemPrompt(prompt: (environment: EvalEnvironment) => string): void { defaultPrompt = prompt; }
 
 let taskSequence = 0;
 const activeTasks = new Set<NatlangTask>();
@@ -95,9 +96,9 @@ export class NatlangTask {
     const model = this.runtime.options.model;
     return typeof model === 'function' ? { driver: model } : model;
   }
-  systemPrompt(environment: EvalEnvironment): string {
+  systemPrompt(): string {
     const extra = this.runtime.options.systemPrompt;
-    return defaultPrompt(environment) + (typeof extra === 'function' ? extra() : extra ?? '');
+    return TOOLS_PROMPT + (typeof extra === 'function' ? extra() : extra ?? '');
   }
   cancel(reason: unknown = new Error('natlang task cancelled')): void { this.abort.abort(reason); }
   get isClosed(): boolean { return this.closed; }

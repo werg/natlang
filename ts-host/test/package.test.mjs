@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { createPackageArchive, NatlangPackageStore, parsePackageArchive,
-  satisfiesVersion, writePackageArchive } from '../dist/index.js';
+  satisfiesVersion, writePackageArchive, modelTurnsSoFar } from '../dist/index.js';
 import { createServer } from 'node:http';
 import { promisify } from 'node:util';
 import { execFile as execFileCallback } from 'node:child_process';
@@ -117,11 +117,11 @@ test('CLI builds and runs TypeScript entries, packs and installs applications, a
   };
   for (const [path, text] of Object.entries(files)) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), text); }
   const { wire, env } = await modelServer(t, body => {
-    const opening = String(body.messages[1]?.content ?? ''), turn = body.messages.length;
-    const code = opening.includes('Greet the people') ? 'result = "hello " + input.join(" and ")' :
-      opening.includes('answer from this codebase') ? 'result = helper.helper() + ": " + (await project.file("project-notes.txt").readText())' : undefined;
+    const opening = String(body.messages[1]?.content ?? ''), turn = modelTurnsSoFar(body.messages);
+    const code = opening.includes('Greet the people') ? 'return "hello " + input.join(" and ")' :
+      opening.includes('answer from this codebase') ? 'return helper.helper() + ": " + (await project.file("project-notes.txt").readText())' : undefined;
     if (!code) return null;
-    return turn === 2 ? ['eval', { code }] : turn === 4 ? ['mark_lines', { start: 1 }] : null;
+    return turn === 0 ? ['eval', { code }] : null;
   });
   const cli = join(import.meta.dirname, '..', 'bin', 'natlang.mjs');
   const natlang = (args, options = {}) => execFile(process.execPath, [cli, ...args], { encoding: 'utf8', env, ...options }).then(result => result.stdout);
@@ -131,7 +131,7 @@ test('CLI builds and runs TypeScript entries, packs and installs applications, a
   assert.equal(await natlang(['run', root, '--', 'Ada', 'Grace']), 'hello Ada and Grace');
   assert.equal(await natlang(['run', join(root, 'main.ts'), '--', 'Linus']), 'hello Linus');
   assert.equal(await natlang(['ask', 'answer from this codebase'], { cwd: root }), 'local helper: non-source project context\n');
-  assert.ok(wire.some(body => /helper\(\): string {2}# TypeScript/.test(JSON.stringify(body))), 'natlang.d is listed for ask');
+  assert.ok(wire.some(body => /declare namespace helper \{.*function helper\(\): string;/.test(JSON.stringify(body))), 'natlang.d is listed for ask');
   const inspected = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', root, '--json'], { encoding: 'utf8' }));
   assert.equal(inspected.target, 'hello'); assert.equal(inspected.entry, 'main.ts');
   const discovered = JSON.parse(execFileSync(process.execPath, [cli, 'apps', root, '--json'], { encoding: 'utf8' }));

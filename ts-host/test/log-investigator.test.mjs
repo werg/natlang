@@ -19,7 +19,7 @@ test('natlang investigates a burst, suppresses duplicate escalation and records 
     line('e6', 6, 'health_probe', 'ERROR token used in test fixture')];
   const model = scriptedModel(opening => {
     assert.match(opening, /Judge this event using the supplied exact log evidence/);
-    return 'result = { action: evidence.length >= 3 && item.code === "auth_failed" ? "escalate" : "ignore", ' +
+    return 'return { action: evidence.length >= 3 && item.code === "auth_failed" ? "escalate" : "ignore", ' +
       'severity: "medium", claim: "Repeated failed logins", uncertainty: "" }';
   });
   const traces = [];

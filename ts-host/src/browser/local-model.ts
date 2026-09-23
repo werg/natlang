@@ -15,7 +15,7 @@ type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; ji
   progressCallback?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal };
 type ModelCompletionRequest = { messages: ModelMessage[]; tools: ModelTool[]; tool_choice: 'auto';
-  max_tokens?: number; temperature: number; seed?: number; abortSignal?: AbortSignal;
+  max_tokens?: number; temperature?: number; seed?: number; abortSignal?: AbortSignal;
   cache_prompt?: boolean };
 
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
@@ -230,7 +230,8 @@ export class BrowserLocalModel {
           response = await this.engine.createChatCompletion({ messages,
             tools, tool_choice: 'auto', cache_prompt: true,
             ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
-            temperature: request.temperature, ...(request.seed === null ? {} : { seed: request.seed }),
+            ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+            ...(request.seed === null ? {} : { seed: request.seed }),
             abortSignal: signal });
         } catch (error) {
           if (String(error).includes('kv_cache_full'))

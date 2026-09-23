@@ -66,8 +66,8 @@ test('natlang build types .nl imports, plans inline lambdas, embeds records, and
   assert.ok(emitted.includes(RUNTIME.url), 'the emitted runtime import is bound to the running runtime');
 
   const model = scriptedModel(opening => {
-    if (opening.includes('Decide whether ticket is urgent')) return 'result = keywords.urgent.some(word => ticket.text.includes(word)) ? "urgent" : "normal"';
-    if (opening.includes('Write a note')) return 'seen = seen + 1; result = tone.polite(style + " " + ticket.id)';
+    if (opening.includes('Decide whether ticket is urgent')) return 'return keywords.urgent.some(word => ticket.text.includes(word)) ? "urgent" : "normal"';
+    if (opening.includes('Write a note')) return 'seen = seen + 1; return tone.polite(style + " " + ticket.id)';
     return null;
   });
   const app = await import(pathToFileURL(join(root, 'dist/app.js')).href);
@@ -77,9 +77,9 @@ test('natlang build types .nl imports, plans inline lambdas, embeds records, and
     { id: 'T1', priority: 'urgent', note: 'Please: brief T1!! seen=1' },
     { id: 'T2', priority: 'normal', note: 'Please: brief T2!! seen=1' }]);
   const inlineOpening = model.openings.find(opening => opening.includes('Write a note'));
-  assert.match(inlineOpening, /captures \(live bindings from the caller\)\n {2}style: string = "brief" {2}\(let/);
-  assert.match(inlineOpening, /summarize\(text: string\): Promise<string> {2}# natural language/, 'natlang.d is the inline callable context');
-  assert.match(inlineOpening, /tone {2}# TypeScript module/);
+  assert.match(inlineOpening, /let style: string = "brief"; \/\/ assignments are written back to the caller/);
+  assert.match(inlineOpening, /declare function summarize\(text: string\): Promise<string>; {2}\/\/ natural language/, 'natlang.d is the inline callable context');
+  assert.match(inlineOpening, /declare namespace tone \{/);
 });
 
 test('natlang check reports inline type errors and callable-folder policy violations with locations', () => {
@@ -95,7 +95,7 @@ test('natlang check reports inline type errors and callable-folder policy violat
 });
 
 test('a virtual project compiles and runs in-process through the same compiler', async () => {
-  const model = scriptedModel(opening => opening.includes('Name a color') ? 'result = "teal"' : null);
+  const model = scriptedModel(opening => opening.includes('Name a color') ? 'return "teal"' : null);
   const compiled = compileVirtualProject({ files: {
     'main.ts': "import { nl } from '@natlang/browser';\nexport async function main(input: { mood: string }): Promise<string> {\n" +
       '  const color: string = await nl`Name a color for the mood in input.`(input);\n  return color.toUpperCase();\n}\n' } }, runtimeNamespace, { target: 'node' });

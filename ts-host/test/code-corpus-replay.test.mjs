@@ -5,14 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { replayIsolated, project, materializeCorpus } from '../scripts/code-corpus/replay.mjs';
 import { readJsonl, writeJsonl, digest } from '../scripts/code-corpus/common.mjs';
-import { ApplicationPackages } from '../dist/application-packages.js';
 import { extractFunctions } from '../scripts/code-corpus/extract.mjs';
 const task = () => ({version:'natlang.code_task/1',id:'fixture:double',group_id:'fixture:double',kind:'function',instruction:'Return twice the input.',source:{name:'fixture',license:'MIT'},function:{name:'f',parameters:[{name:'x'}],body:'{ return x * 2; }'},cases:[{args:[3],expected:6,outcome:'return'},{args:[4],expected:8,outcome:'return'}]});
-test('replay produces real eval and mark_lines turns with source-level split groups', async () => {
+test('replay produces a real eval turn and a done turn with source-level split groups', async () => {
   const a = task();
   const row = await replayIsolated(a,0);
   assert.equal(row.outcome.accepted,true);
-  assert.deepEqual(row.outcome.action_ledger.map(e=>e.name),['eval','mark_lines']);
+  assert.deepEqual(row.outcome.action_ledger.map(e=>e.name),['eval']);
   const result = await materializeCorpus([row]);
   assert.equal(result.turns.length,2);
   assert.deepEqual(result.turns[0].source_groups,['fixture:double']);
@@ -88,10 +87,10 @@ test('dependency-bearing corpus replay imports installed local packages from the
   const root = await mkdtemp(join(tmpdir(), 'corpus-replay-package-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'corpus-replay-package-fixture', private: true, type: 'module' }));
-  await mkdir(join(root, 'fixture-pkg'));
-  await writeFile(join(root, 'fixture-pkg', 'package.json'), JSON.stringify({ name: 'corpus-replay-local', version: '1.0.0', type: 'module', exports: './index.js' }));
-  await writeFile(join(root, 'fixture-pkg', 'index.js'), 'export class LocalBox { constructor(value) { this.value = value; } triple() { return this.value * 3; } }\n');
-  await new ApplicationPackages(root).installPackages(['file:./fixture-pkg']);
+  const installed = join(root, 'node_modules', 'corpus-replay-local');
+  await mkdir(installed, { recursive: true });
+  await writeFile(join(installed, 'package.json'), JSON.stringify({ name: 'corpus-replay-local', version: '1.0.0', type: 'module', exports: './index.js' }));
+  await writeFile(join(installed, 'index.js'), 'export class LocalBox { constructor(value) { this.value = value; } triple() { return this.value * 3; } }\n');
   const record = task();
   record.source.path = 'src/main.ts';
   record.function.imports = [{ specifier: 'corpus-replay-local', source: "import { LocalBox } from 'corpus-replay-local';" }];
@@ -102,10 +101,7 @@ test('dependency-bearing corpus replay imports installed local packages from the
   assert.equal(row.outcome.value, 9);
   assert.equal(row.provenance.workspace_before.path, root);
   assert.ok(row.provenance.workspace_before.hashes['package.json']);
-  assert.ok(row.provenance.workspace_before.hashes['package-lock.json']);
-  assert.ok(row.provenance.workspace_after.hashes['package-lock.json']);
   assert.ok(row.outcome.effects.host_events.some(event => event.operation === 'packages.import' && event.specifier === 'corpus-replay-local'));
-  assert.match(row.trajectory[0].context[0].content, /Importable application dependencies from package\.json:\n- "corpus-replay-local"/);
 });
 test('JSONL is bounded, atomic and refuses replacement', async () => {
   const dir=await mkdtemp(join(tmpdir(),'corpus-common-'));
