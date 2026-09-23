@@ -14,79 +14,6 @@ function add(family, index, root, inputs, expected, extra = {}) {
     semantics: { root: { $lambda: root }, inputs, expected, operation: 'read_before_code', ...extra } });
 }
 
-const numericPolicies = [
-  { memo: 'Only the even measurements are eligible. Square each eligible value, retaining source order.',
-    run: values => values.filter(n => n % 2 === 0).map(n => n * n) },
-  { memo: 'Ignore negative measurements. Report the remaining values from largest to smallest, with duplicates retained.',
-    run: values => values.filter(n => n >= 0).sort((a, b) => b - a) },
-  { memo: 'Use each distinct positive measurement once, in the order of its first appearance, then double it.',
-    run: values => [...new Set(values.filter(n => n > 0))].map(n => n * 2) },
-  { memo: 'Keep measurements strictly above the median of this batch. Return their original zero-based positions.',
-    run: values => { const sorted = [...values].sort((a, b) => a - b), median = sorted[Math.floor(sorted.length / 2)];
-      return values.flatMap((n, i) => n > median ? [i] : []); } },
-  { memo: 'A zero resets the running total. Report the running total after each nonzero entry; omit the reset entries.',
-    run: values => { let sum = 0; return values.flatMap(n => { if (n === 0) { sum = 0; return []; } sum += n; return [sum]; }); } },
-  { memo: 'Treat adjacent readings as a transition. Report the positive increases only, in encounter order.',
-    run: values => values.slice(1).flatMap((n, i) => n > values[i] ? [n - values[i]] : []) },
-];
-const numericBatches = [
-  [[-3, 0, 2, 5, 2, 8, -1], [4, -2, 4, 7, 0, 3, 6]],
-  [[7, -1, 3, 3, 0, 9, -5], [2, 8, -4, 8, 1, 0, 5]],
-  [[3, 1, 3, -2, 5, 1, 8], [0, 6, 6, -1, 2, 4, 2]],
-  [[1, 9, 3, 7, 5, 2, 11], [8, 2, 6, 4, 10, 1, 7]],
-  [[2, 3, 0, 4, -1, 2, 0, 5], [0, 7, -2, 1, 0, 3, 3, -1]],
-  [[2, 7, 5, 9, 3, 3, 8], [10, 6, 6, 12, 4, 9, 11]],
-];
-numericPolicies.forEach((policy, p) => numericBatches[p].forEach((values, variant) => {
-  add('input_numeric', p * 2 + variant, {
-    type: '(brief: Record<string, string | number[]>) => number[]',
-    instructions: 'Inspect brief/memo and brief/values before choosing the computation.\n' +
-      'Write TypeScript in eval that implements the memo for these values.\nReturn the resulting number array.',
-    function: 'apply_measurement_memo',
-  }, { brief: { memo: policy.memo, values } }, policy.run(values),
-  { lazy_inputs: ['brief'] });
-}));
-
-const textPolicies = [
-  { memo: 'Keep only entries that start with an action verb (ship, call, or review), ignoring case. Return their ticket ids in source order.',
-    run: lines => lines.flatMap(line => /^(ship|call|review)\b/i.test(line.split('|')[1].trim()) ? [line.split('|')[0]] : []) },
-  { memo: 'Select entries marked urgent, but exclude ones explicitly marked resolved. Return their ticket ids in source order.',
-    run: lines => lines.flatMap(line => /\burgent\b/i.test(line) && !/\bresolved\b/i.test(line) ? [line.split('|')[0]] : []) },
-  { memo: 'Keep the first ticket for each distinct owner, ignoring owner case. Return those ticket ids in first-seen order.',
-    run: lines => { const seen = new Set(); return lines.flatMap(line => { const [id, , owner] = line.split('|'), key = owner.trim().toLowerCase();
-      if (seen.has(key)) return []; seen.add(key); return [id]; }); } },
-  { memo: 'Keep entries whose action says to retry or rerun, but not entries saying not to retry or rerun. Return their ticket ids.',
-    run: lines => lines.flatMap(line => /\b(retry|rerun)\b/i.test(line.split('|')[1]) &&
-      !/\b(not|never|no)\s+(retry|rerun)\b/i.test(line.split('|')[1]) ? [line.split('|')[0]] : []) },
-  { memo: 'Keep tickets with an owner of Ada or Bo, regardless of case. Return ids grouped by owner Ada first, Bo second; preserve source order within each group.',
-    run: lines => ['ada', 'bo'].flatMap(owner => lines.flatMap(line => line.split('|')[2].trim().toLowerCase() === owner ? [line.split('|')[0]] : [])) },
-  { memo: 'Keep entries whose action contains a question mark and that are not marked resolved. Return their ticket ids.',
-    run: lines => lines.flatMap(line => line.split('|')[1].includes('?') && !/\bresolved\b/i.test(line) ? [line.split('|')[0]] : []) },
-];
-const textBatches = [
-  [['T1|Ship replacement|Ada','T2|wait for reply|Bo','T3|CALL vendor|Cy','T4|review traces|Ada'],
-   ['T5|Review evidence|Bo','T6|archive note|Ada','T7|ship label|Cy','T8|ask owner?|Bo']],
-  [['T1|urgent: call owner|Ada','T2|urgent but resolved|Bo','T3|routine review|Cy','T4|URGENT follow-up|Ada'],
-   ['T5|resolved urgent alert|Bo','T6|urgent investigation|Cy','T7|routine case|Ada','T8|urgent unresolved|Bo']],
-  [['T1|review|Ada','T2|call|Bo','T3|ship|ADA','T4|wait|Cy'],
-   ['T5|wait|Bo','T6|review|Cy','T7|call|ada','T8|ship|Dee']],
-  [['T1|retry once|Ada','T2|do not retry|Bo','T3|rerun audit|Cy','T4|never rerun|Ada'],
-   ['T5|no retry needed|Bo','T6|please retry|Cy','T7|rerun tomorrow|Ada','T8|archive|Dee']],
-  [['T1|ship|Bo','T2|call|Cy','T3|review|Ada','T4|wait|bo'],
-   ['T5|wait|ada','T6|review|Dee','T7|call|BO','T8|ship|Ada']],
-  [['T1|why now?|Ada','T2|resolved: why now?|Bo','T3|review logs|Cy','T4|which host?|Ada'],
-   ['T5|resolved question?|Bo','T6|what changed?|Cy','T7|archive|Ada','T8|who owns this?|Bo']],
-];
-textPolicies.forEach((policy, p) => textBatches[p].forEach((lines, variant) => {
-  add('input_text', p * 2 + variant, {
-    type: '(brief: Record<string, string | string[]>) => string[]',
-    instructions: 'Inspect brief/memo and brief/entries before deciding how to process the entries.\n' +
-      'Write the selected processing code in eval. Each entry is id|action|owner.\nReturn the selected ticket ids.',
-    function: 'apply_ticket_memo',
-  }, { brief: { memo: policy.memo, entries: lines } }, policy.run(lines),
-  { lazy_inputs: ['brief'] });
-}));
-
 const tablePolicies = [
   { memo: 'Include active accounts with balance at least 50. Return their ids in file order.',
     run: records => records.filter(r => r.status === 'active' && r.balance >= 50).map(r => r.id) },
@@ -154,9 +81,145 @@ logPolicies.forEach((policy, p) => logDatasets.forEach((events, variant) => {
     'events.json': JSON.stringify(events, null, 2) + '\n' } });
 }));
 
+// Application-shaped batches are large because every account or event is a
+// meaningful row. Their normal opening preview shows only the first few rows.
+const accountExtras = [
+  [{id:'A5',owner:'Bo',region:'west',status:'active',balance:35,opened:2025},
+   {id:'A6',owner:'Cy',region:'north',status:'active',balance:-6,opened:2026},
+   {id:'A7',owner:'Dee',region:'south',status:'active',balance:50,opened:2024},
+   {id:'A8',owner:'Ada',region:'east',status:'suspended',balance:130,opened:2025},
+   {id:'A9',owner:'Bo',region:'east',status:'active',balance:70,opened:2026},
+   {id:'A10',owner:'Dee',region:'west',status:'closed',balance:-9,opened:2023},
+   {id:'A11',owner:'Eli',region:'north',status:'active',balance:70,opened:2025},
+   {id:'A12',owner:'Cy',region:'south',status:'active',balance:55,opened:2026}],
+  [{id:'B5',owner:'Eli',region:'west',status:'active',balance:70,opened:2025},
+   {id:'B6',owner:'Bo',region:'east',status:'suspended',balance:-11,opened:2026},
+   {id:'B7',owner:'Ada',region:'north',status:'active',balance:120,opened:2024},
+   {id:'B8',owner:'Dee',region:'south',status:'active',balance:50,opened:2025},
+   {id:'B9',owner:'Cy',region:'west',status:'closed',balance:-3,opened:2026},
+   {id:'B10',owner:'Dee',region:'north',status:'active',balance:80,opened:2026},
+   {id:'B11',owner:'Bo',region:'west',status:'active',balance:90,opened:2025},
+   {id:'B12',owner:'Eli',region:'east',status:'active',balance:25,opened:2024}],
+];
+const accountBatches = tableDatasets.map((base, index) => [...base, ...accountExtras[index]]);
+tablePolicies.forEach((policy, p) => accountBatches.forEach((accounts, variant) => {
+  add('input_accounts', p * 2 + variant, {
+    type: '(request: string, accounts: { id: string, owner: string, region: string, status: string, balance: number, opened: number }[]) => string[]',
+    instructions: 'Examine the complete accounts batch before deciding how to implement the request.\n' +
+      'Write the selected account processing code in eval.\nReturn the requested account ids.',
+    function: 'select_batch_accounts',
+  }, { request: policy.memo, accounts }, policy.run(accounts));
+}));
+
+const eventExtras = [
+  [{id:'L7',minute:17,service:'worker',level:'warn',note:'queue'},
+   {id:'L8',minute:18,service:'security',level:'fail',note:'unexpected'},
+   {id:'L9',minute:19,service:'api',level:'warn',note:'latency'},
+   {id:'L10',minute:20,service:'worker',level:'ok',note:'recovered'},
+   {id:'L11',minute:21,service:'security',level:'ok',note:'recovered'},
+   {id:'L12',minute:22,service:'api',level:'fail',note:'expected'}],
+  [{id:'M7',minute:21,service:'security',level:'fail',note:'unexpected'},
+   {id:'M8',minute:22,service:'api',level:'warn',note:'latency'},
+   {id:'M9',minute:23,service:'security',level:'warn',note:'token'},
+   {id:'M10',minute:24,service:'worker',level:'fail',note:'expected'},
+   {id:'M11',minute:25,service:'api',level:'ok',note:'recovered'},
+   {id:'M12',minute:26,service:'security',level:'fail',note:'unexpected'}],
+];
+const eventBatches = logDatasets.map((base, index) => [...base, ...eventExtras[index]]);
+logPolicies.forEach((policy, p) => eventBatches.forEach((events, variant) => {
+  add('input_events', p * 2 + variant, {
+    type: '(request: string, events: { id: string, minute: number, service: string, level: string, note: string }[]) => string[]',
+    instructions: 'Examine the complete event batch before deciding how to implement the request.\n' +
+      'Write the selected event analysis in eval.\nReturn the requested event ids.',
+    function: 'analyze_event_batch',
+  }, { request: policy.memo, events }, policy.run(events));
+}));
+
+// A full incident window exercises value paging: later recoveries can change
+// whether an earlier failure is still unresolved.
+const incidentWindow = [...eventBatches[0],
+  {id:'L13',minute:23,service:'worker',level:'fail',note:'queue stalled'},
+  {id:'L14',minute:24,service:'api',level:'warn',note:'latency'},
+  {id:'L15',minute:25,service:'security',level:'fail',note:'token rejected'},
+  {id:'L16',minute:26,service:'worker',level:'warn',note:'retrying'},
+  {id:'L17',minute:27,service:'api',level:'fail',note:'upstream timeout'},
+  {id:'L18',minute:28,service:'worker',level:'ok',note:'queue drained'},
+  {id:'L19',minute:29,service:'security',level:'warn',note:'new token'},
+  {id:'L20',minute:30,service:'api',level:'ok',note:'upstream recovered'},
+  {id:'L21',minute:31,service:'security',level:'ok',note:'token rotated'},
+  {id:'L22',minute:32,service:'worker',level:'fail',note:'worker restarted'},
+  {id:'L23',minute:33,service:'api',level:'warn',note:'slow requests'},
+  {id:'L24',minute:34,service:'worker',level:'warn',note:'backlog growing'},
+  {id:'L25',minute:35,service:'security',level:'fail',note:'login rejected'},
+  {id:'L26',minute:36,service:'api',level:'fail',note:'new timeout'},
+  {id:'L27',minute:37,service:'worker',level:'ok',note:'backlog cleared'},
+  {id:'L28',minute:38,service:'security',level:'warn',note:'rotation pending'},
+  {id:'L29',minute:39,service:'api',level:'warn',note:'upstream degraded'},
+  {id:'L30',minute:40,service:'security',level:'fail',note:'login rejected again'}];
+const unresolvedPolicy = logPolicies[3];
+add('input_events_paged', 0, {
+  type: '(request: string, events: { id: string, minute: number, service: string, level: string, note: string }[]) => string[]',
+  instructions: 'Inspect the incident window and decide how to implement the request.\n' +
+    'Write the event analysis in eval.\nReturn the requested event ids.',
+  function: 'analyze_incident_window',
+}, { request: unresolvedPolicy.memo, events: incidentWindow }, unresolvedPolicy.run(incidentWindow));
+
+// These incident notes require interpreting what happened, not just applying a
+// field predicate. The preview contains only the first few notes.
+const incidentNotes = [
+  [
+    {id:'A1',note:'Finance confirmed a second settled payment for the same order; the customer was charged twice.'},
+    {id:'A2',note:'For a separate order, the second bank entry is only a pending authorization and has not settled.'},
+    {id:'A3',note:'The reporter cleared the cache and can now open the dashboard again.'},
+    {id:'A4',note:'The operator intends to roll back once traffic drains, but has not started.'},
+    {id:'A5',note:'Rollback completed and the error rate has stayed at baseline for twenty minutes.'},
+    {id:'A6',note:'The blank page reproduces in staging; production users are unaffected.'},
+    {id:'A7',note:'Production checkout is rejecting cards, and monitoring confirms seventy failed attempts.'},
+    {id:'A8',note:'Support thinks the incident may have recovered; no telemetry or user retest is available.'},
+    {id:'A9',note:'The vendor reports that its webhook backlog cleared, but our queue is still growing.'},
+    {id:'A10',note:'The patch is deployed and smoke checks pass, yet the customer still sees the failure.'},
+    {id:'A11',note:'Key rotation restored service; monitors and the affected user both confirm recovery.'},
+    {id:'A12',note:'The suspicious integration was disabled, while the other tenants continue normally.'},
+  ],
+  [
+    {id:'B1',note:'For one renewal, a duplicate invoice was drafted but voided before capture; the ledger shows one payment.'},
+    {id:'B2',note:'For a different renewal, two captures posted to the ledger, confirmed by finance.'},
+    {id:'B3',note:'A fix is queued for tomorrow; no deployment has happened.'},
+    {id:'B4',note:'The on-call engineer reverted the release and both health checks and customer retries pass.'},
+    {id:'B5',note:'A test tenant saw failed logins in staging; live tenant traffic is healthy.'},
+    {id:'B6',note:'Live tenants cannot upload files, confirmed in access logs and support reports.'},
+    {id:'B7',note:'The provider marked the incident resolved, but our failed uploads are still increasing.'},
+    {id:'B8',note:'A restart finished, though there has been no customer retest and metrics remain unavailable.'},
+    {id:'B9',note:'The queue drained after the restart, and both telemetry and a user confirm uploads work.'},
+    {id:'B10',note:'The patch passed tests but has not reached production.'},
+    {id:'B11',note:'Synthetic checks look green, but a customer reproduced the error after deployment.'},
+    {id:'B12',note:'The affected integration was switched off, preventing further bad events.'},
+  ],
+];
+const incidentQuestions = [
+  { request:'Which notes confirm that the reported problem has recovered? Require actual user or operational evidence, rather than a plan or an unverified claim.',
+    expected:[['A3','A5','A11'],['B4','B9']] },
+  { request:'Which notes establish real production or customer impact, rather than staging effects or a transaction that never settled?',
+    expected:[['A1','A7','A10'],['B2','B6','B11']] },
+  { request:'Which notes describe a remedy that is only planned or queued and has not been applied yet?',
+    expected:[['A4'],['B3','B10']] },
+  { request:'Which notes report an external claim of recovery that local evidence contradicts?',
+    expected:[['A9'],['B7']] },
+  { request:'Which notes describe a mitigation that was actually carried out, regardless of whether it fully resolved the issue?',
+    expected:[['A3','A5','A10','A11','A12'],['B4','B8','B9','B11','B12']] },
+];
+incidentQuestions.forEach((question, q) => incidentNotes.forEach((notes, variant) => {
+  add('input_incidents', q * 2 + variant, {
+    type: '(request: string, notes: { id: string, note: string }[]) => string[]',
+    instructions: 'Read the incident notes, then interpret the request using their meaning and evidence.\n' +
+      'Write the resulting selection in eval.\nReturn the matching note ids in source order.',
+    function: 'review_incident_notes',
+  }, { request: question.request, notes }, question.expected[variant]);
+}));
+
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
-const examples = [0, 5, 12, 17, 24, 29, 36, 41].map(index => {
+const examples = [0, 5, 12, 17, 24, 29, 36, 41, 49, 54].map(index => {
   const row = rows[index], s = row.semantics;
   const input = s.folder_files ? Object.entries(s.folder_files).map(([path, content]) =>
     `**${path}**\n\n\`\`\`text\n${content.trimEnd()}\n\`\`\``).join('\n\n') :
@@ -165,9 +228,9 @@ const examples = [0, 5, 12, 17, 24, 29, 36, 41].map(index => {
     `**Expected return**\n\n\`\`\`json\n${JSON.stringify(s.expected)}\n\`\`\`\n`;
 });
 const sheet = '# Read-before-code probe: sample problems\n\n' +
-  'These eight cases illustrate the 48-case [IR corpus](../data/teacher/read-before-code-probe.ir.jsonl). ' +
-  'The agent sees the function instructions and typed scope. Lazy input values must be inspected with `read_value` or `eval`; ' +
-  'folder contents must be read through file tools or `fs` in `eval`. Expected returns are oracle data, not shown to the agent.\n\n' +
+  'These ten cases illustrate the 59-case [IR corpus](../data/teacher/read-before-code-probe.ir.jsonl). ' +
+  'The agent sees the function instructions and typed scope. Large ordinary input batches show only their first few rows in the opening preview. ' +
+  'Folder contents must be read through file tools or `fs` in `eval`. Expected returns are oracle data, not shown to the agent.\n\n' +
   examples.join('\n');
 await writeFile(resolve('docs/read-before-code-examples.md'), sheet);
 console.log(`${rows.length} cases across ${new Set(rows.map(row => row.family)).size} families -> ${output}`);

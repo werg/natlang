@@ -30,6 +30,50 @@ test('eval displays an incompatible expression without setting the typed result'
   assert.equal(right.kind, 'ok'); assert.equal(right.value, 9); assert.equal(lam.return, 9);
 });
 
+test('an empty local assigned to the typed result keeps its list type', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: string[]) => string[]',
+    instructions: 'Select matching items.', args: { items: ['skip'] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const outcome = await session.applyAsync('eval', { code:
+    'const ids = items.filter(item => item.startsWith("take")).map(item => item.slice(5)); result = ids;' });
+  assert.equal(outcome.kind, 'ok', outcome.text);
+  assert.deepEqual(lam.return, []);
+  assert.deepEqual(lam.let.ids, []);
+});
+
+test('filter then map uses the mapped element type', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: { id: string, status: string }[]) => string[]',
+    instructions: 'Select active ids.', args: { items: [
+      { id: 'A1', status: 'active' }, { id: 'A2', status: 'closed' }] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const outcome = await session.applyAsync('eval', { code:
+    'const ids = items.filter(item => item.status === "active").map(item => item.id); result = ids;' });
+  assert.equal(outcome.kind, 'ok', outcome.text);
+  assert.deepEqual(lam.return, ['A1']);
+  assert.deepEqual(lam.let.ids, ['A1']);
+});
+
+test('a later eval may redeclare a prior local while correcting the result', async () => {
+  const lam = buildPending({ $lambda: { type: '() => string[]', instructions: 'Return selected ids.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const first = await session.applyAsync('eval', { code: 'const ids = []; result = ids;' });
+  assert.equal(first.kind, 'ok', first.text);
+  const corrected = await session.applyAsync('eval', { code: 'const ids = ["A1"]; result = ids;' });
+  assert.equal(corrected.kind, 'ok', corrected.text);
+  assert.deepEqual(lam.return, ['A1']);
+  assert.deepEqual(lam.let.ids, ['A1']);
+});
+
+test('read_value can inspect the immutable debug snapshot after eval fails', async () => {
+  const lam = buildPending({ $lambda: { type: '() => number', instructions: 'Return a number.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const failed = await session.applyAsync('eval', { code: 'const values = []; values.noSuchMethod();' });
+  assert.equal(failed.kind, 'error');
+  const inspected = session.apply('read_value', { expression: `${session.failureBinding}.message` });
+  assert.equal(inspected.kind, 'ok');
+  assert.match(inspected.text, /noSuchMethod/);
+});
+
 test('eval returns console.log observations without changing the function result', async () => {
   const lam = buildPending({ $lambda: { type: '(items: number[]) => number',
     instructions: 'Inspect the average, then return the total.', args: { items: [2, 4, 6] } } });
@@ -345,6 +389,33 @@ test('scope read_value slices string by zero-based characters and lists by items
   const clamped = session.apply('read_value', { expression: 'text', start: 0, end: 2000 });
   assert.equal(clamped.kind, 'ok'); assert.equal(clamped.value, 'alpha\nbeta');
   assert.equal(session.apply('read_value', { expression: 'text', start: 2000, end: 3000 }).value, '');
+});
+
+test('read_value pages large text, lists, and records with explicit totals', () => {
+  const lam = buildPending({ $lambda: { type: '(text: string, items: number[], fields: Record<string, number>) => number',
+    instructions: 'Inspect the inputs.', args: { text: 'x'.repeat(5000),
+      items: Array.from({ length: 30 }, (_, i) => i),
+      fields: Object.fromEntries(Array.from({ length: 25 }, (_, i) => [`field${i}`, i])) } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const textPage = session.apply('read_value', { expression: 'text' });
+  assert.equal(textPage.kind, 'ok'); assert.equal(textPage.value.length, 2000);
+  assert.match(textPage.text, /characters \[0, 2000\) of 5000; next start=2000/);
+  assert.equal(session.apply('read_value', { expression: 'text', start: 2000, end: 2300 }).value.length, 300);
+  const medium = buildPending({ $lambda: { type: '(text: string) => string',
+    instructions: 'Inspect the text.', args: { text: 'x'.repeat(2500) } } });
+  const mediumPage = new NativeSession(new NativeRuntime(), medium, new TypeEnv())
+    .apply('read_value', { expression: 'text' });
+  assert.match(mediumPage.text, /characters \[0, 2000\) of 2500; next start=2000/);
+  const listPage = session.apply('read_value', { expression: 'items' });
+  assert.deepEqual(listPage.value, Array.from({ length: 12 }, (_, i) => i));
+  assert.match(listPage.text, /items \[0, 12\) of 30; next start=12/);
+  assert.deepEqual(session.apply('read_value', { expression: 'items', start: 12, end: 24 }).value,
+    Array.from({ length: 12 }, (_, i) => i + 12));
+  const recordPage = session.apply('read_value', { expression: 'fields' });
+  assert.equal(Object.keys(recordPage.value).length, 12);
+  assert.match(recordPage.text, /fields \[0, 12\) of 25; next start=12/);
+  assert.deepEqual(Object.keys(session.apply('read_value', { expression: 'fields', start: 12, end: 24 }).value),
+    Array.from({ length: 12 }, (_, i) => `field${i + 12}`));
 });
 
 test('scope eval reports every still-open instruction line after setting the result', async () => {

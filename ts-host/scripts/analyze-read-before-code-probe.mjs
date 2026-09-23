@@ -15,8 +15,13 @@ for (const row of rows) {
     ['read_value', 'read_file'].includes(action.name)).map(action =>
     action.name === 'read_value' ? String(action.arguments?.expression ?? '') :
       String(action.arguments?.path ?? ''));
-  const wanted = family.includes('input_numeric') ? ['brief.memo', 'brief.values'] :
-    family.includes('input_text') ? ['brief.memo', 'brief.entries'] :
+  const pages = before.filter(action => action.name === 'read_value' && action.outcome === 'ok' &&
+    /\[(?:[^\]]+): (?:items|fields|characters) \[\d+, \d+\) of \d+;/.test(String(action.result_text ?? '')))
+    .map(action => ({ expression: action.arguments?.expression, start: action.arguments?.start ?? 0,
+      result: String(action.result_text).match(/\[(?:[^\]]+): ((?:items|fields|characters) \[\d+, \d+\) of \d+; [^\]]+)/)?.[1] }));
+  const wanted = family.includes('input_accounts') ? ['accounts'] :
+    family.includes('input_events') ? ['events'] :
+    family.includes('input_incidents') ? ['notes'] :
     family.includes('file_table') ? ['policy.md', 'accounts.json'] : ['criteria.md', 'events.json'];
   const readBeforeCode = wanted.every(item => observations.includes(item));
   const accepted = row.outcome?.accepted === true;
@@ -26,7 +31,7 @@ for (const row of rows) {
   if (accepted && readBeforeCode) current.both++;
   summaries.set(family, current);
   detail.push({ id: program.id, accepted, read_before_code: readBeforeCode,
-    observations, evals: actions.filter(action => action.name === 'eval').length,
+    observations, pages, evals: actions.filter(action => action.name === 'eval').length,
     status: row.outcome?.status, value: row.outcome?.value });
 }
 console.log(JSON.stringify({ cases: rows.length,

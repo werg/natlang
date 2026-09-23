@@ -275,9 +275,12 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         start: span(statement.name).start, end: span(statement.name).end });
     }
   }
+  // Each eval is a new lexical transaction. A top-level declaration may replace
+  // a local from an earlier eval without reusing that earlier const/let binding.
+  const shadowedLocals = new Set(bindings.map(binding => binding.name).filter(name => localNames.includes(name)));
 
   const immutable = new Set([...helperNames, ...opaqueNames,
-    ...localOptions.filter(binding => !binding.mutable).map(binding => binding.name),
+    ...localOptions.filter(binding => !binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.mutable).map(binding => binding.name)]);
   const deeplyReadonly = new Set([...helperNames, ...opaqueNames]);
 
@@ -346,7 +349,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     seen.add(name);
   }
   const declared = new Set(bindings.map(binding => binding.name));
-  for (const name of injected) if (declared.has(name))
+  for (const name of injected) if (declared.has(name) && !shadowedLocals.has(name))
     {
       const binding = bindings.find(item => item.name === name)!;
       diagnostics.push({ code: 'invalid-binding', message: `Top-level binding ${JSON.stringify(name)} redeclares an injected binding.`,
@@ -369,9 +372,20 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   for (const statement of statements) findReturns(statement);
   const captures = [...(implicitResult ? ['result'] : []),
-    ...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
+    ...localOptions.filter(binding => binding.mutable && !shadowedLocals.has(binding.name)).map(binding => binding.name),
     ...bindings.filter(binding => !binding.transient).map(binding => binding.name)];
   const capture = `{ ${captures.join(', ')} }`;
+  const assignedToResult: string[] = [];
+  if (implicitResult) {
+    const visit = (node: ts.Node): void => {
+      if (ts.isFunctionLike(node)) return;
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isIdentifier(node.left) && node.left.text === 'result' && ts.isIdentifier(node.right))
+        assignedToResult.push(node.right.text);
+      ts.forEachChild(node, visit);
+    };
+    for (const statement of statements) visit(statement);
+  }
   const edits: { start: number; end: number; text: string }[] = returns.map(statement => {
     const location = span(statement);
     const expression = statement.expression ? statement.expression.getText(file) : 'null';
@@ -391,15 +405,15 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const producesResult = !!finalExpression || returns.length > 0;
   const result: ScopeCompileResult = { version: SCOPE_COMPILE_VERSION, ok: diagnostics.length === 0,
     producesResult,
-    resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
+    resultBindings: [...new Set(assignedToResult.concat(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
       ? [statement.expression.text] : []).concat(last && ts.isExpressionStatement(last) && ts.isIdentifier(last.expression)
-      ? [last.expression.text] : []))],
+      ? [last.expression.text] : [])))],
     entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
   if (diagnostics.length) return result;
   const prologue = [inputNames.length ? `let { ${inputNames.join(', ')} } = ` +
       `JSON.parse(JSON.stringify(__inputs));` : '',
     ...(implicitResult ? ['let result = __locals.result;'] : []),
-    ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
+    ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
     ...helperNames.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +
       `__invoke(${JSON.stringify(name)}, args), { __natlangFunction: ${JSON.stringify(name)} });`),

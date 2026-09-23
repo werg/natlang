@@ -866,26 +866,28 @@ export class NativeSession {
     try {
       if (name === 'mark_lines') return this.applyNow('mark_done', args);
       if (name === 'read_value') {
-        const path = this.scopePath(String(args.expression ?? ''));
-        if (args.start !== undefined || args.end !== undefined) {
-          const value = this.resolve(path).get();
-          // String ranges are character slices, matching both JS slicing and the
-          // ``(N chars)`` preview.  Lists continue to use item ranges.
-          const sequence = Array.isArray(value) || typeof value === 'string' ? value : null;
-          if (!sequence) throw new Reject([{ path, code: 'bad-range', expected: 'a list or text value' }]);
-          let start = Number(args.start ?? 0), end = Number(args.end ?? sequence.length);
-          if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < 0)
-            throw new Reject([{ path, code: 'bad-range', expected: 'non-negative JavaScript slice offsets' }]);
-          start = Math.min(start, sequence.length); end = Math.min(end, sequence.length);
-          if (end < start) end = start;
-          const slice = sequence.slice(start, end);
-          if (typeof value === 'string') {
-            return { kind: 'ok', text: slice as string, value: slice as string };
+        const expression = String(args.expression ?? '').trim();
+        const debugName = this.failureBinding;
+        if (debugName && (expression === debugName || expression.startsWith(`${debugName}.`))) {
+          const fields = expression.slice(debugName.length).split('.').filter(Boolean);
+          let inspected: unknown = this.failureDebug;
+          for (const field of fields) {
+            if (!inspected || typeof inspected !== 'object' || !Object.hasOwn(inspected, field))
+              throw new Reject([{ path: expression, code: 'no-such-path', expected: 'a debug snapshot field' }]);
+            inspected = (inspected as Record<string, unknown>)[field];
           }
-          return { kind: 'ok', text: (slice as Value[]).map((item, index) =>
-            `${start + index}: ${typeof item === 'string' ? item : JSON.stringify(dump(item))}`).join('\n'),
-            value: slice as Value[] };
+          const page = this.readValuePage(expression, inspected as Value, args.start, args.end);
+          if (page) return page;
+          if (args.start !== undefined || args.end !== undefined)
+            throw new Reject([{ path: expression, code: 'bad-range', expected: 'a list, text, or record value' }]);
+          const rendered = typeof inspected === 'string' ? inspected : JSON.stringify(inspected);
+          return { kind: 'ok', text: rendered, value: inspected as Value };
         }
+        const path = this.scopePath(expression);
+        const page = this.readValuePage(path, this.resolve(path).get(), args.start, args.end);
+        if (page) return page;
+        if (args.start !== undefined || args.end !== undefined)
+          throw new Reject([{ path, code: 'bad-range', expected: 'a list, text, or record value' }]);
         return this.applyNow('read', { path });
       }
       if (name === 'commit') {
@@ -1137,6 +1139,44 @@ export class NativeSession {
     return path;
   }
 
+  private readValuePage(path: string, value: Value, startRaw?: unknown, endRaw?: unknown): NativeResult | undefined {
+    const explicit = startRaw !== undefined || endRaw !== undefined;
+    if (typeof value !== 'string' && !Array.isArray(value) &&
+        !(value && typeof value === 'object' && !pending(value) && !isLazyDict(value) &&
+          !(value instanceof Folder) && !(value instanceof FolderHandle) && !(value instanceof FileHandle))) return;
+    const entries = typeof value === 'string' || Array.isArray(value) ? undefined : Object.entries(value);
+    const size = typeof value === 'string' || Array.isArray(value) ? value.length : entries!.length;
+    const rendered = typeof value === 'string' ? value : JSON.stringify(dump(value), null, 1);
+    if (!explicit && rendered.length <= 4000 && size <= 20) return;
+    const requestedStart = Number(startRaw ?? 0);
+    const pageSize = typeof value === 'string' ? 2000 : 12;
+    const requestedEnd = Number(endRaw ?? requestedStart + pageSize);
+    if (!Number.isInteger(requestedStart) || !Number.isInteger(requestedEnd) ||
+        requestedStart < 0 || requestedEnd < 0)
+      throw new Reject([{ path, code: 'bad-range', expected: 'non-negative JavaScript slice offsets' }]);
+    const start = Math.min(size, requestedStart);
+    const end = Math.min(size, Math.max(start, requestedEnd), start + pageSize);
+    const footer = `[${path}: ${typeof value === 'string' ? 'characters' : Array.isArray(value) ? 'items' : 'fields'} ` +
+      `[${start}, ${end}) of ${size}; ${end < size ? `next start=${end}` : 'end of value'}]`;
+    if (typeof value === 'string') {
+      const slice = value.slice(start, end);
+      return { kind: 'ok', text: (explicit || end === size) && size <= 4000 ? slice :
+        `${slice}\n${footer}`,
+        value: slice };
+    }
+    if (Array.isArray(value)) {
+      const slice = value.slice(start, end);
+      const body = slice.map((item, index) => `${start + index}: ${JSON.stringify(dump(item))}`).join('\n');
+      return { kind: 'ok', text: `${body.slice(0, 4000)}${body.length > 4000 ? '\n[CUT OFF: inspect an item by index]' : ''}\n` +
+        footer, value: slice };
+    }
+    const selected = entries!.slice(start, end);
+    const body = selected.map(([key, item]) => `${key}: ${JSON.stringify(dump(item))}`).join('\n');
+    return { kind: 'ok', text: `${body.slice(0, 4000)}${body.length > 4000 ? '\n[CUT OFF: inspect a field by name]' : ''}\n` +
+      footer,
+      value: Object.fromEntries(selected) as Value };
+  }
+
   private scopeInitializerType(expression: string, locals: Record<string, Type>): Type | undefined {
     const source = expression.trim();
     // A reduce result has the accumulator's type, which need not match its list.
@@ -1151,7 +1191,9 @@ export class NativeSession {
       const definition = this.lam.codebase[mappedCall[1]!] as Record<string, unknown>;
       if (typeof definition.returns === 'string') return parseType(`(${definition.returns})[]`);
     }
-    const collection = /^(.*)\.(find|filter|slice)\s*\(.*\)$/s.exec(source);
+    const lastCollectionMethod = [...source.matchAll(/\.(find|filter|slice|map|flatMap)\s*\(/g)].at(-1)?.[1];
+    const collection = ['find', 'filter', 'slice'].includes(lastCollectionMethod ?? '') ?
+      /^(.*)\.(find|filter|slice)\s*\(.*\)$/s.exec(source) : null;
     const projected = /^(.*)\.map\s*\(\s*(?:\(\s*)?([A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*\2((?:\.[A-Za-z_$][\w$]*|\[(?:\d+|"[^"]+"|'[^']+')\])+)\s*\)$/s.exec(source);
     const receiver = (collection?.[1] ?? projected?.[1] ?? source).trim();
     const selected = (base: Type, tail: string): Type | undefined => {
@@ -1495,7 +1537,7 @@ export class NativeSession {
           try { coerce(materialized, this.lam.type.returns, this.env, 'return'); }
           catch { continue; /* An intermediate observation must not change the typed result slot. */ }
         }
-        let type = this.lam.letTypes[name];
+        let type = name === 'result' && this.lam.type.kind === 'lambda' ? this.lam.type.returns : this.lam.letTypes[name];
         const annotation = annotations.get(name);
         if (annotation) type = parseType(annotation);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);

@@ -7,6 +7,7 @@ import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { EXPLICIT_TOOLS_PROMPT } from '../native/prompt.js';
 import { NativeRuntime } from '../native/runtime.js';
+import { Folder } from '../native/scoped-fs.js';
 import { TypeEnv } from '../native/types.js';
 import { buildPending, coerce, dump, isPending } from '../native/values.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -20,7 +21,8 @@ const TOOL_SCHEMA = 'scope-eval-v1';
 export type ProgramRecord = { version: string; id: string; kind: string;
   semantics: { root: Record<string, unknown>; inputs: Record<string, unknown>; expected: unknown;
     operation?: string; effects?: Record<string, unknown>; events?: unknown[];
-    failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' } }; [key: string]: unknown };
+    failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' };
+    folder_files?: Record<string, string>; expected_files?: Record<string, string> }; [key: string]: unknown };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
@@ -46,6 +48,12 @@ export function validateFocusedRecord(record: ProgramRecord): void {
   if (!record.id || !record.semantics || typeof record.semantics !== 'object' ||
       !record.semantics.root || !record.semantics.inputs || !Object.hasOwn(record.semantics, 'expected'))
     throw new Error('invalid focused program IR record');
+  if (record.semantics.folder_files &&
+      (typeof record.semantics.folder_files !== 'object' || Array.isArray(record.semantics.folder_files) ||
+       !Object.values(record.semantics.folder_files).every(value => typeof value === 'string')))
+    throw new Error('folder_files must map relative paths to text');
+  if (record.semantics.expected_files && !record.semantics.folder_files)
+    throw new Error('expected_files requires folder_files');
   if (record.semantics.failure_seed &&
       (typeof record.semantics.failure_seed.code !== 'string' || !record.semantics.failure_seed.code.trim() ||
        (record.semantics.failure_seed.kind !== undefined &&
@@ -278,6 +286,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     };
     const root = buildPending(item.record.semantics.root);
     bindInputs(root, item.record.semantics.inputs);
+    const folderFiles = item.record.semantics.folder_files;
+    if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))
+      throw new Error(`${item.record.id}: folder_files requires a directory reducer root`);
+    const folder = folderFiles ? Folder.fromFiles(folderFiles) : undefined;
+    if (folder && root.nodeKind === 'lambda') {
+      root.projectTransaction = await folder.beginTransaction(false);
+      root.reducerMode = 'apply';
+    }
     const environment = new TypeScriptEnvironment({ mode: 'fresh' });
     const effects = effectHarness(item.record.semantics.effects ?? {});
     let streamIndex = 0;
@@ -292,20 +308,24 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       seedPolicy: { mode: 'derived', root: config.rootSeed }, runId, signal });
     try {
       const result = await runtime.runRoot(root), actual = dump(result.value);
+      const actualFiles = folder ? Object.fromEntries(await Promise.all(folder.listFiles().map(async file =>
+        [file.path, await folder.readText(file.path)] as const))) : undefined;
       const expectedKind = item.record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
       const seededFailure = item.record.semantics.failure_seed;
       const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
         (!seededFailure.kind || event.failure_kind === seededFailure.kind));
       if (Object.hasOwn(effects.observed, 'out.emit')) effects.observed['out.emit'] = result.emitted;
       const effectsOk = same(effects.observed, effects.expected);
-      const accepted = failureSeen && result.outcome.kind === expectedKind && effectsOk &&
+      const filesOk = !folder || same(actualFiles, item.record.semantics.expected_files ?? folderFiles);
+      const accepted = failureSeen && result.outcome.kind === expectedKind && effectsOk && filesOk &&
         (expectedKind !== 'done' || same(actual, item.record.semantics.expected));
       const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
         id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,
         task: { kind: 'whole_program', program_ir: item.record,
           source_program_ids: [item.record.id] } as TeacherRow['task'], provenance: { ...expected,
           trace_sha256: sha256(canonical(runtime.trace.events)) }, outcome: { status: result.outcome.kind,
-          detail: result.outcome.detail, value: actual, effects: effects.observed, accepted,
+          detail: result.outcome.detail, value: actual, effects: effects.observed,
+          ...(actualFiles ? { files: actualFiles } : {}), accepted,
           action_ledger: runtime.trace.events.filter(event => event.kind === 'action') }, trajectory,
         capture_limits: [] };
       await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),

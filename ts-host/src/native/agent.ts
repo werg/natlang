@@ -106,8 +106,12 @@ function previewValue(value: Value): string {
     const more = value.length > 3 ? `, … ${value.length - 3} more (read to see)` : '';
     return `${value.length} items: [${head}${more}]`;
   }
-  if (value && typeof value === 'object')
-    return `{ ${Object.entries(value).slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item)}`).join(', ')} }`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+    const head = entries.slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item)}`).join(', ');
+    const more = entries.length > 6 ? `, … ${entries.length - 6} more fields (read to see)` : '';
+    return `{ ${head}${more} }`;
+  }
   if (value === null) return 'null';
   return String(value);
 }
@@ -215,10 +219,10 @@ export class NativeToolAgent {
     const tools = [
       tool('eval', 'Execute TypeScript in the persistent scope. Parameters and declarations persist. A compatible final expression or assignment to result sets the function result.',
         { code: { type: 'string' } }, ['code']),
-      tool('read_value', 'Inspect a variable or field/index selection without executing code.',
+      tool('read_value', 'Inspect a variable or field/index selection without executing code. Large values return a bounded page with a next start offset; use that exact offset or a narrower expression for more.',
         { expression: { type: 'string' },
-          start: { type: 'integer', minimum: 0, description: 'Zero-based character offset for string or item index for a list.' },
-          end: { type: 'integer', minimum: 0, description: 'Exclusive character or item offset, as in JavaScript slice().' } }, ['expression']),
+          start: { type: 'integer', minimum: 0, description: 'Zero-based character offset for text, item index for a list, or field index for a record.' },
+          end: { type: 'integer', minimum: 0, description: 'Exclusive offset; a page is bounded even when a larger end is requested.' } }, ['expression']),
       tool('mark_lines', 'Close one instruction line or inclusive contiguous range after its work succeeded. Use skipped only for an untaken branch.',
         { start: { type: 'integer' }, end: { type: 'integer' }, skipped: { type: 'boolean' } }, ['start']),
       tool('report_blocker', 'End without a result because required information is missing. Do not guess.',
