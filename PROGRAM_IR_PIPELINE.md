@@ -24,6 +24,7 @@ plus its evaluation contract:
 node ts-host/scripts/generate-synthetic-ir.mjs --out data/teacher/native-synthetic.ir.jsonl --seed 909 --n 300
 node ts-host/scripts/freeze-source-teacher-cases.mjs          # codebases/ programs × frozen seeds
 node ts-host/scripts/build-read-before-code-probe.mjs         # folder-reading probe
+node ts-host/scripts/inline-curriculum/build.mjs --seed 1 --shapes 2 --out OUT.jsonl   # inline-lambda and follow-up curriculum (docs/INLINE_CURRICULUM.md)
 node ts-host/scripts/failure-corpus/freeze.mjs OUT.jsonl      # seeded failure-and-repair cases
 node ts-host/scripts/import-playground-cases.mjs CASES.jsonl OUT.jsonl
 node ts-host/scripts/code-corpus/…                            # captured source-function corpus (plans/CODE_CORPUS.md)

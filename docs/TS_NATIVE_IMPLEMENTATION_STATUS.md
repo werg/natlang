@@ -84,6 +84,14 @@ Reworked against live Bonsai 27B runs (`ts-host/scripts/live-probe/`):
 - Eval allows `try`/`catch`, classes, and Node host globals; package imports resolve from the
   workspace like any module (the npm install layer is removed).
 
+Follow-up (inline curriculum, [INLINE_CURRICULUM.md](INLINE_CURRICULUM.md)):
+
+- The system prompt describes inline `nl` in eval and `iterateOn`; the function listing shows doc comments
+  (`.nl` `description`, TypeScript JSDoc).
+- Type text accepts single-quoted string literals.
+- Callable modules' aliases, classes (live class types, listed by public members), and interfaces are in eval's type environment.
+- The collector requires a blocked case to end with the model's own `blocked` or `failed` call.
+
 ### Training-data pipeline: state after the revision
 
 Done: collector (`maxTurns`/`--max-turns`, run ID from program and seed only), materializer

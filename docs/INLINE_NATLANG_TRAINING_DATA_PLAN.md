@@ -2,6 +2,8 @@
 
 This plan accompanies the [TypeScript integration plan](TS_INLINE_HOST_INTEGRATION_PLAN.md), [inline lambda design](inline-natlang-lambdas.md), and [`iterateOn` plan](ITERATE_ON_PLAN.md). Its purpose is to teach the interpreter model to create typed inline natlang lambdas when a semantic subtask belongs in code, to use the callable and iteration surfaces correctly, and to **run code, inspect real results, and make a subsequent decision** when the result matters. It also supplies authoring examples for agents writing ordinary TS applications. **Assume the specified TypeScript compiler, Node/browser runtime, live closure and handle semantics, scoped imports, typed child calls, proof/observation adapters, shared IR, and `iterateOn` are implemented and functioning.** This is a data construction plan for that system, not a protocol readiness experiment.
 
+Implementation status, the case format, the family catalog, and pilot findings are in [INLINE_CURRICULUM.md](INLINE_CURRICULUM.md).
+
 ## Existing evidence and the gap
 
 The existing [semantic follow-up probe](semantic-followup-examples.md) has 96 cases. In its small Bonsai pilot, 10 report cases and 6 composite cases were accepted; the composites used 3–6 `eval` calls. The [read-before-code probe](READ_BEFORE_CODE_PROBE.md) has 59 cases; its first eight-case pilot read needed files or values before implementation, but seven of those eight still used only one `eval`. These are useful seeds, not sufficient coverage of inline lambdas or observation-driven revision. The read-before-code probe also exposed a real paging mistake and ambiguous oracle wording. Treat those as generation and admission lessons, not as training successes to copy wholesale.
