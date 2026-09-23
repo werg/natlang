@@ -1,23 +1,17 @@
-import { clear_outbox } from "./step/clear_outbox";
-import { dispatch } from "./step/dispatch";
-import { read_event } from "./step/read_event";
-import { seen } from "./step/seen";
-import { transition } from "./step/transition";
+import clear_outbox from "./step/clear_outbox";
+import dispatch from "./step/dispatch";
+import read_event from "./step/read_event";
+import seen from "./step/seen";
+import transition from "./step/transition";
 ---
 args:
   acc: State
   item: Event
 returns: State
-types:
-  Event: '{ id: string, order: string, text: string }'
-  Kind: '"start" | "paid" | "failed" | "sent" | "cancel"'
-  Order: '"reserved" | "paid" | "done" | "cancelled"'
-  Command: '{ key: string, order: string, operation: string }'
-  State: '{ seen: string[], orders: Record<string, Order>, outbox: Command[] }'
 effects:
-- queue.send
-description: Process an event stream with duplicate suppression, an outbox, idempotent
-  delivery and compensation.
+  - queue.send
+description: Process an event stream with duplicate suppression, an outbox,
+  idempotent delivery and compensation.
 ---
 function step(acc, item) -> State
   duplicate = seen(acc, item)

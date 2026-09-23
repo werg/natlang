@@ -27,11 +27,12 @@ async function transform(folder, plan, { vision = null, assessment = null } = {}
   const tracePath = join(folder, 'transform.trace.jsonl');
   try {
     const result = await host.run({ source: { kind: 'file', path: source }, tracePath,
+      validationFeedback: 'caller',
       inputs: { request: { text: `Please ${plan.kind} the video`, input: 'input.mp4', output: plan.output }, files: new NodeFileTree(folder) },
       modelTurn: request => {
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function transform(')) return evalTurn(request,
-          'const source = await probe(request.input); const chosen = await choose(request, source, files); const receipt = await render(request, source, chosen); const inspection = await inspect(request, chosen, receipt); const assessment = await assess(request, source, chosen, files, receipt, inspection); await finalize(request, source, chosen, receipt, inspection, assessment)');
+          'const source = await probe(request.input); const chosen = await choose(request, source, files); const receipt = await render(request, source, chosen); const inspection = await inspect(request, chosen, receipt); const assessment = await assess(request, source, chosen, receipt, inspection, files); await finalize(request, source, chosen, receipt, inspection, assessment)');
         if (prompt.includes('Choose exactly one')) return evalTurn(request, `(${JSON.stringify(plan)})`);
         return evalTurn(request, `(${JSON.stringify(assessment ?? {
           intent_met: true, needs_visual_review: false, explanation: 'The transform matches the request.'

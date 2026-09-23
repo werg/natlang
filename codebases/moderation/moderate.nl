@@ -1,20 +1,15 @@
-import { severity_of } from "./moderate/severity_of";
-import { split_rules } from "./moderate/split_rules";
-import { violates } from "./moderate/violates";
-import { select_by_flags } from "../std/select_by_flags";
-import { any_true } from "../std/any_true";
+import severity_of from "./moderate/severity_of";
+import split_rules from "./moderate/split_rules";
+import violates from "./moderate/violates";
+import select_by_flags from "../std/select_by_flags";
+import any_true from "../std/any_true";
 ---
-description: Moderate one post against a written policy - allow, warn, remove, or escalate to a human.
+description: Moderate one post against a written policy - allow, warn, remove,
+  or escalate to a human.
 args:
   post: string
   policy: string
 returns: Decision
-types:
-  Severity: '"low" | "high"'
-  Decision: '{ action: "allow" | "warn" | "remove" | "escalate", rules: string[], note: string }'
-uses:
-  select_by_flags: ../std/select_by_flags
-  any_true: ../std/any_true
 ---
 function moderate(post, policy) -> Decision
 

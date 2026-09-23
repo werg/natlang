@@ -23,14 +23,9 @@ function decode(raw) { try { return JSON.parse(raw || '{}'); } catch { return { 
 function teacherDriver(server, exchanges) {
     return async request => {
         const tools = structuredClone(request.tools);
-        for (const tool of tools) {
-            if (tool.function.name === 'call') tool.function.name = 'call_function';
-            if (tool.function.name === 'write') tool.function.parameters.properties.value = { type: 'string', description: 'Plain text for Text; otherwise JSON text for the value.' };
+        for (const tool of tools)
             for (const key of Object.keys(tool.function.parameters ?? {})) if (key.startsWith('x-')) delete tool.function.parameters[key];
-        }
         const messages = structuredClone(request.messages);
-        for (const message of messages) for (const call of message.tool_calls ?? [])
-            if (call.function?.name === 'call') call.function.name = 'call_function';
         const payload = { messages, tools, tool_choice: 'auto', parallel_tool_calls: true,
             temperature: request.temperature, seed: request.seed, top_p: .95, top_k: 20,
             thinking_budget_tokens: 512, chat_template_kwargs: { reasoning_effort: 'low' } };
@@ -41,10 +36,8 @@ function teacherDriver(server, exchanges) {
         if (!response.ok) throw new Error(`teacher HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`);
         const message = body.choices?.[0]?.message ?? {};
         const calls = (message.tool_calls ?? []).map(call => {
-            const name = call.function?.name === 'call_function' ? 'call' : call.function?.name;
+            const name = call.function?.name;
             const args = decode(call.function?.arguments);
-            if (name === 'write' && typeof args.value === 'string' && args.type !== 'Text')
-                try { args.value = JSON.parse(args.value); } catch { /* runtime validates it */ }
             return [name, args];
         });
         exchanges.push({ request, response: body, assistant: { content: String(message.content ?? ''),

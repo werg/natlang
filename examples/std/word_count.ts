@@ -1,7 +1,3 @@
-/*---
-description: Number of words in a text.
-args:
-  text: string
-returns: number
----*/
-return wordCount(args.text)
+export default function word_count(text: string): number {
+return wordCount(text)
+}

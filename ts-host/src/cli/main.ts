@@ -107,7 +107,7 @@ function topicHelp(topic: string): string {
 SOURCE may be a .nl, .ts, .json, or .yaml program, an application directory
 containing natlang.json, a manifest file, NAME, or NAME@VERSION#TARGET.
 Two or more words, or one quoted multiword argument, which do not form an
-existing path become an anonymous Lambda<{ files: Dict<ProjectFile> }, Text>
+existing path become an anonymous (files: Record<string, ProjectFile>) => string
 instruction over the current directory's top-level functions and lazy file tree.
 
 Program options:
@@ -405,7 +405,7 @@ async function runAnonymousInstruction(parsed: Parsed, instruction: string): Pro
     const preparation = model.prepare();
     const program = loadAnonymousInstruction(process.cwd(), instruction);
     const body = program.$lambda as Record<string, unknown>;
-    body.type = 'Lambda<{ files: Dict<ProjectFile> }, Text>';
+    body.type = '(files: Record<string, ProjectFile>) => string';
     body.types = { ...body.types as Record<string, string> ?? {}, ProjectFile: FILE_TREE_LEAF_TYPE };
     const run = host.run({ source: { kind: 'program', program },
       inputs: { files: new NodeFileTree(process.cwd()) },

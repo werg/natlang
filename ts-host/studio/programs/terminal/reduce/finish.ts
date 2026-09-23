@@ -1,7 +1,5 @@
-/*---
-engine: typescript-host
-args:
-  step: Step
-returns: State
----*/
-return args.step.state;
+import type { Receipt, Line, State, Step, Decision, UiEvent, View } from "../types.js";
+
+export default function finish(step: Step): State {
+return step.state;
+}

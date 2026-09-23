@@ -1,6 +1,6 @@
-import { apply } from "./step/apply";
-import { choose } from "./step/choose";
-import { inspect } from "./step/inspect";
+import apply from "./step/apply";
+import choose from "./step/choose";
+import inspect from "./step/inspect";
 ---
 description: Decide and apply one inventory, payment, shipping or recovery step.
 args:

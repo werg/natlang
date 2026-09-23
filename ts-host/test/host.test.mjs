@@ -100,7 +100,7 @@ test('fresh and retained eval contexts, immutable snapshots and boundary failure
   const retained = new TypeScriptEnvironment({ mode: 'retained' });
   assert.equal(retained.execute(request('globalThis.marker = 9; 9')).result, 9);
   assert.equal(retained.execute(request('globalThis.marker')).result, 9);
-  assert.throws(() => retained.execute(request('n = 10')), /read only|read-only|Cannot assign/);
+  assert.throws(() => retained.execute(request('self.args.n = 10')), /read only|read-only|Cannot assign/);
   assert.throws(() => retained.execute(request('new Date()')), /native object/);
   assert.throws(() => retained.execute(request('2n ** 60n')), /unsupported or inexact/);
   assert.throws(() => portable({ x: undefined }), /unsupported or inexact/);

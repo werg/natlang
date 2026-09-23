@@ -1,11 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  state: Board
-  plan: ViewPlan
-returns: UiNode
----*/
-const { state, plan } = args;
+import type { Task, Board, UiEvent, Decision, TaskGroup, ViewPlan, UiAction, UiNode } from "../types.js";
+
+export default function layout(state: Board, plan: ViewPlan): UiNode {
 const byId = new Map(state.items.map(item => [item.id, item]));
 const listed = plan.groups.flatMap(group => group.ids);
 if (!plan.title || !plan.summary || !Array.isArray(plan.groups) ||
@@ -34,3 +29,4 @@ for (const group of plan.groups) {
   ] });
 }
 return { tag: 'main', children };
+}

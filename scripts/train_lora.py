@@ -86,6 +86,56 @@ def directory_digest(path):
     return h.hexdigest()
 
 
+def recover_checkpoint_directory(out):
+    """Recover the last complete checkpoint after interruption during directory swap."""
+    out = Path(out)
+    checkpoint, old, temporary = (out / name for name in
+                                  ("checkpoint", "checkpoint.old", "checkpoint.tmp"))
+    if not checkpoint.exists() and old.exists():
+        os.replace(old, checkpoint)
+    if checkpoint.exists():
+        if old.exists():
+            shutil.rmtree(old)
+        if temporary.exists():
+            shutil.rmtree(temporary)
+
+
+def install_stop_handlers():
+    """Install deferred stop handlers early enough to cover loading and evaluation."""
+    stop = {"now": False}
+    def request_stop(*_):
+        stop["now"] = True
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, request_stop)
+    return stop
+
+
+def capture_rng_state():
+    return {"torch_cpu": torch.get_rng_state(),
+            "torch_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+            "python": random.getstate()}
+
+
+def restore_rng_state(saved):
+    # Accept checkpoints from the previous CPU-only RNG format.
+    if isinstance(saved, torch.Tensor):
+        torch.set_rng_state(saved)
+        return
+    torch.set_rng_state(saved["torch_cpu"])
+    if saved.get("torch_cuda") and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(saved["torch_cuda"])
+    if saved.get("python") is not None:
+        random.setstate(saved["python"])
+
+
+def order_training_pairs(train, data_order):
+    if data_order == "source":
+        train.sort(key=lambda row: row["offset"])
+    elif data_order != "shuffle":
+        raise ValueError(f"Unsupported training data order {data_order!r}")
+    return train
+
+
 def completion_loss(model, encoded):
     """Keep the preceding prompt position so the first completion token is trained.
 
@@ -223,6 +273,10 @@ def main():
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
+    ap.add_argument("--skip-heldout-loss", action="store_true",
+                    help="skip before/after held-out loss evaluation while retaining the held-out split")
+    ap.add_argument("--data-order", choices=("shuffle", "source"), default="shuffle",
+                    help="shuffle training rows (default) or preserve source file order")
     ap.add_argument("--save-every", type=int, default=25, help="checkpoint every N optimizer steps")
     ap.add_argument("--snapshot-every", type=int, default=0,
                     help="also retain adapter-only snapshots every N steps for behavioral selection")
@@ -230,7 +284,10 @@ def main():
                     help="start a new training phase from this LoRA adapter with a fresh optimizer")
     ap.add_argument("--fresh", action="store_true", help="ignore an existing checkpoint and start over")
     ap.add_argument("--merge-only", action="store_true", help="export out/merged from the latest checkpoint and exit")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="save the resumable checkpoint but skip exporting a merged model at completion")
     a = ap.parse_args()
+    stop = install_stop_handlers()
     if a.steps is not None and a.steps < 1:
         ap.error("--steps must be positive")
     if a.epochs is not None and a.epochs <= 0:
@@ -247,6 +304,8 @@ def main():
         ap.error("--unsloth requires --load-in-4bit in this memory-constrained trainer")
     if a.merge_only and a.load_in_4bit:
         ap.error("a QLoRA checkpoint is adapter-only; convert the adapter or merge it with a non-quantized base")
+    if a.merge_only and a.no_merge:
+        ap.error("--no-merge cannot be combined with --merge-only")
     if a.init_adapter is not None and not a.init_adapter.is_dir():
         ap.error("--init-adapter must be an adapter directory")
     targets = [x.strip() for x in a.target_modules.split(",") if x.strip()] if a.target_modules else None
@@ -255,6 +314,7 @@ def main():
     default_targets = (["q_proj", "k_proj", "v_proj", "out_proj", "in_proj", "w1", "w2", "w3"]
                        if a.unsloth_lfm_experts else ["q_proj", "k_proj", "v_proj", "o_proj"])
     ckpt = a.out / "checkpoint"
+    recover_checkpoint_directory(a.out)
     state_file = ckpt / "state.json"
     if a.fresh and ckpt.exists():
         shutil.rmtree(ckpt)
@@ -268,13 +328,22 @@ def main():
     if not a.merge_only:
         pairs = index_pairs(a.data)
         held, train, split = split_programs(pairs, a.holdout, a.seed)
+        train = order_training_pairs(train, a.data_order)
         target_examples = (max(1, math.ceil(len(train) * a.epochs))
                            if a.epochs is not None else (a.steps or 300) * a.accum)
         a.steps = math.ceil(target_examples / a.accum)
         identity = {"data_sha256": file_digest(a.data), "split_sha256": digest(split),
                     "max_len": a.max_len, "model": a.model,
                     "model_revision": a.model_revision, "accum": a.accum,
+                    "microbatch": a.microbatch, "batch_tokens": a.batch_tokens,
+                    "seed": a.seed, "data_order": a.data_order,
                     "target_examples": target_examples, "steps": a.steps, "lr": a.lr,
+                    "full": a.full, "rank": a.rank,
+                    "target_modules": targets,
+                    "load_in_4bit": a.load_in_4bit,
+                    "unsloth": a.unsloth,
+                    "unsloth_lfm_experts": a.unsloth_lfm_experts,
+                    "unsloth_compile": a.unsloth_compile,
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens}
         if a.retain_every_n_layers:
@@ -299,6 +368,9 @@ def main():
         print(f"program split: {len(train)} training turns, {len(held)} held-out turns "
               f"from {len(split['held_programs'])} programs; target {target_examples} examples "
               f"({target_examples / len(train):.3g} epochs, {a.steps} optimizer steps)", flush=True)
+    if stop["now"]:
+        print("stop requested before model loading; no optimizer step was started", flush=True)
+        return
     torch.manual_seed(a.seed)
     FastLanguageModel = None
     use_unsloth = a.unsloth or a.unsloth_lfm_experts
@@ -408,13 +480,21 @@ def main():
 
     @torch.no_grad()
     def heldout_loss():
+        eval_rng = capture_rng_state()
         model.eval()
         tot = n = 0
-        for p in held[:100]:
-            e = encode(p, phase="heldout")
-            if e:
-                tot += batch_completion_loss(model, collate_completions([e])).item(); n += 1
-        model.train()
+        try:
+            for p in held[:100]:
+                if stop["now"]:
+                    break
+                e = encode(p, phase="heldout")
+                if e:
+                    tot += batch_completion_loss(model, collate_completions([e])).item(); n += 1
+        finally:
+            model.train()
+            restore_rng_state(eval_rng)
+        if stop["now"]:
+            return None
         if held and not n:
             raise ValueError("Every held-out example exceeds --max-len")
         return tot / n if n else None
@@ -424,11 +504,12 @@ def main():
     if resume:
         opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location="cuda"))
         sched.load_state_dict(torch.load(ckpt / "scheduler.pt"))
-        torch.set_rng_state(torch.load(ckpt / "rng.pt"))
+        restore_rng_state(torch.load(ckpt / "rng.pt", map_location="cpu", weights_only=False))
         print(f"resumed from step {state['step']} (pair {state['cursor']})", flush=True)
     else:
         torch.manual_seed(a.seed)
-        state["heldout_before"] = None if a.benchmark_steps else heldout_loss()
+        state["heldout_before"] = (None if a.benchmark_steps or a.skip_heldout_loss or stop["now"]
+                                    else heldout_loss())
         print(f"{len(train)} training pairs; held-out loss before: {state['heldout_before']}", flush=True)
 
     def save_checkpoint():
@@ -439,7 +520,7 @@ def main():
         model.save_pretrained(tmp / "weights", safe_serialization=True)
         torch.save(opt.state_dict(), tmp / "optimizer.pt")
         torch.save(sched.state_dict(), tmp / "scheduler.pt")
-        torch.save(torch.get_rng_state(), tmp / "rng.pt")
+        torch.save(capture_rng_state(), tmp / "rng.pt")
         (tmp / "state.json").write_text(json.dumps({**state, "args": {k: str(v) for k, v in vars(a).items()}}))
         if ckpt.exists():                                  # swap in atomically enough: the old one goes last
             old = a.out / "checkpoint.old"
@@ -462,9 +543,6 @@ def main():
                 shutil.rmtree(snapshot)
             os.rename(snapshot_tmp, snapshot)
 
-    stop = {"now": False}
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, lambda *_: stop.update(now=True))
     a.out.mkdir(parents=True, exist_ok=True)
     model.train()
     torch.cuda.synchronize()
@@ -488,39 +566,61 @@ def main():
             "peak_reserved_bytes": torch.cuda.max_memory_reserved(), "steps": metrics}, indent=2) + "\n")
         tmp.replace(metrics_file)
 
+    def save_metrics_at_boundary():
+        try:
+            save_metrics()
+        except BaseException:
+            if not a.benchmark_steps:
+                save_checkpoint()
+            raise
+
     target_steps = a.benchmark_steps or a.steps
     target_examples = a.benchmark_steps * a.accum if a.benchmark_steps else state["corpus"]["target_examples"]
     state.setdefault("trained_examples", state["step"] * a.accum)
     while state["step"] < target_steps and state["trained_examples"] < target_examples and not stop["now"]:
+        boundary = (state["cursor"], state["skipped"], state["trained_examples"])
+        rng_boundary = capture_rng_state()
+        optimizer_started = False
         step_start = time.perf_counter()
-        examples = []
-        for _ in range(min(a.accum, target_examples - state["trained_examples"])):
-            e = None
-            start_cursor = state["cursor"]
-            while e is None:
-                if state["cursor"] - start_cursor >= len(train):
-                    raise ValueError("Every training example exceeds --max-len")
-                e = encode(train[state["cursor"] % len(train)]); state["cursor"] += 1
-                state["skipped"] += e is None
-            examples.append(e)
-        ready = time.perf_counter()
-        running = torch.zeros((), device="cuda")
-        batches = 0
-        padded_tokens = 0
-        for batch in microbatches(examples, a.microbatch, a.batch_tokens):
-            encoded = collate_completions(batch, pad_id=tok.pad_token_id or 0)
-            want_checkpointing = a.gradient_checkpointing and encoded["input_ids"].numel() > a.checkpoint_above_tokens
-            if want_checkpointing != model.is_gradient_checkpointing:
-                set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
-            loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
-            loss.backward()
-            running += loss.detach()
-            padded_tokens += encoded["input_ids"].numel()
-            batches += 1
-        torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
-        opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
-        state["step"] += 1
-        state["trained_examples"] += len(examples)
+        try:
+            examples = []
+            for _ in range(min(a.accum, target_examples - state["trained_examples"])):
+                e = None
+                start_cursor = state["cursor"]
+                while e is None:
+                    if state["cursor"] - start_cursor >= len(train):
+                        raise ValueError("Every training example exceeds --max-len")
+                    e = encode(train[state["cursor"] % len(train)]); state["cursor"] += 1
+                    state["skipped"] += e is None
+                examples.append(e)
+            ready = time.perf_counter()
+            running = torch.zeros((), device="cuda")
+            batches = 0
+            padded_tokens = 0
+            for batch in microbatches(examples, a.microbatch, a.batch_tokens):
+                encoded = collate_completions(batch, pad_id=tok.pad_token_id or 0)
+                want_checkpointing = a.gradient_checkpointing and encoded["input_ids"].numel() > a.checkpoint_above_tokens
+                if want_checkpointing != model.is_gradient_checkpointing:
+                    set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
+                loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
+                loss.backward()
+                running += loss.detach()
+                padded_tokens += encoded["input_ids"].numel()
+                batches += 1
+            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+            optimizer_started = True
+            opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
+            state["step"] += 1
+            state["trained_examples"] += len(examples)
+        except BaseException:
+            # A failed preparation/backward has not committed an optimizer step.
+            # Restore the cursor and counters to the prior boundary and persist that state.
+            opt.zero_grad(set_to_none=True)
+            state["cursor"], state["skipped"], state["trained_examples"] = boundary
+            if not a.benchmark_steps and not optimizer_started:
+                restore_rng_state(rng_boundary)
+                save_checkpoint()
+            raise
         running = running.item()  # one synchronization per optimizer step, not per sequence
         if cache:
             cache.db.commit()
@@ -530,14 +630,14 @@ def main():
                         "completion_tokens": sum(len(y) for x, y in examples),
                         "padded_tokens": padded_tokens, "microbatches": batches, "loss": running})
         if state["step"] % 10 == 0 or state["step"] == target_steps:
-            save_metrics()
+            save_metrics_at_boundary()
             state["log"].append([state["step"], round(running, 4)])
             print(f"step {state['step']:4d}  loss {running:.4f}  lr {sched.get_last_lr()[0]:.2e}  "
                   f"mem {torch.cuda.max_memory_allocated() / 2**30:.1f} GiB  {time.time() - t0:.0f}s "
                   f"overlength={state.get('overlength_encounters', {})}", flush=True)
         if not a.benchmark_steps and state["step"] % a.save_every == 0:
             save_checkpoint()
-    save_metrics()
+    save_metrics_at_boundary()
     if a.benchmark_steps:
         if cache:
             cache.db.close()
@@ -550,11 +650,17 @@ def main():
         print(f"stopped at step {state['step']} of {a.steps}; checkpoint written. "
               f"Run the same command to continue, or {action}.", flush=True)
         return
-    state["heldout_after"] = heldout_loss()
+    state["heldout_after"] = (None if a.skip_heldout_loss or stop["now"] else heldout_loss())
+    if stop["now"]:
+        save_checkpoint()
+        print(f"stopped at step {state['step']} of {a.steps}; checkpoint written", flush=True)
+        return
     print(f"held-out loss after: {state['heldout_after']}; trained examples {state['trained_examples']}, "
           f"source rows visited {state['cursor']}, too long {state['skipped']}", flush=True)
     save_checkpoint()
-    if a.load_in_4bit:
+    if a.no_merge:
+        print(f"saved checkpoint {ckpt}; merged export skipped", flush=True)
+    elif a.load_in_4bit:
         print(f"saved adapter {ckpt / 'weights'}; QLoRA checkpoints are not merged into their quantized base", flush=True)
     else:
         export_merged()

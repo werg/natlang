@@ -6,7 +6,7 @@ args:
   policy: string
 returns: Draft
 ---
-Reconcile `args/updates` against `args/base/text` under `args/policy`. This is a semantic
+Reconcile `updates` against `base/text` under `policy`. This is a semantic
 decision: read what each author intends; do not treat textual proximity as sufficient.
 Write the merged document to `text`. Put an update ID in `applied` only when its intended
 change is represented in that document. For unresolved or incompatible intents, put every

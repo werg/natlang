@@ -78,7 +78,7 @@ try {
     await page.waitForFunction(() => window.workerStopped && !document.querySelector('.statusbar').classList.contains('busy'));
     await page.goto(studio.url+'?fixture#ide');
     await page.waitForFunction(()=>window.natlangStudio?.spec?.id==='ide'&&window.natlangStudio.app?.view!==null&&!document.querySelector('.statusbar').classList.contains('busy'));
-    await page.evaluate(()=>window.natlangStudio.dispatch('add',{target:'answer.ts',text:'/*---\nengine: typescript-host\nargs: {}\nreturns: Num\n---*/\nreturn 42;'}));
+    await page.evaluate(()=>window.natlangStudio.dispatch('add',{target:'answer.ts',text:'export default function answer(): number { return 42; }'}));
     await page.evaluate(()=>window.natlangStudio.dispatch('run',{text:'{}'}));
     assert.equal(await page.evaluate(()=>window.natlangStudio.app.state.result),'42');
     assert.ok(await page.evaluate(()=>window.natlangStudio.app.state.trace_count)>0);

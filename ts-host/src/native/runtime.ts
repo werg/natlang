@@ -8,6 +8,7 @@ import { changes, NativeTraceRecorder } from './trace.js';
 import { isLazyDict } from './host-tree.js';
 import { FileHandle, Folder, FolderHandle, FolderBusyError, type FolderTransaction } from './scoped-fs.js';
 import { compileScopeSnippet } from '../scope-compiler.js';
+import { parseCrispModule } from './source-core.js';
 
 export type NativeOutcome = { path: string; kind: 'done' | 'quiesced' | 'waiting' | 'replaced'; detail: string; value?: Value };
 export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
@@ -77,9 +78,9 @@ const nodeType = (node: Pending) => ({ lambda: 'Lambda', map: 'MapNode', fold: '
 const DIAGNOSTIC_HINTS: Record<string, string> = {
   'commit-holes': 'Fill what is still missing with write, then finish your turn.',
   'commit-pending': 'A sub-task has not produced its result yet: call run on it, then finish your turn.',
-  'not-writable': 'args are read-only. Write into return, or into the args of a sub-task you defined.',
+  'not-writable': 'That value cannot be changed at this location.',
   frozen: 'That sub-task is running; its args cannot change now.',
-  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for Bool `true`, for Num `42.5`, for Text a string, for a record an object with exactly its fields.',
+  'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
   'type-does-not-fit-slot': 'That slot needs the type shown as expected.',
   'unknown-field': 'Use one of the fields listed as expected.',
   'unbound-param': 'Give the sub-task its inputs first: copy a value into the path shown, or define it with args_from.',
@@ -139,6 +140,23 @@ function jsView(value: Value): unknown {
   if (pending(value)) return { $pending: formatType(value.type), status: value.status };
   if (Array.isArray(value)) return value.map(jsView);
   if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, jsView(v)]));
+  return value;
+}
+function materializeLazyDictFlat(value: import('./host-tree.js').LazyDict,
+  prefix = ''): Record<string, unknown> {
+  return Object.fromEntries(value.entries().flatMap(entry => {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const child = value.child(entry.name);
+    return isLazyDict(child) ? Object.entries(materializeLazyDictFlat(child, path)) : [[path, dump(child as Value)]];
+  }));
+}
+function materializeHostDicts(value: Value): Value {
+  if (isLazyDict(value)) return materializeLazyDictFlat(value) as Value;
+  if (Array.isArray(value)) return value.map(materializeHostDicts);
+  if (value && typeof value === 'object' && !(value instanceof Folder) &&
+      !(value instanceof FolderHandle) && !(value instanceof FileHandle))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+      [key, materializeHostDicts(item as Value)])) as Value;
   return value;
 }
 const OMIT_HOST_VALUE = Symbol('omit-host-value');
@@ -208,7 +226,7 @@ export class NativeRuntime {
     this.seedPolicy = options.seedPolicy ?? { mode: 'compatibility' };
     if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
       throw new TypeError('derived seed policy requires an integer root');
-    this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'tools-v3',
+    this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'scope-eval-v1',
       ...(options.sourceRevision ? { source_revision: options.sourceRevision } : {}),
       ...(options.parentCallId ? { parent_call_id: options.parentCallId } : {}),
       engines: ['typescript-host'], engine_contracts: { 'typescript-host': {
@@ -415,8 +433,16 @@ export class NativeRuntime {
       code: node.body, effectful: node.effects.length > 0 });
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
-      const result = await this.evalForAsync(node, node.body, ref.path,
-        { args: jsView(node.args as Value), return: jsView(node.return) });
+      const names = node.type.params.fields.map(field => field.name);
+      const helpers = Object.keys(node.codebase).map(name => `const ${name} = Object.assign((...values: unknown[]) => ` +
+        `fx.natlang.scope(self.__natlangScopeToken, "call", [${JSON.stringify(name)}, values]), ` +
+        `{ __natlangFunction: ${JSON.stringify(name)} });`).join('\n');
+      const source = `${names.length ? `let { ${names.join(', ')} } = JSON.parse(JSON.stringify(self.inputs));` : ''}\n` +
+        `${helpers}\nreturn await (async () => {\n${node.body}\n})();`;
+      const session = new NativeSession(this, node, env, ref.path);
+      const result = await this.evalScopeFor(node, source, ref.path,
+        { inputs: jsView(materializeHostDicts(node.args as Value)) },
+        (operation, values) => session.scopeBridge(operation, values));
       let value: Value;
       try { value = coerce(result.result, node.type.returns, env, ref.path); }
       catch (error) {
@@ -474,7 +500,10 @@ export class NativeRuntime {
       throw error;
     } finally { this.trace.emit('invocation', { phase: 'end', call_id: callId });
       this.stack.pop(); this.invocationPaths.pop(); this.depth--; this.currentCallId = previousCallId; }
-    if (session.completed) return this.done(ref, node, node.return);
+    // Ending the interpreter turn is the completion signal.  A custom agent and
+    // the model-backed agent follow the same lifecycle: the runtime validates
+    // the typed result and line marks, then commits any reducer transaction.
+    if (session.completed || session.finish()) return this.done(ref, node, node.return);
     if (node.projectTransaction?.open) {
       node.projectTransaction.abort();
       this.trace.emit('folder', { call_id: callId, phase: 'discarded', mode: node.reducerMode,
@@ -632,7 +661,7 @@ export class NativeRuntime {
       if (node.checkName) check.args[node.checkName] = cloneValue(node.state);
       else { check.args.recent = cloneValue(node.recent as Value); check.args.iteration = node.iteration; }
       const box: Record<string, Value> = { value: check };
-      const chk = itemRef(box, 'value', check.type.kind === 'lambda' ? check.type.returns : parseType('Bool'), env,
+      const chk = itemRef(box, 'value', check.type.kind === 'lambda' ? check.type.returns : parseType('boolean'), env,
         `${ref.path}/check/${node.iteration}`);
       const checked = await this.trigger(chk);
       if (checked.kind !== 'done') return this.quiesce(ref, node, `check ${checked.kind}: ${checked.detail}`);
@@ -648,16 +677,18 @@ export class NativeSession {
   completed = false;
   actions = 0;
   toolCalls = 0;
-  surfaceName = 'tools-v3';
+  surfaceName = 'scope-eval-v1';
   readonly env: TypeEnv;
   private scopeCallSequence = 0;
   private readonly scopeLocalMutability = new Map<string, boolean>();
+  private readonly explainedNaturalFunctions = new Set<string>();
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
     this.env = outerEnv.child(lam.types);
   }
   finish(): boolean {
     if (this.lam.return === MISSING || this.lam.type.kind !== 'lambda') return false;
+    if (pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks).length) return false;
     const p = problems(this.lam.return, this.lam.type.returns, this.env, 'return');
     if (p.holes.length || p.pending.length) return false;
     const tx = this.lam.projectTransaction;
@@ -740,6 +771,9 @@ export class NativeSession {
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+    if (!['read_value', 'mark_lines', 'commit', 'report_blocker', 'report_error'].includes(name))
+      return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action',
+        expected: 'a current scope-eval tool' }])));
     if (this.actionLimitReached())
       return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
@@ -751,33 +785,12 @@ export class NativeSession {
   }
   private applyNow(name: string, args: Record<string, unknown>): NativeResult {
     try {
-      if (name === 'write_value') {
-        if (args.name !== undefined) {
-          const local = String(args.name);
-          if (Object.hasOwn(this.lam.args, local) || Object.hasOwn(this.lam.let, local) ||
-              Object.hasOwn(this.lam.codebase, local))
-            throw new Reject([{ path: local, code: 'not-writable', expected: 'a new scope variable name' }]);
-        }
-        return this.applyNow('write', {
-          path: args.name !== undefined ? `let/${String(args.name)}` : args.destination,
-          type: args.as_type ?? args.type ?? (args.name !== undefined ? this.inferScopeType(args.value) : undefined),
-          value: args.value });
-      }
-      if (name === 'copy_function') return this.applyNow('write', {
-        path: args.save_as, type: `Function<${String(args.function ?? '')}>` });
-      if (name === 'copy_value') {
-        const source = this.resolve(String(args.source ?? ''));
-        if (!source.type) throw new Reject([{ path: String(args.source ?? ''), code: 'no-such-path' }]);
-        return this.applyNow('write', { path: args.destination, type: formatType(source.type), source: args.source });
-      }
-      if (name === 'edit_text') return this.applyNow('edit', { path: args.path, old: args.find,
-        new: args.replace_with ?? '', fuzzy: args.fuzzy ?? false });
       if (name === 'mark_lines') return this.applyNow('mark_done', args);
       if (name === 'read_value') {
         const path = this.scopePath(String(args.expression ?? ''));
         if (args.start !== undefined || args.end !== undefined) {
           const value = this.resolve(path).get();
-          // Text ranges are character slices, matching both JS slicing and the
+          // String ranges are character slices, matching both JS slicing and the
           // ``(N chars)`` preview.  Lists continue to use item ranges.
           const sequence = Array.isArray(value) || typeof value === 'string' ? value : null;
           if (!sequence) throw new Reject([{ path, code: 'bad-range', expected: 'a list or text value' }]);
@@ -796,20 +809,6 @@ export class NativeSession {
         }
         return this.applyNow('read', { path });
       }
-      if (name === 'return_value') {
-        const variable = String(args.variable ?? '');
-        const source = Object.hasOwn(this.lam.let, variable) ? `let/${variable}` :
-          Object.hasOwn(this.lam.args, variable) ? `args/${variable}` : '';
-        if (!source) throw new Reject([{ path: variable, code: 'no-such-path', expected: 'an existing scope variable' }]);
-        if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'return', code: 'type-mismatch' }]);
-        const result = this.applyNow('write', { path: 'return', type: formatType(this.lam.type.returns), source });
-        if (this.lam.subtype === 'directory-reducer') {
-          this.lam.commitInclude = undefined; this.lam.commitExclude = undefined;
-        }
-        const open = pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks);
-        if (open.length) result.text = `${result.text.trimEnd()}\nResult staged; lines still open: ${open.join(', ')}.`;
-        return result;
-      }
       if (name === 'commit') {
         if (this.lam.subtype !== 'directory-reducer' || !this.lam.projectTransaction)
           throw new Reject([{ path: 'commit', code: 'bad-action', expected: 'a running directory reducer' }]);
@@ -818,7 +817,9 @@ export class NativeSession {
           if (selectors !== undefined && (!Array.isArray(selectors) || selectors.some(item =>
             typeof item !== 'string' || !item || item.startsWith('/') || item.startsWith('project/') || item.startsWith('codebase/'))))
             throw new Reject([{ path: key, code: 'bad-action', expected: 'relative project glob patterns' }]);
-        const result = this.applyNow('return_value', { variable: args.value });
+        if (this.lam.type.kind !== 'lambda')
+          throw new Reject([{ path: 'commit', code: 'bad-action', expected: 'a typed directory reducer result' }]);
+        const result = this.applyNow('write', { path: 'return', type: formatType(this.lam.type.returns), value: args.value });
         this.lam.commitInclude = include === undefined ? undefined : [...include as string[]];
         this.lam.commitExclude = exclude === undefined ? undefined : [...exclude as string[]];
         return result;
@@ -850,7 +851,7 @@ export class NativeSession {
           const def = this.lam.codebase[functionCopy[1]!] as Record<string, unknown> | undefined;
           if (!local || !def) throw new Reject([{ path, code: !local ? 'not-writable' : 'no-such-function' }]);
           const params = Object.entries(def.args as Record<string, string> ?? {}).map(([key, type]) => `${key}: ${type}`).join(', ');
-          const type = parseType(`Lambda<{ ${params} }, ${String(def.returns)}>`);
+          const type = parseType(`(${params}) => ${String(def.returns)}`);
           const kind = Object.hasOwn(def, 'code') ? 'code' : 'instructions';
           const copied = buildPending({ $lambda: { type: formatType(type), [kind]: def[kind],
             engine: def.engine, types: def.types ?? {}, effects: def.effects ?? [],
@@ -991,23 +992,11 @@ export class NativeSession {
         ref.set(retry);
         return { kind: 'ok', text: `ok   ${path}: draft return prefilled`, value: retry };
       }
-      if (name === 'run_code') {
-        if (args.engine === undefined) throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'an explicit available engine' }]);
-        const engine = String(args.engine);
-        if (engine !== 'typescript-host') return { kind: 'error', text: `engine ${engine} unavailable` };
-        const result = this.runtime.evalFor(this.lam, String(args.code ?? ''), false, 'eval',
-          { instructions: this.lam.body,
-            args: inlineEvalView(this.lam.args as Value), return: inlineEvalView(this.lam.return),
-            let: inlineEvalView(this.lam.let as Value) });
-        return { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value };
-      }
       throw new Reject([{ path: name, code: 'bad-action' }]);
     } catch (error) {
       if (error instanceof Reject) return rejected(error);
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NATLANG:effect-undeclared')) return { kind: 'rejected', text: message, codes: ['effect-undeclared'] };
-      if (name === 'run_code' && /read only|Cannot assign|not extensible/i.test(message))
-        return { kind: 'rejected', text: message, codes: ['eval-cannot-write'] };
       return { kind: 'error', text: message };
     }
   }
@@ -1023,7 +1012,7 @@ export class NativeSession {
       if (end >= value.length) throw new Reject([{ path, code: 'bad-range' }]);
       return { ref, type: ref.type!, value: value.slice(start, end + 1) };
     }
-    if (typeof value === 'string' && type.kind === 'prim' && type.name === 'Text') {
+    if (typeof value === 'string' && type.kind === 'prim' && type.name === 'string') {
       const lines = value.match(/[^\n]*\n|[^\n]+$/g) ?? [];
       if (start < 1 || end > lines.length) throw new Reject([{ path, code: 'bad-range' }]);
       return { ref, type: ref.type!, value: lines.slice(start - 1, end).join('') };
@@ -1034,10 +1023,10 @@ export class NativeSession {
   private inferScopeType(value: unknown): string {
     if (value instanceof Folder || value instanceof FolderHandle) return 'Folder';
     if (value instanceof FileHandle) return 'FileHandle';
-    if (value === null) return 'Null';
-    if (typeof value === 'boolean') return 'Bool';
-    if (typeof value === 'number' && Number.isFinite(value)) return 'Num';
-    if (typeof value === 'string') return 'Text';
+    if (value === null) return 'null';
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'number' && Number.isFinite(value)) return 'number';
+    if (typeof value === 'string') return 'string';
     if (Array.isArray(value)) {
       if (!value.length) throw new Reject([{ path: 'as_type', code: 'type-mismatch', expected: 'as_type for an empty list' }]);
       const types = [...new Set(value.map(item => this.inferScopeType(item)))];
@@ -1119,7 +1108,7 @@ export class NativeSession {
       Object.entries(this.lam.let).filter(([, value]) => !pending(value))) as Value) };
   }
 
-  private async scopeBridge(operation: string, raw: unknown[]): Promise<unknown> {
+  async scopeBridge(operation: string, raw: unknown[]): Promise<unknown> {
     if (operation === 'fs') return this.scopeFsBridge(String(raw[0] ?? ''), raw.slice(1));
     if (operation === 'handle') return this.scopeHandleBridge(raw[0], String(raw[1] ?? ''), raw.slice(2));
     if (operation === 'directory') return this.scopeDirectoryBridge(String(raw[0] ?? ''), raw[1],
@@ -1127,22 +1116,36 @@ export class NativeSession {
     if (operation !== 'call')
       throw new Reject([{ path: 'code', code: 'bad-call', expected: 'a checked natlang call', got: operation }]);
     const functionName = String(raw[0] ?? '');
-    const positional = raw[1];
-    if (!Array.isArray(positional))
+    const rawPositional = raw[1];
+    if (!Array.isArray(rawPositional))
       throw new Reject([{ path: 'code', code: 'bad-call', expected: 'positional function arguments' }]);
     const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
     if (!definition)
       throw new Reject([{ path: functionName, code: 'no-such-function' }]);
-    if (definition.subtype === 'directory-reducer' && positional.length && this.isScopeHandle(positional[0]))
-      return this.scopeDirectoryBridge('direct', positional[0], functionName, positional.slice(1));
+    if (definition.subtype === 'directory-reducer') {
+      if (this.lam.subtype !== 'directory-reducer' || !this.lam.projectTransaction)
+        throw new Reject([{ path: functionName, code: 'bad-call', expected: 'directory reducers may only be called by a directory reducer' }]);
+      if (!rawPositional.length || !this.isScopeHandle(rawPositional[0]))
+        throw new Reject([{ path: functionName, code: 'bad-call',
+          expected: 'a Folder handle as the first argument to a directly called directory reducer' }]);
+      return this.scopeDirectoryBridge('direct', rawPositional[0], functionName, rawPositional.slice(1));
+    }
+    const positional = rawPositional.map(value => this.materializeScopeValue(value));
     const signature = definition.args as Record<string, string> ?? {};
     const declared = Object.keys(signature);
     const required = declared.filter(name => !name.endsWith('?')).length;
     if (positional.length < required || positional.length > declared.length)
       throw new Reject([{ path: functionName, code: 'bad-call',
         expected: `${required} to ${declared.length} positional arguments`, got: String(positional.length) }]);
-    const values = Object.fromEntries(positional.map((value, index) =>
-      [declared[index]!.replace(/\?$/, ''), value]));
+    const values = Object.fromEntries(positional.flatMap((value, index) => {
+      const parameter = declared[index]!;
+      if (value === undefined) {
+        if (!parameter.endsWith('?')) throw new Reject([{ path: functionName, code: 'bad-call',
+          expected: `${parameter} is required` }]);
+        return [];
+      }
+      return [[parameter.replace(/\?$/, ''), value]];
+    }));
     const hidden = `__scope_call_${++this.scopeCallSequence}`;
     try {
       const outcome = await this.applyAsync('call', { function: functionName, to: `let/${hidden}`, values });
@@ -1156,6 +1159,18 @@ export class NativeSession {
 
   private isScopeHandle(value: unknown): value is { __natlangHandle: Record<string, unknown> } {
     return !!value && typeof value === 'object' && !!(value as Record<string, unknown>).__natlangHandle;
+  }
+
+  private materializeScopeValue(value: unknown): unknown {
+    if (this.isScopeHandle(value)) return this.resolveScopeHandle(value);
+    if (Array.isArray(value)) return value.map(item => this.materializeScopeValue(item));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => [key, this.materializeScopeValue(item)]));
+    return value;
+  }
+
+  private materializeLazyDict(value: import('./host-tree.js').LazyDict): Record<string, unknown> {
+    return materializeLazyDictFlat(value);
   }
 
   private resolveScopeHandle(value: unknown): FolderHandle | FileHandle {
@@ -1202,6 +1217,8 @@ export class NativeSession {
 
   private async scopeDirectoryBridge(mode: string, rawFolder: unknown, functionName: string,
     positional: unknown[]): Promise<unknown> {
+    if (this.lam.subtype !== 'directory-reducer' || !this.lam.projectTransaction)
+      throw new Reject([{ path: functionName, code: 'bad-call', expected: 'directory reducers may only be called by a directory reducer' }]);
     const handle = this.resolveScopeHandle(rawFolder);
     if (!(handle instanceof FolderHandle))
       throw new Reject([{ path: 'code', code: 'type-mismatch', expected: 'a folder handle' }]);
@@ -1213,7 +1230,7 @@ export class NativeSession {
     if (positional.length < required || positional.length > declared.length)
       throw new Reject([{ path: functionName, code: 'bad-call', expected: `${required} to ${declared.length} positional arguments` }]);
     const values = Object.fromEntries(positional.map((value, index) =>
-      [declared[index]!.replace(/\?$/, ''), value]));
+      [declared[index]!.replace(/\?$/, ''), this.materializeScopeValue(value)]));
     let tx: FolderTransaction;
     try { tx = await handle.beginTransaction(false); }
     catch (error) {
@@ -1232,19 +1249,21 @@ export class NativeSession {
   }
 
   private async scopeFsBridge(method: string, values: unknown[]): Promise<unknown> {
-    if (!values.length || typeof values[0] !== 'string')
+    const rawPath = values[0];
+    if ((!values.length && !['list', 'diff', 'exists'].includes(method)) ||
+        (values.length && typeof rawPath !== 'string'))
       throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, ...)` }]);
-    const rawPath = values[0], root = rawPath === 'project' || rawPath.startsWith('project/') ? 'project' :
-      rawPath === 'codebase' || rawPath.startsWith('codebase/') ? 'codebase' : '';
-    if (!root) throw new Reject([{ path: rawPath, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
-    const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
-    if (!folder) throw new Reject([{ path: rawPath, code: 'bad-action', expected: 'a directory reducer project' }]);
-    const path = rawPath === root ? '' : rawPath.slice(root.length + 1);
+    const path = typeof rawPath === 'string' ? rawPath : '';
+    if (path.startsWith('/') || path === '..' || path.startsWith('../') || path.includes('/../') ||
+        (!path && !['list', 'diff', 'exists'].includes(method)))
+      throw new Reject([{ path, code: 'no-such-path', expected: 'a relative path in the current folder' }]);
+    const folder = this.lam.projectTransaction?.folder;
+    if (!folder) throw new Reject([{ path, code: 'bad-action', expected: 'a directory reducer folder' }]);
     if (method === 'exists') return folder.exists(path);
     if (method === 'list') {
       const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
       return folder.listFiles(path, options.pattern === undefined ? undefined : String(options.pattern))
-        .map(item => ({ ...item, path: `${root}/${item.path}` }));
+        .map(item => ({ ...item, path: item.path }));
     }
     if (method === 'readText' || method === 'readJson') {
       const options = values[1] && typeof values[1] === 'object' ? values[1] as Record<string, unknown> : {};
@@ -1254,35 +1273,29 @@ export class NativeSession {
     }
     if (method === 'writeText' || method === 'writeJson') {
       if (values.length !== 2) throw new Reject([{ path: 'code', code: 'bad-call', expected: `fs.${method}(path, value)` }]);
-      if (root === 'codebase' && !folder.isFile(path))
-        throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'an existing codebase file' }]);
       const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
       folder.writeText(path, method === 'writeText' ? String(values[1]) : `${JSON.stringify(values[1], null, 2)}\n`);
-      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-      catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
       return null;
     }
     if (method === 'editText') {
       if (values.length !== 2 || !values[1] || typeof values[1] !== 'object')
         throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.editText(path, { find, replaceWith, fuzzy? })' }]);
-      const options = values[1] as Record<string, unknown>, before = folder.readBytesSync(path);
+      const options = values[1] as Record<string, unknown>;
       const result = await folder.editText(path, String(options.find ?? ''), String(options.replaceWith ?? ''), options.fuzzy === true);
-      try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-      catch (error) { folder.writeBytes(path, before); throw error; }
       return result;
     }
     if (method === 'diff') return folder.diffSync(path).changes.map(change =>
-      ({ path: `${root}/${change.path}`, kind: change.kind }));
+      ({ path: change.path, kind: change.kind }));
     if (method === 'remove') {
-      if (root === 'codebase') throw new Reject([{ path: rawPath, code: 'not-writable', expected: 'codebase files cannot be deleted' }]);
       folder.remove(path); return null;
     }
     if (method === 'move') {
       if (values.length !== 2 || typeof values[1] !== 'string')
         throw new Reject([{ path: 'code', code: 'bad-call', expected: 'fs.move(source, destination)' }]);
-      if (root !== 'project' || !(values[1] === 'project' || values[1].startsWith('project/')))
-        throw new Reject([{ path: 'code', code: 'not-writable', expected: 'codebase files cannot be moved' }]);
-      folder.move(path, values[1].slice(8)); return null;
+      const destination = values[1];
+      if (!destination || destination.startsWith('/') || destination === '..' || destination.startsWith('../') || destination.includes('/../'))
+        throw new Reject([{ path: destination, code: 'no-such-path', expected: 'a relative path in the current folder' }]);
+      folder.move(path, destination); return null;
     }
     throw new Reject([{ path: 'code', code: 'bad-call', expected: 'an fs method', got: method }]);
   }
@@ -1290,17 +1303,25 @@ export class NativeSession {
   private async scopeEvalNative(code: string): Promise<NativeResult> {
     if (!code.trim())
       return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]));
-    const inputNames = Object.entries(this.lam.args)
-      .filter(([, value]) => !(value instanceof Folder) && !(value instanceof FolderHandle) && !(value instanceof FileHandle))
-      .map(([name]) => name);
+    const opaqueInputs = Object.entries(this.lam.args)
+      .filter(([, value]) => isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle);
+    const opaqueInputNames = new Set(opaqueInputs.map(([name]) => name));
+    const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields
+      .map(field => field.name).filter(name => !opaqueInputNames.has(name)) : [];
     const locals = Object.entries(this.lam.let)
-      .filter(([, value]) => !pending(value) && !(value instanceof Folder) &&
+      .filter(([, value]) => !pending(value) && !isLazyDict(value) && !(value instanceof Folder) &&
         !(value instanceof FolderHandle) && !(value instanceof FileHandle));
+    const opaqueLocals = Object.entries(this.lam.let)
+      .filter(([, value]) => isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle);
     const localBindings = locals.map(([name]) => ({ name,
       mutable: this.scopeLocalMutability.get(name) ?? true,
       annotation: this.lam.letTypes[name] ? formatType(this.lam.letTypes[name]!) : undefined }));
     const helperNames = Object.keys(this.lam.codebase);
-    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: helperNames });
+    const opaqueNames = [...opaqueInputs, ...opaqueLocals].map(([name]) => name);
+    if (this.lam.projectTransaction) opaqueNames.push('folder', 'fs');
+    const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: helperNames,
+      opaqueBindings: opaqueNames,
+      ...this.runtime.environment.scopeCapabilities });
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item =>
         `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
@@ -1324,31 +1345,41 @@ export class NativeSession {
       `fx.natlang.scope(self.__natlangScopeToken, "handle", [value, method, ...args]) });\n` +
       `  return value;\n};\n`;
     const handleBindings = [
-      ...Object.entries(this.lam.args).filter(([, value]) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
-        .map(([name, value]) => `const ${name} = __makeHandle(${JSON.stringify({ source: 'arg', name,
+      ...opaqueInputs.map(([name, value]) => isLazyDict(value) ?
+        `const ${name} = ${JSON.stringify(this.materializeLazyDict(value))};` :
+        `const ${name} = __makeHandle(${JSON.stringify({ source: 'arg', name,
           path: '', kind: value instanceof FileHandle ? 'file' : 'folder' })});`),
-      ...Object.entries(this.lam.let).filter(([, value]) => value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle)
-        .map(([name, value]) => `const ${name} = __makeHandle(${JSON.stringify({ source: 'local', name,
+      ...opaqueLocals.map(([name, value]) => isLazyDict(value) ?
+        `const ${name} = ${JSON.stringify(this.materializeLazyDict(value))};` :
+        `const ${name} = __makeHandle(${JSON.stringify({ source: 'local', name,
           path: '', kind: value instanceof FileHandle ? 'file' : 'folder' })});`),
-      `const codebase = __makeHandle({ source: "codebase", path: "", kind: "folder" });`,
-      ...(this.lam.projectTransaction ? [`const project = __makeHandle({ source: "project", path: "", kind: "folder" });`] : []),
+      ...(this.lam.projectTransaction ? [`const folder = __makeHandle({ source: "project", path: "", kind: "folder" });`] : []),
     ].join('\n');
-    const source = handleFactory + handleBindings + `\nconst fs = new Proxy({}, { get: (_, method) => (...args: unknown[]) => ` +
-      `fx.natlang.scope(self.__natlangScopeToken, "fs", [String(method), ...args]) });\n` +
+    const fsBinding = this.lam.projectTransaction ? `\nconst fs = new Proxy({}, { get: (_, method) => (...args: unknown[]) => ` +
+      `fx.natlang.scope(self.__natlangScopeToken, "fs", [String(method), ...args]) });\n` : '\n';
+    const source = handleFactory + handleBindings + fsBinding +
       `const __invoke = (name: string, args: unknown[]) => ` +
       `fx.natlang.scope(self.__natlangScopeToken, "call", [name, args]);\n${compiled.program}\n` +
       `return await ${compiled.entrypoint}(self.inputs, self.locals, __invoke);`;
     try {
       const evaluated = await this.runtime.evalScopeFor(this.lam, source, 'eval', this.scopeView(),
         (operation, args) => this.scopeBridge(operation, args));
-      const output = evaluated.result as { result?: unknown; bindings?: Record<string, unknown> };
+      const output = evaluated.result as { result?: unknown; inputs?: Record<string, unknown>;
+        bindings?: Record<string, unknown> };
       if (!output || typeof output !== 'object' || !output.bindings || typeof output.bindings !== 'object')
         throw new Reject([{ path: 'code', code: 'bad-action', expected: 'an atomic scope transaction result' }]);
       const annotations = new Map(compiled.bindings.map(binding => [binding.name, binding.annotation]));
       const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
       const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));
       const staged: [string, Type, Value][] = [];
+      const stagedInputs: [string, Value][] = [];
       const inferred: Record<string, Type> = { ...this.lam.letTypes };
+      if (output.inputs && typeof output.inputs === 'object') for (const [name, value] of Object.entries(output.inputs)) {
+        const field = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.find(item => item.name === name) : undefined;
+        if (!field || !Object.hasOwn(this.lam.args, name))
+          throw new Reject([{ path: name, code: 'no-such-path', expected: 'a function parameter' }]);
+        stagedInputs.push([name, coerce(value, field.type, this.env, `args/${name}`)]);
+      }
       for (const [name, value] of Object.entries(output.bindings)) {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
@@ -1357,17 +1388,38 @@ export class NativeSession {
         const annotation = annotations.get(name);
         if (annotation) type = parseType(annotation);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
-        if (!type) type = parseType(this.inferScopeType(materialized));
+        if (!type) {
+          try { type = parseType(this.inferScopeType(materialized)); }
+          catch (error) {
+            if (this.lam.type.kind !== 'lambda' || !compiled.resultBindings?.includes(name)) throw error;
+            type = this.lam.type.returns;
+          }
+        }
         inferred[name] = type;
         staged.push([name, type, coerce(materialized, type, this.env, `let/${name}`)]);
       }
+      let functionResult: Value | undefined;
+      if (compiled.producesResult && this.lam.type.kind === 'lambda') try {
+        functionResult = coerce(output.result, this.lam.type.returns, this.env, 'return');
+      } catch { /* An intermediate expression of another type is still a useful eval result. */ }
+      for (const [name, value] of stagedInputs) this.lam.args[name] = value;
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;
         this.lam.let[name] = value;
         if (mutability.has(name)) this.scopeLocalMutability.set(name, mutability.get(name)!);
       }
+      if (functionResult !== undefined) {
+        this.lam.return = functionResult;
+        if (this.lam.subtype === 'directory-reducer') {
+          this.lam.commitInclude = undefined; this.lam.commitExclude = undefined;
+        }
+      }
       const text = JSON.stringify(output.result ?? null);
-      return { kind: 'ok', text: text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`,
+      const rendered = text.length <= 400 ? text : `${text.slice(0, 400)} … (${text.length} chars)`;
+      const open = functionResult === undefined ? [] : pendingProgramLines(this.lam.originalBody ?? this.lam.body, this.lam.marks);
+      const status = functionResult === undefined ? '' : open.length ?
+        `\nFunction result set; lines still open: ${open.join(', ')}.` : '\nFunction result set.';
+      return { kind: 'ok', text: rendered + status,
         value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
@@ -1376,7 +1428,7 @@ export class NativeSession {
     }
   }
 
-  private editableDefinitionSource(definition: Record<string, unknown>): string {
+  private editableDefinitionSource(name: string, definition: Record<string, unknown>): string {
     const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
     const meta: Record<string, unknown> = { description: definition.description ?? '',
       args: definition.args ?? {}, returns: definition.returns };
@@ -1385,7 +1437,12 @@ export class NativeSession {
     if (definition.subtype === 'directory-reducer') meta.kind = definition.subtype;
     if (kind === 'code' && definition.engine && definition.engine !== 'typescript-host') meta.engine = definition.engine;
     const front = YAML.stringify(meta).trimEnd(), body = String(definition[kind] ?? '').replace(/^\n+|\n+$/g, '') + '\n';
-    return kind === 'code' ? `/*---\n${front}\n---*/\n${body}` : `---\n${front}\n---\n${body}`;
+    if (kind !== 'code') return `---\n${front}\n---\n${body}`;
+    const parameters = Object.entries(definition.args as Record<string, string> ?? {}).map(([raw, type]) =>
+      `${raw.replace(/\?$/, '')}${raw.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
+    const isAsync = /\bawait\b/.test(body), returns = String(definition.returns);
+    return `export default ${isAsync ? 'async ' : ''}function ${name}(${parameters}): ` +
+      `${isAsync ? `Promise<${returns}>` : returns} {\n${body}}\n`;
   }
 
   private editableCodebase(): Folder {
@@ -1398,7 +1455,7 @@ export class NativeSession {
           const nested = definition.codebase as Record<string, unknown> | undefined;
           const imports = Object.entries(nested ?? {}).map(([childName, childRaw]) => {
             const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
-            return `import { ${childName} } from "./${name}/${childName}${childExtension}";`;
+            return `import ${childName} from "./${name}/${childName}${childExtension}";`;
           });
           this.lam.codebasePaths[key] = path;
           this.lam.codebaseFiles[path] = definition;
@@ -1406,7 +1463,7 @@ export class NativeSession {
             const child = childRaw as Record<string, unknown>, childExtension = Object.hasOwn(child, 'code') ? '.ts' : '.nl';
             return [childName, [...prefix, name, `${childName}${childExtension}`].join('/')];
           }));
-          files[path] = `${imports.length ? `${imports.join('\n')}\n\n` : ''}${this.editableDefinitionSource(definition)}`;
+          files[path] = `${imports.length ? `${imports.join('\n')}\n\n` : ''}${this.editableDefinitionSource(name, definition)}`;
           if (!ancestors.has(definition)) {
             if (nested) add(nested, [...prefix, name], new Set([...ancestors, definition]));
           }
@@ -1418,27 +1475,45 @@ export class NativeSession {
     return this.lam.codebaseFolder;
   }
 
+  private functionSource(name: string): { key: string; path: string; folder: Folder } {
+    const folder = this.editableCodebase();
+    const key = name.trim().replace(/\./g, '/');
+    const path = this.lam.codebasePaths[key];
+    if (!path) throw new Reject([{ path: name, code: 'no-such-function',
+      expected: Object.keys(this.lam.codebasePaths).map(item => item.replace(/\//g, '.')).join(', ') }]);
+    return { key, path, folder };
+  }
+
   private refreshCodebaseFile(path: string): void {
     const entry = Object.entries(this.lam.codebasePaths).find(([, source]) => source === path);
     if (!entry) throw new Reject([{ path: `codebase/${path}`, code: 'no-such-path', expected: 'an imported function source' }]);
     const [binding] = entry, parts = binding.split('/');
     const previous = this.lam.codebaseFiles[path] as Record<string, unknown>;
     const source = new TextDecoder().decode(this.editableCodebase().readBytesSync(path));
-    let moduleSource = source;
     const imports: Array<{ alias: string; exported: string; specifier: string }> = [];
-    const importLine = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']([^"']+)["'];?\s*\r?\n/;
-    while (moduleSource.startsWith('import')) {
-      const imported = importLine.exec(moduleSource);
-      if (!imported) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'one named static import per line' }]);
-      imports.push({ exported: imported[1]!, alias: imported[2] ?? imported[1]!, specifier: imported[3]! });
-      moduleSource = moduleSource.slice(imported[0].length);
+    const isCode = path.endsWith('.ts');
+    let meta: Record<string, unknown>, body: string;
+    if (isCode) {
+      const module = parseCrispModule(source, path);
+      imports.push(...module.imports.map(([alias, exported, specifier]) => ({ alias, exported, specifier })));
+      meta = { args: module.args, returns: module.returns, effects: module.effects,
+        kind: previous.subtype ?? 'function' };
+      body = module.code;
+    } else {
+      let moduleSource = source;
+      const importLine = /^import\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"']+)["'];?\s*\r?\n/;
+      while (moduleSource.startsWith('import')) {
+        const imported = importLine.exec(moduleSource);
+        if (!imported) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'one default relative import per line' }]);
+        imports.push({ exported: '', alias: imported[1]!, specifier: imported[2]! });
+        moduleSource = moduleSource.slice(imported[0].length);
+      }
+      moduleSource = moduleSource.replace(/^\r?\n/, '');
+      const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(moduleSource);
+      if (!match) throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'natural-language frontmatter between --- lines' }]);
+      meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
+      body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
     }
-    moduleSource = moduleSource.replace(/^\r?\n/, '');
-    const isCode = moduleSource.trimStart().startsWith('/*---');
-    const match = (isCode ? /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/ :
-      /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/).exec(moduleSource);
-    if (!match) throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
-    const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
     if (typeof meta.returns !== 'string') throw new Reject([{ path: `codebase/${path}`, code: 'type-mismatch', expected: 'returns' }]);
     const subtype = String(meta.kind ?? 'function');
     if (!['function', 'directory-reducer'].includes(subtype))
@@ -1457,21 +1532,18 @@ export class NativeSession {
       const target = pieces.join('/'), candidates = /\.[A-Za-z0-9]+$/.test(target) ? [target] : [`${target}.nl`, `${target}.ts`];
       const targetEntry = Object.entries(this.lam.codebasePaths).find(([, candidate]) => candidates.includes(candidate));
       if (!targetEntry) throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: 'an existing associated codebase file', got: item.specifier }]);
-      const targetName = targetEntry[0].split('/').at(-1)!;
-      if (targetName !== item.exported)
-        throw new Reject([{ path: `codebase/${path}`, code: 'bad-import', expected: `export { ${targetName} }`, got: item.exported }]);
       linkedPaths[item.alias] = this.lam.codebasePaths[targetEntry[0]]!;
     }
     const updated: Record<string, unknown> = { description: String(meta.description ?? ''),
       args: meta.args ?? {}, returns: meta.returns, [isCode ? 'code' : 'instructions']:
-        match[2]!.replace(/^\n+|\n+$/g, '') + '\n', types: meta.types ?? previous.types ?? {},
+        body, types: meta.types ?? previous.types ?? {},
       effects: meta.effects ?? [], subtype, codebase: {} };
     if (isCode) updated.engine = String(meta.engine ?? 'typescript-host');
     // Parse all declared types before making the edited binding live.
     const env = this.env.child(Object.fromEntries(Object.entries(updated.types as Record<string, string>)
       .map(([key, value]) => [key, parseType(value)])));
-    env.checkNames(parseType(`Lambda<{ ${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
-      `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${updated.returns}>`));
+    env.checkNames(parseType(`(${Object.entries(updated.args as Record<string, string>).map(([key, value]) =>
+      `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')}) => ${updated.returns}`));
     this.lam.codebaseFiles[path] = updated;
     this.lam.codebaseImports[path] = linkedPaths;
     const memo = new Map<string, Record<string, unknown>>();
@@ -1505,44 +1577,70 @@ export class NativeSession {
 
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
+    if (['read_function', 'edit_function', 'diff_functions'].includes(name)) {
+      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
+      if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
+      this.actions++; this.toolCalls++; this.lam.steps++;
+      try {
+        if (name === 'diff_functions') {
+          const folder = this.editableCodebase();
+          const changes = folder.diffSync().changes.map(change => ({
+            function: (Object.entries(this.lam.codebasePaths).find(([, path]) => path === change.path)?.[0] ?? change.path)
+              .replace(/\//g, '.'), kind: change.kind,
+          }));
+          return this.record(name, args, { kind: 'ok', text: JSON.stringify(changes, null, 2), value: changes as Value });
+        }
+        const source = this.functionSource(String(args.name ?? ''));
+        if (name === 'read_function') {
+          const content = await source.folder.readText(source.path);
+          let explanation = '';
+          if (source.path.endsWith('.nl') && !this.explainedNaturalFunctions.has(source.key)) {
+            this.explainedNaturalFunctions.add(source.key);
+            explanation = 'Natural-language function source: the YAML frontmatter declares its parameter and return types; the body contains the instructions executed line by line.\n\n';
+          }
+          return this.record(name, args, { kind: 'ok', text: explanation + content, value: content });
+        }
+        const before = source.folder.readBytesSync(source.path);
+        const result = await source.folder.editText(source.path, String(args.find ?? ''),
+          String(args.replace_with ?? ''), args.fuzzy === true);
+        try { this.refreshCodebaseFile(source.path); }
+        catch (error) { source.folder.writeBytes(source.path, before); throw error; }
+        return this.record(name, args, { kind: 'ok', text: JSON.stringify(result), value: result as Value });
+      } catch (error) {
+        if (error instanceof Reject) return this.record(name, args, rejected(error));
+        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
+      }
+    }
     if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name)) {
       if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
       if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
       try {
-        const fallback = this.lam.projectTransaction ? 'project' : 'codebase';
-        const raw = String(args.path ?? fallback);
-        const root = raw === 'project' || raw.startsWith('project/') ? 'project' :
-          raw === 'codebase' || raw.startsWith('codebase/') ? 'codebase' : '';
-        if (!root) throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a path rooted at codebase/ or project/' }]);
-        const folder = root === 'project' ? this.lam.projectTransaction?.folder : this.editableCodebase();
-        if (!folder) throw new Reject([{ path: raw, code: 'bad-action', expected: 'a directory reducer project' }]);
-        const path = raw === root ? '' : raw.slice(root.length + 1);
+        const raw = String(args.path ?? '');
+        if (raw.startsWith('/') || raw === '..' || raw.startsWith('../') || raw.includes('/../'))
+          throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a relative path in the current folder' }]);
+        const folder = this.lam.projectTransaction?.folder;
+        if (!folder) throw new Reject([{ path: raw, code: 'bad-action', expected: 'a directory reducer folder' }]);
+        const path = raw;
         if (['read_file', 'write_file', 'edit_file'].includes(name) && !path)
-          throw new Reject([{ path: raw, code: 'no-such-path', expected: `a ${root} file` }]);
+          throw new Reject([{ path: raw, code: 'no-such-path', expected: 'a file in the current folder' }]);
         let value: unknown;
         if (name === 'list_files') value = folder.listFiles(path, args.pattern === undefined ? undefined : String(args.pattern))
-          .map(item => ({ ...item, path: `${root}/${item.path}` }));
+          .map(item => ({ ...item, path: item.path }));
         else if (name === 'search_files') value = (await folder.search(String(args.query ?? ''), path,
           args.pattern === undefined ? undefined : String(args.pattern), args.regex === true))
-          .map(item => ({ ...item, path: `${root}/${item.path}` }));
+          .map(item => ({ ...item, path: item.path }));
         else if (name === 'read_file') value = await folder.readText(path,
           args.start_line === undefined ? undefined : Number(args.start_line),
           args.end_line === undefined ? undefined : Number(args.end_line));
         else if (name === 'write_file') {
-          if (root === 'codebase' && !folder.isFile(path)) throw new Reject([{ path: raw, code: 'not-writable',
-            expected: 'an existing codebase file; codebase files cannot be added, moved, or deleted' }]);
           const before = folder.isFile(path) ? folder.readBytesSync(path) : undefined;
           folder.writeText(path, String(args.content ?? ''));
-          try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-          catch (error) { if (before) folder.writeBytes(path, before); else folder.remove(path); throw error; }
           value = { path: raw, changed: true };
         }
         else if (name === 'edit_file') {
           const before = folder.readBytesSync(path);
           value = await folder.editText(path, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
-          try { if (root === 'codebase') this.refreshCodebaseFile(path); }
-          catch (error) { folder.writeBytes(path, before); throw error; }
         }
         else value = folder.diffSync(path);
         const text = typeof value === 'string' ? value : JSON.stringify(value, null, 1);
@@ -1557,106 +1655,6 @@ export class NativeSession {
       if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
       this.actions++; this.toolCalls++; this.lam.steps++;
       return this.record(name, args, await this.scopeEvalNative(String(args.code ?? '')));
-    }
-    if (['run_function', 'for_each', 'fold', 'repeat'].includes(name)) {
-      const functionName = String(args.function ?? '');
-      const definition = this.lam.codebase[functionName] as Record<string, unknown> | undefined;
-      if (!definition) return this.record(name, args, rejected(new Reject([{ path: 'function', code: 'no-such-function' }])));
-      const signature = definition.args as Record<string, string> ?? {};
-      const declared = Object.keys(signature).map(raw => raw.replace(/\?$/, ''));
-      const skip = name === 'fold' ? 2 : name === 'for_each' || name === 'repeat' ? 1 : 0;
-      const paths = args.inputs ?? [];
-      if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string'))
-        return this.record(name, args, rejected(new Reject([{ path: 'inputs', code: 'bad-call', expected: 'ordered workspace paths' }])));
-      const tail = Object.keys(signature).slice(skip);
-      const required = tail.filter(raw => !raw.endsWith('?')).length;
-      if (paths.length < required || paths.length > tail.length)
-        return this.record(name, args, rejected(new Reject([{ path: 'inputs', code: 'bad-call',
-          expected: `${required} to ${tail.length} paths in parameter order` }])));
-      const inputs = Object.fromEntries(paths.map((path, index) => [declared[skip + index]!, path]));
-      const forwarded: Record<string, unknown> = { function: functionName, to: args.save_as, inputs };
-      if (name === 'for_each' || name === 'fold') forwarded.over = args.items;
-      if (name === 'fold' || name === 'repeat') forwarded.init = args.initial;
-      if (name === 'repeat') { forwarded.until = args.until; forwarded.max = args.at_most; }
-      return this.applyAsync('call', forwarded);
-    }
-    if (name === 'invoke') return this.applyAsync('call', args);
-    if (name === 'map_items') {
-      const item = String(args.item_param ?? '');
-      const inputs = args.inputs as Record<string, unknown> ?? {}, values = args.values as Record<string, unknown> ?? {};
-      if (!item || item in inputs || item in values)
-        return this.record(name, args, rejected(new Reject([{ path: 'item_param', code: 'bad-call',
-          expected: 'the parameter supplied by the map, absent from inputs and values' }])));
-      const { item_param: _item, ...forwarded } = args;
-      return this.applyAsync('call', forwarded);
-    }
-    if (name === 'fold_items') {
-      if (args.item_param !== 'item' || args.accumulator_param !== 'acc')
-        return this.record(name, args, rejected(new Reject([{ path: 'item_param', code: 'bad-call',
-          expected: 'item and acc for the current fold function' }])));
-      const { item_param: _item, accumulator_param: _acc, initial, ...forwarded } = args;
-      return this.applyAsync('call', { ...forwarded, init: initial });
-    }
-    if (name === 'repeat_until') {
-      const state = String(args.state_param ?? '');
-      const inputs = args.inputs as Record<string, unknown> ?? {}, values = args.values as Record<string, unknown> ?? {};
-      if (!state || state in inputs || state in values)
-        return this.record(name, args, rejected(new Reject([{ path: 'state_param', code: 'bad-call',
-          expected: 'the transition parameter supplied by the loop' }])));
-      const { initial, state_param: _state, ...forwarded } = args;
-      return this.applyAsync('call', { ...forwarded, init: initial });
-    }
-    if (name === 'resume') {
-      const path = String(args.computation ?? args.path ?? '');
-      const ref = this.resolve(path), value = ref.get();
-      if (!pending(value) || !['unreduced', 'quiesced'].includes(value.status))
-        return this.record(name, args, rejected(new Reject([{ path, code: 'no-such-path',
-          expected: 'an unfinished computation' }])));
-      const outcome = await this.runtime.trigger(ref);
-      return this.record(name, args, { kind: outcome.kind,
-        text: `${path}: ${outcome.kind}  ${outcome.detail}`, value: outcome.value });
-    }
-    if (name === 'run_code' && /\bawait\b/.test(String(args.code ?? ''))) {
-      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-      if (this.actionLimitReached())
-        return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
-      this.actions++; this.toolCalls++; this.lam.steps++;
-      try {
-        if (args.engine !== 'typescript-host') throw new Reject([{ path: 'engine', code: 'bad-action', expected: 'typescript-host' }]);
-        const expression = String(args.code ?? '');
-        const result = await this.runtime.evalForAsync(this.lam, `(async () => (${expression}))()`, 'eval',
-          { instructions: this.lam.body, args: inlineEvalView(this.lam.args as Value),
-            return: inlineEvalView(this.lam.return), let: inlineEvalView(this.lam.let as Value) }, false);
-        return this.record(name, args, { kind: 'ok', text: JSON.stringify(result.result), value: result.result as Value });
-      } catch (error) {
-        if (error instanceof Reject) return this.record(name, args, rejected(error));
-        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
-      }
-    }
-    if (name === 'run') {
-      if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-      if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
-      this.actions++; this.toolCalls++; this.lam.steps++;
-      try {
-        const paths = Array.isArray(args.paths) ? args.paths : [args.paths];
-        const outcomes = [];
-        for (const path of paths) {
-          const ref = this.resolve(String(path));
-          if (ref.deny) throw new Reject([{ path: ref.path, code: ref.deny }]);
-          const value = ref.get();
-          if (pending(value)) {
-            const missing = unboundParts(value, ref.env, ref.path);
-            if (missing.length) return this.record(name, args, { kind: 'refused',
-              text: missing.map(d => `${d.path}: ${d.code}`).join('\n'), codes: [...new Set(missing.map(d => d.code))] });
-          }
-          outcomes.push(await this.runtime.trigger(ref));
-        }
-        return this.record(name, args, { kind: outcomes.length === 1 ? outcomes[0]!.kind : 'ok',
-          text: outcomes.map(o => `${o.path}: ${o.kind}  ${o.detail}`).join('\n'), value: outcomes.length === 1 ? outcomes[0]!.value : undefined });
-      } catch (error) {
-        if (error instanceof Reject) return this.record(name, args, rejected(error));
-        return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
-      }
     }
     if (name !== 'call') return this.apply(name, args);
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
@@ -1694,7 +1692,7 @@ export class NativeSession {
       }
       const signature = definition.args as Record<string, string> ?? {};
       const params = Object.entries(signature).map(([name, type]) => `${name.replace(/\?$/, '')}${name.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
-      const typeText = `Lambda<{ ${params} }, ${String(definition.returns)}>`;
+      const typeText = `(${params}) => ${String(definition.returns)}`;
       const kind = Object.hasOwn(definition, 'code') ? 'code' : 'instructions';
       const inputPaths = (args.inputs ?? {}) as Record<string, string>;
       const values: Record<string, unknown> = { ...args.values as Record<string, unknown> ?? {} };
@@ -1765,7 +1763,7 @@ export class NativeSession {
         const checkKind = Object.hasOwn(check, 'code') ? 'code' : 'instructions';
         raw = { $iterate: { type: `Iterate<${stateType}>`, init, max: args.max,
           state_name: stateName, check_name: checkName,
-          step: { $lambda: leaf }, check: { $lambda: { type: `Lambda<{ ${checkName}: ${checkArgs[checkName]} }, ${check.returns}>`,
+          step: { $lambda: leaf }, check: { $lambda: { type: `(${checkName}: ${checkArgs[checkName]}) => ${check.returns}`,
             [checkKind]: check[checkKind],
             ...(checkKind === 'code' && check.engine && check.engine !== 'typescript-host' ?
               { engine: check.engine } : {}), function: String(args.until) } } } };
@@ -1818,11 +1816,11 @@ export class NativeSession {
     const first = parts.shift()!;
     let container: Record<string, Value>, type: Type, deny = '';
     if (first === 'args') { container = this.lam.args; type = this.lam.type.kind === 'lambda' ? this.lam.type.params : parseType('{}'); deny = 'not-writable'; }
-    else if (first === 'return') { container = this.lam as unknown as Record<string, Value>; type = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('Null'); }
+    else if (first === 'return') { container = this.lam as unknown as Record<string, Value>; type = this.lam.type.kind === 'lambda' ? this.lam.type.returns : parseType('null'); }
     else if (first === 'let') { container = this.lam.let; type = parseType('{}'); }
     else if (first === this.lam.kind) {
       if (parts.length) throw new Reject([{ path, code: 'no-such-path' }]);
-      return itemRef(this.lam as unknown as Record<string, Value>, 'body', parseType('Text'), this.env, first);
+      return itemRef(this.lam as unknown as Record<string, Value>, 'body', parseType('string'), this.env, first);
     }
     else throw new Reject([{ path, code: 'no-such-path' }]);
     if (first === 'return' && parts.length === 0) return itemRef(container, 'return', type, this.env, path, deny);
@@ -1831,7 +1829,7 @@ export class NativeSession {
     const name = parts.shift();
     if (!name) throw new Reject([{ path, code: 'no-such-path' }]);
     if (first === 'let') {
-      type = this.lam.letTypes[name] ?? parseType('Null');
+      type = this.lam.letTypes[name] ?? parseType('null');
       if (!this.lam.letTypes[name]) throw new Reject([{ path, code: 'no-such-path' }]);
     } else if (first === 'args') {
       if (type.kind !== 'record') throw new Reject([{ path, code: 'no-such-path' }]);
@@ -1916,7 +1914,7 @@ export class NativeSession {
         deny: node === this.lam ? 'not-writable' : deny,
         get: () => node.args as Value, set: () => { throw new Reject([{ path: at, code: 'not-writable' }]); }, del: () => {} };
       if (part === 'return') return field('return', node.type.returns);
-      if (part === node.kind) return field('body', parseType('Text'));
+      if (part === node.kind) return field('body', parseType('string'));
       if (part === 'let' && node === this.lam) return { path: at, env, deny,
         get: () => node.let as Value, set: () => { throw new Reject([{ path: at, code: 'not-writable' }]); }, del: () => {} };
     }
@@ -1927,12 +1925,12 @@ export class NativeSession {
     }
     if (node.nodeKind === 'fold' && node.type.kind === 'fold') {
       if (['over', 'init', 'step'].includes(part)) return field(part, partType(node, part));
-      if (part === 'acc' || part === 'at') return field(part, part === 'acc' ? node.type.s : parseType('Num'), 'not-writable');
+      if (part === 'acc' || part === 'at') return field(part, part === 'acc' ? node.type.s : parseType('number'), 'not-writable');
       if (part === 'current' && node.current !== null) return field(part, partType(node, 'step'));
     }
     if (node.nodeKind === 'iterate' && node.type.kind === 'iterate') {
       if (['init', 'step', 'check', 'max'].includes(part)) return field(part, partType(node, part));
-      if (part === 'state' || part === 'iteration') return field(part, part === 'state' ? node.type.s : parseType('Num'), 'not-writable');
+      if (part === 'state' || part === 'iteration') return field(part, part === 'state' ? node.type.s : parseType('number'), 'not-writable');
       if (part === 'current' && node.current !== null) return field(part, partType(node, 'step'));
     }
     throw new Reject([{ path: at, code: 'no-such-path' }]);

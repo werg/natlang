@@ -1,10 +1,7 @@
-/*---
-engine: typescript-host
-args:
-  current: WorkflowState
-  item: WorkflowEvent
-  decision: Decision
-returns: WorkflowState
----*/
-return await host.workflow.apply(args.current.order_id, args.current.revision,
-  args.item, args.decision);
+import type { WorkflowEvent, Operation, WorkflowState, Decision } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default async function apply(current: WorkflowState, item: WorkflowEvent, decision: Decision): Promise<WorkflowState> {
+return await host.workflow.apply(current.order_id, current.revision,
+  item, decision);
+}

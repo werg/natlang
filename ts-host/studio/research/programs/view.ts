@@ -1,12 +1,10 @@
-/*---
-engine: typescript-host
-args:
-  state: State
-returns: View
----*/
+import type { State, Event, Entry, Hit, Edit, Proposal, CommitResult, CandidateResult, Branch, Receipt, View } from "./types.js";
+
+export default function view(state: State): View {
 return {
-  heading: args.state.question || 'Ask something worth investigating.',
-  summary: args.state.notice,
-  active_view: args.state.active_view,
+  heading: state.question || 'Ask something worth investigating.',
+  summary: state.notice,
+  active_view: state.active_view,
   suggestions: [],
 };
+}

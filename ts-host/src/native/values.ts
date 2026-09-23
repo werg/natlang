@@ -123,11 +123,11 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (wanted.kind === 'prim') {
-    if ((wanted.name === 'Text' || wanted.name === 'Blob') && typeof raw === 'string') return raw;
-    if (wanted.name === 'Num' && typeof raw === 'number' && Number.isFinite(raw) &&
+    if ((wanted.name === 'string' || wanted.name === 'Blob') && typeof raw === 'string') return raw;
+    if (wanted.name === 'number' && typeof raw === 'number' && Number.isFinite(raw) &&
         (!Number.isInteger(raw) || Number.isSafeInteger(raw))) return raw;
-    if (wanted.name === 'Bool' && typeof raw === 'boolean') return raw;
-    if (wanted.name === 'Null' && raw === null) return null;
+    if (wanted.name === 'boolean' && typeof raw === 'boolean') return raw;
+    if (wanted.name === 'null' && raw === null) return null;
     if (wanted.name === 'Folder' && (raw instanceof Folder || raw instanceof FolderHandle)) return raw;
     if (wanted.name === 'FileHandle' && raw instanceof FileHandle) return raw;
     return reject(path, 'type-mismatch', wanted.name, preview(raw));
@@ -149,7 +149,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
       else {
         const field = wanted.fields.find(f => f.name === key);
         if (!field) return reject(`${path}/${key}`, 'unknown-field', formatType(wanted));
-        if (value === null && field.optional && !fitsType(parseType('Null'), field.type, env)) continue;
+        if (value === null && field.optional && !fitsType(parseType('null'), field.type, env)) continue;
         out[key] = coerce(value, field.type, env, `${path}/${key}`);
       }
     }
@@ -181,14 +181,14 @@ export function partType(node: Pending, part: string): Type {
   }
   if (node.nodeKind === 'iterate' && type.kind === 'iterate') {
     if (part === 'init' || part === 'state') return type.s;
-    if (part === 'max') return parseType('Num');
+    if (part === 'max') return parseType('number');
     if (part === 'step') return { kind: 'lambda', params: { kind: 'record', fields: [
       { name: node.stateName, type: type.s, optional: false }] }, returns: type.s };
     if (part === 'check') return { kind: 'lambda', params: { kind: 'record', fields: node.checkName ? [
       { name: node.checkName, type: type.s, optional: false }] : [
       { name: 'recent', type: { kind: 'list', element: type.s }, optional: false },
-      { name: 'iteration', type: parseType('Num'), optional: false }] },
-      returns: node.checkName ? parseType('Bool') : parseType('LoopVerdict') };
+      { name: 'iteration', type: parseType('number'), optional: false }] },
+      returns: node.checkName ? parseType('boolean') : parseType('LoopVerdict') };
   }
   throw new Error(`unknown part ${part}`);
 }
@@ -221,7 +221,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
     const hasInstructions = Object.hasOwn(body, 'instructions'), hasCode = Object.hasOwn(body, 'code');
     if (hasInstructions === hasCode) return reject(path, 'type-mismatch', 'exactly one of instructions / code');
     const text = body[hasInstructions ? 'instructions' : 'code'];
-    if (typeof text !== 'string') return reject(path, 'type-mismatch', 'Text body');
+    if (typeof text !== 'string') return reject(path, 'type-mismatch', 'string body');
     if (body.effects && !Array.isArray(body.effects))
       return reject(`${path}/effects`, 'type-mismatch', 'a list of capabilities');
     if (body.args && !plain(body.args) && !(Array.isArray(body.args) && body.args.length === 0))

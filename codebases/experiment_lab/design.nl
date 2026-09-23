@@ -5,12 +5,9 @@ args:
   cases: Case[]
   budget: number
 returns: Plan
-types:
-  Case: '{ id: string, group: string, description: string, expected: string }'
-  Plan: '{ selected: string[], reason: string }'
 ---
-Choose at most `args/budget` distinct case IDs from `args/cases` that best probe
-`args/question`. Cover distinct groups and include a challenging case when one
+Choose at most `budget` distinct case IDs from `cases` that best probe
+`question`. Cover distinct groups and include a challenging case when one
 is offered. Return only listed IDs and a short reason. The host will validate
 the selection and hold all candidate inputs fixed before any trial starts. Do not
 claim that selecting a case has tested it.

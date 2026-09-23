@@ -1,5 +1,5 @@
-export type Passage = { id: Text; title: Text; text: Text }; export type Claim = { id: Text; text: Text; passage: Text; quote: Text }; export type State = { revision: Num; notice: Text; passages: Passage[]; query: Text; hits: Text[]; claims: Claim[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "add"; target: Text; secondary: Text; text: Text; } | { action: "search"; text: Text; } | { action: "claim"; target: Text; text: Text; secondary: Text; } | { action: "remove"; target: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Passage = { id: string; title: string; text: string }; export type Claim = { id: string; text: string; passage: string; quote: string }; export type State = { revision: number; notice: string; passages: Passage[]; query: string; hits: string[]; claims: Claim[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "add"; target: string; secondary: string; text: string; } | { action: "search"; text: string; } | { action: "claim"; target: string; text: string; secondary: string; } | { action: "remove"; target: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

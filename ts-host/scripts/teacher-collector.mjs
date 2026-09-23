@@ -15,5 +15,10 @@ catch {
 const child = spawn(process.execPath, [collector, ...process.argv.slice(2)], {
   cwd: process.cwd(), env: process.env, stdio: 'inherit',
 });
+let stopping = false;
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  stopping = true;
+  child.kill('SIGTERM');
+});
 child.on('error', error => { console.error(`Unable to start the Node teacher collector: ${error.message}`); process.exitCode = 1; });
-child.on('exit', (code, signal) => { if (signal) process.kill(process.pid, signal); else process.exitCode = code ?? 1; });
+child.on('exit', (code, signal) => { process.exitCode = stopping ? 75 : signal ? 1 : code ?? 1; });

@@ -52,7 +52,7 @@ test('natlang stream terminal routes real build and media recipes with correlate
   try {
     const result = await host.run({ source: { kind: 'program', program: { $fold: {
       type: 'Fold<Event, Session>', types: step.$lambda.types, init, step } } },
-      streams: { over: events() }, tracePath,
+      streams: { over: events() }, tracePath, validationFeedback: 'caller',
       modelTurn: turn => {
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function step(')) {
@@ -62,10 +62,10 @@ test('natlang stream terminal routes real build and media recipes with correlate
             evalTurn(turn, 'const message = await explain(item); await settle(acc, item, message)');
         }
         if (prompt.includes('Choose one recipe ID')) return evalTurn(turn,
-          `JSON.stringify(${JSON.stringify(interpretation++ === 0 ? 'compile-note' : 'scale-video')})`);
+          JSON.stringify(interpretation++ === 0 ? 'compile-note' : 'scale-video'));
         return evalTurn(turn, JSON.stringify('Completed with recorded outcome.'));
       } });
-    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
     assert.equal(result.value.status, 'ok');
     assert.equal(result.value.revision, 4);
     assert.deepEqual(Array.from(result.value.history).map(row => row.request_id), ['r1', 'r2']);

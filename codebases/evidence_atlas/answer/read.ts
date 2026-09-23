@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  selected: string[]
-  collection_revision: string
-returns: Passage[]
----*/
-return host.evidence.read(args.selected, args.collection_revision);
+import type { Hit, SearchResult, Passage, Claim, Draft, EvidenceAnswer } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function read(selected: string[], collection_revision: string): Passage[] {
+return host.evidence.read(selected, collection_revision);
+}

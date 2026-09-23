@@ -5,8 +5,6 @@ args:
   customer_columns: string[]
   order_columns: string[]
 returns: Mapping
-types:
-  Mapping: '{ customer_id: string, email: string, name: string, order_id: string, order_customer: string, amount: string, unit: string, reason: string }'
 ---
 Choose actual column names using this exact result shape:
 `{customer_id: string, email: string, name: string, order_id: string,

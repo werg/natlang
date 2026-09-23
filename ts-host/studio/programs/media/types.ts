@@ -1,5 +1,5 @@
-export type Receipt = { id: Text; operation: Text; status: Text; output: Text }; export type State = { revision: Num; notice: Text; asset: Text; output: Text; receipts: Receipt[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "sample";  } | { action: "import"; target: Text; } | { action: "transform"; target: Text; text: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Receipt = { id: string; operation: string; status: string; output: string }; export type State = { revision: number; notice: string; asset: string; output: string; receipts: Receipt[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "sample";  } | { action: "import"; target: string; } | { action: "transform"; target: string; text: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

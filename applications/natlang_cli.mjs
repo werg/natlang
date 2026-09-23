@@ -13,7 +13,7 @@ export function modelTurnFromCli(args) {
   if (!endpoint || !model) throw new Error('use --server URL --model ID (or NATLANG_SERVER/NATLANG_MODEL)');
   const exchangePath = cliFlag(args, '--exchanges');
   return openAICompatibleModelTurn({ endpoint, model,
-    apiKey: process.env.NATLANG_API_KEY, toolAliases: { call: 'call_function' },
+    apiKey: process.env.NATLANG_API_KEY,
     onExchange: exchangePath ? exchange => {
       const path = resolve(exchangePath); mkdirSync(dirname(path), { recursive: true });
       appendFileSync(path, JSON.stringify(exchange) + '\n');

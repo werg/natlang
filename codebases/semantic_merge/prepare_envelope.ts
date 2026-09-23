@@ -1,16 +1,11 @@
-/*---
-description: Normalize a finite delivery set for typed semantic merge experiments.
-args:
-  revision: number
-  updates: Update[]
-returns: Prepared
----*/
-const invalid = error => ({ valid: false, error, updates: args.updates, presentation: "" });
-if (!Number.isSafeInteger(args.revision) || args.revision < 0) return invalid("Invalid base revision.");
-if (args.updates.length > 16) return invalid("More than 16 finite deliveries.");
+import type { State, Node, Edge, Item, Rule, Object, Event } from "./types.js";
+export default function prepare_envelope(revision: number, updates: Update[]): Prepared {
+const invalid = error => ({ valid: false, error, updates: updates, presentation: "" });
+if (!Number.isSafeInteger(revision) || revision < 0) return invalid("Invalid base revision.");
+if (updates.length > 16) return invalid("More than 16 finite deliveries.");
 const byId = new Map();
-for (const update of args.updates) {
-  if (!update.id.trim() || update.base_revision !== args.revision ||
+for (const update of updates) {
+  if (!update.id.trim() || update.base_revision !== revision ||
       new Set(update.parents).size !== update.parents.length)
     return invalid(`Invalid update ID, parents or base revision: ${update.id}`);
   const normalized = { ...update, parents: [...update.parents].sort() };
@@ -37,3 +32,4 @@ while (pending.size) {
 }
 return { valid: true, error: "", updates: ordered,
          presentation: JSON.stringify(ordered.map(u => u.id)) };
+}

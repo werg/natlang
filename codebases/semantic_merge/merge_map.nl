@@ -1,20 +1,15 @@
-import { check_state } from "./merge_map/check_state";
-import { interpret } from "./merge_map/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_map/check_state";
+import interpret from "./merge_map/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
-description: Merge a keyed configuration or encyclopedia infobox, including semantic renames and conflicting values.
+description: Merge a keyed configuration or encyclopedia infobox, including
+  semantic renames and conflicting values.
 args:
   base: State
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  State: '{ revision: number, fields: Record<string, string> }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_map(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

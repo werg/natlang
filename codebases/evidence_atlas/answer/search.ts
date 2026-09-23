@@ -1,7 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  queries: string[]
-returns: SearchResult
----*/
-return host.evidence.search(args.queries);
+import type { Hit, SearchResult, Passage, Claim, Draft, EvidenceAnswer } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function search(queries: string[]): SearchResult {
+return host.evidence.search(queries);
+}

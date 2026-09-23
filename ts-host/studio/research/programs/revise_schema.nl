@@ -1,8 +1,8 @@
 ---
 description: Revise a domain representation in response to a concrete mismatch.
 args:
-  goal: Text
-  material: Text
+  goal: string
+  material: string
 returns: Proposal
 ---
 Identify exactly which current concept fails and show records or queries that

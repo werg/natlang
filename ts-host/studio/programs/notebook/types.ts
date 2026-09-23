@@ -1,5 +1,5 @@
-export type Cell = { id: Text; engine: Text; source: Text; needs: Text[]; result: Text; result_id: Text; status: Text }; export type State = { revision: Num; notice: Text; cells: Cell[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "add"; target: Text; secondary: Text; text: Text; ids?: Text[]; } | { action: "save"; target: Text; text: Text; } | { action: "remove"; target: Text; } | { action: "execute"; target: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Cell = { id: string; engine: string; source: string; needs: string[]; result: string; result_id: string; status: string }; export type State = { revision: number; notice: string; cells: Cell[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "add"; target: string; secondary: string; text: string; ids?: string[]; } | { action: "save"; target: string; text: string; } | { action: "remove"; target: string; } | { action: "execute"; target: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

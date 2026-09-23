@@ -30,7 +30,7 @@ test('natlang merges two page edits and runs a pinned, limited child cell', asyn
     drainEvents: () => wiki.drainEvents() } });
   try {
     const result = await host.run({ source: { kind: 'file', path: mergePath },
-      inputs: { base, updates, profile },
+      inputs: { base, updates, profile }, validationFeedback: 'caller',
       modelTurn: turn => {
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function merge_page(')) return evalTurn(turn,
@@ -40,7 +40,7 @@ test('natlang merges two page edits and runs a pinned, limited child cell', asyn
             base.blocks[1]], accounted: ['a', 'b'], unresolved: [],
         })})`);
       } });
-    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
     assert.equal(result.value.status, 'merged');
     assert.match(result.value.page.blocks[0].text, /concise example/);
     const cell = await host.run({ source: { kind: 'file', path: cellPath },

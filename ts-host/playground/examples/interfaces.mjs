@@ -1,17 +1,10 @@
-import { crisp, natural } from './builders.mjs';
+import { crisp, natural, typescript } from './builders.mjs';
 
 const types = `type State = { count: number, step: number };
 type UiEvent = { id: string, kind: string, value?: string };
 type Action = { kind: string, value?: string, from?: string };
 type Node = { tag: string, text?: string, value?: string, id?: string, label?: string, disabled?: boolean, action?: Action, children?: Node[] };`;
-const reducer = `/*---
-args:
-  state: State
-  event: UiEvent
-returns: State
-engine: typescript-host
----*/
-const { state, event } = args;
+const reducer = typescript('reduce', { state: 'State', event: 'UiEvent' }, 'State', `
 if (event.kind === "reset") return { ...state, count: 0 };
 if (event.kind === "step") {
   const step = Number(event.value);
@@ -19,7 +12,7 @@ if (event.kind === "step") {
 }
 const direction = event.kind === "increase" ? 1 : event.kind === "decrease" ? -1 : 0;
 return { ...state, count: state.count + direction * state.step };
-`;
+`);
 const counterView = state => ({ tag: 'section', children: [
   { tag: 'h2', text: 'Counter' },
   { tag: 'output', text: String(state.count) },
@@ -35,7 +28,7 @@ const counter = crisp({ id: 'living-counter', name: 'Counter UI', category: 'Liv
   description: 'Counter with editable view, state updates, and recorded history.',
   concepts: ['live UI', 'events', 'state', 'time travel'], root: 'ui/view.ts', args: { state: 'State' }, returns: 'Node',
   files: { 'ui/types.ts': types, 'ui/reduce.ts': reducer },
-  code: `const view = ${counterView.toString()};\nreturn view(args.state);`,
+  code: `const view = ${counterView.toString()};\nreturn view(state);`,
   inputs: { state: { count: 3, step: 1 } }, expected: counterView({ count: 3, step: 1 }) });
 counter.guide = 'Click Increase, edit ui/view.ts, or scrub the timeline. Live edit keeps the current count.';
 const modelCounter = natural({ id: 'natural-interface', name: 'Generated counter UI', category: 'Live interfaces', level: 'Intermediate',
@@ -48,10 +41,10 @@ args:
 returns: Node
 ---
 Create a counter interface as a Node tree. Write it to return.
-Use a section containing a heading, an output showing args/state/count,
+Use a section containing a heading, an output showing state/count,
 and three buttons labelled Decrease, Increase, and Reset.
 Their action kinds must be decrease, increase, and reset respectively.
-Add a short paragraph explaining that each click changes the count by args/state/step.
+Add a short paragraph explaining that each click changes the count by state/step.
 Use only section, div, h2, p, output, and button tags.
 Do not emit HTML, CSS, or JavaScript. Return structured Node data.` });
 modelCounter.guide = 'The model writes the view; the exact reducer handles clicks. Try asking for a different heading or explanation in ui/view.nl, then Apply & run. Each interaction generates a fresh view.';
@@ -73,17 +66,11 @@ const quoteView = state => {
 const quote = crisp({ id: 'reactive-pricing', name: 'Pricing calculator', category: 'Live interfaces', level: 'Beginner',
   description: 'Change seats and billing to update the total, or edit the calculation.',
   concepts: ['live UI', 'derived values', 'interactive inputs'], root: 'ui/view.ts', args: { state: 'State' }, returns: 'Node',
-  files: { 'ui/types.ts': quoteTypes, 'ui/reduce.ts': `/*---
-args:
-  state: State
-  event: UiEvent
-returns: State
-engine: typescript-host
----*/
-if (args.event.kind === "billing") return { ...args.state, annual: !args.state.annual };
-const seats = Number(args.event.value);
-return { ...args.state, seats: Number.isFinite(seats) ? Math.max(1, Math.min(1000, Math.round(seats))) : args.state.seats };` },
-  code: `const view = ${quoteView.toString()};\nreturn view(args.state);`,
+  files: { 'ui/types.ts': quoteTypes, 'ui/reduce.ts': typescript('reduce', { state: 'State', event: 'UiEvent' }, 'State', `
+if (event.kind === "billing") return { ...state, annual: !state.annual };
+const seats = Number(event.value);
+return { ...state, seats: Number.isFinite(seats) ? Math.max(1, Math.min(1000, Math.round(seats))) : state.seats };`) },
+  code: `const view = ${quoteView.toString()};\nreturn view(state);`,
   inputs: { state: { seats: 5, annual: false } }, expected: quoteView({ seats: 5, annual: false }) });
 quote.guide = 'Change the seats and switch billing. Then change the prices in ui/view.ts with live editing on. The state stays put while the calculation changes.';
 const modelQuote = natural({ id: 'natural-pricing-ui', name: 'Generated pricing UI', category: 'Live interfaces', level: 'Intermediate',

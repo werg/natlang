@@ -1,10 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  base: WikiPage
-  prepared: PreparedMerge
-  draft: MergeDraft
-  profile: MergeProfile
-returns: MergeReport
----*/
-return host.wiki.publish(args.base, args.prepared, args.draft, args.profile);
+import type { MergeProfile, WikiBlock, WikiPage, WikiUpdate, Conflict, PreparedMerge, MergeDraft, MergeReport, CellResult } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function publish(base: WikiPage, prepared: PreparedMerge, draft: MergeDraft, profile: MergeProfile): MergeReport {
+return host.wiki.publish(base, prepared, draft, profile);
+}

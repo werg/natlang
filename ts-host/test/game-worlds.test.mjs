@@ -28,7 +28,7 @@ async function runPolicy(path, binding, inputs, choice, rootName) {
           'const observation = await observe(actor);\n' +
           'const intent = await decide(observation);\n' +
           'await submit(actor, observation.tick, intent)');
-        return evalTurn(turn, JSON.stringify(choice));
+        return evalTurn(turn, `(${JSON.stringify(choice)})`);
       } });
   } finally { host.close(); }
 }

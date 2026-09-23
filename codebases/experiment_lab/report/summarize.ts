@@ -1,12 +1,7 @@
-/*---
-description: Count every planned trial and paired repeat exactly, including failures and missing observations.
-args:
-  candidates: Candidate[]
-  trials: Trial[]
-returns: Metric[]
----*/
-return args.candidates.map(candidate => {
-  const runs = args.trials.filter(t => t.candidate === candidate.id);
+import type { Case, Plan, Candidate, Trial, Metric, Analysis, Report } from "../types.js";
+export default function summarize(candidates: Candidate[], trials: Trial[]): Metric[] {
+return candidates.map(candidate => {
+  const runs = trials.filter(t => t.candidate === candidate.id);
   const byCase = new Map();
   for (const trial of runs) {
     const list = byCase.get(trial.case_id) || [];
@@ -33,3 +28,4 @@ return args.candidates.map(candidate => {
     repeats_compared, repeats_agree
   };
 });
+}

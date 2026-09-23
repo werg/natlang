@@ -1,11 +1,8 @@
-/*---
-args:
-  state: State
-  chosen: string
-returns: State
----*/
-const task = args.state.tasks.find(t => t.id === args.chosen);
-if (!task || args.state.order.includes(task.id) || !task.needs.every(n => args.state.order.includes(n)))
+import type { Task, State } from "../../types.js";
+export default function advance(state: State, chosen: string): State {
+const task = state.tasks.find(t => t.id === chosen);
+if (!task || state.order.includes(task.id) || !task.needs.every(n => state.order.includes(n)))
   throw new Error("chosen task is not ready");
-const order = [...args.state.order, task.id];
-return {...args.state, order, finished: order.length === args.state.tasks.length};
+const order = [...state.order, task.id];
+return {...state, order, finished: order.length === state.tasks.length};
+}

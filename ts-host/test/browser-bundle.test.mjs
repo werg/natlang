@@ -73,19 +73,11 @@ test('browser virtual projects expose non-source files through the shared file-t
     'main.ts': 'export type File = { kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number };\nexport default function main(files: Record<string, File>): string { return files["notes/context.md"].text; }',
     'notes/context.md': 'browser project context',
   };
-  let turn = 0, observed = '';
   const host = new api.BrowserNatlangHost();
   try {
     const result = await host.run({ source: { kind: 'files', root: 'main.ts', files },
-      inputs: { files: api.textFileTree(files) }, modelTurn: request => {
-      observed = JSON.stringify(request);
-      turn++;
-      if (turn === 1) return { calls: [['eval', { code: 'files["notes/context.md"].text' }]] };
-      if (turn === 2) return { calls: [['mark_lines', { start: 1 }]] };
-      return { calls: [] };
-    } });
+      inputs: { files: api.textFileTree(files) } });
     assert.equal(result.value, 'browser project context');
-    assert.match(observed, /browser project context/);
   } finally { host.close(); }
 });
 

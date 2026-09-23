@@ -1,13 +1,7 @@
-/*---
-description: A standalone HTML document for one file - frontmatter, then every body line wrapped by role, tokens marked.
-args:
-  file: SourceFile
-  parts: Parts
-  roles: Role[]
-returns: string
----*/
+import type { SourceFile, Role, Parts, Highlighted } from "../../types.js";
+export default function render_html(file: SourceFile, parts: Parts, roles: Role[]): string {
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-const fns = new Set(args.parts.functions)
+const fns = new Set(parts.functions)
 const KEY = new Set(["function", "for", "each", "in", "if", "else", "otherwise", "return", "repeat", "until", "at", "most", "times"])
 function tokens(line) {
   const hash = line.search(/(^|\s)#/)
@@ -27,8 +21,9 @@ const css = `body{font:14px/1.5 ui-monospace,monospace;background:#fbfaf7;color:
 .nl-role-condition{border-color:#a72}.nl-role-exact{border-color:#a27;background:#fdf3f8}.nl-role-prose_step{border-color:#999;font-style:italic}
 .nl-role-return{border-color:#555}.nl-fn{color:#0a6;font-weight:600}.nl-kw{color:#05a}.nl-path{color:#a50}.nl-str{color:#a22}
 .nl-num{color:#70a}.nl-comment{color:#999}`
-const front = args.parts.frontmatter ? `<pre class="nl-front">---\n${esc(args.parts.frontmatter)}\n---</pre>` : ""
-const lines = args.parts.lines.map((l, i) =>
-  `<span class="nl-line nl-role-${args.parts.is_code ? "code" : (args.roles[i] || "blank")}">${tokens(l) || " "}</span>`).join("\n")
-return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(args.file.path)}</title><style>${css}</style></head>` +
-       `<body><h3>${esc(args.file.path)}</h3>${front}<pre class="nl-body">${lines}</pre></body></html>`
+const front = parts.frontmatter ? `<pre class="nl-front">---\n${esc(parts.frontmatter)}\n---</pre>` : ""
+const lines = parts.lines.map((l, i) =>
+  `<span class="nl-line nl-role-${parts.is_code ? "code" : (roles[i] || "blank")}">${tokens(l) || " "}</span>`).join("\n")
+return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(file.path)}</title><style>${css}</style></head>` +
+       `<body><h3>${esc(file.path)}</h3>${front}<pre class="nl-body">${lines}</pre></body></html>`
+}

@@ -1,8 +1,3 @@
-/*---
-description: The items whose flag (same position) is true.
-args:
-  items: string[]
-  flags: boolean[]
-returns: string[]
----*/
-return args.items.filter((_, i) => args.flags[i])
+export default function select_by_flags(items: string[], flags: boolean[]): string[] {
+return items.filter((_, i) => flags[i])
+}

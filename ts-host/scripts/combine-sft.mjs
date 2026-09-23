@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RENDERER_FIELDS = ['template_sha256', 'end_token', 'terminal_tool_policy',
+  'tokenizer_fingerprint_sha256', 'local_tokenizer_artifacts_sha256',
   'teacher_reasoning_policy', 'cache_stable_tools', 'native_roundtrip',
   'native_target_policy', 'invalid_action_policy'];
 const sha256 = value => createHash('sha256').update(value).digest('hex');

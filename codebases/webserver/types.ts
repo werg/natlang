@@ -1,0 +1,9 @@
+export type Request = { id: string, method: string, path: string, headers: Record<string, string>, body: string };
+export type Parsed = { id: string, method: string, path: string, query: Record<string, string>, form: Record<string, string>, session_id: string };
+export type Route = { kind: "static" | "page" | "form" | "not_found" | "method_not_allowed", name: string, purpose: string, asset: string };
+export type RouteDef = { path: string, methods: string[], kind: "static" | "page" | "form", purpose: string, asset?: string };
+export type Entry = { author: string, message: string };
+export type Session = { id: string, visits: number, name: string };
+export type Site = { name: string, about: string, routes: RouteDef[], assets: Record<string, string>, entries: Entry[], sessions: Record<string, Session>, log: string[] };
+export type Review = { accept: boolean, reason: string, author: string, message: string };
+export type Response = { status: number, headers: Record<string, string>, body: string };

@@ -1,13 +1,8 @@
-/*---
-engine: typescript-host
-args:
-  state: Board
-  event: UiEvent
-  decision: Decision
-returns: Board
----*/
-const state = args.state;
-const decision = args.decision;
+import type { Task, Board, UiEvent, Decision, TaskGroup, ViewPlan, UiAction, UiNode } from "../types.js";
+
+export default function apply(_state: Board, event: UiEvent, _decision: Decision): Board {
+const state = _state;
+const decision = _decision;
 const items = state.items.map(item => ({ ...item }));
 if (decision.kind === 'add') {
   const text = String(decision.text || '').trim();
@@ -26,3 +21,4 @@ if (decision.kind === 'clear_done')
   return { ...state, items: items.filter(item => !item.done), revision: state.revision + 1 };
 if (decision.kind === 'ignore') return state;
 throw new Error('unknown decision');
+}

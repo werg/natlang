@@ -1,5 +1,5 @@
-export type Entry = { id: Text; replica: Text; text: Text }; export type State = { revision: Num; notice: Text; family: Text; base: Text; left: Text; right: Text; merged: Text; issues: Text[]; history: Entry[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "configure"; target: Text; text: Text; secondary: Text; } | { action: "right"; text: Text; } | { action: "propose"; text: Text; ids?: Text[]; } | { action: "commit";  };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Entry = { id: string; replica: string; text: string }; export type State = { revision: number; notice: string; family: string; base: string; left: string; right: string; merged: string; issues: string[]; history: Entry[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "configure"; target: string; text: string; secondary: string; } | { action: "right"; text: string; } | { action: "propose"; text: string; ids?: string[]; } | { action: "commit";  };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

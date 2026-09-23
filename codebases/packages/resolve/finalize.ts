@@ -1,13 +1,9 @@
-/*---
-engine: typescript-host
-args:
-  request: PackageRequest
-  locks: Lock[]
-  selected: string
-returns: Resolution
----*/
-const lock = args.locks.find(row => row.id === args.selected);
+import type { PackageRequest, Pin, Lock, Resolution, InstallCheck, InstallReport } from "../types.js";
+
+export default function finalize(request: PackageRequest, locks: Lock[], selected: string): Resolution {
+const lock = locks.find(row => row.id === selected);
 if (!lock) return { status: 'invalid-selection',
-  lock: { id: '', root: args.request.name, engine: args.request.engine, packages: [] },
-  alternatives: args.locks.length, detail: 'selected ID was not offered by the exact solver' };
-return { status: 'resolved', lock, alternatives: args.locks.length, detail: '' };
+  lock: { id: '', root: request.name, engine: request.engine, packages: [] },
+  alternatives: locks.length, detail: 'selected ID was not offered by the exact solver' };
+return { status: 'resolved', lock, alternatives: locks.length, detail: '' };
+}

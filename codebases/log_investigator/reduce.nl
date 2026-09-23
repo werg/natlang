@@ -1,4 +1,4 @@
-import { step } from "./step";
+import step from "./step";
 ---
 description: Reduce one log stream event through the semantic incident investigator.
 args:
@@ -6,8 +6,6 @@ args:
   event: LogEvent
   files?: Record<string, File>
 returns: IncidentState
-uses:
-  step: ./step.nl
 ---
 function reduce(state, event, files) -> IncidentState
   return step(state, event, files)

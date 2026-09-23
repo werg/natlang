@@ -1,8 +1,8 @@
 ---
 description: Update evidence-linked beliefs and choose a useful next investigation.
 args:
-  goal: Text
-  material: Text
+  goal: string
+  material: string
 returns: Proposal
 ---
 Represent observations, claims, assumptions, opposing evidence and open

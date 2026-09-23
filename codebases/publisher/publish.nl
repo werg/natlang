@@ -1,9 +1,9 @@
-import { check } from "./publish/check";
-import { compose } from "./publish/compose";
-import { plan } from "./publish/plan";
-import { prepare } from "./publish/prepare";
-import { read } from "./publish/read";
-import { reject } from "./publish/reject";
+import check from "./publish/check";
+import compose from "./publish/compose";
+import plan from "./publish/plan";
+import prepare from "./publish/prepare";
+import read from "./publish/read";
+import reject from "./publish/reject";
 ---
 description: Compose a cited document from pinned passages and prepare local Markdown and HTML. Read files for local asset or editorial context when needed.
 args:

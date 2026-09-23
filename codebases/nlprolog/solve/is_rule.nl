@@ -4,5 +4,5 @@ args:
   statement: string
 returns: boolean
 ---
-Answer true if `args/statement` is a general rule: "if ... then ...", "every ...", "all ...", "whoever ...",
+Answer true if `statement` is a general rule: "if ... then ...", "every ...", "all ...", "whoever ...",
 "anything that ...". Answer false if it is a plain fact about a specific thing or person.

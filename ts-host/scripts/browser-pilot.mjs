@@ -108,7 +108,7 @@ try {
         if (kind.startsWith('natlang')) {
           await window.natlangPilot.host.run({
             source: { kind: 'program', program: { $lambda: {
-              type: 'Lambda<{}, Num>', instructions: 'Write the number 7 to return.' } } },
+              type: '() => number', instructions: 'Return the number 7.' } } },
             modelTurn: async turn => { request = turn; return { calls: [], text: 'probe', completion_tokens: 1 }; },
             options: { model: { max_turns: 1 } },
           });

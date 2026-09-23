@@ -1,7 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  revision: string
-returns: CheckReport
----*/
-return host.ide.check(args.revision);
+import type { EditorFile, EditorSnapshot, EditPatch, EditReport, CheckReport, RunReport, TraceView, ViewPanel, EditorView } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function check(revision: string): CheckReport {
+return host.ide.check(revision);
+}

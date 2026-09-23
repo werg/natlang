@@ -103,7 +103,7 @@ export class NotebookWorkspace {
         value = this.query(cell.source);
       } else {
         if (!this.eval) throw new Error('typescript-host cell needs an evaluator supplied by the host');
-        value = (await this.eval.executeAsync({ code: cell.source, body: true,
+        value = (await this.eval.executeAsync({ code: `const deps = self.args.deps;\n${cell.source}`, body: true,
           path: `cell/${id}`, effectful: false,
           scope: { args: { deps: dependencies }, let: {} } })).result;
       }

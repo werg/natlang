@@ -12,8 +12,8 @@ const hash = text => createHash('sha256').update(text).digest('hex');
 const assert = (test, message) => { if (!test)
     throw new Error(message); };
 const packages = [
-    { name: 'greetings', version: '1.0.0', description: 'A small greeting function', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'Text' }, returns: 'Text', engine: 'typescript-host', code: 'return "Hello, " + args.name;' } } },
-    { name: 'greetings', version: '1.1.0', description: 'A punctuated greeting', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'Text' }, returns: 'Text', engine: 'typescript-host', code: 'return "Hello, " + args.name + "!";' } } },
+    { name: 'greetings', version: '1.0.0', description: 'A small greeting function', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'string' }, returns: 'string', engine: 'typescript-host', code: 'return "Hello, " + name;' } } },
+    { name: 'greetings', version: '1.1.0', description: 'A punctuated greeting', engines: ['typescript-host'], dependencies: {}, definitions: { main: { args: { name: 'string' }, returns: 'string', engine: 'typescript-host', code: 'return "Hello, " + name + "!";' } } },
 ];
 let nextProgress=0;
 const progressWaiters=new Map();

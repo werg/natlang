@@ -4,15 +4,15 @@ import { EvalFailure, type EnvironmentMode, type EvalEnvironment, type EvalReque
 
 declare const __NATLANG_PRELUDE__: string;
 
-function portable(value: unknown, seen = new Set<object>()): unknown {
+function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
   if (!value || typeof value !== 'object' || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
-    throw new TypeError('eval result contains an unsupported or inexact value');
+    throw new TypeError(`eval result ${path} contains an unsupported or inexact ${typeof value} value`);
   if (seen.has(value)) throw new TypeError('eval result contains a cycle');
   seen.add(value);
   if (Array.isArray(value)) {
-    const out = value.map(item => portable(item, seen));
+    const out = value.map((item, index) => portable(item, seen, `${path}[${index}]`));
     seen.delete(value); return out;
   }
   if (Object.prototype.toString.call(value) !== '[object Object]')
@@ -21,7 +21,7 @@ function portable(value: unknown, seen = new Set<object>()): unknown {
   if (proto !== null && (Object.getPrototypeOf(proto) !== null || proto.constructor?.name !== 'Object'))
     throw new TypeError('eval result contains a native class instance');
   const out: Record<string, unknown> = Object.create(null);
-  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen);
+  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen, `${path}.${key}`);
   seen.delete(value); return out;
 }
 
@@ -33,8 +33,17 @@ function snapshot(value: unknown): unknown {
   freeze(copy); return copy;
 }
 
+function scopeBridgeValue(value: unknown): unknown {
+  if (value === undefined || value === null || typeof value === 'string' ||
+      typeof value === 'boolean' || typeof value === 'number') return value;
+  if (Array.isArray(value)) return Array.from(value, scopeBridgeValue);
+  if (typeof value === 'object' || typeof value === 'function')
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scopeBridgeValue(item)]));
+  throw new TypeError(`scope bridge contains unsupported ${typeof value} value`);
+}
+
 function compile(code: string, body: boolean, asyncBody: boolean): string {
-  const source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, args: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,args,fx,host)` : code;
+  const source = body ? `${asyncBody ? 'async ' : ''}function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}\n__natlang_body(self,fx,host)` : code;
   const result = ts.transpileModule(source, { fileName: 'natlang-eval.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
       isolatedModules: true, removeComments: false } });
@@ -45,7 +54,7 @@ function compile(code: string, body: boolean, asyncBody: boolean): string {
 
 /** Parse a browser-host TypeScript function body without evaluating it. */
 export function checkTypeScriptBody(code: string): string[] {
-  const source = `async function __natlang_body(self: unknown, args: unknown, fx: unknown, host: unknown) {\n${code}\n}`;
+  const source = `async function __natlang_body(self: unknown, fx: unknown, host: unknown) {\n${code}\n}`;
   const result = ts.transpileModule(source, { fileName: 'natlang-source.ts', reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None,
       isolatedModules: true } });
@@ -80,9 +89,9 @@ export class TypeScriptEnvironment implements EvalEnvironment {
 
   private makeEvaluator(): Evaluator {
     const prelude = __NATLANG_PRELUDE__.split('const __deepFreeze')[0];
-    const factory = new Function('host', `${prelude}\nlet self, args, locals;\n` +
+    const factory = new Function('host', `${prelude}\nlet self, locals;\n` +
       `function* evaluate() { let job=yield; while(true) {\n` +
-      `const {scope,code,effect}=job; self=scope; args=scope.args; locals=scope.let || {};\n` +
+      `const {scope,code,effect}=job; self=scope; locals=scope.let || {};\n` +
       `const fx=new Proxy({}, {get:(_,cap)=>new Proxy({}, {get:(_,fn)=>(...raw)=>effect(String(cap),String(fn),raw)})});\n` +
       `job=yield eval(code);\n} }\n` +
       `const runner=evaluate(); runner.next();\n` +
@@ -107,7 +116,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     const scope = snapshot(request.scope) as Record<string, unknown>;
     return evaluator(scope, compile(request.code, request.body, asyncBody), (cap, fn, raw) => {
       if (!this.effect) throw new Error('NATLANG:effect-undeclared');
-      const args = portable(raw) as unknown[];
+      const args = cap === 'natlang' && fn === 'scope' ? scopeBridgeValue(raw) as unknown[] : portable(raw) as unknown[];
       const result = this.effect(cap, fn, args);
       if (result && typeof result === 'object' && typeof (result as Promise<unknown>).then === 'function')
         return Promise.resolve(result).then(portable);

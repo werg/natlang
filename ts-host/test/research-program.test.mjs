@@ -45,7 +45,7 @@ test('a learned crisp method executes from its committed source and records the 
         } finally { host.close(); }
     } });
     const manifest = await runtime.commit('', {
-        'methods/compare.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  before: number\n  after: number\nreturns: number\n---*/\nreturn after - before;' },
+        'methods/compare.ts': { kind: 'source', content: 'export default function compare(before: number, after: number): number { return after - before; }\n' },
     });
     const receipt = await runtime.execute(manifest.id, 'methods/compare.ts', { before: 18, after: 7 }, 'trial-1');
     assert.equal(receipt.status, 'complete');

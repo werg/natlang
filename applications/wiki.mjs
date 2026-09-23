@@ -31,11 +31,11 @@ export class WikiWorkspace {
 
   #cell(block) {
     if (!['quickjs', 'natlang'].includes(block.language) ||
-        !['Text', 'Num', 'Bool'].includes(block.returns))
+        !['string', 'number', 'boolean'].includes(block.returns))
       throw new Error('invalid cell language or return type');
     const withFiles = this.files && block.language === 'natlang';
-    const definition = { args: { input: 'Text', ...(withFiles ? { files: 'Dict<File>' } : {}) },
-      ...(withFiles ? { types: { File: '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }' } } : {}),
+    const definition = { args: { input: 'string', ...(withFiles ? { files: 'Record<string, File>' } : {}) },
+      ...(withFiles ? { types: { File: '{ kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number }' } } : {}),
       returns: block.returns,
       ...(block.language === 'natlang' ? { instructions: block.text } : { code: block.text }) };
     return new NativeSourceWorkspace({ cell: definition }, 'cell');

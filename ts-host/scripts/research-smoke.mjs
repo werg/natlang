@@ -50,7 +50,7 @@ try {
         const allowed = await runChild({ cell, deps: { id }, researchNative: [id] });
         const authored = await runChild({ request: {
             source: { kind: 'files', root: 'methods/native_length.ts', files: {
-                'methods/native_length.ts': '/*---\nengine: typescript-host\nargs:\n  id: Text\nreturns: Num\n---*/\nreturn (await host.research.readNative(args.id)).length;',
+                'methods/native_length.ts': 'import { host } from "natlang:runtime";\n\nexport default async function native_length(id: string): Promise<number> { return (await host.research.readNative(id)).length; }',
             } }, inputs: { id }, options: { seed: { mode: 'derived', root: 7 } },
         }, researchNative: [id] });
         let rejected = false;
@@ -65,8 +65,8 @@ try {
         const store = await StudioStore.open(), workspace = new ResearchWorkspace(store);
         const current = (await store.get('states', 'research')).state;
         const manifest = await workspace.commitEdits(current.head, {
-            'methods/cohort.nl': { kind: 'source', content: '---\nargs:\n  value: Text\n  context: Text\nreturns: Text\n---\nCompare this cohort against the current evidence.' },
-            'methods/add.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  left: Num\n  right: Num\nreturns: Num\n---*/\nreturn args.left + args.right;' },
+            'methods/cohort.nl': { kind: 'source', content: '---\nargs:\n  value: string\n  context: string\nreturns: string\n---\nCompare this cohort against the current evidence.' },
+            'methods/add.ts': { kind: 'source', content: 'export default function add(left: number, right: number): number { return left + right; }' },
             'views/cohort.json': { kind: 'view', content: { tree: { tag: 'section', children: [
                 { tag: 'h2', text: 'Explore cohorts' }, { tag: 'input', id: 'cohort', label: 'Cohort' },
                 { tag: 'select', id: 'period', label: 'Period', value: 'after', children: [
@@ -84,7 +84,7 @@ try {
         await workspace.propose(manifest.id, {
             'claims/reviewed.json': { kind: 'claim', content: { text: 'Candidate remains reviewable before activation', status: 'reviewed' } },
             'intent/custom-ui.json': { kind: 'intent', content: { request: 'Make cohort alternatives spatially explorable' } },
-            'methods/choose.ts': { kind: 'source', content: '/*---\nengine: typescript-host\nargs:\n  value: Text\n  context: Text\nreturns: Text\n---*/\nreturn `Compared ${args.value}`;' },
+            'methods/choose.ts': { kind: 'source', content: 'export default function choose(value: string, context: string): string { return `Compared ${value}`; }' },
             'views/cohort.json': { kind: 'view', content: { module: {
                 title: 'Cohort constellation',
                 html: '<main><h2>Cohort constellation</h2><p id="choice"></p><button id="mobile">Explore mobile</button></main>',

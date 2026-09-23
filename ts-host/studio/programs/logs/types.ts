@@ -1,5 +1,5 @@
-export type Log = { id: Text; time: Text; level: Text; message: Text }; export type Incident = { id: Text; title: Text; evidence: Text[]; severity: Text; status: Text }; export type State = { revision: Num; notice: Text; logs: Log[]; incidents: Incident[]; receipts: Text[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "ingest"; text: Text; } | { action: "incident"; text: Text; target: Text; ids: Text[]; } | { action: "resolve"; target: Text; } | { action: "escalate"; target: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Log = { id: string; time: string; level: string; message: string }; export type Incident = { id: string; title: string; evidence: string[]; severity: string; status: string }; export type State = { revision: number; notice: string; logs: Log[]; incidents: Incident[]; receipts: string[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "ingest"; text: string; } | { action: "incident"; text: string; target: string; ids: string[]; } | { action: "resolve"; target: string; } | { action: "escalate"; target: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
@@ -277,7 +277,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const stream = events ? { poll: () => streamIndex < events.length ?
       { kind: 'item' as const, value: structuredClone(events[streamIndex++]) } : { kind: 'closed' as const } } : undefined;
     const agent = new NativeToolAgent(driver, { systemPrompt: config.systemPrompt, temperature: 0,
-      segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages, toolSchema: TOOL_SCHEMA,
+      segmentTurns: config.segmentTurns, segmentMessages: config.segmentMessages,
       validationFeedback: 'caller' });
     const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index, ...expected })).slice(0, 32);
     const runtime = new NativeRuntime({ environment, agent: session => agent.run(session), capabilities: effects.capabilities, stream,
@@ -306,8 +306,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
 }
 
 export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..', import.meta.url))): Promise<string> {
-  const files = ['src/native/agent.ts', 'src/native/runtime.ts', 'src/native/values.ts',
-    'src/native/prompt.ts', 'src/environment.ts'];
+  // Resume only against the exact interpreter implementation. Compiler, type,
+  // source-loading, and filesystem changes can alter an identical tool call
+  // even when its public JSON schema is unchanged.
+  const native = (await readdir(join(root, 'src/native'))).filter(name => name.endsWith('.ts'))
+    .map(name => `src/native/${name}`);
+  const files = [...native, 'src/scope-compiler.ts', 'src/environment.ts'].sort();
   const chunks = await Promise.all(files.map(path => readFile(join(root, path))));
   return sha256(Buffer.concat(chunks.flatMap((chunk, index) => index ? [Buffer.from([0]), chunk] : [chunk])));
 }

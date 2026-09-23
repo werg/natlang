@@ -27,7 +27,9 @@ async function run(tasks, goal, choose = () => 'source', setup = () => {}) {
         const prompt = String(request.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function build(')) return evalTurn(request,
           'const initial = await prepare(goal, tasks);\n' +
-          'await step(initial, files)');
+          'let current = initial;\n' +
+          'while (!await finished(current)) current = await step(current, files);\n' +
+          'current');
         if (prompt.includes('function step(')) return cyclic ? evalTurn(request,
           'const ready = await ready_tasks(state);\nawait stall(state)') : evalTurn(request,
           'const ready = await ready_tasks(state);\n' +

@@ -35,7 +35,7 @@ test('natlang Fold investigates a burst, suppresses duplicate escalation and rec
   try {
     const result = await host.run({ source: { kind: 'program', program: { $fold: {
       type: 'Fold<LogEvent, IncidentState>', types: step.$lambda.types, init, step,
-      over: events } } }, tracePath,
+      over: events } } }, tracePath, validationFeedback: 'caller',
       modelTurn: turn => {
         const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
         if (prompt.includes('function step(')) {
@@ -50,7 +50,7 @@ test('natlang Fold investigates a burst, suppresses duplicate escalation and rec
           claim: 'Repeated failed logins', uncertainty: '',
         })})`);
       } });
-    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
     assert.equal(result.value.observed, 4);
     assert.equal(result.value.alerts.length, 1);
     assert.equal(sent.length, 1);

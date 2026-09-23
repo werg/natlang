@@ -1,11 +1,6 @@
-/*---
-description: Why this position cannot be played from by this player; "" if it can.
-args:
-  cells: Cell[]
-  player: Mark
-returns: string
----*/
-const c = args.cells
+import type { Mark, Cell, Verdict } from "../types.js";
+export default function board_problem(cells: Cell[], player: Mark): string {
+const c = cells
 if (c.length !== 9) return `a board has 9 cells, this one has ${c.length}`
 const x = c.filter(v => v === "X").length, o = c.filter(v => v === "O").length
 if (x - o !== 0 && x - o !== 1) return `impossible position: ${x} X and ${o} O`
@@ -14,4 +9,5 @@ const won = m => lines.some(l => l.every(i => c[i] === m))
 if (won("X") || won("O")) return "the game is already over"
 if (x + o === 9) return "the board is full"
 const turn = x === o ? "X" : "O"
-return turn === args.player ? "" : `it is ${turn}'s turn, not ${args.player}'s`
+return turn === player ? "" : `it is ${turn}'s turn, not ${player}'s`
+}

@@ -1,0 +1,11 @@
+export type Target = { name: string, body: string, parameters: string[], revision: string };
+export type Obligation = { kind: "argument" | "return", parameter: string, type: string, source: string };
+export type Signature = { name: string, args: Record<string, string>, returns: string };
+export type Witness = { id: string, callee: string, arg_types: Record<string, string>, source: string };
+export type Context = { named_types: Record<string, string>, signatures: Signature[], obligations: Obligation[], required_effects: string[], witnesses: Witness[] };
+export type CallClaim = { callee: string, arg_types: Record<string, string>, evidence_id: string, rationale: string };
+export type Diagnostic = { level: "exact" | "hypothesis" | "unknown", source: string, message: string };
+export type CheckReport = { claims: CallClaim[], diagnostics: Diagnostic[] };
+export type Candidate = { args: Record<string, string>, returns: string, effects: string[], reason: string, alternatives: string[] };
+export type FitReport = { parseable: boolean, obligations_ok: boolean, checked: number, diagnostics: Diagnostic[] };
+export type Assessment = { candidate: Candidate, fit: FitReport, status: "consistent" | "uncertain" | "invalid" };

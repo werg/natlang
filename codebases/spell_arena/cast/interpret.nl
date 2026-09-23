@@ -6,7 +6,7 @@ args:
   rules: Rules
 returns: Interpretation
 ---
-Read the player's utterance as a request within `args/rules` and the visible `args/observation`.
+Read the player's utterance as a request within `rules` and the visible `observation`.
 For an unambiguous lawful request, write status "plan" and an ordered effect list with exact actor IDs.
 Use "clarify" when the target or requested action has more than one plausible reading.
 Use "impossible" when the utterance asks for an action outside damage, shielding and movement.

@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  left: Text
-  right: Text
-returns: Text
----*/
-return await host.research.diff(args.left, args.right);
+import type { State, Event, Entry, Hit, Edit, Proposal, CommitResult, CandidateResult, Branch, Receipt, View } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default async function diff(left: string, right: string): Promise<string> {
+return await host.research.diff(left, right);
+}

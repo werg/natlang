@@ -1,11 +1,8 @@
-/*---
-args:
-  state: State
-returns: boolean
----*/
-const nodes = args.state.nodes;
+import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
+export default function check_state(state: State): boolean {
+const nodes = state.nodes;
 const ids = nodes.map(node => node.id);
-if (!Number.isSafeInteger(args.state.revision) || args.state.revision < 0 ||
+if (!Number.isSafeInteger(state.revision) || state.revision < 0 ||
     ids.some(id => !id.trim()) || new Set(ids).size !== ids.length) return false;
 const byId = new Map(nodes.map(node => [node.id, node]));
 for (const node of nodes) {
@@ -18,3 +15,4 @@ for (const node of nodes) {
   }
 }
 return true;
+}

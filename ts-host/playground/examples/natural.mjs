@@ -1,4 +1,4 @@
-import { natural } from './builders.mjs';
+import { natural, typescript } from './builders.mjs';
 
 export const naturalExamples = [
   natural({ id: 'natural-seven', name: 'Return seven', level: 'Beginner',
@@ -19,7 +19,7 @@ returns: Tone
 types:
   Tone: '"positive" | "negative" | "neutral"'
 ---
-Read args/comment. Write the best matching tone to return.`,
+Read comment. Write the best matching tone to return.`,
     inputs: { comment: 'The setup was easy and the team was helpful.' }, expected: 'positive' }),
   natural({ id: 'extract-contact', name: 'Extract contact', category: 'Extraction', level: 'Beginner',
     description: 'Extract a name and email into a typed record.',
@@ -31,7 +31,7 @@ returns: Contact
 types:
   Contact: '{ name: string, email: string }'
 ---
-Read args/message and find the person's full name and email address.
+Read message and find the person's full name and email address.
 Copy both exactly as written, without inventing missing details.
 Write a Contact record with name and email to return.`,
     inputs: { message: 'Please contact Maya Chen at maya@example.com.' },
@@ -46,7 +46,7 @@ returns: Issue
 types:
   Issue: '{ area: string, urgency: string, customer: string }'
 ---
-Read args/message. Extract the customer, affected area, and urgency. Use urgency "high" only for a current outage; otherwise use "normal". Write the record to return.`,
+Read message. Extract the customer, affected area, and urgency. Use urgency "high" only for a current outage; otherwise use "normal". Write the record to return.`,
     inputs: { message: 'From Northwind: checkout is down for every customer right now.' },
     expected: { area: 'checkout', urgency: 'high', customer: 'Northwind' } }),
   natural({ id: 'policy-decision', name: 'Policy decision', category: 'Decisions', level: 'Intermediate',
@@ -60,7 +60,7 @@ returns: Decision
 types:
   Decision: '{ allowed: boolean, reason: string }'
 ---
-Apply args/rule to args/request. Write allowed and a brief reason grounded in the rule to return.`,
+Apply rule to request. Write allowed and a brief reason grounded in the rule to return.`,
     inputs: { request: 'Refund a purchase made 10 days ago.', rule: 'Refunds are allowed within 30 days.' },
     expected: { allowed: true, reason: 'The purchase is within the 30-day refund window.' } }),
   natural({ id: 'meeting-actions', name: 'Meeting actions', category: 'Extraction', level: 'Intermediate',
@@ -71,7 +71,7 @@ args:
   notes: string
 returns: string[]
 ---
-List only the explicit next actions in args/notes, in the order they appear. Write the list to return.`,
+List only the explicit next actions in notes, in the order they appear. Write the list to return.`,
     inputs: { notes: 'Maya will draft the proposal. We discussed pricing. Leo will send the test report.' },
     expected: ['Maya will draft the proposal.', 'Leo will send the test report.'] }),
   natural({ id: 'sql-risk', name: 'SQL risk triage', category: 'Classification', level: 'Intermediate',
@@ -84,7 +84,7 @@ returns: Risk
 types:
   Risk: '"safe" | "suspicious"'
 ---
-Classify args/query as suspicious when it contains an attempt to change query meaning through injected SQL syntax. Otherwise classify it as safe. Write the label to return.`,
+Classify query as suspicious when it contains an attempt to change query meaning through injected SQL syntax. Otherwise classify it as safe. Write the label to return.`,
     inputs: { query: "' OR 1=1 --" }, expected: 'suspicious' }),
   natural({ id: 'evidence-summary', name: 'Evidence summary', category: 'Synthesis', level: 'Intermediate',
     description: 'Summarize a claim using supplied evidence only.',
@@ -95,7 +95,7 @@ args:
   evidence: string[]
 returns: string
 ---
-Answer args/claim using only args/evidence. If the evidence is insufficient, say so. Write one concise sentence to return.`,
+Answer claim using only evidence. If the evidence is insufficient, say so. Write one concise sentence to return.`,
     inputs: { claim: 'Did the service recover?', evidence: ['Errors fell to zero at 14:05 UTC.', 'The health check passed at 14:07 UTC.'] },
     expected: 'The service recovered by 14:07 UTC, when the health check passed after errors fell to zero.' }),
   natural({ id: 'support-triage', name: 'Support triage', category: 'Composed agents',
@@ -108,7 +108,7 @@ returns: Triage
 types:
   Triage: '{ team: string, priority: string }'
 ---
-First call classify on args/ticket to choose a team. Then call prioritize on the same ticket. Write the two results into return.`,
+First call classify on ticket to choose a team. Then call prioritize on the same ticket. Write the two results into return.`,
     files: {
       'support/triage/classify.nl': `---
 args:
@@ -137,7 +137,7 @@ returns: Brief
 types:
   Brief: '{ severity: string, headline: string }'
 ---
-Call severity on args/log. Write the severity and a short factual headline to return.`,
+Call severity on log. Write the severity and a short factual headline to return.`,
     files: { 'incident/brief/severity.nl': `---
 args:
   log: string
@@ -160,20 +160,14 @@ types:
 ---
 Call gate with tests_passed. Call summarize with notes. Write both results to return without changing the gate decision.`,
     files: {
-      'release/review/gate.ts': `/*---
-args:
-  tests_passed: boolean
-returns: boolean
-engine: typescript-host
----*/
-return args.tests_passed;
-`,
+      'release/review/gate.ts': typescript('gate', { tests_passed: 'boolean' }, 'boolean',
+        'return tests_passed;'),
       'release/review/summarize.nl': `---
 args:
   notes: string
 returns: string
 ---
-Write a concise one-sentence summary of args/notes to return.
+Write a concise one-sentence summary of notes to return.
 `,
     },
     inputs: { notes: 'The search page is faster and keyboard navigation is improved.', tests_passed: true },
@@ -188,7 +182,7 @@ returns: ThemeReport
 types:
   ThemeReport: '{ labels: string[], summary: string }'
 ---
-For each comment in args/comments call label. Write the ordered labels and one sentence about the most common issue to return.`,
+For each comment in comments call label. Write the ordered labels and one sentence about the most common issue to return.`,
     files: { 'survey/themes/label.nl': `---
 args:
   comment: string
@@ -208,21 +202,16 @@ returns: string[]
 types:
   Task: '{ id: string, needs: string[] }'
 ---
-Call order_tasks with args/tasks. Write the returned order to return. If dependencies are impossible, report an error rather than guessing.`,
-    files: { 'migration/plan/order_tasks.ts': `/*---
-args:
-  tasks: Task[]
-returns: string[]
-engine: typescript-host
----*/
-const done = [], pending = new Map(args.tasks.map(task => [task.id, task.needs]));
+Call order_tasks with tasks. Write the returned order to return. If dependencies are impossible, report an error rather than guessing.`,
+    files: { 'migration/plan/order_tasks.ts': typescript('order_tasks', { tasks: 'Task[]' }, 'string[]', `
+const done = [], pending = new Map(tasks.map(task => [task.id, task.needs]));
 while (pending.size) {
   const ready = [...pending].filter(([, needs]) => needs.every(id => done.includes(id))).map(([id]) => id).sort();
   if (!ready.length) throw new Error('dependency cycle');
   for (const id of ready) { done.push(id); pending.delete(id); }
 }
 return done;
-` },
+`) },
     inputs: { tasks: [{ id: 'cutover', needs: ['backup', 'verify'] },
       { id: 'verify', needs: ['backup'] }, { id: 'backup', needs: [] }] },
     expected: ['backup', 'verify', 'cutover'] }),

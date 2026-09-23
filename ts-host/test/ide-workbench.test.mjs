@@ -16,15 +16,20 @@ test('natlang edits, runs, inspects and renders a source-pinned child programme'
   const host = new NatlangHost({ host: { ide, drainEvents: () => ide.drainEvents() } });
   try {
     const edited = await host.run({ source: { kind: 'file', path: editPath },
-      inputs: { request: 'Make output lowercase' },
-      modelTurn: request => evalTurn(request,
-        'const snapshot = await inspect();\n' +
-        'const patch = await interpret(request, snapshot);\n' +
-        'await apply(patch)') });
+      inputs: { request: 'Make output lowercase' }, validationFeedback: 'caller',
+      modelTurn: turn => {
+        const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
+        if (prompt.includes('function edit(')) return evalTurn(turn,
+          'const snapshot = await inspect();\n' +
+          'const patch = await interpret(request, snapshot);\n' +
+          'await apply(patch)');
+        return evalTurn(turn, `(${JSON.stringify({ name: 'main', start: 13, end: 24,
+          text: 'toLowerCase', expected_revision: ide.snapshot().revision })})`);
+      } });
     assert.equal(edited.value.status, 'edited');
     assert.notEqual(ide.snapshot().revision, original.revision);
     const run = await host.run({ source: { kind: 'file', path: runPath },
-      inputs: { input: 'HeLLo' },
+      inputs: { input: 'HeLLo' }, validationFeedback: 'caller',
       modelTurn: request => evalTurn(request,
         'const snapshot = await inspect();\n' +
         'const checked = await check(snapshot.revision);\n' +
@@ -33,13 +38,21 @@ test('natlang edits, runs, inspects and renders a source-pinned child programme'
     assert.equal(run.value.status, 'done');
     assert.equal(run.value.value_text, '"hello"');
     const view = await host.run({ source: { kind: 'file', path: viewPath },
-      inputs: { run_id: run.value.run_id, index: 0 },
-      modelTurn: request => evalTurn(request,
-        'const snapshot = await inspect();\n' +
-        'const checked = await check(snapshot.revision);\n' +
-        'const event = await trace(run_id, index);\n' +
-        'const page = await describe(snapshot, checked, event);\n' +
-        'await render(page)') });
+      inputs: { run_id: run.value.run_id, index: 0 }, validationFeedback: 'caller',
+      modelTurn: turn => {
+        const prompt = String(turn.messages.find(row => row.role === 'user')?.content ?? '');
+        if (prompt.includes('function view(')) return evalTurn(turn,
+          'const snapshot = await inspect();\n' +
+          'const checked = await check(snapshot.revision);\n' +
+          'const event = await trace(run_id, index);\n' +
+          'const page = await describe(snapshot, checked, event);\n' +
+          'await render(page)');
+        return evalTurn(turn, `(${JSON.stringify({ title: 'IDE <view>', panels: [
+          { heading: 'Source', body: 'Current checked source.' },
+          { heading: 'Diagnostics', body: 'No diagnostics.' },
+          { heading: 'Trace', body: '<recorded event>' },
+        ] })})`);
+      } });
     assert.equal(view.outcome.kind, 'done');
     assert.match(view.value, /IDE &lt;view&gt;/);
     assert.match(view.value, /&lt;recorded event&gt;/);

@@ -1,7 +1,7 @@
-import { finish_step } from "./apply_update/finish_step";
-import { interpret_update } from "./apply_update/interpret_update";
-import { prepare_step } from "./apply_update/prepare_step";
-import { reject_step } from "./apply_update/reject_step";
+import finish_step from "./apply_update/finish_step";
+import interpret_update from "./apply_update/interpret_update";
+import prepare_step from "./apply_update/prepare_step";
+import reject_step from "./apply_update/reject_step";
 ---
 description: Incrementally merge one semantic update into a prior result, retaining provenance and unresolved intent.
 args:

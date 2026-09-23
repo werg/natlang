@@ -1,10 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  state: Session
-returns: TerminalView
----*/
-const state = args.state;
+import type { Event, File, Recipe, Job, Outcome, Session, ViewBlock, TerminalView } from "./types.js";
+
+export default function view(state: Session): TerminalView {
 const latest = state.messages.slice(-8);
 const blocks = [
   { kind: 'status', text: `Status: ${state.status}`, tone:
@@ -21,3 +17,4 @@ return { title: 'Natlang Terminal', subtitle: `Session revision ${state.revision
   prompt: state.status === 'running' ? 'job running> ' : 'natlang> ',
   busy: state.status === 'running' || state.status === 'cancel-requested',
   help: ['/help commands', '/recipes capabilities', '/cancel request job cancellation', '/quit exit'] };
+}

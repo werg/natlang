@@ -1,7 +1,3 @@
-/*---
-description: Is at least one flag true?
-args:
-  flags: boolean[]
-returns: boolean
----*/
-return args.flags.some(Boolean)
+export default function any_true(flags: boolean[]): boolean {
+return flags.some(Boolean)
+}

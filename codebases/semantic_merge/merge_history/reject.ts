@@ -1,11 +1,8 @@
-/*---
-args:
-  base: Document
-  prepared: Prepared
-returns: MergeResult
----*/
-return { status: "rejected", text: args.base.text, applied: [],
-         alternatives: args.prepared.updates.map(u => ({ update_ids: [u.id], proposal: u.text,
-                                                        reason: args.prepared.error })),
-         explanation: args.prepared.error, base_revision: args.base.revision,
-         updates: args.prepared.updates, presentation: args.prepared.presentation };
+import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
+export default function reject(base: Document, prepared: Prepared): MergeResult {
+return { status: "rejected", text: base.text, applied: [],
+         alternatives: prepared.updates.map(u => ({ update_ids: [u.id], proposal: u.text,
+                                                        reason: prepared.error })),
+         explanation: prepared.error, base_revision: base.revision,
+         updates: prepared.updates, presentation: prepared.presentation };
+}

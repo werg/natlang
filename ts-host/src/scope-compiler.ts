@@ -9,6 +9,8 @@ export type ScopeBinding = {
   mutable: boolean;
   annotation?: string;
   initializer?: string;
+  /** Module namespaces and HTTP response handles live only for this eval. */
+  transient?: boolean;
   start: number;
   end: number;
 };
@@ -27,12 +29,17 @@ export type ScopeCompileDiagnostic = ScopeSourceSpan & {
 };
 
 export type ScopeCompileOptions = {
-  /** Read-only lambda inputs exposed as lexical bindings. */
+  /** Lambda parameters exposed as ordinary mutable lexical bindings. */
   inputBindings?: readonly string[];
   /** Existing persistent locals copied into the transaction before execution. */
   localBindings?: readonly ScopeExistingBinding[];
   /** Checked async callables generated over the runtime's host dispatcher. */
   helperBindings?: readonly string[];
+  /** Opaque host values supplied by the runtime outside the portable snapshot. */
+  opaqueBindings?: readonly string[];
+  /** Enabled only when the evaluator exposes application-scoped module loading. */
+  allowModules?: boolean;
+  allowNetwork?: boolean;
 };
 
 export type ScopeExistingBinding = { name: string; mutable: boolean; annotation?: string };
@@ -43,6 +50,10 @@ export type ScopeCompileResult = {
   entrypoint: '__natlang_scope';
   bindings: ScopeBinding[];
   finalExpression?: ScopeSourceSpan;
+  /** The snippet has a final expression or a top-level return. */
+  producesResult: boolean;
+  /** Locals directly returned by this eval; their declared function result type provides context. */
+  resultBindings?: string[];
   diagnostics: ScopeCompileDiagnostic[];
   repairs: ScopeCompileDiagnostic[];
   /** TypeScript body after applying final-expression REPL semantics. */
@@ -73,8 +84,8 @@ function namesOf(name: ts.BindingName): ts.Identifier[] {
 /** Translate ordinary TypeScript annotations to the portable natlang type tree. */
 function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | undefined {
   const primitive = new Map<number, string>([
-    [ts.SyntaxKind.StringKeyword, 'Text'], [ts.SyntaxKind.NumberKeyword, 'Num'],
-    [ts.SyntaxKind.BooleanKeyword, 'Bool'], [ts.SyntaxKind.NullKeyword, 'Null'],
+    [ts.SyntaxKind.StringKeyword, 'string'], [ts.SyntaxKind.NumberKeyword, 'number'],
+    [ts.SyntaxKind.BooleanKeyword, 'boolean'], [ts.SyntaxKind.NullKeyword, 'null'],
   ]);
   const direct = primitive.get(node.kind);
   if (direct) return direct;
@@ -107,7 +118,7 @@ function portableAnnotation(node: ts.TypeNode, file: ts.SourceFile): string | un
       const element = portableAnnotation(args[0]!, file); return element ? `(${element})[]` : undefined;
     }
     if (name === 'Record' && args.length === 2 && args[0]!.kind === ts.SyntaxKind.StringKeyword) {
-      const value = portableAnnotation(args[1]!, file); return value ? `Dict<${value}>` : undefined;
+      const value = portableAnnotation(args[1]!, file); return value ? `Record<string, ${value}>` : undefined;
     }
     if (!args.length) return name;
   }
@@ -154,6 +165,34 @@ function assignmentTarget(node: ts.Node): ts.Expression | undefined {
 /** Parse and compile a sandboxed TypeScript snippet without executing it. */
 export function compileScopeSnippet(source: string, options: ScopeCompileOptions = {}): ScopeCompileResult {
   if (typeof source !== 'string') throw new TypeError('scope source must be a string');
+  if (options.allowModules) {
+    const module = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const imports = module.statements.filter(ts.isImportDeclaration);
+    if (imports.length) {
+      let lowered = source;
+      for (const statement of [...imports].reverse()) {
+        const clause = statement.importClause;
+        let text = '';
+        const typeOnlyBindings = clause?.namedBindings && ts.isNamedImports(clause.namedBindings)
+          && clause.namedBindings.elements.length > 0 && clause.namedBindings.elements.every(binding => binding.isTypeOnly);
+        if (!clause?.isTypeOnly && !(typeOnlyBindings && !clause?.name)) {
+          const call = `await import(${statement.moduleSpecifier.getText(module)})`;
+          const fields: string[] = [];
+          if (clause?.name) fields.push(`default: ${clause.name.text}`);
+          const bindings = clause?.namedBindings;
+          if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
+            if (!binding.isTypeOnly) fields.push(`${binding.propertyName?.text ?? binding.name.text}: ${binding.name.text}`);
+          }
+          if (bindings && ts.isNamespaceImport(bindings)) {
+            text = `const ${bindings.name.text} = ${call};`;
+            if (clause?.name) text += ` const {default: ${clause.name.text}} = ${call};`;
+          } else text = fields.length ? `const { ${fields.join(', ')} } = ${call};` : `${call};`;
+        }
+        lowered = lowered.slice(0, statement.getStart(module)) + text + lowered.slice(statement.end);
+      }
+      return compileScopeSnippet(lowered, options);
+    }
+  }
   const wrapped = PREFIX + source + SUFFIX;
   const file = ts.createSourceFile('natlang-scope.ts', wrapped, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
   const fn = file.statements.find(ts.isFunctionDeclaration);
@@ -189,7 +228,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   const localOptions = options.localBindings ?? [];
   const localNames = localOptions.map(binding => binding.name);
   const helperNames = options.helperBindings ?? [];
-  const injectedNames = new Set([...inputNames, ...localNames, ...helperNames]);
+  const opaqueNames = options.opaqueBindings ?? [];
+  const injectedNames = new Set([...inputNames, ...localNames, ...helperNames, ...opaqueNames]);
   const redundantAliases: ScopeSourceSpan[] = [];
   const bindings: ScopeBinding[] = [];
   for (const statement of fn.body.statements) {
@@ -211,7 +251,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       const flags = statement.declarationList.flags;
       const kind: ScopeBinding['kind'] = flags & ts.NodeFlags.Const ? 'const' : flags & ts.NodeFlags.Let ? 'let' : 'var';
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
+        let initial = declaration.initializer;
+        while (initial && (ts.isAwaitExpression(initial) || ts.isParenthesizedExpression(initial) || ts.isPropertyAccessExpression(initial))) initial = initial.expression;
+        const transient = initial && ts.isCallExpression(initial) &&
+          ((options.allowModules && initial.expression.kind === ts.SyntaxKind.ImportKeyword) ||
+           (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'));
         bindings.push({ name: name.text, kind, mutable: kind !== 'const',
+          ...(transient ? { transient: true } : {}),
           ...(declaration.type && portableAnnotation(declaration.type, file) ?
             { annotation: portableAnnotation(declaration.type, file) } : {}),
           ...(declaration.initializer ? { initializer: declaration.initializer.getText(file) } : {}),
@@ -226,10 +272,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     }
   }
 
-  const immutable = new Set([...inputNames, ...helperNames,
+  const immutable = new Set([...helperNames, ...opaqueNames,
     ...localOptions.filter(binding => !binding.mutable).map(binding => binding.name),
     ...bindings.filter(binding => !binding.mutable).map(binding => binding.name)]);
-  const deeplyReadonly = new Set([...inputNames, ...helperNames]);
+  const deeplyReadonly = new Set([...helperNames, ...opaqueNames]);
 
   const topLevelNames = new Set<string>();
   for (const binding of bindings) {
@@ -246,17 +292,19 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node) ||
         ts.isExportAssignment(node) || ts.isMetaProperty(node))
       add('forbidden-dynamic-code', 'Modules are resolved by the codebase loader; imports and exports are unavailable in eval.', node);
-    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword)
+    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && !options.allowModules)
       add('forbidden-dynamic-code', 'Dynamic import is unavailable in eval.', node);
     else if (ts.isIdentifier(node) && (node.text === 'eval' || node.text === 'Function') &&
         !isPropertyName(node) && !isDeclarationName(node))
       add('forbidden-dynamic-code', `${node.text} is unavailable in eval.`, node);
-    else if (ts.isTryStatement(node) || ts.isThrowStatement(node))
-      add('forbidden-control', 'Eval cannot catch or manufacture runtime failures; use report_error or let validation bubble.', node);
+    else if (ts.isTryStatement(node))
+      add('forbidden-control', 'Eval cannot catch runtime failures; let validation bubble to the caller.', node);
     else if (ts.isClassDeclaration(node) || ts.isClassExpression(node) || ts.isYieldExpression(node) ||
         (ts.isFunctionLike(node) && 'asteriskToken' in node && !!node.asteriskToken))
       add('forbidden-control', 'Classes, generators, and yield are unavailable in eval.', node);
     else if (ts.isIdentifier(node) && FORBIDDEN_AMBIENTS.has(node.text) &&
+        !(node.text === 'fetch' && options.allowNetwork) &&
+        !topLevelNames.has(node.text) &&
         !isPropertyName(node) && !isDeclarationName(node))
       add('forbidden-ambient', `${node.text} is not an injected eval binding.`, node);
 
@@ -278,11 +326,11 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   };
   for (const statement of fn.body.statements) visit(statement);
 
-  const injected = [...inputNames, ...localNames, ...helperNames];
+  const injected = [...inputNames, ...localNames, ...helperNames, ...opaqueNames];
   const seen = new Set<string>();
   for (const name of injected) {
     if (!IDENTIFIER.test(name) || name === ENTRYPOINT || name === '__inputs' || name === '__locals' ||
-        name === '__invoke' || name === '__natlang_finish') {
+        name === '__invoke' || name === '__natlang_finish' || name === '__natlang_result') {
       diagnostics.push({ code: 'invalid-binding', message: `Invalid injected binding ${JSON.stringify(name)}.`,
         start: 0, end: 0, line: 1, column: 1 });
     } else if (seen.has(name)) {
@@ -314,17 +362,16 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ts.forEachChild(node, findReturns);
   };
   for (const statement of statements) findReturns(statement);
-  const lastDeclarationEnd = Math.max(0, ...statements.filter(ts.isVariableStatement).map(statement => span(statement).end));
-  for (const statement of returns) if (span(statement).start < lastDeclarationEnd)
-    add('forbidden-control', 'Return before the final top-level declaration cannot commit locals atomically.', statement);
-
   const captures = [...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
-    ...bindings.map(binding => binding.name)];
+    ...bindings.filter(binding => !binding.transient).map(binding => binding.name)];
   const capture = `{ ${captures.join(', ')} }`;
   const edits: { start: number; end: number; text: string }[] = returns.map(statement => {
     const location = span(statement);
     const expression = statement.expression ? statement.expression.getText(file) : 'null';
-    return { start: location.start, end: location.end, text: `return __natlang_finish(${expression});` };
+    const available = [...localOptions.filter(binding => binding.mutable).map(binding => binding.name),
+      ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
+    return { start: location.start, end: location.end,
+      text: `return __natlang_finish(${expression}, { ${available.join(', ')} });` };
   });
   if (finalExpression) edits.push({ start: finalExpression.start, end: finalExpression.end,
     text: `return __natlang_finish(${source.slice(finalExpression.start, finalExpression.end)});` });
@@ -333,15 +380,25 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     body = body.slice(0, edit.start) + edit.text + body.slice(edit.end);
 
   diagnostics.sort((a, b) => a.start - b.start || a.code.localeCompare(b.code));
+  const producesResult = !!finalExpression || returns.length > 0;
   const result: ScopeCompileResult = { version: SCOPE_COMPILE_VERSION, ok: diagnostics.length === 0,
+    producesResult,
+    resultBindings: [...new Set(returns.flatMap(statement => statement.expression && ts.isIdentifier(statement.expression)
+      ? [statement.expression.text] : []).concat(last && ts.isExpressionStatement(last) && ts.isIdentifier(last.expression)
+      ? [last.expression.text] : []))],
     entrypoint: ENTRYPOINT, bindings, ...(finalExpression ? { finalExpression } : {}), diagnostics, repairs };
   if (diagnostics.length) return result;
-  const prologue = [inputNames.length ? `const { ${inputNames.join(', ')} } = __inputs;` : '',
+  const prologue = [inputNames.length ? `let { ${inputNames.join(', ')} } = ` +
+      `JSON.parse(JSON.stringify(__inputs));` : '',
     ...localOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __locals.${binding.name};`),
     ...helperNames.map(name => `const ${name} = Object.assign((...args: unknown[]) => ` +
       `__invoke(${JSON.stringify(name)}, args), { __natlangFunction: ${JSON.stringify(name)} });`),
-    `const __natlang_finish = (result: unknown) => ({ result, bindings: ${capture} });`,
+    `const __natlang_present = (value: Record<string, unknown>) => Object.fromEntries(` +
+      `Object.entries(value).filter(([, item]) => item !== undefined));`,
+    `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}) => ` +
+      `({ result: __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
+      `bindings: __natlang_present(__natlang_bindings) });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +
     `__locals: Readonly<Record<string, unknown>>, ` +

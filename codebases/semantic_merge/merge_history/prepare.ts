@@ -1,18 +1,13 @@
-/*---
-description: Validate transport identity and present causal updates in stable order; make no semantic merge decision.
-args:
-  base: Document
-  updates: Update[]
-returns: Prepared
----*/
-const invalid = error => ({ valid: false, error, updates: args.updates, presentation: "" });
-if (!Number.isSafeInteger(args.base.revision) || args.base.revision < 0)
+import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
+export default function prepare(base: Document, updates: Update[]): Prepared {
+const invalid = error => ({ valid: false, error, updates: updates, presentation: "" });
+if (!Number.isSafeInteger(base.revision) || base.revision < 0)
   return invalid("Invalid base revision.");
-if (args.updates.length > 16) return invalid("History exceeds the finite merge limit of 16 deliveries.");
+if (updates.length > 16) return invalid("History exceeds the finite merge limit of 16 deliveries.");
 const byId = new Map();
-for (const update of args.updates) {
+for (const update of updates) {
   if (!update.id || !update.id.trim() || !Number.isSafeInteger(update.base_revision) ||
-      update.base_revision !== args.base.revision || new Set(update.parents).size !== update.parents.length)
+      update.base_revision !== base.revision || new Set(update.parents).size !== update.parents.length)
     return invalid(`Invalid update identity, parents or base revision: ${update.id}`);
   const earlier = byId.get(update.id);
   if (earlier) {
@@ -36,3 +31,4 @@ while (remaining.size) {
 }
 return { valid: true, error: "", updates: ordered,
          presentation: JSON.stringify(ordered.map(u => u.id)) };
+}

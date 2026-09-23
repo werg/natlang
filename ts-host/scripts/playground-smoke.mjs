@@ -99,7 +99,7 @@ try {
   await page.locator('#rawInputs summary').click();
   await page.locator('#inputs').fill('{"a":"invalid","b":5}');
   await page.locator('#inputs').press('Tab');
-  assert.match(await page.locator('#inputError').textContent(), /a must match Num/);
+  assert.match(await page.locator('#inputError').textContent(), /a must match number/);
   await page.locator('#inputs').fill('{"a":3,"b":5}');
   await page.locator('#inputs').press('Tab');
   assert.equal(await page.locator('#inputFields input[aria-label=a]').inputValue(), '3');
@@ -135,10 +135,10 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('.case-split')]
     .filter(element => element.textContent === 'train · accepted').length === 2);
   assert.equal(await page.getByText('train · accepted').count(), 2);
-  await page.locator('#editor').fill('/*---\nreturns: Num\nengine: typescript-host\n---*/\nreturn (;');
+  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport default function summarize(a: number, b: number): Summary { return (; }');
   await page.getByText('1 diagnostic').waitFor();
   assert.equal(await page.locator('#runButton').isDisabled(), true);
-  await page.locator('#editor').fill('/*---\nreturns: Num\nengine: typescript-host\n---*/\nreturn 9;');
+  await page.locator('#editor').fill('import type { Summary } from "./types.js";\n\nexport default function summarize(a: number, b: number): Summary { return { sum: 9, larger: 9 }; }');
   await page.getByText('No diagnostics').waitFor();
   await page.getByText('Saved locally').waitFor();
   await page.reload();

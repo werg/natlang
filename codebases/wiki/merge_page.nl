@@ -1,7 +1,7 @@
-import { interpret } from "./merge_page/interpret";
-import { prepare } from "./merge_page/prepare";
-import { publish } from "./merge_page/publish";
-import { reject } from "./merge_page/reject";
+import interpret from "./merge_page/interpret";
+import prepare from "./merge_page/prepare";
+import publish from "./merge_page/publish";
+import reject from "./merge_page/reject";
 ---
 description: Semantically merge concurrent page edits under an agreed profile and pinned page revision.
 args:

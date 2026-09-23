@@ -1,10 +1,10 @@
-import { assess } from "./step/assess";
-import { gap } from "./step/gap";
-import { observe } from "./step/observe";
-import { search } from "./step/search";
-import { transition } from "./step/transition";
+import assess from "./step/assess";
+import gap from "./step/gap";
+import observe from "./step/observe";
+import search from "./step/search";
+import transition from "./step/transition";
 ---
-description: Investigate one log or source-gap event with exact evidence and semantic judgment. When an event refers to a local log or runbook, inspect its specific args/files leaf before judging it; do not walk unrelated files.
+description: Investigate one log or source-gap event with exact evidence and semantic judgment. When an event refers to a local log or runbook, inspect its specific files leaf before judging it; do not walk unrelated files.
 args:
   acc: IncidentState
   item: LogEvent

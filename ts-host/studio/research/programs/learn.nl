@@ -1,8 +1,8 @@
 ---
 description: Extract and evaluate a reusable executable method from an investigation.
 args:
-  goal: Text
-  material: Text
+  goal: string
+  material: string
 returns: Proposal
 ---
 Look for a repeated or transferable reasoning/computation pattern in the

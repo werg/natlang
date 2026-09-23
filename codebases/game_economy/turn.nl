@@ -1,6 +1,6 @@
-import { decide } from "./turn/decide";
-import { observe } from "./turn/observe";
-import { submit } from "./turn/submit";
+import decide from "./turn/decide";
+import observe from "./turn/observe";
+import submit from "./turn/submit";
 ---
 description: Choose one merchant trade or pass from its permitted observation.
 args:

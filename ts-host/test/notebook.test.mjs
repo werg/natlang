@@ -32,9 +32,10 @@ test('natlang orders SQL and TypeScript cells, then explains the checked samples
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
     if (prompt.includes('function run(')) return evalTurn(turn,
       'const initial = await prepare(goal);\n' +
-      'const finished = await step(initial, files);\n' +
-      'const answer = await explain(question, finished, files);\n' +
-      'await attach(finished, answer)');
+      'let current = initial;\n' +
+      'while (!await complete(current)) current = await step(current, files);\n' +
+      'const answer = await explain(question, current, files);\n' +
+      'await attach(current, answer)');
     if (prompt.includes('function step(')) return evalTurn(turn,
       'const ready = await ready_cells(state);\n' +
       'if (ready.length === 0) { await stall(state); }\n' +

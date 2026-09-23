@@ -44,7 +44,7 @@ class NodeFileProvider implements TreeProvider<FileTreeLeaf> {
   }
 }
 
-/** A filesystem-backed lazy Dict<FileTreeLeaf>, suitable as an ordinary natlang input. */
+/** A filesystem-backed lazy Record<string, FileTreeLeaf>, suitable as an ordinary natlang input. */
 export class NodeFileTree extends LazyDict<FileTreeLeaf> {
   constructor(root: string, label = 'project files') { super(new NodeFileProvider(root), label); }
 }

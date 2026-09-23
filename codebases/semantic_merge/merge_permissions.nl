@@ -1,7 +1,7 @@
-import { check_state } from "./merge_permissions/check_state";
-import { interpret } from "./merge_permissions/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_permissions/check_state";
+import interpret from "./merge_permissions/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
 description: Merge access policy edits while exposing conflicting grants and revocations.
 args:
@@ -9,13 +9,6 @@ args:
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  Rule: '{ subject: string, resource: string, action: string, decision: "allow" | "deny" }'
-  State: '{ revision: number, rules: Rule[] }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_permissions(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

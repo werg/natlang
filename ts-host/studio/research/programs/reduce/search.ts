@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  head: Text
-  query: Text
-returns: Hit[]
----*/
-return await host.research.search(args.head, args.query);
+import type { State, Event, Entry, Hit, Edit, Proposal, CommitResult, CandidateResult, Branch, Receipt, View } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default async function search(head: string, query: string): Promise<Hit[]> {
+return await host.research.search(head, query);
+}

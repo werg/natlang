@@ -1,22 +1,15 @@
-import { classify } from "./main/classify";
-import { is_urgent } from "./main/is_urgent";
-import { summarize } from "./main/summarize";
-import { count_true } from "../std/count_true";
-import { select_by_flags } from "../std/select_by_flags";
-import { group_count } from "../std/group_count";
+import classify from "./main/classify";
+import is_urgent from "./main/is_urgent";
+import summarize from "./main/summarize";
+import count_true from "../std/count_true";
+import select_by_flags from "../std/select_by_flags";
+import group_count from "../std/group_count";
 ---
 description: Triage a batch of support tickets into a report.
 args:
   tickets: string[]
   rubric: string
 returns: Report
-types:
-  Label: '"billing" | "technical" | "spam"'
-  Report: '{ urgent: number, by_label: Record<string, number>, summary: string }'
-uses:
-  count_true: ../std/count_true
-  select_by_flags: ../std/select_by_flags
-  group_count: ../std/group_count
 ---
 function triage(tickets, rubric) -> Report
 

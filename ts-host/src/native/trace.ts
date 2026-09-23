@@ -12,10 +12,10 @@ export function deriveSeed(root: number, path: string, attempt: number, purpose:
 }
 
 function valueType(value: unknown): string {
-  if (value === null) return 'Null';
-  if (typeof value === 'boolean') return 'Bool';
-  if (typeof value === 'number') return 'Num';
-  if (typeof value === 'string') return 'Text';
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'string') return 'string';
   if (Array.isArray(value)) return 'List';
   if (value && typeof value === 'object') for (const [key, body] of Object.entries(value)) {
     if (key.startsWith('$') && body && typeof body === 'object' && 'type' in body)

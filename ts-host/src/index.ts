@@ -1,4 +1,5 @@
 export { TypeScriptEnvironment, portable } from './environment.js';
+export { ApplicationPackages } from './application-packages.js';
 export type { EnvironmentMode, EvalEnvironment, EvalRequest, EvalResult, HostEvent } from './environment.js';
 export { compileScopeSnippet, SCOPE_COMPILE_VERSION } from './scope-compiler.js';
 export type { ScopeBinding, ScopeCompileDiagnostic, ScopeCompileOptions,

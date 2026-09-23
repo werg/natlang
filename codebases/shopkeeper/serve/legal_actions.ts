@@ -1,12 +1,7 @@
-/*---
-description: Every action the rules allow for this intent in this state.
-args:
-  acc: Shop
-  intent: Intent
-returns: Action[]
----*/
-const i = args.intent, out = [{ code: "decline", good: "", qty: 0, price: 0 }]
-const price = args.acc.prices[i.good], have = args.acc.stock[i.good] || 0
+import type { Message, Shop, Intent, Action } from "../types.js";
+export default function legal_actions(acc: Shop, intent: Intent): Action[] {
+const i = intent, out = [{ code: "decline", good: "", qty: 0, price: 0 }]
+const price = acc.prices[i.good], have = acc.stock[i.good] || 0
 if (price === undefined) return out.concat([{ code: "chat", good: "", qty: 0, price: 0 }])
 out.push({ code: "quote", good: i.good, qty: 0, price })
 const qty = Math.max(1, Math.min(i.qty || 1, have))
@@ -18,3 +13,4 @@ if (have > 0 && (i.kind === "buy" || i.kind === "haggle")) {
 }
 if (have === 0) out.push({ code: "out_of_stock", good: i.good, qty: 0, price })
 return out
+}

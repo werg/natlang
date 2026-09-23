@@ -4,4 +4,4 @@ args:
   text: string
 returns: string
 ---
-Rewrite `args/text` to be noticeably shorter. Keep every fact; drop filler and repetition.
+Rewrite `text` to be noticeably shorter. Keep every fact; drop filler and repetition.

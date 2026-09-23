@@ -1,9 +1,6 @@
-/*---
-args:
-  base: Document
-  prepared: Prepared
-returns: MergeResult
----*/
-return { status: "merged", text: args.base.text, applied: [], alternatives: [],
-         explanation: "No updates.", base_revision: args.base.revision,
-         updates: [], presentation: args.prepared.presentation };
+import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
+export default function unchanged(base: Document, prepared: Prepared): MergeResult {
+return { status: "merged", text: base.text, applied: [], alternatives: [],
+         explanation: "No updates.", base_revision: base.revision,
+         updates: [], presentation: prepared.presentation };
+}

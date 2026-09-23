@@ -2,11 +2,11 @@ import { lazyDict, type LazyDict } from './host-tree.js';
 
 export type FileTreeLeaf = { kind: 'text'; text: string; bytes: number } |
   { kind: 'binary'; bytes: number };
-export const FILE_TREE_LEAF_TYPE = '{ kind: "text", text: Text, bytes: Num } | { kind: "binary", bytes: Num }';
+export const FILE_TREE_LEAF_TYPE = '{ kind: "text", text: string, bytes: number } | { kind: "binary", bytes: number }';
 export type FileWrite = { path: string; text: string };
-export const FILE_WRITE_TYPE = '{ path: Text, text: Text }';
+export const FILE_WRITE_TYPE = '{ path: string, text: string }';
 
-/** Turn an in-memory text project into a lazy Dict<FileTreeLeaf>. */
+/** Turn an in-memory text project into a lazy Record<string, FileTreeLeaf>. */
 export function textFileTree(files: Record<string, string>, label = 'project files'): LazyDict<FileTreeLeaf> {
   return lazyDict(Object.fromEntries(Object.entries(files).map(([path, text]) =>
     [path.replace(/^[/\\]+/, ''), { kind: 'text', text, bytes: new TextEncoder().encode(text).byteLength }])), label);

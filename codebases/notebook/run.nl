@@ -1,10 +1,10 @@
-import { attach } from "./run/attach";
-import { complete } from "./run/complete";
-import { explain } from "./run/explain";
-import { prepare } from "./run/prepare";
-import { step } from "./run/step";
+import attach from "./run/attach";
+import complete from "./run/complete";
+import explain from "./run/explain";
+import prepare from "./run/prepare";
+import step from "./run/step";
 ---
-description: Execute the declared notebook cell graph and interpret bounded results. If the question names a supporting note or schema, inspect that specific args/files leaf before answering.
+description: Execute the declared notebook cell graph and interpret bounded results. If the question names a supporting note or schema, inspect that specific files leaf before answering.
 args:
   goal: string
   question: string

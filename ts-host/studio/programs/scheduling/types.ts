@@ -1,5 +1,5 @@
-export type Task = { id: Text; title: Text; duration: Num; start: Text; done: Bool }; export type State = { revision: Num; notice: Text; tasks: Task[]; date: Text };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "add"; text: Text; amount: Num; } | { action: "date"; text: Text; } | { action: "schedule"; target: Text; text: Text; } | { action: "complete"; target: Text; } | { action: "unschedule"; target: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Task = { id: string; title: string; duration: number; start: string; done: boolean }; export type State = { revision: number; notice: string; tasks: Task[]; date: string };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "add"; text: string; amount: number; } | { action: "date"; text: string; } | { action: "schedule"; target: string; text: string; } | { action: "complete"; target: string; } | { action: "unschedule"; target: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

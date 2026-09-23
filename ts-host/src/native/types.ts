@@ -1,6 +1,6 @@
 /** Native port of natlang's structural type grammar and fit relation. */
 export type Type =
-  | { kind: 'prim'; name: 'Text' | 'Num' | 'Bool' | 'Null' | 'Blob' | 'Folder' | 'FileHandle' }
+  | { kind: 'prim'; name: 'string' | 'number' | 'boolean' | 'null' | 'Blob' | 'Folder' | 'FileHandle' }
   | { kind: 'lit'; value: string | number }
   | { kind: 'record'; fields: { name: string; type: Type; optional: boolean }[] }
   | { kind: 'list'; element: Type }
@@ -14,8 +14,8 @@ export type Type =
 
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
-const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\])|([{}<>|,;:?()]))/y;
-const PRIMS = new Set(['Text', 'Num', 'Bool', 'Null', 'Blob', 'Folder', 'FileHandle']);
+const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
+const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'Blob', 'Folder', 'FileHandle']);
 const pendingKinds = new Set(['lambda', 'map', 'fold', 'iterate']);
 
 function tokenize(source: string): Token[] {
@@ -87,18 +87,41 @@ class Parser {
   private atom(): Type {
     const token = this.peek();
     if (!token) throw new TypeSyntaxError('unexpected end of type');
-    if (token.value === '(') { this.eat('('); const inner = this.union(); this.eat(')'); return inner; }
+    if (token.value === '(') {
+      const start = this.index;
+      this.eat('(');
+      const fields: Extract<Type, { kind: 'record' }>['fields'] = [];
+      let callable = this.peek()?.value === ')' ||
+        (this.peek()?.kind === 'id' && [':', '?'].includes(this.tokens[this.index + 1]?.value ?? ''));
+      if (callable) {
+        while (this.peek()?.value !== ')') {
+          const name = this.eat();
+          if (name.kind !== 'id') { callable = false; break; }
+          const optional = this.peek()?.value === '?'; if (optional) this.eat('?');
+          this.eat(':'); fields.push({ name: name.value, optional, type: this.union() });
+          if (this.peek()?.value === ',') this.eat(','); else break;
+        }
+        if (callable && this.peek()?.value === ')') {
+          this.eat(')');
+          if (this.peek()?.value === '=>') {
+            this.eat('=>');
+            return { kind: 'lambda', params: { kind: 'record', fields }, returns: this.union() };
+          }
+        }
+      }
+      this.index = start; this.eat('('); const inner = this.union(); this.eat(')'); return inner;
+    }
     if (token.value === '{') return this.record();
     this.eat();
     if (token.kind === 'str') return { kind: 'lit', value: token.value };
     if (token.kind === 'num') return { kind: 'lit', value: Number(token.value) };
     if (token.kind !== 'id') throw new TypeSyntaxError(`unexpected ${JSON.stringify(token.value)}`);
     if (PRIMS.has(token.value)) return { kind: 'prim', name: token.value as Extract<Type, { kind: 'prim' }>['name'] };
-    if (token.value === 'Dict') return { kind: 'dict', element: this.args(1)[0]! };
-    if (token.value === 'Lambda') {
-      const [params, returns] = this.args(2);
-      if (params?.kind !== 'record') throw new TypeSyntaxError('Lambda params must be a record type');
-      return { kind: 'lambda', params, returns: returns! };
+    if (token.value === 'Record') {
+      const [key, value] = this.args(2);
+      if (key?.kind !== 'prim' || key.name !== 'string')
+        throw new TypeSyntaxError('Record keys must be string');
+      return { kind: 'dict', element: value! };
     }
     if (token.value === 'Map') { const [a, b] = this.args(2); return { kind: 'map', a: a!, b: b! }; }
     if (token.value === 'Fold') { const [a, s] = this.args(2); return { kind: 'fold', a: a!, s: s! }; }
@@ -118,16 +141,17 @@ export function formatType(type: Type): string {
     case 'lit': return typeof type.value === 'string' ? `"${type.value}"` : String(type.value);
     case 'record': return type.fields.length ? `{ ${type.fields.map(f => `${f.name}${f.optional ? '?' : ''}: ${formatType(f.type)}`).join(', ')} }` : '{}';
     case 'list': return (type.element.kind === 'union' ? `(${formatType(type.element)})` : formatType(type.element)) + '[]';
-    case 'dict': return `Dict<${formatType(type.element)}>`;
+    case 'dict': return `Record<string, ${formatType(type.element)}>`;
     case 'union': return type.members.map(formatType).join(' | ');
-    case 'lambda': return `Lambda<${formatType(type.params)}, ${formatType(type.returns)}>`;
+    case 'lambda': return `(${type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ` +
+      formatType(field.type)).join(', ')}) => ${formatType(type.returns)}`;
     case 'map': return `Map<${formatType(type.a)}, ${formatType(type.b)}>`;
     case 'fold': return `Fold<${formatType(type.a)}, ${formatType(type.s)}>`;
     case 'iterate': return `Iterate<${formatType(type.s)}>`;
   }
 }
 
-export const LOOP_VERDICT = parseType('{ reason: Text, verdict: "continue" | "done" | "degenerate" }');
+export const LOOP_VERDICT = parseType('{ reason: string, verdict: "continue" | "done" | "degenerate" }');
 
 export class TypeEnv {
   constructor(readonly names: Record<string, Type> = {}, readonly parent?: TypeEnv) {}
@@ -174,7 +198,7 @@ export function fitsType(source: Type, target: Type, env = new TypeEnv(), seen =
   if (pendingKinds.has(a.kind) && !pendingKinds.has(b.kind)) return fitsType(resultType(a), b, env, seen);
   if (a.kind === 'union') return a.members.every(member => fitsType(member, b, env, seen));
   if (b.kind === 'union') return b.members.some(member => fitsType(a, member, env, seen));
-  if (a.kind === 'lit' && b.kind === 'prim') return b.name === (typeof a.value === 'string' ? 'Text' : 'Num');
+  if (a.kind === 'lit' && b.kind === 'prim') return b.name === (typeof a.value === 'string' ? 'string' : 'number');
   if ((a.kind === 'list' || a.kind === 'dict') && a.kind === b.kind) return fitsType(a.element, b.element, env, seen);
   if (a.kind === 'record' && b.kind === 'record') {
     for (const field of b.fields) {

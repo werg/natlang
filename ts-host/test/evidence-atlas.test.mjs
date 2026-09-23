@@ -20,9 +20,9 @@ test('natlang plans search, reads versioned spans and returns citation-checked c
     if (prompt.includes('function answer(')) return evalTurn(turn,
       'const queries = await plan_search(question); const found = await search(queries); const selected = await select(question, found); const passages = await read(selected, found.collection_revision); const draft = await compose(question, passages, found.truncated); await verify(passages, draft, found.collection_revision)');
     if (prompt.includes('two or three focused search phrases')) return evalTurn(turn,
-      `JSON.stringify(${JSON.stringify(['Fold consumes events', 'source order'])})`);
+      `(${JSON.stringify(['Fold consumes events', 'source order'])})`);
     if (prompt.includes('Choose IDs of the offered hits')) return evalTurn(turn,
-      `JSON.stringify(${JSON.stringify(['spec#p0'])})`);
+      `(${JSON.stringify(['spec#p0'])})`);
     return evalTurn(turn, `(${JSON.stringify({
       answer: 'Fold consumes events in source order.',
       claims: [{ text: 'Fold consumes events in source order', span_id: 'spec#p0',

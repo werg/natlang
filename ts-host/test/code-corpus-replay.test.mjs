@@ -37,6 +37,14 @@ test('nested arrays replay using native list type syntax', async () => {
   a.cases=[{args:[[1,2]],expected:[[1,2]],outcome:'return'}];
   assert.equal((await replayIsolated(a,0)).outcome.accepted,true);
 });
+test('empty-only captured arrays can use explicit primitive array boundary types', async () => {
+  const a=task(); a.function.parameters=[{name:'x',type:'number[]'}];
+  a.function.return_type='number[]'; a.function.body='{ return x; }';
+  a.cases=[{args:[[]],expected:[],outcome:'return'}];
+  assert.equal((await replayIsolated(a,0)).outcome.accepted,true);
+  a.function.parameters[0].type='Unresolved[]';
+  assert.throws(()=>project(a),/empty-only array/);
+});
 test('extracted sibling function closure replays without module initializers', async () => {
   const [record] = extractFunctions('/** Double the input. */ export function twice(x: number) { return helper(x); }\nexport function helper(x: number) { return add(x, x); }\nfunction add(a: number, b: number) { return a + b; }\nconst secretState = launchExternalEffect();', {path:'fixture.ts',sourceName:'fixture'});
   record.cases = task().cases;

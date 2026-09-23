@@ -1,18 +1,15 @@
-/*---
-engine: typescript-host
-args:
-  goal: string
-  tasks: Task[]
-returns: State
----*/
-const ids = new Set(args.tasks.map(t => t.id));
-const outputs = args.tasks.flatMap(t => t.outputs);
+import type { Task, File, TaskResult, State } from "../types.js";
+
+export default function prepare(goal: string, tasks: Task[]): State {
+const ids = new Set(tasks.map(t => t.id));
+const outputs = tasks.flatMap(t => t.outputs);
 let detail = '';
-if (!ids.has(args.goal)) detail = `unknown goal: ${args.goal}`;
-else if (ids.size !== args.tasks.length || args.tasks.some(t => !t.id)) detail = 'duplicate or empty task ID';
+if (!ids.has(goal)) detail = `unknown goal: ${goal}`;
+else if (ids.size !== tasks.length || tasks.some(t => !t.id)) detail = 'duplicate or empty task ID';
 else if (outputs.length !== new Set(outputs).size) detail = 'two tasks declare the same output';
-else if (args.tasks.some(t => !t.argv.length || t.outputs.length === 0)) detail = 'task lacks command or output';
-else if (args.tasks.some(t => t.needs.includes(t.id) || new Set(t.needs).size !== t.needs.length)) detail = 'self or duplicate dependency';
-else if (args.tasks.some(t => t.inputs.some(p => t.outputs.includes(p)))) detail = 'task reads its own output';
-return { goal: args.goal, tasks: args.tasks, order: [], results: [], blocked: [],
+else if (tasks.some(t => !t.argv.length || t.outputs.length === 0)) detail = 'task lacks command or output';
+else if (tasks.some(t => t.needs.includes(t.id) || new Set(t.needs).size !== t.needs.length)) detail = 'self or duplicate dependency';
+else if (tasks.some(t => t.inputs.some(p => t.outputs.includes(p)))) detail = 'task reads its own output';
+return { goal: goal, tasks: tasks, order: [], results: [], blocked: [],
   status: detail ? 'invalid' : 'running', detail };
+}

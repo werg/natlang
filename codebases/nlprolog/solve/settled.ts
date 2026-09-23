@@ -1,7 +1,4 @@
-/*---
-description: Did the last round derive nothing new?
-args:
-  state: State
-returns: boolean
----*/
-return !args.state.grew
+import type { Answer, State } from "../types.js";
+export default function settled(state: State): boolean {
+return !state.grew
+}

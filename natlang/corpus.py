@@ -40,29 +40,66 @@ def program_id(row):
 
 
 def split_programs(pairs, holdout=200, seed=0):
-    """Hold out whole programs until at least `holdout` turns are reserved."""
+    """Split whole linked program groups, honoring explicit source splits."""
     if holdout < 0:
         raise ValueError("holdout must be nonnegative")
     groups = defaultdict(list)
     for row in pairs:
         groups[program_id(row)].append(row)
-    keys = sorted(groups)
+    # source_groups links derived/captured records that must never cross the split.
+    parent = {key: key for key in groups}
+    def root(key):
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+    def join(left, right):
+        a, b = root(left), root(right)
+        if a != b:
+            parent[max(a, b)] = min(a, b)
+    owners = defaultdict(list)
+    for key, rows in groups.items():
+        for row in rows:
+            for group in row.get("source_groups", []) or []:
+                owners[str(group)].append(key)
+    for keys_for_group in owners.values():
+        for key in keys_for_group[1:]:
+            join(keys_for_group[0], key)
+    components = defaultdict(list)
+    for key in groups:
+        components[root(key)].extend(groups[key])
+    explicit = defaultdict(set)
+    for row in pairs:
+        split = row.get("split")
+        if split in ("train", "test"):
+            explicit[root(program_id(row))].add(split)
+        elif split is not None:
+            raise ValueError(f"Unsupported explicit corpus split {split!r}")
+    if any(len(labels) > 1 for labels in explicit.values()):
+        raise ValueError("Linked corpus records have conflicting explicit train/test splits")
+    fixed_held = {key for key, labels in explicit.items() if "test" in labels}
+    fixed_train = {key for key, labels in explicit.items() if "train" in labels}
+    if fixed_held & fixed_train:
+        raise ValueError("Linked corpus records have conflicting explicit train/test splits")
+    eligible = sorted(set(components) - fixed_held - fixed_train)
     rng = random.Random(seed)
-    rng.shuffle(keys)
-    held_keys, count = set(), 0
-    for key in keys:
+    rng.shuffle(eligible)
+    held_keys, count = set(fixed_held), sum(len(components[k]) for k in fixed_held)
+    for key in eligible:
         if count >= holdout:
             break
         held_keys.add(key)
-        count += len(groups[key])
-    held = [p for p in pairs if program_id(p) in held_keys]
-    train = [p for p in pairs if program_id(p) not in held_keys]
+        count += len(components[key])
+    held_rows = {id(p) for key in held_keys for p in components[key]}
+    held = [p for p in pairs if id(p) in held_rows]
+    train = [p for p in pairs if id(p) not in held_rows]
     if not train:
         raise ValueError("No training programs remain; reduce --holdout or supply more programs")
     rng.shuffle(held)
     rng.shuffle(train)
     manifest = {"version": "program-split/1", "seed": seed, "holdout_target": holdout,
-                "held_programs": sorted(held_keys), "train_programs": sorted(set(keys) - held_keys),
+                "held_programs": sorted(k for k in groups if root(k) in held_keys),
+                "train_programs": sorted(k for k in groups if root(k) not in held_keys),
                 "held_turns": len(held), "train_turns": len(train)}
     return held, train, manifest
 
@@ -79,5 +116,10 @@ def index_pairs(path):
             if not line.strip():
                 continue
             row = json.loads(line)
-            rows.append({'id': row['id'], 'program_id': program_id(row), 'offset': offset})
+            indexed = {'id': row['id'], 'program_id': program_id(row), 'offset': offset}
+            if 'split' in row:
+                indexed['split'] = row['split']
+            if 'source_groups' in row:
+                indexed['source_groups'] = row['source_groups']
+            rows.append(indexed)
     return rows

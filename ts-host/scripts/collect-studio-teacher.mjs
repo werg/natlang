@@ -67,17 +67,9 @@ function teacherDriver({ server, exchanges, partial, partialPath }) {
   let replayIndex = 0;
   return async request => {
     const tools = portableSchema(request.tools);
-    for (const tool of tools) {
-      if (tool.function.name === 'call') tool.function.name = 'call_function';
-      if (tool.function.name === 'write' || tool.function.name === 'write_value') {
-        const properties = tool.function.parameters?.properties;
-        if (properties?.value) properties.value = { type: 'string', description:
-          'For Text use plain text. For every other type use JSON text of the value itself.' };
-      }
-    }
+    // Preserve the runtime's tool names and schemas exactly. Teacher traces must
+    // exercise the same surface that the student will receive.
     const messages = structuredClone(request.messages);
-    for (const message of messages) for (const call of message.tool_calls ?? [])
-      if (call.function?.name === 'call') call.function.name = 'call_function';
     const payload = { messages, tools, tool_choice: 'auto', parallel_tool_calls: true,
       temperature: request.temperature, seed: request.seed, thinking_budget_tokens: 256,
       top_p: 0.95, top_k: 20, chat_template_kwargs: { reasoning_effort: 'low' } };
@@ -100,11 +92,8 @@ function teacherDriver({ server, exchanges, partial, partialPath }) {
     replayIndex++;
     const message = body.choices?.[0]?.message ?? {};
     const calls = (message.tool_calls ?? []).map(call => {
-      const name = call.function?.name === 'call_function' ? 'call' : call.function?.name;
+      const name = call.function?.name;
       const args = decodeArguments(call.function?.arguments);
-      if ((name === 'write' || name === 'write_value') && typeof args.value === 'string' && args.type !== 'Text') {
-        try { args.value = JSON.parse(args.value); } catch { /* runtime may coerce a simple scalar string */ }
-      }
       return [name, args];
     });
     exchanges.push({ request, response: body, duration_ms: Math.round(performance.now() - started),

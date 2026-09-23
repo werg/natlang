@@ -35,7 +35,7 @@ test('natlang ranks exact feasible schedules and host conditionally commits', as
           'if (alternatives.options.length === 0) { await infeasible(snapshot, alternatives); }\n' +
           'const chosen = await rank(request, snapshot, alternatives);\n' +
           'await commit(chosen, snapshot.revision)');
-        return evalTurn(turn, JSON.stringify(option));
+        return evalTurn(turn, `(${JSON.stringify(option)})`);
       } });
     assert.equal(result.outcome.kind, 'done');
     assert.equal(result.value.status, 'committed');

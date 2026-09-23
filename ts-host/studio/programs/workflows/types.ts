@@ -1,5 +1,5 @@
-export type WorkflowStep = { id: Text; title: Text; needs: Text[]; status: Text; key: Text }; export type Receipt = { id: Text; step: Text; status: Text }; export type State = { revision: Num; notice: Text; steps: WorkflowStep[]; receipts: Receipt[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "execute"; target: Text; } | { action: "fail"; target: Text; } | { action: "unknown"; target: Text; } | { action: "reconcile"; target: Text; text: Text; } | { action: "compensate"; target: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type WorkflowStep = { id: string; title: string; needs: string[]; status: string; key: string }; export type Receipt = { id: string; step: string; status: string }; export type State = { revision: number; notice: string; steps: WorkflowStep[]; receipts: Receipt[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "execute"; target: string; } | { action: "fail"; target: string; } | { action: "unknown"; target: string; } | { action: "reconcile"; target: string; text: string; } | { action: "compensate"; target: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

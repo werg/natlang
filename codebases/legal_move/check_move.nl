@@ -1,19 +1,16 @@
-import { board_problem } from "./check_move/board_problem";
-import { draw } from "./check_move/draw";
-import { judge_move } from "./check_move/judge_move";
-import { read_move } from "./check_move/read_move";
-import { read_position } from "./check_move/read_position";
+import board_problem from "./check_move/board_problem";
+import draw from "./check_move/draw";
+import judge_move from "./check_move/judge_move";
+import read_move from "./check_move/read_move";
+import read_position from "./check_move/read_position";
 ---
-description: Is this move legal in this tic-tac-toe position, both described in prose? Exact rules, fuzzy reading.
+description: Is this move legal in this tic-tac-toe position, both described in
+  prose? Exact rules, fuzzy reading.
 args:
   position: string
   move: string
   player: Mark
 returns: Verdict
-types:
-  Mark: '"X" | "O"'
-  Cell: '"X" | "O" | "empty"'
-  Verdict: '{ legal: boolean, reason: string, wins: boolean, board: string }'
 ---
 function check_move(position, move, player) -> Verdict
 

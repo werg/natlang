@@ -7,7 +7,7 @@ args:
   trials: Trial[]
 returns: Analysis
 ---
-Interpret the exact `args/metrics` for `args/question`. State denominators and failed or
+Interpret the exact `metrics` for `question`. State denominators and failed or
 missing trials. Repeated value digests measure repeatability for those paired completed
 runs only; they do not establish semantic correctness. A quality label of
 "pending" means nobody has admitted the semantic result. Put unsupported conclusions in

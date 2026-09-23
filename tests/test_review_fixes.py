@@ -8,7 +8,7 @@ import pytest
 
 from natlang import js
 from natlang.checks import grade
-from natlang.corpus import program_id, split_programs
+from natlang.corpus import index_pairs, program_id, split_programs
 from natlang.decoder import ChatTurn
 from natlang.host import load
 from natlang.invocation import RunOptions
@@ -35,6 +35,33 @@ def test_holdout_reserves_every_turn_of_a_program():
     assert program_id({'id': 'judge-0-0', 'program_id': '71:judge:0'}) == '71:judge:0'
     with pytest.raises(ValueError, match='No training'):
         split_programs(pairs, 100)
+
+
+def test_explicit_splits_and_linked_source_groups_are_preserved(tmp_path):
+    path = tmp_path / 'pairs.jsonl'
+    rows = [
+        {'id': 'p0-0', 'program_id': 'p0', 'split': 'train', 'source_groups': ['shared']},
+        {'id': 'p1-0', 'program_id': 'p1', 'split': 'test', 'source_groups': ['shared']},
+        {'id': 'p2-0', 'program_id': 'p2', 'split': 'train'},
+        {'id': 'p3-0', 'program_id': 'p3'},
+    ]
+    path.write_text('\n'.join(json.dumps(row) for row in rows))
+    indexed = index_pairs(path)
+    assert indexed[0]['source_groups'] == ['shared'] and indexed[0]['split'] == 'train'
+    with pytest.raises(ValueError, match='conflicting explicit'):
+        split_programs(indexed, holdout=0)
+
+
+def test_explicit_test_is_never_training_and_explicit_train_is_not_held_out():
+    pairs = [
+        {'id': 'a-0', 'program_id': 'a', 'split': 'train'},
+        {'id': 'b-0', 'program_id': 'b', 'split': 'test'},
+        {'id': 'c-0', 'program_id': 'c', 'source_groups': ['held-link']},
+        {'id': 'd-0', 'program_id': 'd', 'source_groups': ['held-link']},
+    ]
+    held, train, _ = split_programs(pairs, holdout=1, seed=0)
+    assert pairs[0] in train and pairs[1] in held
+    assert (pairs[2] in held) == (pairs[3] in held)
 
 
 def sample(i):

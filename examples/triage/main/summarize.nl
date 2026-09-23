@@ -1,5 +1,5 @@
-import { is_short } from "./summarize/is_short";
-import { shorten } from "./summarize/shorten";
+import is_short from "./summarize/is_short";
+import shorten from "./summarize/shorten";
 ---
 description: One short paragraph about a set of urgent tickets.
 args:

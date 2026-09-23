@@ -4,9 +4,6 @@ args:
   question: string
   observations: Observation[]
 returns: Assessment
-types:
-  Observation: '{ id: string, source_revision: string, status: string, violations: string[], minimized: string[], trace_sha256: string, detail: string }'
-  Assessment: '{ confirmed_ids: string[], unknown_ids: string[], findings: string[], unknowns: string[], followups: string[] }'
 ---
 Explain confirmed contract violations, execution failures, and unresolved cases.
 Only an observation with status "violated" and a nonempty violations list is a

@@ -1,6 +1,4 @@
-/*---
-args:
-  state: State
-returns: State
----*/
-return {...args.state, blocked: args.state.tasks.filter(t => !args.state.order.includes(t.id)).map(t => t.id), finished: true};
+import type { Task, State } from "../../types.js";
+export default function stall(state: State): State {
+return {...state, blocked: state.tasks.filter(t => !state.order.includes(t.id)).map(t => t.id), finished: true};
+}

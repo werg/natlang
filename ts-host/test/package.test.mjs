@@ -90,29 +90,14 @@ test('CLI packs, installs, and runs a target from the content store', async t =>
     if (previousModel === undefined) delete process.env.NATLANG_MODEL; else process.env.NATLANG_MODEL = previousModel;
   });
   const root = mkdtempSync(join(tmpdir(), 'natlang-cli-package-'));
-  writeFileSync(join(root, 'direct.ts'), `/*---
-description: Return a fixture number.
-args: {}
-returns: number
----*/
-return 7`);
-  writeFileSync(join(root, 'helper.ts'), `/*---
-description: Return text from the local codebase.
-args: {}
-returns: string
----*/
-return "local helper"`);
+  writeFileSync(join(root, 'direct.ts'), 'export default function direct(): number { return 7; }\n');
+  writeFileSync(join(root, 'helper.ts'), 'export default function helper(): string { return "local helper"; }\n');
   writeFileSync(join(root, 'ordinary.ts'), 'export const ordinaryHostCode = true;\n');
   writeFileSync(join(root, 'project-notes.txt'), 'non-source project context');
   const administrativeNames = ['apps', 'inspect', 'packages', 'package', 'setup', 'runtime', 'doctor'];
   for (const name of administrativeNames) {
     mkdirSync(join(root, name));
-    writeFileSync(join(root, name, 'main.ts'), `/*---
-description: Prove administrative words remain valid source paths.
-args: {}
-returns: string
----*/
-return "source named ${name}"`);
+    writeFileSync(join(root, name, 'main.ts'), `export default function main(): string { return "source named ${name}"; }\n`);
   }
   writeFileSync(join(root, 'target.mjs'), `export function createTarget(context) {
     return { run() { context.io.output.write(context.package.name + ':' + context.args.join(',') + ':' + Object.keys(context.dependencies).length + ':' + typeof context.runtime.NodeFileTree); } };
@@ -138,9 +123,9 @@ return "source named ${name}"`);
   globalThis.fetch = async (_url, init) => {
     wire = JSON.parse(init.body);
     anonymousTurn++;
-    const call = anonymousTurn === 1 ? { name: 'read', arguments: JSON.stringify({ path: 'args/files/project-notes.txt/text' }) } :
-      anonymousTurn === 2 ? { name: 'write', arguments: JSON.stringify({
-        path: 'return', type: 'string', value: 'anonymous result', done: 1 }) } : undefined;
+    const call = anonymousTurn === 1 ? { name: 'read_value', arguments: JSON.stringify({ expression: 'files["project-notes.txt"].text' }) } :
+      anonymousTurn === 2 ? { name: 'eval', arguments: JSON.stringify({ code: '"anonymous result"' }) } :
+      anonymousTurn === 3 ? { name: 'mark_lines', arguments: JSON.stringify({ start: 1 }) } : undefined;
     return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: call ? [{
       id: `anonymous-${anonymousTurn}`, type: 'function', function: call }] : [] } }], usage: { completion_tokens: 1 } }), { status: 200,
       headers: { 'content-type': 'application/json' } });

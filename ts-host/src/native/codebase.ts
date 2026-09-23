@@ -26,8 +26,8 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
     if (def.kind !== undefined && !['function', 'directory-reducer'].includes(def.kind))
       throw new Reject([{ path: `${name}/kind`, code: 'type-mismatch', expected: 'function or directory-reducer' }]);
     const env = new TypeEnv(Object.fromEntries(Object.entries(def.types ?? {}).map(([key, value]) => [key, parseType(value)])));
-    const signature = parseType(`Lambda<{ ${Object.entries(def.args ?? {}).map(([key, value]) =>
-      `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')} }, ${def.returns}>`);
+    const signature = parseType(`(${Object.entries(def.args ?? {}).map(([key, value]) =>
+      `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`).join(', ')}) => ${def.returns}`);
     env.checkNames(signature);
     for (const type of Object.values(env.names)) env.checkNames(type);
     for (const [alias, target] of Object.entries(def.uses ?? {})) {
@@ -65,7 +65,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
     const params = Object.entries(def.args ?? {}).map(([name, type]) =>
       `${name.replace(/\?$/, '')}${name.endsWith('?') ? '?' : ''}: ${type}`).join(', ');
     const kind = def.code !== undefined ? 'code' : 'instructions';
-    const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${def.returns}>`, [kind]: def[kind],
+    const node = buildPending({ $lambda: { type: `(${params}) => ${def.returns}`, [kind]: def[kind],
       ...(kind === 'code' && def.engine && def.engine !== 'typescript-host' ? { engine: def.engine } : {}),
       args: inputs, types: def.types ?? {}, effects: def.effects ?? [],
       function: root, ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}) } });

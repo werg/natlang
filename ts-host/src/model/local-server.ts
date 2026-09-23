@@ -126,7 +126,7 @@ export function createManagedModelSession(profile: ModelProfile,
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
     if (external) return { ...profile, endpoint: external.endpoint, model: external.model,
-      apiKey: environment[profile.apiKeyEnv ?? 'NATLANG_API_KEY'], toolAliases: { call: 'call_function' } };
+      apiKey: environment[profile.apiKeyEnv ?? 'NATLANG_API_KEY'] };
     if (local) return local;
     if (starting) return starting;
     starting = (async () => {
@@ -155,8 +155,7 @@ export function createManagedModelSession(profile: ModelProfile,
         if (child.exitCode !== null || child.signalCode !== null)
           throw new Error(`managed model server exited during startup\n${recentError.trim()}`);
         try { const response = await fetch(endpoint + '/health'); if (response.ok) {
-          local = { endpoint, model: environment.NATLANG_MODEL ?? DEFAULT_LOCAL_MODEL.id,
-            toolAliases: { call: 'call_function' } }; return local;
+          local = { endpoint, model: environment.NATLANG_MODEL ?? DEFAULT_LOCAL_MODEL.id }; return local;
         } } catch { /* server is still loading */ }
         await new Promise(resolveWait => setTimeout(resolveWait, 250));
       }

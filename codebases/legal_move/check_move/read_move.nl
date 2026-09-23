@@ -4,6 +4,6 @@ args:
   move: string
 returns: number
 ---
-`args/move` describes one tic-tac-toe move in words ("the centre", "bottom left", "top row, middle").
+`move` describes one tic-tac-toe move in words ("the centre", "bottom left", "top row, middle").
 Answer the number of the cell, counting row by row from 1 (top-left) to 9 (bottom-right).
 If it does not name exactly one cell, report a blocker saying what is unclear.

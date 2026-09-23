@@ -1,0 +1,8 @@
+{
+  "name": "natlang-npm-app-example",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "is-number": "7.0.0"
+  }
+}

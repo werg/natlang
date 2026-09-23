@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  span_ids: string[]
-  collection_revision: string
-returns: Passage[]
----*/
-return host.publisher.evidence.read(args.span_ids, args.collection_revision);
+import type { File, Passage, Claim, Section, Outline, Document, PublishCheck, PublishReport } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function read(span_ids: string[], collection_revision: string): Passage[] {
+return host.publisher.evidence.read(span_ids, collection_revision);
+}

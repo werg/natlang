@@ -1,21 +1,15 @@
-import { check_state } from "./merge_schedule/check_state";
-import { interpret } from "./merge_schedule/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_schedule/check_state";
+import interpret from "./merge_schedule/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
-description: Merge collaborative calendar entries and booking requests with time and intent conflicts.
+description: Merge collaborative calendar entries and booking requests with time
+  and intent conflicts.
 args:
   base: State
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  Event: '{ id: string, title: string, start: string, end: string, place: string }'
-  State: '{ revision: number, events: Event[] }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_schedule(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

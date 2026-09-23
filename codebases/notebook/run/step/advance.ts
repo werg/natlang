@@ -1,14 +1,11 @@
-/*---
-engine: typescript-host
-args:
-  state: NotebookState
-  chosen: string
-returns: NotebookState
----*/
-const state = args.state, done = new Set(state.order);
-const cell = state.cells.find(row => row.id === args.chosen);
+import type { Cell, File, CellResult, NotebookState } from "../../types.js";
+import { host } from "natlang:runtime";
+
+export default async function advance(_state: NotebookState, chosen: string): Promise<NotebookState> {
+const state = _state, done = new Set(state.order);
+const cell = state.cells.find(row => row.id === chosen);
 if (!cell || done.has(cell.id) || !cell.needs.every(parent => done.has(parent)))
-  return { ...state, status: 'invalid', detail: `cell is not ready: ${args.chosen}` };
+  return { ...state, status: 'invalid', detail: `cell is not ready: ${chosen}` };
 const result = await host.notebook.execute(cell.id);
 const results = [...state.results, result];
 if (result.revision !== cell.revision)
@@ -18,3 +15,4 @@ if (result.status !== 'ok') return { ...state, results,
 const order = [...state.order, cell.id];
 return { ...state, order, results,
   status: cell.id === state.goal ? 'done' : 'running', detail: '' };
+}

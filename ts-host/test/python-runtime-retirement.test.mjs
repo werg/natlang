@@ -9,8 +9,9 @@ test('active teacher launchers use the stable Node collector entrypoint', async 
     read('scripts/run_teacher_generation.sh'),
     read('ts-host/scripts/playground-jobs.mjs'),
   ]);
+  assert.match(pipeline, /node['"]?,?\s+(?:args:\s*\[)?['"]?ts-host\/scripts\/teacher-collector\.mjs/);
+  assert.match(playground, /node['"]?,?\s+(?:args:\s*\[)?['"]?ts-host\/scripts\/playground-teacher\.mjs/);
   for (const source of [pipeline, playground]) {
-    assert.match(source, /node['"]?,?\s+(?:args:\s*\[)?['"]?ts-host\/scripts\/teacher-collector\.mjs/);
     assert.doesNotMatch(source, /scripts\/collect_(?:scenario_teacher|teacher_batch)\.py/);
   }
 });

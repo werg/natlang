@@ -4,17 +4,13 @@ args:
   customers: Customer[]
   existing: Existing[]
 returns: Decision[]
-types:
-  Customer: '{ source_key: string, email: string, name: string }'
-  Existing: '{ id: string, email: string, name: string }'
-  Decision: '{ source_key: string, action: "new" | "merge" | "review", target_email: string, reason: string }'
 ---
 Return one decision per source customer. Use `new` when there is no supported
 match, `merge` only for the same normalized email and the same display name,
 and `review` when identity or names conflict. A missing stable source ID or
 missing email must be reviewed. Similar names alone are not identity evidence.
-Consider both `args/existing` and every row in `args/customers`. For a valid
-email absent from `args/existing` that appears more than once in this import,
+Consider both `existing` and every row in `customers`. For a valid
+email absent from `existing` that appears more than once in this import,
 mark one source row `new` and the other same-name rows `merge`; conflicting
 names require `review`. A `merge` may refer to the matching `new` row in this
 batch. Return one decision for every source row.

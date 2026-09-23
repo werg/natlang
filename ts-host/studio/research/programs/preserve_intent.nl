@@ -1,8 +1,8 @@
 ---
 description: Carry a change's meaning across source, data, tests, views and prose.
 args:
-  goal: Text
-  material: Text
+  goal: string
+  material: string
 returns: Proposal
 ---
 Separate the user's stated purpose from your inferred purpose. Identify

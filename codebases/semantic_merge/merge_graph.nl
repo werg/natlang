@@ -1,22 +1,15 @@
-import { check_state } from "./merge_graph/check_state";
-import { interpret } from "./merge_graph/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_graph/check_state";
+import interpret from "./merge_graph/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
-description: Merge a knowledge or dependency graph with semantic node identity and edge meaning.
+description: Merge a knowledge or dependency graph with semantic node identity
+  and edge meaning.
 args:
   base: State
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  Node: '{ id: string, label: string }'
-  Edge: '{ from: string, relation: string, to: string }'
-  State: '{ revision: number, nodes: Node[], edges: Edge[] }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_graph(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

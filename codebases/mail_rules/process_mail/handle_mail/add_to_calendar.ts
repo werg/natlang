@@ -1,10 +1,7 @@
-/*---
-description: Put an entry into the calendar.
-args:
-  date: string
-  email: string
-returns: boolean
-effects: [calendar.add]
----*/
-fx.calendar.add({ date: args.date, note: args.email.slice(0, 80) })
+import type { Decision, MailReport } from "../../types.js";
+import { effects as fx } from "natlang:runtime";
+
+export default function add_to_calendar(date: string, email: string): boolean {
+fx.calendar.add({ date: date, note: email.slice(0, 80) })
 return true
+}

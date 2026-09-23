@@ -113,8 +113,8 @@ test('scope compiler treats parameters as mutable local bindings', async () => {
   assert.deepEqual(result, { result: 5, inputs: { count: 5, items: [1, 5] }, bindings: {} });
 });
 
-test('scope compiler rejects an early return that would skip persistent declaration initialization', () => {
+test('scope compiler captures only initialized bindings across an early return', () => {
   const compiled = compileScopeSnippet('if (stop) return 1;\nconst later = 2;\nlater', { inputBindings: ['stop'] });
-  assert.equal(compiled.ok, false);
-  assert.ok(compiled.diagnostics.some(item => item.code === 'forbidden-control' && /atomically/.test(item.message)));
+  assert.equal(compiled.ok, true);
+  assert.match(compiled.program, /__natlang_finish\(1, \{\s*\}\)/);
 });

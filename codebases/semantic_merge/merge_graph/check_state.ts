@@ -1,10 +1,8 @@
-/*---
-args:
-  state: State
-returns: boolean
----*/
-const ids = args.state.nodes.map(node => node.id);
+import type { State, Node, Edge, Item, Rule, Object, Event } from "../types.js";
+export default function check_state(state: State): boolean {
+const ids = state.nodes.map(node => node.id);
 const known = new Set(ids);
-return Number.isSafeInteger(args.state.revision) && args.state.revision >= 0 &&
+return Number.isSafeInteger(state.revision) && state.revision >= 0 &&
        ids.every(id => id.trim().length > 0) && known.size === ids.length &&
-       args.state.edges.every(edge => known.has(edge.from) && known.has(edge.to) && edge.relation.trim());
+       state.edges.every(edge => known.has(edge.from) && known.has(edge.to) && edge.relation.trim());
+}

@@ -5,7 +5,7 @@ args:
   files?: Record<string, File>
 returns: Plan
 ---
-Choose exactly one of trim, crop, scale, or transcode from the user's request. If the request names a sidecar note, inspect only that args/files leaf before choosing.
+Choose exactly one of trim, crop, scale, or transcode from the user's request. If the request names a sidecar note, inspect only that files leaf before choosing.
 Write a Plan record with exactly kind, input, output, start, end, x, y, width,
 height, and keep_audio. Copy request.input and request.output exactly. For trim,
 use start/end seconds in source duration. For crop, use x/y and desired width

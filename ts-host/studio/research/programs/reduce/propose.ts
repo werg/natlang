@@ -1,11 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  base: Text
-  edits: Edit[]
-  removes: Text[]
-  effect_ids: Text[]
-  message: Text
-returns: CandidateResult
----*/
-return await host.research.propose(args.base, args.edits, args.removes, args.effect_ids, args.message);
+import type { State, Event, Entry, Hit, Edit, Proposal, CommitResult, CandidateResult, Branch, Receipt, View } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default async function propose(base: string, edits: Edit[], removes: string[], effect_ids: string[], message: string): Promise<CandidateResult> {
+return await host.research.propose(base, edits, removes, effect_ids, message);
+}

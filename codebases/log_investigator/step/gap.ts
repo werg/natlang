@@ -1,10 +1,7 @@
-/*---
-engine: typescript-host
-args:
-  acc: IncidentState
-  item: LogEvent
-returns: IncidentState
----*/
-if (args.item.cursor <= args.acc.cursor) return args.acc;
-return { ...args.acc, cursor: args.item.cursor, status: 'gap',
-  unknowns: [...args.acc.unknowns, `Source gap at cursor ${args.item.cursor}: ${args.item.message}`] };
+import type { LogEvent, File, Observation, Evidence, Judgement, Alert, IncidentState, ViewBlock, TerminalView } from "../types.js";
+
+export default function gap(acc: IncidentState, item: LogEvent): IncidentState {
+if (item.cursor <= acc.cursor) return acc;
+return { ...acc, cursor: item.cursor, status: 'gap',
+  unknowns: [...acc.unknowns, `Source gap at cursor ${item.cursor}: ${item.message}`] };
+}

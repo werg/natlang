@@ -1,10 +1,10 @@
-import { assess } from "./transform/assess";
-import { choose } from "./transform/choose";
-import { finalize } from "./transform/finalize";
-import { inspect } from "./transform/inspect";
-import { probe } from "./transform/probe";
-import { render } from "./transform/render";
-import { source_failure } from "./transform/source_failure";
+import assess from "./transform/assess";
+import choose from "./transform/choose";
+import finalize from "./transform/finalize";
+import inspect from "./transform/inspect";
+import probe from "./transform/probe";
+import render from "./transform/render";
+import source_failure from "./transform/source_failure";
 ---
 description: Interpret a media request, run one exact transform, inspect the output, and report uncertainty honestly. Use files to inspect input and sidecar metadata when needed.
 args:

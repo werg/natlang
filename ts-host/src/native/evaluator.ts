@@ -13,6 +13,7 @@ export interface EvalEnvironment {
   readonly authority: string;
   readonly mode: EnvironmentMode;
   readonly host: object;
+  readonly scopeCapabilities?: { allowModules?: boolean; allowNetwork?: boolean };
   execute(request: EvalRequest): EvalResult;
   executeAsync(request: EvalRequest): Promise<EvalResult>;
   bindEffect(handler: (capability: string, operation: string, args: unknown[]) => unknown): () => void;

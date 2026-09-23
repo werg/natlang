@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  run_id: string
-  index: number
-returns: TraceView
----*/
-return host.ide.inspect(args.run_id, args.index);
+import type { EditorFile, EditorSnapshot, EditPatch, EditReport, CheckReport, RunReport, TraceView, ViewPanel, EditorView } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function trace(run_id: string, index: number): TraceView {
+return host.ide.inspect(run_id, index);
+}

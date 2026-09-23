@@ -47,7 +47,7 @@ async function main(): Promise<void> {
       chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } } };
   const records = await loadRecords(ir, integer(flags, '--start', 0), integer(flags, '--limit', 10));
   const controller = new AbortController();
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => controller.abort());
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
   const result = await collectBatch(records, config, nativeJobRunner(config), controller.signal);
   const source = await readFile(ir);
   const merged = await readFile(output);

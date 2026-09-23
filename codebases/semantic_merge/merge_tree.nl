@@ -1,21 +1,15 @@
-import { check_state } from "./merge_tree/check_state";
-import { interpret } from "./merge_tree/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_tree/check_state";
+import interpret from "./merge_tree/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
-description: Merge a nested outline or folder tree, including subtree moves and rename conflicts.
+description: Merge a nested outline or folder tree, including subtree moves and
+  rename conflicts.
 args:
   base: State
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  Node: '{ id: string, parent: string, title: string }'
-  State: '{ revision: number, nodes: Node[] }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_tree(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

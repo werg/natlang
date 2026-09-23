@@ -1,9 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  snapshot: ScheduleSnapshot
-  alternatives: Alternatives
-returns: ScheduleResult
----*/
-return { status: 'infeasible', revision: args.snapshot.revision,
-  plan: args.snapshot.plan, detail: args.alternatives.detail };
+import type { Task, Slot, ScheduleSnapshot, Candidate, Alternatives, ScheduleResult } from "../types.js";
+
+export default function infeasible(snapshot: ScheduleSnapshot, alternatives: Alternatives): ScheduleResult {
+return { status: 'infeasible', revision: snapshot.revision,
+  plan: snapshot.plan, detail: alternatives.detail };
+}

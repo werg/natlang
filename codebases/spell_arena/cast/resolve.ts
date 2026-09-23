@@ -1,13 +1,7 @@
-/*---
-description: Atomically validate and apply a semantic spell plan to a pure arena snapshot.
-args:
-  observation: World
-  rules: Rules
-  meaning: Interpretation
-returns: CastResult
----*/
-const original = args.observation;
-const meaning = args.meaning;
+import type { Actor, World, Rules, Effect, Plan, Interpretation, CastResult } from "../types.js";
+export default function resolve(observation: World, rules: Rules, _meaning: Interpretation): CastResult {
+const original = observation;
+const meaning = _meaning;
 const fail = (status, explanation) => ({ status, world: original, cost: 0, explanation });
 if (meaning.status !== "plan") return fail(meaning.status, meaning.explanation);
 const plan = meaning.plan;
@@ -15,7 +9,7 @@ if (plan.revision !== original.revision) return fail("stale", "The arena changed
 if (original.revision >= Number.MAX_SAFE_INTEGER) return fail("invalid", "The arena revision cannot advance safely.");
 if (!plan.effects.length) return fail("invalid", "A cast needs at least one effect.");
 if (plan.effects.length > 8) return fail("invalid", "A cast may contain at most eight effects.");
-const r = args.rules;
+const r = rules;
 const limits = [r.max_damage, r.max_shield, r.max_move, r.damage_cost, r.shield_cost, r.move_cost];
 if (limits.some(n => !Number.isSafeInteger(n) || n < 0) ||
     !Number.isSafeInteger(original.energy) || original.energy < 0 ||
@@ -59,3 +53,4 @@ for (const effect of plan.effects) {
 if (cost > original.energy) return fail("insufficient", "The caster lacks energy for the whole spell.");
 return { status: "applied", world: { revision: original.revision + 1, energy: original.energy - cost, actors },
          cost, explanation: meaning.explanation };
+}

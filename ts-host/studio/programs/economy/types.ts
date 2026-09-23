@@ -1,5 +1,5 @@
-export type Merchant = { id: Text; name: Text; cash: Num; apples: Num; price: Num }; export type Trade = { id: Text; buyer: Text; seller: Text; quantity: Num; total: Num }; export type State = { revision: Num; notice: Text; merchants: Merchant[]; trades: Trade[]; tick: Num };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "price"; target: Text; amount: Num; } | { action: "buy"; target: Text; secondary: Text; amount: Num; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Merchant = { id: string; name: string; cash: number; apples: number; price: number }; export type Trade = { id: string; buyer: string; seller: string; quantity: number; total: number }; export type State = { revision: number; notice: string; merchants: Merchant[]; trades: Trade[]; tick: number };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "price"; target: string; amount: number; } | { action: "buy"; target: string; secondary: string; amount: number; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

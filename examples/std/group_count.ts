@@ -1,9 +1,5 @@
-/*---
-description: How often each value occurs.
-args:
-  values: string[]
-returns: Record<string, number>
----*/
+export default function group_count(values: string[]): Record<string, number> {
 const out = {}
-for (const v of args.values) out[v] = (out[v] || 0) + 1
+for (const v of values) out[v] = (out[v] || 0) + 1
 return out
+}

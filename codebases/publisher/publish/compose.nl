@@ -9,7 +9,7 @@ args:
   files?: Record<string, File>
 returns: Document
 ---
-Compose one portable document from the outline. If the brief names local editorial context, inspect only that args/files leaf. For each factual claim write a
+Compose one portable document from the outline. If the brief names local editorial context, inspect only that files leaf. For each factual claim write a
 short claim text, the exact span_id and revision of its passage, and a literal
 quote copied from that passage. The quoted words must occur in the passage.
 Use table_id only for an offered table. Put offered asset IDs in assets if used.

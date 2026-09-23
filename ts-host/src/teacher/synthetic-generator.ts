@@ -49,36 +49,36 @@ function arrayKernel(rng: Random, id: string): Dict {
     const start = rng.int(0, 30); return { start, end: start + rng.int(0, 9) };
   });
   const cases: Array<{ name: string; inputs: Dict; params: string; returns: string; text: string; code: string; expected: unknown }> = [
-    { name: 'prefix_sums', inputs: { numbers: nums }, params: 'numbers: Num[]', returns: 'Num[]',
+    { name: 'prefix_sums', inputs: { numbers: nums }, params: 'numbers: number[]', returns: 'number[]',
       text: 'Return every running prefix sum of `numbers` in order.',
-      code: 'args.numbers.reduce((out, x) => out.concat([(out.length ? out[out.length - 1] : 0) + x]), [])',
+      code: 'numbers.reduce((out, x) => out.concat([(out.length ? out[out.length - 1] : 0) + x]), [])',
       expected: nums.reduce<number[]>((out, x) => [...out, (out.at(-1) ?? 0) + x], []) },
-    { name: 'window_sums', inputs: { numbers: nums, width: rng.int(1, Math.min(5, nums.length)) }, params: 'numbers: Num[], width: Num', returns: 'Num[]',
+    { name: 'window_sums', inputs: { numbers: nums, width: rng.int(1, Math.min(5, nums.length)) }, params: 'numbers: number[], width: number', returns: 'number[]',
       text: 'Compute the sum of every contiguous window of `width` numbers.',
-      code: 'args.numbers.slice(0, args.numbers.length - args.width + 1).map((_, i) => sum(args.numbers.slice(i, i + args.width)))',
+      code: 'numbers.slice(0, numbers.length - width + 1).map((_, i) => sum(numbers.slice(i, i + width)))',
       expected: [] },
-    { name: 'top_k', inputs: { numbers: nums, k: rng.int(0, nums.length) }, params: 'numbers: Num[], k: Num', returns: 'Num[]',
-      text: 'Return the largest `k` values from `numbers`, greatest first.', code: 'args.numbers.slice().sort((a, b) => b - a).slice(0, args.k)', expected: [] },
-    { name: 'stable_unique', inputs: { items }, params: 'items: Text[]', returns: 'Text[]',
+    { name: 'top_k', inputs: { numbers: nums, k: rng.int(0, nums.length) }, params: 'numbers: number[], k: number', returns: 'number[]',
+      text: 'Return the largest `k` values from `numbers`, greatest first.', code: 'numbers.slice().sort((a, b) => b - a).slice(0, k)', expected: [] },
+    { name: 'stable_unique', inputs: { items }, params: 'items: string[]', returns: 'string[]',
       text: 'Remove duplicate values from `items` while preserving first occurrence order.',
-      code: 'args.items.filter((x, i) => args.items.indexOf(x) === i)', expected: [...new Set(items)] },
-    { name: 'weighted_checksum', inputs: { numbers: nums }, params: 'numbers: Num[]', returns: 'Num',
+      code: 'items.filter((x, i) => items.indexOf(x) === i)', expected: [...new Set(items)] },
+    { name: 'weighted_checksum', inputs: { numbers: nums }, params: 'numbers: number[]', returns: 'number',
       text: 'Multiply each number by its one-based position and add the products.',
-      code: 'sum(args.numbers.map((x, i) => x * (i + 1)))', expected: nums.reduce((sum, x, i) => sum + (i + 1) * x, 0) },
-    { name: 'adjacent_changes', inputs: { items }, params: 'items: Text[]', returns: 'Num',
+      code: 'sum(numbers.map((x, i) => x * (i + 1)))', expected: nums.reduce((sum, x, i) => sum + (i + 1) * x, 0) },
+    { name: 'adjacent_changes', inputs: { items }, params: 'items: string[]', returns: 'number',
       text: 'Count positions after the first where the value in `items` differs from the preceding value.',
-      code: 'args.items.slice(1).filter((x, i) => x !== args.items[i]).length',
+      code: 'items.slice(1).filter((x, i) => x !== items[i]).length',
       expected: items.slice(1).filter((x, i) => x !== items[i]).length },
-    { name: 'row_sums', inputs: { matrix }, params: 'matrix: Num[][]', returns: 'Num[]',
-      text: 'Return the sum of each row in `matrix`, preserving row order.', code: 'args.matrix.map(row => sum(row))',
+    { name: 'row_sums', inputs: { matrix }, params: 'matrix: number[][]', returns: 'number[]',
+      text: 'Return the sum of each row in `matrix`, preserving row order.', code: 'matrix.map(row => sum(row))',
       expected: matrix.map(row => row.reduce((a, b) => a + b, 0)) },
-    { name: 'longest_true_run', inputs: { flags }, params: 'flags: Bool[]', returns: 'Num',
+    { name: 'longest_true_run', inputs: { flags }, params: 'flags: boolean[]', returns: 'number',
       text: 'Return the length of the longest contiguous run of true values in `flags`.',
-      code: 'args.flags.reduce((s, x) => ({ run: x ? s.run + 1 : 0, best: Math.max(s.best, x ? s.run + 1 : 0) }), { run: 0, best: 0 }).best',
+      code: 'flags.reduce((s, x) => ({ run: x ? s.run + 1 : 0, best: Math.max(s.best, x ? s.run + 1 : 0) }), { run: 0, best: 0 }).best',
       expected: flags.reduce((s, x) => ({ run: x ? s.run + 1 : 0, best: Math.max(s.best, x ? s.run + 1 : 0) }), { run: 0, best: 0 }).best },
     { name: 'merge_intervals', inputs: { intervals }, params: 'intervals: Interval[]', returns: 'Interval[]',
       text: 'Merge all overlapping intervals in `intervals` and return them ordered by start.',
-      code: 'args.intervals.slice().sort((a, b) => a.start - b.start || a.end - b.end).reduce((out, x) => { const last = out[out.length - 1]; return last && x.start <= last.end ? out.slice(0, -1).concat([{ start: last.start, end: Math.max(last.end, x.end) }]) : out.concat([{ start: x.start, end: x.end }]) }, [])',
+      code: 'intervals.slice().sort((a, b) => a.start - b.start || a.end - b.end).reduce((out, x) => { const last = out[out.length - 1]; return last && x.start <= last.end ? out.slice(0, -1).concat([{ start: last.start, end: Math.max(last.end, x.end) }]) : out.concat([{ start: x.start, end: x.end }]) }, [])',
       expected: mergeIntervals(intervals) },
   ];
   const selected = rng.pick(cases);
@@ -90,8 +90,8 @@ function arrayKernel(rng: Random, id: string): Dict {
     const { k } = selected.inputs as { k: number };
     selected.expected = [...nums].sort((a, b) => b - a).slice(0, k);
   }
-  const root = lambda(selected.text, `Lambda<{ ${selected.params} }, ${selected.returns}>`, selected.name,
-    undefined, selected.name === 'merge_intervals' ? { Interval: '{ start: Num, end: Num }' } : undefined);
+  const root = lambda(selected.text, `(${selected.params}) => ${selected.returns}`, selected.name,
+    undefined, selected.name === 'merge_intervals' ? { Interval: '{ start: number, end: number }' } : undefined);
   return record(id, selected.name, 'lambda_source', { root, inputs: selected.inputs, expected: selected.expected,
     operation: 'algorithm', expression: selected.code, algorithm: selected.name });
 }
@@ -111,20 +111,20 @@ function stagedRanking(rng: Random, id: string): Dict {
   const k = rng.int(0, candidates.length);
   const expected = candidates.map(item => ({ ...item, score: item.quality * 100 - item.cost }))
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, k);
-  const candidate = '{ id: Text, quality: Num, cost: Num }', ranked = '{ id: Text, quality: Num, cost: Num, score: Num }';
+  const candidate = '{ id: string, quality: number, cost: number }', ranked = '{ id: string, quality: number, cost: number, score: number }';
   const instructions = 'Score every candidate, sort by descending score with id as the tie breaker, then return the first `k`.';
   const codebase = {
-    score_candidates: { description: 'Attach the exact quality/cost score to every candidate.', args: { items: 'Candidate[]' }, returns: 'Ranked[]', code: 'return args.items.map(x => ({ ...x, score: x.quality * 100 - x.cost }))' },
-    sort_ranked: { description: 'Sort ranked candidates by score descending and id ascending.', args: { items: 'Ranked[]' }, returns: 'Ranked[]', code: 'return args.items.slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))' },
-    take_ranked: { description: 'Take the requested prefix of a ranked list.', args: { items: 'Ranked[]', k: 'Num' }, returns: 'Ranked[]', code: 'return args.items.slice(0, args.k)' },
+    score_candidates: { description: 'Attach the exact quality/cost score to every candidate.', args: { items: 'Candidate[]' }, returns: 'Ranked[]', code: 'return items.map(x => ({ ...x, score: x.quality * 100 - x.cost }))' },
+    sort_ranked: { description: 'Sort ranked candidates by score descending and id ascending.', args: { items: 'Ranked[]' }, returns: 'Ranked[]', code: 'return items.slice().sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))' },
+    take_ranked: { description: 'Take the requested prefix of a ranked list.', args: { items: 'Ranked[]', k: 'number' }, returns: 'Ranked[]', code: 'return items.slice(0, k)' },
   };
   const operations = [
-    { op: 'invoke', function: 'score_candidates', target: 'let/scored', arguments: { items: 'args/candidates' } },
-    { op: 'invoke', function: 'sort_ranked', target: 'let/sorted', arguments: { items: 'let/scored' } },
-    { op: 'invoke', function: 'take_ranked', target: 'return', arguments: { items: 'let/sorted', k: 'args/k' } },
+    { op: 'eval', code: 'const scored = await score_candidates(candidates)' },
+    { op: 'eval', code: 'const sorted = await sort_ranked(scored)' },
+    { op: 'eval', code: 'await take_ranked(sorted, k)' },
   ];
   return record(id, 'staged_ranking', 'lambda_graph', { root: lambda(instructions,
-    'Lambda<{ candidates: Candidate[], k: Num }, Ranked[]>', 'rank_candidates', codebase,
+    '(candidates: Candidate[], k: number) => Ranked[]', 'rank_candidates', codebase,
     { Candidate: candidate, Ranked: ranked }), inputs: { candidates, k }, expected, operations, source_lines: [], leaf_oracles: {} });
 }
 
@@ -136,17 +136,17 @@ function algorithmPipeline(rng: Random, id: string): Dict {
   const expected = accounts.map((account, i) => ({ account, total: totals[i]! })).sort((a, b) => b.total - a.total || a.account.localeCompare(b.account));
   const instructions = 'Discard inactive transactions, total the remaining amounts per account, and rank accounts by total descending then account id.';
   const codebase = {
-    active_only: { description: 'Keep only active transactions.', args: { items: 'Transaction[]' }, returns: 'Transaction[]', code: 'return args.items.filter(x => x.active)' },
-    rank_accounts: { description: 'Pair accounts with totals and sort the leaderboard.', args: { accounts: 'Text[]', totals: 'Num[]' }, returns: 'Summary[]', code: 'return args.accounts.map((account, i) => ({ account, total: args.totals[i] })).sort((a, b) => b.total - a.total || a.account.localeCompare(b.account))' },
+    active_only: { description: 'Keep only active transactions.', args: { items: 'Transaction[]' }, returns: 'Transaction[]', code: 'return items.filter(x => x.active)' },
+    rank_accounts: { description: 'Pair accounts with totals and sort the leaderboard.', args: { accounts: 'string[]', totals: 'number[]' }, returns: 'Summary[]', code: 'return accounts.map((account, i) => ({ account, total: totals[i] })).sort((a, b) => b.total - a.total || a.account.localeCompare(b.account))' },
   };
   const operations = [
-    { op: 'invoke', function: 'active_only', target: 'let/active', arguments: { items: 'args/transactions' } },
-    { op: 'compute', expression: 'args.accounts.map(a => sum(locals.active.filter(x => x.account === a).map(x => x.amount)))', target: 'let/totals', value_type: 'Num[]' },
-    { op: 'invoke', function: 'rank_accounts', target: 'return', arguments: { accounts: 'args/accounts', totals: 'let/totals' } },
+    { op: 'eval', code: 'const active = await active_only(transactions)' },
+    { op: 'eval', code: 'const totals = accounts.map(a => active.filter(x => x.account === a).reduce((sum, x) => sum + x.amount, 0))' },
+    { op: 'eval', code: 'await rank_accounts(accounts, totals)' },
   ];
   return record(id, 'algorithm_pipeline', 'lambda_graph', { root: lambda(instructions,
-    'Lambda<{ transactions: Transaction[], accounts: Text[] }, Summary[]>', 'account_leaderboard', codebase,
-    { Transaction: '{ account: Text, amount: Num, active: Bool }', Summary: '{ account: Text, total: Num }' }),
+    '(transactions: Transaction[], accounts: string[]) => Summary[]', 'account_leaderboard', codebase,
+    { Transaction: '{ account: string, amount: number, active: boolean }', Summary: '{ account: string, total: number }' }),
     inputs: { transactions, accounts }, expected, operations, source_lines: [], leaf_oracles: {} });
 }
 

@@ -5,10 +5,10 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 function accepts(value, type, env) {
   const resolved = env.resolve(type);
   switch (resolved.kind) {
-    case 'prim': return resolved.name === 'Null' ? value === null :
-      resolved.name === 'Num' ? typeof value === 'number' && Number.isFinite(value) &&
+    case 'prim': return resolved.name === 'null' ? value === null :
+      resolved.name === 'number' ? typeof value === 'number' && Number.isFinite(value) &&
         (!Number.isInteger(value) || Number.isSafeInteger(value)) :
-        resolved.name === 'Bool' ? typeof value === 'boolean' : typeof value === 'string';
+        resolved.name === 'boolean' ? typeof value === 'boolean' : typeof value === 'string';
     case 'lit': return value === resolved.value;
     case 'union': return resolved.members.some(member => accepts(value, member, env));
     case 'list': return Array.isArray(value) && value.every(item => accepts(item, resolved.element, env));
@@ -53,17 +53,17 @@ export function mountInputForm(container, lambda, values, onChange) {
       control.append(...literals.map(value => new Option(String(value), JSON.stringify(value))));
       control.value = JSON.stringify(current ?? literals[0]);
       read = () => JSON.parse(control.value);
-    } else if (type.kind === 'prim' && type.name === 'Bool') {
+    } else if (type.kind === 'prim' && type.name === 'boolean') {
       control = document.createElement('input'); control.type = 'checkbox'; control.checked = Boolean(current);
       read = () => control.checked;
-    } else if (type.kind === 'prim' && type.name === 'Num') {
+    } else if (type.kind === 'prim' && type.name === 'number') {
       control = document.createElement('input'); control.type = 'number'; control.step = 'any';
       control.value = current === undefined ? '' : String(current);
       read = () => {
         if (control.value.trim() === '' || !Number.isFinite(Number(control.value))) throw new Error(`${label} must be a number`);
         return Number(control.value);
       };
-    } else if (type.kind === 'prim' && type.name === 'Text') {
+    } else if (type.kind === 'prim' && type.name === 'string') {
       control = current?.length > 100 || String(current ?? '').includes('\n') ?
         document.createElement('textarea') : document.createElement('input');
       if (control.tagName === 'INPUT') control.type = 'text';

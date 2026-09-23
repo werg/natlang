@@ -1,5 +1,5 @@
-export type Page = { id: Text; title: Text; body: Text; cell: Text; output: Text }; export type State = { revision: Num; notice: Text; pages: Page[]; selected: Text; incoming: Text; conflicts: Text[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "save"; secondary: Text; text: Text; } | { action: "add"; target: Text; secondary: Text; text: Text; } | { action: "select"; target: Text; } | { action: "incoming"; text: Text; } | { action: "merge"; text: Text; ids?: Text[]; } | { action: "save_cell"; text: Text; } | { action: "run"; text?: Text; };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Page = { id: string; title: string; body: string; cell: string; output: string }; export type State = { revision: number; notice: string; pages: Page[]; selected: string; incoming: string; conflicts: string[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "save"; secondary: string; text: string; } | { action: "add"; target: string; secondary: string; text: string; } | { action: "select"; target: string; } | { action: "incoming"; text: string; } | { action: "merge"; text: string; ids?: string[]; } | { action: "save_cell"; text: string; } | { action: "run"; text?: string; };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

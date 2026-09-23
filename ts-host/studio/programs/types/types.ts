@@ -1,5 +1,5 @@
-export type Contract = { id: Text; signature: Text; reason: Text }; export type Diagnostic = { id: Text; location: Text; detail: Text }; export type State = { revision: Num; notice: Text; source: Text; contracts: Contract[]; diagnostics: Diagnostic[] };
-export type Step = { state: State; ok: Bool; detail: Text };
-export type Decision = { action: "save"; text: Text; } | { action: "infer"; target: Text; text: Text; secondary: Text; } | { action: "diagnostic"; target: Text; text: Text; } | { action: "clear";  };
-export type UiEvent = { id: Text; kind: Text; value?: Text };
-export type View = { heading: Text; summary: Text; focus: Text[]; suggestions: Text[] };
+export type Contract = { id: string; signature: string; reason: string }; export type Diagnostic = { id: string; location: string; detail: string }; export type State = { revision: number; notice: string; source: string; contracts: Contract[]; diagnostics: Diagnostic[] };
+export type Step = { state: State; ok: boolean; detail: string };
+export type Decision = { action: "save"; text: string; } | { action: "infer"; target: string; text: string; secondary: string; } | { action: "diagnostic"; target: string; text: string; } | { action: "clear";  };
+export type UiEvent = { id: string; kind: string; value?: string };
+export type View = { heading: string; summary: string; focus: string[]; suggestions: string[] };

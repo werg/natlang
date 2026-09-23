@@ -1,6 +1,6 @@
-import { apply } from "./reduce/apply";
-import { choose } from "./reduce/choose";
-import { finish } from "./reduce/finish";
+import apply from "./reduce/apply";
+import choose from "./reduce/choose";
+import finish from "./reduce/finish";
 ---
 description: Reduce a The lantern inn event into typed application state.
 args:

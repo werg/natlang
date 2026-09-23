@@ -1,10 +1,7 @@
-/*---
-engine: typescript-host
-args:
-  state: ConsoleState
-returns: TerminalView
----*/
-const state = args.state, answer = state.answers.at(-1), question = state.questions.at(-1);
+import type { Claim, EvidenceAnswer, ConsoleEvent, ConsoleState, ViewBlock, TerminalView } from "./types.js";
+
+export default function view(_state: ConsoleState): TerminalView {
+const state = _state, answer = state.answers.at(-1), question = state.questions.at(-1);
 const blocks = answer ? [
   { kind: 'text', text: `Q: ${question}` },
   { kind: 'status', text: answer.status, tone: answer.status === 'citation-checked' ? 'good' : 'warn' },
@@ -16,3 +13,4 @@ const blocks = answer ? [
   { kind: 'list', items: ['Try: How does the console prevent fabricated citations?', 'Use /help to discover setup and navigation commands.'] }];
 return { title: 'Natlang Evidence Console', subtitle: `${state.answers.length} answered questions`, blocks,
   prompt: 'evidence> ', help: ['/help commands', '/sources collection', '/load PATH add evidence', '/quit exit'] };
+}

@@ -1,7 +1,4 @@
-/*---
-args:
-  acc: State
-  item: Event
-returns: boolean
----*/
-return args.acc.seen.includes(args.item.id);
+import type { Event, Kind, Order, Command, State } from "../types.js";
+export default function seen(acc: State, item: Event): boolean {
+return acc.seen.includes(item.id);
+}

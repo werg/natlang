@@ -1,8 +1,6 @@
-/*---
-engine: typescript-host
-args:
-  observation: NpcObservation
-  plan: NpcPlan
-returns: NpcResult
----*/
-return host.npc.apply(args.observation, args.plan);
+import type { NpcEvent, Memory, Commitment, NpcObservation, NpcPlan, NpcResult } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default function apply(observation: NpcObservation, plan: NpcPlan): NpcResult {
+return host.npc.apply(observation, plan);
+}

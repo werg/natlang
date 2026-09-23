@@ -1,20 +1,15 @@
-import { check_state } from "./merge_counter/check_state";
-import { interpret } from "./merge_counter/interpret";
-import { prepare_envelope } from "./prepare_envelope";
-import { validate_claims } from "./validate_claims";
+import check_state from "./merge_counter/check_state";
+import interpret from "./merge_counter/interpret";
+import prepare_envelope from "./prepare_envelope";
+import validate_claims from "./validate_claims";
 ---
-description: Merge numeric counter intentions, distinguishing increments, corrections and resets.
+description: Merge numeric counter intentions, distinguishing increments,
+  corrections and resets.
 args:
   base: State
   updates: Update[]
   policy: string
 returns: Draft
-uses:
-  prepare_envelope: prepare_envelope.ts
-  validate_claims: validate_claims.ts
-types:
-  State: '{ revision: number, value: number, unit: string }'
-  Draft: '{ state: State, applied: string[], alternatives: Alternative[], explanation: string }'
 ---
 function merge_counter(base, updates, policy) -> Draft
   prepared = prepare_envelope(base.revision, updates)

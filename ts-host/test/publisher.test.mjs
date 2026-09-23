@@ -22,7 +22,7 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
   const modelTurn = turn => {
     const prompt = String(turn.messages.find(m => m.role === 'user')?.content ?? '');
     if (prompt.includes('function publish(')) return evalTurn(turn,
-      'const passages = await read(span_ids, collection_revision); const outline = await plan(brief, passages, table_ids, asset_ids, files); const document = await compose(brief, outline, passages, collection_revision, table_ids, asset_ids, files); const checked = await check(document); if (checked.ok) await prepare(document, target); else await reject(target, checked)');
+      'const passages = await read(span_ids, collection_revision); const outline = await plan(brief, passages, table_ids, asset_ids, files); const document = await compose(brief, outline, passages, collection_revision, table_ids, asset_ids, files); const checked = await check(document); const result = checked.ok ? await prepare(document, target) : await reject(target, checked); result');
     if (prompt.includes('Plan a short document')) return evalTurn(turn, `(${JSON.stringify({
       title: 'Study <results>', headings: ['Summary'],
       selected_tables: ['counts'], selected_assets: ['graph'],
@@ -40,8 +40,9 @@ test('natlang composes pinned evidence and prepares identical-source Markdown an
     const result = await host.run({ source: { kind: 'file', path },
       inputs: { brief: 'Summarize', span_ids: ['study#p0'],
         collection_revision: evidence.revision(), table_ids: ['counts'],
-        asset_ids: ['graph'], target: 'report', files: new NodeFileTree(root) }, modelTurn });
-    assert.equal(result.outcome.kind, 'done');
+        asset_ids: ['graph'], target: 'report', files: new NodeFileTree(root) }, modelTurn,
+      validationFeedback: 'caller' });
+    assert.equal(result.outcome.kind, 'done', JSON.stringify(result.outcome));
     assert.equal(result.value.status, 'prepared');
     const html = await readFile(join(root, 'report', 'document.html'), 'utf8');
     const md = await readFile(join(root, 'report', 'document.md'), 'utf8');

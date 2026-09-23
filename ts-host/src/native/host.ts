@@ -3,8 +3,10 @@ import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import YAML from 'yaml';
 import { TypeScriptEnvironment } from '../environment.js';
+import { applicationCapabilityPrompt } from '../application-packages.js';
 import type { RunRequest, RunResult } from '../contracts.js';
 import { NativeToolAgent, type NativeReviewOptions } from './agent.js';
+import { TOOLS_PROMPT } from './prompt.js';
 import { checkedDefinitions } from './codebase.js';
 import { NativeRuntime, type NativeStream } from './runtime.js';
 import { loadFunctionFile } from './source.js';
@@ -22,9 +24,11 @@ export class NativeNatlangHost {
   private closed = false;
   private running = false;
 
-  constructor(options: { environment?: TypeScriptEnvironment; host?: object; mode?: 'fresh' | 'retained' } = {}) {
+  constructor(options: { environment?: TypeScriptEnvironment; host?: object; mode?: 'fresh' | 'retained';
+    workspace?: string; network?: boolean } = {}) {
     this.ownsEnvironment = !options.environment;
-    this.environment = options.environment ?? new TypeScriptEnvironment({ host: options.host, mode: options.mode });
+    this.environment = options.environment ?? new TypeScriptEnvironment({ host: options.host, mode: options.mode,
+      workspace: options.workspace, network: options.network });
   }
 
   async run(request: NativeRunRequest): Promise<RunResult> {
@@ -43,7 +47,8 @@ export class NativeNatlangHost {
       if (request.source.kind === 'program') root = buildPending(request.source.program);
       else if (request.source.kind === 'definitions') root = checkedDefinitions(
         request.source.entries as Parameters<typeof checkedDefinitions>[0], request.source.root).instantiate(request.inputs);
-      else if (['.nl', '.ts'].includes(extname(request.source.path))) root = loadFunctionFile(request.source.path);
+      else if (['.nl', '.ts'].includes(extname(request.source.path))) root = loadFunctionFile(request.source.path,
+        { packageImports: this.environment.scopeCapabilities.allowModules });
       else {
         const doc = YAML.parse(readFileSync(request.source.path, 'utf8')) as Record<string, unknown>;
         root = buildPending(doc.program ?? doc);
@@ -72,12 +77,13 @@ export class NativeNatlangHost {
         catch (error) { return { kind: 'failed', detail: error instanceof Error ? error.message : String(error) }; }
       } };
       const agent = request.modelTurn ? new NativeToolAgent(request.modelTurn, {
+        systemPrompt: TOOLS_PROMPT + applicationCapabilityPrompt(this.environment.scopeCapabilities),
         maxTurns: request.options?.model?.max_turns, maxTokens: request.options?.model?.max_tokens,
         turnTokens: request.options?.model?.turn_tokens, temperature: request.options?.model?.temperature,
         segmentTurns: request.options?.model?.segment_turns,
         segmentMessages: request.options?.model?.segment_messages,
         maxSeconds: request.options?.model?.max_seconds, validationFeedback: request.validationFeedback,
-        review: request.review, toolSchema: request.options?.model?.tool_schema }) : undefined;
+        review: request.review }) : undefined;
       runtime = new NativeRuntime({ environment: this.environment, stream,
         agent: agent ? session => agent.run(session) : undefined,
         capabilities: request.capabilities as Record<string, (args: unknown[]) => unknown>,
@@ -138,7 +144,7 @@ export class NativeNatlangHost {
       throw new TypeError(`${path} is a directory but the parameter type is not a list or Dict`);
     }
     const text = readFileSync(path, 'utf8');
-    return ['.json', '.yaml', '.yml'].includes(extname(path)) || !(resolved.kind === 'prim' && resolved.name === 'Text') ?
+    return ['.json', '.yaml', '.yml'].includes(extname(path)) || !(resolved.kind === 'prim' && resolved.name === 'string') ?
       YAML.parse(text) : text;
   }
 

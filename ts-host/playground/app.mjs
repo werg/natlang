@@ -186,13 +186,13 @@ function renderEditor() {
 function selectFile(path) { selectedFile = path; renderFileList(); renderEditor(); }
 
 function highlightSource(text, isNl) {
-  const token = /(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:return|function|const|let|if|else|for|each|while|await|type|true|false|null|in)\b|\b(?:Text|Num|Bool|Null|Blob|Lambda|Map|Fold|Iterate|Dict)\b|\b\d+(?:\.\d+)?\b|^---.*$|^\s*[A-Za-z_]+:)/gm;
+  const token = /(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:export|default|return|function|const|let|if|else|for|each|while|await|async|type|interface|string|number|boolean|true|false|null|in)\b|\b(?:Blob|Folder|FileHandle|Record|Promise)\b|\b\d+(?:\.\d+)?\b|^---.*$|^\s*[A-Za-z_]+:)/gm;
   let output = '', at = 0, match;
   while ((match = token.exec(text))) {
     output += escapeHTML(text.slice(at, match.index));
     const value = match[0], kind = /^(\/\/|#)/.test(value) ? 'comment' : /^['"`]/.test(value) ? 'string' :
       /^\d/.test(value) ? 'number' : /^(---|\s*\w+:)/.test(value) && isNl ? 'meta' :
-        /^(Text|Num|Bool|Null|Blob|Lambda|Map|Fold|Iterate|Dict)$/.test(value) ? 'type' : 'keyword';
+        /^(string|number|boolean|null|Blob|Folder|FileHandle|Record|Promise)$/.test(value) ? 'type' : 'keyword';
     output += `<span class="token ${kind}">${escapeHTML(value)}</span>`;
     at = match.index + value.length;
   }
@@ -758,8 +758,8 @@ function bind() {
   $('addFile').onclick = async () => { const path = await promptText('Add file', 'Use a relative .nl or .ts path, such as tasks/answer.nl.', 'tasks/new.nl');
     if (!path) return;
     if (!validProjectPath(path) || project.files[path]) { message('Choose a unique relative .nl or .ts path', true); return; }
-    const source = path.endsWith('.nl') ? '---\nreturns: Text\n---\nWrite a short answer to return.\n' :
-      '/*---\nreturns: Text\nengine: typescript-host\n---*/\nreturn "Hello";\n';
+    const source = path.endsWith('.nl') ? '---\nargs: {}\nreturns: string\n---\nReturn a short answer.\n' :
+      `export default function ${path.split('/').at(-1).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_$]/g, '_')}(): string {\n  return "Hello";\n}\n`;
     replaceProject(editPlaygroundProject(project, { files: { ...project.files, [path]: source } })); selectFile(path);
   };
   $('renameFile').onclick = async () => { const path = await promptText('Rename file', 'The root path follows the renamed file.', selectedFile);

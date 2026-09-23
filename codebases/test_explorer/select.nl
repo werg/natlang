@@ -5,9 +5,6 @@ args:
   cases: Case[]
   budget: number
 returns: Selection
-types:
-  Case: '{ id: string, description: string, group: string }'
-  Selection: '{ ids: string[], reason: string }'
 ---
 Select at most budget distinct case IDs from cases. Prefer cases that test different
 graph structures and missing dependencies. Explain what each selection probes. Only

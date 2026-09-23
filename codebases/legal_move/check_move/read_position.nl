@@ -4,6 +4,6 @@ args:
   position: string
 returns: Cell[]
 ---
-`args/position` describes a tic-tac-toe board in words. List its nine cells row by row (top-left first, bottom-right
+`position` describes a tic-tac-toe board in words. List its nine cells row by row (top-left first, bottom-right
 last): "X", "O" or "empty". Cells that are not mentioned are empty. If the description contradicts itself, report a
 blocker saying how.

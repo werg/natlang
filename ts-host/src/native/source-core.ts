@@ -1,5 +1,6 @@
 import { readTypeAliases } from './type-aliases.js';
 import YAML from 'yaml';
+import ts from 'typescript';
 import { Reject, buildPending, type LambdaNode } from './values.js';
 import { formatType } from './types.js';
 
@@ -33,19 +34,70 @@ function inline(def: FileDefinition): Record<string, unknown> {
   return doc;
 }
 const frontNl = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-const frontTs = /^\s*\/\*---\r?\n([\s\S]*?)\r?\n---\*\/\r?\n?([\s\S]*)$/;
 const id = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const staticImport = /^import\s*\{\s*([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*\}\s*from\s*["']([^"']+)["'];?\s*$/;
+const staticImport = /^import\s+([A-Za-z_$][\w$]*)\s+from\s*["']([^"']+)["'];?\s*$/;
 function splitImports(source: string): { imports: [string, string, string][]; source: string } {
   const lines = source.match(/[^\n]*\n|[^\n]+$/g) ?? [], imports: [string, string, string][] = [];
   let at = 0;
   while (at < lines.length) {
     const match = staticImport.exec(lines[at]!.replace(/\r?\n$/, ''));
     if (!match) break;
-    imports.push([match[2] ?? match[1]!, match[1]!, match[3]!]); at++;
+    imports.push([match[1]!, '', match[2]!]); at++;
   }
   if (at && at < lines.length && !lines[at]!.trim()) at++;
   return { imports, source: lines.slice(at).join('') };
+}
+
+export function parseCrispModule(source: string, file: string, options: { packageImports?: boolean;
+  resolveImport?: (specifier: string) => string } = {}): { imports: [string, string, string][];
+  args: Record<string, string>; returns: string; code: string; effects: string[];
+  types: Record<string, string> } {
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const errors = (parsed as unknown as { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }).parseDiagnostics ?? [];
+  if (errors.length) throw new Reject([{ path: file, code: 'typescript-syntax',
+    got: errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; ') }]);
+  const imports: [string, string, string][] = [];
+  const runtimeImports: string[] = [];
+  for (const statement of parsed.statements) if (ts.isImportDeclaration(statement)) {
+    const specifier = ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : '';
+    if (statement.importClause?.isTypeOnly) continue;
+    if (specifier === 'natlang:runtime') continue;
+    if (options.packageImports && (!specifier.startsWith('.') || statement.importClause?.namedBindings || /\.[cm]?js$/.test(specifier))) {
+      const rewritten = options.resolveImport?.(specifier) ?? specifier;
+      runtimeImports.push(ts.createPrinter().printNode(ts.EmitHint.Unspecified,
+        ts.factory.updateImportDeclaration(statement, statement.modifiers, statement.importClause,
+          ts.factory.createStringLiteral(rewritten), statement.attributes), parsed));
+      continue;
+    }
+    if (!specifier.startsWith('.') || !statement.importClause?.name || statement.importClause.namedBindings)
+      throw new Reject([{ path: file, code: 'bad-import', expected: 'a default import from a relative .ts or .nl module' }]);
+    imports.push([statement.importClause.name.text, '', specifier]);
+  }
+  const functions = parsed.statements.filter(ts.isFunctionDeclaration).filter(statement =>
+    statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword));
+  if (functions.length !== 1)
+    throw new Reject([{ path: file, code: 'type-mismatch', expected: 'exactly one default exported function' }]);
+  const fn = functions[0]!;
+  const expectedName = file.slice(file.lastIndexOf('/') + 1).replace(/\.ts$/, '');
+  if (!fn.name || fn.name.text !== expectedName)
+    throw new Reject([{ path: file, code: 'type-mismatch', expected: `default function ${expectedName}` }]);
+  if (!fn.body || !fn.type)
+    throw new Reject([{ path: file, code: 'type-mismatch', expected: 'an implementation and explicit return type' }]);
+  const args: Record<string, string> = {};
+  for (const parameter of fn.parameters) {
+    if (!ts.isIdentifier(parameter.name) || !parameter.type || parameter.dotDotDotToken || parameter.initializer)
+      throw new Reject([{ path: file, code: 'type-mismatch', expected: 'identifier parameters with explicit TypeScript types' }]);
+    args[parameter.name.text + (parameter.questionToken ? '?' : '')] = parameter.type.getText(parsed);
+  }
+  let returns = fn.type.getText(parsed);
+  if (ts.isTypeReferenceNode(fn.type) && ts.isIdentifier(fn.type.typeName) && fn.type.typeName.text === 'Promise' &&
+      fn.type.typeArguments?.length === 1) returns = fn.type.typeArguments[0]!.getText(parsed);
+  const code = source.slice(fn.body.getStart(parsed) + 1, fn.body.getEnd() - 1).replace(/^\s*\n|\s+$/g, '') + '\n';
+  const effects = [...code.matchAll(/\bfx\.([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)/g)]
+    .map(match => `${match[1]}.${match[2]}`);
+  return { imports, args, returns,
+    code: runtimeImports.length ? runtimeImports.join('\n') + '\n' + code : code,
+    effects: [...new Set(effects)], types: readTypeAliases(source) };
 }
 
 function fileFor(path: string, files: SourceFiles): string {
@@ -56,21 +108,26 @@ function fileFor(path: string, files: SourceFiles): string {
 }
 
 /** Load frontmatter, companion functions, lexical types, and explicit uses without Python. */
-export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode {
+export function loadFunctionSource(path: string, files: SourceFiles, options: { packageImports?: boolean } = {}): LambdaNode {
   const active = new Set<string>();
   function read(name: string, inherited: Record<string, string>): FileDefinition {
     const file = fileFor(name, files);
     if (active.has(file)) throw new Reject([{ path: file, code: 'recursion' }]);
     active.add(file);
     try {
-      const ts = files.extname(file) === '.ts';
-      const parsed = splitImports(files.read(file));
-      const match = (ts ? frontTs : frontNl).exec(parsed.source);
-      if (!match) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
-      const meta = YAML.parse(match[1]!) as Record<string, unknown> ?? {};
+      const isTs = files.extname(file) === '.ts';
+      const raw = files.read(file);
+      const module = isTs ? parseCrispModule(raw, file, { ...options,
+        resolveImport: specifier => specifier.startsWith('.') ? files.resolve(files.join(files.dirname(file), specifier)) : specifier }) : undefined;
+      const parsed = isTs ? { imports: module!.imports, source: raw } : splitImports(raw);
+      const match = isTs ? undefined : frontNl.exec(parsed.source);
+      if (!isTs && !match) throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter between --- lines' }]);
+      const meta = isTs ? { args: module!.args, returns: module!.returns, effects: module!.effects,
+        types: module!.types,
+        engine: 'typescript-host' } : YAML.parse(match![1]!) as Record<string, unknown> ?? {};
       if (!meta || typeof meta !== 'object' || Array.isArray(meta))
         throw new Reject([{ path: file, code: 'type-mismatch', expected: 'frontmatter mapping' }]);
-      const allowed = new Set(['description', 'args', 'returns', 'types', 'uses', 'effects', 'engine', 'kind']);
+      const allowed = new Set(['description', 'args', 'returns', 'types', 'effects', 'engine', 'kind']);
       for (const key of Object.keys(meta)) if (!allowed.has(key))
         throw new Reject([{ path: file, code: 'unknown-field', got: key }]);
       if (typeof meta.returns !== 'string') throw new Reject([{ path: file, code: 'type-mismatch', expected: 'returns' }]);
@@ -91,23 +148,18 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
           children[files.basename(child, files.extname(child))] = read(files.join(companion, child), types);
         }
       }
-      for (const [alias, target] of Object.entries(meta.uses as Record<string, string> ?? {})) {
-        if (!id.test(alias)) throw new Reject([{ path: `${file}/uses/${alias}`, code: 'type-mismatch' }]);
-        if (!parsed.imports.some(([binding]) => binding === alias))
-          children[alias] = read(files.join(files.dirname(file), String(target)), {});
-      }
       for (const [binding, exported, specifier] of parsed.imports) {
         if (!specifier.startsWith('.')) throw new Reject([{ path: file, code: 'no-such-path',
           expected: 'a relative natlang module import', got: specifier }]);
         const child = read(files.join(files.dirname(file), specifier), types);
-        if (child.function !== exported) throw new Reject([{ path: file, code: 'bad-import',
+        if (exported && child.function !== exported) throw new Reject([{ path: file, code: 'bad-import',
           expected: `export {${child.function}} from ${specifier}`, got: exported }]);
         if (Object.hasOwn(children, binding)) throw new Reject([{ path: file, code: 'duplicate-path', got: binding }]);
         children[binding] = child;
       }
-      const body = match[2]!.replace(/^\n+|\n+$/g, '') + '\n';
+      const body = isTs ? module!.code : match![2]!.replace(/^\n+|\n+$/g, '') + '\n';
       return { description: String(meta.description ?? ''), args: meta.args as Record<string, string> ?? {},
-        returns: meta.returns, [ts ? 'code' : 'instructions']: body,
+        returns: meta.returns, [isTs ? 'code' : 'instructions']: body,
         engine: String(meta.engine ?? 'typescript-host'), types,
         effects: meta.effects as string[] ?? [], codebase: children, function: functionName,
         subtype: subtype as FileDefinition['subtype'] };
@@ -116,7 +168,7 @@ export function loadFunctionSource(path: string, files: SourceFiles): LambdaNode
   const definition = read(path, {});
   const params = Object.entries(definition.args).map(([key, type]) => `${key}: ${type}`).join(', ');
   const kind = definition.code === undefined ? 'instructions' : 'code';
-  const node = buildPending({ $lambda: { type: `Lambda<{ ${params} }, ${definition.returns}>`,
+  const node = buildPending({ $lambda: { type: `(${params}) => ${definition.returns}`,
     [kind]: definition[kind], engine: definition.engine, types: definition.types,
     effects: definition.effects, function: definition.function,
     ...(definition.subtype !== 'function' ? { subtype: definition.subtype } : {}) } });
@@ -152,9 +204,13 @@ export function loadCodebaseSource(path: string, files: SourceFiles): Record<str
     const extension = files.extname(name);
     if (!['.nl', '.ts'].includes(extension) || name === 'types.ts') continue;
     const file = files.join(root, name);
-    // A natlang TypeScript function is explicitly marked by frontmatter. Ordinary
-    // host TypeScript may coexist at an application or repository root.
-    if (extension === '.ts' && !frontTs.test(splitImports(files.read(file)).source)) continue;
+    // Ordinary host TypeScript may coexist at an application or repository root.
+    // A natlang crisp module is identified by its default exported function.
+    if (extension === '.ts') {
+      const parsed = ts.createSourceFile(file, files.read(file), ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+      if (!parsed.statements.some(statement => ts.isFunctionDeclaration(statement) &&
+          statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword))) continue;
+    }
     const functionName = files.basename(name, extension);
     if (Object.hasOwn(entries, functionName))
       throw new Reject([{ path: file, code: 'duplicate-path', got: functionName }]);
@@ -163,11 +219,11 @@ export function loadCodebaseSource(path: string, files: SourceFiles): Record<str
   return entries;
 }
 
-/** Construct a zero-argument, Text-returning instruction over a directory codebase. */
+/** Construct a zero-argument, string-returning instruction over a directory codebase. */
 export function loadAnonymousInstructionSource(path: string, instructions: string,
   files: SourceFiles): Record<string, unknown> {
   const body = instructions.trim();
   if (!body) throw new TypeError('anonymous instructions cannot be empty');
-  return { $lambda: { type: 'Lambda<{}, Text>', instructions: body,
+  return { $lambda: { type: '() => string', instructions: body,
     function: 'anonymous', codebase: loadCodebaseSource(path, files) } };
 }

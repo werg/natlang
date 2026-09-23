@@ -1,13 +1,10 @@
-/*---
-engine: typescript-host
-args:
-  request: Request
-  source: Clip
-  plan: Plan
-returns: Receipt
----*/
-if (args.plan.input !== args.request.input || args.plan.output !== args.request.output ||
-    args.source.id !== args.request.input || args.source.status !== 'ok')
-  return { status: 'failed', output: args.request.output, exit_code: -1, sha256: '',
+import type { Request, File, Clip, Plan, Receipt, Inspection, Assessment, MediaResult } from "../types.js";
+import { host } from "natlang:runtime";
+
+export default async function render(request: Request, source: Clip, plan: Plan): Promise<Receipt> {
+if (plan.input !== request.input || plan.output !== request.output ||
+    source.id !== request.input || source.status !== 'ok')
+  return { status: 'failed', output: request.output, exit_code: -1, sha256: '',
     detail: 'plan changed the selected input or output' };
-return await host.media.render(args.plan);
+return await host.media.render(plan);
+}
