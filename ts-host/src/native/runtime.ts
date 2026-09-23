@@ -709,6 +709,12 @@ export class NativeRuntime {
   }
 }
 
+export type ScopeFailureDebug = {
+  version: 'natlang.scope_failure/1'; serial: number; kind: 'compile' | 'runtime' | 'boundary';
+  message: string; code: string; scope: Record<string, unknown>; trace: Record<string, unknown>[];
+  diagnostics: Record<string, unknown>[]; logs: string[]; stack?: string;
+};
+
 export class NativeSession {
   completed = false;
   actions = 0;
@@ -716,11 +722,48 @@ export class NativeSession {
   surfaceName = 'scope-eval-v1';
   readonly env: TypeEnv;
   private scopeCallSequence = 0;
+  failureSerial = 0;
+  failureDebug?: ScopeFailureDebug;
   private readonly scopeLocalMutability = new Map<string, boolean>();
   private readonly explainedNaturalFunctions = new Set<string>();
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly outerEnv: TypeEnv,
     readonly path = '') {
     this.env = outerEnv.child(lam.types);
+  }
+  get failureBinding(): string | undefined {
+    if (!this.failureDebug) return;
+    const used = new Set([...Object.keys(this.lam.args), ...Object.keys(this.lam.let),
+      ...Object.keys(this.lam.codebase), 'result', 'folder', 'fs']);
+    for (const name of ['debug', '__natlangDebug']) if (!used.has(name)) return name;
+    let suffix = 2;
+    while (used.has(`__natlangDebug${suffix}`)) suffix++;
+    return `__natlangDebug${suffix}`;
+  }
+  private captureScopeFailure(kind: ScopeFailureDebug['kind'], code: string,
+    scope: Record<string, unknown>, message: string, diagnostics: Record<string, unknown>[] = [],
+    error?: unknown): string {
+    const trace = this.runtime.trace.events.filter(event =>
+      ['action', 'eval', 'effect', 'host', 'node', 'invocation', 'folder'].includes(event.kind)).slice(-24)
+      .map(event => {
+        const fields: [string, unknown][] = [];
+        for (const key of ['seq', 'kind', 'path', 'phase', 'transition', 'operation',
+          'capability', 'status', 'outcome', 'error', 'result_text', 'call_id']) {
+          const value = event[key];
+          if (typeof value === 'string') fields.push([key, value.slice(0, 1200)]);
+          else if (typeof value === 'number' || typeof value === 'boolean') fields.push([key, value]);
+        }
+        return Object.fromEntries(fields);
+      });
+    const sourceStack = error instanceof EvalFailure ? error.debug.sourceStack : error instanceof Error ? error.stack : undefined;
+    const logs = error instanceof EvalFailure ? error.debug.logs ?? [] : [];
+    this.failureDebug = { version: 'natlang.scope_failure/1', serial: ++this.failureSerial,
+      kind, message, code: code.slice(0, 16000), scope, trace, diagnostics,
+      logs: logs.slice(0, 32).map(line => line.slice(0, 2000)),
+      ...(sourceStack ? { stack: sourceStack.split('\n').slice(0, 12).join('\n').slice(0, 4000) } : {}) };
+    this.runtime.trace.emit('scope_failure', { path: this.path, failure_kind: kind, serial: this.failureSerial,
+      message: message.slice(0, 1200), diagnostic_count: diagnostics.length });
+    return `\nDebug snapshot available as immutable ${this.failureBinding} in the next eval. ` +
+      'Inspect its scope, diagnostics, logs, stack, and trace before revising the code. Host effects may already have happened.';
   }
   finish(): boolean {
     if (this.lam.return === MISSING || this.lam.type.kind !== 'lambda') return false;
@@ -1141,11 +1184,12 @@ export class NativeSession {
     } catch { return; }
   }
 
-  private scopeView(): Record<string, unknown> {
+  private scopeView(includeDebug = true): Record<string, unknown> {
     const locals = Object.fromEntries(Object.entries(this.lam.let).filter(([, value]) => !pending(value)));
     if (!Object.hasOwn(locals, 'result') && this.lam.return !== MISSING) locals.result = this.lam.return;
     return { args: inlineEvalView(this.lam.args as Value), inputs: inlineEvalView(this.lam.args as Value),
-      locals: inlineEvalView(locals as Value) };
+      locals: inlineEvalView(locals as Value),
+      ...(includeDebug && this.failureDebug ? { debug: this.failureDebug } : {}) };
   }
 
   scopeBridge(operation: string, raw: unknown[]): unknown {
@@ -1362,6 +1406,7 @@ export class NativeSession {
   private async scopeEvalNative(code: string): Promise<NativeResult> {
     if (!code.trim())
       return rejected(new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]));
+    const scopeBefore = this.scopeView(false);
     const opaqueInputs = Object.entries(this.lam.args)
       .filter(([, value]) => isLazyDict(value) || value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle);
     const opaqueInputNames = new Set(opaqueInputs.map(([name]) => name));
@@ -1378,13 +1423,16 @@ export class NativeSession {
     const helperNames = Object.keys(this.lam.codebase);
     const opaqueNames = [...opaqueInputs, ...opaqueLocals].map(([name]) => name);
     if (this.lam.projectTransaction) opaqueNames.push('folder', 'fs');
+    const debugBinding = this.failureBinding;
+    if (debugBinding) opaqueNames.push(debugBinding);
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: helperNames,
       opaqueBindings: opaqueNames, resultBinding: true,
       ...this.runtime.environment.scopeCapabilities });
     if (!compiled.ok || !compiled.program) {
       const text = compiled.diagnostics.map(item =>
         `${item.line}:${item.column} ${item.code}: ${item.message}`).join('\n');
-      return { kind: 'rejected', text, codes: [...new Set(compiled.diagnostics.map(item => item.code))] };
+      return { kind: 'rejected', text: text + this.captureScopeFailure('compile', code, scopeBefore,
+        text, compiled.diagnostics), codes: [...new Set(compiled.diagnostics.map(item => item.code))] };
     }
     const handleFactory = `const __makeHandle = (descriptor: Record<string, unknown>) => {\n` +
       `  const value: Record<string, unknown> = { __natlangHandle: descriptor };\n` +
@@ -1404,6 +1452,7 @@ export class NativeSession {
       `fx.natlang.scope(self.__natlangScopeToken, "handle", [value, method, ...args]) });\n` +
       `  return value;\n};\n`;
     const handleBindings = [
+      ...(debugBinding ? [`const ${debugBinding} = self.debug;`] : []),
       ...opaqueInputs.map(([name, value]) => isLazyDict(value) ?
         `const ${name} = ${JSON.stringify(this.materializeLazyDict(value))};` :
         `const ${name} = __makeHandle(${JSON.stringify({ source: 'arg', name,
@@ -1478,6 +1527,7 @@ export class NativeSession {
       }
       if (functionResult !== undefined) {
         this.lam.return = functionResult;
+        this.failureDebug = undefined;
         if (this.lam.subtype === 'directory-reducer') {
           this.lam.commitInclude = undefined; this.lam.commitExclude = undefined;
         }
@@ -1496,8 +1546,13 @@ export class NativeSession {
         value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
-      if (error instanceof Reject) return rejected(error);
-      return { kind: 'error', text: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      const note = this.captureScopeFailure(error instanceof EvalFailure ? 'runtime' : 'boundary',
+        code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error);
+      if (error instanceof Reject) {
+        const result = rejected(error); return { ...result, text: result.text + note };
+      }
+      return { kind: 'error', text: message + note };
     }
   }
 

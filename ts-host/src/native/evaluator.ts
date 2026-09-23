@@ -5,7 +5,10 @@ export type HostEvent = { operation: string; [key: string]: unknown };
 export type EvalResult = { result: unknown; events: HostEvent[]; logs?: string[] };
 
 export class EvalFailure extends Error {
-  constructor(message: string, readonly events: HostEvent[]) { super(message); this.name = 'EvalFailure'; }
+  constructor(message: string, readonly events: HostEvent[],
+    readonly debug: { sourceStack?: string; logs?: string[] } = {}) {
+    super(message); this.name = 'EvalFailure';
+  }
 }
 
 /** The deliberately small boundary between reduction and a crisp evaluator. */

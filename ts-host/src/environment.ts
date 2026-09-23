@@ -203,9 +203,10 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
+    let logs: string[] = [];
     try {
       const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
-      const logs = this.captureConsole(context);
+      logs = this.captureConsole(context);
       const scope = snapshot(request.scope) as Record<string, unknown>;
       context.self = scope;
       context.locals = scope.let ?? {};
@@ -216,7 +217,9 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       const result = portable(value === undefined ? null : value);
       return { result, events: this.capture(request, 'completed'), logs };
     } catch (error) {
-      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
+      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+        { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+          error.stack : undefined, logs });
     }
   }
 
@@ -224,9 +227,10 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
+    let logs: string[] = [];
     try {
       const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
-      const logs = this.captureConsole(context);
+      logs = this.captureConsole(context);
       const scope = snapshot(request.scope) as Record<string, unknown>;
       context.self = scope; context.locals = scope.let ?? {};
       const previousFx = context.fx;
@@ -253,7 +257,9 @@ export class TypeScriptEnvironment implements EvalEnvironment {
         return { result, events: this.capture(request, 'completed'), logs };
       } finally { context.fx = previousFx; }
     } catch (error) {
-      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
+      throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+        { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+          error.stack : undefined, logs });
     }
   }
 

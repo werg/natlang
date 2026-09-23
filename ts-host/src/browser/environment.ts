@@ -113,13 +113,12 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     this.observe?.(evalEvent); return [...events, evalEvent];
   }
 
-  private run(request: EvalRequest, asyncBody: boolean): { value: unknown; logs: string[] } {
+  private run(request: EvalRequest, asyncBody: boolean, logs: string[]): { value: unknown; logs: string[] } {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     const evaluator = this.mode === 'retained' ? (this.evaluator ??= this.makeEvaluator()) : this.makeEvaluator();
     const scope = snapshot(request.scope) as Record<string, unknown>;
-    const logs: string[] = [];
     const log = (...values: unknown[]) => {
       if (logs.length >= 32) return;
       const line = values.map(value => {
@@ -142,20 +141,26 @@ export class TypeScriptEnvironment implements EvalEnvironment {
   }
 
   execute(request: EvalRequest): EvalResult {
+    const logs: string[] = [];
     try {
-      const { value, logs } = this.run(request, false);
+      const { value } = this.run(request, false, logs);
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
         throw new TypeError('async eval results require a host job and later poll');
       return { result: portable(value === undefined ? null : value), events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed')); }
+    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+        error.stack : undefined, logs }); }
   }
 
   async executeAsync(request: EvalRequest): Promise<EvalResult> {
+    const logs: string[] = [];
     try {
-      const { value, logs } = this.run(request, request.body);
+      const { value } = this.run(request, request.body, logs);
       const resolved = await value;
       return { result: portable(resolved === undefined ? null : resolved), events: this.capture(request, 'completed'), logs };
-    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed')); }
+    } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'),
+      { sourceStack: error && typeof error === 'object' && 'stack' in error && typeof error.stack === 'string' ?
+        error.stack : undefined, logs }); }
   }
 
   close(): void { this.disposed = true; this.evaluator = undefined; }

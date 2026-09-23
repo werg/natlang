@@ -17,7 +17,7 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
 
     assert config['version'] == 'natlang.training_pipeline/1'
     assert [stage['id'] for stage in config['stages']] == [
-        'acquire', 'assemble', 'freeze-runtime', 'observe-source', 'synthetic', 'teacher-seeds', 'prepare',
+        'acquire', 'assemble', 'freeze-runtime', 'freeze-failure-corpus', 'observe-source', 'synthetic', 'teacher-seeds', 'prepare',
         'training-readiness', 'render-general', 'audit-general', 'train-general', 'render-coding', 'audit-coding', 'train-coding',
         'teacher', 'materialize-teacher', 'prepare-teacher', 'render-teacher', 'audit-teacher', 'train-teacher',
     ]
@@ -33,6 +33,9 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
     assert '${run}/source-observations.jsonl' in stages['synthetic']['command']
     assert '${run}/synthetic/code-proposals.jsonl' in stages['synthetic']['outputs']
     assert '${run}/teacher-programs.jsonl' in stages['teacher-seeds']['outputs']
+    assert '${run}/failure-repair-cases.jsonl' in stages['freeze-failure-corpus']['outputs']
+    assert '${run}/failure-repair-cases.jsonl' in stages['teacher-seeds']['inputs']
+    assert '${run}/failure-repair-cases.jsonl' in stages['teacher-seeds']['command']
     assert '${run}/source-observations.jsonl' in stages['observe-source']['outputs']
     assert '${run}/synthetic/code-proposals.jsonl' in stages['prepare']['inputs']
     for name in ('observe-source', 'synthetic', 'teacher-seeds', 'teacher', 'materialize-teacher'):

@@ -19,7 +19,8 @@ const TOOL_SCHEMA = 'scope-eval-v1';
 
 export type ProgramRecord = { version: string; id: string; kind: string;
   semantics: { root: Record<string, unknown>; inputs: Record<string, unknown>; expected: unknown;
-    operation?: string; effects?: Record<string, unknown>; events?: unknown[] }; [key: string]: unknown };
+    operation?: string; effects?: Record<string, unknown>; events?: unknown[];
+    failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' } }; [key: string]: unknown };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
   segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
@@ -45,6 +46,11 @@ export function validateFocusedRecord(record: ProgramRecord): void {
   if (!record.id || !record.semantics || typeof record.semantics !== 'object' ||
       !record.semantics.root || !record.semantics.inputs || !Object.hasOwn(record.semantics, 'expected'))
     throw new Error('invalid focused program IR record');
+  if (record.semantics.failure_seed &&
+      (typeof record.semantics.failure_seed.code !== 'string' || !record.semantics.failure_seed.code.trim() ||
+       (record.semantics.failure_seed.kind !== undefined &&
+        !['compile', 'runtime', 'boundary'].includes(record.semantics.failure_seed.kind))))
+    throw new Error('failure_seed must contain nonempty code and a supported failure kind');
 }
 
 export async function loadRecords(path: string, start = 0, limit = 10): Promise<IndexedRecord[]> {
@@ -209,8 +215,8 @@ function bindInputs(root: ReturnType<typeof buildPending>, inputs: Record<string
 function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
-  return { phase: request.tools.length ? 'action' : 'checkpoint', context: request.messages,
-    tools_offered: request.tools, assistant: { content: response.text ?? '',
+  return { phase: request.tools.length ? 'action' : 'checkpoint', context: structuredClone(request.messages),
+    tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
       reasoning: message.reasoning_content ?? message.reasoning ?? message.thinking ?? null,
       calls: (response.calls ?? []).map(([tool, args]) => ({ tool, source_tool: tool, arguments: args, call_id: null })) },
     raw_response_sha256: raw ? sha256(canonical(raw)) : null };
@@ -258,7 +264,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
           throw new Error(`partial teacher replay diverged at model turn ${replayIndex}`);
         response = structuredClone(recorded.response);
       } else {
-        response = await transport(request);
+        response = replayIndex === 0 && item.record.semantics.failure_seed ?
+          { calls: [['eval', { code: item.record.semantics.failure_seed.code }]], completion_tokens: 1 } :
+          await transport(request);
         partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
         // The response is durable before its actions execute. A restart can
         // replay it into the deterministic frozen harness without another decode.
@@ -285,9 +293,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     try {
       const result = await runtime.runRoot(root), actual = dump(result.value);
       const expectedKind = item.record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
+      const seededFailure = item.record.semantics.failure_seed;
+      const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
+        (!seededFailure.kind || event.failure_kind === seededFailure.kind));
       if (Object.hasOwn(effects.observed, 'out.emit')) effects.observed['out.emit'] = result.emitted;
       const effectsOk = same(effects.observed, effects.expected);
-      const accepted = result.outcome.kind === expectedKind && effectsOk &&
+      const accepted = failureSeen && result.outcome.kind === expectedKind && effectsOk &&
         (expectedKind !== 'done' || same(actual, item.record.semantics.expected));
       const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
         id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,

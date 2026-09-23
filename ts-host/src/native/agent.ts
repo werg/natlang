@@ -161,7 +161,11 @@ export class NativeToolAgent {
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string);
       validationFeedback?: 'caller' | 'local'; review?: NativeReviewOptions;
+      maxFailureRepairs?: number;
       segmentTurns?: number | null; segmentMessages?: number | null } = {}) {
+    if (options.maxFailureRepairs !== undefined &&
+        (!Number.isInteger(options.maxFailureRepairs) || options.maxFailureRepairs < 0))
+      throw new RangeError('maxFailureRepairs must be a non-negative integer');
     if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
         (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
       throw new RangeError('segmentTurns must be positive or null');
@@ -338,7 +342,12 @@ export class NativeToolAgent {
   async run(session: NativeSession): Promise<string | void> {
     const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
       ? this.options.systemPrompt() : this.options.systemPrompt ?? EXPLICIT_TOOLS_PROMPT) +
-      (session.lam.subtype === 'directory-reducer' ? DIRECTORY_REDUCER_PROMPT : '');
+      (session.lam.subtype === 'directory-reducer' ? DIRECTORY_REDUCER_PROMPT : '') +
+      (session.failureDebug ? `\nThe last eval failed. An immutable ${session.failureBinding} value is now in eval scope. ` +
+        'It has kind, message, code, scope (inputs and persistent locals before the failed eval), diagnostics, logs, stack, and a compact trace. ' +
+        `Use eval to probe ${session.failureBinding} and the current scope, then submit a corrected eval. ` +
+        'A failed eval did not commit portable locals or the function result, but host effects may have occurred; inspect the trace before retrying any effectful call. ' +
+        'Do not mark the failed step complete or report a task error merely because an eval failed.\n' : '');
     const openingMessages = (): Record<string, unknown>[] => [
       { role: 'system', content: systemPrompt() },
       { role: 'user', content: this.scopeOpening(session) },
@@ -347,7 +356,7 @@ export class NativeToolAgent {
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, nudges = 0, turns = 0, withdrawals = 0, segmentTurns = 0;
-    let checkpointReady = true;
+    let checkpointReady = true, failureRepairs = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -506,6 +515,7 @@ export class NativeToolAgent {
           { id: `call_${turns}_${i}`, type: 'function', function: { name, arguments: JSON.stringify(args) } };
       });
       const results: NativeResult[] = [];
+      const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
         const result: NativeResult = await session.applyAsync(name, args);
@@ -520,6 +530,14 @@ export class NativeToolAgent {
       checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&
         ['eval', 'edit_file', 'mark_lines', 'commit'].includes(calls[results.length - 1]?.[0] ?? '');
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
+      if (session.failureSerial > previousFailureSerial) {
+        checkpointReady = false;
+        if (++failureRepairs > (this.options.maxFailureRepairs ?? 3))
+          return `eval repair limit reached: ${session.failureDebug?.message ?? 'failure'}`;
+        continue;
+      }
+      if (!session.failureDebug && results.some((result, index) => calls[index]?.[0] === 'eval' && result.kind === 'ok'))
+        failureRepairs = 0;
       const failed = results.find(result => ['rejected', 'refused'].includes(result.kind));
       if (this.options.validationFeedback !== 'local' && failed)
         return `validation failed: ${failed.text}`;

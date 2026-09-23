@@ -49,6 +49,11 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         [f"{r}/sources/manifest.json", f"{p}/ts-host/scripts/code-corpus/assemble.mjs", *inventories], [f"{r}/bundle/complete.jsonl", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f'{r}/bundle/rejected.jsonl'])
     add("freeze-runtime", [python, f"{p}/scripts/freeze_training_runtime.py", f"{p}/ts-host", f"{r}/runtime-host"],
         [f"{p}/scripts/freeze_training_runtime.py"], [f"{r}/runtime-host/frozen-runtime.json", f"{r}/runtime-host/dist", f"{r}/runtime-host/scripts", f"{r}/runtime-host/prelude.js"])
+    failure_cases = f"{r}/failure-repair-cases.jsonl"
+    add("freeze-failure-corpus", ["node", f"{r}/runtime-host/scripts/failure-corpus/freeze.mjs", failure_cases],
+        [f"{r}/runtime-host/frozen-runtime.json", f"{r}/runtime-host/scripts/failure-corpus/cases.mjs",
+         f"{r}/runtime-host/scripts/failure-corpus/freeze.mjs"],
+        [failure_cases, f"{failure_cases}.manifest.json"])
     typed_names = ("exercism-typescript.tasks.jsonl", "radashi.tasks.jsonl", "deno-std.final.tasks.jsonl", "remeda.tasks.jsonl")
     observation_inputs = [path for name in typed_names for path in inventories if Path(path).name == name]
     if inventories_override is not None:
@@ -130,8 +135,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
              f'{p}/ts-host/scripts/code-corpus/workspace-pilot.mjs', f'{p}/ts-host/scripts/code-corpus/replay.mjs'],
             [f'{case_out}/manifest.json', f'{case_out}/native-replay.jsonl.turns.jsonl'])
         verified_turns.append(f'{case_out}/native-replay.jsonl.turns.jsonl')
-    add("teacher-seeds", ["node", f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl", str(teacher_programs), "42"],
-        [f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{p}/ts-host/dist/teacher/synthetic-generator.js", f"{r}/synthetic/teacher-programs.jsonl"],
+    add("teacher-seeds", ["node", f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl", str(teacher_programs), "42", failure_cases],
+        [f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{p}/ts-host/dist/teacher/synthetic-generator.js", f"{r}/synthetic/teacher-programs.jsonl", failure_cases],
         [f"{r}/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl.manifest.jsonl"])
     add("prepare", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared", "--code", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl",
                        "--native", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns,

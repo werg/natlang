@@ -229,6 +229,112 @@ test('failed scope child bubbles to eval without leaving a resumable model-facin
   assert.equal(Object.hasOwn(lam.let, 'answer'), false);
 });
 
+test('failed eval exposes an immutable, probeable scope and trace without committing partial locals', async () => {
+  const lam = buildPending({ $lambda: { type: '(item: { deep: { count: number } }) => number',
+    instructions: 'Return the count plus one.', args: { item: { deep: { count: 4 } } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.equal((await session.applyAsync('eval', { code: 'const earlier = item.deep.count; console.log("earlier", earlier);' })).kind, 'ok');
+  const failed = await session.applyAsync('eval', { code:
+    'const transient = item.deep.count * 2; console.log("before failure", transient); throw new Error("broken step");' });
+  assert.equal(failed.kind, 'error');
+  assert.match(failed.text, /immutable debug/);
+  assert.equal(Object.hasOwn(lam.let, 'transient'), false);
+  assert.equal(lam.return, MISSING);
+  assert.equal(session.failureDebug.kind, 'runtime');
+  assert.equal(session.failureDebug.scope.inputs.item.deep.count, 4);
+  assert.equal(session.failureDebug.scope.locals.earlier, 4);
+  assert.deepEqual(session.failureDebug.logs, ['before failure 8']);
+  assert.ok(session.failureDebug.trace.some(event => event.kind === 'action'));
+  assert.match(session.failureDebug.stack, /broken step/);
+  const probe = await session.applyAsync('eval', { code:
+    'console.log("count", debug.scope.inputs.item.deep.count); debug.kind' });
+  assert.equal(probe.kind, 'ok');
+  assert.match(probe.text, /count 4/);
+  assert.ok(session.failureDebug, 'a diagnostic probe must keep the failure available');
+  const recovered = await session.applyAsync('eval', { code: 'result = item.deep.count + 1' });
+  assert.equal(recovered.kind, 'ok');
+  assert.equal(lam.return, 5);
+  assert.equal(session.failureDebug, undefined);
+});
+
+test('compile failure retains source diagnostics for a subsequent eval', async () => {
+  const lam = buildPending({ $lambda: { type: '() => number', instructions: 'Return two.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const failed = await session.applyAsync('eval', { code: 'const answer = ;' });
+  assert.equal(failed.kind, 'rejected');
+  assert.equal(session.failureDebug.kind, 'compile');
+  assert.ok(session.failureDebug.diagnostics.length);
+  const probe = await session.applyAsync('eval', { code: 'debug.diagnostics[0].code' });
+  assert.equal(probe.kind, 'ok');
+  assert.equal(probe.value, 'typescript-syntax');
+  const immutable = await session.applyAsync('eval', { code: 'debug.message = "forged";' });
+  assert.equal(immutable.kind, 'rejected');
+  assert.match(immutable.text, /immutable in eval/);
+});
+
+test('failure debug uses a distinct binding when an input is named debug', async () => {
+  const lam = buildPending({ $lambda: { type: '(debug: number) => number',
+    instructions: 'Return debug plus one.', args: { debug: 5 } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  assert.equal((await session.applyAsync('eval', { code: 'throw new Error("failed")' })).kind, 'error');
+  assert.equal(session.failureBinding, '__natlangDebug');
+  const probe = await session.applyAsync('eval', { code: '__natlangDebug.scope.inputs.debug' });
+  assert.equal(probe.kind, 'ok');
+  assert.equal(probe.value, 5);
+});
+
+test('model repairs an eval failure in caller-feedback mode using the debug snapshot', async () => {
+  const requests = [];
+  const script = [
+    ['eval', { code: 'result = String(items[9].value)' }],
+    ['eval', { code: 'debug.scope.inputs.items.length' }],
+    ['eval', { code: 'result = String(items[0].value)' }],
+    ['mark_lines', { start: 1 }],
+  ];
+  const agent = new NativeToolAgent(request => {
+    requests.push(structuredClone(request));
+    return { calls: [script[requests.length - 1]], completion_tokens: 1 };
+  }, { validationFeedback: 'caller', maxTurns: 5 });
+  const result = await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: '(items: { value: number }[]) => string', instructions: 'Return the first value as text.',
+    args: { items: [{ value: 7 }] } } });
+  assert.equal(result.outcome.kind, 'done');
+  assert.equal(result.value, '7');
+  assert.equal(requests.length, 4);
+  assert.match(requests[1].messages[0].content, /immutable debug/);
+  assert.match(requests[1].messages.at(-1).content, /Debug snapshot available/);
+});
+
+test('repeated failed repairs stop at the configured limit', async () => {
+  let turns = 0;
+  const agent = new NativeToolAgent(() => {
+    turns++;
+    return { calls: [['eval', { code: 'throw new Error("still broken")' }]], completion_tokens: 1 };
+  }, { validationFeedback: 'caller', maxFailureRepairs: 1 });
+  const result = await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: '() => number', instructions: 'Return one.' } });
+  assert.equal(result.outcome.kind, 'quiesced');
+  assert.match(result.outcome.detail, /eval repair limit reached/);
+  assert.equal(turns, 2);
+});
+
+test('diagnostic probes do not reset the failure repair budget', async () => {
+  let turns = 0;
+  const script = [
+    'throw new Error("first failure")',
+    'debug.kind',
+    'throw new Error("second failure")',
+  ];
+  const agent = new NativeToolAgent(() => ({
+    calls: [['eval', { code: script[turns++] }]], completion_tokens: 1,
+  }), { validationFeedback: 'caller', maxFailureRepairs: 1 });
+  const result = await new NativeRuntime({ agent: session => agent.run(session) }).runRoot({ $lambda: {
+    type: '() => number', instructions: 'Return one.' } });
+  assert.equal(result.outcome.kind, 'quiesced');
+  assert.match(result.outcome.detail, /eval repair limit reached/);
+  assert.equal(turns, 3);
+});
+
 test('scope read_value slices string by zero-based characters and lists by items', () => {
   const lam = buildPending({ $lambda: { type: '(text: string, flags: boolean[]) => string',
     instructions: 'Return part of the text.', args: { text: 'alpha\nbeta', flags: [true, false, true] } } });

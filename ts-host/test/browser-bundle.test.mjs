@@ -28,6 +28,32 @@ test('browser bundle runs typed crisp and model programs without Node builtins',
   } finally { host.close(); }
 });
 
+test('browser model can probe a failed eval snapshot and repair the function', async () => {
+  const nodeProcess = globalThis.process;
+  let api;
+  try { globalThis.process = undefined; api = await import('../dist/browser/natlang.js'); }
+  finally { globalThis.process = nodeProcess; }
+  const host = new api.BrowserNatlangHost();
+  const script = [
+    ['eval', { code: 'result = value.missing.deep' }],
+    ['eval', { code: 'debug.kind' }],
+    ['eval', { code: 'result = value + 1' }],
+    ['mark_lines', { start: 1 }],
+  ];
+  let turns = 0;
+  try {
+    const result = await host.run({ source: { kind: 'program', program: { $lambda: {
+      type: '(value: number) => number', instructions: 'Return the next number.', args: { value: 4 } } } },
+    validationFeedback: 'caller', modelTurn: request => {
+      if (turns === 1) assert.match(request.messages[0].content, /immutable debug/);
+      return { calls: [script[turns++]], completion_tokens: 1 };
+    } });
+    assert.equal(result.outcome.kind, 'done');
+    assert.equal(result.value, 5);
+    assert.equal(turns, 4);
+  } finally { host.close(); }
+});
+
 test('browser natural functions call companion TypeScript subfunctions without await', async () => {
   const nodeProcess = globalThis.process;
   let api;
