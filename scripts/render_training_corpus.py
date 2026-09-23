@@ -104,6 +104,8 @@ def _call_template(tokenizer: Any, messages: list[dict[str, Any]], tools: list[d
     template_messages = []
     for message in messages:
         normalized = dict(message)
+        if normalized.get('reasoning_content') and not normalized.get('thinking'):
+            normalized['thinking'] = normalized['reasoning_content']
         if isinstance(message.get('tool_calls'), list):
             calls = []
             for call in message['tool_calls']:

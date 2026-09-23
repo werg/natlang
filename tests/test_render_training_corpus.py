@@ -66,6 +66,22 @@ def test_render_decodes_tool_arguments_for_templates_without_changing_ir():
     assert raw_call['function']['arguments'] == '{"code":"1 + 1"}'
 
 
+def test_render_preserves_teacher_reasoning_for_thinking_only_templates():
+    class ThinkingTokenizer(MockTokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            formatted = [{**message, 'content': (f"<think>{message['thinking']}</think>"
+                         if message.get('thinking') else '') + message.get('content', '')}
+                         for message in messages]
+            return super().apply_chat_template(formatted, **kwargs)
+
+    row = {'id': 'thinking', 'messages': [{'role': 'user', 'content': 'Compute.'}],
+           'tools': [], 'target': {'role': 'assistant', 'content': 'Done.'},
+           'teacher_reasoning': 'The computation is complete.',
+           'training_admission': {'approved': True}}
+    pair = render_turn(row, ThinkingTokenizer(), '<eos>')
+    assert '<think>The computation is complete.</think>' in pair['completion']
+
+
 def test_target_prefix_and_end_token_are_required():
     row = {"id": "bad", "messages": [{"role": "user", "content": "x"}], "tools": [],
            "target": {"role": "assistant", "content": "answer"},
