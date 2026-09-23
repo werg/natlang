@@ -20,8 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install TypeScript dependencies
-        working-directory: ts-host
-        run: npm ci
+        run: npm --prefix ts-host ci
       - name: Runtime, applications, and conformance tests
         working-directory: ts-host
         run: npm test

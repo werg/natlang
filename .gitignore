@@ -9,6 +9,7 @@ models/templates/*
 !models/templates/LFM2.5-350M.jinja
 vendor/
 data/
+!ts-host/studio/programs/data/
 *.tgz
 .natlang/
 *.d.nl.ts
