@@ -16,8 +16,8 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
     assert config['version'] == 'natlang.training_pipeline/1'
     assert [stage['id'] for stage in config['stages']] == [
         'acquire', 'assemble', 'freeze-runtime', 'observe-source', 'synthetic', 'teacher-seeds', 'prepare',
-        'render-general', 'train-general', 'render-coding', 'train-coding',
-        'teacher', 'materialize-teacher', 'prepare-teacher', 'render-teacher', 'train-teacher',
+        'training-readiness', 'render-general', 'audit-general', 'train-general', 'render-coding', 'audit-coding', 'train-coding',
+        'teacher', 'materialize-teacher', 'prepare-teacher', 'render-teacher', 'audit-teacher', 'train-teacher',
     ]
     assert '--execute' in stages['observe-source']['command']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['freeze-runtime']['outputs']
@@ -49,6 +49,7 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
         command = stages[name]['command']
         assert '--epochs' in command and command[command.index('--epochs') + 1] == '1'
         assert '--no-merge' in command and '--skip-heldout-loss' in command
+        assert '--require-audit' in command
         assert '--data-order' in command and command[command.index('--data-order') + 1] == 'source'
         assert not any('baseline' in value or 'benchmark' in value or 'compare' in value for value in command)
 
@@ -77,7 +78,7 @@ def test_student_selection_propagates_to_every_render_and_training_stage(tmp_pat
     revision = 'a' * 40
     stages = stages_by_id(recipe(tmp_path, model=model, revision=revision))
     for phase in ('general', 'coding', 'teacher'):
-        for kind, revision_flag in [('render', '--revision'), ('train', '--model-revision')]:
+        for kind, revision_flag in [('render', '--revision'), ('audit', '--revision'), ('train', '--model-revision')]:
             command = stages[f'{kind}-{phase}']['command']
             assert command[command.index('--model') + 1] == model
             assert command[command.index(revision_flag) + 1] == revision
@@ -101,3 +102,35 @@ def test_lora_stages_chain_checkpoint_adapters_in_order(tmp_path):
 def test_recipe_rejects_full_weight_stage_chaining(tmp_path):
     with pytest.raises(ValueError, match='chains LoRA adapters'):
         recipe(tmp_path, train_args=['--full'])
+
+
+@pytest.mark.parametrize('args', [[], ['--max-len', '2048'], ['--max-len=2048']])
+def test_audit_precedes_training_and_uses_effective_context_budget(tmp_path, args):
+    config = recipe(tmp_path, train_args=args)
+    stages = stages_by_id(config)
+    ids = list(stages)
+    for phase in ('general', 'coding', 'teacher'):
+        audit, train = stages[f'audit-{phase}'], stages[f'train-{phase}']
+        assert ids.index(f'render-{phase}') < ids.index(f'audit-{phase}') < ids.index(f'train-{phase}')
+        assert audit['command'][audit['command'].index('--max-len') + 1] == ('2048' if args else '8192')
+        assert f'${{run}}/{phase}.ready.jsonl' in train['command']
+        assert '${run}/training-readiness.json' in train['inputs']
+        assert '--gpus' not in stages['training-readiness']['command']
+
+
+def test_student_cannot_be_changed_only_for_training(tmp_path):
+    with pytest.raises(ValueError, match='render, audit and trainer agree'):
+        recipe(tmp_path, train_args=['--model=other'])
+
+
+def test_existing_test_captures_are_inputs_to_observation(tmp_path):
+    captured = tmp_path / 'data/direct-code-2026-09-23/fixture/captures.jsonl'
+    captured.parent.mkdir(parents=True)
+    captured.write_text('')
+    observer = stages_by_id(recipe(tmp_path))['observe-source']
+    assert str(captured) in observer['inputs']
+    assert observer['command'][observer['command'].index('--captures') + 1] == str(captured)
+    explicit = tmp_path / 'explicit-calls.jsonl'
+    observer = stages_by_id(recipe(tmp_path, captures_override=[explicit]))['observe-source']
+    assert str(explicit) in observer['inputs']
+    assert str(captured) not in observer['inputs']

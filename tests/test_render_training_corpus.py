@@ -38,7 +38,7 @@ def test_render_native_turn_preserves_provenance_and_uses_assistant_generation_p
     row = {"id": "turn-1", "program_id": "program-1", "source_groups": ["source-group"],
            "split": "train", "family": "fixture", "skill": "write", "quality": {"score": 0.9},
            "messages": [{"role": "user", "content": "Say hi"}], "tools": [],
-           "target": {"role": "assistant", "content": "Hello<eos>ignored"},
+           "target": {"role": "assistant", "content": "Hello"},
            "training_admission": {"approved": True}}
     pair = render_turn(row, MockTokenizer(), "<eos>")
     assert pair["prompt"] == "<user>Say hi<eos><assistant>"
@@ -55,6 +55,9 @@ def test_target_prefix_and_end_token_are_required():
         render_turn(row, BadPrefixTokenizer(), "<eos>")
     with pytest.raises(ValueError, match="end token is absent"):
         render_turn(row, MockTokenizer(), "<missing>")
+    row['target']['content'] = 'hello<eos>silently lost tail'
+    with pytest.raises(ValueError, match='refusing silent truncation'):
+        render_turn(row, MockTokenizer(), '<eos>')
 
 
 def test_code_sft_inputs_render_offline_and_preserve_source_quality_and_split(tmp_path):
@@ -160,3 +163,26 @@ def test_final_data_without_manifest_is_recovered_only_when_cache_matches(tmp_pa
     output.write_text("user content that must not be replaced\n")
     with pytest.raises(ValueError, match="differs from verified shard cache"):
         render_corpus([source], output, model="fixture", tokenizer=MockTokenizer())
+
+
+def test_invalid_targets_get_a_resumable_rejection_ledger(tmp_path):
+    source, output = tmp_path / 'input', tmp_path / 'output'
+    rows = [{'id': 'reserved', 'messages': [{'role': 'user', 'content': 'x'}],
+             'target': {'role': 'assistant', 'content': 'bad<eos>tail'}, 'training_admission': {'approved': True}},
+            {'id': 'valid', 'messages': [{'role': 'user', 'content': 'x'}],
+             'target': {'role': 'assistant', 'content': 'ok'}, 'training_admission': {'approved': True}},
+            {'id': 'denied-code', 'kind': 'code_sft', 'syntax_checked': True,
+             'prompt': 'x', 'completion': 'let x = 1;', 'training_admission': {'approved': False}}]
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    assert render_corpus([source], output, model='fixture', tokenizer=MockTokenizer(),
+                         chunk_rows=1, should_stop=lambda: True) == 75
+    assert render_corpus([source], output, model='fixture', tokenizer=MockTokenizer(), chunk_rows=1) == 0
+    assert [json.loads(line)['id'] for line in output.read_text().splitlines()] == ['valid']
+    ledger = output.with_name(output.name + '.rejected.jsonl')
+    rejected = [json.loads(line) for line in ledger.read_text().splitlines()]
+    assert [r['reason'] for r in rejected] == ['invalid_training_view', 'not_explicitly_admitted']
+    assert 'silent truncation' in rejected[0]['detail']
+    assert render_corpus([source], output, model='fixture', tokenizer=MockTokenizer(), chunk_rows=1) == 0
+    ledger.write_text('tamper')
+    with pytest.raises(ValueError, match='rejection ledger differs'):
+        render_corpus([source], output, model='fixture', tokenizer=MockTokenizer(), chunk_rows=1)

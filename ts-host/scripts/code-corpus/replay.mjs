@@ -46,11 +46,15 @@ export async function materializeCorpus(rows) {
   result.turns = result.turns.map(turn => {
     const program = turn.task.program_ir;
     return { ...turn, source_groups:program.source_groups, source_program_ids:program.source_ids,
-      license:program.license, split:program.split, family:'code_corpus', source:program.source };
+      license:program.license, split:program.split, family:program.family ?? 'code_corpus', source:program.source,
+      generation:program.generation, behavioral_evidence:program.behavioral_evidence,
+      implementation_sha256:program.implementation_sha256,
+      execution_verified:true };
   });
   return result;
 }
 export function project(record, index = 0) {
+  if (record.verification?.status === 'rejected') throw new Error('rejected source cannot be projected');
   if (record.kind !== 'function' || !record.instruction?.trim()) throw new Error('requires a documented function');
   const cases = record.cases.filter(c => c.outcome === 'return' && c.portable !== false);
   const observations = new Map();
@@ -80,6 +84,10 @@ export function project(record, index = 0) {
   return { code: body, expected: item.expected, program: {
     version: 'natlang.program/1', id, kind: 'lambda_source', source: record.source.name,
     source_ids: [record.id], source_groups: [record.group_id], license: record.source.license,
+    family: record.generation?.family ?? record.family ?? 'code_corpus', generation:record.generation,
+    implementation_sha256: digest(record.function),
+    behavioral_evidence: record.behavioral_evidence ?? {kind:record.observation ? 'source_observed' : record.generation ? 'generated_reference' : 'captured_return',
+      note:'Native replay checks fidelity to supplied expected values, not full specification correctness.'},
     split: Number.parseInt(digest(record.group_id).slice(0, 8), 16) % 100 < 5 ? 'test' : 'train',
     semantics: { root: { $lambda: { type: `(${fields.join(', ')}) => ${boundaryType(cases.map(c => c.expected), record.function.return_type)}`,
       instructions: record.instruction.replace(/\s+/g, ' ').trim() } }, inputs: Object.fromEntries(params.map((p, i) => [p.name, item.args[i]])),

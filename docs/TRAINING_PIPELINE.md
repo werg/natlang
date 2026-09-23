@@ -75,12 +75,13 @@ flowchart LR
   D --> E[Generate candidates and native replay]
   E --> F[Select teacher seed programs]
   F --> G[Freeze linked group splits and prepare corpora]
-  G --> H[Render general] --> I[Train general]
-  I --> J[Render coding] --> K[Train coding]
+  G --> R[CPU training-readiness gate]
+  R --> H[Render general] --> AH[Token audit general] --> I[Train general]
+  I --> J[Render coding] --> AJ[Token audit coding] --> K[Train coding]
   K --> L[Collect teacher trajectories]
   L --> M[Materialize teacher turns]
   M --> N[Prepare with frozen splits]
-  N --> O[Render teacher] --> P[Train teacher]
+  N --> O[Render teacher] --> AO[Token audit teacher] --> P[Train teacher]
 ```
 
 `freeze-runtime` snapshots the already-built `ts-host/dist`, `ts-host/scripts`,
@@ -160,3 +161,78 @@ as separate files, while combining them for the coding curriculum. Provenance
 fields continue to distinguish their evidence. The pipeline manifest and row
 provenance preserve these distinctions; the recipe makes no claim that training
 has completed or that the resulting model has passed behavioral evaluation.
+
+## Data-quality and training-readiness gates
+
+Each render is followed by `audit-general`, `audit-coding`, or `audit-teacher`.
+The trainer consumes **`<phase>.ready.jsonl`**, not the unfiltered render. These
+audits use the selected student tokenizer, immutable renderer identity, and the
+effective `--max-len` (including `--train-arg=--max-len` overrides). They never
+truncate a completion. Empty targets, invalid termination, missing split/admission,
+prompt/target tokenization boundary mismatches, and over-budget examples are
+recorded in a rejection ledger and excluded before training budgets are computed.
+An audit without any usable training rows fails the stage. The trainer requires
+the matching audit and treats a subsequently encountered overlength row as an
+error, rather than skipping it and repeatedly consuming other rows.
+
+The renderer also records invalid training views and unapproved rows in
+`<phase>.sft.jsonl.rejected.jsonl`. An embedded target termination token is
+rejected instead of silently truncating the assistant response. Rendering and
+auditing commit hash-checked chunks; SIGINT/SIGTERM finishes the current chunk
+and exits 75. Use a new output/run directory when code, tokenizer, budget, or
+inputs change. Exact retries reuse committed chunks and validate final artifacts.
+
+For each phase, inspect:
+
+- `<phase>.ready.jsonl.audit.json`: eligible/rejected counts, prompt and supervised
+  tokens, length quantiles, and source/repository/family/template/evidence/split
+  distributions. Training-only counts and token shares exclude held-out rows.
+- Duplicate implementation/prompt-target clusters and largest repeated groups.
+  This reports exact identities, not semantic or renamed-code deduplication.
+- `<phase>.ready.jsonl.rejected.jsonl`: individual post-render rejection reasons.
+- Upstream rejection ledgers, when provided by the recipe, are reported separately;
+  their event counts are not added to the rendered corpus's rejected row count.
+
+The replayable synthetic generator has 16 distinct implementation families:
+deduplication, prefix sums, word counts, grouping, numeric record totals, longest
+strings, numeric/stable-key sorting, strict decimal parsing, ASCII validation,
+flattening, row totals, matrix transpose, second distinct maximum, Unicode code
+point counting, and sorted unique values. It checks family-specific properties
+alongside separate executable references. Some references share algorithms with
+the implementation; they are **not** claimed to be independent correctness
+oracles. Native replay must still reproduce the expected results.
+
+`--max-family-repetitions` defaults to 50 for replayable families, globally by
+index within a generated range: a 1,000-row request emits at most 800 replayable
+tasks. The manifest reports requested/emitted/capped counts. All inputs for the
+same implementation family share a split group. Broader object, error-handling,
+async, and dependency examples use a separate code-only lane; they are not
+promoted to native replay evidence.
+
+Source observation now tries deterministic empty/singleton/duplicate/negative/
+Unicode boundary inputs and independently varied parameters, plus compatible existing test/capture inputs.
+The recipe discovers existing `data/direct-code-2026-09-23/*/captures.jsonl`
+snapshots, or accepts repeatable `--captures` overrides. Calls are joined by exact
+source task ID, retaining return snapshots as capture fidelity evidence rather
+than independent assertions. Captures do not relax the observer's type/effect restrictions. A generated
+input outside a function's domain can fail without discarding other valid cases.
+Explicit upstream test assertions are checked without replacing their expected
+values with observed results: mismatches, contradictory duplicate assertions,
+or execution failure on a supported asserted return quarantine the task. Capture
+snapshots are only fidelity evidence, not independent assertions; disagreement
+with a capture also quarantines conversion. Mutation, unsupported exception
+outcomes, async functions, imports, and unsupported types remain explicitly
+deferred by the pure source observer. Timeout workers are not a security sandbox.
+
+`training-readiness` is a CPU-only engineering gate, not a student experiment.
+It checks completion-only masking, finite-value guards, and actual production
+checkpoint serialization/reload with a tiny model, AdamW, scheduler, and RNG.
+The continued update must match the uninterrupted update exactly. Its immutable,
+idempotent report records source hashes and package versions. Training checks
+finite loss before backward and finite gradient norm before optimizer mutation.
+A failure before the optimizer step restores the data cursor/counters and RNG
+and writes the safe boundary. A failure inside an optimizer/scheduler step is
+not transactionally reversible in memory; recover from the prior disk checkpoint.
+This CPU gate does not certify GPU kernels, GPU memory fit, or every student
+architecture. No teacher process is stopped and no GPU training is performed by
+these checks.

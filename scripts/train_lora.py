@@ -22,6 +22,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from natlang.corpus import split_programs, file_digest, digest, index_pairs
+from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_loss,
+                                        validate_training_audit,
+                                        validate_training_audit_tokenizer)
 
 import torch
 
@@ -98,6 +101,41 @@ def recover_checkpoint_directory(out):
             shutil.rmtree(old)
         if temporary.exists():
             shutil.rmtree(temporary)
+
+
+def write_checkpoint_directory(out, write_weights, optimizer_state, scheduler_state,
+                              rng_state, state_payload):
+    """Install a complete checkpoint directory with recoverable directory swaps.
+
+    ``write_weights`` writes the model-specific files into ``tmp/weights``;
+    optimizer, scheduler, RNG, and state serialization is shared with CPU
+    recovery tests so the tested checkpoint boundary is the production one.
+    """
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    tmp = out / "checkpoint.tmp"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    try:
+        write_weights(tmp / "weights")
+        torch.save(optimizer_state, tmp / "optimizer.pt")
+        torch.save(scheduler_state, tmp / "scheduler.pt")
+        torch.save(rng_state, tmp / "rng.pt")
+        (tmp / "state.json").write_text(json.dumps(state_payload))
+        checkpoint, old = out / "checkpoint", out / "checkpoint.old"
+        if checkpoint.exists():
+            if old.exists():
+                shutil.rmtree(old)
+            os.rename(checkpoint, old)
+            os.rename(tmp, checkpoint)
+            shutil.rmtree(old)
+        else:
+            os.rename(tmp, checkpoint)
+    except BaseException:
+        # Preserve a previous complete directory if promotion was interrupted.
+        recover_checkpoint_directory(out)
+        raise
 
 
 def install_stop_handlers():
@@ -258,6 +296,8 @@ def main():
     ap.add_argument("--token-cache", type=Path)
     ap.add_argument("--benchmark-steps", type=int, default=0, help="isolated throughput run, no heldout evaluation or saved model")
     ap.add_argument("--max-len", type=int, default=3072)
+    ap.add_argument("--require-audit", action="store_true",
+                    help="require a ready sibling .manifest.json matching the data bytes and --max-len")
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--load-in-4bit", action="store_true",
@@ -287,6 +327,12 @@ def main():
     ap.add_argument("--no-merge", action="store_true",
                     help="save the resumable checkpoint but skip exporting a merged model at completion")
     a = ap.parse_args()
+    audit_manifest = None
+    if a.require_audit:
+        try:
+            audit_manifest = validate_training_audit(a.data, a.max_len, a.model, a.model_revision)
+        except (OSError, ValueError) as exc:
+            ap.error(str(exc))
     stop = install_stop_handlers()
     if a.steps is not None and a.steps < 1:
         ap.error("--steps must be positive")
@@ -345,7 +391,8 @@ def main():
                     "unsloth_lfm_experts": a.unsloth_lfm_experts,
                     "unsloth_compile": a.unsloth_compile,
                     "gradient_checkpointing": a.gradient_checkpointing,
-                    "checkpoint_above_tokens": a.checkpoint_above_tokens}
+                    "checkpoint_above_tokens": a.checkpoint_above_tokens,
+                    "require_audit": a.require_audit}
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.init_adapter is not None:
@@ -393,10 +440,14 @@ def main():
                     snapshot_download(a.model, revision=a.model_revision))
         model, tok = FastLanguageModel.from_pretrained(
             model_name=base_src, max_seq_length=a.max_len, load_in_4bit=True, device_map=0)
+        if audit_manifest is not None:
+            validate_training_audit_tokenizer(audit_manifest, tok, a.model, a.model_revision)
         if a.unsloth_lfm_experts:
             restore_lfm_expert_quantization(model, base_src)
     else:
         tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision)
+        if audit_manifest is not None:
+            validate_training_audit_tokenizer(audit_manifest, tok, a.model, a.model_revision)
         load_options = {"dtype": torch.bfloat16}
         if a.model_revision:
             load_options["revision"] = a.model_revision
@@ -473,6 +524,8 @@ def main():
         if not x or not y:
             raise ValueError("Training pairs require a nonempty prompt and completion")
         if len(x) + len(y) > a.max_len:
+            if a.require_audit:
+                raise ValueError(f"audited training example at offset {offset} exceeds --max-len {a.max_len}")
             counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})
             counts[family] = counts.get(family, 0) + 1
             return None
@@ -513,24 +566,12 @@ def main():
         print(f"{len(train)} training pairs; held-out loss before: {state['heldout_before']}", flush=True)
 
     def save_checkpoint():
-        tmp = a.out / "checkpoint.tmp"
-        if tmp.exists():
-            shutil.rmtree(tmp)
-        tmp.mkdir(parents=True)
-        model.save_pretrained(tmp / "weights", safe_serialization=True)
-        torch.save(opt.state_dict(), tmp / "optimizer.pt")
-        torch.save(sched.state_dict(), tmp / "scheduler.pt")
-        torch.save(capture_rng_state(), tmp / "rng.pt")
-        (tmp / "state.json").write_text(json.dumps({**state, "args": {k: str(v) for k, v in vars(a).items()}}))
-        if ckpt.exists():                                  # swap in atomically enough: the old one goes last
-            old = a.out / "checkpoint.old"
-            if old.exists():
-                shutil.rmtree(old)
-            os.rename(ckpt, old)
-            os.rename(tmp, ckpt)
-            shutil.rmtree(old)
-        else:
-            os.rename(tmp, ckpt)
+        write_checkpoint_directory(
+            a.out,
+            lambda weights: model.save_pretrained(weights, safe_serialization=True),
+            opt.state_dict(), sched.state_dict(), capture_rng_state(),
+            {**state, "args": {k: str(v) for k, v in vars(a).items()}},
+        )
         if a.snapshot_every and state["step"] % a.snapshot_every == 0:
             snapshot = a.out / "snapshots" / f"step-{state['step']:04d}"
             snapshot_tmp = snapshot.with_name(snapshot.name + ".tmp")
@@ -603,11 +644,12 @@ def main():
                 if want_checkpointing != model.is_gradient_checkpointing:
                     set_layer_checkpointing(model, want_checkpointing, a.retain_every_n_layers)
                 loss = batch_completion_loss(model, encoded) * (len(batch) / len(examples))
+                require_finite_loss(loss, state["step"] + 1)
                 loss.backward()
                 running += loss.detach()
                 padded_tokens += encoded["input_ids"].numel()
                 batches += 1
-            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+            clip_finite_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
             optimizer_started = True
             opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
             state["step"] += 1

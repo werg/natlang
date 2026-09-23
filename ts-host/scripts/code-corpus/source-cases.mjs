@@ -18,16 +18,55 @@ function typeShape(type) {
   if (!match) return null;
   return { primitive: match[1], depth: match[2].length / 2 };
 }
-function valuesFor(shape, edge) {
-  if (shape.depth) {
-    const child = { primitive: shape.primitive, depth: shape.depth - 1 };
-    if (edge) return [];
-    if (child.depth) return [valuesFor(child, false), valuesFor(child, true)];
-    return shape.primitive === 'number' ? [0, 2, -1] : shape.primitive === 'boolean' ? [true, false] : ['', 'oak', 'blue'];
+function valueProfiles(shape) {
+  if (shape.depth === 0) {
+    if (shape.primitive === 'number') return [3, 0, -1, 2, 2, Number.MAX_SAFE_INTEGER];
+    if (shape.primitive === 'boolean') return [true, false, true, false, true, false];
+    return ['sample text', '', '🙂', 'aa', 'aa', 'e\u0301'];
   }
-  if (shape.primitive === 'number') return edge ? 0 : 3;
-  if (shape.primitive === 'boolean') return edge ? false : true;
-  return edge ? '' : 'sample text';
+  const child = { primitive: shape.primitive, depth: shape.depth - 1 };
+  if (child.depth) return [[], [valueProfiles(child)[1]], [valueProfiles(child)[2], valueProfiles(child)[2]], [valueProfiles(child)[3], valueProfiles(child)[0], valueProfiles(child)[3]], [valueProfiles(child)[0], valueProfiles(child)[1], valueProfiles(child)[0]]];
+  if (shape.primitive === 'number') return [[], [0], [2, 2, -1], [-1, 0, 1], [1, 1, 1], [Number.MAX_SAFE_INTEGER, 0, -Number.MAX_SAFE_INTEGER]];
+  if (shape.primitive === 'boolean') return [[], [false], [true, true, false], [false, true], [true, true, true], [false, false]];
+  return [[], [''], ['aa', 'aa', '🙂'], ['🙂', '', '🙂'], ['e\u0301', 'é', 'e\u0301'], ['x', 'x']];
+}
+
+function generatedArguments(parameters) {
+  const profiles = parameters.map(parameter => valueProfiles(typeShape(parameter.type)));
+  const count = Math.max(6, ...profiles.map(profile => profile.length));
+  const seen = new Set();
+  const correlated = Array.from({ length: count }, (_, index) => profiles.map(profile => profile[index % profile.length]));
+  // Equal-valued parameters alone miss subtraction, ordering, and tie branches.
+  // Vary one parameter at a time, bounded independently of unusual arities.
+  const independent = profiles.slice(0, 8).map((_, varied) => profiles.map((profile, index) => profile[index === varied ? 2 : 0]));
+  return [...correlated, ...independent]
+    .filter(args => { const key = JSON.stringify(args); if (seen.has(key)) return false; seen.add(key); return true; })
+    .map(args => ({ args, input_source: 'deterministic_boundary_generator' }));
+}
+
+function generatedOrObserved(record) {
+  return Boolean(record.generation || record.observation || record.cases?.some(item => item.provenance === 'observed_from_original_source' || item.input_source === 'deterministic_boundary_generator'));
+}
+function upstreamArguments(record) {
+  return (record.cases ?? []).map((item, index) => {
+    const args = item?.args;
+    const explicitlyAsserted = item?.provenance === 'upstream_test' || item?.provenance === 'upstream_assertion'
+      || (record.case_provenance === 'upstream_tests' && !generatedOrObserved(record));
+    const captured = !explicitlyAsserted && (Array.isArray(item?.input_after) || item?.provenance === 'runtime_capture'
+      || (record.verification?.status === 'captured' && !generatedOrObserved(record)));
+    const inputSource = explicitlyAsserted ? 'upstream_case' : captured ? 'runtime_capture' : 'existing_task_case';
+    if (!Array.isArray(args) || args.length !== record.function.parameters.length || item.portable === false || !['return', undefined].includes(item.outcome))
+      return { rejected: true, input_source: inputSource, upstream_case_index: index, ...(item.capture_key ? { capture_key:item.capture_key } : {}),
+        ...(item.reasons ? { capture_reasons:item.reasons } : {}), rejection: inputSource === 'runtime_capture' ? 'unsupported_runtime_capture' : 'unsupported_upstream_case_shape_or_outcome' };
+    if (!args.every((value, i) => portable(value) && matchesType(value, typeShape(record.function.parameters[i].type))))
+      return { rejected:true, input_source:inputSource, upstream_case_index:index, ...(item.capture_key ? { capture_key:item.capture_key } : {}),
+        rejection:inputSource === 'runtime_capture' ? 'runtime_capture_argument_type_mismatch' : 'upstream_argument_type_mismatch' };
+    return { args: structuredClone(args), input_source: inputSource, upstream_case_index: index,
+      ...(item.capture_key ? { capture_key:item.capture_key } : {}),
+      ...(Object.hasOwn(item, 'expected') ? { ...(explicitlyAsserted ? { upstream_asserted_expected: structuredClone(item.expected), upstream_asserted_expected_portable: portable(item.expected) }
+        : captured ? { captured_expected:structuredClone(item.expected), captured_input_after:item.input_after === undefined ? null : structuredClone(item.input_after) }
+          : { existing_expected: structuredClone(item.expected) }) } : {}) };
+  });
 }
 function safeRecord(record) {
   if (record.verification?.status === 'rejected') return 'source_task_rejected';
@@ -75,12 +114,16 @@ function portable(value, depth = 0) {
   return Array.isArray(value) && value.every(item => portable(item, depth + 1));
 }
 function samePortable(a,b) { return JSON.stringify(a)===JSON.stringify(b); }
+function matchesType(value, shape) {
+  if (shape.depth) return Array.isArray(value) && value.every(item => matchesType(item, { primitive: shape.primitive, depth: shape.depth - 1 }));
+  return shape.primitive === 'number' ? typeof value === 'number' && Number.isFinite(value)
+    : shape.primitive === 'boolean' ? typeof value === 'boolean' : typeof value === 'string';
+}
 
 export function sourceCases(record) {
   const reason = safeRecord(record);
   if (reason) return { eligible: false, reason, cases: [] };
-  const args = [0, 1].map(edge => record.function.parameters.map(parameter => valuesFor(typeShape(parameter.type), Boolean(edge))));
-  return { eligible: true, reason: null, cases: args.map(values => ({ args: values })) };
+  return { eligible: true, reason: null, cases: [...upstreamArguments(record), ...generatedArguments(record.function.parameters)] };
 }
 
 export function observeSourceCase(record, args, timeout = CASE_TIMEOUT_MS) {
@@ -137,8 +180,10 @@ async function validateOutputHashes(hashes) {
 
 async function main() {
   const argv = process.argv.slice(2), get = key => { const i=argv.indexOf(key); return i<0 ? undefined : argv[i+1]; };
-  if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write('Usage: node scripts/code-corpus/source-cases.mjs --input TASKS.jsonl [--input MORE.jsonl ...] --output OBSERVED.jsonl [--limit N] [--execute]\nDefault cap is 500 functions across inputs. --execute evaluates only the audited pure primitive/array subset in disposable timeout children; outputs are source observations, not upstream test labels. An unchanged command resumes from per-case cache.\n'); return; }
-  const inputs=argv.flatMap((arg,index)=>arg==='--input'?[argv[index+1]]:[]).filter(Boolean), output=get('--output'); if(!inputs.length||!output) throw new Error('--input and --output are required');
+  if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write('Usage: node scripts/code-corpus/source-cases.mjs --input TASKS.jsonl [--input MORE.jsonl ...] [--captures CAPTURES.jsonl ...] --output OBSERVED.jsonl [--limit N] [--execute]\nDefault cap is 500 functions across inputs. Captures attach by capture.key === task.id and remain source-runtime observations, not upstream test assertions. --execute evaluates only the audited pure primitive/array subset in disposable timeout children; outputs are source observations, not upstream test labels. An unchanged command resumes from per-case cache.\n'); return; }
+  const inputs=argv.flatMap((arg,index)=>arg==='--input'?[argv[index+1]]:[]).filter(Boolean);
+  const captureInputs=argv.flatMap((arg,index)=>arg==='--captures'?[argv[index+1]]:[]).filter(Boolean);
+  const output=get('--output'); if(!inputs.length||!output) throw new Error('--input and --output are required');
   const limit=Number(get('--limit')??500); if(!Number.isSafeInteger(limit)||limit<1) throw new Error('--limit must be a positive integer');
   const batches=await Promise.all(inputs.map(path=>readJsonl(path,{limit}))),tasks=[];
   for(let index=0;tasks.length<limit;index++) {
@@ -146,9 +191,23 @@ async function main() {
     for(const batch of batches) { if(batch[index] && tasks.length<limit) { tasks.push(batch[index]); added=true; } }
     if(!added) break;
   }
-  const execute=argv.includes('--execute'), inputHashes=await Promise.all(inputs.map(async path=>[resolve(path),digest(await readFile(path))]));
+  const captureBatches=await Promise.all(captureInputs.map(path=>readJsonl(path)));
+  const captures=captureBatches.flat(), captureByKey=new Map();
+  for(const capture of captures) { const list=captureByKey.get(capture.key)??[]; list.push(capture); captureByKey.set(capture.key,list); }
+  const selectedTaskIds=new Set(tasks.map(task=>task.id));
+  const matchedCaptureCases=captures.filter(capture=>selectedTaskIds.has(capture.key)).length;
+  const tasksWithCaptures=tasks.map(task=>{
+    const matched=captureByKey.get(task.id)??[];
+    const appended=matched.map(capture=>({args:capture.args,expected:capture.expected,outcome:capture.outcome,input_after:capture.input_after,
+      portable:capture.portable,reasons:capture.reasons,provenance:'runtime_capture',capture_key:capture.key}));
+    return appended.length?{...task,cases:[...(task.cases??[]),...appended]}:task;
+  });
+  const unmatchedCaptureCases=captures.length-matchedCaptureCases;
+  const execute=argv.includes('--execute'), inputHashes=await Promise.all([...inputs,...captureInputs].map(async path=>[resolve(path),digest(await readFile(path))]));
   const sourceHash=digest(await readFile(new URL('./source-cases.mjs',import.meta.url)));
-  const config={generator:'natlang.code_source_observations/1',inputs:inputHashes,limit,execute,timeout_ms:CASE_TIMEOUT_MS,source_cases_sha256:sourceHash,node:process.version,typescript:ts.version};
+  const config={generator:'natlang.code_source_observations/1',inputs:inputHashes,
+    task_inputs:inputs.map(path=>resolve(path)),capture_inputs:captureInputs.map(path=>resolve(path)),
+    limit,execute,timeout_ms:CASE_TIMEOUT_MS,source_cases_sha256:sourceHash,node:process.version,typescript:ts.version};
   const manifestPath=`${output}.manifest.json`,cacheDir=`${output}.cache`;
   const outputPath=resolve(output),reportPath=resolve(`${output}.report.json`);
   try {
@@ -161,17 +220,30 @@ async function main() {
   await atomicWrite(manifestPath,`${JSON.stringify({version:'natlang.code_source_observations_manifest/1',config,status:'in_progress'},null,2)}\n`);
   let interrupted=false; const checkpoint=signal=>{if(interrupted)return;interrupted=true;process.stderr.write(`\n${signal}: checkpointing after the current source case\n`);};
   process.on('SIGINT',()=>checkpoint('SIGINT'));process.on('SIGTERM',()=>checkpoint('SIGTERM'));
-  const out = [], reasons = {}, counters = { input: tasks.length, eligible: 0, observed_tasks: 0, observed_cases: 0, rejected: 0, execution_enabled: execute };
-  for (const task of tasks) {
+  const out = [], reasons = {}, counters = { input: tasks.length, eligible: 0, generated_cases_considered: 0, upstream_cases_considered: 0,
+    observed_tasks: 0, observed_cases: 0, observed_upstream_cases: 0, observed_generated_cases: 0, diagnostic_cases:0, quarantined_tasks:0,
+    case_rejections: 0, rejected: 0, execution_enabled: execute };
+  Object.assign(counters, { upstream_assertions_checked:0, upstream_assertions_matched:0, upstream_assertions_mismatched:0,
+    upstream_assertion_execution_failures:0, conflicting_duplicate_input_groups:0 });
+  for (const task of tasksWithCaptures) {
     if (task.source?.name === 'xlam-function-calling-60k' || task.kind === 'tool_calls') { counters.rejected++; reasons.never_execute_external_api = (reasons.never_execute_external_api ?? 0) + 1; continue; }
     const candidate = sourceCases(task);
     if (!candidate.eligible) { counters.rejected++; reasons[candidate.reason] = (reasons[candidate.reason] ?? 0) + 1; continue; }
     counters.eligible++;
+    counters.upstream_cases_considered += candidate.cases.filter(item => item.input_source === 'upstream_case').length;
+    counters.generated_cases_considered += candidate.cases.filter(item => item.input_source === 'deterministic_boundary_generator').length;
     const row = { ...task, cases: [], observation: { kind:'source_execution_candidate', execution_enabled:counters.execution_enabled,
       expected_source:'original_function_body_and_captured_sibling_helpers', not_upstream_tests:true, verified:false } };
     if (counters.execution_enabled) {
+      const caseRejections = [];
+      const upstreamExecutionFailures = [];
+      let upstreamAssertionsChecked = 0, upstreamAssertionsMatched = 0;
       for (const item of candidate.cases) {
         if(interrupted) break;
+        if (item.rejected) { caseRejections.push({ input_source:item.input_source, upstream_case_index:item.upstream_case_index, rejection:item.rejection }); reasons[item.rejection] = (reasons[item.rejection] ?? 0) + 1; continue; }
+        if (Object.hasOwn(item, 'upstream_asserted_expected') && !item.upstream_asserted_expected_portable) {
+          caseRejections.push({ input_source:item.input_source, upstream_case_index:item.upstream_case_index, args:item.args, rejection:'upstream_expected_not_portable' }); reasons.upstream_expected_not_portable = (reasons.upstream_expected_not_portable ?? 0) + 1; continue;
+        }
         const cacheKey=digest([config,task.id,task.function,item.args]);
         const cachePath=resolve(cacheDir,`${cacheKey.slice(0,40)}.json`);
         let cached;
@@ -186,20 +258,88 @@ async function main() {
         }
         if(cached.cache_key!==cacheKey||cached.payload_sha256!==digest(cached.observation))
           throw new Error(`source-observation cache integrity check failed for ${task.id}; refusing silent repair`);
-        if(cached.observation.error) { reasons.execution_error=(reasons.execution_error??0)+1;row.cases=[];row.observation.rejection=cached.observation.error;break; }
-        if(!samePortable(item.args,cached.observation.input_after)) { reasons.input_mutation=(reasons.input_mutation??0)+1;row.cases=[];row.observation.rejection='source function mutated invocation inputs';break; }
-        row.cases.push({...item,expected:cached.observation.expected,input_after:cached.observation.input_after,outcome:'return',portable:true,provenance:'observed_from_original_source'});
+        if(cached.observation.error) {
+          reasons.execution_error=(reasons.execution_error??0)+1;
+          const rejection={input_source:item.input_source,upstream_case_index:item.upstream_case_index,args:item.args,rejection:cached.observation.error};
+          caseRejections.push(rejection);
+          if (item.input_source === 'upstream_case' && Object.hasOwn(item, 'upstream_asserted_expected')) upstreamExecutionFailures.push(rejection);
+          continue;
+        }
+        if(!samePortable(item.args,cached.observation.input_after)) {
+          reasons.input_mutation=(reasons.input_mutation??0)+1;
+          const rejection={input_source:item.input_source,upstream_case_index:item.upstream_case_index,args:item.args,rejection:'source function mutated invocation inputs'};
+          caseRejections.push(rejection);
+          if (item.input_source === 'upstream_case' && Object.hasOwn(item, 'upstream_asserted_expected')) upstreamExecutionFailures.push(rejection);
+          continue;
+        }
+        const upstreamMatch = Object.hasOwn(item, 'upstream_asserted_expected')
+          ? samePortable(item.upstream_asserted_expected, cached.observation.expected) : null;
+        if (upstreamMatch !== null) { upstreamAssertionsChecked++; if (upstreamMatch) upstreamAssertionsMatched++; }
+        row.cases.push({...item,expected:cached.observation.expected,input_after:cached.observation.input_after,outcome:'return',portable:true,provenance:'observed_from_original_source',
+          ...(item.input_source === 'upstream_case' ? { upstream_assertion_status: upstreamMatch === null ? 'no_expected_value' : upstreamMatch ? 'matched_source_observation' : 'mismatched_source_observation' } : {}),
+          ...(item.input_source === 'runtime_capture' ? { captured_output_status: !portable(item.captured_expected) ? 'not_comparable' : samePortable(item.captured_expected, cached.observation.expected) ? 'matched_source_observation' : 'different_source_observation' } : {})});
       }
       if(interrupted) break;
-      if (row.cases.length) { row.observation.verified = false; row.observation.kind = 'source_derived_observations'; counters.observed_tasks++; counters.observed_cases += row.cases.length; }
+      row.observation.case_rejections = caseRejections;
+      counters.case_rejections = (counters.case_rejections ?? 0) + caseRejections.length;
+      const assertionsByArgs = new Map();
+      for (const item of row.cases.filter(item => item.input_source === 'upstream_case' && Object.hasOwn(item, 'upstream_asserted_expected'))) {
+        const key = JSON.stringify(item.args), values = assertionsByArgs.get(key) ?? new Set();
+        values.add(JSON.stringify(item.upstream_asserted_expected)); assertionsByArgs.set(key, values);
+      }
+      const conflictingArgs = new Set([...assertionsByArgs].filter(([, values]) => values.size > 1).map(([key]) => key));
+      const mismatches = row.cases.filter(item => item.upstream_assertion_status === 'mismatched_source_observation');
+      const captureMismatches = row.cases.filter(item => item.captured_output_status === 'different_source_observation');
+      const duplicateConflicts = row.cases.filter(item => item.input_source === 'upstream_case' && conflictingArgs.has(JSON.stringify(item.args)));
+      row.observation.behavioral_evidence = { kind:'source_observed', scope:'observed_inputs_only_not_specification_verification',
+        upstream_assertions_checked:upstreamAssertionsChecked, upstream_assertions_matched:upstreamAssertionsMatched,
+        upstream_assertions_mismatched:mismatches.length, upstream_assertion_execution_failures:upstreamExecutionFailures.length,
+        capture_fidelity_mismatches:captureMismatches.length,
+        conflicting_duplicate_input_groups:conflictingArgs.size };
+      row.behavioral_evidence = row.observation.behavioral_evidence;
+      counters.upstream_assertions_checked += upstreamAssertionsChecked;
+      counters.upstream_assertions_matched += upstreamAssertionsMatched;
+      counters.upstream_assertions_mismatched += mismatches.length;
+      counters.upstream_assertion_execution_failures += upstreamExecutionFailures.length;
+      counters.conflicting_duplicate_input_groups += conflictingArgs.size;
+      if (mismatches.length || duplicateConflicts.length || upstreamExecutionFailures.length || captureMismatches.length) {
+        counters.diagnostic_cases += row.cases.length;
+        counters.quarantined_tasks++;
+        row.observation.kind = (mismatches.length || duplicateConflicts.length || upstreamExecutionFailures.length)
+          ? 'upstream_assertion_conflict' : 'capture_fidelity_conflict';
+        row.observation.rejection = mismatches.length ? 'upstream_assertion_mismatch' : duplicateConflicts.length ? 'conflicting_upstream_assertions' : upstreamExecutionFailures.length ? 'upstream_assertion_execution_failure' : 'capture_fidelity_mismatch';
+        row.observation.diagnostic_cases = row.cases;
+        row.observation.case_rejections.push(...duplicateConflicts.map(item => ({ input_source:'upstream_case', upstream_case_index:item.upstream_case_index,
+          args:item.args, rejection:'conflicting_upstream_assertions' })));
+        row.cases = [];
+        const rejectionReasons = [...new Set([...(task.verification?.reasons ?? []), ...(mismatches.length ? ['upstream_assertion_mismatch'] : []),
+          ...(duplicateConflicts.length ? ['conflicting_upstream_assertions'] : []), ...(upstreamExecutionFailures.length ? ['upstream_assertion_execution_failure'] : []),
+          ...(captureMismatches.length ? ['capture_fidelity_mismatch'] : [])])];
+        row.verification = { ...(task.verification ?? {}), status:'rejected', reasons:rejectionReasons };
+        counters.case_rejections += duplicateConflicts.length;
+        counters.rejected++;
+        reasons[row.observation.rejection] = (reasons[row.observation.rejection] ?? 0) + 1;
+        if (duplicateConflicts.length) reasons.conflicting_upstream_assertions = (reasons.conflicting_upstream_assertions ?? 0) + 1;
+        if (upstreamExecutionFailures.length) reasons.upstream_assertion_execution_failure = (reasons.upstream_assertion_execution_failure ?? 0) + 1;
+        out.push(row);
+        continue;
+      }
+      if (row.cases.length) {
+        row.observation.verified = false; row.observation.kind = 'source_derived_observations'; counters.observed_tasks++; counters.observed_cases += row.cases.length;
+        counters.observed_upstream_cases += row.cases.filter(item => item.input_source === 'upstream_case').length;
+        counters.observed_generated_cases += row.cases.filter(item => item.input_source === 'deterministic_boundary_generator').length;
+      }
       else { counters.rejected++; continue; }
     }
     out.push(row);
   }
   const data = out.map(row => JSON.stringify(row)).join('\n') + (out.length ? '\n' : '');
   await atomicWrite(outputPath, data);
-  const report = { version:'natlang.code_source_observations/1', inputs:inputHashes.map(([path])=>path), input_sha256:digest(tasks), output:resolve(output), ...counters,
-    by_source:Object.fromEntries([...new Set(tasks.map(task=>task.source?.name??'unknown'))].sort().map(name=>[name,tasks.filter(task=>task.source?.name===name).length])), rejected_by_reason:reasons,
+  counters.matched_capture_cases=matchedCaptureCases;
+  counters.unmatched_capture_cases=unmatchedCaptureCases;
+  const report = { version:'natlang.code_source_observations/1', inputs:inputHashes.map(([path])=>path), task_inputs:inputs.map(path=>resolve(path)), capture_inputs:captureInputs.map(path=>resolve(path)),
+    input_sha256:digest([tasks,captures]), output:resolve(output), ...counters,
+    by_source:Object.fromEntries([...new Set(tasksWithCaptures.map(task=>task.source?.name??'unknown'))].sort().map(name=>[name,tasksWithCaptures.filter(task=>task.source?.name===name).length])), rejected_by_reason:reasons,
     interpretation:counters.execution_enabled ? 'Outputs were observed by calling inspected original source in a disposable timeout process. They are not upstream test labels and require separate native replay before training admission.' : 'Dry-run eligibility report only.' };
   await atomicWrite(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   const status=interrupted?'interrupted':'complete';

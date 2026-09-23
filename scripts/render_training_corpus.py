@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import fnmatch
 import hashlib
 import json
@@ -78,9 +79,13 @@ def _read_inputs(paths: list[Path]) -> tuple[list[dict[str, Any]], list[dict[str
 
 def _as_turn(row: dict[str, Any]) -> dict[str, Any]:
     if row.get("kind") == "code_sft":
+        if row.get("training_admission", {}).get("approved") is False:
+            return row
         if not row.get("syntax_checked") or not row.get("completion"):
             raise ValueError(f"{row.get('id', '<unknown>')}: code_sft row must be syntax_checked and have completion")
         return {
+            **{key: row[key] for key in ('behavioral_evidence', 'evidence', 'generation', 'verification',
+                                        'curriculum_lane', 'difficulty', 'syntax_checked') if key in row},
             "id": row.get("id"), "program_id": row.get("program_id"),
             "source_groups": row.get("source_groups", []), "family": row.get("family", "code_corpus"),
             "skill": row.get("skill", "code_generation"), "split": row.get("split"),
@@ -109,6 +114,10 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
     messages, tools, target = turn.get("messages"), turn.get("tools", []), turn.get("target")
     if not isinstance(messages, list) or not isinstance(tools, list) or not isinstance(target, dict):
         raise ValueError(f"{turn.get('id', '<unknown>')}: missing messages/tools/target training view")
+    if target.get('role') != 'assistant':
+        raise ValueError('training target must be an assistant turn')
+    if end_token in json.dumps(target, ensure_ascii=False) or end_token in str(turn.get('teacher_reasoning', '')):
+        raise ValueError('target contains reserved termination token; refusing silent truncation')
     prompt = _call_template(tokenizer, messages, tools, True)
     target = dict(target)
     if turn.get("teacher_reasoning"):
@@ -131,7 +140,8 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
         "id", "program_id", "source_groups", "split", "family", "skill", "quality",
         "training_admission", "source", "license", "source_ids", "source_revisions",
         "teacher_trajectory_id", "teacher_trajectory_digest", "execution_verified",
-        "implementation_sha256") if key in turn}
+        "implementation_sha256", "behavioral_evidence", "evidence", "generation", "verification",
+        "curriculum_lane", "difficulty", "syntax_checked") if key in turn}
     result.update(renderer="transformers-chat-template", context_items=len(messages),
                   prompt=prompt, completion=suffix[:end + len(end_token)])
     return result
@@ -193,7 +203,8 @@ def render_corpus(inputs: list[Path], output: Path, *, model: str, revision: str
         raise ValueError("--end-token or tokenizer.eos_token must be a nonempty string")
     renderer["end_token"] = end_token
     rows, input_identity = _read_inputs(inputs)
-    identity = {"renderer": renderer, "inputs": input_identity, "chunk_rows": chunk_rows}
+    identity = {"renderer": renderer, "inputs": input_identity, "chunk_rows": chunk_rows,
+                "renderer_sha256": _file_sha(Path(__file__))}
     identity_sha = _sha(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode())
     cache = output.with_name(output.name + ".cache")
     cache.mkdir(parents=True, exist_ok=True)
@@ -216,22 +227,33 @@ def render_corpus(inputs: list[Path], output: Path, *, model: str, revision: str
             content = (cache / chunk["file"]).read_bytes()
             if _sha(content) != chunk["sha256"]:
                 raise ValueError(f"committed chunk hash mismatch: {chunk['file']}")
+            if chunk.get('rejections_sha256') != _sha(_jsonl_bytes(chunk.get('rejections', []))):
+                raise ValueError('committed rejection ledger hash mismatch')
             expected_start = chunk["input_row_end"]
         cursor = expected_start
     else:
         cursor = 0
-    committed = []
+    committed, rejections = [], []
     for start in range(0, len(rows), chunk_rows):
         if start < cursor:
             chunk = next(c for c in manifest["chunks"] if c["input_row_start"] == start)
             committed.extend(json.loads(line) for line in (cache / chunk["file"]).read_text().splitlines())
+            rejections.extend(chunk.get('rejections', []))
             continue
-        selected = []
+        selected, rejected = [], []
         for original in rows[start:start + chunk_rows]:
-            turn = _as_turn(original)
-            pair = render_turn(turn, tokenizer, end_token)
+            try:
+                turn = _as_turn(original)
+                pair = render_turn(turn, tokenizer, end_token)
+            except (ValueError, KeyError) as error:
+                rejected.append({'id': original.get('id'), 'source': original.get('source'),
+                                 'reason': 'invalid_training_view', 'detail': str(error)})
+                continue
             if pair is not None:
                 selected.append(pair)
+            else:
+                rejected.append({'id': original.get('id'), 'source': original.get('source'),
+                                 'reason': 'not_explicitly_admitted'})
         index = len(manifest["chunks"])
         name = f"chunk-{index:08d}.jsonl"
         payload = _jsonl_bytes(selected)
@@ -240,18 +262,31 @@ def render_corpus(inputs: list[Path], output: Path, *, model: str, revision: str
         input_chunk = rows[start:input_end]
         manifest["chunks"].append({"index": index, "input_row_start": start, "input_row_end": input_end,
                                    "input_rows": len(input_chunk), "input_sha256": _sha(_jsonl_bytes(input_chunk)),
-                                   "file": name, "sha256": _sha(payload), "rows": len(selected)})
+                                   "file": name, "sha256": _sha(payload), "rows": len(selected),
+                                   'rejections': rejected, 'rejections_sha256': _sha(_jsonl_bytes(rejected))})
         _atomic(cache_manifest_path, (json.dumps(manifest, indent=2) + "\n").encode())
         committed.extend(selected)
+        rejections.extend(rejected)
         if should_stop():
             return 75
     # All cached and newly rendered chunks are already in input order.
     if cursor < len(rows) and sum(c["input_rows"] for c in manifest["chunks"]) < len(rows):
         raise ValueError("incomplete shard cache")
     data = _jsonl_bytes(committed)
+    if any(_file_sha(Path(item['path'])) != item['sha256'] for item in input_identity):
+        raise ValueError('source inputs changed during rendering')
+    rejection_data = _jsonl_bytes(rejections)
     final_manifest = {"version": "natlang.sft.native/1", "source": [str(p.resolve()) for p in inputs],
                       "source_sha256": [_file_sha(p.resolve()) for p in inputs], "rows": len(committed),
-                      "renderer": renderer, "identity_sha256": identity_sha, "sha256": _sha(data)}
+                      "renderer": renderer, "identity_sha256": identity_sha, "sha256": _sha(data),
+                      "rejections": dict(Counter(item['reason'] for item in rejections)),
+                      'rejections_sha256': _sha(rejection_data)}
+    rejection_path = output.with_name(output.name + '.rejected.jsonl')
+    if rejection_path.exists():
+        if rejection_path.read_bytes() != rejection_data:
+            raise ValueError('existing rendering rejection ledger differs from shard cache')
+    else:
+        _atomic_new(rejection_path, rejection_data)
     final_manifest_path = output.with_suffix(output.suffix + ".manifest.json")
     prior_manifest = None
     if final_manifest_path.exists():
