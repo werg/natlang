@@ -52,7 +52,7 @@ for (const seed of cases) {
   const semantics = structuredClone(seed.semantics);
   delete semantics.root_template;
   semantics.root = root;
-  rows.push({ version: 'natlang.program/1', id: seed.id, kind: 'source_program',
+  rows.push({ version: 'natlang.program/1', id: seed.id, kind: 'lambda_graph',
     family: seed.family, source: 'natlang-current-source', split: seed.split,
     source_ids: [relative], source_groups: [seed.family], source_revisions: [revision],
     license: 'project-generated', gold_sources: ['frozen-reference-case'],
