@@ -24,6 +24,16 @@ test('extracts documented declarations with original defaults, types, docs, and 
   assert.match(imported[0].function.body, /helper\(x\)/);
 });
 
+test('extractor flags direct and transitive recursion before corpus replay', () => {
+  const direct = extractFunctions('/** Recurse. */ export function f(x: number): number { return f(x - 1); }', { path: 'f.ts' });
+  assert.equal(direct[0].function.recursive, true);
+  assert.match(direct[0].verification.reasons.join(' '), /recursive function graph/);
+  const indirect = extractFunctions('/** Recurse indirectly. */ export function f(x: number): number { return g(x); }\nfunction g(x: number): number { return f(x); }', { path: 'f.ts' });
+  assert.equal(indirect[0].function.recursive, true);
+  const safe = extractFunctions('/** Double. */ export function f(x: number): number { return g(x); }\nfunction g(x: number): number { return x * 2; }', { path: 'f.ts' });
+  assert.equal(safe[0].function.recursive, false);
+});
+
 test('instrumented module captures defaults, input mutation, returns, and throws in child process', () => {
   const dir = mkdtempSync(join(tmpdir(), 'code-corpus-'));
   try {

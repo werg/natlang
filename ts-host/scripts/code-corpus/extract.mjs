@@ -70,7 +70,7 @@ export function extractFunctions(source, { path, sourceName, revision, license, 
     if (node.parameters.some((p) => p.dotDotDotToken)) reasons.push('rest parameters deferred');
     // Preserve a conservative transitive closure of sibling function declarations.
     // Do not copy module initializers: they may have effects or depend on live state.
-    const siblings = new Map(executable.statements.filter(s => ts.isFunctionDeclaration(s) && s.name && s.body && s.name.text !== node.name.text).map(s => [s.name.text, s]));
+    const siblings = new Map(file.statements.filter(s => ts.isFunctionDeclaration(s) && s.name && s.body && s.name.text !== node.name.text).map(s => [s.name.text, s]));
     const selected = new Map();
     const includeHelpers = body => {
       const visit = child => {
@@ -84,10 +84,32 @@ export function extractFunctions(source, { path, sourceName, revision, license, 
       visit(body);
     };
     includeHelpers(executableNode?.body ?? node.body);
+    const functionDeclarations = new Map([[node.name.text, node], ...siblings]);
+    const graph = new Map([...functionDeclarations].map(([name, declaration]) => {
+      const calls = new Set();
+      const visit = child => {
+        if (ts.isCallExpression(child) && ts.isIdentifier(child.expression) && functionDeclarations.has(child.expression.text))
+          calls.add(child.expression.text);
+        ts.forEachChild(child, visit);
+      };
+      visit(declaration.body);
+      return [name, calls];
+    }));
+    const active = new Set(), visited = new Set();
+    const cyclic = name => {
+      if (active.has(name)) return true;
+      if (visited.has(name)) return false;
+      active.add(name);
+      for (const target of graph.get(name) ?? []) if (cyclic(target)) return true;
+      active.delete(name); visited.add(name);
+      return false;
+    };
+    const recursive = cyclic(node.name.text);
+    if (recursive) reasons.push('recursive function graph');
     const printer = ts.createPrinter();
     const helpers = [...selected.values()].map(helper => printer.printNode(ts.EmitHint.Unspecified,
       ts.factory.updateFunctionDeclaration(helper, helper.modifiers?.filter(m => ![ts.SyntaxKind.ExportKeyword, ts.SyntaxKind.DefaultKeyword].includes(m.kind)),
-        helper.asteriskToken, helper.name, helper.typeParameters, helper.parameters, helper.type, helper.body), executable));
+        helper.asteriskToken, helper.name, helper.typeParameters, helper.parameters, helper.type, helper.body), file));
     result.push({
       version: 'natlang.code_task/1', id: `${sourceName ?? 'source'}:${revision ?? 'unknown'}:${path ?? 'source.ts'}:${node.name.text}`,
       group_id: `${sourceName ?? 'source'}:${path ?? 'source.ts'}:${node.name.text}`,
@@ -96,6 +118,7 @@ export function extractFunctions(source, { path, sourceName, revision, license, 
       function: {
         name: node.name.text, parameters,
         helpers,
+        recursive,
         imports: file.statements.filter(ts.isImportDeclaration).map(statement => ({
           specifier: ts.isStringLiteral(statement.moduleSpecifier) ? statement.moduleSpecifier.text : '',
           source: statement.getText(file),

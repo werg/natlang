@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
-import { resolve, dirname, relative, sep } from 'node:path';
-import ts from 'typescript';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fork } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { digest, readJsonl, writeJsonl } from './common.mjs';
+import { projectSubfunctions } from './subfunctions.mjs';
 
 async function workspaceSnapshot(workspace) {
   if (!workspace) return null;
@@ -53,8 +53,9 @@ export async function materializeCorpus(rows) {
   });
   return result;
 }
-export function project(record, index = 0) {
+export function project(record, index = 0, options = {}) {
   if (record.verification?.status === 'rejected') throw new Error('rejected source cannot be projected');
+  if (record.function?.recursive) throw new Error('recursive function graph cannot be projected into natlang');
   if (record.kind !== 'function' || !record.instruction?.trim()) throw new Error('requires a documented function');
   const cases = record.cases.filter(c => c.outcome === 'return' && c.portable !== false);
   const observations = new Map();
@@ -80,8 +81,9 @@ export function project(record, index = 0) {
   const fields = params.map((p, i) => `${p.name}: ${boundaryType(cases.map(c => c.args[i]), p.type)}`);
   const body = record.function.body.trim().replace(/^\{/, '').replace(/\}$/, '');
   if (!body.trim()) throw new Error('missing function body');
+  const subfunctions = projectSubfunctions(record, options);
   const id = `code:${digest([record.id, item.args]).slice(0, 24)}`;
-  return { code: body, expected: item.expected, program: {
+  return { code: body, packageImports: subfunctions.packageImports, expected: item.expected, program: {
     version: 'natlang.program/1', id, kind: 'lambda_source', source: record.source.name,
     source_ids: [record.id], source_groups: [record.group_id], license: record.source.license,
     family: record.generation?.family ?? record.family ?? 'code_corpus', generation:record.generation,
@@ -89,8 +91,10 @@ export function project(record, index = 0) {
     behavioral_evidence: record.behavioral_evidence ?? {kind:record.observation ? 'source_observed' : record.generation ? 'generated_reference' : 'captured_return',
       note:'Native replay checks fidelity to supplied expected values, not full specification correctness.'},
     split: Number.parseInt(digest(record.group_id).slice(0, 8), 16) % 100 < 5 ? 'test' : 'train',
+    source_layout: subfunctions.sourceLayout,
     semantics: { root: { $lambda: { type: `(${fields.join(', ')}) => ${boundaryType(cases.map(c => c.expected), record.function.return_type)}`,
-      instructions: record.instruction.replace(/\s+/g, ' ').trim() } }, inputs: Object.fromEntries(params.map((p, i) => [p.name, item.args[i]])),
+      instructions: record.instruction.replace(/\s+/g, ' ').trim(),
+      ...(Object.keys(subfunctions.codebase).length ? { codebase: subfunctions.codebase } : {}) } }, inputs: Object.fromEntries(params.map((p, i) => [p.name, item.args[i]])),
       expected: item.expected, operation: 'exact' },
   } };
 }
@@ -104,32 +108,14 @@ export async function replayCase(record, index = 0, options = {}) {
   const { NativeRuntime } = await import('../../dist/native/runtime.js');
   const { TypeEnv } = await import('../../dist/native/types.js');
   const { buildPending, coerce, dump } = await import('../../dist/native/values.js');
-  const projection = project(record, index);
+  const projection = project(record, index, options);
   const { program, expected } = projection;
   let code = projection.code;
-  if (record.function.helpers?.length) {
-    const helpers = record.function.helpers.join('\n');
-    if (record.function.helpers.length > 32 || helpers.length > 32000) throw new Error('sibling helper context exceeds replay budget');
-    code = helpers+'\n'+code;
-  }
   // The captured body is one function invocation, not a persistent eval session.
   // Keep its locals (including nonportable imported package objects) within an
   // inner function; a bare block can collide with the eval scope's `result` slot.
   code = 'return await (async () => {\n'+code+'\n})();';
-  if (record.function.imports?.length) {
-    if (!options.workspace) throw new Error('dependency-bearing replay requires --workspace');
-    const base = dirname(resolve(options.workspace,record.source.path));
-    const imports=record.function.imports.map(item=>{
-      const parsed=ts.createSourceFile('import.ts',item.source,ts.ScriptTarget.Latest,true);
-      const declaration=parsed.statements[0];
-      if(!declaration||!ts.isImportDeclaration(declaration)) throw new Error('invalid captured import');
-      const specifier=item.specifier.startsWith('.')
-        ? './'+relative(resolve(options.workspace),resolve(base,item.specifier)).split(sep).join('/') : item.specifier;
-      return ts.createPrinter().printNode(ts.EmitHint.Unspecified,ts.factory.updateImportDeclaration(declaration,declaration.modifiers,
-        declaration.importClause,ts.factory.createStringLiteral(specifier),declaration.attributes),parsed);
-    });
-    code=imports.join('\n')+'\n'+code;
-  }
+  if (projection.packageImports.length) code=projection.packageImports.join('\n')+'\n'+code;
   const root = buildPending(program.semantics.root);
   const env = new TypeEnv().child(root.types);
   for (const [name, value] of Object.entries(program.semantics.inputs)) {

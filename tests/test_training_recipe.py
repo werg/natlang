@@ -138,16 +138,14 @@ def test_existing_test_captures_are_inputs_to_observation(tmp_path):
     assert str(captured) not in observer['inputs']
 
 
-def test_verified_unit_test_turns_enter_coding_stage(tmp_path):
+def test_legacy_unit_test_turns_require_explicit_override(tmp_path):
     turns = tmp_path / 'data/direct-code-2026-09-23/d3-transpose-pilot-final/native-replay.jsonl.turns.jsonl'
     turns.parent.mkdir(parents=True)
     turns.write_text('')
     prepared = stages_by_id(recipe(tmp_path))['prepare']
-    assert str(turns) in prepared['inputs']
+    assert str(turns) not in prepared['inputs']
     command = prepared['command']
-    assert command[command.index('--native') + 1:command.index('--split-records')] == [
-        '${run}/synthetic/verified-turns.jsonl', '${run}/synthetic/code-proposals.jsonl', str(turns),
-    ]
+    assert str(turns) not in command
     explicit = tmp_path / 'extra/native-turns.jsonl'
     prepared = stages_by_id(recipe(tmp_path, verified_turns_override=[explicit]))['prepare']
     assert str(explicit) in prepared['inputs']
@@ -198,6 +196,8 @@ def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
     (accepted / 'manifest.json').write_text(json.dumps({'native_replay': {
         'accepted': 1, 'turns_sha256': hashlib.sha256(turns.read_bytes()).hexdigest(),
     }}))
+    (accepted / 'tasks.jsonl').write_text(json.dumps({'function': {'helpers': [], 'imports': []}}) + '\n')
+    (accepted / 'native-replay.jsonl').write_text(json.dumps({'outcome': {'accepted': True}}) + '\n')
     rejected = corpus / 'rejected'
     rejected.mkdir()
     (rejected / 'native-replay.jsonl.turns.jsonl').write_text('')
@@ -205,6 +205,22 @@ def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
     prepared = stages_by_id(recipe(tmp_path))['prepare']
     assert str(turns) in prepared['inputs']
     assert str(rejected / 'native-replay.jsonl.turns.jsonl') not in prepared['inputs']
+    inlined = corpus / 'inlined'
+    inlined.mkdir()
+    inlined_turns = inlined / 'native-replay.jsonl.turns.jsonl'
+    inlined_turns.write_text('{"id":"inlined"}\n')
+    (inlined / 'manifest.json').write_text(json.dumps({'native_replay': {
+        'accepted': 1, 'turns_sha256': hashlib.sha256(inlined_turns.read_bytes()).hexdigest(),
+    }}))
+    (inlined / 'tasks.jsonl').write_text(json.dumps({'function': {'helpers': ['function helper() {}']}}) + '\n')
+    inlined_replay = {
+        'outcome': {'accepted': True},
+        'task': {'program_ir': {'semantics': {'root': {'$lambda': {}}}}},
+    }
+    (inlined / 'native-replay.jsonl').write_text(json.dumps(inlined_replay) + '\n')
+    config = recipe(tmp_path)
+    assert str(inlined_turns) not in stages_by_id(config)['prepare']['inputs']
+    assert config['unit_test_corpus']['excluded'][0]['reason'] == 'local subfunctions were inlined or imported'
     turns.write_text('tampered\n')
     with pytest.raises(ValueError, match='do not match capture manifest'):
         recipe(tmp_path)

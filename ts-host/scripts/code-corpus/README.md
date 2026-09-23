@@ -64,20 +64,23 @@ Runtime package installation and networking are documented in
 [application-packages.md](../../../../docs/application-packages.md). These are
 application capabilities, not reasons to discard dependency-bearing source code.
 Replay accepts `--workspace /absolute/app-root` for dependency-bearing functions.
-Captured static imports are preserved and relative paths are rebased from the
-original source file to the app root. Prepare upstream dependencies explicitly
-before replay; imports do not install them. Workspace mode enables package
-installation and network access with host authority. Replay records before/after
+Declared package imports are preserved; relative imports of application functions
+are converted into nested native codebase entries (the `foo.nl` / `foo/` layout)
+only when explicit portable signatures permit it. Unsupported or recursive
+subfunction graphs are rejected, never inlined into eval. Prepare upstream
+dependencies explicitly before replay; imports do not install them. Replay records before/after
 manifest and npm lockfile hashes, Node version, capabilities and observed host
 events. Extracted functions also carry a conservative transitive set of sibling
-function declarations; replay keeps those block-local within the single eval
-(up to 32 helpers / 32,000 characters). Module-level variable initializers and
+function declarations; typed helpers are projected into child codebase entries.
+Module-level variable initializers and
 arbitrary closures are not captured. Passing means the observed return value matched the captured expectation,
 not that external effects are deterministic or fully recorded. Imported code may
 perform effects outside the observer. Repository-wide test-runner adapters and
 general module-state/closure capture remain future work.
 
-The real dependency-and-helper pilot can be reproduced with:
+The earlier dependency-and-helper pilot is retained for provenance, but its
+untyped helpers cannot be represented as native subfunctions and it is no longer
+admitted by the production recipe. It can be rerun to inspect rejections with:
 
 ```sh
 node scripts/code-corpus/direct-pilot.mjs --execute --function transpose --output /absolute/new-pilot-dir
@@ -137,13 +140,12 @@ paths must stay inside the workspace. Capture records actual calls made by those
 tests; the pipeline does not synthesize extra cases or claim more verified
 examples than the replay outputs admit. Its verified counts are available in
 each `captured-unit-tests/NNNN/manifest.json` and `.turns.jsonl` artifact.
-The default coding recipe also admits the retained execution-verified pilots and
-accepted `data/direct-code-2026-09-23/unit-test-corpus/*` captures. It verifies
-each new capture's turns hash against its manifest and skips zero-accepted runs.
-At the current retained snapshot, the three original final pilots contribute
-70 turns and eight additional d3-array functions contribute 128 turns (64 accepted
-test inputs), for 198 distinct prepared coding decisions before fresh synthetic
-generation. These are eleven source functions, not 198 independent implementations.
+The default coding recipe admits only captures compatible with the current native
+subfunction layout. It verifies turns against manifests and excludes old captures
+that used inline helpers or relative application imports. At the current retained
+snapshot this leaves 120 execution-verified coding decisions across six source
+functions before fresh synthetic generation. The recipe reports excluded capture
+directories and reasons in `unit_test_corpus`.
 
 The measured `d3-transpose-pilot-final` has 22 portable upstream-test captures,
 7 accepted distinct native cases and 14 materialized turns. Combined with the

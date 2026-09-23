@@ -7,7 +7,7 @@ import { replayIsolated, project, materializeCorpus } from '../scripts/code-corp
 import { readJsonl, writeJsonl, digest } from '../scripts/code-corpus/common.mjs';
 import { ApplicationPackages } from '../dist/application-packages.js';
 import { extractFunctions } from '../scripts/code-corpus/extract.mjs';
-const task = () => ({version:'natlang.code_task/1',id:'fixture:double',group_id:'fixture:double',kind:'function',instruction:'Return twice the input.',source:{name:'fixture',license:'MIT'},function:{parameters:[{name:'x'}],body:'{ return x * 2; }'},cases:[{args:[3],expected:6,outcome:'return'},{args:[4],expected:8,outcome:'return'}]});
+const task = () => ({version:'natlang.code_task/1',id:'fixture:double',group_id:'fixture:double',kind:'function',instruction:'Return twice the input.',source:{name:'fixture',license:'MIT'},function:{name:'f',parameters:[{name:'x'}],body:'{ return x * 2; }'},cases:[{args:[3],expected:6,outcome:'return'},{args:[4],expected:8,outcome:'return'}]});
 test('replay produces real eval and mark_lines turns with source-level split groups', async () => {
   const a = task();
   const row = await replayIsolated(a,0);
@@ -46,26 +46,44 @@ test('empty-only captured arrays can use explicit primitive array boundary types
   assert.throws(()=>project(a),/empty-only array/);
 });
 test('extracted sibling function closure replays without module initializers', async () => {
-  const [record] = extractFunctions('/** Double the input. */ export function twice(x: number) { return helper(x); }\nexport function helper(x: number) { return add(x, x); }\nfunction add(a: number, b: number) { return a + b; }\nconst secretState = launchExternalEffect();', {path:'fixture.ts',sourceName:'fixture'});
+  const [record] = extractFunctions('/** Double the input. */ export function twice(x: number): number { return helper(x); }\nexport function helper(x: number): number { return add(x, x); }\nfunction add(a: number, b: number): number { return a + b; }\nconst secretState = launchExternalEffect();', {path:'fixture.ts',sourceName:'fixture'});
   record.cases = task().cases;
   assert.equal(record.function.helpers.length, 2);
   assert.doesNotMatch(record.function.helpers.join('\n'), /export|secretState|launchExternalEffect/);
-  assert.equal((await replayIsolated(record, 0)).outcome.accepted, true);
+  const projected = project(record, 0);
+  assert.deepEqual(Object.keys(projected.program.semantics.root.$lambda.codebase), ['helper']);
+  assert.deepEqual(Object.keys(projected.program.semantics.root.$lambda.codebase.helper.codebase), ['add']);
+  assert.equal(projected.program.source_layout.subfunctions.add, 'twice/helper/add.ts');
+  const row = await replayIsolated(record, 0);
+  assert.equal(row.outcome.accepted, true);
+  assert.doesNotMatch(row.trajectory[0].assistant.calls[0].arguments.code, /function helper/);
+});
+test('recursive and untyped subfunction graphs are excluded from natlang replay', () => {
+  const direct = task(); direct.function.body = '{ return f(x); }';
+  assert.throws(() => project(direct), /Recursive function call/);
+  const indirect = task(); indirect.function.body = '{ return helper(x); }';
+  indirect.function.helpers = ['function helper(x: number): number { return f(x); }'];
+  assert.throws(() => project(indirect), /Recursive subfunction call graph/);
+  const untyped = task(); untyped.function.body = '{ return helper(x); }';
+  untyped.function.helpers = ['function helper(x) { return x * 2; }'];
+  assert.throws(() => project(untyped), /needs explicit portable parameter and return types/);
 });
 test('dependency-bearing corpus replay resolves captured relative imports from the application workspace', async t => {
   const root = await mkdtemp(join(tmpdir(), 'corpus-replay-workspace-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'corpus-replay-fixture', private: true, type: 'module' }));
   await mkdir(join(root, 'src'));
-  await writeFile(join(root, 'src', 'helper.mjs'), 'export const double = value => value * 2;\n');
+  await writeFile(join(root, 'src', 'helper.ts'), 'export default function double(value: number): number { return value * 2; }\n');
   const record = task();
   record.source.path = 'src/main.ts';
-  record.function.imports = [{ specifier: './helper.mjs', source: "import { double } from './helper.mjs';" }];
+  record.function.imports = [{ specifier: './helper.ts', source: "import double from './helper.ts';" }];
   record.function.body = '{ return double(x); }';
-  await assert.rejects(replayIsolated(record, 0), /dependency-bearing replay requires --workspace/);
+  await assert.rejects(replayIsolated(record, 0), /Local subfunction conversion requires the source workspace/);
   const row = await replayIsolated(record, 0, 10000, { workspace: root });
   assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome));
   assert.equal(row.outcome.value, 6);
+  assert.deepEqual(Object.keys(row.task.program_ir.semantics.root.$lambda.codebase), ['double']);
+  assert.doesNotMatch(row.trajectory[0].assistant.calls[0].arguments.code, /import double/);
 });
 test('dependency-bearing corpus replay imports installed local packages from the workspace', async t => {
   const root = await mkdtemp(join(tmpdir(), 'corpus-replay-package-'));

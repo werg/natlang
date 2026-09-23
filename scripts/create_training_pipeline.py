@@ -58,9 +58,9 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     proven_pilots = (
         repo / 'data/direct-code-2026-09-23/chunk-native-final.jsonl.turns.jsonl',
         repo / 'data/direct-code-2026-09-23/d3-pilot/native-replay.jsonl.turns.jsonl',
-        repo / 'data/direct-code-2026-09-23/d3-transpose-pilot-final/native-replay.jsonl.turns.jsonl',
     )
     new_unit_turns = []
+    excluded_unit_captures = []
     for manifest_path in sorted((repo / 'data/direct-code-2026-09-23/unit-test-corpus').glob('*/manifest.json')):
         manifest = json.loads(manifest_path.read_text())
         turns = manifest_path.parent / 'native-replay.jsonl.turns.jsonl'
@@ -69,6 +69,25 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             continue
         if hashlib.sha256(turns.read_bytes()).hexdigest() != replay.get('turns_sha256'):
             raise ValueError(f'unit-test turns do not match capture manifest: {turns}')
+        tasks_path = manifest_path.parent / 'tasks.jsonl'
+        trajectories_path = manifest_path.parent / 'native-replay.jsonl'
+        if not tasks_path.is_file() or not trajectories_path.is_file():
+            excluded_unit_captures.append({'path': str(manifest_path.parent), 'reason': 'missing projection evidence'})
+            continue
+        tasks = [json.loads(line) for line in tasks_path.read_text().splitlines() if line.strip()]
+        if any(task.get('function', {}).get('recursive') for task in tasks):
+            excluded_unit_captures.append({'path': str(manifest_path.parent), 'reason': 'recursive function graph'})
+            continue
+        needs_codebase = any(task.get('function', {}).get('helpers') or any(
+            imp.get('specifier', '').startswith('.') for imp in task.get('function', {}).get('imports', [])) for task in tasks)
+        if needs_codebase:
+            trajectories = [json.loads(line) for line in trajectories_path.read_text().splitlines() if line.strip()]
+            converted = trajectories and all(not row.get('outcome', {}).get('accepted') or (
+                row.get('task', {}).get('program_ir', {}).get('semantics', {}).get('root', {}).get('$lambda', {}).get('codebase')
+                and row.get('task', {}).get('program_ir', {}).get('source_layout')) for row in trajectories)
+            if not converted:
+                excluded_unit_captures.append({'path': str(manifest_path.parent), 'reason': 'local subfunctions were inlined or imported'})
+                continue
         new_unit_turns.append(turns)
     verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else
                       [str(path) for path in (*proven_pilots, *new_unit_turns) if path.exists()])
@@ -174,7 +193,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
-    return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages}
+    return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
+            "unit_test_corpus": {"included": [str(path) for path in new_unit_turns], "excluded": excluded_unit_captures}}
 
 
 def main():
