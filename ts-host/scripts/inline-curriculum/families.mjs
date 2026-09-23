@@ -8,7 +8,7 @@ import { childOptOut, eventRetry, loopRewrite, recursionRewrite, reducerApply } 
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
 import { textworldIterate, textworldQuest } from './textworld.mjs';
-import { authoringInlineReview, authoringIterate, authoringNamedHelper } from './authoring.mjs';
+import { authoringCapturedPolicy, authoringInlineReview, authoringIterate, authoringNamedHelper, authoringStructuredExtract } from './authoring.mjs';
 import { anliBatch, commaqaNumeric, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
@@ -65,4 +65,6 @@ export const FAMILIES = {
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },
   authoring_named_helper: { build: authoringNamedHelper, weight: 1, track: 'authoring' },
+  authoring_structured_extract: { build: authoringStructuredExtract, weight: 1, track: 'authoring' },
+  authoring_captured_policy: { build: authoringCapturedPolicy, weight: 1, track: 'authoring' },
 };

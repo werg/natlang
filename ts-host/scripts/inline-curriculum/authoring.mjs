@@ -170,3 +170,77 @@ export async function negative_share(reviews: Review[]): Promise<number> {
       oracle: sets.flat().map(r => ({ match: [JSON.stringify(r.id)], value: r.label })) },
     solution })];
 }
+
+const RECEIPTS = [
+  { text: 'CAFE LUMEN\n2x Espresso 5,60\nTOTAL 8,80 EUR', total: 8.8, currency: 'EUR' },
+  { text: 'Harbor Books receipt #4471\nAmount paid: $18.89', total: 18.89, currency: 'USD' },
+  { text: 'Northline Rail, single ticket\nFare paid £42.10 (card)', total: 42.1, currency: 'GBP' },
+  { text: 'Bäckerei Sonne\nSumme: 8,10 €', total: 8.1, currency: 'EUR' },
+  { text: 'QuickPark garage, 3 hours\nTotal charged: $12.00', total: 12, currency: 'USD' },
+  { text: 'The Crown pub\nTotal £13.00, service not included', total: 13, currency: 'GBP' },
+];
+
+/** Implement per-currency totals from receipt text: each receipt's fields need a typed nl result (nl<Amount>). */
+export function authoringStructuredExtract(seed, index) {
+  const rng = new Random(seed, `author-extract:${index}`);
+  const draw = set => rng.sample(RECEIPTS, 4).map((receipt, i) => ({ id: `X${index}-${set}${i + 1}`, ...receipt }));
+  const sets = [draw('a'), draw('b')];
+  const sums = set => { const out = {}; for (const r of set) out[r.currency] = Math.round(((out[r.currency] ?? 0) + r.total) * 100) / 100; return out; };
+  const header = `import type { Receipt, Amount } from "./types";
+
+/** The total paid per currency code across receipts, rounded to cents. */
+export async function totals(receipts: Receipt[]): Promise<Record<string, number>> {`;
+  const stub = `${header}\n  // TODO: implement.\n  return {};\n}\n`;
+  const solution = `${header}
+  const amounts = await Promise.all(receipts.map(receipt => nl<Amount>\`Read the final amount paid on receipt and its currency.\`(receipt)));
+  const out: Record<string, number> = {};
+  for (const amount of amounts) out[amount.currency] = Math.round(((out[amount.currency] ?? 0) + amount.total) * 100) / 100;
+  return out;
+}
+`;
+  return [authoringCase({ family: 'authoring_structured_extract', shape: `receipts${index}`, variant: 'a', module: 'expenses.ts',
+    instructions: 'Implement totals in expenses.ts as its doc comment describes. Reading a receipt\'s amount and currency is a judgment about free text: make it with an inline nl function per receipt, and add up exactly in TypeScript. Keep the signature.',
+    files: { 'expenses.ts': stub, 'types.ts': 'export type Receipt = { id: string, text: string };\nexport type Amount = { total: number, currency: "EUR" | "USD" | "GBP" };\n' },
+    spec: { module: 'expenses.ts', export: 'totals', requires: { nl: true },
+      runs: sets.map(set => ({ args: [set.map(({ id, text }) => ({ id, text }))], expected: sums(set) })),
+      oracle: sets.flat().map(r => ({ match: [JSON.stringify(r.id)], value: { total: r.total, currency: r.currency } })) },
+    solution })];
+}
+
+/** Implement a release gate: exact metrics per service, then an inline judgment that captures a policy by name. */
+export function authoringCapturedPolicy(seed, index) {
+  const rng = new Random(seed, `author-policy:${index}`);
+  const services = nonceWords(rng, 3);
+  const make = (set, errors, notes) => services.map((name, i) => ({ id: `${name}-${set}`, requests: Array.from({ length: 20 }, (_, k) => ({ status: k < errors[i] ? 503 : 200 })), notes: notes[i] }));
+  const announced = 'The legacy export endpoint is switched off in this release; its 503 errors are expected.';
+  const unrelated = 'This release updates translations only.';
+  const sets = [make('a', [4, 0, 3], [announced, unrelated, unrelated]), make('b', [0, 5, 1], [unrelated, announced, unrelated])];
+  const decide = service => { const rate = service.requests.filter(r => r.status >= 500).length / service.requests.length;
+    return rate <= 0.05 ? 'proceed' : service.notes === announced ? 'hold' : 'rollback'; };
+  const header = `import type { Service, Decision } from "./types";
+
+/** The policy every decision follows. */
+const policy = "Proceed when at most 5% of requests failed. Otherwise hold if the release notes announce those failures as expected, and roll back if they do not.";
+
+/** A decision per service id under policy, from each service's error rate and release notes. */
+export async function gate(services: Service[]): Promise<Record<string, Decision>> {`;
+  const stub = `${header}\n  // TODO: implement.\n  return {};\n}\n`;
+  const solution = `${header}
+  const out: Record<string, Decision> = {};
+  for (const service of services) {
+    const errorRate = service.requests.filter(r => r.status >= 500).length / service.requests.length;
+    const facts = { errorRate, notes: service.notes };
+    out[service.id] = await nl\`Decide under policy whether to proceed, hold, or roll back, given facts.\`(facts);
+  }
+  return out;
+}
+`;
+  return [authoringCase({ family: 'authoring_captured_policy', shape: `gate${index}`, variant: 'a', module: 'gate.ts',
+    instructions: 'Implement gate in gate.ts as its doc comment describes. Compute each service\'s error rate exactly in TypeScript; whether the notes announce the failures is a judgment, so make the decision with an inline nl function whose instructions refer to policy by name (so it sees the policy) and that receives the computed values. Keep the signature.',
+    files: { 'gate.ts': stub, 'types.ts': 'export type Service = { id: string, requests: { status: number }[], notes: string };\nexport type Decision = "proceed" | "hold" | "rollback";\n' },
+    spec: { module: 'gate.ts', export: 'gate', requires: { nl: true },
+      runs: sets.map(set => ({ args: [set], expected: Object.fromEntries(set.map(s => [s.id, decide(s)])) })),
+      // The child sees the computed rate and the notes; the oracle keys on both.
+      oracle: sets.flat().map(s => ({ match: [`errorRate: ${s.requests.filter(r => r.status >= 500).length / s.requests.length}, notes`, s.notes], value: decide(s) })) },
+    solution })];
+}

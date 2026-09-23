@@ -131,6 +131,8 @@ function, or create no `nl` function where an existing one fits. `select.mjs` ta
 | `authoring_inline_review` | A per-ticket semantic filter with an inline `nl` inside the module |
 | `authoring_iterate` | A link-distance search stepped with `iterateOn` (checked on near, far past the progress review, and unreachable) |
 | `authoring_named_helper` | An aggregate that must call the folder's `sentiment.nl`, not a new judgment |
+| `authoring_structured_extract` | Per-currency totals whose per-receipt judgment needs a typed result (`nl<Amount>`) |
+| `authoring_captured_policy` | A release gate: exact error rates, then an inline judgment that captures `policy` by name |
 
 Building the checker found that `import type { X } from "./types"` in a callable module resolved to nothing,
 so the aliases became `any` and inline children lost their types; module compilation now provides the folder's
