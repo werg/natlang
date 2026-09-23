@@ -17,16 +17,11 @@ are {path,kind,content} records; content is exact file text, or JSON text for
 view, data, evidence, claim, assessment, schema metadata, migration, intent,
 method and change artifacts. Removes are exact paths. A commit must use the
 latest head; a stale commit reports a conflict. Keep the resulting head in State.
-State.head and every manifest ID are opaque text handles. They are never paths
-in the interpreter state: do not use the interpreter `read` action on a hash
-and do not put the hash itself in a call's inputs map. Call inputs are paths to
-values. For example, call `list` to `let/artifacts` with
-`inputs: {"head":"args/state/head"}`. Bind other helper arguments from
-`args/...` or `let/...` paths in the same way. For a literal artifact name,
-call `workspace_read` with the head in inputs and
-`values: {"path":"evidence/name.json"}`. An artifact path returned by list
-can instead be bound from `let/artifacts/.../path`. Never use the interpreter's
-`read` action on an artifact path.
+State.head and every manifest ID are opaque text handles, not filesystem paths.
+Pass them as ordinary string arguments: `const artifacts = await list(state.head)`
+and `const evidence = await workspace_read(state.head, "evidence/name.json")`.
+An artifact path returned by `list` can be passed the same way. Inspect the
+returned value to read an artifact; the identifier itself contains no content.
 For deeper work, call learn, revise_schema, invent_interaction,
 preserve_intent, and investigate_beliefs with selected source/evidence. They
 return candidate artifact edits and checks. Inspect and revise their proposals;
@@ -94,8 +89,9 @@ An authored TypeScript method running in a pinned child manifest can also call
 `await host.research.readNative(id)` to process its full text. The ID must be
 referenced by an artifact in that manifest. The method shares selected host
 authority through its eval environment; treat external effects explicitly.
-continuation across a long investigation; productive algorithmic work need not
-fit into one short turn. On a concrete blocker, preserve the work and explain it.
+Continue a long investigation through the recorded State; productive algorithmic
+work need not fit into one short turn. On a concrete blocker, preserve the work
+and explain it.
 Return a State whose head matches the latest committed manifest and whose
 receipt IDs came from actual execution. Increment revision exactly once for
 this submitted event. It is fine to change only semantic State with no commit.

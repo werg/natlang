@@ -21,6 +21,5 @@ function step(acc, item) -> State
     kind = read_event(item.text)
     next = transition(acc, item, kind)
     sent = dispatch(next.outbox)
-    if dispatch quiesced: resume that same dispatch call once
-    if dispatch still quiesced: report a blocker and preserve the pending work
-    return clear_outbox(next)
+    if dispatch fails: report a blocker without clearing the outbox or sending it again
+    return clear_outbox(next) after dispatch succeeds
