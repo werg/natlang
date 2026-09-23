@@ -7,6 +7,7 @@ import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion
 import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
+import { textworldIterate, textworldQuest } from './textworld.mjs';
 import { anliBatch, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
@@ -54,4 +55,6 @@ export const FAMILIES = {
   entailment_premises: { build: entailmentPremises, weight: 2, source: 'entailmentbank' },
   anli_batch: { build: anliBatch, weight: 2, source: 'anli' },
   commaqa_question: { build: commaqaQuestion, weight: 2, source: 'commaqa' },
+  textworld_quest: { build: textworldQuest, weight: 2, source: 'textworld' },
+  textworld_iterate: { build: textworldIterate, weight: 2, source: 'textworld' },
 };

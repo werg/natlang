@@ -58,8 +58,9 @@ export type Curriculum = {
   plausible_actions: string[];
   minimum_sequence: string[];
   /** A replayable solution: root tool calls in order, and answers for child calls keyed by fragments of the child's opening (all must appear). */
-  // A child answer with `call` answers with that tool call (such as `blocked`) instead of a value.
-  reference: { root: ReferenceCall[]; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall }[] };
+  // A child answer with `call` answers with that tool call (such as `blocked`) instead of a value; `calls` plays
+  // several turns in order (for example an eval that acts, then return_result).
+  reference: { root: ReferenceCall[]; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
 export type CurriculumRecord = ProgramRecord & { curriculum: Curriculum; family: string; split: string };
 
@@ -208,6 +209,7 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   const trajectory: Turn[] = [];
   let step = 0, seeded = !record.semantics.failure_seed;
+  const childTurns = new Map<string, number>();
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     const context = structuredClone(request.messages) as Message[], name = callName(context);
     let response: ModelTurn;
@@ -223,7 +225,11 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
       const opening = openingText(context);
       const answer = record.curriculum.reference.children?.find(child =>
         (Array.isArray(child.match) ? child.match : [child.match]).every(fragment => opening.includes(fragment)));
-      response = answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { value: answer.value }]] } :
+      const turn = childTurns.get(opening) ?? 0;
+      childTurns.set(opening, turn + 1);
+      const scripted = answer?.calls?.[turn];
+      response = scripted ? { calls: [[scripted[0], scripted[1]]] } :
+        answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { value: answer.value }]] } :
         { calls: [['failed', { message: `The reference has no answer for the child call ${name}.` }]] };
     }
     trajectory.push({ context, assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });

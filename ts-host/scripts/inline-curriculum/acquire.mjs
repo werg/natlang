@@ -69,6 +69,15 @@ export const SOURCES = {
     files: [{ path: 'anli.zip', split: 'mixed', sha256: '4e00551fd9ee04c92e823a8fe078e017c78b35739b36e8f9f122b4bf8a84b16b', extract: true }],
     url: (revision, path) => `https://storage.googleapis.com/ai2-mosaic/public/abductive-commonsense-reasoning-iclr2020/${path}`,
   },
+  textworld: {
+    name: 'TextWorld', homepage: 'https://github.com/microsoft/TextWorld', license: 'MIT',
+    release: 'games generated with textworld 1.7.0 (tw-make custom, seeds 1-300) and exported by textworld_export.py',
+    revision: 'textworld-1.7.0-seeds-1-300',
+    // Generated, not downloaded: TEXTWORLD_PYTHON is a Python with textworld==1.7.0 installed.
+    generate: target => execFileSync(process.env.TEXTWORLD_PYTHON ?? '../vendor/textworld-venv/bin/python',
+      [new URL('./textworld_export.py', import.meta.url).pathname, join(target, 'games'), '--seeds', '1-300'], { stdio: 'inherit' }),
+    files: [],
+  },
   commaqa: {
     name: 'CommaQA', homepage: 'https://github.com/allenai/CommaQA', license: 'Apache-2.0',
     release: 'v1 (AI2 public datasets bucket)', revision: 'v1',
@@ -90,6 +99,11 @@ async function main() {
     const source = SOURCES[key];
     if (!source) throw new Error(`unknown source ${key}; known: ${Object.keys(SOURCES).join(', ')}`);
     const files = [];
+    if (source.generate) {
+      const target = cachePath(cache, key, source.revision, '');
+      await mkdir(target, { recursive: true });
+      source.generate(target);
+    }
     for (const file of source.files) {
       const url = source.url(source.revision, file.path);
       const target = cachePath(cache, key, source.revision, file.path);
