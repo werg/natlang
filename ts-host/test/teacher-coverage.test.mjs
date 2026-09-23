@@ -45,6 +45,7 @@ test('teacher generation snapshots native synthetic IR and Studio cases on every
   ]);
   const snapshot = pipeline.slice(pipeline.indexOf('snapshot() {'), pipeline.indexOf('\nfingerprint()'));
   assert.match(snapshot, /generate-synthetic-ir\.mjs/);
+  assert.match(snapshot, /freeze-source-teacher-cases\.mjs/);
   assert.match(snapshot, /build-teacher-coverage-selection\.mjs/);
   assert.match(snapshot, /freeze-studio-teacher-cases\.mjs/);
   assert.match(pipeline, /while true/);
@@ -55,5 +56,8 @@ test('teacher generation snapshots native synthetic IR and Studio cases on every
   for (const family of ['algo_prefix_sums', 'algo_window_sums', 'algo_top_k', 'algo_stable_unique',
     'algo_weighted_checksum', 'algo_adjacent_changes', 'algo_row_sums', 'algo_longest_true_run',
     'algo_merge_intervals', 'algo_staged_ranking', 'algo_algorithm_pipeline'])
+    assert.match(configText, new RegExp(`family:${family}`));
+  for (const family of ['cb_dependency_plan', 'cb_highlighter', 'cb_legal_move', 'cb_mail_rules',
+    'cb_moderation', 'cb_nlprolog', 'cb_order_saga', 'cb_reconciliation', 'cb_shopkeeper', 'cb_webserver'])
     assert.match(configText, new RegExp(`family:${family}`));
 });
