@@ -9,6 +9,8 @@ function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
   if (!value || typeof value !== 'object' || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
     throw new TypeError(`eval result ${path} contains an unsupported or inexact ${typeof value} value`);
+  if (typeof (value as Promise<unknown>).then === 'function')
+    throw new TypeError('await the asynchronous imported function call');
   if (seen.has(value)) throw new TypeError('eval result contains a cycle');
   seen.add(value);
   if (Array.isArray(value)) {

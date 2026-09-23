@@ -3,7 +3,7 @@ import { TypeEnv, parseType } from './types.js';
 import { Reject, buildPending, type LambdaNode } from './values.js';
 
 export type NativeDefinition = { args?: Record<string, string>; returns: string;
-  instructions?: string; code?: string; engine?: string; types?: Record<string, string>;
+  instructions?: string; code?: string; async?: boolean; engine?: string; types?: Record<string, string>;
   uses?: Record<string, string>; effects?: string[]; description?: string;
   kind?: 'function' | 'directory-reducer' };
 export type NativeGraph = { root: string; definitions: Record<string, NativeDefinition>;
@@ -55,6 +55,7 @@ export function checkedDefinitions(entries: Record<string, NativeDefinition>, ro
       ...(def.types && Object.keys(def.types).length ? { types: def.types } : {}),
       ...(def.effects?.length ? { effects: def.effects } : {}),
       ...(def.kind === 'directory-reducer' ? { subtype: def.kind } : {}),
+      ...(kind === 'code' ? { async: def.async ?? /\bawait\b|\bPromise\s*[.(]/.test(source) } : {}),
       ...(kind === 'code' && def.engine && def.engine !== 'typescript-host' ? { engine: def.engine } : {}),
       ...(Object.keys(children).length ? { codebase: children } : {}) };
   }

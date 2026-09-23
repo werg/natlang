@@ -109,14 +109,26 @@ test('scope eval persists locals, calls imports positionally and uses a compatib
 test('ordinary synchronous TypeScript imports return values without await, including nested imports', async () => {
   const lam = buildPending({ $lambda: { type: '(value: number) => number',
     instructions: 'Compute the adjusted value.', args: { value: 4 },
-    codebase: { adjusted: { args: { value: 'number' }, returns: 'number', async: false,
+    codebase: { adjusted: { args: { value: 'number' }, returns: 'number',
       code: 'return double(value) + 1;', codebase: { double: { args: { value: 'number' },
-        returns: 'number', async: false, code: 'return value * 2;' } } } } } });
+        returns: 'number', code: 'return value * 2;' } } } } } });
   const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
   const result = await session.applyAsync('eval', { code: 'const answer = adjusted(value); answer' });
   assert.equal(result.kind, 'ok');
   assert.equal(result.value, 9);
   assert.equal(lam.return, 9);
+});
+
+test('an asynchronous imported call waits for await and does not escape eval as a rejected promise', async () => {
+  const lam = buildPending({ $lambda: { type: '() => number', instructions: 'Get a number.',
+    codebase: { get_number: { args: {}, returns: 'number', async: true, code: 'return 7;' } } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const forgotten = await session.applyAsync('eval', { code: 'const pending = get_number(); pending' });
+  assert.equal(forgotten.kind, 'error');
+  assert.match(forgotten.text, /await the asynchronous imported function call/);
+  const awaited = await session.applyAsync('eval', { code: 'const result = await get_number(); result' });
+  assert.equal(awaited.kind, 'ok');
+  assert.equal(awaited.value, 7);
 });
 
 test('failed scope child bubbles to eval without leaving a resumable model-facing local', async () => {

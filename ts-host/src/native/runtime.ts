@@ -67,6 +67,17 @@ function oneLine(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+function importInvokePrelude(codebase: Record<string, unknown>): string {
+  const synchronous = Object.entries(codebase).filter(([, raw]) =>
+    !!raw && typeof raw === 'object' && (raw as Record<string, unknown>).async === false &&
+    Object.hasOwn(raw, 'code')).map(([name]) => name);
+  return `const __syncImports = new Set(${JSON.stringify(synchronous)});\n` +
+    `const __invoke = (name: string, args: unknown[]) => __syncImports.has(name) ? ` +
+    `fx.natlang.scope(self.__natlangScopeToken, "call", [name, args]) : ` +
+    `({ then: (resolve: (value: unknown) => void, reject: (reason: unknown) => void) => { ` +
+    `try { Promise.resolve(fx.natlang.scope(self.__natlangScopeToken, "call", [name, args]))` +
+    `.then(resolve, reject); } catch (error) { reject(error); } } });\n`;
+}
 function pythonJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(pythonJson).join(', ')}]`;
   if (value && typeof value === 'object') return `{${Object.entries(value)
@@ -458,8 +469,9 @@ export class NativeRuntime {
     try {
       if (node.type.kind !== 'lambda') throw new Error('invalid lambda type');
       const names = node.type.params.fields.map(field => field.name);
-      const helpers = Object.keys(node.codebase).map(name => `const ${name} = Object.assign((...values: unknown[]) => ` +
-        `fx.natlang.scope(self.__natlangScopeToken, "call", [${JSON.stringify(name)}, values]), ` +
+      const helpers = importInvokePrelude(node.codebase) + Object.keys(node.codebase).map(name =>
+        `const ${name} = Object.assign((...values: unknown[]) => ` +
+        `__invoke(${JSON.stringify(name)}, values), ` +
         `{ __natlangFunction: ${JSON.stringify(name)} });`).join('\n');
       const source = `${names.length ? `let { ${names.join(', ')} } = JSON.parse(JSON.stringify(self.inputs));` : ''}\n` +
         `${helpers}\nreturn await (async () => {\n${node.body}\n})();`;
@@ -1402,9 +1414,8 @@ export class NativeSession {
     ].join('\n');
     const fsBinding = this.lam.projectTransaction ? `\nconst fs = new Proxy({}, { get: (_, method) => (...args: unknown[]) => ` +
       `fx.natlang.scope(self.__natlangScopeToken, "fs", [String(method), ...args]) });\n` : '\n';
-    const source = handleFactory + handleBindings + fsBinding +
-      `const __invoke = (name: string, args: unknown[]) => ` +
-      `fx.natlang.scope(self.__natlangScopeToken, "call", [name, args]);\n${compiled.program}\n` +
+    const source = handleFactory + handleBindings + fsBinding + importInvokePrelude(this.lam.codebase) +
+      `${compiled.program}\n` +
       `return await ${compiled.entrypoint}(self.inputs, self.locals, __invoke);`;
     try {
       const evaluated = await this.runtime.evalScopeFor(this.lam, source, 'eval', this.scopeView(),
