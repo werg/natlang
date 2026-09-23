@@ -73,6 +73,16 @@ test('browser client shares an application host with crisp eval', async () => {
   } finally { await client.close(); }
 });
 
+test('browser eval returns captured console observations', async () => {
+  const { BrowserNatlangClient } = await api();
+  const client = new BrowserNatlangClient({ mode: 'retained' });
+  try {
+    const result = await client.environment.executeAsync({ code: 'console.log("average", 4); return null;',
+      body: true, path: 'eval', effectful: false, scope: {} });
+    assert.deepEqual(result.logs, ['average 4']);
+  } finally { await client.close(); }
+});
+
 test('retained browser client keeps one eval environment across application runs', async () => {
   const { BrowserNatlangClient } = await api();
   const client = new BrowserNatlangClient({ mode: 'retained' });

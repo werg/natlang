@@ -64,7 +64,9 @@ export function checkTypeScriptBody(code: string): string[] {
     .map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
 }
 
-type Evaluator = (scope: Record<string, unknown>, code: string, effect: (cap: string, fn: string, args: unknown[]) => unknown) => unknown;
+type Evaluator = (scope: Record<string, unknown>, code: string,
+  effect: (cap: string, fn: string, args: unknown[]) => unknown,
+  log: (...values: unknown[]) => void) => unknown;
 /** Trusted browser evaluator. The host object is shared by identity and may be mutated. */
 export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-browser-host';
@@ -93,11 +95,12 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     const prelude = __NATLANG_PRELUDE__.split('const __deepFreeze')[0];
     const factory = new Function('host', `${prelude}\nlet self, locals;\n` +
       `function* evaluate() { let job=yield; while(true) {\n` +
-      `const {scope,code,effect}=job; self=scope; locals=scope.let || {};\n` +
+      `const {scope,code,effect,log}=job; self=scope; locals=scope.let || {};\n` +
+      `const console=Object.freeze({log,info:log,warn:log,error:log});\n` +
       `const fx=new Proxy({}, {get:(_,cap)=>new Proxy({}, {get:(_,fn)=>(...raw)=>effect(String(cap),String(fn),raw)})});\n` +
       `job=yield eval(code);\n} }\n` +
       `const runner=evaluate(); runner.next();\n` +
-      `return function(scope,code,effect) { return runner.next({scope,code,effect}).value; }`) as (host: object) => Evaluator;
+      `return function(scope,code,effect,log) { return runner.next({scope,code,effect,log}).value; }`) as (host: object) => Evaluator;
     return factory(this.host);
   }
 
@@ -110,35 +113,48 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     this.observe?.(evalEvent); return [...events, evalEvent];
   }
 
-  private run(request: EvalRequest, asyncBody: boolean): unknown {
+  private run(request: EvalRequest, asyncBody: boolean): { value: unknown; logs: string[] } {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     const evaluator = this.mode === 'retained' ? (this.evaluator ??= this.makeEvaluator()) : this.makeEvaluator();
     const scope = snapshot(request.scope) as Record<string, unknown>;
-    return evaluator(scope, compile(request.code, request.body, asyncBody), (cap, fn, raw) => {
+    const logs: string[] = [];
+    const log = (...values: unknown[]) => {
+      if (logs.length >= 32) return;
+      const line = values.map(value => {
+        if (typeof value === 'string') return value;
+        if (value === undefined) return 'undefined';
+        try { return JSON.stringify(portable(value)); }
+        catch { return String(value); }
+      }).join(' ');
+      logs.push(line.length > 2000 ? `${line.slice(0, 2000)} …` : line);
+    };
+    const value = evaluator(scope, compile(request.code, request.body, asyncBody), (cap, fn, raw) => {
       if (!this.effect) throw new Error('NATLANG:effect-undeclared');
       const args = cap === 'natlang' && fn === 'scope' ? scopeBridgeValue(raw) as unknown[] : portable(raw) as unknown[];
       const result = this.effect(cap, fn, args);
       if (result && typeof result === 'object' && typeof (result as Promise<unknown>).then === 'function')
         return Promise.resolve(result).then(portable);
       return portable(result);
-    });
+    }, log);
+    return { value, logs };
   }
 
   execute(request: EvalRequest): EvalResult {
     try {
-      const value = this.run(request, false);
+      const { value, logs } = this.run(request, false);
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
         throw new TypeError('async eval results require a host job and later poll');
-      return { result: portable(value === undefined ? null : value), events: this.capture(request, 'completed') };
+      return { result: portable(value === undefined ? null : value), events: this.capture(request, 'completed'), logs };
     } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed')); }
   }
 
   async executeAsync(request: EvalRequest): Promise<EvalResult> {
     try {
-      const value = await this.run(request, request.body);
-      return { result: portable(value === undefined ? null : value), events: this.capture(request, 'completed') };
+      const { value, logs } = this.run(request, request.body);
+      const resolved = await value;
+      return { result: portable(resolved === undefined ? null : resolved), events: this.capture(request, 'completed'), logs };
     } catch (error) { throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed')); }
   }
 

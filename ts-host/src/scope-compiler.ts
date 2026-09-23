@@ -75,7 +75,7 @@ const FORBIDDEN_AMBIENTS = new Set([
   'process', 'globalThis', 'require', 'module', 'Buffer',
   'window', 'document', 'navigator', 'location',
   'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource',
-  'setTimeout', 'setInterval', 'queueMicrotask', 'console',
+  'setTimeout', 'setInterval', 'queueMicrotask',
 ]);
 
 function namesOf(name: ts.BindingName): ts.Identifier[] {
@@ -255,7 +255,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       for (const declaration of statement.declarationList.declarations) for (const name of namesOf(declaration.name)) {
         let initial = declaration.initializer;
         while (initial && (ts.isAwaitExpression(initial) || ts.isParenthesizedExpression(initial) || ts.isPropertyAccessExpression(initial))) initial = initial.expression;
-        const transient = !!(initial && ((ts.isCallExpression(initial) &&
+        const transient = !!(initial && ((ts.isArrowFunction(initial) || ts.isFunctionExpression(initial)) ||
+          (ts.isCallExpression(initial) &&
           ((options.allowModules && initial.expression.kind === ts.SyntaxKind.ImportKeyword) ||
            (options.allowNetwork && ts.isIdentifier(initial.expression) && initial.expression.text === 'fetch'))) ||
           (ts.isNewExpression(initial) && ts.isIdentifier(initial.expression) &&
@@ -268,11 +269,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
           start: span(name).start, end: span(name).end });
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {
-      bindings.push({ name: statement.name.text, kind: 'function', mutable: false,
+      bindings.push({ name: statement.name.text, kind: 'function', mutable: false, transient: true,
         ...(statement.type && portableAnnotation(statement.type, file) ?
           { annotation: portableAnnotation(statement.type, file) } : {}),
         start: span(statement.name).start, end: span(statement.name).end });
-      add('forbidden-control', 'Top-level function declarations cannot be persisted; use a local arrow expression within one eval.', statement);
     }
   }
 
@@ -406,7 +406,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     `const __natlang_present = (value: Record<string, unknown>) => Object.fromEntries(` +
       `Object.entries(value).filter(([, item]) => item !== undefined));`,
     `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}) => ` +
-      `({ result: __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
+      `({ result: __natlang_result === undefined ? null : __natlang_result, inputs: __natlang_present({ ${inputNames.join(', ')} }), ` +
       `bindings: __natlang_present(__natlang_bindings) });`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +

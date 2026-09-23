@@ -2,7 +2,7 @@ export type EnvironmentMode = 'fresh' | 'retained';
 export type EvalRequest = { code: string; scope: Record<string, unknown>; body: boolean;
   path: string; effectful: boolean };
 export type HostEvent = { operation: string; [key: string]: unknown };
-export type EvalResult = { result: unknown; events: HostEvent[] };
+export type EvalResult = { result: unknown; events: HostEvent[]; logs?: string[] };
 
 export class EvalFailure extends Error {
   constructor(message: string, readonly events: HostEvent[]) { super(message); this.name = 'EvalFailure'; }

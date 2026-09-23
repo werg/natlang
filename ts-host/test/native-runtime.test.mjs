@@ -30,6 +30,56 @@ test('eval displays an incompatible expression without setting the typed result'
   assert.equal(right.kind, 'ok'); assert.equal(right.value, 9); assert.equal(lam.return, 9);
 });
 
+test('eval returns console.log observations without changing the function result', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: number[]) => number',
+    instructions: 'Inspect the average, then return the total.', args: { items: [2, 4, 6] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const observed = await session.applyAsync('eval', { code:
+    'const average = items.reduce((sum, item) => sum + item, 0) / items.length; console.log("average", average);' });
+  assert.equal(observed.kind, 'ok');
+  assert.match(observed.text, /console:\naverage 4/);
+  assert.equal(lam.return, MISSING);
+  const finished = await session.applyAsync('eval', { code: 'result = items.reduce((sum, item) => sum + item, 0)' });
+  assert.equal(finished.kind, 'ok');
+  assert.equal(lam.return, 12);
+  assert.doesNotMatch(finished.text, /average 4/);
+});
+
+test('eval can use a local arrow function while logging an intermediate value', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: number[]) => number',
+    instructions: 'Inspect the average.', args: { items: [2, 4, 6] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const observed = await session.applyAsync('eval', { code:
+    'const avg = (xs: number[]) => xs.reduce((sum, x) => sum + x, 0) / xs.length; const mean = avg(items); console.log("mean", mean);' });
+  assert.equal(observed.kind, 'ok');
+  assert.match(observed.text, /console:\nmean 4/);
+  assert.equal(Object.hasOwn(lam.let, 'avg'), false);
+  assert.equal(lam.let.mean, 4);
+});
+
+test('eval can use a local function declaration within one call', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: number[]) => number',
+    instructions: 'Return the average.', args: { items: [2, 4, 6] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const outcome = await session.applyAsync('eval', { code:
+    'function average(xs: number[]) { return xs.reduce((sum, x) => sum + x, 0) / xs.length; } result = average(items);' });
+  assert.equal(outcome.kind, 'ok');
+  assert.equal(lam.return, 4);
+  assert.equal(Object.hasOwn(lam.let, 'average'), false);
+});
+
+test('an incompatible observation does not persist in the typed result slot', async () => {
+  const lam = buildPending({ $lambda: { type: '() => number', instructions: 'Return a count.' } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const observed = await session.applyAsync('eval', { code: 'result = { before: 2, after: 3 }' });
+  assert.equal(observed.kind, 'ok');
+  assert.equal(lam.return, MISSING);
+  assert.equal(Object.hasOwn(lam.let, 'result'), false);
+  const finished = await session.applyAsync('eval', { code: 'result = 3' });
+  assert.equal(finished.kind, 'ok');
+  assert.equal(lam.return, 3);
+});
+
 test('a compatible result assignment supplies the function value without an extra expression', async () => {
   const lam = buildPending({ $lambda: { type: '(items: string[]) => string[]',
     instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } } });

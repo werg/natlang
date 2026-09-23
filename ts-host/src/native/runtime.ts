@@ -1442,6 +1442,10 @@ export class NativeSession {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
         const materialized = this.isScopeHandle(value) ? this.resolveScopeHandle(value) : value;
+        if (name === 'result' && this.lam.type.kind === 'lambda') {
+          try { coerce(materialized, this.lam.type.returns, this.env, 'return'); }
+          catch { continue; /* An intermediate observation must not change the typed result slot. */ }
+        }
         let type = this.lam.letTypes[name];
         const annotation = annotations.get(name);
         if (annotation) type = parseType(annotation);
@@ -1487,7 +1491,8 @@ export class NativeSession {
         ...staged.map(([name, , value]) => `local ${name} = ${oneLine(value)}`),
       ];
       const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
-      return { kind: 'ok', text: rendered + storedStatus + status,
+      const logStatus = evaluated.logs?.length ? `console:\n${evaluated.logs.join('\n')}\n` : '';
+      return { kind: 'ok', text: logStatus + rendered + storedStatus + status,
         value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {

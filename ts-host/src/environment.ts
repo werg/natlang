@@ -183,12 +183,29 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     return context;
   }
 
+  private captureConsole(context: Context): string[] {
+    const logs: string[] = [];
+    const write = (...values: unknown[]) => {
+      if (logs.length >= 32) return;
+      const line = values.map(value => {
+        if (typeof value === 'string') return value;
+        if (value === undefined) return 'undefined';
+        try { return JSON.stringify(portable(value)); }
+        catch { return String(value); }
+      }).join(' ');
+      logs.push(line.length > 2000 ? `${line.slice(0, 2000)} …` : line);
+    };
+    context.console = Object.freeze({ log: write, info: write, warn: write, error: write });
+    return logs;
+  }
+
   execute(request: EvalRequest): EvalResult {
     if (this.disposed) throw new Error('TypeScript environment is disposed');
     if (typeof request.code !== 'string' || typeof request.scope !== 'object' || request.scope === null)
       throw new TypeError('invalid eval request');
     try {
       const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
+      const logs = this.captureConsole(context);
       const scope = snapshot(request.scope) as Record<string, unknown>;
       context.self = scope;
       context.locals = scope.let ?? {};
@@ -197,7 +214,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       if (value && typeof value === 'object' && typeof (value as Promise<unknown>).then === 'function')
         throw new TypeError('async eval results require a host job and later poll');
       const result = portable(value === undefined ? null : value);
-      return { result, events: this.capture(request, 'completed') };
+      return { result, events: this.capture(request, 'completed'), logs };
     } catch (error) {
       throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
     }
@@ -209,6 +226,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       throw new TypeError('invalid eval request');
     try {
       const context = this.mode === 'retained' ? (this.context ??= this.makeContext()) : this.makeContext();
+      const logs = this.captureConsole(context);
       const scope = snapshot(request.scope) as Record<string, unknown>;
       context.self = scope; context.locals = scope.let ?? {};
       const previousFx = context.fx;
@@ -232,7 +250,7 @@ export class TypeScriptEnvironment implements EvalEnvironment {
         const pending = runInContext(code, context, { timeout: this.timeoutMs, displayErrors: true });
         const value = await pending;
         const result = portable(value === undefined ? null : value);
-        return { result, events: this.capture(request, 'completed') };
+        return { result, events: this.capture(request, 'completed'), logs };
       } finally { context.fx = previousFx; }
     } catch (error) {
       throw new EvalFailure(error instanceof Error ? error.message : String(error), this.capture(request, 'failed'));
