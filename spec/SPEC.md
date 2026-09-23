@@ -139,6 +139,8 @@ lines for callable items and services, then the parameters and locals declared
 with their current values (large values cut off, with the `read_page` ID that holds them). An
 eval is atomic: a failed compilation or execution commits no local or capture
 changes (effects already performed remain). A final expression is only shown.
+Eval code may create inline `nl` functions like any TypeScript; they see the
+callable items and the scope bindings their instructions mention.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live
