@@ -34,7 +34,8 @@ execution tools are:
 Normal lambdas can inspect, edit, and diff imported functions through function
 tools. They do not receive model-facing filesystem tools. A function completes
 when a typed eval result exists, every substantive instruction line is closed,
-and no child operation remains unresolved. There is no separate done action.
+and no child operation remains unresolved. A compatible final expression or
+assignment to `result` supplies the typed value. There is no separate done action.
 
 ## Directory reducers and files
 

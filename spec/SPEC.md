@@ -62,6 +62,7 @@ commit parameter or local changes.
 
 A final expression or top-level return is displayed as the eval tool result. If
 that value fits the function return type, it also becomes the function result.
+A compatible assignment to the local `result` also sets the function result.
 A later compatible eval value may replace it until the function completes.
 
 Imported functions take positional values. A synchronous TypeScript default

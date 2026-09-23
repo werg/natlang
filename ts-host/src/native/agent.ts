@@ -196,7 +196,7 @@ export class NativeToolAgent {
 
   private toolsScope(session: NativeSession): any[] {
     const tools = [
-      tool('eval', 'Execute TypeScript in the persistent scope. Parameters and declarations persist. A compatible final expression becomes the function result.',
+      tool('eval', 'Execute TypeScript in the persistent scope. Parameters and declarations persist. A compatible final expression or assignment to result sets the function result.',
         { code: { type: 'string' } }, ['code']),
       tool('read_value', 'Inspect a variable or field/index selection without executing code.',
         { expression: { type: 'string' },

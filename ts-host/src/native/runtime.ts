@@ -1447,6 +1447,12 @@ export class NativeSession {
       if (compiled.producesResult && this.lam.type.kind === 'lambda') try {
         functionResult = coerce(output.result, this.lam.type.returns, this.env, 'return');
       } catch { /* An intermediate expression of another type is still a useful eval result. */ }
+      if (functionResult === undefined && !compiled.producesResult && this.lam.type.kind === 'lambda') {
+        const resultBinding = staged.find(([name]) => name === 'result');
+        if (resultBinding) try {
+          functionResult = coerce(resultBinding[2], this.lam.type.returns, this.env, 'return');
+        } catch { /* A local named result may still be an intermediate value. */ }
+      }
       for (const [name, value] of stagedInputs) this.lam.args[name] = value;
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;

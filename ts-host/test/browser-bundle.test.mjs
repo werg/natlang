@@ -45,7 +45,7 @@ test('browser natural functions call synchronous TypeScript imports without awai
         if (!turns++) {
           assert.match(String(request.messages.find(message => message.role === 'user')?.content),
             /double \[TypeScript\] \(value: number\): number/);
-          return { calls: [['eval', { code: 'double(value)' }]], completion_tokens: 1 };
+          return { calls: [['eval', { code: 'const result = double(value);' }]], completion_tokens: 1 };
         }
         return { calls: [['mark_lines', { start: 1 }]], completion_tokens: 1 };
       } });

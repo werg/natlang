@@ -30,6 +30,15 @@ test('eval displays an incompatible expression without setting the typed result'
   assert.equal(right.kind, 'ok'); assert.equal(right.value, 9); assert.equal(lam.return, 9);
 });
 
+test('a compatible result assignment supplies the function value without an extra expression', async () => {
+  const lam = buildPending({ $lambda: { type: '(items: string[]) => string[]',
+    instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } } });
+  const session = new NativeSession(new NativeRuntime(), lam, new TypeEnv());
+  const result = await session.applyAsync('eval', { code: 'let result = [...new Set(items)];' });
+  assert.equal(result.kind, 'ok');
+  assert.deepEqual(lam.return, ['a', 'b']);
+});
+
 test('native reads may inspect read-only inputs', () => {
   const lam = buildPending({ $lambda: { type: '(state: { head: string }) => string',
     instructions: 'Inspect the state.', args: { state: { head: 'manifest-1' } } } });
