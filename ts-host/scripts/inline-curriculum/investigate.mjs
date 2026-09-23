@@ -1,6 +1,7 @@
 // Investigation families: a frontier search whose length is not known in advance (iterateOn, with a progress
 // review on a long but useful run), and an exact aggregate whose winner is decided by the last page.
-import { capitalize, curriculumCase, evalCall, literal, nonceWords, Random, returnCall } from './lib.mjs';
+import { createHash } from 'node:crypto';
+import { blockedCall, capitalize, curriculumCase, evalCall, literal, nonceWords, Random, returnCall } from './lib.mjs';
 
 /**
  * Breadth-first search over a graph that can only be explored link by link. The target is near, far (past the
@@ -99,5 +100,95 @@ export function page(n: number): { id: string, supplier: string, quarter: string
 export function page_count(): number { return ${Math.ceil(rows.length / 8)}; }
 ` },
       inputs: {}, expected: best });
+  });
+}
+
+/**
+ * A reactive controller run with iterateOn: each step reads the greenhouse and sets heater and vent until the
+ * temperature holds between 20 and 22 °C for three readings. Sunlight changes the dynamics partway through, a
+ * cold start runs past the progress review (which should let it continue), and a broken heater makes the goal
+ * unreachable (the review stops it, and the honest outcome is blocked).
+ */
+export function greenhouseControl(seed, index) {
+  const rng = new Random(seed, `greenhouse:${index}`);
+  const certificate = `stable-${createHash('sha256').update(`${seed}:${index}:greenhouse`).digest('hex').slice(0, 8)}`;
+  const shape = `greenhouse${index}`;
+  const variants = {
+    normal: { start: rng.pick([15, 16, 17]), sunAt: 0, broken: false },
+    sun_arrives: { start: rng.pick([15, 16]), sunAt: rng.int(3, 5), broken: false },
+    long: { start: rng.pick([6, 7]), sunAt: 0, broken: false },
+    heater_broken: { start: rng.pick([15, 16]), sunAt: 0, broken: true },
+  };
+  // The reference controller, simulated here to know how the run ends and whether the review is reached.
+  const simulate = spec => {
+    let temp = spec.start, tick = 0, heater = false, vent = false;
+    const read = () => {
+      tick++;
+      const sunny = spec.sunAt > 0 && tick >= spec.sunAt;
+      temp = Math.round((temp + (sunny ? 0.8 : -0.4) + (heater && !spec.broken ? 1.2 : 0) - (vent ? 1.5 : 0)) * 10) / 10;
+      return temp;
+    };
+    const readings = [read()];
+    for (let step = 1; step <= 40; step++) {
+      heater = temp < 20.5; vent = temp > 21.5;
+      readings.push(read());
+      if (readings.slice(-3).length === 3 && readings.slice(-3).every(t => t >= 20 && t <= 22)) return { steps: step, reached: true };
+    }
+    return { steps: 40, reached: false };
+  };
+  return Object.entries(variants).map(([variant, spec]) => {
+    const run = simulate(spec);
+    if (!spec.broken && !run.reached) throw new Error(`greenhouse ${variant}: the reference controller does not stabilise`);
+    const module = `let temp = ${spec.start};
+let tick = 0;
+let heater = false;
+let vent = false;
+const readings: number[] = [];
+/** Set the heater and the vent; they act from the next reading on. */
+export function set(controls: { heater: boolean, vent: boolean }): void { heater = controls.heater; vent = controls.vent; }
+/** Let ten minutes pass and read the temperature in °C (one decimal), and whether the sun is on the glass. */
+export function read(): { minute: number, temp: number, sunny: boolean } {
+  tick += 1;
+  const sunny = ${spec.sunAt} > 0 && tick >= ${spec.sunAt};
+  temp = Math.round((temp + (sunny ? 0.8 : -0.4) + (heater && !${spec.broken} ? 1.2 : 0) - (vent ? 1.5 : 0)) * 10) / 10;
+  readings.push(temp);
+  return { minute: tick * 10, temp, sunny };
+}
+/** The stability certificate once the last three readings were all between 20 and 22 °C; otherwise null. */
+export function certificate(): string | null {
+  const last = readings.slice(-3);
+  return last.length === 3 && last.every(t => t >= 20 && t <= 22) ? ${JSON.stringify(certificate)} : null;
+}
+`;
+    const loop = `type Run = { temp: number, certified: string | null };
+const control = (run: Run): Run => {
+  greenhouse.set({ heater: run.temp < 20.5, vent: run.temp > 21.5 });
+  const reading = greenhouse.read();
+  return { temp: reading.temp, certified: greenhouse.certificate() };
+};
+const first = greenhouse.read();`;
+    const reference = spec.broken ? [
+      evalCall(`${loop}
+let outcome: string;
+try { outcome = (await iterateOn(control, { temp: first.temp, certified: null }).until(run => run.certified !== null)).certified!; }
+catch (error) { outcome = String(error) + ' | last reading ' + greenhouse.read().temp; }
+outcome`),
+      blockedCall('The greenhouse keeps cooling with the heater on: the heater does not respond, so the temperature cannot be brought into the band.'),
+    ] : [evalCall(`${loop}
+const final = await iterateOn(control, { temp: first.temp, certified: null }).until(run => run.certified !== null);
+return final.certified;`), returnCall(certificate)];
+    const judge = spec.broken ?
+      { verdict: 'divergent', reason: 'The temperature falls every step although the heater is on; the run is moving away from the band.' } :
+      { verdict: 'continue', reason: 'The temperature rises steadily toward the band.' };
+    return curriculumCase({ family: 'actor_greenhouse', shape, variant, pairGroup: `greenhouse:${shape}`,
+      slice: 'iterate', domain: 'actor', mode: 'single_call', inline: 'avoid', iterate: 'required',
+      evidence: { world: [`start ${spec.start} °C`, spec.sunAt ? `sun from reading ${spec.sunAt}` : 'no sun', spec.broken ? 'heater broken' : 'heater works'],
+        retrieved: [], background: [`reference controller: ${run.reached ? `${run.steps} steps` : 'never stabilises'}`] },
+      minimumSequence: ['read the greenhouse', 'step a controller with iterateOn until the certificate appears', spec.broken ? 'report the unreachable goal' : 'return the certificate'],
+      reference: { root: reference, children: [{ match: 'An iterative process', value: judge }] },
+      root: { name: 'stabilise_greenhouse', args: {}, returns: 'string',
+        instructions: 'Bring the greenhouse to between 20 and 22 °C and keep it there until greenhouse.certificate() issues a certificate (three readings in a row in that band), by setting its heater and vent between readings. Return the certificate.' },
+      files: { 'stabilise_greenhouse/greenhouse.ts': module },
+      inputs: {}, expected: spec.broken ? null : certificate, ...(spec.broken ? { operation: 'blocked' } : {}) });
   });
 }

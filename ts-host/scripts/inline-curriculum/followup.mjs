@@ -233,7 +233,7 @@ for (const line of order) {
 if (short) { for (const id of reserved) inv.release(id); reserved.length = 0; }
 console.log({ reserved, short, stock_after: inv.fingerprint() });`;
     return curriculumCase({ family: 'live_inventory', shape, variant, pairGroup: `inventory:${shape}`,
-      slice: 'nested_scoped', domain: 'actor', mode: 'followup',
+      slice: 'nested_scoped', domain: 'actor', mode: 'single_call', // one eval with a rollback on failure is a correct solution
       evidence: { world: [fingerprint(stock)], retrieved: [expected.stock_after], background: [] },
       decisive: [{ marker: expected.stock_after, source: 'eval', note: 'the stock fingerprint after reserving or rolling back' }],
       plausibleActions: ['reserve every line', 'roll back and report the short line'],

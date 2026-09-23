@@ -73,8 +73,16 @@ function rejected(error: Reject): NativeResult {
     codes: error.diagnostics.map(diagnostic => diagnostic.code) };
 }
 /** What the model is told when a value is staged as the call's result. */
-const stagedMessage = (value: Value) => `\nStaged ${oneLine(value)} as the result. If this is the result of the task you were given and ` +
-  'you are satisfied with it, you can reply done (without a tool call) to return it, or keep working and return a different value later.';
+const stagedMessage = (value: Value) => `\nStaged ${stagedText(value)} as the result. If this is the result of the task you were given and ` +
+  'you are satisfied with it, you can reply done (without a tool call) to return exactly this value, or keep working and return a different value later.';
+/** A staged value in full when it is small portable data, so it can be checked (and never needs retyping). */
+function stagedText(value: Value): string {
+  if (!containsLive(value)) {
+    const text = JSON.stringify(value);
+    if (text !== undefined && text.length <= 1500) return text;
+  }
+  return oneLine(value);
+}
 /** A deep-frozen copy of portable data; live values and handles are kept by reference. */
 function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
   const copy = (item: unknown): unknown => Array.isArray(item) ? Object.freeze(item.map(copy)) :

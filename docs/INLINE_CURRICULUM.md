@@ -20,10 +20,11 @@ gives the model only `semantics`, so the block is oracle metadata the teacher ne
 | `mode` | `single_call` (one well-formed eval can be right) or `followup` (a later choice depends on an observation) |
 | `inline` | `required`, `optional`, or `avoid` (a gratuitous child) |
 | `edits` | `required` (a real defect in a callable helper) or `forbidden` (a correct helper) |
+| `named`, `iterate` | `required`: the trajectory must call a named callable `.nl` function, or run `iterateOn` |
 | `decisive` | Markers of the observations the answer rests on, with where they first appear |
 | `plausible_actions`, `minimum_sequence` | What could be done before the observation; the causally sufficient sequence |
 | `evidence`, `assumptions`, `world_semantics` | World assertions, what must be retrieved, bridging knowledge, open/closed/defeasible semantics |
-| `reference` | A replayable solution: root tool calls, and answers for child calls keyed by a fragment of the child's opening |
+| `reference` | A replayable solution: root tool calls, and answers for child calls keyed by fragments of the child's opening (a value, or a tool call such as `blocked`) |
 
 Results are exact typed values (labels, ids, receipts, certificates), so a semantic decision is still checked
 exactly. Worlds are callable-folder TypeScript modules: data stays hidden until the model queries it, module
@@ -52,11 +53,12 @@ collector accepted its contract **and**:
   root's opening, and, for follow-up cases, before the root's first result decision (a `return_result`,
   `blocked`, `failed`, or a staged eval `return`);
 - `inline: required` saw an inline child, and `inline: avoid` saw none;
-- `edits: required` saw an `edit_function`, and `edits: forbidden` saw none.
+- `edits: required` saw an `edit_function`, and `edits: forbidden` saw none;
+- `named: required` saw a named child call, and `iterate: required` an eval that runs `iterateOn`.
 
 Rejection reasons: `wrong_return`, `fabricated_result` (a value where the honest outcome is a blocker),
 `incomplete_trajectory`, `missing_observation:<marker>`, `premature_choice:<marker>`, `inline_missing`,
-`gratuitous_inline`, `defect_not_repaired`, `unwarranted_edit`. The number of evals is never a criterion.
+`gratuitous_inline`, `defect_not_repaired`, `unwarranted_edit`, `named_helper_unused`, `iterate_missing`. The number of evals is never a criterion.
 The collector itself now requires a blocked case to end with the model's own `blocked` or `failed` call;
 running out of turns also quiesces a call and was previously accepted.
 
@@ -68,6 +70,10 @@ running out of turns also quiesces a call and was previously accepted.
 | `logic_proof_verifier` | follow-up | logic | follow-up | A guarded rule's negated condition holds, is defeated by a late fact the verifier names, or a needed link is absent; a proof returns the verifier's certificate |
 | `logic_abduction_test` | follow-up | logic | follow-up | A discriminating test confirms the suggested cause, reverses it, or is inconclusive |
 | `folio_entailment` | follow-up | logic | follow-up | FOLIO premises in a paged store mixed with an unrelated story's; one case per example |
+| `folio_batch` | inline | logic | single call | Every conclusion of one FOLIO story, each judged in its own inline child |
+| `prontoqa_proof` | follow-up | logic | single call | A PrOntoQA proof as a chain of fact ids checked by a verifier; the counterpart lacks a rule the proof needs |
+| `prontoqa_search` | iterate | logic | single call | The same proofs found by forward search with `iterateOn` |
+| `kqapro_question` | nested | relational | single call | A KQA Pro question over a paged knowledge-base module holding what its gold program touches, plus decoys |
 | `child_sufficiency` | nested | logic | follow-up | A named child finds the first records sufficient, needs the detailed records, or neither suffices (blocked) |
 | `relational_multihop_qualifier` | nested | relational | single call | Paged two-hop graph with temporal qualifiers: base, divestment, a hire on a later page, a departure |
 | `relational_policy_inline` | inline | relational | single call | Exact candidate retrieval, then per-candidate policy judgments through a typed `review_each` callback |
@@ -87,7 +93,18 @@ running out of turns also quiesces a call and was previously accepted.
 | `inline_late_binding` | inline | other | single call | One saved inline judgment captures a `let` budget reassigned between screening rounds |
 | `inline_type_repair` | inline | other | follow-up | A seeded eval reads fields of an untyped inline lambda's result; the diagnostic proposes the annotation, which leads to a typed lambda (or a direct answer) |
 | `idempotent_retry` | failure | other | follow-up | A send succeeds but its acknowledgement is lost; the same command is retried under its key |
-| `live_inventory` | nested | actor | follow-up | A live class instance from a module: reserve every line, or roll back on a short line; the stock fingerprint proves the rollback |
+| `live_inventory` | nested | actor | single call | A live class instance from a module: reserve every line, or roll back on a short line; the stock fingerprint proves the rollback |
+| `inline_multi_capture` | inline | other | single call | Exact per-service metrics and release notes judged together under a policy: notes announce the failures, are unrelated, or announce another path |
+| `inline_union_target` | inline | other | single call | A union-of-records triage per message, collected with `Promise.all` and keyed back by id |
+| `stateful_dates` | inline | other | single call | A `Map` of `Date`s: overdue contacts, with a note deferring one to a date that has or has not arrived |
+| `inline_structured_extract` | inline | other | single call | Each receipt's total and currency need a typed record (`nl<Amount>`), then exact sums per currency |
+| `named_versus_inline` | nested / inline | other | single call | The folder's `urgency` function fits (a new inline function is gratuitous), or no helper fits (judge inline) |
+| `loop_rewrite` | failure | other | follow-up | A seeded `while` loop is rejected: rewrite as a counted loop (page count known) or with `iterateOn` (until an empty page) |
+| `child_opt_out` | nested | other | single call | One invoice states no total: its child reports blocked and the parent records null, never a computed figure |
+| `event_retry` | failure | actor | follow-up | A committed event whose view times out is rendered again, not re-applied; a rejected event is reported |
+| `iterate_frontier` | iterate | relational | single call | Breadth-first search link by link with `iterateOn`: near, far (past the progress review), or unreachable |
+| `relational_late_argmax` | follow-up | relational | single call | The supplier with the most late Q3 shipments; late, other-quarter, or cancelled rows on the last page decide it |
+| `actor_greenhouse` | iterate | actor | single call | A controller stepped with `iterateOn` until the temperature holds: sun arrives, a cold start runs past the review, or a broken heater makes it blocked |
 
 ## External sources
 
@@ -99,6 +116,16 @@ read only the cache and keep source labels and formal annotations in the oracle 
   gated behind accepting its terms with an account; switch the source to it once that is done. v0.0 spells the
   third label both `Uncertain` and `Unknown`, and has the label errors v2 fixed, so its cases need review
   before training. Validation stories become `test` cases.
+- **PrOntoQA-OOD** (Apache-2.0) is pinned at `0a6412b` (`generated_ood_data.zip`, regenerated 2024-10-17). The
+  proof-only files give 4,100 distinct theories, all of which parse and derive their goal; in-context examples
+  are `train`, the benchmark's test examples `test`.
+- **KQA Pro** is pinned at the Hugging Face mirror `drt/kqa_pro@0b26da6` (the maintainers' download link no longer
+  serves the archive). The authors license it **CC BY-SA 4.0**; share-alike may extend to derived training
+  rows, so review this before training on them. Each question's gold program is translated into TypeScript
+  over a paged `kb` API and run against the full knowledge base; only questions whose run reproduces the
+  dataset answer are used, and the translated program is the reference. Validation questions are `test`.
+- An interactive world (ScienceWorld, ALFWorld, TextWorld) is not integrated yet; they are Python environments
+  that need a process bridge. The actor domain uses the project's own simulators meanwhile.
 
 ## Commands
 
@@ -113,6 +140,10 @@ node scripts/inline-curriculum/admit.mjs ../runs/ic.results.jsonl --ledger ../ru
 ```
 
 `--shapes` scales every family by its weight; `--start` offsets the shape index so shards are disjoint.
+`select.mjs POOL.jsonl --out SHARD.jsonl [--split train|test]` picks the largest shard whose domain and slice
+shares are all within three points of the plan's targets, keeping counterfactual groups whole and spreading
+picks across families: from a 2,580-case pool (seed 102, `--shapes 20`, about 30 s) it selects 1,455 cases
+from all 39 families, the largest family at 7%.
 Synthetic case ids and groups carry the seed; source cases are grouped by source story across shards.
 Admitted rows are ordinary collector rows and go through `materialize-native-teacher.mjs` unchanged.
 
@@ -129,3 +160,16 @@ Admitted rows are ordinary collector rows and go through `materialize-native-tea
 - An unannotated inline `nl` gets its result type from how the eval uses it (typed holes, `compiler/holes.ts`):
   conditions, `Promise.all(items.map(...))` results, arithmetic, typed variables, and `iterateOn` steps and stopping
   checks no longer need `nl<T>`. Before, 17 of 20 natural unannotated uses were rejected.
+- In eval, `await nl`...`` without a call runs the judgment (a live run awaited the function itself, so every
+  verdict was truthy); project source gets an `nl-not-called` diagnostic instead.
+- A staged result is shown in full when it is small portable data. A live run saw `Staged { reserved: …, … }`,
+  retyped the value into `return_result`, and invented the reservation ids it had never been shown.
+
+## Pilot findings
+
+Pilot 4 (Bonsai 27B, 80 cases, one counterfactual group per family, before the families added with it):
+18 of the first 21 admitted, including every logic case and the relational multi-hop cases whose edge
+direction pilot 3 misread. Rejections were a policy review that awaited `nl` functions without calling them
+(fixed in the surface), a review whose "judgment" was keyword regexes (a correct rejection), and the invented
+reservation ids above.
+

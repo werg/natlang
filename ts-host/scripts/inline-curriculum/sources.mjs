@@ -121,7 +121,7 @@ function prontoClosure(facts, entity) {
  * PrOntoQA: prove a goal about an entity by submitting a chain of fact ids to a verifier. The counterpart
  * removes one rule the proof needs (and every alternative), so the same goal is not provable from the store.
  */
-export function prontoProof(seed, index) {
+export function prontoProof(seed, index, mode = 'proof') {
   const rows = prontoRows();
   const row = rows[index % rows.length];
   const rng = new Random(seed, `pronto:${row.id}`);
@@ -176,21 +176,97 @@ export function verify(chain: string[]): { ok: boolean, certificate: string | nu
   return ok ? { ok, certificate: ${JSON.stringify(certificate)}, problem: null } : fail('the chain shows "' + say(reached) + '", not the goal "' + say(GOAL) + '"');
 }
 `;
-      const reference = variant === 'provable' ?
+      const reference = mode === 'search' ? [evalCall(PRONTO_SEARCH), returnCall(expected)] : variant === 'provable' ?
         [evalCall(READ_ALL), evalCall(`const checked = proof.verify(${JSON.stringify(proofChain)});\nchecked`), returnCall(expected)] :
         [evalCall(READ_ALL), returnCall(expected)];
-      return curriculumCase({ family: 'prontoqa_proof', shape, variant, pairGroup: `pronto:${shape}`,
+      const search = mode === 'search';
+      return curriculumCase({ family: search ? 'prontoqa_search' : 'prontoqa_proof', shape, variant, pairGroup: `pronto${search ? '-search' : ''}:${shape}`,
         splitGroup: `prontoqa:${row.file}:${row.id.split(':')[1]}`, split: row.split,
-        slice: 'observation_followup', domain: 'logic', mode: 'single_call', worldSemantics: 'open_world', inline: 'avoid',
+        slice: search ? 'iterate' : 'observation_followup', domain: 'logic', mode: 'single_call', worldSemantics: 'open_world', inline: 'avoid',
+        ...(search ? { iterate: 'required' } : {}),
         evidence: { world: variant === 'provable' ? proofChain.map(id => facts.find(f => f.id === id).text) : [`removed: ${removed}`],
           retrieved: [], background: [`source: PrOntoQA-OOD ${SOURCES.prontoqa.revision} ${row.id}`, `gold chain of thought: ${row.chain_of_thought.join(' ')}`] },
         minimumSequence: ['read the fact store', 'find a chain from a fact about the entity through rules to the goal', 'verify it, or conclude no chain exists'],
         reference: { root: reference },
         root: { name: 'prove_goal', args: { goal: 'string' }, returns: 'ProofResult',
-          instructions: `Prove goal from the facts in the store (facts), using only those facts. A proof is a chain of fact ids: a fact about the entity, then each rule you apply in turn. Check it with proof.verify(chain); on success return status "proved" with the verifier's certificate. If the facts do not prove goal, return status "unprovable" with a null certificate.` },
+          instructions: `Prove goal from the facts in the store (facts), using only those facts. A proof is a chain of fact ids: a fact about the entity, then each rule you apply in turn. Check it with proof.verify(chain); on success return status "proved" with the verifier's certificate. If the facts do not prove goal, return status "unprovable" with a null certificate.` +
+            (search ? ' Find the chain by searching forward with iterateOn: each step applies the rules to the classes the entity has reached so far, until the goal is reached or a step reaches nothing new.' : '') },
         files: { 'prove_goal/facts.ts': factStore(ids, 'The fact store.'), 'prove_goal/proof.ts': verifier,
           'types.ts': 'export type ProofResult = { status: "proved" | "unprovable", certificate: string | null };\n' },
         inputs: { goal: goalText }, expected });
     });
 }
 export const prontoCount = () => prontoRows().length;
+/** The same proofs found by forward search with iterateOn (logic in the iteration slice). */
+export const prontoSearch = (seed, index) => prontoProof(seed, index, 'search');
+
+const PRONTO_SEARCH = `const all: { id: string, text: string }[] = [];
+const count = facts.pages();
+for (let p = 1; p <= count; p++) all.push(...facts.page(p));
+const entity = goal.split(' ')[0];
+const singular = (word: string) => word.toLowerCase().replace(/uses$/, 'us');
+type Rule = { id: string, from: string, to: string, isClass: boolean, negated: boolean };
+const rules: Rule[] = [];
+const reached: Record<string, string[]> = {};
+for (const fact of all) {
+  let m = /^(?:Every|Each) (\\w+) is (not )?(an? )?(\\w+)\\.$/.exec(fact.text);
+  if (m) { rules.push({ id: fact.id, from: m[1], to: m[4], isClass: !!m[3], negated: !!m[2] }); continue; }
+  m = /^(\\w+) are (not )?(\\w+)\\.$/.exec(fact.text);
+  if (m) { rules.push({ id: fact.id, from: singular(m[1]), to: singular(m[3]), isClass: /uses$/.test(m[3]), negated: !!m[2] }); continue; }
+  m = /^(\\w+) is an? (\\w+)\\.$/.exec(fact.text);
+  if (m && m[1] === entity) reached[m[2]] = [fact.id];
+}
+const target = goal.replace(/\\.$/, '').replace(' is an ', ' is a ');
+const say = (rule: Rule) => entity + ' is ' + (rule.negated ? 'not ' : '') + (rule.isClass ? 'a ' : '') + rule.to;
+type Search = { reached: Record<string, string[]>, frontier: string[], found: string[] | null };
+const expand = (state: Search): Search => {
+  const next = { ...state.reached };
+  const frontier: string[] = [];
+  let found = state.found;
+  for (const cls of state.frontier) for (const rule of rules.filter(r => r.from === cls)) {
+    const chain = [...state.reached[cls], rule.id];
+    if (found === null && say(rule) === target) found = chain;
+    if (rule.isClass && !rule.negated && !next[rule.to]) { next[rule.to] = chain; frontier.push(rule.to); }
+  }
+  return { reached: next, frontier, found };
+};
+const direct = Object.keys(reached).find(cls => entity + ' is a ' + cls === target);
+const final = await iterateOn(expand, { reached, frontier: Object.keys(reached), found: direct ? reached[direct] : null })
+  .until(state => state.found !== null || state.frontier.length === 0);
+if (final.found === null) return { status: 'unprovable', certificate: null };
+const checked = proof.verify(final.found);
+return { status: 'proved', certificate: checked.certificate };`;
+
+/**
+ * FOLIO, batched: every conclusion drawn from one story, each judged in its own inline child against the
+ * premises the parent read (logic in the inline slice). Stories keep their original split.
+ */
+export function folioBatch(seed, index) {
+  const rows = folioRows();
+  const stories = [...new Set(rows.map(row => `${row.split}:${row.story_id}`))];
+  const [split, story] = stories[index % stories.length].split(':');
+  const examples = rows.filter(row => row.split === split && String(row.story_id) === story);
+  const rng = new Random(seed, `folio-batch:${story}`);
+  const premises = examples[0].premises.map(text => text.trim());
+  const facts = rng.shuffle(premises).map((text, i) => ({ id: `P${i + 1}`, text }));
+  const conclusions = examples.map((row, i) => ({ id: `C${i + 1}`, text: row.conclusion.trim(), verdict: VERDICT[row.label] }));
+  if (conclusions.some(c => !c.verdict)) throw new Error(`FOLIO story ${story}: unexpected label`);
+  const expected = Object.fromEntries(conclusions.map(c => [c.id, c.verdict]));
+  const plain = conclusions.map(({ id, text }) => ({ id, text }));
+  return [curriculumCase({ family: 'folio_batch', shape: `story${story}`, variant: split, splitGroup: `folio:story:${story}`,
+    split: split === 'train' ? 'train' : 'test', slice: 'inline_placement', domain: 'logic', mode: 'single_call', inline: 'required',
+    worldSemantics: 'open_world',
+    evidence: { world: premises, retrieved: [], background: examples.map(row => `${row.conclusion.trim()} => ${row.label}`).concat(`source: FOLIO ${SOURCES.folio.revision}`) },
+    assumptions: ['Only the stored premises hold; a statement they neither establish nor refute is unknown.'],
+    minimumSequence: ['read the premises', 'judge each conclusion against them in its own child'],
+    reference: { root: [evalCall(`${READ_ALL}
+const premises = all.map(f => f.text);
+const judged = await Promise.all(conclusions.map(conclusion => nl<Verdict>\`Using only premises and no outside knowledge, is conclusion entailed, contradicted, or unknown?\`(conclusion)));
+return Object.fromEntries(conclusions.map((conclusion, i) => [conclusion.id, judged[i]]));`), returnCall(expected)],
+      children: plain.map(c => ({ match: JSON.stringify(c.text), value: expected[c.id] })) },
+    root: { name: 'evaluate_conclusions', args: { conclusions: '{ id: string, text: string }[]' }, returns: 'Record<string, Verdict>',
+      instructions: `For each of conclusions, decide whether it follows from the premises in the store (facts), using only those premises and no outside knowledge: "entailed" if the premises make it true, "contradicted" if they make it false, and "unknown" if they settle neither. Judge each conclusion separately. Return a record from conclusion id to verdict.` },
+    files: { 'evaluate_conclusions/facts.ts': factStore(facts, 'The premise store.'),
+      'types.ts': 'export type Verdict = "entailed" | "contradicted" | "unknown";\n' },
+    inputs: { conclusions: plain }, expected })];
+}
