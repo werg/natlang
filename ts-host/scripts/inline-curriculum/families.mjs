@@ -8,6 +8,7 @@ import { childOptOut, eventRetry, loopRewrite } from './failure.mjs';
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
 import { textworldIterate, textworldQuest } from './textworld.mjs';
+import { authoringInlineReview, authoringIterate, authoringNamedHelper } from './authoring.mjs';
 import { anliBatch, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
@@ -57,4 +58,8 @@ export const FAMILIES = {
   commaqa_question: { build: commaqaQuestion, weight: 2, source: 'commaqa' },
   textworld_quest: { build: textworldQuest, weight: 2, source: 'textworld' },
   textworld_iterate: { build: textworldIterate, weight: 2, source: 'textworld' },
+  // The TypeScript authoring track (curriculum.track "authoring").
+  authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
+  authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },
+  authoring_named_helper: { build: authoringNamedHelper, weight: 1, track: 'authoring' },
 };

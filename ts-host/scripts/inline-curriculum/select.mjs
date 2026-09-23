@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Select a balanced shard from verified case pools.
-// node scripts/inline-curriculum/select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S] [--split train|test]
+// node scripts/inline-curriculum/select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S] [--split train|test] [--track interpreter|authoring]
 // Counterfactual groups stay whole. Domains and slices are filled up to the plan's shares of the shard size
 // (by default the largest shard whose shares all stay within three points of target), preferring the categories
 // with the most room left and spreading picks across families.
@@ -10,12 +10,14 @@ import { DOMAIN_TARGETS, SLICE_TARGETS } from '../../dist/teacher/curriculum.js'
 import { Random } from './lib.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  out: { type: 'string' }, size: { type: 'string' }, seed: { type: 'string', default: '1' }, split: { type: 'string' } } });
+  out: { type: 'string' }, size: { type: 'string' }, seed: { type: 'string', default: '1' }, split: { type: 'string' }, track: { type: 'string', default: 'interpreter' } } });
 if (!positionals.length || !values.out) throw new Error('usage: select.mjs POOL.jsonl [...] --out OUT.jsonl [--size N] [--seed S]');
 
 const records = positionals.flatMap(path => readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)));
 const seen = new Set();
-const unique = records.filter(record => (!values.split || record.split === values.split) && !seen.has(record.id) && seen.add(record.id));
+// Authoring rows (curriculum.track "authoring") are a separate track: select them with --track authoring.
+const unique = records.filter(record => (record.curriculum.track ?? 'interpreter') === values.track &&
+  (!values.split || record.split === values.split) && !seen.has(record.id) && seen.add(record.id));
 const units = new Map();
 for (const record of unique) {
   const key = record.curriculum.pair_group ?? record.id;

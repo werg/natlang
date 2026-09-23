@@ -10,6 +10,7 @@ import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
+import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
@@ -372,14 +373,17 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
       (!seededFailure.kind || event.failure_kind === seededFailure.kind));
     const effectsOk = same(effects.observed, effects.expected);
-    const filesOk = !folder || same(actualFiles, record.semantics.expected_files ?? folderFiles);
+    // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.
+    const authoringSpec = (record.semantics as { authoring?: AuthoringSpec }).authoring;
+    const authoring = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
+    const filesOk = !folder || (authoring ? authoring.ok : same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
     const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk &&
-      (expectedKind !== 'done' || same(actual, record.semantics.expected));
+      (expectedKind !== 'done' || !!authoring || same(actual, record.semantics.expected));
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
-      effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), accepted,
+      effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}), accepted,
       action_ledger: trace.filter(event => event.kind === 'action'),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
       host_events: trace.filter(event => event.kind === 'host') } };

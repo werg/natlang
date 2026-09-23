@@ -55,6 +55,10 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     const known = new Set(Object.keys(record.types));
     files[`${FOLDER}/__types.d.ts`] = Object.entries(record.types)
       .map(([name, text]) => `type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\n';
+    // The same aliases are importable as the folder's types module (`import type { Ticket } from "./types"`),
+    // which is what TypeScript authors write; without it the import resolves to nothing and types become any.
+    files[`${FOLDER}/types.ts`] ??= Object.entries(record.types)
+      .map(([name, text]) => `export type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\nexport {};\n';
     const external = new Map<string, Set<string>>();
     const parsed = ts.createSourceFile(path, record.text, ts.ScriptTarget.ES2022, true);
     for (const statement of parsed.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&

@@ -112,6 +112,27 @@ running out of turns also quiesces a call and was previously accepted.
 | `relational_late_argmax` | follow-up | relational | single call | The supplier with the most late Q3 shipments; late, other-quarter, or cancelled rows on the last page decide it |
 | `actor_greenhouse` | iterate | actor | single call | A controller stepped with `iterateOn` until the temperature holds: sun arrives, a cold start runs past the review, or a broken heater makes it blocked |
 
+## TypeScript authoring track
+
+Authoring rows (`curriculum.track: "authoring"`) are directory-reducer calls that edit a small project so that a
+module implements a function with `nl`, a named callable function, or `iterateOn`. `semantics.authoring`
+(`ts-host/src/teacher/authoring.ts`) judges the result by running it: the edited folder is mounted as a callable
+folder, the export is called on test inputs, and its natural-language children are answered by an oracle keyed
+by fragments of the child's opening (argument values), since the author's instruction wording is not known in
+advance. The spec can also require the source to create an `nl` function, use `iterateOn`, call a named
+function, or create no `nl` function where an existing one fits. `select.mjs` takes authoring rows only with
+`--track authoring`.
+
+| Family | What is authored |
+|---|---|
+| `authoring_inline_review` | A per-ticket semantic filter with an inline `nl` inside the module |
+| `authoring_iterate` | A link-distance search stepped with `iterateOn` (checked on near, far past the progress review, and unreachable) |
+| `authoring_named_helper` | An aggregate that must call the folder's `sentiment.nl`, not a new judgment |
+
+Building the checker found that `import type { X } from "./types"` in a callable module resolved to nothing,
+so the aliases became `any` and inline children lost their types; module compilation now provides the folder's
+aliases as an importable `types` module.
+
 ## External sources
 
 `acquire.mjs` fetches pinned files into the untracked `vendor/datasets/` cache, checks recorded checksums, and

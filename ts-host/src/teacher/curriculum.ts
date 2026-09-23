@@ -89,8 +89,7 @@ export function validateCurriculum(record: CurriculumRecord): void {
 
 // ---- Trajectory reading ----------------------------------------------------------------------
 
-type Message = { role: string; content?: unknown; tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[];
-  tool_call_id?: string };
+import { openingLength, openingText, text, type Message } from './opening.js';
 type Turn = { context: Message[]; assistant?: { calls?: { tool: string; arguments: unknown }[]; content?: string } };
 
 /** The name of the call a request belongs to, from its opening line. */
@@ -98,17 +97,7 @@ export function callName(context: Message[]): string {
   const match = /^You are inside this call: ([^(]+)\(/.exec(String(context[1]?.content ?? ''));
   return match?.[1] ?? '';
 }
-/** Length of the opening: system, user, and the runtime's pre-filled `scope_` exchanges. */
-export function openingLength(context: Message[]): number {
-  let length = 2;
-  while (context[length]?.role === 'assistant' && (context[length]!.tool_calls ?? []).length &&
-      context[length]!.tool_calls!.every(call => String(call.id).startsWith('scope_')))
-    length += 1 + context[length]!.tool_calls!.length;
-  return length;
-}
-const text = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value ?? '');
-const openingText = (context: Message[]) => context.slice(1, openingLength(context))
-  .map(message => text(message.content) + (message.tool_calls ?? []).map(call => call.function?.arguments ?? '').join('\n')).join('\n');
+export { openingLength } from './opening.js';
 const isInline = (name: string) => name.startsWith('nl@');
 const TERMINAL = new Set(['return_result', 'blocked', 'failed']);
 /** A top-level `return` in an eval stages a result: a decision as much as return_result is. */
