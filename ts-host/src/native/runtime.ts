@@ -245,7 +245,7 @@ export class NativeRuntime {
     const before = dumpState(node);
     this.trace.emit('state', { phase: 'initial', value: before });
     this.lastObserved = before;
-    const env = new TypeEnv().child(node.types);
+    const env = new TypeEnv(callableTypes(node.codebase)).child(node.types);
     env.classes = node.hostClasses;
     const outcome = await this.episode(node, env);
     this.observeState('final', outcome.kind);
@@ -853,4 +853,26 @@ export class NativeSession {
     }
     return ref;
   }
+}
+
+/**
+ * The type aliases of the callable items a call can use: the types its function listing shows. A name
+ * that two items define differently is left out, since neither definition is the one in scope.
+ */
+export function callableTypes(codebase: Record<string, unknown>): Record<string, Type> {
+  const texts = new Map<string, string | null>();
+  const visit = (items: Record<string, unknown>) => {
+    for (const raw of Object.values(items)) {
+      const item = raw as { types?: Record<string, string>; codebase?: Record<string, unknown> };
+      for (const [name, text] of Object.entries(item.types ?? {}))
+        texts.set(name, !texts.has(name) || texts.get(name) === text ? text : null);
+      if (item.codebase) visit(item.codebase);
+    }
+  };
+  visit(codebase ?? {});
+  const types: Record<string, Type> = {};
+  for (const [name, text] of texts) if (text !== null) {
+    try { types[name] = parseType(text); } catch { /* outside the portable grammar: checked by the compiler, not here */ }
+  }
+  return types;
 }

@@ -90,17 +90,19 @@ function pythonJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function referencedTypeAliases(signatures: string[], definitions: Record<string, string>): string[] {
+function referencedTypeAliases(signatures: string[], definitions: Record<string, string>,
+  declarations: Record<string, string> = {}): string[] {
   const found = new Set<string>();
   const visit = (text: string): void => {
     for (const name of Object.keys(definitions)) {
       if (found.has(name) || !new RegExp(`\\b${name}\\b`).test(text)) continue;
       found.add(name);
-      visit(definitions[name]!);
+      visit(declarations[name] ?? definitions[name]!);
     }
   };
   for (const signature of signatures) visit(signature);
-  return [...found].map(name => `type ${name} = ${definitions[name]};`);
+  // A class or method-bearing interface is shown as its TypeScript declaration, not its live-value alias.
+  return [...found].map(name => declarations[name] ?? `type ${name} = ${definitions[name]};`);
 }
 
 function previewValue(value: Value): string {
@@ -313,7 +315,10 @@ export class NativeToolAgent {
     const lam = session.lam, aliases = new Set<string>(), lines: string[] = [];
     const params = (args: Record<string, string>) => Object.entries(args)
       .map(([key, value]) => `${key.replace(/\?$/, '')}${key.endsWith('?') ? '?' : ''}: ${value}`);
-    type Export = { kind: string; args?: Record<string, string>; returns?: string; async?: boolean; type?: string };
+    type Export = { kind: string; args?: Record<string, string>; returns?: string; async?: boolean; type?: string; doc?: string };
+    // The author's one-line description of a function, when there is one.
+    const doc = (text: unknown, indent: string) => typeof text === 'string' && text.trim() ?
+      [`${indent}/** ${text.trim().replace(/\s+/g, ' ').replace(/\*\//g, '* /')} */`] : [];
     const returns = (spec: Export) => spec.async ? `Promise<${spec.returns}>` : String(spec.returns);
     const declare = (name: string, raw: Record<string, unknown>, indent: string): void => {
       const lead = indent ? indent : 'declare ';
@@ -323,17 +328,21 @@ export class NativeToolAgent {
       if (raw.kind === 'module') {
         const exports = (raw.exports ?? {}) as Record<string, Export>;
         for (const [exportName, spec] of Object.entries(exports)) {
-          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types)) aliases.add(line);
+          for (const line of referencedTypeAliases([...Object.values(spec.args ?? {}), spec.returns ?? '', spec.type ?? ''], types,
+            (raw.declarations ?? {}) as Record<string, string>)) aliases.add(line);
           if (exportName === 'default') {
-            if (spec.kind === 'function') lines.push(`${lead}function ${name}(${params(spec.args ?? {}).join(', ')}): ${returns(spec)};  // TypeScript`);
-          } else inner.push(spec.kind === 'function' ? `function ${exportName}(${params(spec.args ?? {}).join(', ')}): ${returns(spec)};  // TypeScript` :
-            `const ${exportName}: ${spec.type ?? 'unknown'};`);
+            if (spec.kind === 'function') lines.push(...doc(spec.doc, indent),
+              `${lead}function ${name}(${params(spec.args ?? {}).join(', ')}): ${returns(spec)};  // TypeScript`);
+          } else if (spec.kind === 'function') inner.push(...doc(spec.doc, ''),
+            `function ${exportName}(${params(spec.args ?? {}).join(', ')}): ${returns(spec)};  // TypeScript`);
+          else inner.push(`const ${exportName}: ${spec.type ?? 'unknown'};`);
         }
       } else if (raw.kind !== 'namespace') {
         const reducer = raw.subtype === 'directory-reducer';
         const list = params((raw.args ?? {}) as Record<string, string>);
         if (reducer) list.unshift('folder: Folder');
         if (reducer) lines.push(`${indent}/** Directory reducer: calling it uses only its result and discards its file changes; handle.apply(${name}, ...) keeps them. */`);
+        else lines.push(...doc(raw.description, indent));
         lines.push(`${lead}function ${name}(${list.join(', ')}): Promise<${raw.returns}>;${reducer ? '' : '  // natural language'}`);
         for (const line of referencedTypeAliases([...Object.values((raw.args ?? {}) as Record<string, string>), String(raw.returns)], types)) aliases.add(line);
       }

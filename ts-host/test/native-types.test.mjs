@@ -10,7 +10,7 @@ test('native type parser handles the complete structural grammar', () => {
     ['(string | number)[]', '(string | number)[]'],
     ['Record<string, {key: string, size: number}>', 'Record<string, { key: string, size: number }>'],
     ['(item: number) => boolean', '(item: number) => boolean'],
-    ['"open" | "closed"', '"open" | "closed"'],
+    ['"open" | "closed"', '"open" | "closed"'], ["'low' | 'high'", '"low" | "high"'], ["{ note: 'it\\'s' }", '{ note: "it\'s" }'],
     ['Map<string, number>', 'Map<string, number>'], ['Date', 'Date'],
     ['Live<"Ledger", "class", "Ledger">', 'Ledger'],
   ]) assert.equal(formatType(parseType(source)), canonical);
@@ -41,7 +41,7 @@ test('record types accept TS semicolon separators and nested aliases are not tru
   const aliases=readTypeAliases('// type Ignored = Bad;\nexport type A = { nested: { value: string; }; note?: "a;b"; };\ntype B = A[];');
   assert.deepEqual(Object.keys(aliases),['A','B']);
   assert.equal(formatType(parseType(aliases.A)), '{ nested: { value: string }, note?: "a;b" }');
-  assert.throws(()=>readTypeAliases('type A = { value: string;'),/unterminated/);
+  assert.throws(()=>readTypeAliases('type A = { value: string;'),/type alias syntax: '\}' expected/);
   assert.throws(()=>readTypeAliases('type A = string; type A = number;'),/duplicate/);
 });
 

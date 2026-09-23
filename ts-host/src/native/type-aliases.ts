@@ -1,32 +1,19 @@
-/** Read the supported `type Name = ...;` declarations without truncating record fields. */
+import ts from 'typescript';
+
+/**
+ * The `type Name = ...` declarations of a TypeScript source, as type text. Generic aliases are left out:
+ * natlang types have no type parameters.
+ */
 export function readTypeAliases(source: string): Record<string, string> {
-  // Preserve quoted literals while removing comments before finding declaration headers.
-  const clean = source.replace(/"(?:[^"\\]|\\.)*"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    value => value.startsWith('/') ? ' '.repeat(value.length) : value);
-  const header = /\b(?:export\s+)?type\s+([A-Za-z_]\w*)\s*=\s*/g;
+  const file = ts.createSourceFile('types.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const errors = (file as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
+  if (errors.length) throw new Error(`type alias syntax: ${errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; ')}`);
   const result: Record<string, string> = {};
-  let match: RegExpExecArray | null;
-  while ((match = header.exec(clean))) {
-    const start = header.lastIndex;
-    let depth = 0, quoted = false, escaped = false, end = start;
-    for (; end < clean.length; end++) {
-      const char = clean[end]!;
-      if (quoted) {
-        if (escaped) escaped = false;
-        else if (char === '\\') escaped = true;
-        else if (char === '"') quoted = false;
-      } else if (char === '"') quoted = true;
-      else if ('{[(<'.includes(char)) depth++;
-      else if ('}])>'.includes(char)) depth--;
-      else if (char === ';' && depth === 0) break;
-      if (depth < 0) throw new Error(`unbalanced type alias ${match[1]}`);
-    }
-    if (end === clean.length || quoted || depth !== 0)
-      throw new Error(`unterminated type alias ${match[1]}`);
-    const name = match[1]!;
+  for (const statement of file.statements) {
+    if (!ts.isTypeAliasDeclaration(statement) || statement.typeParameters?.length) continue;
+    const name = statement.name.text;
     if (Object.hasOwn(result, name)) throw new Error(`duplicate type alias ${name}`);
-    result[name] = clean.slice(start, end).trim();
-    header.lastIndex = end + 1;
+    result[name] = statement.type.getText(file);
   }
   return result;
 }

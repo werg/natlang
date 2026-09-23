@@ -38,7 +38,7 @@ export function checkHost(value: unknown, contract: HostCheck, classes?: Readonl
 
 export class TypeSyntaxError extends Error {}
 type Token = { kind: 'str' | 'num' | 'id' | 'p'; value: string };
-const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
+const TOKEN = /\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(-?\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|(\[\]|=>)|([{}<>|,;:?()]))/y;
 const PRIMS = new Set(['string', 'number', 'boolean', 'null', 'Blob', 'Folder', 'FileHandle', 'unknown']);
 
 function tokenize(source: string): Token[] {
@@ -48,9 +48,11 @@ function tokenize(source: string): Token[] {
     TOKEN.lastIndex = position;
     const match = TOKEN.exec(text);
     if (!match) throw new TypeSyntaxError(`bad character at ${position}: ${JSON.stringify(text.slice(position, position + 12))}`);
-    const kind = match[1] !== undefined ? 'str' : match[2] !== undefined ? 'num' :
-      match[3] !== undefined ? 'id' : 'p';
-    result.push({ kind, value: match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5]! });
+    // TypeScript spells string literals with either quote; a single-quoted one is the same literal.
+    const single = match[2]?.replace(/\\'/g, "'");
+    const kind = match[1] !== undefined || single !== undefined ? 'str' : match[3] !== undefined ? 'num' :
+      match[4] !== undefined ? 'id' : 'p';
+    result.push({ kind, value: match[1] ?? single ?? match[3] ?? match[4] ?? match[5] ?? match[6]! });
     position = TOKEN.lastIndex;
   }
   return result;

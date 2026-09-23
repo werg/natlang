@@ -28,7 +28,7 @@ export type SourceFiles = {
 };
 
 export type ExportRecord =
-  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean }
+  | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string }
   | { kind: 'value'; type?: string };
 
 export type NatlangRecord = { kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
@@ -36,6 +36,8 @@ export type NatlangRecord = { kind: 'natlang'; id: string; name: string; source:
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord> };
 export type ModuleRecord = { kind: 'module'; id: string; name: string; source: string; revision: string; text: string;
   types: Record<string, string>; exports: Record<string, ExportRecord>; imports: string[];
+  /** TypeScript declarations of the module's classes (and method-bearing interfaces), for function listings. */
+  declarations?: Record<string, string>;
   codebase: Record<string, ItemRecord> };
 export type NamespaceRecord = { kind: 'namespace'; name: string; source: string; codebase: Record<string, ItemRecord> };
 export type ItemRecord = NatlangRecord | ModuleRecord | NamespaceRecord;
@@ -99,7 +101,60 @@ function functionRecord(path: string, node: ts.SignatureDeclaration, file: ts.So
     node.type.typeName.text === 'Promise' && node.type.typeArguments?.length === 1;
   if (promised) returns = node.type.typeArguments![0]!.getText(file);
   const isAsync = promised || !!ts.getModifiers(node as ts.FunctionDeclaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword);
-  return { kind: 'function', args, returns, async: isAsync };
+  const doc = docComment(node);
+  return { kind: 'function', args, returns, async: isAsync, ...(doc ? { doc } : {}) };
+}
+
+/** The text of a function's JSDoc comment, on one line; for a function expression, its variable statement's. */
+function docComment(node: ts.Node): string | undefined {
+  const owner = ts.isFunctionDeclaration(node) ? node : node.parent && ts.isVariableDeclaration(node.parent) ?
+    node.parent.parent?.parent : undefined;
+  const docs = owner ? ((owner as { jsDoc?: ts.JSDoc[] }).jsDoc ?? []) : [];
+  const text = docs.map(doc => ts.getTextOfJSDocComment(doc.comment) ?? '').join(' ').replace(/\s+/g, ' ').trim();
+  return text || undefined;
+}
+
+/**
+ * Types a module declares other than aliases. `types` gives them in natlang type text: a class is a live
+ * class value; an interface of properties is a record, and one with methods is a live value checked by
+ * its members. `declarations` gives the TypeScript a function listing shows for the live ones: the public
+ * members of a class, or the interface itself.
+ */
+function declaredTypes(file: ts.SourceFile): { types: Record<string, string>; declarations: Record<string, string> } {
+  const types: Record<string, string> = {}, declarations: Record<string, string> = {};
+  const doc = (node: ts.Node, indent: string) => {
+    const text = ((node as { jsDoc?: ts.JSDoc[] }).jsDoc ?? []).map(item => ts.getTextOfJSDocComment(item.comment) ?? '').join(' ').replace(/\s+/g, ' ').trim();
+    return text ? [`${indent}/** ${text} */`] : [];
+  };
+  const hidden = (member: ts.ClassElement) => ts.getModifiers(member as ts.HasModifiers)?.some(modifier =>
+    [ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.ProtectedKeyword, ts.SyntaxKind.StaticKeyword].includes(modifier.kind)) ||
+    (member.name !== undefined && ts.isPrivateIdentifier(member.name));
+  for (const statement of file.statements) {
+    if (ts.isClassDeclaration(statement) && statement.name) {
+      const name = statement.name.text, lines = [`declare class ${name} {`];
+      for (const member of statement.members) {
+        if (hidden(member) || !member.name || !ts.isIdentifier(member.name)) continue;
+        const readonly = ts.getModifiers(member as ts.HasModifiers)?.some(modifier => modifier.kind === ts.SyntaxKind.ReadonlyKeyword);
+        if (ts.isMethodDeclaration(member)) {
+          const params = member.parameters.map(parameter => `${parameter.name.getText(file)}${parameter.questionToken || parameter.initializer ? '?' : ''}: ${parameter.type?.getText(file) ?? 'unknown'}`);
+          lines.push(...doc(member, '  '), `  ${member.name.text}(${params.join(', ')}): ${member.type?.getText(file) ?? 'unknown'};`);
+        } else if (ts.isPropertyDeclaration(member) && member.type)
+          lines.push(...doc(member, '  '), `  ${readonly ? 'readonly ' : ''}${member.name.text}: ${member.type.getText(file)};`);
+      }
+      lines.push('}');
+      types[name] = `Live<${JSON.stringify(name)}, "class", ${JSON.stringify(name)}>`;
+      declarations[name] = lines.join('\n');
+    } else if (ts.isInterfaceDeclaration(statement) && !statement.typeParameters?.length && !statement.heritageClauses?.length) {
+      const name = statement.name.text, members = statement.members;
+      const fields = members.map(member => ts.isPropertySignature(member) && member.type && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name)) ?
+        `${member.name.text}${member.questionToken ? '?' : ''}: ${member.type.getText(file)}` : undefined);
+      if (fields.every(field => field !== undefined)) { types[name] = `{ ${fields.join(', ')} }`; continue; }
+      types[name] = `Live<${JSON.stringify(name)}, "shape", ${JSON.stringify(members.flatMap(member =>
+        member.name && (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name)) ? [member.name.text] : []).join(','))}>`;
+      declarations[name] = statement.getText(file).replace(/^export\s+/, '');
+    }
+  }
+  return { types, declarations };
 }
 
 /** Parse a TypeScript module in a callable folder: its exports, imports, and type aliases. */
@@ -180,13 +235,15 @@ export function parseModule(path: string, text: string, inherited: Record<string
   for (const name of Object.keys(exports)) if (name !== 'default') checkName(path, name);
   const name = files.basename(path, '.ts');
   checkName(path, name);
-  const types = { ...inherited, ...readTypeAliases(text) };
+  const declared = declaredTypes(file);
+  const types = { ...inherited, ...declared.types, ...readTypeAliases(text) };
   for (const record of Object.values(exports)) if (record.kind === 'function') {
     try { checkSignature(path, record.args, record.returns, types); }
     catch { /* TypeScript types outside the portable grammar are checked by the compiler, not here. */ }
   }
   const source = files.relative?.(path) ?? path;
-  return { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {} };
+  return { kind: 'module', id: `ts:${source}`, name, source, revision: revisionOf(text), text, types, exports, imports, codebase: {},
+    ...(Object.keys(declared.declarations).length ? { declarations: declared.declarations } : {}) };
 }
 
 const isSource = (name: string) => (name.endsWith('.nl') || (name.endsWith('.ts') && !name.endsWith('.d.ts'))) &&
