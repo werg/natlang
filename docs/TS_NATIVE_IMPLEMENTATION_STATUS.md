@@ -91,6 +91,8 @@ Follow-up (inline curriculum, [INLINE_CURRICULUM.md](INLINE_CURRICULUM.md)):
 - Type text accepts single-quoted string literals.
 - Callable modules' aliases, classes (live class types, listed by public members), and interfaces are in eval's type environment.
 - The collector requires a blocked case to end with the model's own `blocked` or `failed` call.
+- Unannotated inline `nl` result types are inferred from their uses in the same eval or file (typed holes); see
+  [inline-natlang-lambdas.md](inline-natlang-lambdas.md), rule 6.
 
 ### Training-data pipeline: state after the revision
 

@@ -85,7 +85,7 @@ running out of turns also quiesces a call and was previously accepted.
 | `counterexample_revision` | follow-up | other | follow-up | A late record shows that a shared email is a household inbox (revise the rule) or the same person (keep it) |
 | `parallel_labels` | inline | other | single call | Concurrent `nl<Label>` children whose labels must stay attached to their items |
 | `inline_late_binding` | inline | other | single call | One saved inline judgment captures a `let` budget reassigned between screening rounds |
-| `inline_type_repair` | inline | other | follow-up | A seeded eval creates an untyped inline lambda; the diagnostic leads to a typed one (or a direct answer) |
+| `inline_type_repair` | inline | other | follow-up | A seeded eval reads fields of an untyped inline lambda's result; the diagnostic proposes the annotation, which leads to a typed lambda (or a direct answer) |
 | `idempotent_retry` | failure | other | follow-up | A send succeeds but its acknowledgement is lost; the same command is retried under its key |
 | `live_inventory` | nested | actor | follow-up | A live class instance from a module: reserve every line, or roll back on a short line; the stock fingerprint proves the rollback |
 
@@ -126,4 +126,6 @@ Admitted rows are ordinary collector rows and go through `materialize-native-tea
   unknown to eval), its classes are live class types, and its interfaces are records or live shapes. A class
   is listed as a TypeScript declaration of its public members with their doc comments.
 - Natlang type text accepts single-quoted string literals, so `const risk: 'low' | 'high' = await nl`...`` works.
-- Contextual typing does not reach an `nl` inside `Promise.all(items.map(...))`; the prompt uses `nl<T>` there.
+- An unannotated inline `nl` gets its result type from how the eval uses it (typed holes, `compiler/holes.ts`):
+  conditions, `Promise.all(items.map(...))` results, arithmetic, typed variables, and `iterateOn` steps and stopping
+  checks no longer need `nl<T>`. Before, 17 of 20 natural unannotated uses were rejected.

@@ -1,5 +1,6 @@
 import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
+import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
@@ -102,8 +103,9 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string, severity: 'error' | 'warning' = 'error') =>
     diagnostics.push({ ...spanOf(node, displayPath), code, message, severity });
 
-  const target = (type: ts.Type, node: ts.Node, what: string, allowHost = true): TargetDescriptor | undefined => {
-    try { return describeTarget(program, checker, type, { allowHost, location: node }); }
+  const target = (type: ts.Type, node: ts.Node, what: string, allowHost = true,
+    within: { program: ts.Program; location: ts.Node } = { program, location: node }): TargetDescriptor | undefined => {
+    try { return describeTarget(within.program, within.program.getTypeChecker(), type, { allowHost, location: within.location }); }
     catch (error) {
       if (!(error instanceof TargetError)) throw error;
       report(node, what === 'return' ? 'nl-unknown-return' : 'nl-unknown-parameter', what === 'return' ?
@@ -130,7 +132,11 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     }
     const contextual = checker.getContextualType(outer as ts.Expression);
     if (!contextual || contextual.flags & ts.TypeFlags.Any) return;
-    return awaited ? contextual : awaitedType(checker, contextual).type;
+    const result = awaited ? contextual : awaitedType(checker, contextual).type;
+    // A generic slot still being inferred (`map`'s `U`) says nothing yet; uses decide (step 6).
+    const open = (type: ts.Type): boolean => !!(type.flags & (ts.TypeFlags.TypeParameter | ts.TypeFlags.Unknown | ts.TypeFlags.Any)) ||
+      (type.isUnion() && type.types.some(open));
+    return open(result) ? undefined : result;
   };
 
   /** Later uses of an unannotated local that holds the result or the callable itself. */
@@ -159,7 +165,6 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   };
 
   const analyze = (node: ts.TaggedTemplateExpression): void => {
-    const file = node.getSourceFile();
     const outerTag = unwrapParentheses(node);
     const call = outerTag.parent && ts.isCallExpression(outerTag.parent) && outerTag.parent.expression === outerTag ?
       outerTag.parent : undefined;
@@ -181,6 +186,21 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         signature.returns = awaitedType(checker, checker.getTypeFromTypeNode(annotation.type)).type;
       } else signature.returns = awaitedType(checker, checker.getTypeFromTypeNode(annotation)).type;
       signature.origin = 'annotation';
+    }
+
+    // 2a. The step of an iteration, `nl`...`.iterateOn(initial, ...args)` or `iterateOn(nl`...`, initial, ...args)`:
+    // the state has the initial value's type, and the step returns the next state.
+    const iteration = signature.origin === 'none' ? iterationArguments(checker, outerTag) : undefined;
+    if (iteration) {
+      const [initial, ...rest] = iteration;
+      if (!initial || rest.some(ts.isSpreadElement) || ts.isSpreadElement(initial)) {
+        report(node, 'nl-spread', 'An `nl` iteration step needs an initial state and plainly listed arguments, or an explicit signature.');
+        return;
+      }
+      const name = (argument: ts.Expression, index: number) => ts.isIdentifier(argument) ? argument.text : index ? `input${index + 1}` : 'state';
+      signature.parameters = [initial, ...rest].map((argument, index) => ({ name: name(argument, index), type: widen(checker.getTypeAtLocation(argument)) }));
+      signature.returns = signature.parameters[0]!.type;
+      signature.origin = 'iteration';
     }
 
     // 2. Contextual callable type (callbacks, annotated locals).
@@ -213,7 +233,6 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     }
 
     // 3. Immediate-call arguments and 4. result context.
-    let callSiteNames: string[] | undefined;
     if (call) {
       const names: string[] = [];
       const types: ts.Type[] = [];
@@ -233,7 +252,6 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         names.push(ts.isIdentifier(argument) ? argument.text : generated++ ? `input${generated}` : 'input');
         types.push(widen(checker.getTypeAtLocation(argument)));
       }
-      callSiteNames = names;
       if (!signature.parameters) signature.parameters = names.map((name, index) => ({ name, type: types[index]! }));
       else if (signature.parameters.length !== names.length) {
         report(call, 'nl-ambiguous-signature', `This \`nl\` call passes ${names.length} arguments but its signature has ${signature.parameters.length}.`);
@@ -243,15 +261,9 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         const outer = unwrapParentheses(call);
         const awaitNode = outer.parent && ts.isAwaitExpression(outer.parent) ? unwrapParentheses(outer.parent) : undefined;
         signature.returns = resultContext(awaitNode ?? outer, !!awaitNode);
-        // 5. Propagate through a uniquely typed local: `const v = await nl`...`(x)`, later used in a typed position.
-        const holder = (awaitNode ?? outer).parent;
-        if (!signature.returns && holder && ts.isVariableDeclaration(holder) && !holder.type) {
-          const contexts = laterUses(holder).map(use => resultContext(use, true)).filter((type): type is ts.Type => !!type);
-          signature.returns = uniqueType(contexts, node, 'return type');
-        }
       }
-    } else if (!signature.parameters || !signature.returns) {
-      // 5. `const judge = nl`...`` followed by calls.
+    } else if (!signature.parameters) {
+      // 5. `const judge = nl`...`` followed by calls: its parameters come from the calls' arguments.
       const holder = outerTag.parent;
       if (holder && ts.isVariableDeclaration(holder) && !holder.type) {
         const calls = laterUses(holder).map(use => unwrapParentheses(use)).map(use => use.parent)
@@ -265,21 +277,19 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
             type: uniqueType(calls.map(item => widen(checker.getTypeAtLocation(item.arguments[index]!))), node,
               `parameter ${index + 1} type`) ?? checker.getAnyType() }));
         }
-        if (!signature.returns && calls.length) {
-          const contexts = calls.map(item => {
-            const outer = unwrapParentheses(item);
-            const awaitNode = outer.parent && ts.isAwaitExpression(outer.parent) ? unwrapParentheses(outer.parent) : undefined;
-            return resultContext(awaitNode ?? outer, !!awaitNode);
-          }).filter((type): type is ts.Type => !!type);
-          signature.returns = uniqueType(contexts, node, 'return type');
-        }
       }
     }
 
-    if (!signature.returns) {
-      report(node, 'nl-unknown-return', 'Return type of this `nl` expression is unknown; annotate the target or write `nl<Verdict>`.');
-      return;
-    }
+    // 6. No annotation or context: infer the result from how it is used (see holes.ts).
+    if (!signature.returns) { deferred.push({ node, call, signature }); return; }
+    finish(node, call, signature);
+  };
+
+  const deferred: { node: ts.TaggedTemplateExpression; call: ts.CallExpression | undefined; signature: Signature }[] = [];
+
+  const finish = (node: ts.TaggedTemplateExpression, call: ts.CallExpression | undefined, signature: Signature,
+    solved?: { program: ts.Program; location: ts.Node }): void => {
+    const file = node.getSourceFile();
     const parameters = signature.parameters ?? [];
     const seen = new Set<string>();
     for (const parameter of parameters) {
@@ -290,7 +300,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
       seen.add(parameter.name);
     }
-    const returns = target(signature.returns, node, 'return');
+    const returns = target(signature.returns!, node, 'return', true, solved);
     if (!returns) return;
     const parameterTargets: InlineLambdaPlan['parameters'] = [];
     for (const parameter of parameters) {
@@ -374,7 +384,6 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
     plans.push({ sourceSpan, definitionId, strings, instructions: strings.join('${…}'),
       parameters: parameterTargets, returns, captures, inheritedCodebaseRevision: options.codebaseRevision ?? '' });
-    void callSiteNames;
   };
 
   for (const file of files) {
@@ -384,7 +393,37 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     };
     visit(file);
   }
+  if (deferred.length) {
+    const solutions = solveHoles(program, deferred.map((entry, id) => ({ id, node: entry.node })));
+    deferred.forEach((entry, id) => {
+      const solution = solutions?.get(id);
+      if (solution?.kind === 'solved') {
+        finish(entry.node, entry.call, { ...entry.signature, returns: solution.type, origin: 'use' }, solution);
+      } else if (solution?.kind === 'ambiguous') {
+        report(entry.node, 'nl-ambiguous-signature', 'Uses of this `nl` result need different types: ' +
+          solution.uses.map(use => `${use.typeText} (${use.why} in \`${use.text}\`)`).join('; ') + '. Write `nl<T>` with the one you mean.');
+      } else {
+        const hint = solution?.fields.length ? ` Its result is used as an object with ${solution.fields.map(name => `\`${name}\``).join(', ')}; ` +
+          `write \`nl<{ ${solution.fields.map(name => `${name}: …`).join('; ')} }>\`.` :
+          solution?.indexed ? ' Its result is used as a list; write `nl<T[]>` with its element type.' :
+          ' Annotate the variable it is assigned to, or write `nl<T>` (for example `nl<boolean>`).';
+        report(entry.node, 'nl-unknown-return', `Return type of this \`nl\` expression is unknown: nothing that uses it says what it should be.${hint}`);
+      }
+    });
+    const order = new Map(files.map((file, index) => [displayPath(file), index]));
+    plans.sort((a, b) => (order.get(a.sourceSpan.file) ?? 0) - (order.get(b.sourceSpan.file) ?? 0) || a.sourceSpan.start - b.sourceSpan.start);
+  }
   return { plans, diagnostics };
+}
+
+/** The initial state and fixed arguments when an `nl` expression is the step of an `iterateOn` call. */
+function iterationArguments(checker: ts.TypeChecker, expression: ts.Node): readonly ts.Expression[] | undefined {
+  const parent = expression.parent;
+  if (parent && ts.isPropertyAccessExpression(parent) && parent.expression === expression && parent.name.text === 'iterateOn' &&
+      ts.isCallExpression(parent.parent) && parent.parent.expression === parent) return parent.parent.arguments;
+  if (parent && ts.isCallExpression(parent) && parent.arguments[0] === expression && resolveIntrinsic(checker, parent.expression) === 'iterateOn')
+    return parent.arguments.slice(1);
+  return;
 }
 
 function isEnclosingParameter(declaration: ts.Declaration, node: ts.Node): boolean {

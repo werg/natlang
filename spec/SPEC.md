@@ -141,6 +141,10 @@ eval is atomic: a failed compilation or execution commits no local or capture
 changes (effects already performed remain). A final expression is only shown.
 Eval code may create inline `nl` functions like any TypeScript; they see the
 callable items and the scope bindings their instructions mention.
+An unannotated inline `nl` gets its parameter types from its arguments and its
+result type from how the eval uses the result (a condition makes it `boolean`,
+a typed variable gives that type); when no use says it, the eval is rejected
+with a diagnostic that proposes `nl<T>`.
 A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live

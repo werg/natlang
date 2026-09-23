@@ -51,7 +51,7 @@ test('later uses of an unannotated local supply a unique return type', () => {
 test('missing, synchronous, any-typed and colliding signatures produce precise diagnostics', () => {
   const unknown = analyze('async function f() { const x = await nl`Check policy`(note); }', DECLS);
   assert.equal(unknown.diagnostics[0].code, 'nl-unknown-return');
-  assert.match(unknown.diagnostics[0].message, /write `nl<Verdict>`/);
+  assert.match(unknown.diagnostics[0].message, /nothing that uses it says what it should be.*write `nl<T>`/);
   const sync = analyze('function f() { [note].filter(nl`Keep?`); }', DECLS);
   assert.equal(sync.diagnostics[0].code, 'nl-sync-callback');
   const anyTarget = analyze('async function f() { const x: any = await nl`Anything`(); }', DECLS);
