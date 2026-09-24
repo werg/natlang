@@ -65,7 +65,7 @@ An eval that failed (nothing kept) does not count as a result decision, even if 
 
 ### Hinted twins and preference pairs
 
-Every `iterate: required` case is also built as a twin whose instructions end with an explicit `iterateOn` hint
+Every `iterate: required` case is also built as a twin whose instructions end with an explicit requirement to use `iterateOn`
 (`build.mjs`, on by default). Admission strips the hint from an admitted twin's trajectory and program, so the row
 trains `iterateOn` unprompted. `pairs.mjs` pairs an admitted twin with the unhinted run of the same case when that
 run was rejected for `iterate_missing`: at their first root decision with an identical request, the twin's

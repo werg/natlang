@@ -12,7 +12,7 @@ import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { FAMILIES } from './families.mjs';
 
-export const ITERATE_HINT = 'Hint: step this with iterateOn. Write a step function (it may be an nl function) from the current state to the next, and run it with .iterateOn(initial).until(done), rather than a loop with a guessed bound.';
+export const ITERATE_HINT = 'Required: solve this with iterateOn, not with evals or loops that you step by hand. Write a step function (it may be an nl function) from the current state to the next state, and run the whole process in one eval with await step.iterateOn(initial).until(done).';
 function hinted(record) {
   const twin = structuredClone(record);
   twin.id = `${record.id}:hinted`;
