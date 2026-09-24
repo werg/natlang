@@ -156,3 +156,21 @@ test('transcript is searched, not read through: search finds lines, entry gives 
   assert.equal(/locker/.test(indexed.text), false, 'there is no array access');
 });
 
+test('transcript keeps the reasoning of the turn that made each call, and search finds it', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count.' });
+  let turn = 0, found;
+  const driver = request => {
+    turn++;
+    if (turn === 1) return { reasoning: 'The rows need a total; the hidden column holds the discount.', calls: [
+      ['eval', { code: 'const a = 1; a' }], ['eval', { code: 'const b = 2; b' }]] };
+    if (turn === 2) return { reasoning: 'Look back at why I added b.', calls: [['eval', { code: 'transcript.search("discount", { in: "reasoning" }).map(m => [m.entry, m.turn])' }]] };
+    found = request.messages.at(-1).content;
+    return { calls: [['return_result', { status: 'success', value: 3 }]] };
+  };
+  await new NativeToolAgent(driver, { maxTurns: 5 }).run(session);
+  assert.equal(session.transcript[0].reasoning, 'The rows need a total; the hidden column holds the discount.');
+  assert.equal(session.transcript[1].reasoning, undefined, 'a turn\'s reasoning is kept once, with its first call');
+  assert.equal(session.transcript[2].reasoning, 'Look back at why I added b.');
+  assert.match(found, /\[\[0, 1\]\]/);
+});
+

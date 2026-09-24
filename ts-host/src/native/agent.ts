@@ -668,6 +668,7 @@ export class NativeToolAgent {
       });
       const results: NativeResult[] = [];
       session.turn = turns;
+      session.turnReasoning = response.reasoning;
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';

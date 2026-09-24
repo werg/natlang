@@ -71,11 +71,13 @@ test('the HTTP transport streams, strips private schema keys, and decodes tool c
 test('a server that ignores stream, a truncated reply, and one malformed call are handled alike on every transport', async () => {
   const model = await server((body, count) => count === 1 ?
     { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{bad' } }] } }] } :
-    count === 2 ? { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"7"}' } }] } }] } :
+    count === 2 ? { choices: [{ finish_reason: 'tool_calls', message: { reasoning_content: 'Seven is the answer.', tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"7"}' } }] } }] } :
     { choices: [{ finish_reason: 'length', message: { content: 'partial', tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"co' } }] } }] });
   try {
     const drive = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }));
-    assert.deepEqual((await drive(request())).calls, [['eval', { code: '7' }]]);
+    const retried = await drive(request());
+    assert.deepEqual(retried.calls, [['eval', { code: '7' }]]);
+    assert.equal(retried.reasoning, 'Seven is the answer.', 'the model turn carries the reasoning the server returned');
     assert.match(model.bodies[1].messages.at(-1).content, /last tool call was malformed/);
     const cut = await drive(request());
     assert.equal(cut.truncated, true); assert.deepEqual(cut.calls, []); assert.equal(cut.text, 'partial');

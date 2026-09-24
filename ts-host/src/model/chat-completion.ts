@@ -137,7 +137,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           if (!wireName) throw new Error(`tool call ${index} has no function name`);
           return [reverse[wireName] ?? wireName, decodeArguments(fn?.arguments)];
         });
+        const reasoning = message?.reasoning_content ?? message?.reasoning;
         return finish({ calls, text: String(message?.content ?? ''), raw_calls: rawCalls,
+          ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {
         // A reply cut off mid tool call is a truncated turn, not a transport failure.

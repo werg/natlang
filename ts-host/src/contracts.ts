@@ -9,5 +9,7 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
   value_confidence?: (number | { geometric_mean?: number } | null)[];
   raw_response?: Record<string, unknown>;
+  /** The model's reasoning before this turn's reply, when the backend returns it. */
+  reasoning?: string;
   /** The reply stopped at max_tokens. */
   truncated?: boolean };

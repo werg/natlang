@@ -310,12 +310,14 @@ export type ScopeFailureDebug = {
 export const COMPACTION_NOTE_CHARS = 600;
 
 /**
- * One earlier tool call of this call: its arguments, its outcome (`status`, the result kind: ok, rejected, error,
+ * One earlier tool call of this call: the reasoning that led to it, its arguments, its outcome (`status`, the result kind: ok, rejected, error,
  * completed, ...), for eval the returned value as data (`value`, when it is portable data of modest size) and what it
  * printed (`console`), and the full text the model was shown (`output`, nothing cut off).
  */
 export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>;
-  status: string; value?: unknown; console?: string; output: string };
+  status: string; value?: unknown; console?: string; output: string;
+  /** The model's reasoning in the turn that made this call (on the turn's first call only). */
+  reasoning?: string };
 
 /** Largest returned value, as JSON characters, a transcript entry keeps as data. */
 const TRANSCRIPT_VALUE_CHARS = 100_000;
@@ -336,22 +338,22 @@ export class TranscriptView {
   constructor(entries: readonly TranscriptEntry[]) { this.#entries = entries; }
   get length(): number { return this.#entries.length; }
   /**
-   * Lines of earlier outputs (and code) that match: a case-insensitive text, or a regular expression (an empty text
+   * Lines of earlier reasoning, code, and outputs that match: a case-insensitive text, or a regular expression (an empty text
    * matches every line). Each match is { entry, turn, tool, in, line }, the line cut to 200 characters around the
    * match; at most `limit` (default 20). `status` and `tool` restrict the calls searched, e.g. { status: 'error' }.
    */
-  search(query: string | RegExp, options: { in?: 'output' | 'code' | 'both'; limit?: number; status?: string; tool?: string } = {}) {
-    const where = options.in ?? 'both', limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+  search(query: string | RegExp, options: { in?: 'output' | 'code' | 'reasoning' | 'all'; limit?: number; status?: string; tool?: string } = {}) {
+    const where = options.in ?? 'all', limit = Math.max(1, Math.min(options.limit ?? 20, 100));
     const test = (line: string): number => {
       if (typeof query === 'string') return line.toLowerCase().indexOf(query.toLowerCase());
       const found = new RegExp(query.source, query.flags.replace('g', '')).exec(line);
       return found ? found.index : -1;
     };
-    const matches: { entry: number; turn: number; tool: string; in: 'output' | 'code'; line: string }[] = [];
+    const matches: { entry: number; turn: number; tool: string; in: 'output' | 'code' | 'reasoning'; line: string }[] = [];
     for (const [index, item] of this.#entries.entries()) {
       if ((options.status !== undefined && item.status !== options.status) || (options.tool !== undefined && item.tool !== options.tool)) continue;
-      for (const field of ['code', 'output'] as const) {
-        if (where !== 'both' && where !== field) continue;
+      for (const field of ['reasoning', 'code', 'output'] as const) {
+        if (where !== 'all' && where !== field) continue;
         for (const line of (item[field] ?? '').split('\n')) {
           const at = test(line);
           if (at < 0) continue;
@@ -392,6 +394,8 @@ export class NativeSession {
   readonly transcript: TranscriptEntry[] = [];
   /** The model turn the next recorded call belongs to (set by the agent). */
   turn = 0;
+  /** The model's reasoning in that turn, recorded with the turn's first call (set by the agent). */
+  turnReasoning?: string;
   /** What the eval being recorded returned and printed, for its transcript entry. */
   private evalDetail?: { value?: unknown; console?: string };
   /** Texts the current call's result shows cut off, with their full versions for its transcript entry. */
@@ -493,7 +497,9 @@ export class NativeSession {
         if (json === undefined || json.length <= TRANSCRIPT_VALUE_CHARS) value = deepFreeze(structuredClone(detail.value));
       } catch { /* not portable after all */ }
     }
-    this.transcript.push({ turn: this.turn, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
+    const reasoning = this.turnReasoning;
+    this.turnReasoning = undefined;
+    this.transcript.push({ turn: this.turn, ...(reasoning ? { reasoning } : {}), tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
       arguments: structuredClone(args), status: result.kind, ...(value !== undefined ? { value } : {}),
       ...(detail?.console ? { console: detail.console } : {}), output });
     this.runtime.observeState('after-action');

@@ -158,10 +158,11 @@ values.
 Every eval also sees `transcript`, the call's earlier tool calls with their full
 outputs, unless a parameter or local takes that name. It is searched rather than
 read through: `transcript.search(text or regex, { in, limit })` returns matching
-lines as `{ entry, turn, tool, in, line }` (optionally only calls of a given
+lines of reasoning, code, and output as `{ entry, turn, tool, in, line }` (optionally only calls of a given
 `status` or `tool`), and `transcript.entry(n)` returns one call as
-`{ turn, tool, code, arguments, status, value, console, output }` (negative `n`
-counts from the end): `status` is the outcome (`ok`, `rejected`, `error`, …),
+`{ turn, reasoning, tool, code, arguments, status, value, console, output }`
+(negative `n` counts from the end): `reasoning` is the model's reasoning in the
+turn that made the call (on its first call), `status` is the outcome (`ok`, `rejected`, `error`, …),
 `value` an eval's returned value as data when it is portable and of modest size,
 `console` what it printed, and `output` the full text the model was shown. It has no array access or iteration, and printing it shows a summary.
 
