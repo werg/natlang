@@ -114,7 +114,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
     };
     while (true) {
       if (signal?.aborted) throw new Error('model turn aborted');
-      const wireRequest: Json = { ...options.request, messages: attemptMessages, tools, tool_choice: 'auto' };
+      const wireRequest: Json = { ...options.request, messages: attemptMessages, tools, tool_choice: request.tool_choice ?? 'auto' };
       if (request.temperature !== undefined) wireRequest.temperature = request.temperature;
       if (request.seed !== null) wireRequest.seed = request.seed;
       if (request.max_tokens !== null) wireRequest.max_tokens = request.max_tokens;

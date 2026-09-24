@@ -72,3 +72,61 @@ test('without a budget nothing is compacted, and a parameter named transcript ke
   assert.equal(last.some(elided), false);
   assert.equal(session.lam.return, 'mine');
 });
+
+const toolNames = request => request.tools.map(tool => tool.function.name);
+const promptOf = request => Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4);
+
+test('near the budget the model is asked to compact: only compact_history is offered, and its note is pinned', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  const requests = [];
+  let turn = 0, notes = 0;
+  const driver = request => {
+    requests.push(structuredClone(request));
+    turn++;
+    if (toolNames(request).length === 1 && toolNames(request)[0] === 'compact_history')
+      return { calls: [['compact_history', { note: `Counting; reached ${turn}; stop at 16. Note ${++notes}.` }]], prompt_tokens: promptOf(request) };
+    return turn < 16 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: promptOf(request) } :
+      { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
+  };
+  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30 }).run(session);
+  assert.equal(session.completed, true);
+  const forced = requests.filter(request => toolNames(request).join() === 'compact_history');
+  assert.ok(forced.length >= 2, 'the model was asked to compact, more than once in a long call');
+  assert.ok(forced.every(request => request.tool_choice === 'required'), 'the compaction turn requires the tool call');
+  assert.ok(requests.filter(request => toolNames(request).length > 1).every(request => request.tool_choice === undefined));
+  const kinds = requests.map(request => toolNames(request).join() === 'compact_history');
+  assert.equal(kinds.some((forcedTurn, index) => forcedTurn && kinds[index + 1]), false, 'compaction never repeats back to back');
+  const last = requests.at(-1);
+  const pinned = last.messages.filter(message => message.role === 'user' && /^Your note from compacting/.test(message.content));
+  assert.equal(pinned.length, 1, 'only the latest note is kept');
+  assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
+  assert.ok(last.messages.some(elided), 'older outputs moved to transcript');
+  assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the budget');
+  assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');
+});
+
+test('the model may compact on its own, a note over the limit is rejected, and a text reply to the compaction turn is not a result', async () => {
+  const { session } = open({ type: '() => string', instructions: 'Say hello.' });
+  let turn = 0, sawRejection = false;
+  const driver = request => {
+    turn++;
+    if (turn === 1) return { calls: [['eval', { code: "console.log('z'.repeat(3000)); 1" }]] };
+    if (turn === 2) return { calls: [['compact_history', { note: 'x'.repeat(601) }]] };
+    if (turn === 3) { sawRejection = /1 to 600 characters/.test(request.messages.at(-1).content);
+      return { calls: [['compact_history', { note: 'Printed a long line; next say hello.' }]] }; }
+    return { calls: [['return_result', { status: 'success', value: 'hello' }]] };
+  };
+  await new NativeToolAgent(driver, { maxTurns: 10 }).run(session);
+  assert.equal(sawRejection, true);
+  assert.equal(session.lam.return, 'hello');
+  const forcedText = open({ type: '() => string', instructions: 'Say hello.' });
+  let calls = 0;
+  const texting = request => {
+    calls++;
+    if (toolNames(request).join() === 'compact_history') return { text: 'I would rather not.', prompt_tokens: promptOf(request) };
+    return calls < 10 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${calls}` }]], prompt_tokens: promptOf(request) } :
+      { calls: [['return_result', { status: 'success', value: 'hello' }]], prompt_tokens: promptOf(request) };
+  };
+  await new NativeToolAgent(texting, { contextTokens: 4096, maxTurns: 30 }).run(forcedText.session);
+  assert.equal(forcedText.lam.return, 'hello', 'the text reply to the compaction turn did not become the result');
+});

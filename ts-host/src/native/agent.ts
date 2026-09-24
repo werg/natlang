@@ -2,7 +2,7 @@ import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, isLive, liveId, liveLabel, problems } from './values.js';
 import type { Value } from './values.js';
-import type { NativeResult, NativeSession } from './runtime.js';
+import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { DIRECTORY_REDUCER_PROMPT, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT } from './prompt.js';
@@ -58,7 +58,7 @@ const FOLDER_DECLARATIONS = [
 ];
 
 const DEFAULT_CONTEXT_TOKENS = 16384;
-/** Messages at the end of the conversation that compaction never touches: the latest call and its results. */
+/** Messages at the end of the conversation that budget compaction keeps whole if it can: the latest exchanges. */
 const RECENT_MESSAGES = 6;
 /** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
 export const elidedOutput = (entry?: number) => '[Output elided to keep this conversation within its context budget' +
@@ -297,6 +297,10 @@ export class NativeToolAgent {
           description: 'Optional: fail this eval if it has not finished after this many milliseconds.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
+      tool('compact_history', 'Shorten this conversation: older tool outputs and eval code are replaced by references into transcript, ' +
+        'and your note is kept right after the instructions (a newer note replaces it).',
+        { note: { type: 'string', maxLength: COMPACTION_NOTE_CHARS,
+          description: 'What you are doing, what you have found, and what is left.' } }, ['note']),
       tool('return_result', 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
         'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
         'or contradictory operation), give the reason instead of a value.',
@@ -492,6 +496,10 @@ export class NativeToolAgent {
     const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;
     // Tool call id -> index in session.transcript, for compaction stubs.
     const transcriptEntries = new Map<string, number>();
+    // Messages compaction never touches: the opening, and the latest compaction note once there is one.
+    let protectedLength = openingLength;
+    // Estimated prompt size right after the last compaction.
+    let compactedAt = 0;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
@@ -510,18 +518,27 @@ export class NativeToolAgent {
       // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
       // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
-      const availableTools = lastTurn ? this.tools(session).filter(tool =>
-        String((tool as { function?: { name?: string } }).function?.name) === 'return_result') : this.tools(session);
-      if (budget !== null) {
-        const estimate = () => requestChars(availableTools) * tokensPerChar;
-        if (estimate() > budget * 0.75) {
-          // Program state lives in the eval scope, not in old outputs, so eliding them loses no values. The
-          // elision is permanent, so later requests share the compacted prefix and the server's prompt cache.
-          const elided = compactMessages(messages, openingLength, RECENT_MESSAGES, () => estimate() > budget * 0.5,
-            callId => transcriptEntries.get(callId));
-          session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
-            elided, estimated_tokens: Math.round(estimate()) });
-        }
+      const allTools = this.tools(session);
+      const only = (name: string) => allTools.filter(tool => String((tool as { function?: { name?: string } }).function?.name) === name);
+      const estimate = (tools: unknown[]) => requestChars(tools) * tokensPerChar;
+      // Near the context budget the model compacts the conversation itself: the next turn offers only
+      // compact_history, whose note says what matters. The last turn of a call still belongs to return_result.
+      // After a compaction the next one waits until the conversation has grown by another quarter of the budget, so
+      // what compaction cannot remove (the opening, stubs, the note) never makes it ask again and again.
+      const nearLimit = budget !== null && estimate(allTools) > Math.max(budget * 0.75, compactedAt + budget * 0.25);
+      const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
+      if (budget !== null && estimate(availableTools) > budget) {
+        // A request never exceeds the budget: if the model has not compacted, the oldest outputs are elided without
+        // a note. Program state lives in the eval scope and every output in transcript, so no values are lost.
+        // Keep the latest exchanges if that is enough; otherwise keep only the last call and its result.
+        let elided = 0;
+        for (const recent of [RECENT_MESSAGES, 2])
+          if (estimate(availableTools) > budget * 0.5)
+            elided += compactMessages(messages, protectedLength, recent, () => estimate(availableTools) > budget * 0.5,
+              callId => transcriptEntries.get(callId));
+        compactedAt = estimate(allTools);
+        session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
+          elided, note: null, estimated_tokens: Math.round(estimate(availableTools)) });
       }
       const sentChars = requestChars(availableTools);
       const callId = session.runtime.currentCallId ?? null;
@@ -532,6 +549,8 @@ export class NativeToolAgent {
       let response: ModelTurn;
       try {
         response = await this.driver({ messages, tools: availableTools,
+          // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
+          ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
@@ -555,6 +574,15 @@ export class NativeToolAgent {
       tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
       if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
         return 'episode token or wall-clock budget exhausted';
+      if (!response.calls?.length && availableTools !== allTools && !lastTurn) {
+        // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
+        const elided = compactMessages(messages, protectedLength, RECENT_MESSAGES, () => estimate(allTools) > budget! * 0.5,
+          callId => transcriptEntries.get(callId));
+        compactedAt = estimate(allTools);
+        session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
+          elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });
+        continue;
+      }
       if (!response.calls?.length) {
         // A reply without a tool call ends the turn: it returns the staged result, or, for a string-typed
         // call with nothing staged, the reply's text is the result.
@@ -638,12 +666,25 @@ export class NativeToolAgent {
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
       const notice = left === 1 ? '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or status "blocked" with what is missing, or status "failed" with why.]' :
         left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call return_result with status "blocked" and what is missing, or status "failed" and why.]` : '';
+      let note: string | undefined;
       for (const [index, result] of results.entries()) {
         const [name, args] = calls[index]!, id = String(raw[index]!.id);
         messages.push({ role: 'tool', tool_call_id: id, content: result.text + (index === results.length - 1 ? notice : '') });
         transcriptEntries.set(id, session.transcript.length);
         session.transcript.push({ turn: turns, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
           arguments: structuredClone(args), output: session.pages.expand(result.text) });
+        if (name === 'compact_history' && result.kind === 'ok') note = String(args.note).trim();
+      }
+      if (note !== undefined) {
+        // Everything older than the latest exchange moves to transcript; the note is kept after the opening.
+        const pinned = { role: 'user', content: `Your note from compacting this conversation: ${note}` };
+        if (protectedLength > openingLength) messages[openingLength] = pinned;
+        else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
+        // The note speaks for everything before it: only the compaction call and its result stay whole.
+        const elided = compactMessages(messages, protectedLength, 2, () => true, callId => transcriptEntries.get(callId));
+        compactedAt = requestChars(this.tools(session)) * tokensPerChar;
+        session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
+          elided, note, estimated_tokens: Math.round(compactedAt) });
       }
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;

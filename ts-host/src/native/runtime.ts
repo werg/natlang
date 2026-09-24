@@ -318,6 +318,9 @@ export type ScopeFailureDebug = {
   diagnostics: Record<string, unknown>[]; logs: string[]; stack?: string;
 };
 
+/** Longest note compact_history accepts. */
+export const COMPACTION_NOTE_CHARS = 600;
+
 /** One earlier tool call of this call and its full output (nothing cut off); evals read the list as `transcript`. */
 export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>; output: string };
 
@@ -425,7 +428,7 @@ export class NativeSession {
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    const tools = ['eval', 'read_page', 'return_result', 'blocked', 'failed',
+    const tools = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
       'read_function', 'edit_function', 'diff_functions',
       'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
     if (!tools.includes(name))
@@ -468,6 +471,13 @@ export class NativeSession {
 
   private scopeTool(name: string, args: Record<string, unknown>): NativeResult {
     if (name === 'read_page') return { kind: 'ok', text: this.pages.read(String(args.id ?? ''), Number(args.page ?? 1)) };
+    // The agent carries out the compaction itself once this call is accepted (it owns the conversation).
+    if (name === 'compact_history') {
+      const note = typeof args.note === 'string' ? args.note.trim() : '';
+      if (!note || note.length > COMPACTION_NOTE_CHARS) throw new Reject([{ path: 'note', code: 'bad-action',
+        expected: `a note of 1 to ${COMPACTION_NOTE_CHARS} characters: what you are doing, what you have found, what is left` }]);
+      return { kind: 'ok', text: 'Compacted: older outputs and code are in transcript, and your note is kept after the instructions.' };
+    }
     // The retired blocked and failed tools are statuses of return_result now.
     if (name === 'blocked' || name === 'failed') throw new Reject([{ path: name, code: 'bad-action',
       expected: `return_result with status "${name}" and a reason` }]);

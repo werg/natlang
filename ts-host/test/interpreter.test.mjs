@@ -138,7 +138,7 @@ test('scope eval persists locals, calls imports positionally, and treats result 
   assert.notEqual(repairedMap.kind, 'ok');
   const names = new NativeToolAgent(() => ({ calls: [] })).tools(session).map(entry => entry.function.name);
   assert.deepEqual(names, ['eval', 'read_page', 'read_function', 'edit_function', 'diff_functions',
-    'return_result']);
+    'compact_history', 'return_result']);
   const nullCase = open({ type: '() => null', instructions: 'Return null.' });
   assert.equal((await nullCase.session.applyAsync('eval', { code: 'return null' })).kind, 'ok');
   assert.equal(nullCase.lam.return, null);
