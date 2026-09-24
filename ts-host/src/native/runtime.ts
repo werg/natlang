@@ -318,6 +318,9 @@ export type ScopeFailureDebug = {
   diagnostics: Record<string, unknown>[]; logs: string[]; stack?: string;
 };
 
+/** One earlier tool call of this call and its full output (nothing cut off); evals read the list as `transcript`. */
+export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>; output: string };
+
 export class NativeSession {
   completed = false;
   actions = 0;
@@ -331,6 +334,8 @@ export class NativeSession {
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
   /** Output cut off in this call's tool results, readable with read_page. */
   readonly pages = new PageStore();
+  /** This call's tool calls and the results the model was shown, in order (appended by the agent). */
+  readonly transcript: TranscriptEntry[] = [];
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
   /** Whether the model declared this persistent local with let (true) or const. */
@@ -657,6 +662,9 @@ export class NativeSession {
     const inputsBinding = !taken('read_inputs'), inputsObject = !taken('inputs');
     if (inputsBinding) opaqueNames.push('read_inputs');
     if (inputsObject) opaqueNames.push('inputs');
+    // transcript: this call's earlier tool calls and their outputs, read-only, unless the name is taken.
+    const transcriptBinding = !taken('transcript');
+    if (transcriptBinding) opaqueNames.push('transcript');
     // return_result also works as a function in eval: return_result(value) stages a result, and
     // return_result(value, status, reason) carries out the tool's request once the eval has succeeded.
     // A finisher name the snippet declares itself stays the snippet's own variable.
@@ -686,6 +694,8 @@ export class NativeSession {
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.runtime.services, folder: this.lam.projectTransaction?.folder.root(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
+      transcript: transcriptBinding ? Object.freeze(this.transcript.map(entry => Object.freeze({ ...entry,
+        arguments: Object.freeze(structuredClone(entry.arguments)) }))) : undefined,
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
       inline: (index: number, values: unknown[], accessors: Record<string, unknown>) => {
         const plan = plans[index];
@@ -699,6 +709,7 @@ export class NativeSession {
       ...(this.lam.projectTransaction ? ['const folder = __live.folder;'] : []),
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
+      ...(transcriptBinding ? ['const transcript = __live.transcript;'] : []),
       ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
         `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
     ].join('\n');

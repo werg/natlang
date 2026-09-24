@@ -60,25 +60,30 @@ const FOLDER_DECLARATIONS = [
 const DEFAULT_CONTEXT_TOKENS = 16384;
 /** Messages at the end of the conversation that compaction never touches: the latest call and its results. */
 const RECENT_MESSAGES = 6;
-/** What replaces an old tool output when the conversation is compacted. */
-export const ELIDED_OUTPUT = '[Output elided to keep this conversation within its context budget. Values it stored are still in scope.]';
-
+/** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
+export const elidedOutput = (entry?: number) => '[Output elided to keep this conversation within its context budget' +
+  (entry === undefined ? '. Values it stored are still in scope.]' : `; transcript[${entry}].output holds it.]`);
 /** What replaces the code of an old eval call when outputs alone do not bring the conversation under budget. */
-export const ELIDED_CODE = '// Code elided to keep this conversation within its context budget. Its declarations are still in scope.';
+export const elidedCode = (entry?: number) => '// Code elided to keep this conversation within its context budget' +
+  (entry === undefined ? '. Its declarations are still in scope.' : `; transcript[${entry}].code holds it.`);
+const ELIDED = /^\[Output elided |^\/\/ Code elided /;
 
 /**
- * Deterministic compaction: replace the oldest tool outputs after the opening with ELIDED_OUTPUT, oldest first,
- * until `over()` is false; if that is not enough, replace the code of the oldest eval calls with ELIDED_CODE the
- * same way. The opening and the last `recent` messages stay whole; the messages keep their order and number.
+ * Deterministic compaction: replace the oldest tool outputs after the opening with a stub, oldest first, until
+ * `over()` is false; if that is not enough, replace the code of the oldest eval calls the same way. The opening and
+ * the last `recent` messages stay whole; the messages keep their order and number. `entry` maps a tool message, or
+ * a tool call's id, to its transcript index, which the stub names so the model can read the original with code.
  * Returns how many outputs and calls were elided.
  */
 export function compactMessages(messages: Record<string, unknown>[], openingLength: number, recent: number,
-  over: () => boolean): number {
+  over: () => boolean, entry: (callId: string) => number | undefined = () => undefined): number {
   let elided = 0;
   for (let index = openingLength; index < messages.length - recent && over(); index++) {
     const message = messages[index]!;
-    if (message.role !== 'tool' || typeof message.content !== 'string' || message.content.length <= ELIDED_OUTPUT.length) continue;
-    messages[index] = { ...message, content: ELIDED_OUTPUT };
+    if (message.role !== 'tool' || typeof message.content !== 'string' || ELIDED.test(message.content)) continue;
+    const stub = elidedOutput(entry(String(message.tool_call_id)));
+    if (message.content.length <= stub.length) continue;
+    messages[index] = { ...message, content: stub };
     elided++;
   }
   for (let index = openingLength; index < messages.length - recent && over(); index++) {
@@ -90,9 +95,10 @@ export function compactMessages(messages: Record<string, unknown>[], openingLeng
       if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return call;
       let args: Record<string, unknown>;
       try { args = JSON.parse(fn.arguments) as Record<string, unknown>; } catch { return call; }
-      if (typeof args.code !== 'string' || args.code.length <= ELIDED_CODE.length) return call;
+      const stub = elidedCode(entry(String(call.id)));
+      if (typeof args.code !== 'string' || ELIDED.test(args.code) || args.code.length <= stub.length) return call;
       changed = true;
-      return { ...call, function: { ...fn, arguments: JSON.stringify({ ...args, code: ELIDED_CODE }) } };
+      return { ...call, function: { ...fn, arguments: JSON.stringify({ ...args, code: stub }) } };
     });
     if (changed) { messages[index] = { ...message, tool_calls: calls }; elided++; }
   }
@@ -484,6 +490,8 @@ export class NativeToolAgent {
     // Prompt tokens per character of request, calibrated from the server's reported prompt size.
     let tokensPerChar = 1 / 3.5;
     const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;
+    // Tool call id -> index in session.transcript, for compaction stubs.
+    const transcriptEntries = new Map<string, number>();
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
@@ -509,7 +517,8 @@ export class NativeToolAgent {
         if (estimate() > budget * 0.75) {
           // Program state lives in the eval scope, not in old outputs, so eliding them loses no values. The
           // elision is permanent, so later requests share the compacted prefix and the server's prompt cache.
-          const elided = compactMessages(messages, openingLength, RECENT_MESSAGES, () => estimate() > budget * 0.5);
+          const elided = compactMessages(messages, openingLength, RECENT_MESSAGES, () => estimate() > budget * 0.5,
+            callId => transcriptEntries.get(callId));
           session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
             elided, estimated_tokens: Math.round(estimate()) });
         }
@@ -629,8 +638,13 @@ export class NativeToolAgent {
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
       const notice = left === 1 ? '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or status "blocked" with what is missing, or status "failed" with why.]' :
         left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call return_result with status "blocked" and what is missing, or status "failed" and why.]` : '';
-      for (const [index, result] of results.entries())
-        messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text + (index === results.length - 1 ? notice : '') });
+      for (const [index, result] of results.entries()) {
+        const [name, args] = calls[index]!, id = String(raw[index]!.id);
+        messages.push({ role: 'tool', tool_call_id: id, content: result.text + (index === results.length - 1 ? notice : '') });
+        transcriptEntries.set(id, session.transcript.length);
+        session.transcript.push({ turn: turns, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
+          arguments: structuredClone(args), output: session.pages.expand(result.text) });
+      }
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;
       if (session.failureSerial > previousFailureSerial) {

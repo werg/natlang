@@ -30,6 +30,12 @@ export class PageStore {
     return { id, count: pages.length };
   }
 
+  /** A tool result as shown, with every cut-off output restored in full. */
+  expand(shown: string): string {
+    return shown.replace(/\n… \(page 1 of \d+ shown; read_page\("([^"]+)", 2\) for more\)/g,
+      (marker, id: string) => this.pages.get(id)?.slice(1).join('') ?? marker);
+  }
+
   read(id: string, page: number): string {
     const pages = this.pages.get(id);
     if (!pages) throw new Error(`no cut-off output is named ${JSON.stringify(id)}; use an ID from a cut-off message`);
