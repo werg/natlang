@@ -12,7 +12,12 @@ PORT="${1:-8081}"; CTX="${2:-32768}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS
 # Agent programs alternate between root and nested invocations, so one entry
 # per slot thrashes even with only two workers.  Keep about two contexts per
 # slot; BONSAI_CACHE_RAM remains available for memory-constrained machines.
-if [ "$SLOTS" -gt 1 ]; then DEFAULT_CACHE_RAM=$((SLOTS * 1536)); else DEFAULT_CACHE_RAM=1536; fi
+# The server process itself holds about 3 GiB of host memory besides this cache, and the container is killed at
+# BONSAI_MEM, so the cache stays at least 5 GiB below the cap (measured with 6 slots: a 4 GiB cache under 7g was killed).
+if [ "$SLOTS" -gt 1 ]; then DEFAULT_CACHE_RAM=$((SLOTS * 1536)); DEFAULT_MEM=8; else DEFAULT_CACHE_RAM=1536; DEFAULT_MEM=5; fi
+MEM="${BONSAI_MEM:-${DEFAULT_MEM}g}"
+MAX_CACHE_RAM=$(( (${MEM%g} - 5) * 1024 )); [ "$MAX_CACHE_RAM" -lt 1024 ] && MAX_CACHE_RAM=1024
+[ "$DEFAULT_CACHE_RAM" -gt "$MAX_CACHE_RAM" ] && DEFAULT_CACHE_RAM=$MAX_CACHE_RAM
 CACHE_RAM="${BONSAI_CACHE_RAM:-$DEFAULT_CACHE_RAM}"
 # Several slots share one KV buffer, so a long call can use more than an even share of the context.
 if [ "$SLOTS" -gt 1 ]; then KV_UNIFIED=--kv-unified; else KV_UNIFIED=; fi
@@ -24,7 +29,7 @@ if [ -z "${BONSAI_SERVER_NAME:-}" ]; then
   docker rm -f natlang-bonsai >/dev/null 2>&1 || true
 fi
 # --no-mmap: weights go straight to the GPU instead of staying mapped in host RAM; the memory cap protects the desktop.
-exec docker run --rm --name "$CONTAINER" --gpus all --memory "${BONSAI_MEM:-5g}" --memory-swap "${BONSAI_MEM:-5g}" \
+exec docker run --rm --name "$CONTAINER" --gpus all --memory "$MEM" --memory-swap "$MEM" \
   -v "$ROOT/vendor/prism/bin:/prism:ro" -v "$ROOT/models:/models:ro" -e LD_LIBRARY_PATH=/prism \
   -p "127.0.0.1:$PORT:8080" natlang-prism-runtime \
   /prism/llama-server -m "/models/$MODEL" --host 0.0.0.0 --port 8080 \

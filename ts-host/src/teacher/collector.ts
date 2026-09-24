@@ -317,13 +317,16 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
     let replayIndex = 0;
+    // Journaled responses are replayed by their exact request, not by position: the child calls of one eval run
+    // concurrently, so their requests can reach the model in a different order after a restart. A request with no
+    // unused journal entry is decoded live.
+    const unused = new Map<string, PartialJob['turns']>();
+    for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
       const requestSha256 = sha256(canonical(request));
-      const recorded = partial.turns[replayIndex];
+      const recorded = unused.get(requestSha256)?.shift();
       let response: ModelTurn;
       if (recorded) {
-        if (recorded.request_sha256 !== requestSha256)
-          throw new Error(`partial teacher replay diverged at model turn ${replayIndex}`);
         response = structuredClone(recorded.response);
       } else {
         if (handoff && replayIndex < handoff.prefix.length) {
