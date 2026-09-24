@@ -28,8 +28,9 @@ execution tools are:
 - `eval(code)` for ordinary TypeScript declarations, expressions, control
   flow, and imported function calls;
 - `read_page(id, page)` for reading output a tool result cut off;
-- `return_result(value)` for returning a typed value and finishing;
-- `blocked(missing)` and `failed(message)` for explicit exits.
+- `compact_history(note)` for shortening a long conversation (older outputs stay in `transcript`);
+- `return_result(status, value?, reason?)` for returning a typed value and finishing, or for explicit
+  `blocked` and `failed` exits.
 
 Normal lambdas can inspect, edit, and diff imported functions through function
 tools. They do not receive model-facing filesystem tools. A function completes
@@ -65,7 +66,7 @@ and parameter changes; compile, execution, host-call, or type failures do not
 commit those changes. Eval output is visible to the model, and a compatible
 value can supply or replace the function result until completion.
 
-The runtime serializes typed locals, the current result, line marks, suspended
+The runtime serializes typed locals, the current result, suspended
 children, folder revisions, and effect observations for continuation. It does
 not rely on old conversation text to reconstruct completed work. External host
 effects remain application-owned: a failed acknowledgement may leave an

@@ -77,7 +77,13 @@ Reworked against live Bonsai 27B runs (`ts-host/scripts/live-probe/`):
   with status `blocked` or `failed` and a reason ends without a result, as a tool or as
   `return_result(value, status, reason)` in eval; the old `blocked` and `failed` tools are rejected with that hint. `mark_lines`, line
   listings, the `result` variable, the final-expression result rule, and `commit` are removed.
-- `read_page(id, page)` reads cut-off output by a short word ID; `read_value` is removed.
+- `read_page(id, page)` reads the next part of a cut-off tool output by a short word ID; `read_value` is removed.
+- Cut-offs (`native/cutoff.ts`): one note form, `<<cut off: …; customers holds all of it; read_page("amber", 2)
+  shows the next part>>`, not TypeScript. Values are cut at item and field boundaries by `renderValue`; text
+  output keeps its head and tail. Every tool call's full output is in `transcript`, which evals can read.
+- Conversation length: rollover and checkpoint notes are removed. Past three quarters of `contextTokens` (default
+  16,384) the next turn offers only `compact_history({ note })` (tool call required); the note is pinned after the
+  opening and older outputs and eval code become notes naming their `transcript` entries.
 - Parameters are `const` and frozen. The `debug` binding and the failure paragraph in the
   system prompt are removed; the system prompt is fixed for the whole call.
 - No default limits: repairs, nudges, conversation segmentation, eval time, turn tokens, and

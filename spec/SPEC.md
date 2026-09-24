@@ -115,7 +115,8 @@ not repeat an effect record operation identities and reconcile unknown outcomes.
 A natural-language invocation offers the model these tools:
 
 - `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit.
-- `read_page(id, page)`: read more of output a tool result cut off; the cut-off names the ID.
+- `read_page(id, page)`: read the next part of a tool output that was cut off; the cut-off names the ID.
+- `compact_history(note)`: shorten the conversation (see Conversation length).
 - `return_result(status, value?, reason?)`: finish the call. Status `success` returns
   `value`, of the declared type; `blocked` stops because required information is
   absent, and `failed` because the instructions require an invalid or contradictory
@@ -137,7 +138,7 @@ variable instead of changing one. A `let` capture's assignments are written
 back to the caller. Top-level `const` and `let` declarations persist across eval
 calls. The conversation opens with the runtime's own eval: ambient `declare`
 lines for callable items and services, then the parameters and locals declared
-with their current values (large values cut off, with the `read_page` ID that holds them). An
+with their current values (large values cut off; see Cut-offs). An
 eval is atomic: a failed compilation or execution commits no local or capture
 changes (effects already performed remain). A final expression is only shown.
 Eval code may create inline `nl` functions like any TypeScript; they see the
@@ -153,6 +154,33 @@ A top-level `return value` stages the value as the call's result if it has the
 declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live
 values.
+
+Every eval also sees `transcript`, a read-only list of the call's earlier tool
+calls with their full outputs (`{ turn, tool, code, arguments, output }`), unless
+a parameter or local takes that name.
+
+## Cut-offs
+
+Whatever is too long to show is shortened one way, with a note that is not
+TypeScript: `<<cut off: 338 of 340 items not shown; customers holds all of it>>`.
+The note says what was left out, where all of it is in the scope (a variable, or
+`transcript[n].output` for a tool output), and for tool output which
+`read_page` call shows the next part. Values (the opening's declarations, eval
+results, stored locals, the staged result) are cut at item and field boundaries;
+text output (console, files) keeps its beginning and its end. A cut-off literal
+copied into an eval fails to compile rather than running on part of the data.
+
+## Conversation length
+
+A call keeps one conversation. Past three quarters of its context budget
+(`contextTokens`, default 16,384 prompt tokens) the next turn offers only
+`compact_history`, with a tool call required. Its `note` (at most 600 characters:
+what the model is doing, what it found, what is left) is kept after the opening,
+replacing any earlier note, and every older tool output and eval code is replaced
+by a note naming the `transcript` entry that holds it. The model may also compact
+on its own. Compacting again waits until the conversation has grown by another
+quarter of the budget, and a request never exceeds the budget: if needed, outputs
+are elided without a note.
 
 ## Completion
 

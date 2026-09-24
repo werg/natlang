@@ -1,12 +1,12 @@
 # Agent-facing surface and observed failures
 
-> **Current interface (2026-09-23; [`spec/SPEC.md`](../spec/SPEC.md) is normative).** The model
-> answers judgment work directly with `return_result(value)`, and uses a persistent TypeScript
-> evaluation scope for exact work, where a top-level `return` stages the result and a reply
-> without a tool call finishes. The other actions are `read_page`, `blocked`,
-> `failed`, and `read_function`, `edit_function`, and `diff_functions` when functions
-> are imported. Directory reducers additionally receive file tools. The observations below
-> were recorded against earlier surfaces.
+> **Current interface (2026-09-24; [`spec/SPEC.md`](../spec/SPEC.md) is normative).** The model
+> answers judgment work directly with `return_result` (status `success`, `blocked`, or `failed`), and
+> uses a persistent TypeScript evaluation scope for exact work, where a top-level `return` stages the
+> result and a reply without a tool call finishes. The other actions are `read_page`, `compact_history`,
+> and `read_function`, `edit_function`, and `diff_functions` when functions are imported. Directory
+> reducers additionally receive file tools. A call keeps one conversation (the checkpoint continuations
+> described below were removed). The observations below were recorded against earlier surfaces.
 >
 > Imported function sources have a fixed file set: their contents may be
 > edited and imports relinked; creating, moving, and deleting function files is
