@@ -8,8 +8,6 @@ export type EvalRequest = { code: string; scope: Record<string, unknown>; body: 
 export type HostEvent = { operation: string; [key: string]: unknown };
 export type EvalResult = { result: unknown; events: HostEvent[]; logs?: string[] };
 
-/** How much of one output a tool result shows; read_page shows the rest. */
-export const PAGE_CHARS = 2000;
 /** A console writer for one eval; the runtime pages long output for the model. */
 export function consoleWriter(logs: string[], show: (value: unknown) => string): (...values: unknown[]) => void {
   return (...values: unknown[]) => {

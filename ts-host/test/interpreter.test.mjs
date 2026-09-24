@@ -264,16 +264,20 @@ test('in eval, return_result stages its value and blocked ends the call, after t
   assert.equal(reported.kind, 'blocked'); assert.match(reported.text, /blocked: No notes/);
 });
 
-test('cut-off output names a word ID, and read_page shows each page of it', async () => {
+test('long text output keeps its head and tail, names its transcript entry, and read_page continues after the head', async () => {
   const { session } = open({ type: '(text: string) => number', instructions: 'Inspect.', args: { text: 'x'.repeat(4500) } });
-  const shown = await session.applyAsync('eval', { code: 'text' });
-  assert.match(shown.text, /page 1 of 3 shown; read_page\("amber", 2\) for more/);
+  const logged = await session.applyAsync('eval', { code: 'console.log("a".repeat(1400) + "b".repeat(2000) + "c".repeat(1100))' });
+  assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; transcript\[0\]\.output holds all of it; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
+  assert.match(session.transcript[0].output, /a{1400}b{2000}c{1100}/, 'the transcript entry holds all of it');
   const second = session.apply('read_page', { id: 'amber', page: 2 });
-  assert.equal(second.kind, 'ok'); assert.match(second.text, /^x{2000}\n… \(page 2 of 3; read_page\("amber", 3\) for more\)$/);
-  assert.match(session.apply('read_page', { id: 'amber', page: 3 }).text, /\(page 3 of 3, the last\)$/);
+  assert.equal(second.kind, 'ok');
+  assert.match(second.text, /^b{1900}c{100}\n<<page 2 of 3 shown; read_page\("amber", 3\) shows the next part>>$/, 'page 2 starts where the shown head ends');
+  assert.match(session.apply('read_page', { id: 'amber', page: 3 }).text, /<<page 3 of 3, the last>>$/);
   assert.equal(session.apply('read_page', { id: 'amber', page: 4 }).kind, 'error');
-  const logged = await session.applyAsync('eval', { code: 'console.log("y".repeat(3000))' });
-  assert.match(logged.text, /read_page\("birch", 2\)/, 'each cut-off gets the next word');
+  const value = await session.applyAsync('eval', { code: 'text' });
+  assert.match(value.text, /^"x{2000}" <<cut off: 2500 of 4500 characters not shown; transcript\[4\]\.output holds all of it>>/,
+    'a returned value is cut by structure and points at its transcript entry');
+  assert.match(session.transcript[4].output, /^"x{4500}"/);
 });
 
 test('scope parameters are const: changing one is rejected and a copy is a new variable', async () => {

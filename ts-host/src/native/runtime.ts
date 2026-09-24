@@ -5,15 +5,15 @@
  * Portable data reaches eval as a frozen snapshot; live values (host objects, functions, folder
  * handles, captured bindings, callables, services) arrive by reference through `__live`.
  */
-import { EvalFailure, PAGE_CHARS, type EvalEnvironment, type HostEvent } from './evaluator.js';
+import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
+import { PageStore } from './pages.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel, problems, unboundParts,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
-import { livePreview } from './agent.js';
-import { PageStore } from './pages.js';
+import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
@@ -31,7 +31,8 @@ export type NativeRuntimeHooks = {
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
 };
 export type NativeOutcome = { kind: 'done' | 'quiesced'; detail: string; value?: Value };
-export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[] };
+/** A tool call's result. `entry` is its index in the session's transcript. */
+export type NativeResult = { kind: string; text: string; value?: Value; codes?: string[]; entry?: number };
 export type NativeAgent = (session: NativeSession) => Promise<string | void> | string | void;
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
   maxActions?: number; maxToolCalls?: number;
@@ -49,18 +50,9 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
 
-function oneLine(value: unknown): string {
-  if (isLive(value)) return livePreview(value as object);
-  if (Array.isArray(value)) return `${value.length} items`;
-  if (value && typeof value === 'object') return `{ ${Object.entries(value).slice(0, 4)
-    .map(([key, item]) => `${key}: ${item && typeof item === 'object' ? '…' : oneLine(item)}`).join(', ')} }`;
-  if (typeof value === 'string') {
-    const clean = value.replace(/\n+$/, '');
-    if (clean.includes('\n')) return `${JSON.stringify(clean.split('\n')[0]!.slice(0, 80))} (${value.split(/\r?\n/).length} lines)`;
-    return clean.length <= 80 ? JSON.stringify(clean) : `${JSON.stringify(clean.slice(0, 80))} … (${clean.length} chars)`;
-  }
-  return JSON.stringify(value);
-}
+/** A one-line summary of a value for status lines; `holder` names where all of it is (see renderValue). */
+const oneLine = (value: unknown, holder?: string) => renderValue(value, { holder, budget: 80 });
+
 const DIAGNOSTIC_HINTS: Record<string, string> = {
   'type-mismatch': 'Pass the value itself with the type shown as expected, not wrapped in another object: for boolean use `true`, for number use `42.5`, for string use text, and for a record use an object with exactly its fields.',
   'unknown-field': 'Use one of the fields listed as expected.',
@@ -75,13 +67,9 @@ function rejected(error: Reject): NativeResult {
 /** What the model is told when a value is staged as the call's result. */
 const stagedMessage = (value: Value) => `\nStaged ${stagedText(value)} as the result. If this is the result of the task you were given and ` +
   'you are satisfied with it, you can reply done (without a tool call) to return exactly this value, or keep working and return a different value later.';
-/** A staged value in full when it is small portable data, so it can be checked (and never needs retyping). */
+/** A staged value, in full when it is small, so it can be checked (and never needs retyping); long ones are cut by structure. */
 function stagedText(value: Value): string {
-  if (!containsLive(value)) {
-    const text = JSON.stringify(value);
-    if (text !== undefined && text.length <= 1500) return text;
-  }
-  return oneLine(value);
+  return renderValue(value, { budget: 1500 });
 }
 /** A deep-frozen copy of portable data; live values and handles are kept by reference. */
 function frozenCopy(value: Record<string, Value>): Record<string, unknown> {
@@ -337,8 +325,12 @@ export class NativeSession {
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
   /** Output cut off in this call's tool results, readable with read_page. */
   readonly pages = new PageStore();
-  /** This call's tool calls and the results the model was shown, in order (appended by the agent). */
+  /** This call's tool calls with their full outputs, in order; evals read it as `transcript`. */
   readonly transcript: TranscriptEntry[] = [];
+  /** The model turn the next recorded call belongs to (set by the agent). */
+  turn = 0;
+  /** Texts the current call's result shows cut off, with their full versions for its transcript entry. */
+  private cuts: { shown: string; full: string }[] = [];
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
   /** Whether the model declared this persistent local with let (true) or const. */
@@ -370,7 +362,7 @@ export class NativeSession {
     const effects = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
       .filter(event => event.kind === 'effect' || event.kind === 'host')
       .map(event => String(event.capability ?? event.operation ?? event.kind));
-    return (logs.length ? `\nconsole:\n${this.pages.show(logs.join('\n'))}` : '') +
+    return (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       '\nNothing else from this eval was kept.';
   }
@@ -406,11 +398,30 @@ export class NativeSession {
     return true;
   }
 
+  /** A text of the current call's result as it fits in a message; all of it goes to the call's transcript entry. */
+  private show(text: string): string {
+    const shown = this.pages.show(text, `transcript[${this.transcript.length}].output`);
+    if (shown !== text) this.cuts.push({ shown, full: text });
+    return shown;
+  }
+  /** A value of the current call's result, cut by structure; all of it goes to the call's transcript entry. */
+  private showValue(value: unknown): string {
+    const root = this.lam.projectTransaction?.folder;
+    const shown = renderValue(value, { root, holder: `transcript[${this.transcript.length}].output` });
+    const full = renderValue(value, { root, budget: Infinity });
+    if (shown !== full) this.cuts.push({ shown, full });
+    return shown;
+  }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {
     this.runtime.trace.emit('action', { call_id: this.runtime.currentCallId ?? null, surface: this.surfaceName, name,
       arguments: args, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
+    const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
+    this.cuts = [];
+    const entry = this.transcript.length;
+    this.transcript.push({ turn: this.turn, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
+      arguments: structuredClone(args), output });
     this.runtime.observeState('after-action');
-    return result;
+    return { ...result, entry };
   }
   private actionLimitReached(): boolean {
     return (this.runtime.options.maxActions !== undefined && this.actions >= this.runtime.options.maxActions) ||
@@ -456,7 +467,7 @@ export class NativeSession {
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    if (!['read_page', 'return_result', 'blocked', 'failed', 'read_function', 'edit_function', 'diff_functions'].includes(name))
+    if (!['read_page', 'compact_history', 'return_result', 'blocked', 'failed', 'read_function', 'edit_function', 'diff_functions'].includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a synchronous scope-eval tool' }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
@@ -556,7 +567,7 @@ export class NativeSession {
     else if (name === 'edit_file') value = await folder.editText(path, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
     else value = folder.diffSync(path);
     const text = name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
-    return { kind: 'ok', text: this.pages.show(text), value: value as Value };
+    return { kind: 'ok', text: this.show(text), value: value as Value };
   }
 
   private inferScopeType(value: unknown): string {
@@ -793,14 +804,13 @@ export class NativeSession {
         this.lam.return = functionResult;
         this.failureDebug = undefined;
       }
-      const text = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object) :
-        JSON.stringify(output.result ?? null) ?? 'null';
-      const rendered = this.pages.show(text);
+      const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object) :
+        this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?
         stagedMessage(functionResult) : notResult;
-      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value)}`);
+      const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name)}`);
       const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
-      const logStatus = evaluated.logs?.length ? `console:\n${this.pages.show(evaluated.logs.join('\n'))}\n` : '';
+      const logStatus = evaluated.logs?.length ? `console:\n${this.show(evaluated.logs.join('\n'))}\n` : '';
       // return_result in eval stages its value like a top-level return: the value was computed, so the model
       // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
       if (requested?.tool === 'return_result' && requested.args.status === 'success' && this.lam.type.kind === 'lambda') {

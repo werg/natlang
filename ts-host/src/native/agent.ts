@@ -7,8 +7,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
 import { DIRECTORY_REDUCER_PROMPT, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT } from './prompt.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
-import { PAGE_CHARS } from './evaluator.js';
-import type { PageStore } from './pages.js';
+import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 
 /** Assistant turns the model has taken, not counting the runtime's pre-filled scope calls. */
 export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): number {
@@ -29,7 +28,7 @@ const tool = (name: string, description: string, properties: Record<string, unkn
 
 /**
  * The call's arguments as its caller gave them, as the opening eval's result shows them (read_inputs() returns
- * the same values in eval). Long values are paged; an argument the caller left out is undefined.
+ * the same values in eval). A long value is cut off, and its name holds all of it; an argument the caller left out is undefined.
  */
 export function inputsListing(session: NativeSession): string {
   const lam = session.lam;
@@ -37,7 +36,7 @@ export function inputsListing(session: NativeSession): string {
   const root = lam.projectTransaction?.folder;
   return lam.type.params.fields.map(field => {
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
-    const shown = value === undefined ? 'undefined' : scopeExpression(value, root, session.pages) ?? previewValue(value);
+    const shown = renderValue(value, { root, holder: field.name });
     return `${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = ${shown}`;
   }).join('\n');
 }
@@ -64,12 +63,14 @@ const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Cal
 /** Messages at the end of the conversation that budget compaction keeps whole if it can: the latest exchanges. */
 const RECENT_MESSAGES = 6;
 /** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
-export const elidedOutput = (entry?: number) => '[Output elided to keep this conversation within its context budget' +
-  (entry === undefined ? '. Values it stored are still in scope.]' : `; transcript[${entry}].output holds it.]`);
+export const elidedOutput = (entry?: number) => entry === undefined ?
+  cutNote('elided to keep this conversation within its context budget; values it stored are still in scope') :
+  cutNote('elided to keep this conversation within its context budget', { holder: `transcript[${entry}].output` });
 /** What replaces the code of an old eval call when outputs alone do not bring the conversation under budget. */
-export const elidedCode = (entry?: number) => '// Code elided to keep this conversation within its context budget' +
-  (entry === undefined ? '. Its declarations are still in scope.' : `; transcript[${entry}].code holds it.`);
-const ELIDED = /^\[Output elided |^\/\/ Code elided /;
+export const elidedCode = (entry?: number) => entry === undefined ?
+  cutNote('elided to keep this conversation within its context budget; its declarations are still in scope') :
+  cutNote('elided to keep this conversation within its context budget', { holder: `transcript[${entry}].code` });
+const ELIDED = /^<<elided /;
 
 /**
  * Deterministic compaction: replace the oldest tool outputs after the opening with a stub, oldest first, until
@@ -150,24 +151,32 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
   return [...found].map(name => declarations[name] ?? `type ${name} = ${definitions[name]};`);
 }
 
-function previewValue(value: Value): string {
+/**
+ * The one way a value is shown to the model: a TypeScript literal cut at item and field boundaries when it is long
+ * (scopeExpression), or a preview when it has no literal form (live values). `holder` is where all of it is.
+ */
+export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder } = {}): string {
+  if (value === undefined) return 'undefined';
+  return scopeExpression(value, options.root, options.holder, options.budget) ?? previewValue(value as Value, options.holder);
+}
+
+/** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
+function previewValue(value: Value, holder?: string): string {
   if (isLive(value)) return livePreview(value as object);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
     if (text.length > 400 || lines.length > 8)
-      return `${JSON.stringify(lines[0]!.slice(0, 80))} … CUT OFF: only the beginning of ${lines.length} lines, ${text.length} characters. Read it before using it.`;
+      return `${JSON.stringify(lines[0]!.slice(0, 80))} ${cutNote(`cut off: ${text.length - Math.min(80, lines[0]!.length)} of ${text.length} characters not shown`, { holder })}`;
     return lines.length > 1 ? '\n' + lines.map(line => `      | ${line}`).join('\n') : JSON.stringify(text);
   }
   if (Array.isArray(value)) {
-    const head = value.slice(0, 3).map(previewValue).join(', ');
-    const more = value.length > 3 ? `, … ${value.length - 3} more (read to see)` : '';
-    return `${value.length} items: [${head}${more}]`;
+    const head = value.slice(0, 3).map(item => previewValue(item)).join(', ');
+    return `[${head}${value.length > 3 ? `, ${cutNote(`cut off: ${value.length - 3} of ${value.length} items not shown`, { holder })}` : ''}]`;
   }
   if (value && typeof value === 'object') {
     const entries = Object.entries(value);
     const head = entries.slice(0, 6).map(([key, item]) => `${key}: ${previewValue(item)}`).join(', ');
-    const more = entries.length > 6 ? `, … ${entries.length - 6} more fields (read to see)` : '';
-    return `{ ${head}${more} }`;
+    return `{ ${head}${entries.length > 6 ? `, ${cutNote(`cut off: ${entries.length - 6} of ${entries.length} fields not shown`, { holder })}` : ''} }`;
   }
   if (value === null) return 'null';
   return String(value);
@@ -196,16 +205,10 @@ const isPlainRecord = (value: object) => Object.prototype.toString.call(value) =
 /**
  * TypeScript that evaluates to a scope value: a literal for data, `folder.file(...)` for a handle into the
  * reducer's folder, `new Date(...)`/`new Map(...)`/`new Set(...)`/`new Uint8Array(...)` for those built-ins.
- * A value beyond the page budget is cut off with a comment naming the read_page ID that holds all of it.
+ * A value beyond the budget is cut off with a comment saying `holder` (the variable) holds all of it.
  * Undefined when no expression produces the value (an opaque host object).
  */
-function scopeExpression(value: unknown, root: Folder | undefined, pages: PageStore, budget = PAGE_CHARS): string | undefined {
-  const whole = () => {
-    let text: string;
-    try { text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value); } catch { text = String(value); }
-    const { id, count } = pages.add(text);
-    return `the whole value is ${count === 1 ? 'one page' : `${count} pages`}: read_page("${id}", 1)`;
-  };
+function scopeExpression(value: unknown, root: Folder | undefined, holder?: string, budget = SHOWN_CHARS): string | undefined {
   const sequence = <T,>(items: T[], open: string, close: string, noun: string, render: (item: T, left: number) => string | undefined) => {
     const shown: string[] = [];
     let used = 0;
@@ -216,13 +219,13 @@ function scopeExpression(value: unknown, root: Folder | undefined, pages: PageSt
       shown.push(text); used += text.length + 2;
     }
     if (shown.length === items.length) return `${open}${shown.join(', ')}${close}`;
-    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}/* cut off: ${shown.length} of ${items.length} ${noun} shown; ${whole()} */${close}`;
+    return `${open}${shown.join(', ')}${shown.length ? ', ' : ''}${cutNote(`cut off: ${items.length - shown.length} of ${items.length} ${noun} not shown`, { holder })}${close}`;
   };
   if (value === null || typeof value === 'boolean') return String(value);
   if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : String(value);
   if (typeof value === 'string') {
     if (value.length <= budget) return JSON.stringify(value);
-    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} /* cut off: ${Math.max(0, budget)} of ${value.length} characters shown; ${whole()} */`;
+    return `${JSON.stringify(value.slice(0, Math.max(0, budget)))} ${cutNote(`cut off: ${value.length - Math.max(0, budget)} of ${value.length} characters not shown`, { holder })}`;
   }
   if (typeof value !== 'object' || value === undefined) return undefined;
   if (value instanceof FileHandle || value instanceof FolderHandle) {
@@ -233,16 +236,16 @@ function scopeExpression(value: unknown, root: Folder | undefined, pages: PageSt
   if (tag === '[object Date]') return `new Date(${JSON.stringify((value as Date).toISOString())})`;
   if (tag === '[object Uint8Array]') return sequence(Array.from(value as Uint8Array), 'new Uint8Array([', '])', 'bytes', item => String(item));
   if (tag === '[object Set]') return sequence([...(value as Set<unknown>)], 'new Set([', '])', 'members',
-    (item, left) => scopeExpression(item, root, pages, left));
+    (item, left) => scopeExpression(item, root, holder, left));
   if (tag === '[object Map]') return sequence([...(value as Map<unknown, unknown>)], 'new Map([', '])', 'entries', ([key, item], left) => {
-    const keyText = scopeExpression(key, root, pages, left);
-    const itemText = keyText === undefined ? undefined : scopeExpression(item, root, pages, left - keyText.length);
+    const keyText = scopeExpression(key, root, holder, left);
+    const itemText = keyText === undefined ? undefined : scopeExpression(item, root, holder, left - keyText.length);
     return itemText === undefined ? undefined : `[${keyText}, ${itemText}]`;
   });
-  if (Array.isArray(value)) return sequence(value, '[', ']', 'items', (item, left) => scopeExpression(item, root, pages, left));
+  if (Array.isArray(value)) return sequence(value, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left));
   if (!isPlainRecord(value)) return undefined;
   return sequence(Object.entries(value), '{ ', ' }', 'fields', ([key, item], left) => {
-    const text = scopeExpression(item, root, pages, left);
+    const text = scopeExpression(item, root, holder, left);
     return text === undefined ? undefined : `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)}: ${text}`;
   });
 }
@@ -432,10 +435,10 @@ export class NativeToolAgent {
     const declared = (keyword: string, name: string, type: string, value: Value, note = ''): string => {
       // Host types print as their tag; only a class-like tag (FileHandle, Map) is a usable TypeScript type.
       const shown = /^[a-z]+$/.test(type) && !['string', 'number', 'boolean', 'null'].includes(type) ? 'unknown' : type;
-      const expression = scopeExpression(value, root, session.pages);
+      const expression = scopeExpression(value, root, name);
       names.push(name);
       return expression === undefined ?
-        `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value)}${note}` :
+        `declare ${keyword === 'let' ? 'let' : 'const'} ${name}: ${shown};  // live value ${previewValue(value, name)}${note}` :
         `${keyword} ${name}: ${shown} = ${expression};${note}`;
     };
     section('// Functions you can call:', this.callableDeclarations(session));
@@ -459,7 +462,7 @@ export class NativeToolAgent {
     section('// Your variables from earlier in this call:', Object.entries(lam.let).map(([name, value]) =>
       declared(session.localMutable(name) ? 'let' : 'const', name, formatType(lam.letTypes[name]!), value)));
     if (lam.return !== MISSING)
-      section('// Your staged result:', [`// ${scopeExpression(lam.return, root, session.pages) ?? previewValue(lam.return)}`]);
+      section('// Your staged result:', [`// ${renderValue(lam.return, { root })}`]);
     if (!lines.length) return;
     // The arguments appear in the eval's result, not as literals in its code: they come from the caller.
     return { code: lines.join('\n'), text: (params.length ? inputsListing(session) + '\n' : '') +
@@ -663,6 +666,7 @@ export class NativeToolAgent {
           { id: `call_${turns}_${i}`, type: 'function', function: { name, arguments: JSON.stringify(args) } };
       });
       const results: NativeResult[] = [];
+      session.turn = turns;
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
@@ -681,9 +685,7 @@ export class NativeToolAgent {
       for (const [index, result] of results.entries()) {
         const [name, args] = calls[index]!, id = String(raw[index]!.id);
         messages.push({ role: 'tool', tool_call_id: id, content: result.text + (index === results.length - 1 ? notice : '') });
-        transcriptEntries.set(id, session.transcript.length);
-        session.transcript.push({ turn: turns, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
-          arguments: structuredClone(args), output: session.pages.expand(result.text) });
+        if (result.entry !== undefined) transcriptEntries.set(id, result.entry);
         if (name === 'compact_history' && result.kind === 'ok') note = String(args.note).trim();
       }
       if (note !== undefined) {

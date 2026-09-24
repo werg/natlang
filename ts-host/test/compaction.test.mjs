@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { NativeToolAgent, compactMessages, elidedCode, elidedOutput } from '../dist/native/agent.js';
 import { session as open } from './support/natlang.mjs';
 
-const elided = message => typeof message.content === 'string' && message.content.startsWith('[Output elided');
+const elided = message => typeof message.content === 'string' && message.content.startsWith('<<elided');
 
 test('compaction elides the oldest tool outputs first and keeps the opening and the latest exchange', () => {
   const big = 'x'.repeat(500);
