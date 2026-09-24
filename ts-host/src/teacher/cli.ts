@@ -93,4 +93,9 @@ async function main(): Promise<void> {
   if (result.missing.length) process.exitCode = 2;
 }
 
+// Evals run model-written code in this process; a promise it leaves running can reject after its eval has ended.
+// That is the model's error, already outside any row, so it is logged and collection goes on.
+process.on('unhandledRejection', error => {
+  process.stderr.write(`ignored a rejection left over from an eval: ${error instanceof Error ? error.message : String(error)}\n`);
+});
 main().catch(error => { process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`); process.exitCode = 1; });
