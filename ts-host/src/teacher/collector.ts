@@ -174,7 +174,10 @@ const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cu
 const REUSE_KEYS = ['program_ir_sha256', 'model', 'max_turns', 'collection_role', 'handoff_sha256'];
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
   surfaces: string[] = []): TeacherRow | undefined {
-  const { row, path } = found, provenance = row.provenance;
+  const { row } = found;
+  // A row reused before is judged by where it was actually collected, and keeps pointing there.
+  const earlier = row.provenance.reused_from as { path: string; provenance: Record<string, unknown> } | undefined;
+  const provenance = earlier?.provenance ?? row.provenance, path = earlier?.path ?? found.path;
   if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
     return;
   if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined &&

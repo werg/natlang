@@ -94,6 +94,21 @@ test('finished rows of an earlier run stand in for the same programs at other in
   await collectBatch(shard, options, async () => { throw new Error('reused rows were collected again'); });
 });
 
+test('a row reused once is judged by where it was collected when reused again', async () => {
+  const first = await mkdtemp(join(tmpdir(), 'teacher-rereuse-a-')), second = await mkdtemp(join(tmpdir(), 'teacher-rereuse-b-')),
+    third = await mkdtemp(join(tmpdir(), 'teacher-rereuse-c-'));
+  const shard = [record('only')].map((value, index) => ({ index, record: value }));
+  await collectBatch(shard, config(first, 'surface-origin'), async (item, provenance) => row(item, provenance));
+  // Reused into a run on surface-b, then again into a run on surface-c: only the origin surface is declared.
+  await collectBatch(shard, { ...config(second, 'surface-b'), reuse: [config(first).output], reuseSurfaces: ['surface-origin'] },
+    async () => { throw new Error('collected instead of reused'); });
+  await collectBatch(shard, { ...config(third, 'surface-c'), reuse: [config(second).output], reuseSurfaces: ['surface-origin'] },
+    async () => { throw new Error('collected instead of reused'); });
+  const merged = JSON.parse((await readFile(config(third).output, 'utf8')).trim());
+  assert.equal(merged.provenance.reused_from.path, config(first).output, 'reused_from names the run that collected it');
+  assert.equal(merged.provenance.reused_from.provenance.tool_surface_sha256, 'surface-origin');
+});
+
 test('a later row that does not qualify never hides an earlier one, and declared surfaces are reused', async () => {
   const earlier = await mkdtemp(join(tmpdir(), 'teacher-mask-a-')), later = await mkdtemp(join(tmpdir(), 'teacher-mask-b-'));
   const old = [record('one'), record('two')].map((value, index) => ({ index, record: value }));
