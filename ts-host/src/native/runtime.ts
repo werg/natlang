@@ -465,6 +465,10 @@ export class NativeSession {
     if (name === 'read_page') return { kind: 'ok', text: this.pages.read(String(args.id ?? ''), Number(args.page ?? 1)) };
     if (name === 'return_result') {
       if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
+      // Returning the word "blocked" or "failed" is a confusion with the blocked and failed tools, never a result.
+      if (typeof args.value === 'string' && /^\s*(?:blocked|failed)\b[.:]?\s*$/i.test(args.value))
+        throw new Reject([{ path: 'value', code: 'bad-action',
+          expected: 'a result; to report that the task cannot be finished, call the blocked tool (what is missing) or the failed tool (why), not return_result' }]);
       let value: Value;
       try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
       catch (first) {
