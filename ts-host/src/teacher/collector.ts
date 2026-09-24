@@ -146,7 +146,10 @@ function transportFailure(error: unknown): boolean {
   return ['connection refused', 'connection reset', 'fetch failed', 'socket', 'timed out', 'econnreset',
     'econnrefused', 'remote end closed', 'headerstimeout', 'bodytimeout'].some(phrase => text.includes(phrase)) ||
     // A restarting server answers 502/503 (llama.cpp: "Loading model") until it is ready.
-    /\bmodel http (?:502|503|504)\b/.test(text);
+    /\bmodel http (?:502|503|504)\b/.test(text) ||
+    // Slots share one KV buffer: when the running sequences together fill it, the server fails them all, and
+    // space frees as soon as any finishes. The job resumes from its journal.
+    text.includes('context size has been exceeded');
 }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -222,7 +225,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
           break;
         }
-        const wait = Math.min(30_000, (config.retryDelayMs ?? 5_000) * 2 ** Math.min(attempt++, 3));
+        // Jitter spreads out jobs that failed together, so they do not all return at once.
+        const wait = Math.min(30_000, (config.retryDelayMs ?? 5_000) * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random());
         if (wait) await delay(wait);
       }
     }
