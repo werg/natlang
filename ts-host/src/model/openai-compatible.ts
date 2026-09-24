@@ -8,6 +8,22 @@ export type OpenAICompatibleOptions = {
   onExchange?: (exchange: OpenAICompatibleExchange) => void | Promise<void>;
 };
 
+/**
+ * Under Node, fetch (undici) fails a request whose response headers take more than five minutes. A model server
+ * with several slots can queue a request behind others and then reason for minutes before its first byte, so model
+ * requests go through a dispatcher without header or body timeouts; callers bound calls with their own deadlines.
+ * Elsewhere this is plain fetch.
+ */
+let longDispatcher: Promise<unknown> | undefined;
+export async function fetchModel(url: string, init: RequestInit = {}): Promise<Response> {
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    longDispatcher ??= import('undici').then(({ Agent }) => new Agent({ headersTimeout: 0, bodyTimeout: 0 }), () => undefined);
+    const dispatcher = await longDispatcher;
+    if (dispatcher) return fetch(url, { ...init, dispatcher } as RequestInit);
+  }
+  return fetch(url, init);
+}
+
 function decode(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value !== 'string') throw new Error('tool arguments are neither JSON text nor an object');
@@ -41,7 +57,7 @@ export function openAICompatibleModelTurn(options: OpenAICompatibleOptions) {
       const url = options.endpoint.replace(/\/$/, '') + '/v1/chat/completions';
       let response: Response;
       try {
-        response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json',
+        response = await fetchModel(url, { method: 'POST', headers: { 'content-type': 'application/json',
           ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}), ...options.headers },
           body: JSON.stringify(wireRequest) });
       } catch (error) {

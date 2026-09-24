@@ -25,7 +25,7 @@ export { TypeEnv, TypeSyntaxError, parseType, formatType, fitsType } from './nat
 export type { Type as NatlangType } from './native/types.js';
 export type { ModelTurn, ModelTurnRequest } from './contracts.js';
 export type { NativeReviewOptions } from './native/agent.js';
-export { openAICompatibleModelTurn, createManagedModelSession, localModelPrerequisites,
+export { fetchModel, openAICompatibleModelTurn, createManagedModelSession, localModelPrerequisites,
   DEFAULT_LOCAL_MODEL, LLAMA_RUNTIME_RELEASE, defaultNatlangRuntimeDirectory,
   discoverLlamaRuntime, inspectLlamaServer, installManagedLlamaRuntime,
   isCompatibleLlamaVersion, describeLlamaRuntime } from './model/index.js';

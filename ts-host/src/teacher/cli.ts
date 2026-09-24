@@ -3,11 +3,6 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   recordDigest, sha256, writeAtomic, type CollectorConfig, type HandoffRecord } from './collector.js';
-import { Agent, setGlobalDispatcher } from 'undici';
-
-// A request can wait behind other slots' requests and then reason for minutes before its first byte, so fetch's
-// five-minute header and body timeouts are off; each episode has its own wall-clock budget.
-setGlobalDispatcher(new Agent({ headersTimeout: 0, bodyTimeout: 0 }));
 
 function argumentsOf(argv: string[]): { positionals: string[]; flags: Map<string, string> } {
   const positionals: string[] = [], flags = new Map<string, string>();

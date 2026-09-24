@@ -6,6 +6,7 @@
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchModel } from '../dist/model/openai-compatible.js';
 import { MemoryResearchAdapter } from '../studio/shared/research-workspace.mjs';
 import { ResearchHost } from '../studio/research/host.mjs';
 import { scenarios, scenarioById } from '../studio/research/scenarios.mjs';
@@ -31,7 +32,7 @@ function teacherDriver(server, exchanges) {
             temperature: request.temperature, seed: request.seed, top_p: .95, top_k: 20,
             thinking_budget_tokens: 512, chat_template_kwargs: { reasoning_effort: 'low' } };
         if (request.max_tokens !== null) payload.max_tokens = request.max_tokens;
-        const response = await fetch(`${server}/v1/chat/completions`, { method: 'POST',
+        const response = await fetchModel(`${server}/v1/chat/completions`, { method: 'POST',
             headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
         const body = await response.json();
         if (!response.ok) throw new Error(`teacher HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`);
