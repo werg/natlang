@@ -1,15 +1,17 @@
 /**
- * Interactive worlds that run in their own process (ScienceWorld), exposed to a program as a host service.
- * The bridge speaks JSON lines with `scripts/inline-curriculum/scienceworld_bridge.py serve`; the service's
+ * Interactive worlds that run in their own process (ScienceWorld, ALFWorld), exposed to a program as a host service.
+ * The bridge speaks JSON lines with `scripts/inline-curriculum/<kind>_bridge.py serve`; the service's
  * methods are asynchronous, so eval code awaits them.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-export type WorldSpec = { kind: 'scienceworld'; task: string; variation: number; simplifications?: string };
+/** A ScienceWorld task variation, or an ALFWorld game (task: its path under ALFWORLD_DATA). */
+export type WorldSpec = { kind: 'scienceworld' | 'alfworld'; task: string; variation?: number; simplifications?: string };
 
-const BRIDGE = fileURLToPath(new URL('../../scripts/inline-curriculum/scienceworld_bridge.py', import.meta.url));
+const script = (kind: WorldSpec['kind']) => fileURLToPath(new URL(`../../scripts/inline-curriculum/${kind}_bridge.py`, import.meta.url));
+const vendor = (path: string) => fileURLToPath(new URL(`../../../vendor/${path}`, import.meta.url));
 
 export class WorldBridge {
   private next = 1;
@@ -25,11 +27,16 @@ export class WorldBridge {
     process.on('exit', () => { for (const waiter of this.pending.values()) waiter.reject(new Error('the world process exited')); });
   }
 
-  /** Start a world process and load the task. SCIENCEWORLD_PYTHON names a Python with scienceworld installed. */
+  /**
+   * Start a world process and load the task. SCIENCEWORLD_PYTHON / ALFWORLD_PYTHON name a Python with the package
+   * installed; ALFWORLD_DATA points at ALFWorld's downloaded data.
+   */
   static async open(spec: WorldSpec): Promise<WorldBridge> {
-    const python = process.env.SCIENCEWORLD_PYTHON ?? fileURLToPath(new URL('../../../vendor/scienceworld-venv/bin/python', import.meta.url));
-    const bridge = new WorldBridge(spawn(python, [BRIDGE, 'serve'], { stdio: ['pipe', 'pipe', 'pipe'] }));
-    await bridge.request('load', { task: spec.task, variation: spec.variation, simplifications: spec.simplifications ?? 'easy' });
+    const python = spec.kind === 'alfworld' ? process.env.ALFWORLD_PYTHON ?? vendor('alfworld-venv/bin/python') :
+      process.env.SCIENCEWORLD_PYTHON ?? vendor('scienceworld-venv/bin/python');
+    const env = spec.kind === 'alfworld' ? { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? vendor('datasets/alfworld/data') } : process.env;
+    const bridge = new WorldBridge(spawn(python, [script(spec.kind), 'serve'], { stdio: ['pipe', 'pipe', 'pipe'], env }));
+    await bridge.request('load', { task: spec.task, variation: spec.variation ?? 0, simplifications: spec.simplifications ?? 'easy' });
     return bridge;
   }
 

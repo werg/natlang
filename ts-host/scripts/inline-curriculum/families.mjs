@@ -8,7 +8,7 @@ import { childOptOut, eventRetry, loopRewrite, recursionRewrite, reducerApply } 
 import { frontierSearch, greenhouseControl, lateArgmax } from './investigate.mjs';
 import { kqaQuestion } from './kqapro.mjs';
 import { textworldIterate, textworldQuest } from './textworld.mjs';
-import { scienceworldTask } from './scienceworld.mjs';
+import { alfworldTask, scienceworldTask } from './scienceworld.mjs';
 import { authoringCapturedPolicy, authoringInlineReview, authoringIterate, authoringNamedHelper, authoringStructuredExtract } from './authoring.mjs';
 import { anliBatch, commaqaNumeric, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
@@ -63,6 +63,7 @@ export const FAMILIES = {
   textworld_quest: { build: textworldQuest, weight: 2, source: 'textworld' },
   textworld_iterate: { build: textworldIterate, weight: 2, source: 'textworld' },
   scienceworld_task: { build: scienceworldTask, weight: 2, source: 'scienceworld' },
+  alfworld_task: { build: alfworldTask, weight: 2, source: 'alfworld' },
   // The TypeScript authoring track (curriculum.track "authoring").
   authoring_inline_review: { build: authoringInlineReview, weight: 1, track: 'authoring' },
   authoring_iterate: { build: authoringIterate, weight: 1, track: 'authoring' },

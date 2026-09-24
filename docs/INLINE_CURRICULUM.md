@@ -82,6 +82,7 @@ running out of turns also quiesces a call and was previously accepted.
 | `textworld_quest` | follow-up | actor | single call | A generated TextWorld quest played through look/commands/act; the counterpart lacks the needed object (blocked) |
 | `textworld_iterate` | iterate | actor | single call | The same quests played by an inline nl step run with iterateOn; without the object, the progress review stops the loop |
 | `scienceworld_task` | follow-up | actor | single call | A ScienceWorld task (boiling, chemistry, biology, ...) played through the `world` service until the score reaches 100 |
+| `alfworld_task` | follow-up | actor | single call | An ALFWorld household task (find, heat, clean, place, examine) played through the `world` service |
 | `child_sufficiency` | nested | logic | follow-up | A named child finds the first records sufficient, needs the detailed records, or neither suffices (blocked) |
 | `relational_multihop_qualifier` | nested | relational | single call | Paged two-hop graph with temporal qualifiers: base, divestment, a hire on a later page, a departure |
 | `relational_policy_inline` | inline | relational | single call | Exact candidate retrieval, then per-candidate policy judgments through a typed `review_each` callback |
@@ -181,8 +182,9 @@ read only the cache and keep source labels and formal annotations in the oracle 
   (`src/teacher/world-bridge.ts`); a case is accepted when the task's score reaches 100. Variations 0-2 of all 30
   tasks (90 cases; variation 2 is `test`) have gold action paths from the package, and all 90 replay to 100.
   Collection and verification need `SCIENCEWORLD_PYTHON` (default `vendor/scienceworld-venv`) and Java 11+.
-- ALFWorld is not integrated: its dependencies and game data need several gigabytes, and the disk was full on
-  2026-09-24. It would use the same live-world bridge as ScienceWorld.
+- **ALFWorld** (MIT, alfworld 0.4.2, json_2.1.1 games): the same live bridge (`alfworld_bridge.py`), a won game
+  scoring 100. 285 games (up to 100 per split, spread over task types; valid splits are `test`) whose handcoded
+  expert wins; its command list is the reference.
 - Acquisition extracts only the archive members an adapter reads (ProofWriter: OWA depth 5, 0.5 of 3.4 GB).
 
 ## Commands

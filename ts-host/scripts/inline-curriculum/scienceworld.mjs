@@ -42,3 +42,26 @@ const progress = await world.score();
     inputs: {}, expected: null })].map(record => ({ ...record, semantics: { ...record.semantics,
       world: { kind: 'scienceworld', task: task.task, variation: task.variation, simplifications: task.simplifications } } }));
 }
+
+let alfGames;
+/** ALFWorld: a household task in a text simulation of an ALFRED scene, played through the world service. */
+export function alfworldTask(seed, index) {
+  if (!alfGames) {
+    const path = cachePath(CACHE, 'alfworld', SOURCES.alfworld.revision, 'games.json');
+    if (!existsSync(path)) throw new Error('ALFWorld games are not in the dataset cache; run node scripts/inline-curriculum/acquire.mjs --source alfworld');
+    alfGames = JSON.parse(readFileSync(path, 'utf8')).games;
+  }
+  const game = alfGames[index % alfGames.length];
+  const kind = game.game.split('/')[2].split('-')[0];
+  return [curriculumCase({ family: 'alfworld_task', shape: game.game.split('/').slice(1, 4).join('_').replace(/[^A-Za-z0-9_]+/g, '_'), variant: 'game',
+    splitGroup: `alfworld:${game.game.split('/')[2]}`, split: game.split === 'train' ? 'train' : 'test',
+    slice: 'observation_followup', domain: 'actor', mode: 'single_call', inline: 'avoid', worldSemantics: 'closed_world',
+    evidence: { world: [game.task], retrieved: [], background: [`source: ALFWorld ${SOURCES.alfworld.revision} ${game.game}`, `task type: ${kind}`, `expert: ${game.commands.length} commands`] },
+    minimumSequence: ['look around', 'search the likely places', 'carry out the task'],
+    reference: { root: [evalCall(`const log: string[] = [];
+for (const command of ${JSON.stringify(game.commands)}) log.push(command + ' -> ' + (await world.act(command)).observation.slice(0, 80));
+({ progress: await world.score(), last: log.slice(-2) })`), returnCall('The task is complete.')] },
+    root: { name: 'household_task', args: {}, returns: 'string',
+      instructions: `Your task is to: ${game.task}\n\nworld is a text simulation of a household. await world.look() describes where you are; await world.act(command) carries out one command and returns { observation, score, done }; await world.actions() lists the commands possible right now (for example "go to drawer 1", "open drawer 1", "take mug 1 from drawer 1", "put mug 1 in/on shelf 2", "use desklamp 1"); await world.score() reports whether the task is done (score 100). Work until the score is 100, then reply with a one-sentence summary.` },
+    inputs: {}, expected: null })].map(record => ({ ...record, semantics: { ...record.semantics, world: { kind: 'alfworld', task: game.game } } }));
+}

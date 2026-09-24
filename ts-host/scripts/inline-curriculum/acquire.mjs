@@ -87,6 +87,16 @@ export const SOURCES = {
       [new URL('./scienceworld_bridge.py', import.meta.url).pathname, 'export', join(target, 'tasks.json'), '--variations', '3'], { stdio: 'inherit' }),
     files: [],
   },
+  alfworld: {
+    name: 'ALFWorld', homepage: 'https://github.com/alfworld/alfworld', license: 'MIT',
+    release: 'alfworld 0.4.2 text games (json_2.1.1, via alfworld-download into vendor/datasets/alfworld/data); 100 games per split with handcoded-expert command lists',
+    revision: 'alfworld-0.4.2-100-per-split',
+    // Generated from the pinned package: ALFWORLD_PYTHON has alfworld==0.4.2; ALFWORLD_DATA holds its downloaded data.
+    generate: target => execFileSync(process.env.ALFWORLD_PYTHON ?? '../vendor/alfworld-venv/bin/python',
+      [new URL('./alfworld_bridge.py', import.meta.url).pathname, 'export', join(target, 'games.json'), '--per-split', '100'],
+      { stdio: 'inherit', env: { ...process.env, ALFWORLD_DATA: process.env.ALFWORLD_DATA ?? resolve('../vendor/datasets/alfworld/data') } }),
+    files: [],
+  },
   commaqa: {
     name: 'CommaQA', homepage: 'https://github.com/allenai/CommaQA', license: 'Apache-2.0',
     release: 'v1 (AI2 public datasets bucket)', revision: 'v1',
