@@ -4,10 +4,12 @@
 # official chat template (not the one embedded in the GGUF), q4_0 KV cache, a capped thinking budget.
 # The fork's prebuilt binaries lack the CUDA and OpenMP runtimes, so they run inside a small image built from
 # docker/prism.Dockerfile (docker build -t natlang-prism-runtime -f docker/prism.Dockerfile docker).
-# Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL] [SLOTS]  stop: docker stop natlang-bonsai
+# Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL] [SLOTS]  (collectors: --workers to match SLOTS)  stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PORT="${1:-8081}"; CTX="${2:-32768}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-1}}"
+# Defaults: 6 slots sharing a 52k-token KV buffer, the measured fit for the 8 GB RTX 4060 (each slot holds about
+# 145 MB of SSM state; 8 slots do not fit). About 1.6x one slot's decode throughput, more per collected case.
+PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-6}}"
 # A long Bonsai context occupies roughly 0.6-0.9 GiB in the host prompt cache.
 # Agent programs alternate between root and nested invocations, so one entry
 # per slot thrashes even with only two workers.  Keep about two contexts per

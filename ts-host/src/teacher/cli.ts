@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     return;
   }
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
-    throw new Error('usage: collect-teacher-batch IR JOBS OUT --model-id ID --root-seed N [--limit 10 --workers 1]');
+    throw new Error('usage: collect-teacher-batch IR JOBS OUT --model-id ID --root-seed N [--limit 10 --workers 6]');
   const [ir, jobs, output] = positionals.map(value => resolve(value)) as [string, string, string];
   let handoffs: Map<string, HandoffRecord> | undefined;
   if (flags.has('--handoff-queue')) {
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
-    rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 1),
+    rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     segmentTurns: integer(flags, '--segment-turns', 24), segmentMessages: integer(flags, '--segment-messages', 48),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),

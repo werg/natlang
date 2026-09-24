@@ -40,7 +40,7 @@ new data is produced as `natlang.program/2` directly.
 ## Collection, materialization, export
 
 ```bash
-node ts-host/scripts/teacher-collector.mjs IR.jsonl JOBS/ OUT.jsonl --model-id ID --root-seed 909 --server URL --limit 50 --workers 4
+node ts-host/scripts/teacher-collector.mjs IR.jsonl JOBS/ OUT.jsonl --model-id ID --root-seed 909 --server URL --limit 50 --workers 6
 node ts-host/scripts/materialize-native-teacher.mjs OUT.jsonl TURNS.jsonl
 node ts-host/scripts/export-native-sft.mjs TURNS.jsonl SFT.jsonl --server URL --end-token TOKEN
 ```

@@ -206,7 +206,7 @@ cd ts-host
 node scripts/inline-curriculum/acquire.mjs --source folio
 node scripts/inline-curriculum/build.mjs --seed 1 --shapes 2 --out ../data/teacher/inline-curriculum/smoke-s1.ir.jsonl
 node scripts/teacher-collector.mjs ../data/teacher/inline-curriculum/smoke-s1.ir.jsonl ../runs/ic.jobs ../runs/ic.results.jsonl \
-  --model-id Ternary-Bonsai-2-27B --root-seed 909 --server http://127.0.0.1:8081 --all --workers 1 --max-turns 30
+  --model-id Ternary-Bonsai-2-27B --root-seed 909 --server http://127.0.0.1:8081 --all --workers 6 --max-turns 30
 node scripts/inline-curriculum/admit.mjs ../runs/ic.results.jsonl --ledger ../runs/ic.ledger.jsonl --admitted ../runs/ic.admitted.jsonl --show
 ```
 

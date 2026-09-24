@@ -8,7 +8,7 @@ MODEL="${TEACHER_MODEL:-Ternary-Bonsai-2-27B-PTQ1_0}"
 SEED="${TEACHER_SEED:-909}"
 # Bonsai already saturates this 8 GiB GPU with one decode. Two full agent
 # contexts exceed the server's 5 GiB host-memory cgroup on complex programs.
-WORKERS="${TEACHER_WORKERS:-1}"
+WORKERS="${TEACHER_WORKERS:-6}"
 # A typical nested algorithm episode needs 12-20 tool turns.  Keep it in one
 # conversation when possible; longer work still checkpoints into durable state.
 SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-24}"

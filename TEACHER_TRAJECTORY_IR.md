@@ -9,7 +9,7 @@ TypeScript host:
 node ts-host/scripts/teacher-collector.mjs \
   data/teacher/coverage-selection-s909.ir.jsonl runs/teacher.jobs \
   runs/teacher.native.jsonl --model-id MODEL --root-seed 909 \
-  --limit 96 --workers 1 --segment-turns 24 --segment-messages 48
+  --limit 96 --workers 6 --segment-turns 24 --segment-messages 48
 node ts-host/scripts/materialize-native-teacher.mjs \
   runs/teacher.native.jsonl data/teacher-native-turns.jsonl --replace
 ```

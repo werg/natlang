@@ -11,9 +11,10 @@ The teacher is Ternary Bonsai 2 27B PTQ1_0, served by llama-server on port
 8081. The probes record the actual `/v1/models` response, program, prompt,
 tool transcript, runtime outcome, effects, and audit results. Teacher probes
 are quarantined under `runs/`; they never append training references.
-`scripts/serve_bonsai.sh` defaults to a 32,768-token server context; the
-previous 12,288-token launch cap was an operational choice, not a limit of the
-model weights. Every long-run trace records request timing and, for new runs,
+`scripts/serve_bonsai.sh` defaults to 6 slots sharing a 53,248-token KV buffer
+(`--kv-unified`), with collectors at `--workers 6`; single-slot serving leaves the GPU
+idle while tools run. The previous 12,288- and 32,768-token caps were operational
+choices, not limits of the model weights. Every long-run trace records request timing and, for new runs,
 prompt/completion token usage and the offered tool-schema size. Inspect these
 before increasing context again: a large context should support long work, not
 hide repetitive prompts or oversized tool menus.

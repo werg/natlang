@@ -93,7 +93,7 @@ def main():
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--limit', type=int, default=0, help='student programs; zero means all')
     parser.add_argument('--root-seed', type=int, default=42)
-    parser.add_argument('--workers', type=int, default=1)
+    parser.add_argument('--workers', type=int, default=6)
     parser.add_argument('--max-turns', type=int, help='model turns allowed per collected call (unbounded if omitted)')
     args = parser.parse_args()
     config = improvement_pipeline(args.base_recipe, args.base_run, args.programs, args.run,

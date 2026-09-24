@@ -175,7 +175,7 @@ async function main() {
   if (positional.length < 2) throw new Error('usage: collect-studio-teacher.mjs CASES.jsonl JOB_DIR --model ID --seed N [--server URL] [--workers N]');
   const casesPath = resolve(positional[0]), jobs = resolve(positional[1]);
   const options = { model: take('--model'), seed: Number(take('--seed')), server: take('--server') ?? 'http://127.0.0.1:8081',
-    workers: Number(take('--workers') ?? 1),
+    workers: Number(take('--workers') ?? 6),
     toolSurfaceRevision: digest(await readFile(resolve(here, '../dist/browser/natlang.js'))) };
   if (!options.model || !Number.isSafeInteger(options.seed) || !Number.isInteger(options.workers) || options.workers < 1)
     throw new Error('--model, integer --seed, and positive --workers are required');

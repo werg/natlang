@@ -18,7 +18,7 @@ The freeze command refuses to overwrite changed artifacts. Remove or archive the
 ```sh
 node scripts/teacher-collector.mjs ../data/teacher/failure-repair-cases.jsonl \
   ../data/teacher/failure-repair-jobs ../data/teacher/failure-repair-trajectories.jsonl \
-  --model-id /models/Ternary-Bonsai-2-27B-PTQ1_0.gguf --root-seed 17 --limit 10 --workers 1
+  --model-id /models/Ternary-Bonsai-2-27B-PTQ1_0.gguf --root-seed 17 --limit 10 --workers 6
 node scripts/materialize-native-teacher.mjs ../data/teacher/failure-repair-trajectories.jsonl \
   ../data/teacher/failure-repair-turns.jsonl
 ```
