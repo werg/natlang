@@ -280,6 +280,33 @@ test('long text output keeps its head and tail, names its transcript entry, and 
   assert.match(session.transcript[4].output, /^"x{4500}"/);
 });
 
+test('a failed eval reports the service calls it already made, whoever built the runtime', async () => {
+  let revision = 25;
+  const board = { commit_move: async () => ({ revision: ++revision }), render: async () => { throw new Error('view renderer timed out; the board state is unaffected'); } };
+  const { session } = open({ type: '() => number', instructions: 'Move the card.' }, { services: { board } });
+  const failed = await session.applyAsync('eval', { code: 'await board.commit_move({ card: "fub", to: "done" }); await board.render(); 1' });
+  assert.match(failed.text, /Already performed before the failure \(not undone\): board\.commit_move/);
+  assert.equal(revision, 26);
+});
+
+test('tool-call markup in a reply is never taken as a string result', () => {
+  const { session, lam } = open({ type: '() => string', instructions: 'Say something.' });
+  assert.equal(session.acceptTextResult('</parameter>\n</function>\n</tool_call>'), false);
+  assert.equal(session.acceptTextResult('A plain answer.'), true); assert.equal(lam.return, 'A plain answer.');
+});
+
+test('an object keyed by data is stored as a dictionary that later evals can extend', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Group.' });
+  const grouped = await session.applyAsync('eval', { code: 'const byEmail: Record<string, string[]> = {}; byEmail["meshuk.zubux@mail.example"] = ["C01"]; byEmail["trim@x.example"] = ["C02"]; 1' });
+  assert.equal(grouped.kind, 'ok', grouped.text);
+  const later = await session.applyAsync('eval', { code: 'byEmail["new@x.example"] = ["C09"]; Object.keys(byEmail).length' });
+  assert.equal(later.kind, 'ok', later.text); assert.match(later.text, /^3\b/);
+  const many = await session.applyAsync('eval', { code: 'const byId = Object.fromEntries(Array.from({ length: 20 }, (_, i) => ["C" + i, i])); 1' });
+  assert.equal(many.kind, 'ok', many.text);
+  const added = await session.applyAsync('eval', { code: 'byId["C99"] = 99; byId["C99"]' });
+  assert.equal(added.kind, 'ok', added.text); assert.match(added.text, /^99\b/);
+});
+
 test('scope parameters are const: changing one is rejected and a copy is a new variable', async () => {
   const { lam, session } = open({ type: '(count: number, items: number[]) => number', instructions: 'Count the items.',
     args: { count: 2, items: [1] } });

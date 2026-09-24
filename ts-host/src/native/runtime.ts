@@ -7,6 +7,7 @@
  */
 import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.js';
 import { PageStore } from './pages.js';
+import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
 import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel, problems, unboundParts,
   type LambdaNode, type Value } from './values.js';
@@ -42,7 +43,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   frame?: Frame;
   /** Extra manifest fields recorded for this invocation. */
   manifest?: Record<string, unknown>;
-  /** Host services (already wrapped for effect recording), injected into eval as named bindings. */
+  /** Host services, injected into eval as named bindings; their calls are recorded as effects (see effects.ts). */
   services?: Record<string, object>;
   sharedEpisodeBudget?: { limit?: number; used: number };
   seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } };
@@ -197,7 +198,11 @@ export class NativeRuntime {
       seed_policy: this.seedPolicy, coverage: 'natlang-state-and-observed-host-effects', ...(options.manifest ?? {}) });
     this.frame = options.frame;
     this.hooks = options.hooks;
-    this.services = options.services ?? {};
+    // Every service call is recorded as an effect, so a failed eval can say what already happened. Services a caller
+    // has already wrapped (the kernel records with its own call IDs) are used as given.
+    const services = options.services ?? {};
+    this.services = isRecording(services) ? services : recordingServices(services, event =>
+      this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }));
     this.agent = options.agent;
     this.environment = options.environment;
     this.signal = options.signal;
@@ -444,6 +449,8 @@ export class NativeSession {
   acceptTextResult(text: string): boolean {
     const answer = text.trim();
     if (this.lam.type.kind !== 'lambda' || this.lam.return !== MISSING || !answer || /^done[.!]?$/i.test(answer)) return false;
+    // Tool-call markup is a failed tool call, never the answer.
+    if (/<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/.test(answer)) return false;
     let value: Value;
     try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { return false; }
     // Only string-typed results: "7" is not silently a number.
@@ -671,6 +678,12 @@ export class NativeSession {
       const entries = Object.entries(value);
       if (!entries.length) return 'Record<string, unknown>';
       if (containsLive(value)) return 'Live<"object", "any", "">';
+      // An object keyed by data (ids, emails, names) is a dictionary: Record<string, T>, so later evals can add keys.
+      // Only a few identifier keys read as a record with fixed fields.
+      if (entries.length > 12 || entries.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key))) {
+        const types = [...new Set(entries.map(([, item]) => this.inferScopeType(item)))];
+        return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
+      }
       return `{ ${entries.map(([key, item]) => `${key}: ${this.inferScopeType(item)}`).join(', ')} }`;
     }
     throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);

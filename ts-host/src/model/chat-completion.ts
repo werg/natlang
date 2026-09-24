@@ -25,6 +25,10 @@ export type ChatCompletionOptions = {
   onTurn?: (stats: ChatTurnStats) => void;
 };
 
+/** Tool-call markup (Qwen-style XML or <tool_call> tags) left in a reply's text. */
+export const TOOL_MARKUP = /<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/;
+class LeakedCall extends Error {}
+
 const MALFORMED_RETRY = 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. ' +
   'Do not change the task or invent a new tool.';
 
@@ -137,6 +141,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           if (!wireName) throw new Error(`tool call ${index} has no function name`);
           return [reverse[wireName] ?? wireName, decodeArguments(fn?.arguments)];
         });
+        // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
+        if (!calls.length && TOOL_MARKUP.test(String(message?.content ?? ''))) throw new LeakedCall('the tool call came back as text');
         const reasoning = message?.reasoning_content ?? message?.reasoning;
         return finish({ calls, text: String(message?.content ?? ''), raw_calls: rawCalls,
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
@@ -145,6 +151,8 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         // A reply cut off mid tool call is a truncated turn, not a transport failure.
         if (truncated) return finish({ calls: [], text: String(message?.content ?? ''), truncated: true,
           ...counts(), raw_response: body });
+        // A second leaked call ends the turn as an empty reply: its markup must never read as the answer.
+        if (retries >= 1 && error instanceof LeakedCall) return finish({ calls: [], text: '', ...counts(), raw_response: body });
         if (retries >= 1 || signal?.aborted)
           throw new Error(`model returned malformed tool arguments after ${retries + 1} attempt${retries ? 's' : ''}: ` +
             `${error instanceof Error ? error.message : String(error)}`, { cause: error });

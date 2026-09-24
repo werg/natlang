@@ -185,7 +185,7 @@ for (const amount of read) totals[amount.currency] = Math.round(((totals[amount.
 return totals;`), returnCall(expected)],
         children: receipts.map(r => ({ match: JSON.stringify(r.id), value: { total: r.total, currency: r.currency } })) },
       root: { name: 'expense_totals', args: {}, returns: 'Record<string, number>',
-        instructions: 'Add up the final amount paid on every receipt from expenses.receipts(), per currency (EUR, USD, or GBP), rounded to cents. Read each receipt in its own judgment. Return a record from currency code to total.' },
+        instructions: 'Add up the final amount paid on every receipt from expenses.receipts(), per currency (EUR, USD, or GBP), rounded to cents. Read each receipt in its own judgment. Return a record from each currency that appears on the receipts to its total.' },
       files: { 'expense_totals/expenses.ts': `const RECEIPTS = ${literal(plain)};\n/** The scanned receipts of this trip, as text. */\nexport function receipts(): { id: string, text: string }[] { return RECEIPTS; }\n`,
         'types.ts': 'export type Amount = { total: number, currency: "EUR" | "USD" | "GBP" };\n' },
       inputs: {}, expected });

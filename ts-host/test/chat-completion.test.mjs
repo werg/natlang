@@ -94,3 +94,17 @@ test('tool aliases rename tools on the wire and back', async () => {
     assert.deepEqual(turn.calls, [['eval', { code: '1' }]]);
   } finally { await model.close(); }
 });
+
+test('tool-call markup left in the text is a malformed call: retried once, and never returned as a reply', async () => {
+  const leaked = '<tool_call>\n<function=eval>\n<parameter=code>\n1\n</parameter>\n</function>\n</tool_call>';
+  const model = await server((body, count) => count === 1 ? { choices: [{ finish_reason: 'stop', message: { content: leaked } }] } :
+    count === 2 ? { choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'eval', arguments: '{"code":"1"}' } }] } }] } :
+    { choices: [{ finish_reason: 'stop', message: { content: '</parameter>\n</function>\n</tool_call>' } }] });
+  try {
+    const drive = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }));
+    assert.deepEqual((await drive(request())).calls, [['eval', { code: '1' }]], 'the retry produced a real call');
+    const twice = await drive(request());
+    assert.deepEqual(twice.calls, []); assert.equal(twice.text, '', 'a second leak is an empty reply, not the markup');
+  } finally { await model.close(); }
+});
+
