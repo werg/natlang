@@ -169,6 +169,8 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
   }
   return rows;
 }
+/** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
+const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
 const REUSE_KEYS = ['program_ir_sha256', 'model', 'max_turns', 'collection_role', 'handoff_sha256'];
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
   surfaces: string[] = []): TeacherRow | undefined {
@@ -183,6 +185,8 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   const budget = Number(expected.context_tokens);
   if (turns.some(turn => turn.phase === 'checkpoint' ||
       (Number.isFinite(budget) && (turn.model_response?.prompt_tokens ?? 0) > budget * 0.75))) return;
+  // Nor did anything get shortened the way the runtime no longer shortens it (see native/cutoff.ts).
+  if (RETIRED_CUT_OFFS.test(JSON.stringify(row.trajectory ?? []))) return;
   return { ...row, provenance: { ...expected, reused_from: { path, provenance } } };
 }
 
