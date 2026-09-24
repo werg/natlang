@@ -20,7 +20,8 @@ const unique = records.filter(record => (record.curriculum.track ?? 'interpreter
   (!values.split || record.split === values.split) && !seen.has(record.id) && seen.add(record.id));
 const units = new Map();
 for (const record of unique) {
-  const key = record.curriculum.pair_group ?? record.id;
+  // A hinted twin stays with its unhinted case: preference pairs need both runs.
+  const key = (record.curriculum.pair_group ?? record.curriculum.hinted_of ?? record.id).replace(/:hinted$/, '');
   units.set(key, [...(units.get(key) ?? []), record]);
 }
 const count = (list, axis) => { const out = {}; for (const r of list) out[r.curriculum[axis]] = (out[r.curriculum[axis]] ?? 0) + 1; return out; };
