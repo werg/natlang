@@ -82,3 +82,23 @@ export const evalCall = code => ['eval', { code }];
 export const returnCall = value => ['return_result', { status: 'success', value }];
 export const blockedCall = reason => ['return_result', { status: 'blocked', reason }];
 export const failedCall = reason => ['return_result', { status: 'failed', reason }];
+
+export const ITERATE_HINT = 'Required: solve this with iterateOn, not with evals or loops that you step by hand. Write a step function (it may be an nl function) from the current state to the next state, and run the whole process in one eval with await step.iterateOn(initial).until(done).';
+export const INLINE_HINT = 'Required: make each judgment about an item with a natural-language function called on that item (await nl`...`(item)), not with keyword or regular-expression matching.';
+/** The hint for a case that requires a technique: the technique's requirement, then the family's sketch if it has one. */
+export function hintFor(curriculum) {
+  const parts = [...(curriculum.iterate === 'required' ? [ITERATE_HINT] : []), ...(curriculum.inline === 'required' ? [INLINE_HINT] : [])];
+  if (!parts.length) return null;
+  return [...parts, ...(curriculum.sketch ? [`Sketch: ${curriculum.sketch}`] : [])].join(' ');
+}
+export function hinted(record, hint) {
+  const twin = structuredClone(record);
+  twin.id = `${record.id}:hinted`;
+  twin.source_ids = [twin.id];
+  const root = twin.semantics.root;
+  twin.semantics.files[root] = twin.semantics.files[root].replace(/\n$/, '') + `\n\n${hint}\n`;
+  twin.curriculum.hint = hint;
+  twin.curriculum.hinted_of = record.id;
+  if (twin.curriculum.pair_group) twin.curriculum.pair_group = `${twin.curriculum.pair_group}:hinted`;
+  return twin;
+}
