@@ -188,8 +188,14 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   const budget = Number(expected.context_tokens);
   if (turns.some(turn => turn.phase === 'checkpoint' ||
       (Number.isFinite(budget) && (turn.model_response?.prompt_tokens ?? 0) > budget * 0.75))) return;
-  // Nor did anything get shortened the way the runtime no longer shortens it (see native/cutoff.ts).
-  if (RETIRED_CUT_OFFS.test(JSON.stringify(row.trajectory ?? []))) return;
+  // Nor did anything get shortened the way the runtime no longer shortens it (see native/cutoff.ts), or run into a
+  // runtime fault fixed since: an unparsable inferred type, a failed eval with services but no report of the calls
+  // it had already made, or tool-call markup taken as the result.
+  const text = JSON.stringify(row.trajectory ?? []), semantics = row.task.program_ir.semantics as Record<string, unknown>;
+  if (RETIRED_CUT_OFFS.test(text) || text.includes('bad character at')) return;
+  if ((semantics.effects || semantics.world) && text.includes('Nothing else from this eval was kept') &&
+      !text.includes('Already performed before the failure')) return;
+  if (/<\/?(?:tool_call|function|parameter)\b/.test(JSON.stringify(row.outcome?.value ?? null))) return;
   return { ...row, provenance: { ...expected, reused_from: { path, provenance } } };
 }
 
