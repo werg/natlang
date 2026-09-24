@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
-import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
+import { KvBudget, collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
   loadRecords, nativeJobRunner, recordDigest } from '../dist/teacher/collector.js';
 
 const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source', source: 'fixture',
@@ -164,3 +164,19 @@ test('native collector journals model replies and replays them after an interrup
     await assert.rejects(readFile(join(options.jobs, `${jobKey(item)}.partial.json`)), /ENOENT/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('requests wait for room in the shared KV buffer, first come first served, and an oversized one runs alone', async () => {
+  const kv = new KvBudget(100), order = [];
+  await kv.acquire(60); order.push('a');
+  const b = kv.acquire(50).then(() => order.push('b'));
+  const c = kv.acquire(10).then(() => order.push('c'));
+  await new Promise(resolve => setTimeout(resolve, 5));
+  assert.deepEqual(order, ['a'], 'b does not fit beside a, and c waits behind b');
+  kv.release(60); await b; await c;
+  assert.deepEqual(order, ['a', 'b', 'c']);
+  kv.release(50); kv.release(10);
+  await kv.acquire(500); order.push('huge');
+  assert.deepEqual(order.at(-1), 'huge', 'a request larger than the buffer runs when nothing else is in flight');
+  kv.release(500);
+});
+

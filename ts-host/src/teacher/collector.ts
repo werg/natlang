@@ -37,6 +37,8 @@ export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string
   transportRetries?: number; retryDelayMs?: number;
   /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusedRow). */
   reuse?: string[];
+  /** The model server's shared KV buffer in tokens; requests wait to fit into it (see KvBudget). Unset: no limit. */
+  kvTokens?: number;
   /** Earlier tool surfaces whose rows the operator declares equivalent to the current one for reuse. */
   reuseSurfaces?: string[] };
 export type TeacherRow = Record<string, unknown> & { task: { program_ir: ProgramRecord };
@@ -327,8 +329,37 @@ async function removeIfPresent(path: string): Promise<void> {
   }
 }
 
+/**
+ * Admission to the model server's shared KV buffer. Parallel slots share one buffer; when the sequences in flight
+ * together outgrow it, the server fails all of them. A request waits until its estimated size (prompt, plus room to
+ * generate) fits beside those in flight; one that is larger than the whole budget runs alone.
+ */
+export class KvBudget {
+  private used = 0;
+  private readonly waiting: { need: number; start: () => void }[] = [];
+  constructor(readonly tokens: number) {}
+  async acquire(need: number): Promise<void> {
+    if (this.fits(need) && !this.waiting.length) { this.used += need; return; }
+    await new Promise<void>(start => this.waiting.push({ need, start }));
+  }
+  release(need: number): void {
+    this.used -= need;
+    // First come, first served: a large request is not overtaken indefinitely by small ones.
+    while (this.waiting.length && this.fits(this.waiting[0]!.need)) {
+      const next = this.waiting.shift()!;
+      this.used += next.need;
+      next.start();
+    }
+  }
+  private fits(need: number): boolean { return this.used === 0 || this.used + need <= this.tokens; }
+}
+/** Tokens a request may occupy: its prompt (at a conservative 3 characters per token) and room to generate. */
+const requestTokens = (request: ModelTurnRequest) =>
+  Math.ceil((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 3) + (request.max_tokens ?? 2048);
+
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint) throw new Error('endpoint is required for native teacher collection');
+  const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
     const handoff = config.handoffs?.get(item.record.id);
     if (config.handoffs && (!handoff || handoff.program_ir_sha256 !== recordDigest(item.record) ||
@@ -344,8 +375,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         (handoff.student_provenance.seed_policy as Record<string, unknown>)?.root !== config.rootSeed ||
         handoff.student_provenance.context_tokens !== config.contextTokens))
       throw new Error(`${item.record.id}: student handoff runtime/prompt/seed settings differ`);
-    const transport = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
+    const send = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
+    const transport = kv ? async (request: ModelTurnRequest) => {
+      const need = requestTokens(request);
+      await kv.acquire(need);
+      try { return await send(request); } finally { kv.release(need); }
+    } : send;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
     const saved = await loadPartial(partialPath, item, expected);
