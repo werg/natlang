@@ -10,7 +10,7 @@ const schema = [{ type: 'function', function: { name: 'write', description: 'Wri
   parameters: { type: 'object', properties: { path: { type: 'string' } } } } }];
 const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajectory.native/1', id,
   task: { kind: 'whole_program', program_ir: { id: 'program-1', version: 'natlang.program/2' }, source_program_ids: ['program-1'] },
-  provenance: { model: 'fixture-teacher', tool_schema: 'scope-eval-v1', segment_messages: 6 },
+  provenance: { model: 'fixture-teacher', tool_schema: 'scope-eval-v1', context_tokens: 16384 },
   outcome: { status: 'done', accepted, value: 6, action_ledger: [
     { seq: 12, name: 'write', arguments: firstCall.arguments, outcome: 'ok', result_text: 'stored value' },
     { seq: 17, name: 'mark_done', arguments: secondCall.arguments, outcome: 'ok', result_text: 'marked line done' },
@@ -18,41 +18,31 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
   trajectory: [
     { phase: 'action', context: [system, opening], tools_offered: schema,
       assistant: { content: '', reasoning: 'The result is twice n.', calls: [firstCall] }, raw_response_sha256: 'raw-1' },
-    { phase: 'checkpoint', context: [system, opening,
+    { phase: 'action', context: [system, opening,
       { role: 'assistant', content: '', tool_calls: [{ id: 'call-1', type: 'function',
         function: { name: 'write', arguments: JSON.stringify(firstCall.arguments) } }] },
-      { role: 'tool', tool_call_id: 'call-1', content: 'stored value' },
-      { role: 'user', content: 'Write a brief continuation note with the current state.' }],
-      tools_offered: [], assistant: { content: 'The value is 6; the line remains to be marked.',
-        reasoning: 'One line is still open.', calls: [] }, raw_response_sha256: 'raw-checkpoint' },
-    { phase: 'action', context: [system,
-      { role: 'user', content: '1 [ ] Compute the result. Current state: return=6. Note: The value is 6; the line remains to be marked.' }],
+      { role: 'tool', tool_call_id: 'call-1', content: 'stored value' }],
       tools_offered: schema, assistant: { content: '', reasoning: 'The computation is complete.', calls: [secondCall] },
       raw_response_sha256: 'raw-2' },
   ], capture_limits: [] });
 
-test('accepted native rows become linked template neutral decisions with checkpoint segments', () => {
+test('accepted native rows become linked template neutral decisions with their exact contexts', () => {
   const accepted = nativeRow('teacher-1'), rejected = nativeRow('teacher-rejected', false);
   const result = materializeNativeRows([accepted, rejected]);
   assert.equal(result.acceptedRows, 1);
   assert.equal(result.rejectedRows, 1);
-  assert.equal(result.turns.length, 3);
-  const [actionTurn, checkpointTurn, afterCheckpointTurn] = result.turns;
-  const action = actionTurn.decision, checkpoint = checkpointTurn.decision, afterCheckpoint = afterCheckpointTurn.decision;
-  assert.equal(action.phase, 'action');
+  assert.equal(result.turns.length, 2);
+  const [actionTurn, nextTurn] = result.turns;
+  const action = actionTurn.decision, next = nextTurn.decision;
   assert.equal(action.assistant.reasoning, 'The result is twice n.');
   assert.deepEqual(action.tool_schemas, [{ name: 'write', description: 'Write a value.',
     parameters: { type: 'object', properties: { path: { type: 'string' } } } }]);
   assert.deepEqual(action.assistant.calls[0].outcome, { event_index: 0, trace_seq: 12,
     name: 'write', arguments: firstCall.arguments, status: 'ok', result: 'stored value', diagnostics: [] });
-  assert.equal(checkpoint.phase, 'checkpoint');
-  assert.equal(checkpoint.assistant.checkpoint_note, 'The value is 6; the line remains to be marked.');
-  assert.equal(afterCheckpoint.segment, 1);
-  assert.equal(afterCheckpoint.assistant.calls[0].outcome.trace_seq, 17);
-  assert.deepEqual(afterCheckpoint.context.map(message => message.role), ['system', 'user']);
-  assert.match(afterCheckpoint.context[1].content, /Note: The value is 6/);
-  assert.equal(afterCheckpoint.context.some(message => message.content?.includes('stored value')), false,
-    'the earlier segment transcript must not be pasted into the next segment');
+  assert.equal(next.assistant.calls[0].outcome.trace_seq, 17);
+  // The conversation continues: the next decision sees the earlier call and its result.
+  assert.deepEqual(next.context.map(message => message.role), ['system', 'user', 'assistant', 'tool']);
+  assert.deepEqual(next.durable_opening.map(message => message.role), ['system', 'user']);
   assert.equal(actionTurn.source_ref.trajectory_id, 'teacher-1');
   assert.deepEqual(actionTurn.provenance, accepted.provenance);
   assert.deepEqual(actionTurn.messages, [system, opening]);
@@ -64,10 +54,14 @@ test('accepted native rows become linked template neutral decisions with checkpo
       name: 'write', arguments: JSON.stringify(firstCall.arguments),
     },
   }] });
-  assert.equal(checkpointTurn.skill, 'checkpoint');
-  assert.deepEqual(checkpointTurn.target, { role: 'assistant',
-    content: 'The value is 6; the line remains to be marked.' });
-  assert.equal(afterCheckpointTurn.messages.some(message => message.content?.includes('stored value')), false);
+});
+
+test('rows collected with conversation rollover are rejected', () => {
+  const row = nativeRow('rolled-over');
+  row.trajectory.splice(1, 0, { phase: 'checkpoint', context: [system, opening], tools_offered: [],
+    assistant: { content: 'A working note.', reasoning: null, calls: [] }, raw_response_sha256: 'raw-note' });
+  const result = materializeNativeRows([row]);
+  assert.equal(result.acceptedRows, 0); assert.equal(result.rejectedRows, 1); assert.equal(result.turns.length, 0);
 });
 
 test('accepted rows with an unlinked or reordered action outcome are rejected', () => {

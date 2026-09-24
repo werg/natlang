@@ -1,5 +1,11 @@
 # Conversation continuation checkpoints
 
+> **Superseded 2026-09-24.** Rollover and checkpoint notes were removed from the runtime. They were designed for
+> line-by-line execution (line marks), fired on 7% of curriculum runs (the long, hard ones) and cut their history
+> 6 turns before the end, and the notes were unreliable (12 of 18 in one sample were tool calls written as text).
+> Calls now keep one conversation, with deterministic compaction of old tool outputs and eval code past a
+> context budget (`contextTokens`, `NativeToolAgent`). This document is kept as history.
+
 Long model invocations are divided into short conversation segments. After 12
 conversation messages or six work turns, when the task remains incomplete and the latest result is durable,
 the model receives a no-tools request for a working note. The note is saved on

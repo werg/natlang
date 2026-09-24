@@ -26,8 +26,8 @@ async function main(): Promise<void> {
   const { positionals, flags } = argumentsOf(process.argv.slice(2));
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
-      'Options: --server URL --start N --limit N|--all --workers N --segment-turns N\n' +
-      '         --segment-messages N --thinking-tokens N --reasoning-effort LEVEL\n' +
+      'Options: --server URL --start N --limit N|--all --workers N --context-tokens N\n' +
+      '         --thinking-tokens N --reasoning-effort LEVEL\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n');
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
-    segmentTurns: integer(flags, '--segment-turns', 24), segmentMessages: integer(flags, '--segment-messages', 48),
+    contextTokens: integer(flags, '--context-tokens', 16384),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
@@ -79,10 +79,10 @@ async function main(): Promise<void> {
   await writeAtomic(`${output}.manifest.json`, JSON.stringify({
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
-    root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', segment_turns: config.segmentTurns,
+    root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
     ...(handoffs ? { handoff_queue: resolve(flags.get('--handoff-queue')!),
       handoff_queue_sha256: sha256(await readFile(resolve(flags.get('--handoff-queue')!))) } : {}),
-    segment_messages: config.segmentMessages, workers: config.workers, completed: result.completed,
+    workers: config.workers, completed: result.completed,
     missing: result.missing, output_sha256: sha256(merged) }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);
   if (result.missing.length) process.exitCode = 2;

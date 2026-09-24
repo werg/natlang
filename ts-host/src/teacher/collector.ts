@@ -22,7 +22,8 @@ const TOOL_SCHEMA = 'scope-eval-v1';
 export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
 export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPrompt: string;
-  segmentTurns: number; segmentMessages: number; toolSurfaceSha256: string;
+  /** The agent's context budget in prompt tokens (see NativeToolAgent contextTokens). */
+  contextTokens: number; toolSurfaceSha256: string;
   /** Model turns allowed per call; unlimited unless set. A collection run should set one. */
   maxTurns?: number;
   endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean;
@@ -95,8 +96,8 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
     runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
-    system_prompt_sha256: sha256(options.systemPrompt), segment_turns: options.segmentTurns,
-    segment_messages: options.segmentMessages, transport: 'openai-compatible',
+    system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
+    transport: 'openai-compatible',
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     collection_role: options.collectionRole ?? 'teacher',
@@ -149,7 +150,8 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Finished rows of earlier runs, by program digest. A row stands in for a job when the program, model, turn budget,
- * collection role, and handoff match. The tool surface and system prompt may differ only when the row was migrated
+ * collection role, and handoff match, and it would have been collected the same way now (see reusedRow).
+ * The tool surface and system prompt may differ only when the row was migrated
  * to the current finishing surface (scripts/inline-curriculum/migrate-status.mjs), since the row keeps the context
  * it was collected with. Later files win over earlier ones.
  */
@@ -168,6 +170,12 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
     return;
   if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined) return;
+  // A row stands in for a new run only if that run would have seen the same requests: it never rolled over into a
+  // checkpoint (retired), and none of its prompts was large enough for compaction to have elided outputs.
+  const turns = (row.trajectory ?? []) as Array<{ phase?: string; model_response?: { prompt_tokens?: number } }>;
+  const budget = Number(expected.context_tokens);
+  if (turns.some(turn => turn.phase === 'checkpoint' ||
+      (Number.isFinite(budget) && (turn.model_response?.prompt_tokens ?? 0) > budget * 0.75))) return;
   return { ...row, provenance: { ...expected, reused_from: { path, provenance } } };
 }
 
@@ -257,7 +265,7 @@ function effectHarness(specs: Record<string, unknown>): {
 function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
-  return { phase: request.tools.length ? 'action' : 'checkpoint', context: structuredClone(request.messages),
+  return { phase: 'action', context: structuredClone(request.messages),
     request_sha256: sha256(canonical(request)),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
@@ -306,8 +314,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         handoff.student_provenance.tool_schema !== TOOL_SCHEMA ||
         handoff.student_provenance.program_ir_sha256 !== recordDigest(item.record) ||
         (handoff.student_provenance.seed_policy as Record<string, unknown>)?.root !== config.rootSeed ||
-        handoff.student_provenance.segment_turns !== config.segmentTurns ||
-        handoff.student_provenance.segment_messages !== config.segmentMessages))
+        handoff.student_provenance.context_tokens !== config.contextTokens))
       throw new Error(`${item.record.id}: student handoff runtime/prompt/seed settings differ`);
     const transport = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
@@ -371,7 +378,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   };
 }
 
-export type ExecuteOptions = { systemPrompt: string; segmentTurns: number; segmentMessages: number;
+export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; rootSeed: number; runId: string; signal?: AbortSignal };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
@@ -393,7 +400,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: 0,
-    segmentTurns: options.segmentTurns, segmentMessages: options.segmentMessages, maxTurns: options.maxTurns });
+    contextTokens: options.contextTokens, maxTurns: options.maxTurns });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
   for (const [name, fn] of Object.entries(effects.capabilities)) {

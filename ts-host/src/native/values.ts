@@ -17,7 +17,7 @@ export type CaptureCell = { name: string; type: string; mutable: boolean; get():
 export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string, Type>; typesSrc: Record<string, string>;
   status: Status; note: string; attempts: number; steps: number;
   body: string; originalBody?: string; args: Record<string, Value>; return: Value;
-  continuationNote: string; let: Record<string, Value>; letTypes: Record<string, Type>;
+  let: Record<string, Value>; letTypes: Record<string, Type>;
   /** Callable context: the record tree of the function's callable folder (see runtime/loader.ts). */
   codebase: Record<string, unknown>; functionName: string;
   subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
@@ -163,7 +163,7 @@ export function buildPending(raw: unknown, env = new TypeEnv(), path = ''): Pend
     const node: LambdaNode = { nodeKind: 'lambda', type, types, typesSrc, status: (body.status ?? 'unreduced') as Status,
       note: String(body.note ?? ''), attempts: 0, steps: 0,
       body: text && !text.endsWith('\n') ? text + '\n' : text, args: {}, return: MISSING,
-      continuationNote: String(body.continuation_note ?? ''), let: {}, letTypes: {},
+      let: {}, letTypes: {},
       codebase: plain(body.codebase) ? body.codebase as Record<string, unknown> : {},
       functionName: String(body.function ?? ''),
       subtype: subtype as LambdaNode['subtype'], reducerMode: '' };
@@ -239,7 +239,6 @@ export function dump(value: Value, full = false): unknown {
     body.instructions = value.body;
     if (Object.keys(value.args).length) body.args = dump(value.args, full);
     if (value.return !== MISSING) body.return = dump(value.return, full);
-    if (value.continuationNote) body.continuation_note = value.continuationNote;
     if (Object.keys(value.let).length) body.let = dump(value.let, full);
     if (full && Object.keys(value.letTypes).length)
       body.let_types = Object.fromEntries(Object.entries(value.letTypes).map(([k, t]) => [k, formatType(t)]));

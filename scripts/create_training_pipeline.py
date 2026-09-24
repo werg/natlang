@@ -20,7 +20,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     if any(arg.split('=')[0] in ('--model', '--model-revision') for arg in train_args):
         raise ValueError('select the student with recipe --model/--revision so render, audit and trainer agree')
     budget_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-    budget_parser.add_argument('--max-len', type=int, default=8192)
+    budget_parser.add_argument('--max-len', type=int, default=16384)
     budget, _ = budget_parser.parse_known_args(list(train_args))
     if budget.max_len < 2:
         raise ValueError('training context budget must be at least two tokens')
@@ -164,7 +164,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         inputs = [f"{r}/{name}.ready.jsonl", f"{r}/{name}.ready.jsonl.manifest.json", f"{p}/scripts/train_lora.py", f"{p}/scripts/corpus.py",
                   f'{r}/training-readiness.json']
         args = [f"{p}/scripts/train_lora.py", f"{r}/{name}.ready.jsonl", f"{r}/train-{name}", *train_model_args, '--require-audit',
-                "--epochs", "1", "--lr", lr, "--rank", "32", "--accum", "16", "--microbatch", "1", "--batch-tokens", "8192", "--max-len", "8192",
+                "--epochs", "1", "--lr", lr, "--rank", "32", "--accum", "16", "--microbatch", "1", "--batch-tokens", "16384", "--max-len", "16384",
                 "--save-every", "10", "--data-order", "source", "--skip-heldout-loss", "--no-merge", "--token-cache", f"{r}/{name}.tokens.sqlite"]
         if previous:
             args += ["--init-adapter", f"{r}/train-{previous}/checkpoint/weights"]

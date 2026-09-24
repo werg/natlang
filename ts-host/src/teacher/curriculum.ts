@@ -196,7 +196,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
 
 // ---- Build-time verification -----------------------------------------------------------------
 
-const REFERENCE_OPTIONS = { segmentTurns: 24, segmentMessages: 48, maxTurns: 60, rootSeed: 0, runId: 'curriculum-reference' };
+const REFERENCE_OPTIONS = { contextTokens: 16384, maxTurns: 60, rootSeed: 0, runId: 'curriculum-reference' };
 
 /** The opening the model would see (user message and pre-filled scope exchanges), without running a model. */
 export async function renderOpening(record: ProgramRecord, systemPrompt: string): Promise<string> {

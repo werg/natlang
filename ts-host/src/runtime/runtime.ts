@@ -7,7 +7,9 @@ import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.
 
 export type ModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
-  temperature?: number; maxSeconds?: number; segmentTurns?: number | null; segmentMessages?: number | null;
+  temperature?: number; maxSeconds?: number;
+  /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
+  contextTokens?: number | null;
   /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
   maxFailureRepairs?: number;
   review?: NativeReviewOptions };

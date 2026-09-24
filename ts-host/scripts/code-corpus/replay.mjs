@@ -134,7 +134,7 @@ export async function replayCase(record, index = 0, options = {}) {
   const hostEvents = [];
   const environment = new TypeScriptEnvironment({ mode: 'fresh', workspace: options.workspace, network: options.network,
     observe: event => hostEvents.push(event) });
-  const agent = new NativeToolAgent(driver, { systemPrompt: TOOLS_PROMPT, segmentTurns: 3, segmentMessages: 12 });
+  const agent = new NativeToolAgent(driver, { systemPrompt: TOOLS_PROMPT });
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
   try {
     const result = await runtime.run(root);

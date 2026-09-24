@@ -31,7 +31,7 @@ Independent tasks run concurrently, and sibling natlang calls in one task (`Prom
 
 ## Continuation and restart
 
-Long invocations roll the conversation over (`segmentTurns`, `segmentMessages`) while the eval scope and line marks carry progress. That is not process restart recovery: persist application state, event IDs, operation receipts, and seeds, and rebuild native resources through the application's own recovery path.
+Long invocations keep one conversation; past the model's `contextTokens` budget the oldest tool outputs and eval code are elided, while the eval scope carries all values. That is not process restart recovery: persist application state, event IDs, operation receipts, and seeds, and rebuild native resources through the application's own recovery path.
 
 ## Traces and reproducibility
 

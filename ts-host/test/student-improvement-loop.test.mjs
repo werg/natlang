@@ -33,7 +33,7 @@ function modelServer(responses) {
 }
 const config = (dir, endpoint, role, surface) => ({ jobs: join(dir, `${role}-jobs`),
   output: join(dir, `${role}.jsonl`), workers: 1, modelId: role, rootSeed: 7,
-  systemPrompt: defaultSystemPrompt, segmentTurns: 24, segmentMessages: 48,
+  systemPrompt: defaultSystemPrompt, contextTokens: 16384,
   toolSurfaceSha256: surface, endpoint, collectionRole: role, maxTurns: 2 });
 
 test('student failure is replayed exactly, teacher repairs it, prefix is not positive SFT', async () => {

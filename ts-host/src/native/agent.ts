@@ -57,11 +57,47 @@ const FOLDER_DECLARATIONS = [
   '  apply(reducer: Function, ...args: unknown[]): Promise<unknown>; }',
 ];
 
-const CHECKPOINT_REQUEST = 'Before continuing this same task in a fresh conversation, leave yourself a concise working note. ' +
-  'State only unresolved decisions or facts that are not obvious from the program and workspace. ' +
-  'For an unfinished loop, name its current accumulator path and rounds completed; never restart from its initial value. ' +
-  'Your variables, any staged result, and the effects so far will be shown again; do not restate them. ' +
-  'Do not execute a tool or claim the task is finished. Reply with the note only, at most 800 characters.';
+const DEFAULT_CONTEXT_TOKENS = 16384;
+/** Messages at the end of the conversation that compaction never touches: the latest call and its results. */
+const RECENT_MESSAGES = 6;
+/** What replaces an old tool output when the conversation is compacted. */
+export const ELIDED_OUTPUT = '[Output elided to keep this conversation within its context budget. Values it stored are still in scope.]';
+
+/** What replaces the code of an old eval call when outputs alone do not bring the conversation under budget. */
+export const ELIDED_CODE = '// Code elided to keep this conversation within its context budget. Its declarations are still in scope.';
+
+/**
+ * Deterministic compaction: replace the oldest tool outputs after the opening with ELIDED_OUTPUT, oldest first,
+ * until `over()` is false; if that is not enough, replace the code of the oldest eval calls with ELIDED_CODE the
+ * same way. The opening and the last `recent` messages stay whole; the messages keep their order and number.
+ * Returns how many outputs and calls were elided.
+ */
+export function compactMessages(messages: Record<string, unknown>[], openingLength: number, recent: number,
+  over: () => boolean): number {
+  let elided = 0;
+  for (let index = openingLength; index < messages.length - recent && over(); index++) {
+    const message = messages[index]!;
+    if (message.role !== 'tool' || typeof message.content !== 'string' || message.content.length <= ELIDED_OUTPUT.length) continue;
+    messages[index] = { ...message, content: ELIDED_OUTPUT };
+    elided++;
+  }
+  for (let index = openingLength; index < messages.length - recent && over(); index++) {
+    const message = messages[index]!;
+    if (message.role !== 'assistant' || !Array.isArray(message.tool_calls)) continue;
+    let changed = false;
+    const calls = (message.tool_calls as Array<Record<string, unknown>>).map(call => {
+      const fn = call.function as { name?: unknown; arguments?: unknown } | undefined;
+      if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return call;
+      let args: Record<string, unknown>;
+      try { args = JSON.parse(fn.arguments) as Record<string, unknown>; } catch { return call; }
+      if (typeof args.code !== 'string' || args.code.length <= ELIDED_CODE.length) return call;
+      changed = true;
+      return { ...call, function: { ...fn, arguments: JSON.stringify({ ...args, code: ELIDED_CODE }) } };
+    });
+    if (changed) { messages[index] = { ...message, tool_calls: calls }; elided++; }
+  }
+  return elided;
+}
 
 
 function schemaOf(type: Type, env: TypeEnv, depth = 0): Record<string, unknown> {
@@ -211,16 +247,17 @@ export class NativeToolAgent {
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string);
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
-      segmentTurns?: number | null; segmentMessages?: number | null } = {}) {
+      /**
+       * Context budget in prompt tokens (default 16384; null never compacts). Past three quarters of it the oldest
+       * tool outputs are elided until the prompt is back under half.
+       */
+      contextTokens?: number | null } = {}) {
     if (options.maxFailureRepairs !== undefined &&
         (!Number.isInteger(options.maxFailureRepairs) || options.maxFailureRepairs < 0))
       throw new RangeError('maxFailureRepairs must be a non-negative integer');
-    if (options.segmentTurns !== undefined && options.segmentTurns !== null &&
-        (!Number.isInteger(options.segmentTurns) || options.segmentTurns < 1))
-      throw new RangeError('segmentTurns must be positive or null');
-    if (options.segmentMessages !== undefined && options.segmentMessages !== null &&
-        (!Number.isInteger(options.segmentMessages) || options.segmentMessages < 5))
-      throw new RangeError('segmentMessages must be at least 5 or null');
+    if (options.contextTokens !== undefined && options.contextTokens !== null &&
+        (!Number.isInteger(options.contextTokens) || options.contextTokens < 1024))
+      throw new RangeError('contextTokens must be an integer of at least 1024, or null');
   }
 
   private reviewTools(): unknown[] {
@@ -306,7 +343,6 @@ export class NativeToolAgent {
       `): ${formatType(lam.type.returns)}`;
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
-      ...(lam.continuationNote ? ['', `Your notes from earlier in this call: ${lam.continuationNote}`] : []),
     ].join('\n');
   }
 
@@ -443,11 +479,14 @@ export class NativeToolAgent {
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
     const messages = openingMessages();
-    let openingLength = messages.length;
+    const openingLength = messages.length;
+    const budget = this.options.contextTokens === undefined ? DEFAULT_CONTEXT_TOKENS : this.options.contextTokens;
+    // Prompt tokens per character of request, calibrated from the server's reported prompt size.
+    let tokensPerChar = 1 / 3.5;
+    const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
-    let tokens = 0, turns = 0, withdrawals = 0, segmentTurns = 0;
-    let checkpointReady = true, failureRepairs = 0;
+    let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
     const timedOut = () => deadline !== null && Date.now() >= deadline;
     const exhausted = () => (maxTurns !== undefined && turns >= maxTurns) ||
       (maxTokens !== undefined && tokens >= maxTokens) || timedOut();
@@ -459,46 +498,23 @@ export class NativeToolAgent {
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
       messages[0]!.content = systemPrompt();
-      const rollover = this.options.segmentTurns ?? null, itemLimit = this.options.segmentMessages ?? null;
-      if (((rollover !== null && segmentTurns >= rollover) ||
-           (itemLimit !== null && messages.length - openingLength >= itemLimit - 2)) && checkpointReady) {
-        const budget = allowance();
-        const checkpointLimit = budget === null ? 512 : Math.min(512, budget);
-        const checkpointMessages = [...messages, { role: 'user', content: CHECKPOINT_REQUEST }];
-        const callId = session.runtime.currentCallId ?? null;
-        const started = performance.now();
-        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start',
-          purpose: 'checkpoint', turn: turns + 1, messages: checkpointMessages.length });
-        const response = await this.driver({ messages: checkpointMessages, tools: [],
-          ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
-          seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'checkpoint', turns),
-          max_tokens: checkpointLimit });
-        session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end',
-          purpose: 'checkpoint', turn: turns + 1, duration_ms: Math.round(performance.now() - started),
-          prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
-        turns++;
-        tokens += response.completion_tokens === undefined ? checkpointLimit :
-          Math.max(1, response.completion_tokens);
-        session.runtime.checkInterruption();
-        if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
-          return 'episode token or wall-clock budget exhausted';
-        session.lam.continuationNote = (response.text ?? '').trim().slice(0, 800);
-        session.runtime.trace.emit('checkpoint', { call_id: callId, note: session.lam.continuationNote, turn: turns });
-        session.runtime.observeState('after-checkpoint');
-        messages.splice(0, messages.length, ...openingMessages());
-        openingLength = messages.length;
-        segmentTurns = 0;
-        checkpointReady = true;
-        continue;
-      }
       const limit = allowance();
       // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
       // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
       const availableTools = lastTurn ? this.tools(session).filter(tool =>
         String((tool as { function?: { name?: string } }).function?.name) === 'return_result') : this.tools(session);
+      if (budget !== null) {
+        const estimate = () => requestChars(availableTools) * tokensPerChar;
+        if (estimate() > budget * 0.75) {
+          // Program state lives in the eval scope, not in old outputs, so eliding them loses no values. The
+          // elision is permanent, so later requests share the compacted prefix and the server's prompt cache.
+          const elided = compactMessages(messages, openingLength, RECENT_MESSAGES, () => estimate() > budget * 0.5);
+          session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
+            elided, estimated_tokens: Math.round(estimate()) });
+        }
+      }
+      const sentChars = requestChars(availableTools);
       const callId = session.runtime.currentCallId ?? null;
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
@@ -521,8 +537,8 @@ export class NativeToolAgent {
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });
+      if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
-      segmentTurns++;
       session.runtime.checkInterruption();
       const calls = response.calls ?? [];
       session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
@@ -539,7 +555,6 @@ export class NativeToolAgent {
         const feedback = response.truncated ? `Your reply was cut off at the ${limit}-token limit before any tool call. Take the next step with one tool call.` :
           missing || 'The staged result is incomplete.';
         messages.push({ role: 'assistant', content: response.text ?? '' }, { role: 'user', content: feedback });
-        checkpointReady = false;
         continue;
       }
       const proposal: Record<string, unknown> = { calls, value_confidence: response.value_confidence ?? [],
@@ -584,7 +599,6 @@ export class NativeToolAgent {
           session.runtime.trace.emit('proposal', { call_id: session.runtime.currentCallId ?? null,
             phase: 'withdrawn', turn: turns, calls });
           messages.push({ role: 'user', content: 'The pending batch was withdrawn before execution. No action in it happened. Reconsider the original instructions from the unchanged workspace. Do not change requirements to obtain a result. This is the only reconsideration.' });
-          checkpointReady = false;
           break;
         }
         if (decision !== 'approve') return `careful review ${decision}: ${reason}`;
@@ -617,12 +631,9 @@ export class NativeToolAgent {
         left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call return_result with status "blocked" and what is missing, or status "failed" and why.]` : '';
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text + (index === results.length - 1 ? notice : '') });
-      checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&
-        ['eval', 'edit_file'].includes(calls[results.length - 1]?.[0] ?? '');
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
       const repairLimit = this.options.maxFailureRepairs;
       if (session.failureSerial > previousFailureSerial) {
-        checkpointReady = false;
         if (++failureRepairs > (repairLimit ?? Infinity))
           return `eval repair limit reached: ${session.failureDebug?.message ?? 'failure'}`;
         continue;
@@ -632,7 +643,6 @@ export class NativeToolAgent {
       // A rejected tool call is reported back to the model like a failed eval, within the same repair budget.
       const failed = results.find(result => ['rejected', 'refused'].includes(result.kind));
       if (failed) {
-        checkpointReady = false;
         if (++failureRepairs > (repairLimit ?? Infinity)) return `repair limit reached: ${failed.text}`;
         continue;
       }

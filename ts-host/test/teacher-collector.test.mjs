@@ -12,8 +12,8 @@ const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source',
     root: 'one.nl', files: { 'one.nl': '---\nargs: {}\nreturns: number\n---\nReturn one.\n' }, inputs: {}, expected: 1,
     operation: 'exact' } });
 const config = (dir, surface = 'surface-a') => ({ jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'),
-  workers: 2, modelId: 'teacher', rootSeed: 7, systemPrompt: 'prompt', segmentTurns: 3,
-  segmentMessages: 8, toolSurfaceSha256: surface });
+  workers: 2, modelId: 'teacher', rootSeed: 7, systemPrompt: 'prompt', contextTokens: 16384,
+  toolSurfaceSha256: surface });
 const row = (item, provenance) => ({ version: 'test', task: { program_ir: item.record }, provenance,
   outcome: { status: 'done', accepted: true } });
 
@@ -76,16 +76,19 @@ test('finished rows of an earlier run stand in for the same programs at other in
   const rows = (await readFile(config(earlier).output, 'utf8')).trim().split('\n').map(JSON.parse);
   rows[1].provenance.model = 'other-teacher';
   rows[2].provenance.tool_surface_sha256 = 'surface-old'; rows[2].provenance.finish_surface_migration = 'return_result-status/1';
+  rows.push({ ...rows[0], task: { program_ir: record('rolled') }, provenance: { ...rows[0].provenance, program_ir_sha256: undefined },
+    trajectory: [{ phase: 'checkpoint', model_response: {} }] });
   const source = join(earlier, 'earlier.jsonl');
   await writeFile(source, rows.map(value => JSON.stringify(value)).join('\n') + '\n');
   // The same programs sit at new indexes, next to a new one, in a later shard.
-  const shard = [record('new'), record('migrated'), record('stale'), record('kept')].map((value, index) => ({ index, record: value }));
+  rows[3].provenance.program_ir_sha256 = expectedProvenance({ index: 0, record: record('rolled') }.record, config(earlier)).program_ir_sha256;
+  const shard = [record('new'), record('migrated'), record('stale'), record('kept'), record('rolled')].map((value, index) => ({ index, record: value }));
   const ran = [];
   const options = { ...config(later), reuse: [source] };
   await collectBatch(shard, options, async (item, provenance) => { ran.push(item.record.id); return row(item, provenance); });
-  assert.deepEqual(ran.sort(), ['new', 'stale'], 'a row from another model is collected again');
+  assert.deepEqual(ran.sort(), ['new', 'rolled', 'stale'], 'rows from another model or with a rollover checkpoint are collected again');
   const merged = (await readFile(options.output, 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(merged.map(value => value.task.program_ir.id), ['new', 'migrated', 'stale', 'kept']);
+  assert.deepEqual(merged.map(value => value.task.program_ir.id), ['new', 'migrated', 'stale', 'kept', 'rolled']);
   assert.equal(merged[3].provenance.reused_from.path, source);
   assert.equal(merged[1].provenance.reused_from.provenance.tool_surface_sha256, 'surface-old');
   await collectBatch(shard, options, async () => { throw new Error('reused rows were collected again'); });

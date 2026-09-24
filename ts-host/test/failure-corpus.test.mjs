@@ -86,7 +86,7 @@ test('teacher collector seeds a real failure and admits only the repair continua
   try {
     const dir = await mkdtemp(join(tmpdir(), 'failure-teacher-'));
     const options = { endpoint: `http://127.0.0.1:${server.address().port}`, modelId: 'fixture', rootSeed: 3,
-      systemPrompt: defaultSystemPrompt, segmentTurns: 8, segmentMessages: 20, toolSurfaceSha256: 'fixture',
+      systemPrompt: defaultSystemPrompt, contextTokens: 16384, toolSurfaceSha256: 'fixture',
       jobs: join(dir, 'jobs'), output: join(dir, 'out.jsonl'), workers: 1 };
     const item = { index: 0, record };
     const row = await nativeJobRunner(options)(item, expectedProvenance(record, options));

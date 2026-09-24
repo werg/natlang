@@ -32,7 +32,6 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
         args = ['node', f'{frozen}/scripts/teacher-collector.mjs', source,
                 f'{r}/{role}-jobs', output, '--model-id', model, '--server', endpoint,
                 '--root-seed', str(root_seed), '--workers', str(workers),
-                '--segment-turns', '24', '--segment-messages', '48',
                 '--collection-role', role, *(['--max-turns', str(max_turns)] if max_turns else []), *extra]
         if role == 'student':
             args += ['--all'] if limit == 0 else ['--limit', str(limit)]

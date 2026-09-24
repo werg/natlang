@@ -11,8 +11,7 @@ SEED="${TEACHER_SEED:-909}"
 WORKERS="${TEACHER_WORKERS:-6}"
 # A typical nested algorithm episode needs 12-20 tool turns.  Keep it in one
 # conversation when possible; longer work still checkpoints into durable state.
-SEGMENT_TURNS="${TEACHER_SEGMENT_TURNS:-24}"
-SEGMENT_MESSAGES="${TEACHER_SEGMENT_MESSAGES:-48}"
+CONTEXT_TOKENS="${TEACHER_CONTEXT_TOKENS:-16384}"
 SELECTION="${TEACHER_SELECTION:-data/teacher/coverage-selection-s${SEED}.ir.jsonl}"
 NATIVE_SYNTHETIC="${TEACHER_NATIVE_SYNTHETIC:-data/teacher/native-synthetic-s${SEED}.ir.jsonl}"
 SOURCE_CASES="${TEACHER_SOURCE_CASES:-data/teacher/source-cases-s${SEED}.ir.jsonl}"
@@ -64,7 +63,7 @@ while true; do
     "$SELECTION" "$PROGRAM_JOBS" "$PROGRAM_OUT" \
     --server "$SERVER" --model-id "$MODEL" --root-seed "$SEED" \
     --limit "$(wc -l < "$SELECTION")" --workers "$WORKERS" \
-    --segment-turns "$SEGMENT_TURNS" --segment-messages "$SEGMENT_MESSAGES" \
+    --context-tokens "$CONTEXT_TOKENS" \
     --cache-stable-tools
   node ts-host/scripts/materialize-native-teacher.mjs \
     "$PROGRAM_OUT" "$PROGRAM_TURNS" --replace

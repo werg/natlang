@@ -112,9 +112,8 @@ function openingLength(context: Dict[]): number {
 
 /**
  * Convert accepted native teacher runs to one self-contained model decision per row.
- * Context is copied from that exact native request. It is never assembled by appending
- * one continuation segment to another; a checkpoint is followed by the fresh request
- * context captured by the collector.
+ * Context is copied from that exact native request, never assembled by appending one decision onto another.
+ * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
  */
 export function materializeNativeRows(input: unknown[]): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number;
@@ -123,20 +122,19 @@ export function materializeNativeRows(input: unknown[]): {
   let acceptedRows = 0, rejectedRows = 0;
   for (const candidate of input) {
     const row = validateRow(candidate);
-    if (!row.outcome.accepted) { rejectedRows++; continue; }
+    // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
+    const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
+    if (!row.outcome.accepted || rolledOver) { rejectedRows++; continue; }
     acceptedRows++;
     const student = row.provenance.collection_role === 'student';
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
-    let actionIndex = 0, segment = 0;
-    let segmentOpening: Dict[] | null = null;
+    let actionIndex = 0;
     for (let index = 0; index < row.trajectory.length; index++) {
       const source = record(row.trajectory[index], `${row.id}.trajectory[${index}]`);
-      const phase = source.phase === 'checkpoint' ? 'checkpoint' : 'action';
       const contextSource = messages(source.context, `${row.id}.trajectory[${index}].context`);
       if (!contextSource.length || contextSource[0]?.role !== 'system' || contextSource[1]?.role !== 'user')
         throw new Error(`${row.id}: decision ${index} lacks a fresh system/user opening context`);
-      if (!segmentOpening) segmentOpening = structuredClone(contextSource.slice(0, openingLength(contextSource)));
 
       const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
@@ -144,7 +142,6 @@ export function materializeNativeRows(input: unknown[]): {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
-        if (phase !== 'action') throw new Error(`${row.id}: checkpoint decision unexpectedly contains a tool call`);
         const event = ledger[actionIndex];
         if (event && callMatches(normalized, event)) {
           normalized.outcome = { event_index: actionIndex, trace_seq: event.seq ?? null,
@@ -163,8 +160,7 @@ export function materializeNativeRows(input: unknown[]): {
       const context = contextSource.map(normalizeContextMessage);
       const programId = record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null;
       const target = trainingTarget(assistant, calls, index);
-      const skill = phase === 'checkpoint' ? 'checkpoint' :
-        (calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply');
+      const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed']);
       const handoff = row.handoff as Dict | undefined;
       const fromStudentPrefix = handoff !== undefined && index < Number(handoff.handoff_at);
@@ -198,17 +194,16 @@ export function materializeNativeRows(input: unknown[]): {
             'decision contains a failed or unexecuted proposal' }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: nativeRowDigest(row.outcome) },
-        decision: { index, segment, phase,
-          context, durable_opening: segmentOpening.map(normalizeContextMessage),
+        decision: { index,
+          context, durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
           tool_schemas: offered,
           assistant: { content: assistant.content ?? '', reasoning: assistant.reasoning ?? null,
-            calls, checkpoint_note: phase === 'checkpoint' ? assistant.content ?? '' : null },
+            calls },
           training_approved: decisionApproved,
           source_raw_response_sha256: source.raw_response_sha256 ?? null,
           source_tools_offered: structuredClone(source.tools_offered ?? []) },
         outcome: structuredClone(row.outcome),
         capture_limits: structuredClone(row.capture_limits ?? []) });
-      if (phase === 'checkpoint') { segment++; segmentOpening = null; }
     }
     if (actionIndex !== ledger.length)
       throw new Error(`${row.id}: ${ledger.length - actionIndex} action outcomes have no teacher decision link`);

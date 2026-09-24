@@ -25,7 +25,7 @@ The Studio collector uses the same response-before-action journal and removes it
 after publishing a case result.
 
 The output contains one record for each teacher decision (which can contain one
-or more actions) or checkpoint response. In addition to the lossless semantic
+or more actions). In addition to the lossless semantic
 `decision` object, each record has the standard template-neutral
 `messages`/`tools`/`target` fields consumed by `scripts/export-native-sft.mjs`.
 Every record retains the source task, program IR, provenance, raw response hash,
@@ -45,16 +45,14 @@ Rows without `outcome.accepted === true` are counted and skipped.
 
 Each decision copies the messages from its captured native request and normalizes
 assistant/tool messages into semantic calls and results. It does not build a
-transcript by concatenating request histories. A checkpoint is retained as a
-teacher decision with its note; the following decision starts a new segment and
-uses the fresh system/user opening captured by the collector. This prevents an
-earlier continuation's dialogue from being pasted into the later segment.
+transcript by concatenating request histories.
 
-The native collector controls trajectory length with turn and message item
-limits. Materialization preserves those snapshots without token-based truncation,
-so long code or reasoning remains intact. To make examples shorter, lower the
-collector's `segment_turns` or `segment_messages`; those bounds count decisions
-and messages rather than imposing a completion-token cap.
+The agent keeps each call's conversation within a context budget (`--context-tokens`,
+default 16,384, the training length) by deterministic compaction: past three quarters of
+the budget, the oldest tool outputs, then the oldest eval code, are replaced by fixed
+stubs until the prompt is under half. Every decision records its exact request, so
+compacted contexts are trained as the model saw them. Rows collected with the retired
+conversation rollover (checkpoint turns) are rejected.
 
 Render approved decisions with the model server's selected chat template:
 
