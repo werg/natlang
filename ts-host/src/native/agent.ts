@@ -606,8 +606,13 @@ export class NativeToolAgent {
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
       }
       messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length) });
+      // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
+      // ends with an honest blocked or failed rather than by running out.
+      const left = maxTurns === undefined ? Infinity : maxTurns - turns;
+      const notice = left <= 4 && left > 0 ? `\n\n[${left} turn${left === 1 ? '' : 's'} left in this call. If the task cannot be finished, ` +
+        'call blocked with what is missing, or failed with why.]' : '';
       for (const [index, result] of results.entries())
-        messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text });
+        messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text + (index === results.length - 1 ? notice : '') });
       checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&
         ['eval', 'edit_file'].includes(calls[results.length - 1]?.[0] ?? '');
       if (results.at(-1)?.kind === 'budget') return 'action or tool-call budget exhausted';
