@@ -205,6 +205,10 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     pending.push(item);
   }
   if (reused) process.stderr.write(`reused ${reused} finished rows from ${config.reuse!.length} earlier result files\n`);
+  // Work is picked up in a fixed pseudo-random order rather than shard order: a shard keeps a case's variants and
+  // hint twins together, and running several long cases of one family at once fills the server's shared KV buffer.
+  // The order depends only on the job keys, so it is the same on every resume; the merged output stays in shard order.
+  pending.sort((a, b) => sha256(jobKey(a)).localeCompare(sha256(jobKey(b))));
   await mergeCompleted(records, config);
   let cursor = 0;
   const worker = async () => {
