@@ -494,7 +494,11 @@ export class NativeToolAgent {
         continue;
       }
       const limit = allowance();
-      const availableTools = this.tools(session);
+      // On the last turn of a budget only the finishing tools are offered: the call ends with a result or an honest
+      // blocked or failed, not by running out.
+      const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
+      const availableTools = lastTurn ? this.tools(session).filter(tool =>
+        ['return_result', 'blocked', 'failed'].includes(String((tool as { function?: { name?: string } }).function?.name))) : this.tools(session);
       const callId = session.runtime.currentCallId ?? null;
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
@@ -609,8 +613,8 @@ export class NativeToolAgent {
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
       // ends with an honest blocked or failed rather than by running out.
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
-      const notice = left <= 4 && left > 0 ? `\n\n[${left} turn${left === 1 ? '' : 's'} left in this call. If the task cannot be finished, ` +
-        'call blocked with what is missing, or failed with why.]' : '';
+      const notice = left === 1 ? '\n\n[This is your last turn in this call: return the result, or call blocked with what is missing, or failed with why.]' :
+        left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call blocked with what is missing, or failed with why.]` : '';
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text + (index === results.length - 1 ? notice : '') });
       checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&
