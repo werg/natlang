@@ -141,7 +141,7 @@ async function mergeCompleted(records: IndexedRecord[], config: CollectorConfig)
 function transportFailure(error: unknown): boolean {
   const text = String(error instanceof Error ? `${error.name}: ${error.message}` : error).toLowerCase();
   return ['connection refused', 'connection reset', 'fetch failed', 'socket', 'timed out', 'econnreset',
-    'econnrefused', 'remote end closed'].some(phrase => text.includes(phrase)) ||
+    'econnrefused', 'remote end closed', 'headerstimeout', 'bodytimeout'].some(phrase => text.includes(phrase)) ||
     // A restarting server answers 502/503 (llama.cpp: "Loading model") until it is ready.
     /\bmodel http (?:502|503|504)\b/.test(text);
 }
