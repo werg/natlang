@@ -309,8 +309,23 @@ export type ScopeFailureDebug = {
 /** Longest note compact_history accepts. */
 export const COMPACTION_NOTE_CHARS = 600;
 
-/** One earlier tool call of this call and its full output (nothing cut off). */
-export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>; output: string };
+/**
+ * One earlier tool call of this call: its arguments, its outcome (`status`, the result kind: ok, rejected, error,
+ * completed, ...), for eval the returned value as data (`value`, when it is portable data of modest size) and what it
+ * printed (`console`), and the full text the model was shown (`output`, nothing cut off).
+ */
+export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>;
+  status: string; value?: unknown; console?: string; output: string };
+
+/** Largest returned value, as JSON characters, a transcript entry keeps as data. */
+const TRANSCRIPT_VALUE_CHARS = 100_000;
+const deepFreeze = <T,>(value: T): T => {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+};
 
 /**
  * What evals see as `transcript`: the call's history, searched rather than read through. There is no array access
@@ -321,10 +336,11 @@ export class TranscriptView {
   constructor(entries: readonly TranscriptEntry[]) { this.#entries = entries; }
   get length(): number { return this.#entries.length; }
   /**
-   * Lines of earlier outputs (and code) that match: a case-insensitive text, or a regular expression. Each match is
-   * { entry, turn, tool, in, line }, the line cut to 200 characters around the match; at most `limit` (default 20).
+   * Lines of earlier outputs (and code) that match: a case-insensitive text, or a regular expression (an empty text
+   * matches every line). Each match is { entry, turn, tool, in, line }, the line cut to 200 characters around the
+   * match; at most `limit` (default 20). `status` and `tool` restrict the calls searched, e.g. { status: 'error' }.
    */
-  search(query: string | RegExp, options: { in?: 'output' | 'code' | 'both'; limit?: number } = {}) {
+  search(query: string | RegExp, options: { in?: 'output' | 'code' | 'both'; limit?: number; status?: string; tool?: string } = {}) {
     const where = options.in ?? 'both', limit = Math.max(1, Math.min(options.limit ?? 20, 100));
     const test = (line: string): number => {
       if (typeof query === 'string') return line.toLowerCase().indexOf(query.toLowerCase());
@@ -333,6 +349,7 @@ export class TranscriptView {
     };
     const matches: { entry: number; turn: number; tool: string; in: 'output' | 'code'; line: string }[] = [];
     for (const [index, item] of this.#entries.entries()) {
+      if ((options.status !== undefined && item.status !== options.status) || (options.tool !== undefined && item.tool !== options.tool)) continue;
       for (const field of ['code', 'output'] as const) {
         if (where !== 'both' && where !== field) continue;
         for (const line of (item[field] ?? '').split('\n')) {
@@ -352,7 +369,7 @@ export class TranscriptView {
     const index = n < 0 ? this.#entries.length + n : n;
     const item = this.#entries[index];
     if (!Number.isInteger(n) || !item) throw new RangeError(`transcript has entries 0 to ${this.#entries.length - 1}`);
-    return Object.freeze({ ...item, arguments: Object.freeze(structuredClone(item.arguments)) });
+    return Object.freeze({ ...item, arguments: deepFreeze(structuredClone(item.arguments)) });
   }
   toString(): string { return `transcript: ${this.#entries.length} earlier calls; use transcript.search(query) or transcript.entry(n)`; }
   toJSON(): string { return this.toString(); }
@@ -375,6 +392,8 @@ export class NativeSession {
   readonly transcript: TranscriptEntry[] = [];
   /** The model turn the next recorded call belongs to (set by the agent). */
   turn = 0;
+  /** What the eval being recorded returned and printed, for its transcript entry. */
+  private evalDetail?: { value?: unknown; console?: string };
   /** Texts the current call's result shows cut off, with their full versions for its transcript entry. */
   private cuts: { shown: string; full: string }[] = [];
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
@@ -408,6 +427,7 @@ export class NativeSession {
     const effects = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
       .filter(event => event.kind === 'effect' || event.kind === 'host')
       .map(event => String(event.capability ?? event.operation ?? event.kind));
+    this.evalDetail = { console: logs.join('\n') };
     return (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       '\nNothing else from this eval was kept.';
@@ -463,9 +483,19 @@ export class NativeSession {
       arguments: args, outcome: result.kind, result_text: result.text, diagnostics: result.codes ?? [] });
     const output = this.cuts.reduce((text, cut) => text.replace(cut.shown, cut.full), result.text);
     this.cuts = [];
-    const entry = this.transcript.length;
+    const entry = this.transcript.length, detail = name === 'eval' ? this.evalDetail : undefined;
+    this.evalDetail = undefined;
+    // The returned value is kept as data when it is portable and of modest size; its text is always in output.
+    let value: unknown;
+    if (detail && Object.hasOwn(detail, 'value') && !containsLive(detail.value) && !isHandle(detail.value)) {
+      try {
+        const json = JSON.stringify(detail.value);
+        if (json === undefined || json.length <= TRANSCRIPT_VALUE_CHARS) value = deepFreeze(structuredClone(detail.value));
+      } catch { /* not portable after all */ }
+    }
     this.transcript.push({ turn: this.turn, tool: name, ...(name === 'eval' && typeof args.code === 'string' ? { code: args.code } : {}),
-      arguments: structuredClone(args), output });
+      arguments: structuredClone(args), status: result.kind, ...(value !== undefined ? { value } : {}),
+      ...(detail?.console ? { console: detail.console } : {}), output });
     this.runtime.observeState('after-action');
     return { ...result, entry };
   }
@@ -849,6 +879,7 @@ export class NativeSession {
         this.lam.return = functionResult;
         this.failureDebug = undefined;
       }
+      this.evalDetail = { value: output.result ?? null, console: (evaluated.logs ?? []).join('\n') };
       const rendered = isLive(output.result) || isHandle(output.result) ? livePreview(output.result as object) :
         this.showValue(output.result ?? null);
       const status = functionResult !== undefined ?

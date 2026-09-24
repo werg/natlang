@@ -147,6 +147,11 @@ test('transcript is searched, not read through: search finds lines, entry gives 
   const printed = await session.applyAsync('eval', { code: 'console.log(transcript); String(transcript)' });
   assert.match(printed.text, /transcript: 5 earlier calls; use transcript\.search\(query\) or transcript\.entry\(n\)/);
   assert.equal(/locker is locked/.test(printed.text), false, 'printing the transcript does not dump it');
+  await session.applyAsync('eval', { code: 'const rows = [{ id: 1 }, { id: 2 }]; return undefined.boom' });
+  const record = await session.applyAsync('eval', { code: 'const first = transcript.entry(1); [first.status, first.value, first.console, transcript.entry(-1).status]' });
+  assert.match(record.text, /\["ok", 2, "found a brass key", "error"\]/, 'entries carry status, the returned value as data, and console output');
+  const failures = await session.applyAsync('eval', { code: 'transcript.search("", { status: "error" }).map(match => match.entry)' });
+  assert.match(failures.text, /^\[6(, 6)*\]/, 'search can be restricted to failed calls');
   const indexed = await session.applyAsync('eval', { code: 'transcript[0]' });
   assert.equal(/locker/.test(indexed.text), false, 'there is no array access');
 });
