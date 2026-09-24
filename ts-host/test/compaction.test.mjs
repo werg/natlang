@@ -93,6 +93,8 @@ test('near the budget the model is asked to compact: only compact_history is off
   const forced = requests.filter(request => toolNames(request).join() === 'compact_history');
   assert.ok(forced.length >= 2, 'the model was asked to compact, more than once in a long call');
   assert.ok(forced.every(request => request.tool_choice === 'required'), 'the compaction turn requires the tool call');
+  assert.ok(forced.every(request => /near its context limit/.test(request.messages.at(-1).content)), 'the compaction turn says why');
+
   assert.ok(requests.filter(request => toolNames(request).length > 1).every(request => request.tool_choice === undefined));
   const kinds = requests.map(request => toolNames(request).join() === 'compact_history');
   assert.equal(kinds.some((forcedTurn, index) => forcedTurn && kinds[index + 1]), false, 'compaction never repeats back to back');
@@ -100,6 +102,7 @@ test('near the budget the model is asked to compact: only compact_history is off
   const pinned = last.messages.filter(message => message.role === 'user' && /^Your note from compacting/.test(message.content));
   assert.equal(pinned.length, 1, 'only the latest note is kept');
   assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
+  assert.match(pinned[0].content, /Continue from where this note leaves off\. The full history of this call is in transcript/);
   assert.ok(last.messages.some(elided), 'older outputs moved to transcript');
   assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the budget');
   assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');

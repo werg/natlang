@@ -58,6 +58,9 @@ const FOLDER_DECLARATIONS = [
 ];
 
 const DEFAULT_CONTEXT_TOKENS = 16384;
+/** Appended to the latest tool result when the next turn must compact. */
+const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Call compact_history with a short note on what you are ' +
+  'doing and what is left; the full history stays available in transcript.]';
 /** Messages at the end of the conversation that budget compaction keeps whole if it can: the latest exchanges. */
 const RECENT_MESSAGES = 6;
 /** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
@@ -297,10 +300,12 @@ export class NativeToolAgent {
           description: 'Optional: fail this eval if it has not finished after this many milliseconds.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
-      tool('compact_history', 'Shorten this conversation: older tool outputs and eval code are replaced by references into transcript, ' +
-        'and your note is kept right after the instructions (a newer note replaces it).',
+      tool('compact_history', 'Shorten this conversation. Older tool outputs and eval code are replaced by references, and the ' +
+        'full history of this call stays in your eval scope as transcript (every call with its code and complete output), where ' +
+        'you can inspect it with code. Your note is kept right after the instructions (a newer note replaces it) and is what you ' +
+        'continue from, so it need not repeat details: say what you are doing and what is left, and refer to transcript for the rest.',
         { note: { type: 'string', maxLength: COMPACTION_NOTE_CHARS,
-          description: 'What you are doing, what you have found, and what is left.' } }, ['note']),
+          description: 'What you are doing, what you have found, and what is left; details can stay in transcript.' } }, ['note']),
       tool('return_result', 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
         'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
         'or contradictory operation), give the reason instead of a value.',
@@ -527,6 +532,12 @@ export class NativeToolAgent {
       // what compaction cannot remove (the opening, stubs, the note) never makes it ask again and again.
       const nearLimit = budget !== null && estimate(allTools) > Math.max(budget * 0.75, compactedAt + budget * 0.25);
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
+      if (availableTools !== allTools && !lastTurn) {
+        // Say why only compact_history is offered, on the latest tool result, as the turns-left notice does.
+        const latest = messages.at(-1);
+        if (latest?.role === 'tool' && typeof latest.content === 'string' && !latest.content.includes(COMPACTION_NOTICE))
+          messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
+      }
       if (budget !== null && estimate(availableTools) > budget) {
         // A request never exceeds the budget: if the model has not compacted, the oldest outputs are elided without
         // a note. Program state lives in the eval scope and every output in transcript, so no values are lost.
@@ -677,7 +688,9 @@ export class NativeToolAgent {
       }
       if (note !== undefined) {
         // Everything older than the latest exchange moves to transcript; the note is kept after the opening.
-        const pinned = { role: 'user', content: `Your note from compacting this conversation: ${note}` };
+        const pinned = { role: 'user', content: `Your note from compacting this conversation: ${note}\n\n` +
+          'Continue from where this note leaves off. The full history of this call is in transcript; look something up there ' +
+          'only when you have a specific question about it.' };
         if (protectedLength > openingLength) messages[openingLength] = pinned;
         else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
         // The note speaks for everything before it: only the compaction call and its result stay whole.
