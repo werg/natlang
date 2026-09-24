@@ -59,7 +59,7 @@ export const literal = value => JSON.stringify(value, null, 1).replace(/\n\s*/g,
 export function curriculumCase({ family, familyVersion = 1, shape, variant, pairGroup = null, splitGroup, slice, domain,
   mode, inline = 'optional', edits, named, iterate, worldSemantics, evidence = {}, assumptions = [], decisive = [], plausibleActions = [],
   minimumSequence = [], reference, root, files = {}, inputs = {}, expected = null, operation, folderFiles, expectedFiles,
-  failureSeed, split = 'train' }) {
+  failureSeed, split = 'train', sketch }) {
   const id = `inline-curriculum:${family}:${shape}:${variant}`;
   const semantics = { root: `${root.name}.nl`, files: { [`${root.name}.nl`]: nlFile(root), ...files }, inputs, expected,
     ...(operation ? { operation } : {}), ...(folderFiles ? { folder_files: folderFiles } : {}),
@@ -70,7 +70,7 @@ export function curriculumCase({ family, familyVersion = 1, shape, variant, pair
     generation: { generator: GENERATOR_VERSION },
     curriculum: { version: CURRICULUM_VERSION, family, family_version: familyVersion, shape, variant,
       pair_group: pairGroup, split_group: splitGroup ?? `${family}:${shape}`, slice, domain, mode, inline,
-      ...(edits ? { edits } : {}), ...(named ? { named } : {}), ...(iterate ? { iterate } : {}),
+      ...(edits ? { edits } : {}), ...(named ? { named } : {}), ...(iterate ? { iterate } : {}), ...(sketch ? { sketch } : {}),
       ...(worldSemantics ? { world_semantics: worldSemantics } : {}),
       evidence: { world: evidence.world ?? [], retrieved: evidence.retrieved ?? [], background: evidence.background ?? [] },
       assumptions, decisive, plausible_actions: plausibleActions, minimum_sequence: minimumSequence, reference },

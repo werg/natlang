@@ -182,6 +182,9 @@ return final.certified;`), returnCall(certificate)];
       { verdict: 'continue', reason: 'The temperature rises steadily toward the band.' };
     return curriculumCase({ family: 'actor_greenhouse', shape, variant, pairGroup: `greenhouse:${shape}`,
       slice: 'iterate', domain: 'actor', mode: 'single_call', inline: 'avoid', iterate: 'required',
+      sketch: 'the state is { temp: number, certified: string | null }; the step sets heater and vent from state.temp, ' +
+        'calls greenhouse.read(), and returns the new temperature with greenhouse.certificate(); stop when certified is not null. ' +
+        'A simple rule is enough: heat below the band and vent above it; there is no need to measure the rates first.',
       evidence: { world: [`start ${spec.start} °C`, spec.sunAt ? `sun from reading ${spec.sunAt}` : 'no sun', spec.broken ? 'heater broken' : 'heater works'],
         retrieved: [], background: [`reference controller: ${run.reached ? `${run.steps} steps` : 'never stabilises'}`] },
       minimumSequence: ['read the greenhouse', 'step a controller with iterateOn until the certificate appears', spec.broken ? 'report the unreachable goal' : 'return the certificate'],

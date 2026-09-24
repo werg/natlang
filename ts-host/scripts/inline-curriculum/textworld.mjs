@@ -199,6 +199,8 @@ outcome`;
       id: record.id.replace(':textworld_quest:', ':textworld_iterate:'),
       family: 'curriculum_textworld_iterate',
       curriculum: { ...record.curriculum, family: 'textworld_iterate', slice: 'iterate', iterate: 'required', inline: 'required',
+        sketch: 'the state is { step: number, last: string }; the step is an nl function that looks around and carries out the ' +
+          'single most useful command with world.act, returning step + 1 and what happened; stop when world.certificate() is not null.',
         pair_group: record.curriculum.pair_group && `${record.curriculum.pair_group}:iterate`,
         minimum_sequence: ['define an nl step that acts once in the world', 'run it with iterateOn until the certificate appears', playable ? 'return the certificate' : 'report the blocker when the loop is stopped'],
         reference: { root: [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`), playable ? returnCall(record.semantics.expected) :

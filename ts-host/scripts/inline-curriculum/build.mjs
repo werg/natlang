@@ -13,13 +13,20 @@ import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { FAMILIES } from './families.mjs';
 
 export const ITERATE_HINT = 'Required: solve this with iterateOn, not with evals or loops that you step by hand. Write a step function (it may be an nl function) from the current state to the next state, and run the whole process in one eval with await step.iterateOn(initial).until(done).';
-function hinted(record) {
+export const INLINE_HINT = 'Required: make each judgment about an item with a natural-language function called on that item (await nl`...`(item)), not with keyword or regular-expression matching.';
+/** The hint for a case that requires a technique: the technique's requirement, then the family's sketch if it has one. */
+export function hintFor(curriculum) {
+  const parts = [...(curriculum.iterate === 'required' ? [ITERATE_HINT] : []), ...(curriculum.inline === 'required' ? [INLINE_HINT] : [])];
+  if (!parts.length) return null;
+  return [...parts, ...(curriculum.sketch ? [`Sketch: ${curriculum.sketch}`] : [])].join(' ');
+}
+function hinted(record, hint) {
   const twin = structuredClone(record);
   twin.id = `${record.id}:hinted`;
   twin.source_ids = [twin.id];
   const root = twin.semantics.root;
-  twin.semantics.files[root] = twin.semantics.files[root].replace(/\n$/, '') + `\n\n${ITERATE_HINT}\n`;
-  twin.curriculum.hint = ITERATE_HINT;
+  twin.semantics.files[root] = twin.semantics.files[root].replace(/\n$/, '') + `\n\n${hint}\n`;
+  twin.curriculum.hint = hint;
   twin.curriculum.hinted_of = record.id;
   if (twin.curriculum.pair_group) twin.curriculum.pair_group = `${twin.curriculum.pair_group}:hinted`;
   return twin;
@@ -57,10 +64,11 @@ for (const name of selected) {
       throw new Error(`duplicate case id ${record.id}`);
     }
     records.push(record);
-    // An iterateOn case also gets a twin whose instructions end with an explicit hint. Admission strips the
-    // hint from the twin's trajectory, so it trains iterateOn without being asked; with the unhinted run it
-    // makes a same-request preference pair (pairs.mjs).
-    if (values.hints && record.curriculum.iterate === 'required' && record.curriculum.track !== 'authoring') records.push(hinted(record));
+    // A case that requires iterateOn or per-item nl judgments also gets a twin whose instructions end with an
+    // explicit hint (and the family's sketch). Admission strips the hint from the twin's trajectory, so it trains
+    // the technique without being asked; with the unhinted run it makes a same-request preference pair (pairs.mjs).
+    const hint = hintFor(record.curriculum);
+    if (values.hints && hint && record.curriculum.track !== 'authoring') records.push(hinted(record, hint));
   }
 }
 

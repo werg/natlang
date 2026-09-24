@@ -183,7 +183,9 @@ export function verify(chain: string[]): { ok: boolean, certificate: string | nu
       return curriculumCase({ family: search ? 'prontoqa_search' : 'prontoqa_proof', shape, variant, pairGroup: `pronto${search ? '-search' : ''}:${shape}`,
         splitGroup: `prontoqa:${row.file}:${row.id.split(':')[1]}`, split: row.split,
         slice: search ? 'iterate' : 'observation_followup', domain: 'logic', mode: 'single_call', worldSemantics: 'open_world', inline: 'avoid',
-        ...(search ? { iterate: 'required' } : {}),
+        ...(search ? { iterate: 'required', sketch: 'the state maps each class the entity has reached to the chain of fact ids that ' +
+          'reaches it; the step applies every rule whose subject is a reached class and adds the new classes; stop when the goal ' +
+          'class is reached or a step adds nothing, then verify that chain.' } : {}),
         evidence: { world: variant === 'provable' ? proofChain.map(id => facts.find(f => f.id === id).text) : [`removed: ${removed}`],
           retrieved: [], background: [`source: PrOntoQA-OOD ${SOURCES.prontoqa.revision} ${row.id}`, `gold chain of thought: ${row.chain_of_thought.join(' ')}`] },
         minimumSequence: ['read the fact store', 'find a chain from a fact about the entity through rules to the goal', 'verify it, or conclude no chain exists'],
