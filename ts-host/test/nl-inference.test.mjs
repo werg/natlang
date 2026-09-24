@@ -56,12 +56,12 @@ test('an awaited nl expression without a call runs the judgment in eval', async 
     const opening = String(request.messages[1].content);
     if (!opening.includes('Report whether note')) {
       child = opening;
-      return { calls: [['return_result', { value: true }]] };
+      return { calls: [['return_result', { status: 'success', value: true }]] };
     }
     if (!started && (started = true)) return { calls: [['eval', { code:
       'const verdict = await (nl`Does ${note} describe a safety hazard that has not been resolved?`);\nreturn verdict ? "hazard" : "fine";' }]] };
     staged = String(request.messages.at(-1).content);
-    return { calls: [['return_result', { value: 'hazard' }]] };
+    return { calls: [['return_result', { status: 'success', value: 'hazard' }]] };
   };
   const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { note: string }\nreturns: string\n---\nReport whether note describes an unresolved hazard.\n' }, 'root.nl');
@@ -79,12 +79,12 @@ test('an inferred inline judgment runs per item with a boolean result', async ()
     if (!text.includes('Keep the tickets')) {
       // An inline child: its opening states the inferred signature.
       seen.push(String(request.messages[1].content));
-      return { calls: [['return_result', { value: text.includes('total outage') }]] };
+      return { calls: [['return_result', { status: 'success', value: text.includes('total outage') }]] };
     }
     if (!started && (started = true)) return { calls: [['eval', { code:
       'const flags = await Promise.all(tickets.map(t => nl`Does t report an outage?`(t)));\nreturn tickets.filter((t, i) => flags[i]).map(t => t.id);' }]] };
     staged = String(request.messages.at(-1).content);
-    return { calls: [['return_result', { value: ['a'] }]] };
+    return { calls: [['return_result', { status: 'success', value: ['a'] }]] };
   };
   const runtime = createNatlangRuntime({ model, seed: { mode: 'backend' } });
   const fn = loadVirtualNatlang({ 'root.nl': '---\nargs: { tickets: "{ id: string, text: string }[]" }\nreturns: string[]\n---\nKeep the tickets that report an outage.\n' }, 'root.nl');

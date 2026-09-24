@@ -50,15 +50,15 @@ export async function checkAuthoring(files: Record<string, string>, spec: Author
         if (staged) {
           const last = String((request.messages.at(-1) as { content?: unknown } | undefined)?.content ?? '');
           return /\nStaged /.test(`\n${last}`) || last.includes('Staged ') ? { text: 'done' } :
-            { calls: [['failed', { message: `The authored export failed: ${last.slice(0, 400)}` }]] };
+            { calls: [['return_result', { status: 'failed', reason: `The authored export failed: ${last.slice(0, 400)}` }]] };
         }
         staged = true;
         return { calls: [['eval', { code: `return JSON.stringify(await ${moduleName}.${spec.export}(...JSON.parse(payload)) ?? null);` }]] };
       }
       const shown = openingText(request.messages as Message[]);
       const answer = spec.oracle?.find(item => item.match.every(fragment => shown.includes(fragment)));
-      return answer ? { calls: [['return_result', { value: answer.value }]] } :
-        { calls: [['failed', { message: 'The authoring oracle has no answer for this call.' }]] };
+      return answer ? { calls: [['return_result', { status: 'success', value: answer.value }]] } :
+        { calls: [['return_result', { status: 'failed', reason: 'The authoring oracle has no answer for this call.' }]] };
     };
     const runtime = createNatlangRuntime({ model: model as never, seed: { mode: 'backend' } });
     try {

@@ -69,7 +69,11 @@ export function materializeStudioRow(raw: unknown): Dict[] {
       license: 'project-generated', split: caseValue.split, source: 'teacher-studio',
       source_groups: [caseValue.target], messages: publicValue(request.messages ?? []),
       tools: publicValue(request.tools ?? []), target,
-      skill: calls.length ? calls.map(call => String(call.tool)).join('+') : 'reply',
+      // A return_result with status blocked or failed is labelled by its status, as a failure turn.
+      skill: calls.length ? calls.map(call => {
+        const status = call.tool === 'return_result' ? (call.arguments as { status?: unknown } | undefined)?.status : undefined;
+        return status === 'blocked' || status === 'failed' ? String(status) : String(call.tool);
+      }).join('+') : 'reply',
       teacher_reasoning: assistant.reasoning ?? null };
   });
 }

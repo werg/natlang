@@ -44,8 +44,7 @@ test('browser local inference drives the native tool loop without a server', asy
     assert.equal(requests[0].seed, 0);
     assert.equal(requests[0].max_tokens, undefined);
     assert.equal(requests[0].tool_choice, 'auto');
-    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'return_result',
-      'blocked', 'failed']);
+    assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'return_result']);
     assert.equal(requests[0].cache_prompt, true);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(requests[1].messages.at(-1).tool_call_id, 'local_1');

@@ -72,7 +72,7 @@ return people.sort();`;
       evidence: { world: v.edges.map(e => `${e.from} ${e.relation} ${e.to} ${e.since}-${e.until ?? 'now'}`), retrieved: expected, background: [] },
       assumptions: ['A relation is current when it has no end year.'],
       plausibleActions: [], minimumSequence: ['page through owned_by edges into the parent', 'page through works_for edges into each current company'],
-      reference: { root: [evalCall(code), ['return_result', { value: expected }]] },
+      reference: { root: [evalCall(code), ['return_result', { status: 'success', value: expected }]] },
       root: { name: 'current_staff', args: { parent: 'string' }, returns: 'string[]',
         instructions: `List the people who currently work for a company that parent currently owns, using graph.
 Each edge reads as a sentence, from relation to: "c-a owned_by c-p" means c-p owns c-a, and "p-x works_for c-a" means p-x works for c-a. An edge is current when its until is null.
@@ -120,7 +120,7 @@ return kept.sort();`;
       evidence: { world: Object.entries(notes).map(([s, list]) => `${s}: ${list.join(' ')}`), retrieved: expected,
         background: ['A repaired or resubmitted finding is resolved; a pending or ignored hazard is not.'] },
       plausibleActions: [], minimumSequence: ['collect current suppliers exactly', 'judge each supplier against the policy in a child call'],
-      reference: { root: [evalCall(code), ['return_result', { value: expected }]],
+      reference: { root: [evalCall(code), ['return_result', { status: 'success', value: expected }]],
         children: current.map((s, i) => ({ match: JSON.stringify(s), value: !bad[i] })) },
       root: { name: 'qualified_suppliers', args: { product: 'string', policy: 'string' }, returns: 'string[]',
         instructions: `Find the suppliers that currently supply product (supplies edges in graph whose until is null), then keep those that qualify under policy.

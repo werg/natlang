@@ -254,12 +254,12 @@ export class NativeToolAgent {
           description: 'Optional: fail this eval if it has not finished after this many milliseconds.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
-      tool('return_result', 'Return this value as the call\'s result and finish. It must have the declared return type.',
-        { value: session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {} }, ['value']),
-      tool('blocked', 'End without a result because required information is missing. Do not guess.',
-        { missing: { type: 'string' } }, ['missing']),
-      tool('failed', 'End without a result because the instructions require an invalid or contradictory operation.',
-        { message: { type: 'string' } }, ['message']),
+      tool('return_result', 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
+        'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
+        'or contradictory operation), give the reason instead of a value.',
+        { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
+          value: session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {},
+          reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
     ];
     if (Object.keys(session.lam.codebase).length) tools.splice(2, 0,
       tool('read_function', 'Read the source of an imported function by its listed name.',
@@ -418,7 +418,7 @@ export class NativeToolAgent {
   missing(session: NativeSession): string {
     const lam = session.lam;
     if (lam.type.kind !== 'lambda') return '';
-    if (lam.return === MISSING) return `There is no result yet. Call return_result with a ${formatType(lam.type.returns)}, ` +
+    if (lam.return === MISSING) return `There is no result yet. Call return_result with status "success" and a ${formatType(lam.type.returns)}, ` +
       'or return it from an eval (return value;) and then reply done.';
     const holes = problems(lam.return, lam.type.returns, session.env, 'return').holes;
     return holes.length ? `The staged result is incomplete: ${holes.map(hole => `${hole.path} (${hole.expected ?? ''})`).join(', ')}.` : '';
@@ -494,11 +494,11 @@ export class NativeToolAgent {
         continue;
       }
       const limit = allowance();
-      // On the last turn of a budget only the finishing tools are offered: the call ends with a result or an honest
-      // blocked or failed, not by running out.
+      // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
+      // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
       const availableTools = lastTurn ? this.tools(session).filter(tool =>
-        ['return_result', 'blocked', 'failed'].includes(String((tool as { function?: { name?: string } }).function?.name))) : this.tools(session);
+        String((tool as { function?: { name?: string } }).function?.name) === 'return_result') : this.tools(session);
       const callId = session.runtime.currentCallId ?? null;
       const started = performance.now();
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'start', turn: turns + 1,
@@ -613,8 +613,8 @@ export class NativeToolAgent {
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
       // ends with an honest blocked or failed rather than by running out.
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
-      const notice = left === 1 ? '\n\n[This is your last turn in this call: call return_result with the result, or the blocked tool with what is missing, or the failed tool with why.]' :
-        left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call the blocked tool with what is missing, or the failed tool with why.]` : '';
+      const notice = left === 1 ? '\n\n[This is your last turn in this call: call return_result with status "success" and the result, or status "blocked" with what is missing, or status "failed" with why.]' :
+        left <= 4 && left > 0 ? `\n\n[${left} turns left in this call. If the task cannot be finished, call return_result with status "blocked" and what is missing, or status "failed" and why.]` : '';
       for (const [index, result] of results.entries())
         messages.push({ role: 'tool', tool_call_id: raw[index]!.id, content: result.text + (index === results.length - 1 ? notice : '') });
       checkpointReady = !results.some(result => ['rejected', 'refused', 'error'].includes(result.kind)) &&

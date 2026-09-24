@@ -463,12 +463,21 @@ export class NativeSession {
 
   private scopeTool(name: string, args: Record<string, unknown>): NativeResult {
     if (name === 'read_page') return { kind: 'ok', text: this.pages.read(String(args.id ?? ''), Number(args.page ?? 1)) };
+    // The retired blocked and failed tools are statuses of return_result now.
+    if (name === 'blocked' || name === 'failed') throw new Reject([{ path: name, code: 'bad-action',
+      expected: `return_result with status "${name}" and a reason` }]);
     if (name === 'return_result') {
+      const status = args.status ?? 'success';
+      if (status === 'blocked' || status === 'failed') {
+        const reason = String(args.reason ?? '').trim();
+        if (reason.length < 8) throw new Reject([{ path: 'reason', code: 'bad-action',
+          expected: status === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining why the instructions cannot be carried out' }]);
+        return { kind: 'blocked', text: `${status === 'blocked' ? 'blocked' : 'error'}: ${reason}` };
+      }
+      if (status !== 'success') throw new Reject([{ path: 'status', code: 'bad-action', expected: '"success", "blocked", or "failed"' }]);
       if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
-      // Returning the word "blocked" or "failed" is a confusion with the blocked and failed tools, never a result.
-      if (typeof args.value === 'string' && /^\s*(?:blocked|failed)\b[.:]?\s*$/i.test(args.value))
-        throw new Reject([{ path: 'value', code: 'bad-action',
-          expected: 'a result; to report that the task cannot be finished, call the blocked tool (what is missing) or the failed tool (why), not return_result' }]);
+      if (!Object.hasOwn(args, 'value')) throw new Reject([{ path: 'value', code: 'bad-action',
+        expected: `a ${formatType(this.lam.type.returns)} (status "success" returns a value)` }]);
       let value: Value;
       try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
       catch (first) {
@@ -479,12 +488,6 @@ export class NativeSession {
       this.lam.return = value;
       if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);
       return { kind: 'completed', text: `Returned ${oneLine(value)}.`, value };
-    }
-    if (name === 'blocked' || name === 'failed') {
-      const message = String(args[name === 'blocked' ? 'missing' : 'message'] ?? '').trim();
-      if (message.length < 8) throw new Reject([{ path: name === 'blocked' ? 'missing' : 'message',
-        code: 'bad-action', expected: name === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining the error' }]);
-      return { kind: 'blocked', text: `${name === 'blocked' ? 'blocked' : 'error'}: ${message}` };
     }
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
@@ -654,11 +657,11 @@ export class NativeSession {
     const inputsBinding = !taken('read_inputs'), inputsObject = !taken('inputs');
     if (inputsBinding) opaqueNames.push('read_inputs');
     if (inputsObject) opaqueNames.push('inputs');
-    // return_result, blocked, and failed also work as functions in eval: the request is carried out,
-    // exactly as the tool would, once the eval has succeeded.
+    // return_result also works as a function in eval: return_result(value) stages a result, and
+    // return_result(value, status, reason) carries out the tool's request once the eval has succeeded.
     // A finisher name the snippet declares itself stays the snippet's own variable.
     const declaredHere = (name: string) => new RegExp(`\\b(?:const|let|var|function|class)\\s+${name}\\b|[{,]\\s*${name}\\s*[,}=]`).test(code);
-    const finishers = ['return_result', 'blocked', 'failed'].filter(name => !taken(name) && !declaredHere(name));
+    const finishers = ['return_result'].filter(name => !taken(name) && !declaredHere(name));
     opaqueNames.push(...finishers);
     let requested: { tool: string; args: Record<string, unknown> } | undefined;
     const captureCells = this.lam.captures ?? {};
@@ -696,8 +699,8 @@ export class NativeSession {
       ...(this.lam.projectTransaction ? ['const folder = __live.folder;'] : []),
       ...(inputsBinding ? ['const read_inputs = () => __live.callInputs;'] : []),
       ...(inputsObject ? ['const inputs = __live.callInputs;'] : []),
-      ...finishers.map(name => `const ${name} = (argument: unknown) => { __live.request(${JSON.stringify(name)}, ` +
-        `{ ${name === 'return_result' ? 'value' : name === 'blocked' ? 'missing' : 'message'}: argument }); };`),
+      ...finishers.map(name => `const ${name} = (value?: unknown, status: string = 'success', reason?: string) => ` +
+        `{ __live.request(${JSON.stringify(name)}, { value, status, reason }); };`),
     ].join('\n');
     const source = `${SCOPE_RUNTIME_PRELUDE}${prologue}\n${compiled.program}\n` +
       `return await ${compiled.entrypoint}(Object.assign({}, self.inputs, __live.inputs), ` +
@@ -779,7 +782,7 @@ export class NativeSession {
       const logStatus = evaluated.logs?.length ? `console:\n${this.pages.show(evaluated.logs.join('\n'))}\n` : '';
       // return_result in eval stages its value like a top-level return: the value was computed, so the model
       // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
-      if (requested?.tool === 'return_result' && this.lam.type.kind === 'lambda') {
+      if (requested?.tool === 'return_result' && requested.args.status === 'success' && this.lam.type.kind === 'lambda') {
         let staged: Value | undefined, refusal = '';
         try { staged = coerce(requested.args.value, this.lam.type.returns, this.env, 'return'); }
         catch (error) { refusal = error instanceof Error ? error.message : String(error); }

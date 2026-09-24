@@ -39,7 +39,7 @@ const config = (dir, endpoint, role, surface) => ({ jobs: join(dir, `${role}-job
 test('student failure is replayed exactly, teacher repairs it, prefix is not positive SFT', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'student-handoff-'));
   const student = modelServer([[['eval', { code: 'throw new Error("wrong branch")' }]], null]);
-  const teacher = modelServer([[['return_result', { value: 1 }]]]);
+  const teacher = modelServer([[['return_result', { status: 'success', value: 1 }]]]);
   await Promise.all([new Promise(resolve => student.server.listen(0, '127.0.0.1', resolve)),
     new Promise(resolve => teacher.server.listen(0, '127.0.0.1', resolve))]);
   try {

@@ -79,6 +79,6 @@ export function curriculumCase({ family, familyVersion = 1, shape, variant, pair
 
 /** Reference-solution call shorthands. */
 export const evalCall = code => ['eval', { code }];
-export const returnCall = value => ['return_result', { value }];
-export const blockedCall = missing => ['blocked', { missing }];
-export const failedCall = message => ['failed', { message }];
+export const returnCall = value => ['return_result', { status: 'success', value }];
+export const blockedCall = reason => ['return_result', { status: 'blocked', reason }];
+export const failedCall = reason => ['return_result', { status: 'failed', reason }];

@@ -54,11 +54,11 @@ export function scriptedModel(respond) {
     if (modelTurnsSoFar(messages) === 0) {
       openings.push(opening);
       const code = await respond(opening);
-      if (code === null) return { calls: [['failed', { message: 'The scripted model has no answer for this task.' }]] };
+      if (code === null) return { calls: [['return_result', { status: 'failed', reason: 'The scripted model has no answer for this task.' }]] };
       return { calls: [['eval', { code }]] };
     }
     if (last.role === 'tool' && /^(?:rejected|error)|\nerror|Nothing else from this eval was kept/.test(String(last.content)))
-      return { calls: [['failed', { message: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
+      return { calls: [['return_result', { status: 'failed', reason: `Scripted eval failed: ${String(last.content).slice(0, 300)}` }]] };
     return { text: 'done' };
   };
   return { driver, openings };

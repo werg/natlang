@@ -58,7 +58,7 @@ export type Curriculum = {
   plausible_actions: string[];
   minimum_sequence: string[];
   /** A replayable solution: root tool calls in order, and answers for child calls keyed by fragments of the child's opening (all must appear). */
-  // A child answer with `call` answers with that tool call (such as `blocked`) instead of a value; `calls` plays
+  // A child answer with `call` answers with that tool call (such as `return_result` with status `blocked`) instead of a value; `calls` plays
   // several turns in order (for example an eval that acts, then return_result).
   reference: { root: ReferenceCall[]; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
@@ -99,15 +99,14 @@ export function callName(context: Message[]): string {
 }
 export { openingLength } from './opening.js';
 const isInline = (name: string) => name.startsWith('nl@');
-const TERMINAL = new Set(['return_result', 'blocked', 'failed']);
+const TERMINAL = new Set(['return_result']);
 /** A top-level `return` in an eval stages a result: a decision as much as return_result is. */
 /** Whether the root's eval at this turn failed: its result (shown in the root's next turn) kept nothing. */
 function evalFailed(trajectory: Turn[], index: number, rootName: string): boolean {
   const next = trajectory.slice(index + 1).find(turn => callName(turn.context ?? []) === rootName);
   return !!next && text(next.context.at(-1)?.content).includes('Nothing else from this eval was kept.');
 }
-const stagesResult = (code: string) => /^return\b/m.test(code) || /\breturn_result\s*\(/.test(code) ||
-  /\b(?:blocked|failed)\s*\(/.test(code);
+const stagesResult = (code: string) => /^return\b/m.test(code) || /\breturn_result\s*\(/.test(code);
 
 export type RunFacts = {
   rootTurns: number; evals: number; edits: number; functionEdits: number; pageReads: number; usesIterateOn: boolean; inlineCalls: number; namedChildCalls: number;
@@ -204,7 +203,7 @@ export async function renderOpening(record: ProgramRecord, systemPrompt: string)
   let opening = '';
   const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
     if (!opening) opening = openingText(request.messages as Message[]);
-    return { calls: [['failed', { message: 'The opening render stops before the first model turn.' }]] };
+    return { calls: [['return_result', { status: 'failed', reason: 'The opening render stops before the first model turn.' }]] };
   };
   await executeProgram(record, driver, { ...REFERENCE_OPTIONS, systemPrompt });
   return opening;
@@ -227,7 +226,7 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
       response = call ? { calls: [[call[0], call[1]]] } :
-        { calls: [['failed', { message: 'The reference solution ended without finishing the call.' }]] };
+        { calls: [['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]] };
     } else {
       const opening = openingText(context);
       const answer = record.curriculum.reference.children?.find(child =>
@@ -236,8 +235,8 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
       childTurns.set(opening, turn + 1);
       const scripted = answer?.calls?.[turn];
       response = scripted ? { calls: [[scripted[0], scripted[1]]] } :
-        answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { value: answer.value }]] } :
-        { calls: [['failed', { message: `The reference has no answer for the child call ${name}.` }]] };
+        answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { status: 'success', value: answer.value }]] } :
+        { calls: [['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]] };
     }
     trajectory.push({ context, assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });
     return response;

@@ -85,8 +85,8 @@ test('an incompatible observation does not persist in the typed result slot', as
 
 test('return_result finishes with a typed value; an eval return only stages one', async () => {
   const unique = open({ type: '(items: string[]) => string[]', instructions: 'Remove duplicates.', args: { items: ['a', 'a', 'b'] } });
-  assert.equal(unique.session.apply('return_result', { value: 'not a list' }).kind, 'rejected');
-  const finished = unique.session.apply('return_result', { value: ['a', 'b'] });
+  assert.equal(unique.session.apply('return_result', { status: 'success', value: 'not a list' }).kind, 'rejected');
+  const finished = unique.session.apply('return_result', { status: 'success', value: ['a', 'b'] });
   assert.equal(finished.kind, 'completed'); assert.deepEqual(unique.lam.return, ['a', 'b']); assert.equal(unique.session.completed, true);
   const doubled = open({ type: '(value: number) => number', instructions: 'Double the value.', args: { value: 7 } });
   assert.equal((await doubled.session.applyAsync('eval', { code: 'return value * 2;' })).kind, 'ok');
@@ -138,7 +138,7 @@ test('scope eval persists locals, calls imports positionally, and treats result 
   assert.notEqual(repairedMap.kind, 'ok');
   const names = new NativeToolAgent(() => ({ calls: [] })).tools(session).map(entry => entry.function.name);
   assert.deepEqual(names, ['eval', 'read_page', 'read_function', 'edit_function', 'diff_functions',
-    'return_result', 'blocked', 'failed']);
+    'return_result']);
   const nullCase = open({ type: '() => null', instructions: 'Return null.' });
   assert.equal((await nullCase.session.applyAsync('eval', { code: 'return null' })).kind, 'ok');
   assert.equal(nullCase.lam.return, null);
@@ -260,7 +260,7 @@ test('in eval, return_result stages its value and blocked ends the call, after t
   assert.equal(staged.kind, 'ok'); assert.match(staged.text, /Staged 7 as the result/);
   assert.equal(typed.lam.return, 7); assert.equal(typed.session.completed, false, 'a computed value is staged, not finished');
   const blocked = open({ type: '() => number', instructions: 'Convert with the rate in the notes.' });
-  const reported = await blocked.session.applyAsync('eval', { code: 'blocked("No notes with an exchange rate were given.")' });
+  const reported = await blocked.session.applyAsync('eval', { code: 'return_result(undefined, "blocked", "No notes with an exchange rate were given.")' });
   assert.equal(reported.kind, 'blocked'); assert.match(reported.text, /blocked: No notes/);
 });
 
@@ -433,7 +433,7 @@ test('saying done before returning a value is answered, and only budgets the cal
     { maxTurns: 3 });
   const stuck = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => chatty.run(session) });
   assert.equal(stuck.outcome.kind, 'quiesced'); assert.match(stuck.outcome.detail, /budget exhausted/);
-  assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Call return_result with a number/);
+  assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Call return_result with status "success" and a number/);
   let turns = 0;
   const recovering = new NativeToolAgent(() => ++turns === 1 ? { calls: [], text: '7', completion_tokens: 1 } :
     turns === 2 ? { calls: [['eval', { code: 'return 7' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 });

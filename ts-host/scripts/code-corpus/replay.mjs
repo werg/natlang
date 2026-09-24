@@ -123,7 +123,7 @@ export async function replayCase(record, index = 0, options = {}) {
     const lastAction = runtime.trace.events.filter(e => e.kind === 'action').at(-1);
     // The captured body runs as one eval; a second turn says done, or reports the replay failure.
     const calls = trajectory.length ? (lastAction && lastAction.outcome !== 'ok'
-      ? [['failed', { message: `Captured implementation failed during replay: ${lastAction.result_text}` }]]
+      ? [['return_result', { status: 'failed', reason: `Captured implementation failed during replay: ${lastAction.result_text}` }]]
       : []) : [['eval', { code }]];
     const text = calls.length ? '' : 'done';
     trajectory.push({ phase: 'action', context: structuredClone(request.messages), tools_offered: request.tools,

@@ -24,7 +24,7 @@ gives the model only `semantics`, so the block is oracle metadata the teacher ne
 | `decisive` | Markers of the observations the answer rests on, with where they first appear |
 | `plausible_actions`, `minimum_sequence` | What could be done before the observation; the causally sufficient sequence |
 | `evidence`, `assumptions`, `world_semantics` | World assertions, what must be retrieved, bridging knowledge, open/closed/defeasible semantics |
-| `reference` | A replayable solution: root tool calls, and answers for child calls keyed by fragments of the child's opening (a value, or a tool call such as `blocked`) |
+| `reference` | A replayable solution: root tool calls, and answers for child calls keyed by fragments of the child's opening (a value, or a tool call such as `return_result` with status `blocked`) |
 
 Results are exact typed values (labels, ids, receipts, certificates), so a semantic decision is still checked
 exactly. Worlds are callable-folder TypeScript modules: data stays hidden until the model queries it, module
@@ -51,7 +51,7 @@ collector accepted its contract **and**:
 
 - every decisive marker was visible to the model (in a tool result, or in a child it delegated to) outside the
   root's opening, and, for follow-up cases, before the root's first result decision (a `return_result`,
-  `blocked`, `failed`, or a staged eval `return`);
+  `return_result` with any status, or a staged eval `return`);
 - `inline: avoid` saw no inline child. For `inline: required`, a correct answer judged directly is admitted with the
   note `judged_directly`; an eval that tests text against a keyword regular expression instead is rejected
   (`regex_judgment`);
@@ -70,7 +70,7 @@ Every `iterate: required` case is also built as a twin whose instructions end wi
 trains `iterateOn` unprompted. `pairs.mjs` pairs an admitted twin with the unhinted run of the same case when that
 run was rejected for `iterate_missing`: at their first root decision with an identical request, the twin's
 decision is chosen and the unhinted one rejected (the same-request rule of `build-preference-pairs.mjs`). The number of evals is never a criterion.
-The collector itself now requires a blocked case to end with the model's own `blocked` or `failed` call;
+The collector itself now requires a blocked case to end with the model's own `return_result` with status `blocked` or `failed`;
 running out of turns also quiesces a call and was previously accepted.
 
 ## Family catalog

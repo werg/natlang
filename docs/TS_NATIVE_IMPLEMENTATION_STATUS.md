@@ -71,10 +71,11 @@ Reworked against live Bonsai 27B runs (`ts-host/scripts/live-probe/`):
   the arguments with `read_inputs()` into typed consts (their values shown in the eval's
   result), declares functions and services, and for directory reducers a prefilled
   `list_files`.
-- Completion: the `return_result(value)` tool finishes; a top-level eval `return` or
+- Completion: the `return_result` tool with status `success` and a value finishes; a top-level eval `return` or
   `return_result(...)` inside eval stages a computed value, and a reply without a tool call
-  returns it (or, for a string-typed call, the reply text is the result). `blocked(missing)`
-  and `failed(message)` end without a result, as tools or eval functions. `mark_lines`, line
+  returns it (or, for a string-typed call, the reply text is the result). `return_result`
+  with status `blocked` or `failed` and a reason ends without a result, as a tool or as
+  `return_result(value, status, reason)` in eval; the old `blocked` and `failed` tools are rejected with that hint. `mark_lines`, line
   listings, the `result` variable, the final-expression result rule, and `commit` are removed.
 - `read_page(id, page)` reads cut-off output by a short word ID; `read_value` is removed.
 - Parameters are `const` and frozen. The `debug` binding and the failure paragraph in the
@@ -90,7 +91,7 @@ Follow-up (inline curriculum, [INLINE_CURRICULUM.md](INLINE_CURRICULUM.md)):
   (`.nl` `description`, TypeScript JSDoc).
 - Type text accepts single-quoted string literals.
 - Callable modules' aliases, classes (live class types, listed by public members), and interfaces are in eval's type environment.
-- The collector requires a blocked case to end with the model's own `blocked` or `failed` call.
+- The collector requires a blocked case to end with the model's own `return_result` with status `blocked` or `failed`.
 - Callable modules can `import type { X } from "./types"`; before, the import resolved to nothing and types became `any`.
 - Unannotated inline `nl` result types are inferred from their uses in the same eval or file (typed holes); see
   [inline-natlang-lambdas.md](inline-natlang-lambdas.md), rule 6.

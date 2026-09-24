@@ -116,9 +116,10 @@ A natural-language invocation offers the model these tools:
 
 - `eval(code, timeout_ms?)`: run TypeScript in the persistent scope, optionally with a time limit.
 - `read_page(id, page)`: read more of output a tool result cut off; the cut-off names the ID.
-- `return_result(value)`: return a value of the declared type and finish.
-- `blocked(missing)`: stop because required information is absent.
-- `failed(message)`: stop because the operation is invalid or failed.
+- `return_result(status, value?, reason?)`: finish the call. Status `success` returns
+  `value`, of the declared type; `blocked` stops because required information is
+  absent, and `failed` because the instructions require an invalid or contradictory
+  operation, each with a `reason` sentence instead of a value.
 - `read_function`, `edit_function`, `diff_functions`: inspect and edit callable items.
 
 A directory reducer additionally receives `list_files`, `search_files`,
@@ -157,11 +158,11 @@ values.
 
 A call finishes in one of three ways:
 
-- `return_result(value)` with a value of the declared type;
+- `return_result` with status `success` and a value of the declared type;
 - a reply without a tool call, which returns the staged result, or, for a call
   whose declared type accepts the reply's text as a string, that text (a bare
   "done" is never the text result);
-- `blocked` or `failed`, which end the call without a result.
+- `return_result` with status `blocked` or `failed`, which ends the call without a result.
 
 A reply without a tool call and without a result is answered with what is
 missing, and the call continues. A directory reducer keeps the folder changes
