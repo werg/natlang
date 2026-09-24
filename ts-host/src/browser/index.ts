@@ -25,7 +25,10 @@ export { EventLoop, EventQueue } from '../app/event-loop.js';
 export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions } from '../app/event-loop.js';
 export { BrowserDomRenderer } from './dom.js';
 export type { UiNode, UiAction } from './dom.js';
-export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel } from './local-model.js';
+export { BrowserLocalModel, compileBrowserTools, loadBrowserLocalModel, wllamaChatTransport } from './local-model.js';
+export { chatCompletionModelTurn, httpChatTransport, assembleChatCompletion, fetchModel } from '../model/chat-completion.js';
+export type { ChatTransport, ChatCompletionOptions, ChatTurnStats, HttpChatOptions } from '../model/chat-completion.js';
+export { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 export type { BrowserModelLoadOptions, BrowserInferenceEngine, BrowserModelDiagnostics, BrowserModelSource,
   BrowserModelStatus, LoadedBrowserModel } from './local-model.js';
 export { BROWSER_MODEL_CATALOG, loadBrowserModelCatalog, checkModelStorage } from './models.js';

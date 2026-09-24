@@ -72,7 +72,7 @@ test('local model validates calls and exposes local loading options', async () =
     assert.equal(params.jinja, true);
     assert.equal(params.chat_template, 'official template');
     await assert.rejects(() => model.turn({ messages: [{ role: 'user', content: 'x' }], tools: [],
-      temperature: 0, seed: null, max_tokens: 10 }), /invalid JSON arguments/);
+      temperature: 0, seed: null, max_tokens: 10 }), /malformed tool arguments/);
   } finally { await model.close(); }
   assert.equal(statSync(new URL('../dist/browser/wllama.wasm', import.meta.url)).size > 1_000_000, true);
   assert.equal(statSync(new URL('../dist/browser/wllama-compat.wasm', import.meta.url)).size > 1_000_000, true);

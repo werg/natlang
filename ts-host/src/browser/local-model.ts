@@ -1,23 +1,14 @@
 import * as wllamaRuntime from '@wllama/wllama/esm/index.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { chatCompletionModelTurn, modelTools, type ChatTransport, type ChatTurnStats } from '../model/chat-completion.js';
 import { probeBrowserGpu, type BrowserGpuCapability } from './gpu.js';
 
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content?: string | null;
   tool_calls?: unknown[]; tool_call_id?: string };
-type ModelTool = { type: 'function'; function: { name: string; description?: string;
-  parameters?: Record<string, unknown> } };
-type ModelResponse = { choices: Array<{ finish_reason?: string | null; message: {
-  content?: string | null; tool_calls?: Array<{ id?: string; type: string; function: { name: string; arguments: string } }> } }>;
-  usage?: { completion_tokens?: number; prompt_tokens?: number;
-    prompt_tokens_details?: { cached_tokens?: number } }; [key: string]: unknown };
 type LoadParams = { n_ctx: number; n_gpu_layers?: number; n_threads?: number; jinja: boolean;
   reasoning: boolean; chat_template?: string;
   progressCallback?: (progress: { loaded: number; total: number }) => void;
   signal?: AbortSignal };
-type ModelCompletionRequest = { messages: ModelMessage[]; tools: ModelTool[]; tool_choice: 'auto';
-  max_tokens?: number; temperature?: number; seed?: number; abortSignal?: AbortSignal;
-  cache_prompt?: boolean };
-
 /** The subset needed by natlang; applications may inject a preloaded Wllama instance. */
 export type BrowserInferenceEngine = {
   isSupportWebGPU(): boolean;
@@ -26,7 +17,8 @@ export type BrowserInferenceEngine = {
   loadModelFromHF(model: { repo: string; file?: string; quant?: string }, params: LoadParams): Promise<void>;
   loadModelFromUrl(url: string, params: LoadParams): Promise<void>;
   loadModel(files: Blob[], params: LoadParams): Promise<void>;
-  createChatCompletion(request: ModelCompletionRequest): Promise<ModelResponse>;
+  /** OpenAI-style chat completion; with `stream: true` an async iterator of chunks. */
+  createChatCompletion(request: Record<string, unknown>): Promise<AsyncIterable<Record<string, unknown>> | Record<string, unknown>>;
   getLoadedContextInfo?(): { n_ctx: number; n_layer: number };
   getModelMetadata?(): Record<string, unknown>;
   getWorkerResources?(): { compat: boolean; noWebGPU?: boolean };
@@ -65,14 +57,6 @@ function loadParams(options: BrowserModelLoadOptions) {
 }
 
 /** Remove natlang-only schema hints before sending the public JSON Schema to llama.cpp. */
-function publicSchema(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(publicSchema);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !key.startsWith('x-natlang') && key !== 'x-optional')
-    .map(([key, item]) => [key, publicSchema(item)]));
-  return value;
-}
-
 function chatMessages(messages: unknown[]): ModelMessage[] {
   return messages.map((raw, index) => {
     if (!raw || typeof raw !== 'object') throw new TypeError(`model message ${index} must be an object`);
@@ -97,35 +81,24 @@ function chatMessages(messages: unknown[]): ModelMessage[] {
 }
 
 /** Keep the scope-eval surface and names intact; remove only host-private schema annotations. */
-export function compileBrowserTools(rawTools: unknown[]): ModelTool[] {
-  const tools: ModelTool[] = [];
-  for (const [toolIndex, raw] of rawTools.entries()) {
-    const tool = raw as ModelTool;
-    if (tool?.type !== 'function' || typeof tool.function?.name !== 'string')
-      throw new TypeError(`model tool ${toolIndex} is invalid`);
-    tools.push(publicSchema(tool) as ModelTool);
-  }
-  return tools;
-}
+/** Tool definitions as the model sees them (shared with every transport). */
+export const compileBrowserTools = modelTools;
 
-/** Adapt one local model response to the host's template-independent model turn. */
-export function localModelTurn(response: ModelResponse): ModelTurn {
-  const choice = response.choices[0];
-  if (!choice) throw new Error('local model returned no choice');
-  if (choice.finish_reason === 'length') throw new Error('local model reached its token limit before finishing the turn');
-  const rawCalls = choice.message.tool_calls ?? [];
-  const calls = rawCalls.map((call, index): [string, Record<string, unknown>] => {
-    if (call.type !== 'function' || !call.function?.name) throw new Error(`local model tool call ${index} has no function`);
-    let args: unknown;
-    try { args = JSON.parse(call.function.arguments); }
-    catch { throw new Error(`local model tool call ${index} has invalid JSON arguments`); }
-    if (!args || typeof args !== 'object' || Array.isArray(args))
-      throw new Error(`local model tool call ${index} needs object arguments`);
-    return [call.function.name, args as Record<string, unknown>];
-  });
-  return { calls, text: choice.message.content ?? '', raw_calls: rawCalls,
-    completion_tokens: response.usage?.completion_tokens,
-    raw_response: response as unknown as Record<string, unknown> };
+/**
+ * The in-page transport: wllama applies the chat template itself, so earlier tool calls carry argument objects
+ * (llama-server does this conversion on its side).
+ */
+export function wllamaChatTransport(engine: BrowserInferenceEngine): ChatTransport {
+  return async (body, signal) => {
+    try {
+      return await engine.createChatCompletion({ ...body, messages: chatMessages(body.messages as unknown[]),
+        cache_prompt: true, stream: true, abortSignal: signal });
+    } catch (error) {
+      if (String(error).includes('kv_cache_full'))
+        throw new Error('model context is full; reduce prompt or tool schemas, or reload with a larger context', { cause: error });
+      throw error;
+    }
+  };
 }
 
 /** GGUF inference in a browser worker; WebGPU offloads all layers when available. */
@@ -216,56 +189,16 @@ export class BrowserLocalModel {
     this.turnQueue = new Promise<void>(resolve => { release = resolve; });
     await previous;
     try {
-      if (signal?.aborted) throw new Error('local model turn aborted');
-      const tools = compileBrowserTools(request.tools);
-      const schemaBytes = new TextEncoder().encode(JSON.stringify(tools)).length;
-      const baseMessages = chatMessages(request.messages);
-      let messages = baseMessages;
-      let retries = 0, promptTokens = 0, completionTokens = 0, cachedTokens = 0;
-      let hasPrompt = false, hasCompletion = false, hasCached = false;
-      const started = performance.now();
-      while (true) {
-        let response: ModelResponse;
-        try {
-          response = await this.engine.createChatCompletion({ messages,
-            tools, tool_choice: 'auto', cache_prompt: true,
-            ...(request.max_tokens === null ? {} : { max_tokens: request.max_tokens }),
-            ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-            ...(request.seed === null ? {} : { seed: request.seed }),
-            abortSignal: signal });
-        } catch (error) {
-          if (String(error).includes('kv_cache_full'))
-            throw new Error('model context is full; reduce prompt or tool schemas, or reload with a larger context',
-              { cause: error });
-          throw error;
-        }
-        if (response.usage?.prompt_tokens !== undefined) {
-          promptTokens += response.usage.prompt_tokens; hasPrompt = true;
-        }
-        if (response.usage?.completion_tokens !== undefined) {
-          completionTokens += response.usage.completion_tokens; hasCompletion = true;
-        }
-        if (response.usage?.prompt_tokens_details?.cached_tokens !== undefined) {
-          cachedTokens += response.usage.prompt_tokens_details.cached_tokens; hasCached = true;
-        }
-        try {
-          const turn = localModelTurn(response);
-          const durationMs = Math.round(performance.now() - started);
-          this.lastTurn = { durationMs, promptTokens: hasPrompt ? promptTokens : null,
-            completionTokens: hasCompletion ? completionTokens : null,
-            cachedTokens: hasCached ? cachedTokens : null, toolSchemaBytes: schemaBytes, retries,
-            tokensPerSecond: hasCompletion && durationMs > 0 ?
-              Math.round(completionTokens * 1000 / durationMs * 10) / 10 : null };
-          this.turnHistory.push(this.lastTurn);
-          return { ...turn, prompt_tokens: hasPrompt ? promptTokens : undefined,
-            completion_tokens: hasCompletion ? completionTokens : undefined };
-        } catch (error) {
-          if (retries >= 1 || signal?.aborted || response.choices[0]?.finish_reason === 'length') throw error;
-          retries++;
-          messages = [...baseMessages, { role: 'assistant', content: response.choices[0]?.message.content ?? '' },
-            { role: 'user', content: 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. Do not change the task or invent a new tool.' }];
-        }
+      const toolSchemaBytes = new TextEncoder().encode(JSON.stringify(modelTools(request.tools))).length;
+      let stats: ChatTurnStats | undefined;
+      const turn = await chatCompletionModelTurn(wllamaChatTransport(this.engine),
+        { onTurn: value => { stats = value; } })(request, signal);
+      if (stats) {
+        this.lastTurn = { ...stats, toolSchemaBytes, tokensPerSecond: stats.completionTokens !== null && stats.durationMs > 0 ?
+          Math.round(stats.completionTokens * 1000 / stats.durationMs * 10) / 10 : null };
+        this.turnHistory.push(this.lastTurn);
       }
+      return turn;
     } finally { release(); }
   };
 

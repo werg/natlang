@@ -11,7 +11,8 @@ const libs = Object.fromEntries(readdirSync(libDir).filter(name => /^lib\.(es5|e
 await build({ entryPoints: [resolve(root, 'src/browser/index.ts')], bundle: true,
   platform: 'browser', format: 'esm', target: 'es2022',
   outfile: resolve(root, 'dist/browser/natlang.js'),
-  external: ['node:*'],
+  // undici is only loaded under Node (fetchModel); browsers use plain fetch.
+  external: ['node:*', 'undici'],
   define: { __NATLANG_PRELUDE__: JSON.stringify(readFileSync(resolve(root, 'prelude.js'), 'utf8')),
     __NATLANG_TS_LIBS__: JSON.stringify(libs) },
   legalComments: 'none' });
