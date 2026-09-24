@@ -353,9 +353,13 @@ export class KvBudget {
   }
   private fits(need: number): boolean { return this.used === 0 || this.used + need <= this.tokens; }
 }
-/** Tokens a request may occupy: its prompt (at a conservative 3 characters per token) and room to generate. */
+/**
+ * Tokens a request is expected to occupy: its prompt at 4 characters per token (measured on Bonsai collection: 4.06 at
+ * the median) and a typical reply (p90 399 tokens). Deliberately not a worst case: an occasional overflow is retried,
+ * while an overcautious estimate would idle slots.
+ */
 const requestTokens = (request: ModelTurnRequest) =>
-  Math.ceil((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 3) + (request.max_tokens ?? 2048);
+  Math.ceil((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4) + 512;
 
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint) throw new Error('endpoint is required for native teacher collection');

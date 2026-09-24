@@ -6,6 +6,10 @@ well, or decline to, and whose later choices depend on observations the opening 
 `ts-host/src/teacher/curriculum.ts` (schema, verification, admission, coverage) and
 `ts-host/scripts/inline-curriculum/` (families, source adapters, build, acquisition, admission CLI).
 
+**No case may depend on code being private.** A program's callable modules (world simulations included) are
+readable with `read_function`, and reading them is a legitimate, desirable way to learn how things work. If reading
+a module's source would trivialize a case, the case is poorly posed and is redesigned; the read is never penalized.
+
 ## Case format
 
 A case is an ordinary program IR record plus a `curriculum` block (`natlang.inline_curriculum/1`). The collector

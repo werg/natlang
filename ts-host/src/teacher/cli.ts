@@ -32,7 +32,7 @@ async function main(): Promise<void> {
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
-      '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 50000, 0 = off)\n');
+      '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
     return;
   }
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
@@ -63,8 +63,8 @@ async function main(): Promise<void> {
     cacheStableTools: flags.has('--cache-stable-tools'),
     ...(handoffs ? { handoffs } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
-    // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens), with a margin; 0 turns admission off.
-    ...(integer(flags, '--kv-tokens', 50_000) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 50_000) } : {}),
+    // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens); 0 turns admission off.
+    ...(integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
     toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081',
