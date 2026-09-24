@@ -35,8 +35,10 @@ export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   student_provenance: Record<string, unknown> };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
-  /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusableRows). */
-  reuse?: string[] };
+  /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusedRow). */
+  reuse?: string[];
+  /** Earlier tool surfaces whose rows the operator declares equivalent to the current one for reuse. */
+  reuseSurfaces?: string[] };
 export type TeacherRow = Record<string, unknown> & { task: { program_ir: ProgramRecord };
   provenance: Record<string, unknown>; outcome?: Record<string, unknown> };
 export type JobRunner = (item: IndexedRecord, expected: Record<string, unknown>, signal?: AbortSignal) => Promise<TeacherRow>;
@@ -155,21 +157,23 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * to the current finishing surface (scripts/inline-curriculum/migrate-status.mjs), since the row keeps the context
  * it was collected with. Later files win over earlier ones.
  */
-async function reusableRows(paths: string[]): Promise<Map<string, { row: TeacherRow; path: string }>> {
-  const rows = new Map<string, { row: TeacherRow; path: string }>();
+async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: TeacherRow; path: string }>>> {
+  const rows = new Map<string, Array<{ row: TeacherRow; path: string }>>();
   for (const path of paths) for (const line of (await readFile(path, 'utf8')).split(/\r?\n/)) {
     if (!line.trim()) continue;
     const row = JSON.parse(line) as TeacherRow, digest = row.provenance?.program_ir_sha256;
-    if (typeof digest === 'string') rows.set(digest, { row, path });
+    if (typeof digest === 'string') rows.set(digest, [...rows.get(digest) ?? [], { row, path }]);
   }
   return rows;
 }
 const REUSE_KEYS = ['program_ir_sha256', 'model', 'max_turns', 'collection_role', 'handoff_sha256'];
-function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>): TeacherRow | undefined {
+function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
+  surfaces: string[] = []): TeacherRow | undefined {
   const { row, path } = found, provenance = row.provenance;
   if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
     return;
-  if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined) return;
+  if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined &&
+      !surfaces.includes(String(provenance.tool_surface_sha256))) return;
   // A row stands in for a new run only if that run would have seen the same requests: it never rolled over into a
   // checkpoint (retired), and none of its prompts was large enough for compaction to have elided outputs.
   const turns = (row.trajectory ?? []) as Array<{ phase?: string; model_response?: { prompt_tokens?: number } }>;
@@ -185,12 +189,15 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   if (!Number.isInteger(config.workers) || config.workers < 1) throw new RangeError('workers must be positive');
   await mkdir(config.jobs, { recursive: true });
   const pending: IndexedRecord[] = [];
-  const reusable = config.reuse?.length ? await reusableRows(config.reuse) : new Map();
+  const reusable = config.reuse?.length ? await reusableRows(config.reuse) :
+    new Map<string, Array<{ row: TeacherRow; path: string }>>();
   let reused = 0;
   for (const item of records) {
     const expected = expectedProvenance(item.record, config), path = join(config.jobs, `${jobKey(item)}.result.json`);
     if (await readMatching(path, item.record, expected)) continue;
-    const found = reusable.get(expected.program_ir_sha256 as string), row = found && reusedRow(found, expected);
+    // The last listed file with a qualifying row wins; a row that does not qualify never hides an earlier one.
+    const row = (reusable.get(expected.program_ir_sha256 as string) ?? []).map(found => reusedRow(found, expected, config.reuseSurfaces))
+      .filter(Boolean).at(-1);
     if (row) { await writeAtomic(path, JSON.stringify(row) + '\n'); reused++; continue; }
     pending.push(item);
   }

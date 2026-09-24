@@ -94,6 +94,24 @@ test('finished rows of an earlier run stand in for the same programs at other in
   await collectBatch(shard, options, async () => { throw new Error('reused rows were collected again'); });
 });
 
+test('a later row that does not qualify never hides an earlier one, and declared surfaces are reused', async () => {
+  const earlier = await mkdtemp(join(tmpdir(), 'teacher-mask-a-')), later = await mkdtemp(join(tmpdir(), 'teacher-mask-b-'));
+  const old = [record('one'), record('two')].map((value, index) => ({ index, record: value }));
+  await collectBatch(old, config(earlier, 'surface-old'), async (item, provenance) => row(item, provenance));
+  const rows = (await readFile(config(earlier).output, 'utf8')).trim().split('\n').map(JSON.parse);
+  const good = join(earlier, 'good.jsonl'), masking = join(earlier, 'masking.jsonl');
+  await writeFile(good, rows.map(value => JSON.stringify(value)).join('\n') + '\n');
+  await writeFile(masking, JSON.stringify({ ...rows[0], provenance: { ...rows[0].provenance, model: 'other' } }) + '\n');
+  const ran = [];
+  const runner = async (item, provenance) => { ran.push(item.record.id); return row(item, provenance); };
+  await collectBatch(old, { ...config(later), reuse: [good, masking] }, runner);
+  assert.deepEqual(ran.sort(), ['one', 'two'], 'rows of another tool surface are not reused unless declared');
+  const again = await mkdtemp(join(tmpdir(), 'teacher-mask-c-'));
+  ran.length = 0;
+  await collectBatch(old, { ...config(again), reuse: [good, masking], reuseSurfaces: ['surface-old'] }, runner);
+  assert.deepEqual(ran, [], 'declared surface rows are reused, and the later disqualified row does not mask one');
+});
+
 test('native collector journals model replies and replays them after an interrupted request', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-turn-resume-'));
   let requests = 0, interrupted = false;
