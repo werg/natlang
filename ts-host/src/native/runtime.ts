@@ -309,8 +309,54 @@ export type ScopeFailureDebug = {
 /** Longest note compact_history accepts. */
 export const COMPACTION_NOTE_CHARS = 600;
 
-/** One earlier tool call of this call and its full output (nothing cut off); evals read the list as `transcript`. */
+/** One earlier tool call of this call and its full output (nothing cut off). */
 export type TranscriptEntry = { turn: number; tool: string; code?: string; arguments: Record<string, unknown>; output: string };
+
+/**
+ * What evals see as `transcript`: the call's history, searched rather than read through. There is no array access
+ * or iteration, and printing it shows a summary; `search` finds lines, `entry(n)` gives one call in full.
+ */
+export class TranscriptView {
+  readonly #entries: readonly TranscriptEntry[];
+  constructor(entries: readonly TranscriptEntry[]) { this.#entries = entries; }
+  get length(): number { return this.#entries.length; }
+  /**
+   * Lines of earlier outputs (and code) that match: a case-insensitive text, or a regular expression. Each match is
+   * { entry, turn, tool, in, line }, the line cut to 200 characters around the match; at most `limit` (default 20).
+   */
+  search(query: string | RegExp, options: { in?: 'output' | 'code' | 'both'; limit?: number } = {}) {
+    const where = options.in ?? 'both', limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+    const test = (line: string): number => {
+      if (typeof query === 'string') return line.toLowerCase().indexOf(query.toLowerCase());
+      const found = new RegExp(query.source, query.flags.replace('g', '')).exec(line);
+      return found ? found.index : -1;
+    };
+    const matches: { entry: number; turn: number; tool: string; in: 'output' | 'code'; line: string }[] = [];
+    for (const [index, item] of this.#entries.entries()) {
+      for (const field of ['code', 'output'] as const) {
+        if (where !== 'both' && where !== field) continue;
+        for (const line of (item[field] ?? '').split('\n')) {
+          const at = test(line);
+          if (at < 0) continue;
+          const start = Math.max(0, at - 80);
+          matches.push({ entry: index, turn: item.turn, tool: item.tool, in: field,
+            line: (start ? '…' : '') + line.slice(start, start + 200) + (line.length > start + 200 ? '…' : '') });
+          if (matches.length >= limit) return Object.freeze(matches);
+        }
+      }
+    }
+    return Object.freeze(matches);
+  }
+  /** One earlier call in full; negative numbers count from the end (entry(-1) is the latest). */
+  entry(n: number): TranscriptEntry {
+    const index = n < 0 ? this.#entries.length + n : n;
+    const item = this.#entries[index];
+    if (!Number.isInteger(n) || !item) throw new RangeError(`transcript has entries 0 to ${this.#entries.length - 1}`);
+    return Object.freeze({ ...item, arguments: Object.freeze(structuredClone(item.arguments)) });
+  }
+  toString(): string { return `transcript: ${this.#entries.length} earlier calls; use transcript.search(query) or transcript.entry(n)`; }
+  toJSON(): string { return this.toString(); }
+}
 
 export class NativeSession {
   completed = false;
@@ -325,7 +371,7 @@ export class NativeSession {
   private callableCache?: { codebase: Record<string, unknown>; tree: Record<string, unknown> };
   /** Output cut off in this call's tool results, readable with read_page. */
   readonly pages = new PageStore();
-  /** This call's tool calls with their full outputs, in order; evals read it as `transcript`. */
+  /** This call's tool calls with their full outputs, in order; evals see it through a TranscriptView. */
   readonly transcript: TranscriptEntry[] = [];
   /** The model turn the next recorded call belongs to (set by the agent). */
   turn = 0;
@@ -400,14 +446,14 @@ export class NativeSession {
 
   /** A text of the current call's result as it fits in a message; all of it goes to the call's transcript entry. */
   private show(text: string): string {
-    const shown = this.pages.show(text, `transcript[${this.transcript.length}].output`);
+    const shown = this.pages.show(text, `transcript.entry(${this.transcript.length}).output`);
     if (shown !== text) this.cuts.push({ shown, full: text });
     return shown;
   }
   /** A value of the current call's result, cut by structure; all of it goes to the call's transcript entry. */
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
-    const shown = renderValue(value, { root, holder: `transcript[${this.transcript.length}].output` });
+    const shown = renderValue(value, { root, holder: `transcript.entry(${this.transcript.length}).output` });
     const full = renderValue(value, { root, budget: Infinity });
     if (shown !== full) this.cuts.push({ shown, full });
     return shown;
@@ -715,8 +761,7 @@ export class NativeSession {
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.runtime.services, folder: this.lam.projectTransaction?.folder.root(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
-      transcript: transcriptBinding ? Object.freeze(this.transcript.map(entry => Object.freeze({ ...entry,
-        arguments: Object.freeze(structuredClone(entry.arguments)) }))) : undefined,
+      transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
       inline: (index: number, values: unknown[], accessors: Record<string, unknown>) => {
         const plan = plans[index];

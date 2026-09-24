@@ -17,7 +17,7 @@ test('compaction elides the oldest tool outputs first and keeps the opening and 
   const entries = { a: 0, b: 1, c: 2, d: 3 };
   assert.equal(compactMessages(messages, 2, 2, () => size() > target, id => entries[id]), 1);
   assert.equal(messages[3].content, elidedOutput(0), 'the oldest large output goes first, and its stub names its transcript entry');
-  assert.match(messages[3].content, /transcript\[0\]\.output/);
+  assert.match(messages[3].content, /transcript\.entry\(0\)\.output/);
   assert.equal(messages[7].content, big + '2', 'later outputs stay while the target is met');
   assert.equal(compactMessages(messages, 2, 2, () => true, id => entries[id]), 1, 'short outputs and the latest exchange are never elided');
   assert.equal(messages[5].content, 'short'); assert.equal(messages[9].content, big + '3');
@@ -42,7 +42,7 @@ test('a long call compacts old outputs instead of rolling over, and the model ca
     const prompt = Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4);
     turn++;
     if (turn < 12) return { calls: [['eval', { code: `console.log('y'.repeat(2000) + ' mark${turn}'); ${turn}` }]], prompt_tokens: prompt };
-    if (turn === 12) return { calls: [['eval', { code: 'transcript.filter(entry => / mark1\\b/.test(entry.output)).map(entry => entry.turn)' }]], prompt_tokens: prompt };
+    if (turn === 12) return { calls: [['eval', { code: 'transcript.search(/ mark1\\b/, { in: "output" }).map(match => match.turn)' }]], prompt_tokens: prompt };
     recovered = requests.at(-1).at(-1).content;
     return { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: prompt };
   };
@@ -51,7 +51,7 @@ test('a long call compacts old outputs instead of rolling over, and the model ca
   const last = requests.at(-1);
   const stub = last.find(elided);
   assert.ok(stub, 'old outputs were elided');
-  const index = Number(stub.content.match(/transcript\[(\d+)\]/)[1]);
+  const index = Number(stub.content.match(/transcript\.entry\((\d+)\)/)[1]);
   assert.match(session.transcript[index].output, /y{2000} mark/, 'the stub names the entry that holds the output');
   assert.match(recovered, /\[\s*1\s*\]/, 'an eval found the elided first output in transcript');
   assert.ok(last.length > 20, 'the conversation was never cut: every earlier message is still there');
@@ -102,7 +102,7 @@ test('near the budget the model is asked to compact: only compact_history is off
   const pinned = last.messages.filter(message => message.role === 'user' && /^Your note from compacting/.test(message.content));
   assert.equal(pinned.length, 1, 'only the latest note is kept');
   assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
-  assert.match(pinned[0].content, /Continue from where this note leaves off\. The full history of this call is in transcript/);
+  assert.match(pinned[0].content, /Continue from where this note leaves off\. Look into the history only when something specific matters/);
   assert.ok(last.messages.some(elided), 'older outputs moved to transcript');
   assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the budget');
   assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');
@@ -133,3 +133,21 @@ test('the model may compact on its own, a note over the limit is rejected, and a
   await new NativeToolAgent(texting, { contextTokens: 4096, maxTurns: 30 }).run(forcedText.session);
   assert.equal(forcedText.lam.return, 'hello', 'the text reply to the compaction turn did not become the result');
 });
+
+test('transcript is searched, not read through: search finds lines, entry gives one call, printing shows a summary', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Look around.' });
+  await session.applyAsync('eval', { code: 'console.log("alpha\\nthe locker is locked\\nomega"); 1' });
+  await session.applyAsync('eval', { code: 'const key = "brass"; console.log("found a brass key"); 2' });
+  const found = await session.applyAsync('eval', { code: 'transcript.search("LOCKER").map(match => [match.entry, match.in, match.line])' });
+  assert.match(found.text, /\[0, "code", .*\], \[0, "output", "the locker is locked"\]\]/, 'matches in code and output, line by line');
+  const regex = await session.applyAsync('eval', { code: 'transcript.search(/brass/, { in: "code" }).length' });
+  assert.match(regex.text, /^1\b/);
+  const one = await session.applyAsync('eval', { code: 'transcript.entry(-1).code' });
+  assert.match(one.text, /transcript\.search\(\/brass\//, 'entry(-1) is the latest earlier call');
+  const printed = await session.applyAsync('eval', { code: 'console.log(transcript); String(transcript)' });
+  assert.match(printed.text, /transcript: 5 earlier calls; use transcript\.search\(query\) or transcript\.entry\(n\)/);
+  assert.equal(/locker is locked/.test(printed.text), false, 'printing the transcript does not dump it');
+  const indexed = await session.applyAsync('eval', { code: 'transcript[0]' });
+  assert.equal(/locker/.test(indexed.text), false, 'there is no array access');
+});
+

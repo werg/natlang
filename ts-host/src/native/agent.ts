@@ -59,17 +59,17 @@ const FOLDER_DECLARATIONS = [
 const DEFAULT_CONTEXT_TOKENS = 16384;
 /** Appended to the latest tool result when the next turn must compact. */
 const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Call compact_history with a short note on what you are ' +
-  'doing and what is left; the full history stays available in transcript.]';
+  'doing, what you have found, and what is left, written so that you can continue from the note alone.]';
 /** Messages at the end of the conversation that budget compaction keeps whole if it can: the latest exchanges. */
 const RECENT_MESSAGES = 6;
 /** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
 export const elidedOutput = (entry?: number) => entry === undefined ?
   cutNote('elided to keep this conversation within its context budget; values it stored are still in scope') :
-  cutNote('elided to keep this conversation within its context budget', { holder: `transcript[${entry}].output` });
+  cutNote('elided to keep this conversation within its context budget', { holder: `transcript.entry(${entry}).output` });
 /** What replaces the code of an old eval call when outputs alone do not bring the conversation under budget. */
 export const elidedCode = (entry?: number) => entry === undefined ?
   cutNote('elided to keep this conversation within its context budget; its declarations are still in scope') :
-  cutNote('elided to keep this conversation within its context budget', { holder: `transcript[${entry}].code` });
+  cutNote('elided to keep this conversation within its context budget', { holder: `transcript.entry(${entry}).code` });
 const ELIDED = /^<<elided /;
 
 /**
@@ -303,12 +303,13 @@ export class NativeToolAgent {
           description: 'Optional: fail this eval if it has not finished after this many milliseconds.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
-      tool('compact_history', 'Shorten this conversation. Older tool outputs and eval code are replaced by references, and the ' +
-        'full history of this call stays in your eval scope as transcript (every call with its code and complete output), where ' +
-        'you can inspect it with code. Your note is kept right after the instructions (a newer note replaces it) and is what you ' +
-        'continue from, so it need not repeat details: say what you are doing and what is left, and refer to transcript for the rest.',
+      tool('compact_history', 'Shorten this conversation. Older tool outputs and eval code are replaced by references; the full ' +
+        'history stays searchable in your eval scope as transcript. Your note is kept right after the instructions (a newer note ' +
+        'replaces it) and is what you continue from: write it so that you can go on from the note alone, with the facts and ' +
+        'values you will need, what you have ruled out, and what is left. Long details that are only occasionally needed can ' +
+        'stay in transcript.',
         { note: { type: 'string', maxLength: COMPACTION_NOTE_CHARS,
-          description: 'What you are doing, what you have found, and what is left; details can stay in transcript.' } }, ['note']),
+          description: 'What you are doing, what you have found and ruled out, and what is left.' } }, ['note']),
       tool('return_result', 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
         'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
         'or contradictory operation), give the reason instead of a value.',
@@ -691,8 +692,8 @@ export class NativeToolAgent {
       if (note !== undefined) {
         // Everything older than the latest exchange moves to transcript; the note is kept after the opening.
         const pinned = { role: 'user', content: `Your note from compacting this conversation: ${note}\n\n` +
-          'Continue from where this note leaves off. The full history of this call is in transcript; look something up there ' +
-          'only when you have a specific question about it.' };
+          'Continue from where this note leaves off. Look into the history only when something specific matters for the next ' +
+          'step, and then search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.' };
         if (protectedLength > openingLength) messages[openingLength] = pinned;
         else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
         // The note speaks for everything before it: only the compaction call and its result stay whole.

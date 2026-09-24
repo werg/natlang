@@ -155,16 +155,19 @@ declared type; a later valid return replaces it. Values that are not portable
 data (functions, class instances, handles) are passed by reference as live
 values.
 
-Every eval also sees `transcript`, a read-only list of the call's earlier tool
-calls with their full outputs (`{ turn, tool, code, arguments, output }`), unless
-a parameter or local takes that name.
+Every eval also sees `transcript`, the call's earlier tool calls with their full
+outputs, unless a parameter or local takes that name. It is searched rather than
+read through: `transcript.search(text or regex, { in, limit })` returns matching
+lines as `{ entry, turn, tool, in, line }`, and `transcript.entry(n)` returns one
+call as `{ turn, tool, code, arguments, output }` (negative `n` counts from the
+end). It has no array access or iteration, and printing it shows a summary.
 
 ## Cut-offs
 
 Whatever is too long to show is shortened one way, with a note that is not
 TypeScript: `<<cut off: 338 of 340 items not shown; customers holds all of it>>`.
 The note says what was left out, where all of it is in the scope (a variable, or
-`transcript[n].output` for a tool output), and for tool output which
+`transcript.entry(n).output` for a tool output), and for tool output which
 `read_page` call shows the next part. Values (the opening's declarations, eval
 results, stored locals, the staged result) are cut at item and field boundaries;
 text output (console, files) keeps its beginning and its end. A cut-off literal
@@ -177,7 +180,9 @@ A call keeps one conversation. Past three quarters of its context budget
 `compact_history`, with a tool call required. Its `note` (at most 600 characters:
 what the model is doing, what it found, what is left) is kept after the opening,
 replacing any earlier note, and every older tool output and eval code is replaced
-by a note naming the `transcript` entry that holds it. The model may also compact
+by a note naming the `transcript` entry that holds it. The note is written so the
+model can continue from it alone; with it, the model is told to look into the
+history only when something specific matters, by searching it. The model may also compact
 on its own. Compacting again waits until the conversation has grown by another
 quarter of the budget, and a request never exceeds the budget: if needed, outputs
 are elided without a note.

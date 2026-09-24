@@ -267,7 +267,7 @@ test('in eval, return_result stages its value and blocked ends the call, after t
 test('long text output keeps its head and tail, names its transcript entry, and read_page continues after the head', async () => {
   const { session } = open({ type: '(text: string) => number', instructions: 'Inspect.', args: { text: 'x'.repeat(4500) } });
   const logged = await session.applyAsync('eval', { code: 'console.log("a".repeat(1400) + "b".repeat(2000) + "c".repeat(1100))' });
-  assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; transcript\[0\]\.output holds all of it; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
+  assert.match(logged.text, /^console:\na{1400}b{100}\n<<cut off: 2500 of 4500 characters not shown; transcript\.entry\(0\)\.output holds all of it; read_page\("amber", 2\) shows the next part>>\nc{500}\n/);
   assert.match(session.transcript[0].output, /a{1400}b{2000}c{1100}/, 'the transcript entry holds all of it');
   const second = session.apply('read_page', { id: 'amber', page: 2 });
   assert.equal(second.kind, 'ok');
@@ -275,7 +275,7 @@ test('long text output keeps its head and tail, names its transcript entry, and 
   assert.match(session.apply('read_page', { id: 'amber', page: 3 }).text, /<<page 3 of 3, the last>>$/);
   assert.equal(session.apply('read_page', { id: 'amber', page: 4 }).kind, 'error');
   const value = await session.applyAsync('eval', { code: 'text' });
-  assert.match(value.text, /^"x{2000}" <<cut off: 2500 of 4500 characters not shown; transcript\[4\]\.output holds all of it>>/,
+  assert.match(value.text, /^"x{2000}" <<cut off: 2500 of 4500 characters not shown; transcript\.entry\(4\)\.output holds all of it>>/,
     'a returned value is cut by structure and points at its transcript entry');
   assert.match(session.transcript[4].output, /^"x{4500}"/);
 });

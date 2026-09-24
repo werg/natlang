@@ -112,6 +112,8 @@ export type RunFacts = {
   rootTurns: number; evals: number; edits: number; functionEdits: number; pageReads: number; usesIterateOn: boolean; inlineCalls: number; namedChildCalls: number;
   /** An eval tested text against a regular expression with alternatives: a keyword stand-in for a judgment. */
   regexJudgment: boolean;
+  /** An eval read the call's transcript through, entry by entry in a loop, instead of searching it. */
+  transcriptDump: boolean;
   /** Index (in the flat trajectory) of the root's first result decision, and of its final turn. */
   firstDecision: number; finalTurn: number;
   /** For each decisive marker, the first trajectory index whose request shows it outside the root opening, or -1. */
@@ -123,7 +125,7 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   const observedAt: Record<string, number> = Object.fromEntries(record.curriculum.decisive.map(item => [item.marker, -1]));
   const children = new Set<string>();
-  let rootTurns = 0, evals = 0, edits = 0, functionEdits = 0, pageReads = 0, usesIterateOn = false, regexJudgment = false, firstDecision = -1, finalTurn = -1, inlineCalls = 0, namedChildCalls = 0;
+  let rootTurns = 0, evals = 0, edits = 0, functionEdits = 0, pageReads = 0, usesIterateOn = false, regexJudgment = false, transcriptDump = false, firstDecision = -1, finalTurn = -1, inlineCalls = 0, namedChildCalls = 0;
   trajectory.forEach((turn, index) => {
     const context = turn.context ?? [], name = callName(context), root = name === rootName;
     // Observations: anything a tool showed, in this call or a child the model delegated to, past the root opening.
@@ -143,6 +145,7 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
         evals++;
         if (/\.iterateOn\s*\(|\biterateOn\s*\(/.test(String(args.code ?? ''))) usesIterateOn = true;
         if (/\/[^/\n]*\w+\|\w+[^/\n]*\/[gimsuy]*\.test\s*\(/.test(String(args.code ?? ''))) regexJudgment = true;
+        if (/\b(?:for|while|forEach|map)\b[\s\S]{0,300}transcript\.entry\s*\(/.test(String(args.code ?? ''))) transcriptDump = true;
       }
       if (call.tool === 'edit_function') functionEdits++;
       if (call.tool === 'edit_function' || call.tool === 'edit_file' || call.tool === 'write_file') edits++;
@@ -153,7 +156,7 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
     }
   });
   if (firstDecision === -1) firstDecision = finalTurn;
-  return { rootTurns, evals, edits, functionEdits, pageReads, usesIterateOn, regexJudgment, inlineCalls, namedChildCalls, firstDecision, finalTurn, observedAt };
+  return { rootTurns, evals, edits, functionEdits, pageReads, usesIterateOn, regexJudgment, transcriptDump, inlineCalls, namedChildCalls, firstDecision, finalTurn, observedAt };
 }
 
 export type Admission = { id: string; program_id: string; admitted: boolean; reasons: string[];
@@ -186,6 +189,8 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     if (facts.regexJudgment) reasons.push('regex_judgment'); else notes.push('judged_directly');
   }
   if (c.inline === 'avoid' && facts.inlineCalls) reasons.push('gratuitous_inline');
+  // The history is searched for something specific, not read through.
+  if (facts.transcriptDump) reasons.push('transcript_dump');
   if (c.edits === 'required' && !facts.functionEdits) reasons.push('defect_not_repaired');
   if (c.edits === 'forbidden' && facts.functionEdits) reasons.push('unwarranted_edit');
   if (c.named === 'required' && !facts.namedChildCalls) reasons.push('named_helper_unused');
