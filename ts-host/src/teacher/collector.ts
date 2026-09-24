@@ -33,7 +33,9 @@ export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   prefix: { request_sha256: string; response: ModelTurn }[]; failure: Record<string, unknown>;
   student_provenance: Record<string, unknown> };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
-  transportRetries?: number; retryDelayMs?: number };
+  transportRetries?: number; retryDelayMs?: number;
+  /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusableRows). */
+  reuse?: string[] };
 export type TeacherRow = Record<string, unknown> & { task: { program_ir: ProgramRecord };
   provenance: Record<string, unknown>; outcome?: Record<string, unknown> };
 export type JobRunner = (item: IndexedRecord, expected: Record<string, unknown>, signal?: AbortSignal) => Promise<TeacherRow>;
@@ -143,16 +145,46 @@ function transportFailure(error: unknown): boolean {
 }
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Finished rows of earlier runs, by program digest. A row stands in for a job when the program, model, turn budget,
+ * collection role, and handoff match. The tool surface and system prompt may differ only when the row was migrated
+ * to the current finishing surface (scripts/inline-curriculum/migrate-status.mjs), since the row keeps the context
+ * it was collected with. Later files win over earlier ones.
+ */
+async function reusableRows(paths: string[]): Promise<Map<string, { row: TeacherRow; path: string }>> {
+  const rows = new Map<string, { row: TeacherRow; path: string }>();
+  for (const path of paths) for (const line of (await readFile(path, 'utf8')).split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const row = JSON.parse(line) as TeacherRow, digest = row.provenance?.program_ir_sha256;
+    if (typeof digest === 'string') rows.set(digest, { row, path });
+  }
+  return rows;
+}
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'max_turns', 'collection_role', 'handoff_sha256'];
+function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>): TeacherRow | undefined {
+  const { row, path } = found, provenance = row.provenance;
+  if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
+    return;
+  if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined) return;
+  return { ...row, provenance: { ...expected, reused_from: { path, provenance } } };
+}
+
 /** Queue incomplete jobs, publish each result atomically, and rebuild the ordered merge after every job. */
 export async function collectBatch(records: IndexedRecord[], config: CollectorConfig, runner: JobRunner,
   signal?: AbortSignal): Promise<{ completed: number; missing: number[] }> {
   if (!Number.isInteger(config.workers) || config.workers < 1) throw new RangeError('workers must be positive');
   await mkdir(config.jobs, { recursive: true });
   const pending: IndexedRecord[] = [];
+  const reusable = config.reuse?.length ? await reusableRows(config.reuse) : new Map();
+  let reused = 0;
   for (const item of records) {
-    const expected = expectedProvenance(item.record, config);
-    if (!await readMatching(join(config.jobs, `${jobKey(item)}.result.json`), item.record, expected)) pending.push(item);
+    const expected = expectedProvenance(item.record, config), path = join(config.jobs, `${jobKey(item)}.result.json`);
+    if (await readMatching(path, item.record, expected)) continue;
+    const found = reusable.get(expected.program_ir_sha256 as string), row = found && reusedRow(found, expected);
+    if (row) { await writeAtomic(path, JSON.stringify(row) + '\n'); reused++; continue; }
+    pending.push(item);
   }
+  if (reused) process.stderr.write(`reused ${reused} finished rows from ${config.reuse!.length} earlier result files\n`);
   await mergeCompleted(records, config);
   let cursor = 0;
   const worker = async () => {

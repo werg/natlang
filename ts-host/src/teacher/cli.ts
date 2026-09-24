@@ -29,7 +29,8 @@ async function main(): Promise<void> {
       'Options: --server URL --start N --limit N|--all --workers N --segment-turns N\n' +
       '         --segment-messages N --thinking-tokens N --reasoning-effort LEVEL\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
-      '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n');
+      '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
+      '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n');
     return;
   }
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),
     ...(handoffs ? { handoffs } : {}),
+    ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
     toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081',
     request: { thinking_budget_tokens: integer(flags, '--thinking-tokens', 256), top_p: 0.95, top_k: 20,

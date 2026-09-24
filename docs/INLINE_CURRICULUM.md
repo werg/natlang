@@ -210,6 +210,11 @@ node scripts/teacher-collector.mjs ../data/teacher/inline-curriculum/smoke-s1.ir
 node scripts/inline-curriculum/admit.mjs ../runs/ic.results.jsonl --ledger ../runs/ic.ledger.jsonl --admitted ../runs/ic.admitted.jsonl --show
 ```
 
+A collection resumes from its job directory. `--reuse A.results.jsonl,B.results.jsonl` also takes finished rows of
+earlier runs (other shards, pilots) for the same programs, matched by program digest, model, turn budget, and role;
+rows from before the finishing-status change count only after `migrate-status.mjs`. Reused rows record their origin in
+`provenance.reused_from`. Later files win, so list re-run checks last.
+
 `--shapes` scales every family by its weight; `--start` offsets the shape index so shards are disjoint.
 `build.mjs --split test` marks a build's synthetic cases as held out (use a seed no training build uses; sources keep
 their original splits). `select.mjs POOL.jsonl --out SHARD.jsonl [--split train|test] [--track authoring] [--no-balance]` picks the largest shard whose domain and slice

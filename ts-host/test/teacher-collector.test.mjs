@@ -69,6 +69,28 @@ test('provenance invalidates old jobs and partial results remain resumable', asy
   assert.equal(provenance.runtime, 'typescript-native');
 });
 
+test('finished rows of an earlier run stand in for the same programs at other indexes', async () => {
+  const earlier = await mkdtemp(join(tmpdir(), 'teacher-reuse-a-')), later = await mkdtemp(join(tmpdir(), 'teacher-reuse-b-'));
+  const old = [record('kept'), record('stale'), record('migrated')].map((value, index) => ({ index, record: value }));
+  await collectBatch(old, config(earlier), async (item, provenance) => row(item, provenance));
+  const rows = (await readFile(config(earlier).output, 'utf8')).trim().split('\n').map(JSON.parse);
+  rows[1].provenance.model = 'other-teacher';
+  rows[2].provenance.tool_surface_sha256 = 'surface-old'; rows[2].provenance.finish_surface_migration = 'return_result-status/1';
+  const source = join(earlier, 'earlier.jsonl');
+  await writeFile(source, rows.map(value => JSON.stringify(value)).join('\n') + '\n');
+  // The same programs sit at new indexes, next to a new one, in a later shard.
+  const shard = [record('new'), record('migrated'), record('stale'), record('kept')].map((value, index) => ({ index, record: value }));
+  const ran = [];
+  const options = { ...config(later), reuse: [source] };
+  await collectBatch(shard, options, async (item, provenance) => { ran.push(item.record.id); return row(item, provenance); });
+  assert.deepEqual(ran.sort(), ['new', 'stale'], 'a row from another model is collected again');
+  const merged = (await readFile(options.output, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(merged.map(value => value.task.program_ir.id), ['new', 'migrated', 'stale', 'kept']);
+  assert.equal(merged[3].provenance.reused_from.path, source);
+  assert.equal(merged[1].provenance.reused_from.provenance.tool_surface_sha256, 'surface-old');
+  await collectBatch(shard, options, async () => { throw new Error('reused rows were collected again'); });
+});
+
 test('native collector journals model replies and replays them after an interrupted request', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-turn-resume-'));
   let requests = 0, interrupted = false;
