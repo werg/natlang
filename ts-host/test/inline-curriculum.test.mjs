@@ -52,7 +52,14 @@ test('inline and edit expectations are enforced by admission', async () => {
   const direct = structuredClone(semantic);
   direct.curriculum.reference.root = [direct.curriculum.reference.root.at(-1)];
   const plain = await replayReference(direct, TOOLS_PROMPT);
-  assert.deepEqual(admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory }).reasons, ['inline_missing']);
+  const directVerdict = admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory });
+  assert.deepEqual([directVerdict.reasons, directVerdict.notes], [[], ['judged_directly']]);
+  // A keyword regex standing in for the judgment is rejected even when its answer happens to be right.
+  const keywords = structuredClone(semantic);
+  keywords.curriculum.reference.root = [['eval', { code: 'inbox().filter(t => /down|failing|broken/i.test(t.text)).map(t => t.id)' }],
+    keywords.curriculum.reference.root.at(-1)];
+  const regex = await replayReference(keywords, TOOLS_PROMPT);
+  assert.deepEqual(admitRow({ task: { program_ir: keywords }, outcome: regex.run.outcome, trajectory: regex.trajectory }).reasons, ['regex_judgment']);
   // A gratuitous inline child for a field test.
   const eager = structuredClone(crisp);
   eager.curriculum.reference.root = [['eval', { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
@@ -67,7 +74,7 @@ test('inline and edit expectations are enforced by admission', async () => {
   const edited = await replayReference(meddling, TOOLS_PROMPT);
   assert.deepEqual(admitRow({ task: { program_ir: meddling }, outcome: edited.run.outcome, trajectory: edited.trajectory }).reasons, ['unwarranted_edit']);
   const summary = coverage([admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory })]);
-  assert.equal(summary.rejections.inline_missing, 1);
+  assert.equal(summary.rejections.inline_missing, undefined);
 });
 
 function inboxAnswers(record) {

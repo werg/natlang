@@ -7,6 +7,22 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { admitRow, callName, coverage, openingLength } from '../../dist/teacher/curriculum.js';
 
+/**
+ * A hinted run trains as if unprompted: its hint paragraph is removed from every message of its trajectory and
+ * from the program, so the admitted row shows the behavior without the request for it.
+ */
+export function stripHint(row) {
+  const hint = row.task.program_ir.curriculum.hint;
+  if (!hint) return row;
+  const text = JSON.stringify(row);
+  const stripped = JSON.parse(text.split(JSON.stringify(`\n\n${hint}`).slice(1, -1)).join('').split(JSON.stringify(hint).slice(1, -1)).join(''));
+  stripped.task.program_ir.curriculum.hint_stripped = true;
+  return stripped;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) await main();
+
+async function main() {
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   ledger: { type: 'string' }, admitted: { type: 'string' }, show: { type: 'boolean', default: false } } });
 if (!positionals.length || !values.ledger) throw new Error('usage: admit.mjs RESULTS.jsonl... --ledger LEDGER.jsonl [--admitted OUT.jsonl] [--show]');
@@ -17,7 +33,7 @@ const curriculumRows = rows.filter(row => row.task?.program_ir?.curriculum);
 const admissions = curriculumRows.map(admitRow);
 await writeFile(values.ledger, admissions.map(item => JSON.stringify(item)).join('\n') + (admissions.length ? '\n' : ''));
 if (values.admitted) await writeFile(values.admitted, curriculumRows.filter((_, i) => admissions[i].admitted)
-  .map(row => JSON.stringify(row)).join('\n') + '\n');
+  .map(row => JSON.stringify(stripHint(row))).join('\n') + '\n');
 const summary = coverage(admissions);
 await writeFile(values.ledger.replace(/\.jsonl$/, '') + '.coverage.json', JSON.stringify(summary, null, 2) + '\n');
 
@@ -40,3 +56,4 @@ for (const [i, item] of admissions.entries()) {
 }
 console.log(`\n${summary.admitted}/${summary.total} admitted; rejections ${JSON.stringify(summary.rejections)}`);
 console.log(`slice shares ${JSON.stringify(summary.shares.slice)}; domain shares ${JSON.stringify(summary.shares.domain)}`);
+}

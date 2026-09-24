@@ -101,11 +101,18 @@ export { openingLength } from './opening.js';
 const isInline = (name: string) => name.startsWith('nl@');
 const TERMINAL = new Set(['return_result', 'blocked', 'failed']);
 /** A top-level `return` in an eval stages a result: a decision as much as return_result is. */
+/** Whether the root's eval at this turn failed: its result (shown in the root's next turn) kept nothing. */
+function evalFailed(trajectory: Turn[], index: number, rootName: string): boolean {
+  const next = trajectory.slice(index + 1).find(turn => callName(turn.context ?? []) === rootName);
+  return !!next && text(next.context.at(-1)?.content).includes('Nothing else from this eval was kept.');
+}
 const stagesResult = (code: string) => /^return\b/m.test(code) || /\breturn_result\s*\(/.test(code) ||
   /\b(?:blocked|failed)\s*\(/.test(code);
 
 export type RunFacts = {
   rootTurns: number; evals: number; edits: number; functionEdits: number; pageReads: number; usesIterateOn: boolean; inlineCalls: number; namedChildCalls: number;
+  /** An eval tested text against a regular expression with alternatives: a keyword stand-in for a judgment. */
+  regexJudgment: boolean;
   /** Index (in the flat trajectory) of the root's first result decision, and of its final turn. */
   firstDecision: number; finalTurn: number;
   /** For each decisive marker, the first trajectory index whose request shows it outside the root opening, or -1. */
@@ -117,7 +124,7 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
   const observedAt: Record<string, number> = Object.fromEntries(record.curriculum.decisive.map(item => [item.marker, -1]));
   const children = new Set<string>();
-  let rootTurns = 0, evals = 0, edits = 0, functionEdits = 0, pageReads = 0, usesIterateOn = false, firstDecision = -1, finalTurn = -1, inlineCalls = 0, namedChildCalls = 0;
+  let rootTurns = 0, evals = 0, edits = 0, functionEdits = 0, pageReads = 0, usesIterateOn = false, regexJudgment = false, firstDecision = -1, finalTurn = -1, inlineCalls = 0, namedChildCalls = 0;
   trajectory.forEach((turn, index) => {
     const context = turn.context ?? [], name = callName(context), root = name === rootName;
     // Observations: anything a tool showed, in this call or a child the model delegated to, past the root opening.
@@ -133,19 +140,26 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
     rootTurns++; finalTurn = index;
     for (const call of turn.assistant?.calls ?? []) {
       const args = (call.arguments ?? {}) as Record<string, unknown>;
-      if (call.tool === 'eval') { evals++; if (/\.iterateOn\s*\(|\biterateOn\s*\(/.test(String(args.code ?? ''))) usesIterateOn = true; }
+      if (call.tool === 'eval') {
+        evals++;
+        if (/\.iterateOn\s*\(|\biterateOn\s*\(/.test(String(args.code ?? ''))) usesIterateOn = true;
+        if (/\/[^/\n]*\w+\|\w+[^/\n]*\/[gimsuy]*\.test\s*\(/.test(String(args.code ?? ''))) regexJudgment = true;
+      }
       if (call.tool === 'edit_function') functionEdits++;
       if (call.tool === 'edit_function' || call.tool === 'edit_file' || call.tool === 'write_file') edits++;
       if (call.tool === 'read_page') pageReads++;
-      if (firstDecision === -1 && (TERMINAL.has(call.tool) || (call.tool === 'eval' && stagesResult(String(args.code ?? '')))))
+      if (firstDecision === -1 && (TERMINAL.has(call.tool) || (call.tool === 'eval' && stagesResult(String(args.code ?? '')) &&
+          !evalFailed(trajectory, index, rootName))))
         firstDecision = index;
     }
   });
   if (firstDecision === -1) firstDecision = finalTurn;
-  return { rootTurns, evals, edits, functionEdits, pageReads, usesIterateOn, inlineCalls, namedChildCalls, firstDecision, finalTurn, observedAt };
+  return { rootTurns, evals, edits, functionEdits, pageReads, usesIterateOn, regexJudgment, inlineCalls, namedChildCalls, firstDecision, finalTurn, observedAt };
 }
 
-export type Admission = { id: string; program_id: string; admitted: boolean; reasons: string[]; facts: RunFacts;
+export type Admission = { id: string; program_id: string; admitted: boolean; reasons: string[];
+  /** Observations that do not reject a row, such as a correct answer judged directly rather than inline. */
+  notes: string[]; facts: RunFacts;
   family: string; slice: Slice; domain: Domain; mode: string; inline: string; pair_group: string | null };
 
 /**
@@ -167,13 +181,17 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     if (at === -1) reasons.push(`missing_observation:${item.marker}`);
     else if (c.mode === 'followup' && at > facts.firstDecision) reasons.push(`premature_choice:${item.marker}`);
   }
-  if (c.inline === 'required' && !facts.inlineCalls) reasons.push('inline_missing');
+  // A correct answer judged directly is a fine sample; a keyword or regex stand-in for a judgment is not.
+  const notes: string[] = [];
+  if (c.inline === 'required' && !facts.inlineCalls) {
+    if (facts.regexJudgment) reasons.push('regex_judgment'); else notes.push('judged_directly');
+  }
   if (c.inline === 'avoid' && facts.inlineCalls) reasons.push('gratuitous_inline');
   if (c.edits === 'required' && !facts.functionEdits) reasons.push('defect_not_repaired');
   if (c.edits === 'forbidden' && facts.functionEdits) reasons.push('unwarranted_edit');
   if (c.named === 'required' && !facts.namedChildCalls) reasons.push('named_helper_unused');
   if (c.iterate === 'required' && !facts.usesIterateOn) reasons.push('iterate_missing');
-  return { id: String(row.id ?? record.id), program_id: record.id, admitted: !reasons.length, reasons, facts,
+  return { id: String(row.id ?? record.id), program_id: record.id, admitted: !reasons.length, reasons, notes, facts,
     family: c.family, slice: c.slice, domain: c.domain, mode: c.mode, inline: c.inline, pair_group: c.pair_group };
 }
 

@@ -52,13 +52,24 @@ collector accepted its contract **and**:
 - every decisive marker was visible to the model (in a tool result, or in a child it delegated to) outside the
   root's opening, and, for follow-up cases, before the root's first result decision (a `return_result`,
   `blocked`, `failed`, or a staged eval `return`);
-- `inline: required` saw an inline child, and `inline: avoid` saw none;
+- `inline: avoid` saw no inline child. For `inline: required`, a correct answer judged directly is admitted with the
+  note `judged_directly`; an eval that tests text against a keyword regular expression instead is rejected
+  (`regex_judgment`);
 - `edits: required` saw an `edit_function`, and `edits: forbidden` saw none;
 - `named: required` saw a named child call, and `iterate: required` an eval that runs `iterateOn`.
 
 Rejection reasons: `wrong_return`, `fabricated_result` (a value where the honest outcome is a blocker),
 `incomplete_trajectory`, `missing_observation:<marker>`, `premature_choice:<marker>`, `inline_missing`,
-`gratuitous_inline`, `defect_not_repaired`, `unwarranted_edit`, `named_helper_unused`, `iterate_missing`. The number of evals is never a criterion.
+`gratuitous_inline`, `regex_judgment`, `defect_not_repaired`, `unwarranted_edit`, `named_helper_unused`, `iterate_missing`.
+An eval that failed (nothing kept) does not count as a result decision, even if it contained a `return`.
+
+### Hinted twins and preference pairs
+
+Every `iterate: required` case is also built as a twin whose instructions end with an explicit `iterateOn` hint
+(`build.mjs`, on by default). Admission strips the hint from an admitted twin's trajectory and program, so the row
+trains `iterateOn` unprompted. `pairs.mjs` pairs an admitted twin with the unhinted run of the same case when that
+run was rejected for `iterate_missing`: at their first root decision with an identical request, the twin's
+decision is chosen and the unhinted one rejected (the same-request rule of `build-preference-pairs.mjs`). The number of evals is never a criterion.
 The collector itself now requires a blocked case to end with the model's own `blocked` or `failed` call;
 running out of turns also quiesces a call and was previously accepted.
 

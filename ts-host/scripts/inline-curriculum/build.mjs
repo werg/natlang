@@ -12,11 +12,24 @@ import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { FAMILIES } from './families.mjs';
 
+export const ITERATE_HINT = 'Hint: step this with iterateOn. Write a step function (it may be an nl function) from the current state to the next, and run it with .iterateOn(initial).until(done), rather than a loop with a guessed bound.';
+function hinted(record) {
+  const twin = structuredClone(record);
+  twin.id = `${record.id}:hinted`;
+  twin.source_ids = [twin.id];
+  const root = twin.semantics.root;
+  twin.semantics.files[root] = twin.semantics.files[root].replace(/\n$/, '') + `\n\n${ITERATE_HINT}\n`;
+  twin.curriculum.hint = ITERATE_HINT;
+  twin.curriculum.hinted_of = record.id;
+  if (twin.curriculum.pair_group) twin.curriculum.pair_group = `${twin.curriculum.pair_group}:hinted`;
+  return twin;
+}
+
 const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
   start: { type: 'string', default: '0' },
   families: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
   // Held-out generated problems: --split test marks this build's synthetic cases as test (use a seed no training build uses).
-  split: { type: 'string', default: 'train' } } });
+  split: { type: 'string', default: 'train' }, hints: { type: 'boolean', default: true } } });
 if (!values.out) throw new Error('--out FILE is required');
 const seed = Number(values.seed), shapes = Number(values.shapes), start = Number(values.start);
 const selected = values.families ? values.families.split(',') : Object.keys(FAMILIES);
@@ -44,6 +57,10 @@ for (const name of selected) {
       throw new Error(`duplicate case id ${record.id}`);
     }
     records.push(record);
+    // An iterateOn case also gets a twin whose instructions end with an explicit hint. Admission strips the
+    // hint from the twin's trajectory, so it trains iterateOn without being asked; with the unhinted run it
+    // makes a same-request preference pair (pairs.mjs).
+    if (values.hints && record.curriculum.iterate === 'required' && record.curriculum.track !== 'authoring') records.push(hinted(record));
   }
 }
 
