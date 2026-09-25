@@ -109,6 +109,9 @@ export function page_count(): number { return ${Math.ceil(rows.length / 8)}; }
  * cold start runs past the progress review (which should let it continue), and a broken heater makes the goal
  * unreachable (the review stops it, and the honest outcome is blocked).
  */
+export const GREENHOUSE_INSTRUCTIONS = 'Bring the greenhouse to between 20 and 22 °C and keep it there until ' +
+  'greenhouse.certificate() issues a certificate (three readings in a row in that band). Repeat one control step as ' +
+  'often as it takes: heater on below 20.5 °C, vent on above 21.5 °C, then take a reading. Return the certificate.';
 export function greenhouseControl(seed, index) {
   const rng = new Random(seed, `greenhouse:${index}`);
   const certificate = `stable-${createHash('sha256').update(`${seed}:${index}:greenhouse`).digest('hex').slice(0, 8)}`;
@@ -190,7 +193,7 @@ return final.certified;`), returnCall(certificate)];
       minimumSequence: ['read the greenhouse', 'step a controller with iterateOn until the certificate appears', spec.broken ? 'report the unreachable goal' : 'return the certificate'],
       reference: { root: reference, children: [{ match: 'An iterative process', value: judge }] },
       root: { name: 'stabilise_greenhouse', args: {}, returns: 'string',
-        instructions: 'Bring the greenhouse to between 20 and 22 °C and keep it there until greenhouse.certificate() issues a certificate (three readings in a row in that band), by setting its heater and vent between readings. Return the certificate.' },
+        instructions: GREENHOUSE_INSTRUCTIONS },
       files: { 'stabilise_greenhouse/greenhouse.ts': module },
       inputs: {}, expected: spec.broken ? null : certificate, ...(spec.broken ? { operation: 'blocked' } : {}) });
   });
