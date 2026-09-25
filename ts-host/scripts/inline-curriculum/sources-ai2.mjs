@@ -137,7 +137,7 @@ export function check(ids: string[]): { ok: boolean, certificate: string | null 
       minimumSequence: ['read the fact store', 'find the facts that chain to the hypothesis', 'check them, or conclude a needed fact is missing'],
       reference: { root: reference },
       root: { name: 'support_hypothesis', args: { hypothesis: 'string' }, returns: 'Support',
-        instructions: 'Find the facts in the store (facts) that together support hypothesis: each fact needed for a short chain of reasoning to it, and no more. Check your selection with premises.check(ids); if it accepts, return supported true with its certificate. If the store lacks a fact the reasoning needs, return supported false with a null certificate.' },
+        instructions: 'Find the facts in the store (facts) that together support hypothesis: each fact needed for a short chain of reasoning to it, and no more. Check your selection with premises.check(ids); if it accepts, return supported true with its certificate. When no selection from the store supports it, that is the answer: return it with status success, supported false and a null certificate.' },
       files: { 'support_hypothesis/facts.ts': factStore(facts.map(({ id, text }) => ({ id, text })), 'Science facts, most of them unrelated to any one question.'),
         'support_hypothesis/premises.ts': checker,
         'types.ts': 'export type Support = { supported: boolean, certificate: string | null };\n' },
