@@ -173,7 +173,9 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'max_turns', 'collection_role', 'handoff_sha256'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'handoff_sha256'];
+/** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
+const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
   surfaces: string[] = []): TeacherRow | undefined {
   const { row } = found;
@@ -182,6 +184,12 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   const provenance = earlier?.provenance ?? row.provenance, path = earlier?.path ?? found.path;
   if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
     return;
+  // Under another turn limit a run sees the same requests as long as no call came near either limit: the model is
+  // told how many turns are left from TURN_NOTICE turns before the end. All turns, child calls' too, are counted.
+  if (canonical(provenance.max_turns) !== canonical(expected.max_turns)) {
+    const limits = [provenance.max_turns, expected.max_turns].map(Number);
+    if (!limits.every(Number.isFinite) || ((row.trajectory ?? []) as unknown[]).length > Math.min(...limits) - TURN_NOTICE) return;
+  }
   if (provenance.tool_surface_sha256 !== expected.tool_surface_sha256 && provenance.finish_surface_migration === undefined &&
       !surfaces.includes(String(provenance.tool_surface_sha256))) return;
   // A row stands in for a new run only if that run would have seen the same requests: it never rolled over into a

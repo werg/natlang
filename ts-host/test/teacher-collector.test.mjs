@@ -127,6 +127,17 @@ test('a later row that does not qualify never hides an earlier one, and declared
   assert.deepEqual(ran, [], 'declared surface rows are reused, and the later disqualified row does not mask one');
 });
 
+test('a row collected under another turn limit is reused only if it stayed clear of both limits', async () => {
+  const earlier = await mkdtemp(join(tmpdir(), 'teacher-turns-a-')), later = await mkdtemp(join(tmpdir(), 'teacher-turns-b-'));
+  const shard = [record('short'), record('long')].map((value, index) => ({ index, record: value }));
+  await collectBatch(shard, { ...config(earlier), maxTurns: 30 }, async (item, provenance) =>
+    ({ ...row(item, provenance), trajectory: Array.from({ length: item.index ? 17 : 16 }, () => ({ phase: 'action' })) }));
+  const ran = [];
+  await collectBatch(shard, { ...config(later), maxTurns: 20, reuse: [config(earlier).output] },
+    async (item, provenance) => { ran.push(item.record.id); return row(item, provenance); });
+  assert.deepEqual(ran, ['long'], 'a run 4 turns from the new limit would have been told the turns left');
+});
+
 test('native collector journals model replies and replays them after an interrupted request', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-turn-resume-'));
   let requests = 0, interrupted = false;
