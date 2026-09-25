@@ -257,8 +257,8 @@ field reaches training input.
   verdict was truthy); project source gets an `nl-not-called` diagnostic instead.
 - External modules are services with declarations (see above), and `read_function` reads importable packages
   by their type declarations. An eval declares `let x: T;` without a value as not kept, instead of letting a later
-  eval fail on the name. An inline `nl` saved without parameters and not called where it was created takes its
-  parameters from its first call (in train3, `const fits = nl<boolean>`...`` called in a later eval failed with
+  eval fail on the name. An inline `nl` saved without parameters and not called where it was created takes
+  whatever arguments each call passes (in train3, `const fits = nl<boolean>`...`` called in a later eval failed with
   "expects 0 arguments, got 1" until the run gave up).
 - A staged result is shown in full when it is small portable data. A live run saw `Staged { reserved: …, … }`,
   retyped the value into `return_result`, and invented the reservation ids it had never been shown.

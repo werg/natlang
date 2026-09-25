@@ -501,7 +501,7 @@ test('a let declared without a value is reported as not kept, not left to fail a
   assert.deepEqual(Object.keys(lam.let), ['later']);
 });
 
-test('a saved inline function without parameters takes them from its first call, in a later eval too', async () => {
+test('a saved inline function without parameters takes whatever each call passes, in a later eval too', async () => {
   const seen = [];
   const { session } = open({ type: '() => number', instructions: 'Collect.' }, { agent: child => {
     seen.push(child.lam.args); child.lam.return = true; } });
@@ -509,7 +509,7 @@ test('a saved inline function without parameters takes them from its first call,
   const first = await session.applyAsync('eval', { code: 'const v = await fits({ id: "A1", ask: "2,500 dollars" }); v' });
   assert.equal(first.kind, 'ok', first.text); assert.deepEqual(seen, [{ input: { id: 'A1', ask: '2,500 dollars' } }]);
   const again = await session.applyAsync('eval', { code: 'const w = await fits(1, 2); w' });
-  assert.match(again.text, /expects 1 arguments, got 2/, 'the first call fixed the parameters');
+  assert.equal(again.kind, 'ok', again.text); assert.deepEqual(seen[1], { input: 1, input2: 2 }, 'each call binds its own arguments');
   await session.applyAsync('eval', { code: 'const pick = nl<number>`Pick a number.`; const n = await pick(); n' });
   const extra = await session.applyAsync('eval', { code: 'const m = await pick(3); m' });
   assert.match(extra.text, /expects 0 arguments, got 1\. It takes no arguments; to pass some, create it again with a signature/);

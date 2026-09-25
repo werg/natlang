@@ -20,7 +20,7 @@ export type CallableDefinition = {
   name: string;
   body: string;
   params: { name: string; type: string; optional?: boolean }[];
-  /** Parameters still to be fixed by the first call (an inline function saved without any; see InlineLambdaPlan). */
+  /** Takes whatever each call passes (an inline function saved without parameters; see InlineLambdaPlan). */
   openParameters?: boolean;
   returns: string;
   types: Record<string, string>;
@@ -98,11 +98,9 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
     }
     if (handle instanceof Folder || handle instanceof FolderHandle) inputs = inputs.slice(1);
   }
-  if (definition.openParameters) {
-    definition.openParameters = false;
-    if (!definition.params.length) definition.params = inputs.map((input, index) =>
-      ({ name: index ? `input${index + 1}` : 'input', type: inferValueType(input) }));
-  }
+  // An open inline function takes whatever each call passes, typed from its values (a splat).
+  if (definition.openParameters) definition = { ...definition, params: inputs.map((input, index) =>
+    ({ name: index ? `input${index + 1}` : 'input', type: inferValueType(input) })) };
   const required = definition.params.filter(parameter => !parameter.optional).length;
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();

@@ -34,7 +34,7 @@ export type InlineLambdaPlan = {
   parameters: { name: string; type: TargetDescriptor }[];
   /**
    * Saved without parameters and never called where it was created (`const judge = nl<R>`...``, called in a later
-   * eval): its first call fixes the parameters from the values it is given.
+   * eval): each call passes whatever arguments it has, typed from their values.
    */
   openParameters?: boolean;
   returns: TargetDescriptor;
