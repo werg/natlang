@@ -492,3 +492,18 @@ test('model seeds follow the derivation vectors', async () => {
   await runtime.run(lambda({ type: '() => boolean', instructions: 'Return true.' }));
   assert.deepEqual(seen, [deriveSeed(43, 'seed-run', 1, 'model-turn', 0), deriveSeed(43, 'seed-run', 1, 'model-turn', 1)]);
 });
+
+test('a let declared without a value is reported as not kept, not left to fail a later eval', async () => {
+  const { lam, session } = open({ type: '() => number', instructions: 'Collect.' });
+  const declared = await session.applyAsync('eval', { code: 'let budget: number;\nconst f = (x: number) => x; let later: number; later = f(4);' });
+  assert.match(declared.text, /Not kept: budget has no value.*\(let budget = …\)/);
+  assert.doesNotMatch(declared.text, /Not kept: .*(f|later)\b/);
+  assert.deepEqual(Object.keys(lam.let), ['later']);
+});
+
+test('calling a saved inline function created without parameters says how to give it some', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Collect.' });
+  await session.applyAsync('eval', { code: 'const fits = nl<{ ok: boolean }>`Does the application fit?`;' });
+  const called = await session.applyAsync('eval', { code: 'const v = await fits({ ask: 3 }); v' });
+  assert.match(called.text, /expects 0 arguments, got 1\. It was created with no parameters: .*nl<\(application: Application\) => boolean>/);
+});

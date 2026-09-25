@@ -100,7 +100,11 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
-      `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
+      `${required} to ${definition.params.length}`} arguments, got ${inputs.length}` +
+      // An inline function takes its parameters from its signature or from calls in the eval that created it.
+      (definition.name.startsWith('nl@') && !definition.params.length ? '. It was created with no parameters: ' +
+        'nothing in the eval that created it called it, and its type names none. Create it again with them, ' +
+        'e.g. nl<(application: Application) => boolean>`...`, or call it in the eval that creates it' : ''));
   }
   const node = definitionNode(definition, inputs, options);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }

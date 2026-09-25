@@ -38,7 +38,7 @@ const progress = await world.score();
     evidence: { world: [task.description], retrieved: [], background: [`source: ScienceWorld ${SOURCES.scienceworld.revision} ${task.task} variation ${task.variation}`, `gold path: ${task.gold.length} commands`] },
     minimumSequence: ['look around', 'find and use what the task needs', 'reach a score of 100'],
     reference: { root: reference },
-    root: { name: 'science_task', args: {}, returns: 'string', instructions: `${task.description}\n\n${API} Work until world.score() shows a score of 100, then reply with a one-sentence summary.` },
+    root: { name: 'science_task', args: {}, returns: 'string', instructions: `${task.description}\n\n${API} One eval can carry out several commands in a row when you know what they should be; stop at the first one whose observation is not what you expected. Work until world.score() shows a score of 100, then reply with a one-sentence summary.` },
     inputs: {}, expected: null })].map(record => ({ ...record, semantics: { ...record.semantics,
       world: { kind: 'scienceworld', task: task.task, variation: task.variation, simplifications: task.simplifications } } }));
 }
@@ -62,6 +62,6 @@ export function alfworldTask(seed, index) {
 for (const command of ${JSON.stringify(game.commands)}) log.push(command + ' -> ' + (await world.act(command)).observation.slice(0, 80));
 ({ progress: await world.score(), last: log.slice(-2) })`), returnCall('The task is complete.')] },
     root: { name: 'household_task', args: {}, returns: 'string',
-      instructions: `Your task is to: ${game.task}\n\nworld is a text simulation of a household. await world.look() describes where you are; await world.act(command) carries out one command and returns { observation, score, done }; await world.actions() lists the commands possible right now (for example "go to drawer 1", "open drawer 1", "take mug 1 from drawer 1", "put mug 1 in/on shelf 2", "use desklamp 1"); await world.score() reports whether the task is done (score 100). Work until the score is 100, then reply with a one-sentence summary.` },
+      instructions: `Your task is to: ${game.task}\n\nworld is a text simulation of a household. await world.look() describes where you are; await world.act(command) carries out one command and returns { observation, score, done }; await world.actions() lists the commands possible right now (for example "go to drawer 1", "open drawer 1", "take mug 1 from drawer 1", "put mug 1 in/on shelf 2", "use desklamp 1"); await world.score() reports whether the task is done (score 100). One eval can carry out several commands in a row when you know what they should be; stop at the first one whose observation is not what you expected. Work until the score is 100, then reply with a one-sentence summary.` },
     inputs: {}, expected: null })].map(record => ({ ...record, semantics: { ...record.semantics, world: { kind: 'alfworld', task: game.game } } }));
 }

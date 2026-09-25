@@ -905,6 +905,11 @@ export class NativeSession {
         stagedMessage(functionResult) : notResult;
       const stored = changed.map(([name, , value]) => `local ${name} = ${oneLine(value, name)}`);
       const storedStatus = stored.length ? `\nStored ${stored.join('; ')}.` : '';
+      // A local without a value cannot be kept, so say so here rather than let a later eval fail on its name.
+      const unset = compiled.bindings.filter(binding => binding.mutable && !binding.initializer).map(binding => binding.name)
+        .filter(name => output.bindings[name] === undefined && !Object.hasOwn(this.lam.let, name));
+      const unsetStatus = unset.length ? `\nNot kept: ${unset.join(', ')} ${unset.length > 1 ? 'have' : 'has'} no value, and a ` +
+        `local without a value is not kept; declare it with one (let ${unset[0]} = …).` : '';
       const logStatus = evaluated.logs?.length ? `console:\n${this.show(evaluated.logs.join('\n'))}\n` : '';
       // return_result in eval stages its value like a top-level return: the value was computed, so the model
       // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
@@ -916,10 +921,10 @@ export class NativeSession {
           `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
         this.lam.return = staged;
         this.failureDebug = undefined;
-        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${stagedMessage(staged)}`, value: staged };
+        return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged)}`, value: staged };
       }
       if (requested) {
-        const shown = logStatus + rendered + storedStatus;
+        const shown = logStatus + rendered + storedStatus + unsetStatus;
         try {
           const done = this.scopeTool(requested.tool, requested.args);
           return { ...done, text: `${shown}\n${done.text}` };
@@ -929,7 +934,7 @@ export class NativeSession {
           return { ...refused, text: `${shown}\n${requested.tool}: ${refused.text}` };
         }
       }
-      return { kind: 'ok', text: logStatus + rendered + storedStatus + status, value: (output.result ?? null) as Value,
+      return { kind: 'ok', text: logStatus + rendered + storedStatus + unsetStatus + status, value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
