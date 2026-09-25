@@ -110,6 +110,15 @@ eval exposes them as named, read-only bindings. Every service call is traced as
 an effect. Effects are not rolled back when a call fails; applications that must
 not repeat an effect record operation identities and reconcile unknown outcomes.
 
+A service may come with a declaration: the TypeScript declaration of its members,
+with their doc comments, as a declaration file would give them. The model is
+shown it as `declare namespace name { … }` and can read it with `read_function`,
+but the implementation runs in the host and is neither readable nor editable. A
+task gives external modules (a board, a simulated world, a store, a checker) this
+way, so that only code the program owns can be changed. Importable packages are
+external in the same way: `read_function("pkg")` lists a package's exports from
+its type declarations, and `read_function("pkg.name")` shows one with its docs.
+
 ## Model surface
 
 A natural-language invocation offers the model these tools:
@@ -121,7 +130,9 @@ A natural-language invocation offers the model these tools:
   `value`, of the declared type; `blocked` stops because required information is
   absent, and `failed` because the instructions require an invalid or contradictory
   operation, each with a `reason` sentence instead of a value.
-- `read_function`, `edit_function`, `diff_functions`: inspect and edit callable items.
+- `read_function`, `edit_function`, `diff_functions`: inspect and edit callable items;
+  `read_function` also reads the declaration of a service or an importable package,
+  which cannot be edited.
 
 A directory reducer additionally receives `list_files`, `search_files`,
 `read_file`, `write_file`, `edit_file`, and `diff_files`, and the conversation

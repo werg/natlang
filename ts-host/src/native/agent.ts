@@ -317,9 +317,13 @@ export class NativeToolAgent {
           value: session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {},
           reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
     ];
-    if (Object.keys(session.lam.codebase).length) tools.splice(2, 0,
-      tool('read_function', 'Read the source of an imported function by its listed name.',
-        { name: { type: 'string' } }, ['name']),
+    const ownCode = Object.keys(session.lam.codebase).length > 0;
+    const readFunction = tool('read_function', 'Read the source of an imported function by its listed name, or the declaration of an external service or an importable package ("pkg" lists its exports, "pkg.name" shows one).',
+      { name: { type: 'string' } }, ['name']);
+    const external = Object.keys(session.runtime.declarations).length > 0 || !!session.runtime.environment.declarationOf;
+    if (!ownCode && external) tools.splice(2, 0, readFunction);
+    if (ownCode) tools.splice(2, 0,
+      readFunction,
       tool('edit_function', 'Replace one exact or uniquely fuzzy span in an imported function source. The function is validated before the edit becomes live.',
         { name: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['name', 'find', 'replace_with']),
@@ -444,7 +448,8 @@ export class NativeToolAgent {
     };
     section('// Functions you can call:', this.callableDeclarations(session));
     section('// Provided by the host:', [
-      ...Object.entries(session.runtime.services).map(([name, service]) =>
+      ...Object.entries(session.runtime.services).map(([name, service]) => session.runtime.declarations[name] ?
+        `${session.runtime.declarations[name]}  // external service; its calls are recorded as effects` :
         `declare const ${name}: { ${Object.keys(service as object).map(key => `${key}: Function`).join('; ')} };  // service; its calls are recorded as effects`),
       ...(lam.projectTransaction ? [...FOLDER_DECLARATIONS, 'declare const folder: Folder;  // your working copy of the input folder'] : []),
     ]);

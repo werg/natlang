@@ -9,6 +9,7 @@ import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
+import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
@@ -484,10 +485,18 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     (services[service] ??= {})[method] = (...args: unknown[]) => fn(args);
   }
   // An interactive world in its own process becomes the service `world`; the task is done when its score reaches 100.
+  // External modules (semantics.services: name -> TypeScript source) run in the host as services; the model sees
+  // their declarations only (native/external.ts).
+  const declarations: Record<string, string> = {};
+  for (const [name, source] of Object.entries((record.semantics as { services?: Record<string, string> }).services ?? {})) {
+    const external = externalModule(name, source);
+    services[name] = external.exports as Record<string, (...args: unknown[]) => unknown>;
+    declarations[name] = external.declaration;
+  }
   const worldSpec = (record.semantics as { world?: WorldSpec }).world;
   const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
   if (world) services.world = world.service();
-  const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services,
+  const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     seedPolicy: { mode: 'derived', root: options.rootSeed }, runId: options.runId, signal: options.signal });
   try {
     const result = await runtime.run(root), actual = dump(result.value);

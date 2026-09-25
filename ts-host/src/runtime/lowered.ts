@@ -32,6 +32,7 @@ export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, 
   return { id: plan.definitionId, name: `nl@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
     body: plan.instructions,
     params: plan.parameters.map(parameter => ({ name: parameter.name, type: targetType(parameter.type) })),
+    ...(plan.openParameters ? { openParameters: true } : {}),
     returns: targetType(plan.returns), types, codebase, subtype: 'function',
     revision: plan.inheritedCodebaseRevision || undefined, source: plan.sourceSpan.file };
 }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createContext, runInContext, runInThisContext, type Context } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { WorkspaceModules, findPackageWorkspace } from './workspace-modules.js';
+import { WorkspaceModules, findPackageWorkspace, packageDeclaration } from './workspace-modules.js';
 import { packageNameFromSpecifier } from './package-specifier.js';
 import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type EvalEnvironment, type EvalRequest,
   type EvalResult, type HostEvent } from './native/evaluator.js';
@@ -175,6 +175,10 @@ export class TypeScriptEnvironment implements EvalEnvironment {
     const write = consoleWriter(logs, value => { try { return JSON.stringify(portable(value)); } catch { return String(value); } });
     context.console = Object.freeze({ log: write, info: write, warn: write, error: write });
     return logs;
+  }
+
+  declarationOf(name: string): string | undefined {
+    return this.modules && this.scopeCapabilities.allowModules ? packageDeclaration(this.modules.workspace, name) : undefined;
   }
 
   private readonly importModule = async (specifier: string) => {

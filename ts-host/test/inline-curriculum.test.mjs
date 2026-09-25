@@ -83,9 +83,10 @@ function inboxAnswers(record) {
   return tickets.map(ticket => ({ match: JSON.stringify(ticket.id), value: ticket.priority >= 3 }));
 }
 
-test('the function listing shows TypeScript and natlang doc comments', async () => {
+test('the function listing shows TypeScript and natlang doc comments, and an external service by its declaration', async () => {
   const [record] = FAMILIES.child_sufficiency.build(7, 0);
+  assert.deepEqual(Object.keys(record.semantics.services), ['records'], 'the records store is external, not a file');
   const opening = await renderOpening(record, TOOLS_PROMPT);
-  assert.match(opening, /\/\*\* The first-line records for a refund claim\. \*\/\\n\s*function basic\(/);
+  assert.match(opening, /declare namespace records \{\\n {2}\/\*\* The first-line records for a refund claim\. \*\/\\n {2}export function basic\(/);
   assert.match(opening, /\/\*\* Judge whether evidence settles a refund claim, and which way\. \*\/\\ndeclare function assess\(/);
 });

@@ -10,6 +10,13 @@ well, or decline to, and whose later choices depend on observations the opening 
 readable with `read_function`, and reading them is a legitimate, desirable way to learn how things work. If reading
 a module's source would trivialize a case, the case is poorly posed and is redesigned; the read is never penalized.
 
+**Only the program's own code is editable.** A module that stands for something outside the program (a board, a
+world, a store, a checker) is an external service (`semantics.services`: name to TypeScript source, lib.mjs
+`externalize`): the model reads its declaration and calls it, but cannot change it. Editing a board so it stops
+refusing a move was the whole of every `fabricated_result` rejection in train3. Modules a program owns stay files: a
+helper it was given, code it is asked to repair (`line_total`), and the scoped modules of `scoped_module_discovery`.
+`externalize.mjs` applies this to a built shard.
+
 ## Case format
 
 A case is an ordinary program IR record plus a `curriculum` block (`natlang.inline_curriculum/1`). The collector
@@ -248,6 +255,11 @@ field reaches training input.
   checks no longer need `nl<T>`. Before, 17 of 20 natural unannotated uses were rejected.
 - In eval, `await nl`...`` without a call runs the judgment (a live run awaited the function itself, so every
   verdict was truthy); project source gets an `nl-not-called` diagnostic instead.
+- External modules are services with declarations (see above), and `read_function` reads importable packages
+  by their type declarations. An eval declares `let x: T;` without a value as not kept, instead of letting a later
+  eval fail on the name. An inline `nl` saved without parameters and not called where it was created takes its
+  parameters from its first call (in train3, `const fits = nl<boolean>`...`` called in a later eval failed with
+  "expects 0 arguments, got 1" until the run gave up).
 - A staged result is shown in full when it is small portable data. A live run saw `Staged { reserved: …, … }`,
   retyped the value into `return_result`, and invented the reservation ids it had never been shown.
 

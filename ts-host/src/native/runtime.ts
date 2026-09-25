@@ -45,6 +45,11 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   manifest?: Record<string, unknown>;
   /** Host services, injected into eval as named bindings; their calls are recorded as effects (see effects.ts). */
   services?: Record<string, object>;
+  /**
+   * Declarations of external services by name (see external.ts): what the model is shown of them, and what
+   * read_function returns. Their implementations are not part of the program and cannot be read or edited.
+   */
+  declarations?: Record<string, string>;
   sharedEpisodeBudget?: { limit?: number; used: number };
   seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } };
 
@@ -104,6 +109,37 @@ function liveTypeText(value: object): string {
   return tag !== 'Object' ? `Live<${JSON.stringify(tag)}, "tag", ${JSON.stringify(tag)}>` :
     `Live<${JSON.stringify(label)}, "class", ${JSON.stringify(label)}>`;
 }
+/** The scope type of a portable value, as a local holding it is declared. */
+export function inferValueType(value: unknown): string {
+  if (isLive(value)) return liveTypeText(value as object);
+  if (value instanceof Folder || value instanceof FolderHandle) return 'Folder';
+  if (value instanceof FileHandle) return 'FileHandle';
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number' && Number.isFinite(value)) return 'number';
+  if (typeof value === 'string') return 'string';
+  if (Array.isArray(value)) {
+    // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
+    if (!value.length) return 'unknown[]';
+    if (containsLive(value)) return 'Live<"array", "tag", "Array">';
+    const types = [...new Set(value.map(item => inferValueType(item)))];
+    return types.length === 1 ? `(${types[0]})[]` : `(${types.join(' | ')})[]`;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (!entries.length) return 'Record<string, unknown>';
+    if (containsLive(value)) return 'Live<"object", "any", "">';
+    // An object keyed by data (ids, emails, names) is a dictionary: Record<string, T>, so later evals can add keys.
+    // Only a few identifier keys read as a record with fixed fields.
+    if (entries.length > 12 || entries.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key))) {
+      const types = [...new Set(entries.map(([, item]) => inferValueType(item)))];
+      return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
+    }
+    return `{ ${entries.map(([key, item]) => `${key}: ${inferValueType(item)}`).join(', ')} }`;
+  }
+  throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);
+}
+
 /** Rebuild plain data in this realm (eval values come from the sandbox realm); live values keep identity. */
 function hostCopy(value: unknown, seen = new Map<object, unknown>()): unknown {
   if (!value || typeof value !== 'object' || isLive(value) || isHandle(value)) return value;
@@ -177,6 +213,7 @@ export class NativeRuntime {
   readonly frame?: Frame;
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
+  readonly declarations: Record<string, string>;
   currentCallId?: string;
   private root?: LambdaNode;
   private lastObserved?: unknown;
@@ -203,6 +240,7 @@ export class NativeRuntime {
     const services = options.services ?? {};
     this.services = isRecording(services) ? services : recordingServices(services, event =>
       this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }));
+    this.declarations = options.declarations ?? {};
     this.agent = options.agent;
     this.environment = options.environment;
     this.signal = options.signal;
@@ -614,7 +652,22 @@ export class NativeSession {
       return { kind: 'ok', text: JSON.stringify(changed, null, 2), value: changed as Value };
     }
     const requested = String(args.name ?? '');
+    // An external service is shown by its declaration, and is not the program's to change.
+    const service = requested.split('.')[0]!;
+    if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested)) {
+      if (name === 'edit_function') throw new Reject([{ path: requested, code: 'external', expected:
+        `a function of this program; ${service} is an external service: its declaration can be read, but it runs outside this program and cannot be changed` }]);
+      const declaration = this.runtime.declarations[service]!;
+      return { kind: 'ok', text: `${declaration}\n// ${service} is an external service: this declaration is all of it there is to read.`, value: declaration };
+    }
     const found = findCodebaseItem(this.lam.codebase, requested);
+    // An importable package is read by its type declarations; it is not part of this program either.
+    const packaged = found ? undefined : this.runtime.environment.declarationOf?.(requested);
+    if (packaged !== undefined) {
+      if (name === 'edit_function') throw new Reject([{ path: requested, code: 'external', expected:
+        `a function of this program; ${requested} belongs to an imported package, which can be read but not changed` }]);
+      return { kind: 'ok', text: this.show(packaged), value: packaged };
+    }
     if (!found) throw new Reject([{ path: requested, code: 'no-such-function', expected: listCodebase(this.lam.codebase).join(', ') }]);
     const record = found.record;
     if (record.kind === 'namespace')
@@ -659,35 +712,8 @@ export class NativeSession {
     return { kind: 'ok', text: this.show(text), value: value as Value };
   }
 
-  private inferScopeType(value: unknown): string {
-    if (isLive(value)) return liveTypeText(value as object);
-    if (value instanceof Folder || value instanceof FolderHandle) return 'Folder';
-    if (value instanceof FileHandle) return 'FileHandle';
-    if (value === null) return 'null';
-    if (typeof value === 'boolean') return 'boolean';
-    if (typeof value === 'number' && Number.isFinite(value)) return 'number';
-    if (typeof value === 'string') return 'string';
-    if (Array.isArray(value)) {
-      // An empty list may still be filled with anything, and a mixed list holds the union of its item types.
-      if (!value.length) return 'unknown[]';
-      if (containsLive(value)) return 'Live<"array", "tag", "Array">';
-      const types = [...new Set(value.map(item => this.inferScopeType(item)))];
-      return types.length === 1 ? `(${types[0]})[]` : `(${types.join(' | ')})[]`;
-    }
-    if (value && typeof value === 'object') {
-      const entries = Object.entries(value);
-      if (!entries.length) return 'Record<string, unknown>';
-      if (containsLive(value)) return 'Live<"object", "any", "">';
-      // An object keyed by data (ids, emails, names) is a dictionary: Record<string, T>, so later evals can add keys.
-      // Only a few identifier keys read as a record with fixed fields.
-      if (entries.length > 12 || entries.some(([key]) => !/^[A-Za-z_$][\w$]*$/.test(key))) {
-        const types = [...new Set(entries.map(([, item]) => this.inferScopeType(item)))];
-        return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
-      }
-      return `{ ${entries.map(([key, item]) => `${key}: ${this.inferScopeType(item)}`).join(', ')} }`;
-    }
-    throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);
-  }
+  private inferScopeType(value: unknown): string { return inferValueType(value); }
+
 
   private scopePath(expression: string): string {
     const match = /^([A-Za-z_$][\w$]*)(.*)$/.exec(expression.trim());

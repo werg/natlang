@@ -32,6 +32,11 @@ export type InlineLambdaPlan = {
   /** Instruction text with interpolations shown as `${…}` for listings and traces. */
   instructions: string;
   parameters: { name: string; type: TargetDescriptor }[];
+  /**
+   * Saved without parameters and never called where it was created (`const judge = nl<R>`...``, called in a later
+   * eval): its first call fixes the parameters from the values it is given.
+   */
+  openParameters?: boolean;
   returns: TargetDescriptor;
   captures: CapturePlan[];
   inheritedCodebaseRevision: string;
@@ -89,7 +94,7 @@ const unwrapParentheses = (node: ts.Node): ts.Node => {
   return node;
 };
 
-type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string };
+type Signature = { parameters?: { name: string; type: ts.Type }[]; returns?: ts.Type; origin: string; open?: boolean };
 
 export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.SourceFile[],
   options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] } {
@@ -284,6 +289,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
             type: uniqueType(calls.map(item => widen(checker.getTypeAtLocation(item.arguments[index]!))), node,
               `parameter ${index + 1} type`) ?? checker.getAnyType() }));
         }
+        if (!signature.parameters && !calls.length) signature.open = true;
       }
     }
 
@@ -390,7 +396,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const sourceSpan = spanOf(node, displayPath);
     const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
     plans.push({ sourceSpan, definitionId, strings, instructions: strings.join('${…}'),
-      parameters: parameterTargets, returns, captures, inheritedCodebaseRevision: options.codebaseRevision ?? '' });
+      parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures,
+      inheritedCodebaseRevision: options.codebaseRevision ?? '' });
   };
 
   for (const file of files) {

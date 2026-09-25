@@ -40,6 +40,8 @@ export interface EvalEnvironment {
   executeAsync(request: EvalRequest): Promise<EvalResult>;
   /** Evaluate a module body once; `bindings` are passed by reference. Returns the completion value. */
   evaluateModule(code: string, bindings: Record<string, unknown>): unknown;
+  /** The declaration of an importable package (`pkg`) or one of its exports (`pkg.name`), if there is one. */
+  declarationOf?(name: string): string | undefined;
   fork(): EvalEnvironment;
   close(): void;
 }

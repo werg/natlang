@@ -4,7 +4,7 @@
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
 import { NativeToolAgent } from '../native/agent.js';
-import { NativeRuntime } from '../native/runtime.js';
+import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
 import { TypeEnv } from '../native/types.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
@@ -20,6 +20,8 @@ export type CallableDefinition = {
   name: string;
   body: string;
   params: { name: string; type: string; optional?: boolean }[];
+  /** Parameters still to be fixed by the first call (an inline function saved without any; see InlineLambdaPlan). */
+  openParameters?: boolean;
   returns: string;
   types: Record<string, string>;
   /** Callable context: the record tree this definition (and its inline descendants) may call. */
@@ -96,15 +98,19 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
     }
     if (handle instanceof Folder || handle instanceof FolderHandle) inputs = inputs.slice(1);
   }
+  if (definition.openParameters) {
+    definition.openParameters = false;
+    if (!definition.params.length) definition.params = inputs.map((input, index) =>
+      ({ name: index ? `input${index + 1}` : 'input', type: inferValueType(input) }));
+  }
   const required = definition.params.filter(parameter => !parameter.optional).length;
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}` +
-      // An inline function takes its parameters from its signature or from calls in the eval that created it.
-      (definition.name.startsWith('nl@') && !definition.params.length ? '. It was created with no parameters: ' +
-        'nothing in the eval that created it called it, and its type names none. Create it again with them, ' +
-        'e.g. nl<(application: Application) => boolean>`...`, or call it in the eval that creates it' : ''));
+      // An inline function's parameters come from its signature, from its calls where it was created, or else its first call.
+      (definition.name.startsWith('nl@') && !definition.params.length ? '. It takes no arguments; to pass some, create it ' +
+        'again with a signature, e.g. nl<(application: Application) => boolean>`...`' : ''));
   }
   const node = definitionNode(definition, inputs, options);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }

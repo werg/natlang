@@ -64,6 +64,7 @@ export function curriculumCase({ family, familyVersion = 1, shape, variant, pair
   const semantics = { root: `${root.name}.nl`, files: { [`${root.name}.nl`]: nlFile(root), ...files }, inputs, expected,
     ...(operation ? { operation } : {}), ...(folderFiles ? { folder_files: folderFiles } : {}),
     ...(expectedFiles ? { expected_files: expectedFiles } : {}), ...(failureSeed ? { failure_seed: failureSeed } : {}) };
+  externalize(semantics, family);
   return { version: PROGRAM_VERSION, id, kind: 'lambda_source', family: `curriculum_${family}`,
     source: 'natlang-inline-curriculum', split, source_ids: [id], source_groups: [splitGroup ?? `${family}:${shape}`],
     source_revisions: [GENERATOR_VERSION], license: 'project-generated', gold_sources: ['constructed-world-oracle'],
@@ -75,6 +76,28 @@ export function curriculumCase({ family, familyVersion = 1, shape, variant, pair
       evidence: { world: evidence.world ?? [], retrieved: evidence.retrieved ?? [], background: evidence.background ?? [] },
       assumptions, decisive, plausible_actions: plausibleActions, minimum_sequence: minimumSequence, reference },
     semantics };
+}
+
+/**
+ * Modules a program owns and may change: a helper it was given, code it is asked to repair, or modules whose scoping
+ * the task is about. Every other module a case calls stands for something outside the program (a board, a world, a
+ * store, a checker) and becomes an external service: the model reads its declaration and calls it, but cannot read or
+ * edit its implementation (native/external.ts). A module that imports another, or is itself called (a default
+ * export), stays a file.
+ */
+const PROGRAM_MODULES = new Set(['review_each', 'line_total']);
+const PROGRAM_FAMILIES = new Set(['scoped_module_discovery']);
+export function externalize(semantics, family) {
+  if (PROGRAM_FAMILIES.has(family)) return semantics;
+  const modules = Object.keys(semantics.files).filter(path => path.endsWith('.ts') && !path.endsWith('types.ts'));
+  const name = path => path.split('/').pop().replace(/\.ts$/, '');
+  for (const path of modules) {
+    const source = semantics.files[path];
+    if (PROGRAM_MODULES.has(name(path)) || /^import |^export default /m.test(source) || modules.filter(other => name(other) === name(path)).length > 1) continue;
+    (semantics.services ??= {})[name(path)] = source;
+    delete semantics.files[path];
+  }
+  return semantics;
 }
 
 /** Reference-solution call shorthands. */

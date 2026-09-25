@@ -501,9 +501,42 @@ test('a let declared without a value is reported as not kept, not left to fail a
   assert.deepEqual(Object.keys(lam.let), ['later']);
 });
 
-test('calling a saved inline function created without parameters says how to give it some', async () => {
-  const { session } = open({ type: '() => number', instructions: 'Collect.' });
-  await session.applyAsync('eval', { code: 'const fits = nl<{ ok: boolean }>`Does the application fit?`;' });
-  const called = await session.applyAsync('eval', { code: 'const v = await fits({ ask: 3 }); v' });
-  assert.match(called.text, /expects 0 arguments, got 1\. It was created with no parameters: .*nl<\(application: Application\) => boolean>/);
+test('a saved inline function without parameters takes them from its first call, in a later eval too', async () => {
+  const seen = [];
+  const { session } = open({ type: '() => number', instructions: 'Collect.' }, { agent: child => {
+    seen.push(child.lam.args); child.lam.return = true; } });
+  await session.applyAsync('eval', { code: 'let budget = 3000; const fits = nl<boolean>`Does the amount application asks for fit within budget?`;' });
+  const first = await session.applyAsync('eval', { code: 'const v = await fits({ id: "A1", ask: "2,500 dollars" }); v' });
+  assert.equal(first.kind, 'ok', first.text); assert.deepEqual(seen, [{ input: { id: 'A1', ask: '2,500 dollars' } }]);
+  const again = await session.applyAsync('eval', { code: 'const w = await fits(1, 2); w' });
+  assert.match(again.text, /expects 1 arguments, got 2/, 'the first call fixed the parameters');
+  await session.applyAsync('eval', { code: 'const pick = nl<number>`Pick a number.`; const n = await pick(); n' });
+  const extra = await session.applyAsync('eval', { code: 'const m = await pick(3); m' });
+  assert.match(extra.text, /expects 0 arguments, got 1\. It takes no arguments; to pass some, create it again with a signature/);
+});
+
+test('an external service is called and read by its declaration, and cannot be edited', async () => {
+  const { externalModule } = await import('../dist/native/external.js');
+  const board = externalModule('board', 'const REJECT = true;\n/** Move a card. */\nexport function commit_move(event: { card: string, to: string }): { revision: number } {\n' +
+    '  if (REJECT) throw new Error("event rejected: card " + event.card + " is locked");\n  return { revision: 1 };\n}\n');
+  assert.equal(board.declaration, 'declare namespace board {\n  /** Move a card. */\n  export function commit_move(event: {\n      card: string;\n      to: string;\n  }): {\n      revision: number;\n  };\n}');
+  const { session } = open({ type: '() => number', instructions: 'Move the card.' },
+    { services: { board: board.exports }, declarations: { board: board.declaration } });
+  const moved = await session.applyAsync('eval', { code: 'await board.commit_move({ card: "fub", to: "done" })' });
+  assert.match(moved.text, /event rejected: card fub is locked/);
+  const read = session.apply('read_function', { name: 'board.commit_move' });
+  assert.equal(read.kind, 'ok'); assert.match(read.text, /^declare namespace board \{/); assert.doesNotMatch(read.text, /REJECT/);
+  const edited = session.apply('edit_function', { name: 'board', find: 'x', replace_with: 'y' });
+  assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /board is an external service/);
+});
+
+test('read_function shows an importable package by its declarations, and will not edit it', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Look something up.' });
+  const listed = session.apply('read_function', { name: 'undici' });
+  assert.equal(listed.kind, 'ok', listed.text); assert.match(listed.text, /^declare module "undici" \{ {2}\/\/ \d+ exports; read_function\("undici\.<name>"\)/);
+  const one = session.apply('read_function', { name: 'undici.fetch' });
+  assert.match(one.text, /^\/\/ fetch, from "undici" .*\nexport declare function fetch/);
+  const edited = session.apply('edit_function', { name: 'undici.fetch', find: 'a', replace_with: 'b' });
+  assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /belongs to an imported package/);
+  assert.equal(session.apply('read_function', { name: 'no_such_package' }).kind, 'rejected');
 });
