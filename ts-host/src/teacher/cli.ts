@@ -68,7 +68,10 @@ async function main(): Promise<void> {
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
     toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081',
-    request: { thinking_budget_tokens: integer(flags, '--thinking-tokens', 256), top_p: 0.95, top_k: 20,
+    // The thinking budget is the server's (serve_bonsai.sh --reasoning-budget) unless given: a server that enforces a
+    // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
+    request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
+      top_p: 0.95, top_k: 20,
       chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } } };
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
   if (handoffs) for (const item of records) {

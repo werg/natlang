@@ -3,6 +3,23 @@ import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { assembleChatCompletion, chatCompletionModelTurn, httpChatTransport } from '../dist/model/chat-completion.js';
 
+test('a reply that is only the arguments of one offered tool, as JSON, is that call; prose and ambiguous JSON stay text', async () => {
+  const tools = [
+    { type: 'function', function: { name: 'eval', parameters: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] } } },
+    { type: 'function', function: { name: 'return_result', parameters: { type: 'object', properties: { status: { type: 'string' },
+      value: {}, reason: { type: 'string' } }, required: ['status'] } } }];
+  const replies = ['\n\n{\n  "status": "success",\n  "value": { "verdict": "unknown" }\n}', '```json\n{"code": "1 + 1"}\n```',
+    'The answer is {"status": "success"}.', '{"verdict": "unknown"}'];
+  const model = await server((body, count) => ({ choices: [{ finish_reason: 'stop', message: { content: replies[count - 1] } }] }));
+  try {
+    const drive = chatCompletionModelTurn(httpChatTransport({ endpoint: model.endpoint, model: 'm' }));
+    assert.deepEqual((await drive(request(tools))).calls, [['return_result', { status: 'success', value: { verdict: 'unknown' } }]]);
+    assert.deepEqual((await drive(request(tools))).calls, [['eval', { code: '1 + 1' }]], 'a fenced object counts too');
+    assert.deepEqual((await drive(request(tools))).calls, [], 'prose around the object is a reply');
+    assert.deepEqual((await drive(request(tools))).calls, [], 'an object that is no tool\'s arguments is a reply');
+  } finally { await model.close(); }
+});
+
 const request = (tools = [{ type: 'function', function: { name: 'eval', parameters: { type: 'object',
   properties: { code: { type: 'string', 'x-natlang': 'private' } } } } }]) =>
   ({ messages: [{ role: 'user', content: 'Write seven.' }], tools, seed: 3, max_tokens: null });

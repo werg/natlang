@@ -29,6 +29,27 @@ export type ChatCompletionOptions = {
 export const TOOL_MARKUP = /<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/;
 class LeakedCall extends Error {}
 
+/**
+ * The one offered tool whose arguments a reply's whole text is: a JSON object (optionally in a code fence) whose keys
+ * include every required parameter of exactly one tool and name no parameter it lacks. Some models write a call out
+ * like this instead of calling; a reply that could be prose, or several tools' arguments, is left as text.
+ */
+export function callWrittenAsText(text: string, tools: Array<{ function: { name: string } & Json }>): [string, Json] | undefined {
+  const body = text.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n?```$/, '$1').trim();
+  if (!body.startsWith('{')) return undefined;
+  let value: unknown;
+  try { value = JSON.parse(body); } catch { return undefined; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const keys = Object.keys(value);
+  const matches = tools.filter(tool => {
+    const parameters = tool.function.parameters as { properties?: Json; required?: string[] } | undefined;
+    const properties = Object.keys(parameters?.properties ?? {});
+    return keys.length > 0 && keys.every(key => properties.includes(key)) &&
+      (parameters?.required ?? []).every(key => keys.includes(key));
+  });
+  return matches.length === 1 ? [matches[0]!.function.name, value as Json] : undefined;
+}
+
 const MALFORMED_RETRY = 'The last tool call was malformed. Call one offered tool with valid JSON object arguments. ' +
   'Do not change the task or invent a new tool.';
 
@@ -143,6 +164,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
         });
         // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
         if (!calls.length && TOOL_MARKUP.test(String(message?.content ?? ''))) throw new LeakedCall('the tool call came back as text');
+        // A reply that is nothing but one offered tool's arguments, written out as JSON, is that call.
+        const written = calls.length ? undefined : callWrittenAsText(String(message?.content ?? ''), tools);
+        if (written) calls.push([reverse[written[0]] ?? written[0], written[1]]);
         const reasoning = message?.reasoning_content ?? message?.reasoning;
         return finish({ calls, text: String(message?.content ?? ''), raw_calls: rawCalls,
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
