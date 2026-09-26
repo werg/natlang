@@ -116,10 +116,11 @@ function openingLength(context: Dict[]): number {
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
  */
 export function materializeNativeRows(input: unknown[]): {
-  turns: Dict[]; acceptedRows: number; rejectedRows: number;
+  turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: string[];
 } {
   const turns: Dict[] = [];
   let acceptedRows = 0, rejectedRows = 0;
+  const unlinked: string[] = [];
   for (const candidate of input) {
     const row = validateRow(candidate);
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -130,6 +131,7 @@ export function materializeNativeRows(input: unknown[]): {
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     let actionIndex = 0;
+    const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
       const source = record(row.trajectory[index], `${row.id}.trajectory[${index}]`);
       const contextSource = messages(source.context, `${row.id}.trajectory[${index}].context`);
@@ -168,7 +170,7 @@ export function materializeNativeRows(input: unknown[]): {
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
           .some(code => String(code).startsWith('coerced-')));
-      turns.push({ version: NATIVE_TEACHER_TURN_VERSION,
+      rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
           program_ir_id: programId },
@@ -205,8 +207,10 @@ export function materializeNativeRows(input: unknown[]): {
         outcome: structuredClone(row.outcome),
         capture_limits: structuredClone(row.capture_limits ?? []) });
     }
-    if (actionIndex !== ledger.length)
-      throw new Error(`${row.id}: ${ledger.length - actionIndex} action outcomes have no teacher decision link`);
+    // A row whose runtime actions do not all trace back to model decisions cannot be split into turns faithfully:
+    // it is set aside and named, not allowed to stop the export.
+    if (actionIndex !== ledger.length) { unlinked.push(row.id); acceptedRows--; rejectedRows++; continue; }
+    turns.push(...rowTurns);
   }
-  return { turns, acceptedRows, rejectedRows };
+  return { turns, acceptedRows, rejectedRows, unlinked };
 }

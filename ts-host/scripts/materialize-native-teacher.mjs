@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
-import { link, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
@@ -13,10 +13,13 @@ if (!inputPath || !outputPath || positional.length !== 2 || args.some(value => v
 const input = resolve(inputPath), output = resolve(outputPath);
 const rows = (await readFile(input, 'utf8')).split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
 const result = materializeNativeRows(rows);
-const data = result.turns.map(turn => JSON.stringify(turn)).join('\n') + (result.turns.length ? '\n' : '');
+if (result.unlinked.length) console.error(`set aside ${result.unlinked.length} rows whose actions do not all link to a model decision: ${result.unlinked.join(', ')}`);
+console.error(`${result.acceptedRows} rows -> ${result.turns.length} turns (${result.rejectedRows} rows not used)`);
 await mkdir(dirname(output), { recursive: true });
 const staged = `${output}.building-${process.pid}-${randomUUID()}`;
-await writeFile(staged, data, { flag: 'wx' });
+// Line by line: every turn carries its whole context, and thousands of them do not fit in one string.
+const handle = await open(staged, 'wx');
+try { for (const turn of result.turns) await handle.write(JSON.stringify(turn) + '\n'); } finally { await handle.close(); }
 if (args.includes('--replace')) await rename(staged, output);
 else {
   try { await link(staged, output); }
