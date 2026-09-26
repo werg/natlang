@@ -513,8 +513,9 @@ test('a saved inline function without parameters takes whatever each call passes
   const again = await session.applyAsync('eval', { code: 'const w = await fits(1, 2); w' });
   assert.equal(again.kind, 'ok', again.text); assert.deepEqual(seen[1], { input: 1, input2: 2 }, 'each call binds its own arguments');
   await session.applyAsync('eval', { code: 'const pick = nl<number>`Pick a number.`; const n = await pick(); n' });
+  // Called with a value its first call did not pass, it takes that too.
   const extra = await session.applyAsync('eval', { code: 'const m = await pick(3); m' });
-  assert.match(extra.text, /expects 0 arguments, got 1\. It takes no arguments; to pass some, create it again with a signature/);
+  assert.equal(extra.kind, 'ok', extra.text); assert.deepEqual(seen.at(-1), { input: 3 });
 });
 
 test('an external service is called and read by its declaration, and cannot be edited', async () => {

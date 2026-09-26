@@ -113,8 +113,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     try { return describeTarget(within.program, within.program.getTypeChecker(), type, { allowHost, location: within.location }); }
     catch (error) {
       if (!(error instanceof TargetError)) throw error;
-      // A result typed any or unknown is an open result, as when nothing says what it is.
-      if (what === 'return' && type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { text: 'any', natlang: 'unknown', aliases: {} };
+      // A result or parameter typed any or unknown is open, as when nothing says what it is.
+      if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { text: 'any', natlang: 'unknown', aliases: {} };
       report(node, what === 'return' ? 'nl-unknown-return' : 'nl-unknown-parameter', what === 'return' ?
         `Return type of this \`nl\` expression is unknown (${error.message}); annotate the target or write \`nl<Verdict>\`.` :
         `Type of ${what} for this \`nl\` expression cannot be used (${error.message}); annotate it.`);
@@ -178,6 +178,15 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     const signature: Signature = { origin: 'none' };
     // `await nl`...`` waits on the function itself, which is never a judgment. (Eval inserts the call instead;
     // see scope-compiler.ts. Project source is not rewritten, so it gets this diagnostic.)
+    // items.map(r => nl`...`): the arrow hands back the function itself, one per item, and nothing ever runs it.
+    const arrow = outerTag.parent;
+    if (arrow && ts.isArrowFunction(arrow) && arrow.body === outerTag && arrow.parent && ts.isCallExpression(arrow.parent) &&
+        arrow.parent.arguments.includes(arrow)) {
+      report(node, 'nl-not-called', 'This arrow returns the `nl` function itself, never called: nl`...` creates a function. ' +
+        'Call it, and await the results: `await Promise.all(items.map(item => nl`Does item …?`(item)))`, or ask one ' +
+        'question at a time with `await nl(`… ${item.text}`)`.');
+      return;
+    }
     if (outerTag.parent && ts.isAwaitExpression(outerTag.parent)) {
       report(node, 'nl-not-called', 'This awaits the `nl` function itself instead of calling it: nl`...` creates a function. ' +
         'Call it with the values it should judge, as in `await nl`...`(value)`; names its instructions mention are also visible to it.');

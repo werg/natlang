@@ -101,14 +101,23 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
   // An open inline function takes whatever each call passes, typed from its values (a splat).
   if (definition.openParameters) definition = { ...definition, params: inputs.map((input, index) =>
     ({ name: index ? `input${index + 1}` : 'input', type: inferValueType(input) })) };
+  // An inline function called with more values than its signature names takes the rest too, as open parameters
+  // (input2, …): the values are what it was asked about. Too few values cannot be made up, and stay an error.
+  if (definition.name.startsWith('nl@') && inputs.length > definition.params.length) {
+    const taken = new Set(definition.params.map(parameter => parameter.name));
+    const extra = inputs.slice(definition.params.length).map((input, offset) => {
+      let index = definition.params.length + offset, name = index ? `input${index + 1}` : 'input';
+      while (taken.has(name)) name = `input${++index + 1}`;
+      taken.add(name);
+      return { name, type: inferValueType(input) };
+    });
+    definition = { ...definition, params: [...definition.params, ...extra] };
+  }
   const required = definition.params.filter(parameter => !parameter.optional).length;
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
-      `${required} to ${definition.params.length}`} arguments, got ${inputs.length}` +
-      // An inline function's parameters come from its signature, from its calls where it was created, or else its first call.
-      (definition.name.startsWith('nl@') && !definition.params.length ? '. It takes no arguments; to pass some, create it ' +
-        'again with a signature, e.g. nl<(application: Application) => boolean>`...`' : ''));
+      `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
   const node = definitionNode(definition, inputs, options);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }

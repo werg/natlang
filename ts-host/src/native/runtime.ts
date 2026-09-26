@@ -521,7 +521,11 @@ export class NativeSession {
     // or it goes on probing the environment.
     const reaching = /is not defined|unavailable in eval|is not a function|Cannot find name/.test(message +
       diagnostics.map(item => String(item.message ?? '')).join('\n'));
-    return (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
+    // A tool named in eval code: the tools are called as tools, next to eval, not from inside it.
+    const tool = /\b(\w+) is not defined/.exec(message)?.[1];
+    const toolNote = tool && NATIVE_TOOLS.includes(tool) && tool !== 'return_result' ?
+      `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
+    return toolNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       '\nNothing else from this eval was kept.';
   }
@@ -661,6 +665,9 @@ export class NativeSession {
       const id = String(args.id ?? ''), root = id.split('.')[0]!;
       const inScope = Object.hasOwn(this.runtime.services, root) || Object.hasOwn(this.lam.let, root) ||
         Object.hasOwn(this.lam.args, root) || !!findCodebaseItem(this.lam.codebase, root);
+      if (root === 'transcript' && !this.pages.has(id)) throw new Reject([{ path: id, code: 'no-such-page', expected:
+        'an ID from a cut-off message; transcript is in eval\'s scope: search it in eval with transcript.search("…"), ' +
+        'then transcript.entry(n) for a match' }]);
       if (inScope && !this.pages.has(id)) throw new Reject([{ path: id, code: 'no-such-page', expected:
         `an ID from a cut-off message; ${root} is a name in eval's scope, so use it in eval (for example ${root}.page(${Number(args.page ?? 1)}) if it has pages)` }]);
       return { kind: 'ok', text: this.pages.read(id, Number(args.page ?? 1)) };
@@ -969,7 +976,10 @@ export class NativeSession {
       for (const [name, value] of Object.entries(output.bindings)) {
         if (Object.hasOwn(this.lam.args, name) || Object.hasOwn(this.lam.codebase, name))
           throw new Reject([{ path: name, code: 'not-writable', expected: 'a local variable' }]);
-        let type = this.lam.letTypes[name];
+        // A name this eval declares is a new binding, as in a REPL: it takes its type afresh. A local that so far only
+        // held null (let x = null) takes the type of what is assigned to it, as TypeScript's evolving let does.
+        const stored = this.lam.letTypes[name];
+        let type = annotations.has(name) || (stored?.kind === 'prim' && stored.name === 'null' && value !== null) ? undefined : stored;
         const annotation = annotations.get(name);
         if (annotation) type = parseType(annotation);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);

@@ -53,3 +53,21 @@ test('Node\'s own modules cannot be imported in eval; they are not packages', as
   for (const text of results) assert.match(text, /is part of Node, not a package: eval code works with this call's scope/);
   assert.ok(results.every(text => !text.includes('bin')), 'no directory listing came back');
 });
+
+test('a local declared again takes its new type, and a local that held null takes what is assigned', async () => {
+  const { results } = await script([['eval', { code: 'const m = "x".match(/y/);\nm' }],
+    ['eval', { code: 'const m = "xy".match(/y/);\nm && m[0]' }],
+    ['eval', { code: 'let n = null;\nn' }], ['eval', { code: 'n = 5;\nn' }]]);
+  assert.ok(results.every(text => !/type-mismatch/.test(text)), results.join('\n---\n'));
+});
+
+test('the tools are named as tools when eval code reaches for them, and transcript is pointed to eval', async () => {
+  const { results } = await script([['eval', { code: 'read_code({ name: "nl" })' }], ['read_page', { id: 'transcript', page: 1 }]]);
+  assert.match(results[0], /read_code is one of your tools: call it as a tool, not from eval code/);
+  assert.match(results[1], /transcript is in eval's scope: search it in eval with transcript\.search/);
+});
+
+test('an arrow that returns an uncalled nl is named as such', async () => {
+  const { results } = await script([['eval', { code: 'const xs = ["a", "b"];\nconst ys = xs.map(x => nl`Is x a vowel? ${x}`);\nys.length' }]]);
+  assert.match(results[0], /This arrow returns the `nl` function itself, never called/);
+});
