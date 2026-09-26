@@ -15,7 +15,9 @@ world, a store, a checker) is an external service (`semantics.services`: name to
 `externalize`): the model reads its declaration and calls it, but cannot change it. Editing a board so it stops
 refusing a move was the whole of every `fabricated_result` rejection in train3. Modules a program owns stay files: a
 helper it was given, code it is asked to repair (`line_total`), and the scoped modules of `scoped_module_discovery`.
-`externalize.mjs` applies this to a built shard.
+`externalize.mjs` applies this to a built shard. A module inside a function's own directory is scoped to that function
+(`semantics.service_scopes`): the CommaQA stores belong to their experts, so asking the expert is the way to the
+evidence, while every declaration and instruction stays readable.
 
 ## Case format
 

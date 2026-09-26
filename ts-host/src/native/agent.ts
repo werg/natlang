@@ -366,7 +366,7 @@ export class NativeToolAgent {
       `): ${formatType(lam.type.returns)}`;
     // What eval can use, by name: a model that reads only this message should know it can call these in code.
     const names = [...lam.type.params.fields.map(field => field.name), ...Object.keys(lam.captures ?? {}),
-      ...Object.keys(lam.codebase), ...Object.keys(session.runtime.services)];
+      ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
@@ -452,10 +452,13 @@ export class NativeToolAgent {
     };
     section('// Functions you can call:', this.callableDeclarations(session));
     section('// Provided by the host:', [
-      ...Object.entries(session.runtime.services).map(([name, service]) => session.runtime.declarations[name] ?
+      ...Object.entries(session.availableServices()).map(([name, service]) => session.runtime.declarations[name] ?
         `${session.runtime.declarations[name]}  // external service; its calls are recorded as effects` :
         `declare const ${name}: { ${Object.keys(service as object).map(key => `${key}: Function`).join('; ')} };  // service; its calls are recorded as effects`),
       ...(lam.projectTransaction ? [...FOLDER_DECLARATIONS, 'declare const folder: Folder;  // your working copy of the input folder'] : []),
+      // A service scoped to other functions is named, with who can use it, so the call knows to ask them.
+      ...Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)).map(name =>
+        `// ${name}: only ${session.runtime.serviceScopes[name]!.map(path => path.split('/').pop()!.replace(/\.nl$/, '')).join(', ')} can use it (read_function("${name}") shows its declaration)`),
     ]);
     const params = lam.type.params.fields.map(field => field.name);
     if (params.length) {

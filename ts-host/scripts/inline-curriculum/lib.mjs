@@ -82,7 +82,8 @@ export function curriculumCase({ family, familyVersion = 1, shape, variant, pair
  * Modules a program owns and may change: a helper it was given, code it is asked to repair, or modules whose scoping
  * the task is about. Every other module a case calls stands for something outside the program (a board, a world, a
  * store, a checker) and becomes an external service: the model reads its declaration and calls it, but cannot read or
- * edit its implementation (native/external.ts). A module that imports another, or is itself called (a default
+ * edit its implementation (native/external.ts). A module in a function's own directory is scoped to that function:
+ * only its calls, and the calls they make, can use it. A module that imports another, or is itself called (a default
  * export), stays a file.
  */
 const PROGRAM_MODULES = new Set(['review_each', 'line_total']);
@@ -96,6 +97,9 @@ export function externalize(semantics, family) {
     if (PROGRAM_MODULES.has(name(path)) || /^import |^export default /m.test(source) || modules.filter(other => name(other) === name(path)).length > 1) continue;
     (semantics.services ??= {})[name(path)] = source;
     delete semantics.files[path];
+    // A module inside a function's own directory (answer_question/table_expert/tables.ts) is that function's to use.
+    const owner = `${path.split('/').slice(0, -1).join('/')}.nl`;
+    if (owner !== `${semantics.root.replace(/\.nl$/, '')}.nl` && semantics.files[owner]) (semantics.service_scopes ??= {})[name(path)] = [owner];
   }
   return semantics;
 }

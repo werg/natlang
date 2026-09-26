@@ -557,3 +557,23 @@ test('code written into a reply is answered with a note that it did not run', as
   assert.equal(result.value, 42);
   assert.match(requests[1].at(-1).content, /^The code in your reply was not run: code runs only when you call eval with it\. There is no result yet/);
 });
+
+test('a service scoped to a function is usable in its calls only, and named elsewhere with who can use it', async () => {
+  const tables = { page: () => ['Gigabut threw 60.4.'] };
+  const seen = {};
+  const agent = async session => {
+    const name = session.lam.functionName || 'root';
+    seen[name] = (await session.applyAsync('eval', { code: 'const rows = tables.page(1); rows' })).text;
+    if (name === 'root') {
+      const asked = await session.applyAsync('eval', { code: 'const answer = await expert("How far did Gigabut throw?"); answer' });
+      seen.asked = asked.text; session.lam.return = 1;
+    } else session.lam.return = ['60.4'];
+  };
+  const { session } = open({ type: '() => number', instructions: 'Ask the expert.',
+    codebase: { expert: nl('expert', { args: { question: 'string' }, returns: 'string[]', instructions: 'Answer question from tables.page(n).' }) } },
+  { services: { tables }, serviceScopes: { tables: ['expert.nl'] }, agent });
+  await agent(session);
+  assert.match(seen.root, /tables is not defined|Cannot find name 'tables'/, 'the root call cannot use it');
+  assert.match(seen.expert, /Gigabut threw 60\.4/, 'the expert call can');
+  assert.match(seen.asked, /60\.4/);
+});

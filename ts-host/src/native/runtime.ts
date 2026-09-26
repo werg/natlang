@@ -16,7 +16,7 @@ import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, typ
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
-import { runInFrame, type Frame } from '../runtime/context.js';
+import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
@@ -50,6 +50,12 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    * read_function returns. Their implementations are not part of the program and cannot be read or edited.
    */
   declarations?: Record<string, string>;
+  /**
+   * Services only some functions may use, by the source path of each function (`answer_question/table_expert.nl`):
+   * such a service is in scope in that function's calls and the calls they make, and nowhere else. Its declaration
+   * stays readable everywhere; only its use is limited, as a specialist can reach systems its caller cannot.
+   */
+  serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
   seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } };
 
@@ -214,6 +220,7 @@ export class NativeRuntime {
   readonly hooks: NativeRuntimeHooks;
   readonly services: Record<string, object>;
   readonly declarations: Record<string, string>;
+  readonly serviceScopes: Record<string, string[]>;
   currentCallId?: string;
   private root?: LambdaNode;
   private lastObserved?: unknown;
@@ -241,6 +248,7 @@ export class NativeRuntime {
     this.services = isRecording(services) ? services : recordingServices(services, event =>
       this.trace.emit('effect', { call_id: this.currentCallId ?? null, capability: `${event.service}.${event.method}`, ...event }));
     this.declarations = options.declarations ?? {};
+    this.serviceScopes = options.serviceScopes ?? {};
     this.agent = options.agent;
     this.environment = options.environment;
     this.signal = options.signal;
@@ -653,6 +661,15 @@ export class NativeSession {
     throw new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }]);
   }
 
+  /** The services this call may use: all but those scoped to functions it is not running within. */
+  availableServices(): Record<string, object> {
+    const chain = currentFrame()?.chain ?? [];
+    return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
+      const scope = this.runtime.serviceScopes[name];
+      return !scope || scope.some(path => chain.includes(`nl:${path}`));
+    }));
+  }
+
   /** read_function, edit_function, diff_functions over the codebase record tree. */
   private functionTool(name: string, args: Record<string, unknown>): NativeResult {
     if (name === 'diff_functions') {
@@ -824,7 +841,7 @@ export class NativeSession {
     let requested: { tool: string; args: Record<string, unknown> } | undefined;
     const captureCells = this.lam.captures ?? {};
     const captureRead = Object.fromEntries(Object.entries(captureCells).map(([name, cell]) => [name, cell.get()]));
-    const serviceNames = Object.keys(this.runtime.services).filter(name => !inputNames.includes(name) &&
+    const serviceNames = Object.keys(this.availableServices()).filter(name => !inputNames.includes(name) &&
       !callableNames.includes(name) && !Object.hasOwn(captureCells, name));
     const hooks = this.runtime.hooks;
     const compiled = compileScopeSnippet(code, { inputBindings: inputNames, localBindings, helperBindings: callableNames,
@@ -842,7 +859,7 @@ export class NativeSession {
     let finished: unknown;
     const plans = compiled.plans ?? [];
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
-      services: this.runtime.services, folder: this.lam.projectTransaction?.folder.root(),
+      services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },

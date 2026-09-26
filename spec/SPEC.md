@@ -119,6 +119,11 @@ way, so that only code the program owns can be changed. Importable packages are
 external in the same way: `read_function("pkg")` lists a package's exports from
 its type declarations, and `read_function("pkg.name")` shows one with its docs.
 
+A service can be scoped to functions: it is then usable only in their calls and
+the calls they make, as a specialist can reach systems its caller cannot. Its
+declaration stays readable everywhere, and a call that cannot use it is told
+which functions can.
+
 ## Model surface
 
 A natural-language invocation offers the model these tools:
