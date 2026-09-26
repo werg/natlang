@@ -211,3 +211,27 @@ test('directory reducers take a Folder and folder.apply installs their committed
   assert.equal(await folder.readText('log.txt'), 'start\napplied\n');
   await assert.rejects(() => runtime.run(() => tidy('no folder')), /directory reducer/);
 });
+
+test('a runtime shows services by their declarations and limits scoped ones to their functions', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'natlang-scoped-'));
+  mkdirSync(join(dir, 'answer'));
+  const nlFile = text => `---\nargs: { question: string }\nreturns: string\n---\n${text}\n`;
+  writeFileSync(join(dir, 'answer.nl'), nlFile('Answer question by asking lookup.'));
+  writeFileSync(join(dir, 'answer', 'lookup.nl'), nlFile('Answer question from records.find(question).'));
+  const seen = {};
+  const agent = async session => {
+    const name = session.lam.functionName;
+    seen[name] = { used: (await session.applyAsync('eval', { code: 'const found = records.find("x"); found' })).text,
+      read: session.apply('read_function', { name: 'records' }).text };
+    if (name === 'answer') await session.applyAsync('eval', { code: 'const asked = await lookup("x"); asked' });
+    session.lam.return = 'ok';
+  };
+  const runtime = createNatlangRuntime({ agent, services: { records: { find: question => `found ${question}` } },
+    serviceDeclarations: { records: '/** Look a question up in the records. */\nexport function find(question: string): string;' },
+    serviceScopes: { records: ['answer/lookup.nl'] } });
+  await runtime.run(() => loadNatlang(join(dir, 'answer.nl'))('x'));
+  assert.match(seen.answer.used, /records is not defined/, 'the caller cannot use a service scoped to its helper');
+  assert.match(seen.lookup.used, /found x/);
+  for (const name of ['answer', 'lookup'])
+    assert.match(seen[name].read, /^declare namespace records \{\n {2}\/\*\* Look a question up in the records\. \*\/\n {2}export function find/);
+});

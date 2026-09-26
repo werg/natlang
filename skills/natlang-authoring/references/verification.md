@@ -20,7 +20,7 @@ const runtime = createNatlangRuntime({ model: scriptedDriver });   // or a real 
 const report = await runtime.run(() => review(['The trial improved response times.'], 'Improved response times'));
 ```
 
-A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns `{ calls: [['eval', { code }]] }`, `{ calls: [['return_result', { value }]] }`, or `{ text }` (done, or a string result). For live runs, record the model identity and settings; never use fixture answers to claim model success.
+A driver receives `{ messages, tools, temperature, seed, max_tokens }` and returns `{ calls: [['eval', { code }]] }`, `{ calls: [['return_result', { status: 'success', value }]] }` (or `status: 'blocked'` / `'failed'` with a `reason`), or `{ text }` (done, or a string result). For live runs, record the model identity and settings; never use fixture answers to claim model success.
 
 ## Scenario design
 
@@ -36,12 +36,16 @@ In a checkout: `npm --prefix ts-host run build`, then the relevant `ts-host/test
 - Loop policy error in callable-folder code: rewrite as `for...of`, a counted loop, an array method, or `iterateOn`.
 - Correct type, wrong answer: improve instructions, evidence access, or decomposition; structural validation is working.
 - Growing prompts: inspect repeated data and live-value previews, not just source length.
-- Repeated work after conversation rollover (when segmentation is configured): check that progress lives in the scope and that effects are not restarted.
+- A long call that loses track after compacting: check that its progress lives in scope variables, and that the compaction note says what is done and what is left; the full history stays in `transcript`.
+- Every run fails the same way: suspect the program before the model. In teacher data, uniform failures were an instruction naming a technique without its step, a phrase that read as a finishing status, a store the model could not see how to reach, or an environment it could edit.
+- A run succeeds by changing what it was meant to use (editing a checker, a board, a simulated world to accept its move): that module is outside the program; make it a service.
+- A run skips the helper it was meant to use and reads the helper's data itself, correctly: the task depended on privacy. Give the helper the access (a scoped service) or accept the direct route.
+- The model replies with code, or with a result written as text, instead of calling a tool: the runtime tells it so; if it persists with a model, check that its chat template renders the tools and that the server parses its tool-call syntax before changing the program.
 
 Rejected actions and failed evals are reported to the model, which repairs them; `maxFailureRepairs` and the turn, token, and time budgets bound a call only when set. Nothing rolls back an external effect. Record the budgets used in any model study.
 
 ## Training handoff
 
-Traces (`runtime.run(fn, { trace })`, or `fileTraceSink(dir)`) record the presented messages and tools, actions, observations, effects, seeds, and outcomes of every invocation. Teacher tasks are program IR projects (`natlang.program/2`: root `.nl`, files, inputs, expected). Do not admit a trajectory because it parses or reaches `done`; evaluate semantics independently and split related variants by source family.
+Traces (`runtime.run(fn, { trace })`, or `fileTraceSink(dir)`) record the presented messages and tools, actions, observations, effects, seeds, and outcomes of every invocation. Teacher tasks are program IR projects (`natlang.program/2`: root `.nl`, files, services, inputs, expected). Do not admit a trajectory because it parses or reaches `done`; evaluate semantics independently and split related variants by source family. Review rejections by family, not only by reason: a family whose runs all fail alike is a task to fix, while scattered failures are the model's to learn from. A technique the model skips unprompted is taught by a hinted twin of the same case; the unhinted run is the matching negative.
 
 Anchors: `ts-host/src/teacher/`, `ts-host/scripts/teacher-collector.mjs`, `PROGRAM_IR_PIPELINE.md`, `TEACHER_SETUP.md`.

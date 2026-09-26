@@ -19,9 +19,10 @@ Read [language and source contracts](references/language.md) before creating or 
 
 1. State the behavior as typed inputs, results, and observable scenarios, including ambiguity, empty inputs, and partial failure. Types check structure, not meaning.
 2. Write the orchestration in TypeScript. Call natural language where judgment is needed: inline with `` nl`…` `` for a one-off decision, or a named `.nl` function when the instruction deserves its own file, its own helpers, or reuse.
-3. Give each natural-language function one coherent responsibility, a precise signature, and the helpers it may call in its callable folder (`foo/` beside `foo.nl`, or `natlang.d/` for inline calls in application code).
-4. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
-5. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
+3. Give each natural-language function one coherent responsibility, a precise signature, and the helpers it may call in its callable folder (`foo/` beside `foo.nl`, or `natlang.d/` for inline calls in application code). Put only the program's own code there; the systems it acts on (stores, boards, simulators, verifiers, APIs) are services with declarations, scoped to the functions that should use them.
+4. Write each instruction so a small interpreter can take the next step: name the data and how to reach it, state the step a loop repeats, and keep the words for finishing statuses ("missing", "cannot") for real blockers. See [patterns](references/patterns.md).
+5. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
+6. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
 
 ## Preserve the execution model
 
@@ -30,7 +31,8 @@ Read [language and source contracts](references/language.md) before creating or 
 - Signatures are inferred before the model runs: from the contextual type, immediate call arguments, and later uses. When nothing determines the result type, `natlang check` reports `nl-unknown-return`; annotate the binding or use `nl<T>`.
 - A function may not appear in its own chain of callers: no direct or mutual recursion among natural-language functions and callable-folder TypeScript. Concurrent sibling calls (`Promise.all`) and repeated sequential calls are fine.
 - Callable-folder TypeScript and eval code use finite iteration: `for...of`, counted `for (let i = 0; i < n; i++)`, and array methods. `while`, `do`, `for...in`, open `for(;;)`, and generators are rejected. Open-ended refinement uses `iterateOn`, which records every step and reviews progress.
-- Host capabilities come from services: `import { wiki } from 'natlang:services'` in callable-folder code, or the same names as bindings inside eval. Every service call is traced as an effect and is not rolled back.
+- Host capabilities come from services: `import { wiki } from 'natlang:services'` in callable-folder code, or the same names as bindings inside eval. Every service call is traced as an effect and is not rolled back. A service's declaration is what the model knows of it; a scoped service is usable only in its functions' calls.
+- Nothing the interpreter can reach is private: it reads callable items, service declarations, and packages with `read_function`, and edits callable items with `edit_function`. Never let correctness depend on it not reading source; limit what it can use (services, scopes) instead.
 - Directory reducers (`kind: directory-reducer`) receive a `Folder` as their first argument and file tools rooted there. A direct call returns the typed value and discards file changes; `folder.apply(reducer, ...args)` retains the committed changes.
 - Long productive runs are intended. Do not add arbitrary turn, token, or nesting limits to make a test finish; deployment budgets are runtime options.
 - Report real blockers. Do not return invented success, manufacture receipts, weaken assertions, or treat an unknown effect outcome as safe to retry.

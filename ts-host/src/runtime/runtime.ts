@@ -1,3 +1,4 @@
+import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import type { NativeReviewOptions } from '../native/agent.js';
@@ -31,6 +32,14 @@ export type NatlangRuntimeOptions = {
   agent?: import('../native/runtime.js').NativeAgent;
   /** Typed host services, available to callable-folder code via `natlang:services` and to eval as named bindings. */
   services?: Services;
+  /**
+   * What the model is shown of each service: TypeScript declarations of its members with doc comments (a `.d.ts`
+   * body of `export` declarations, or a whole `declare namespace name { … }`). The model can read them with
+   * read_function; without one a service is listed by its method names only.
+   */
+  serviceDeclarations?: Record<string, string>;
+  /** Services only some functions may use, by each function's source path (`review/assess.nl`); see SPEC. */
+  serviceScopes?: Record<string, string[]>;
   trace?: TraceSink;
   limits?: NatlangLimits;
   seed?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
@@ -46,7 +55,8 @@ export type NatlangRuntimeOptions = {
   progressJudge?: ProgressJudgeFunction;
 };
 
-export type TaskOptions = { services?: Services; signal?: AbortSignal; trace?: TraceSink; name?: string };
+export type TaskOptions = { services?: Services; serviceDeclarations?: Record<string, string>;
+  serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string };
 
 let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
 /** Installed by the Node and browser entry points. */
@@ -59,6 +69,8 @@ const activeTasks = new Set<NatlangTask>();
 export class NatlangTask {
   readonly id: string;
   readonly services: Services;
+  readonly serviceDeclarations: Record<string, string>;
+  readonly serviceScopes: Record<string, string[]>;
   readonly signal: AbortSignal;
   readonly episodeBudget: { limit?: number; used: number };
   readonly traces: InvocationTrace[] = [];
@@ -70,6 +82,9 @@ export class NatlangTask {
   constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}) {
     this.id = `${options.name ?? 'task'}-${++taskSequence}-${Math.random().toString(36).slice(2, 8)}`;
     this.services = options.services ?? runtime.options.services ?? {};
+    this.serviceDeclarations = Object.fromEntries(Object.entries(options.serviceDeclarations ?? runtime.options.serviceDeclarations ?? {})
+      .map(([name, text]) => [name, /^\s*declare namespace /.test(text) ? text.trim() : declarationNamespace(name, text)]));
+    this.serviceScopes = options.serviceScopes ?? runtime.options.serviceScopes ?? {};
     this.signal = options.signal ? AbortSignal.any([options.signal, this.abort.signal]) : this.abort.signal;
     this.episodeBudget = { limit: runtime.options.limits?.maxEpisodes, used: 0 };
     const timeout = runtime.options.limits?.timeoutMs;

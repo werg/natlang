@@ -36,7 +36,19 @@ declare module 'natlang:services' { export const wiki: WikiWorkspace; }
 import { wiki } from 'natlang:services';
 ```
 
-Services are ordinary objects with methods, supplied per runtime or per task. Callable-folder TypeScript imports them from `natlang:services`; in eval they are named bindings, shown to the model with their types. Every method call is traced as an effect. Services are read-only bindings: the model calls methods, it does not reassign properties.
+Services are ordinary objects with methods, supplied per runtime or per task. Callable-folder TypeScript imports them from `natlang:services`; in eval they are named bindings. Every method call is traced as an effect. Services are read-only bindings: the model calls methods, it does not reassign properties.
+
+Anything that stands for the world outside the program (stores, boards, simulators, verifiers, APIs) should be a service rather than callable-folder code: the model can read and edit callable-folder code, and it will edit a system that refuses it. Tell the model what a service is with its declaration, and limit who may use it where that matters:
+
+```ts
+const runtime = createNatlangRuntime({ model, services: { records, tables },
+  // What the model is shown and read_function returns: a .d.ts body, wrapped as `declare namespace records { … }`.
+  serviceDeclarations: { records: '/** Look a question up in the records. */\nexport function find(question: string): string;' },
+  // tables is usable only in calls of answer/table_expert.nl and the calls they make; others see who can use it.
+  serviceScopes: { tables: ['answer/table_expert.nl'] } });
+```
+
+Both options also exist per task (`runtime.run(fn, { services, serviceDeclarations, serviceScopes })`). A service without a declaration is listed by its method names only. Scopes name functions by their source path relative to the loaded program. Importable packages need no declaration: `read_function("pkg")` reads a package's exports from its own type declarations.
 
 ## Model transport
 

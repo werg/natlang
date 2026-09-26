@@ -129,7 +129,7 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget, seedPolicy: task.runtime.options.seed, runId: callId,
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
-    frame: childFrame, services,
+    frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
       ...(definition.source ? { definition_source: definition.source } : {}), ...(options.manifest ?? {}) } });
   let outcome = 'failed', detail = '';

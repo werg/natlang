@@ -20,6 +20,7 @@ export async function triage(ticket: Ticket, style: string): Promise<Report> {
 ```
 
 - The compiler plans every `nl` expression before the model runs: parameters, return type, and captures. Unresolvable cases are compile errors (`nl-unknown-return`, `nl-ambiguous-signature`, `nl-unknown-parameter`, `nl-sync-callback`). Use `nl<T>` or an annotation to pin a type.
+- Parameters come from a function-type annotation, the callback slot, an immediate call, or calls later in the same compilation unit. A saved `nl` with none of these (`const judge = nl<boolean>`...`` called only later, typical of a REPL eval) accepts whatever each call passes, as `input`, `input2`, …: name the parameters with a signature, `nl<(application: Application) => boolean>`, so its instructions and its arguments agree.
 - Captures are exact-name mentions of visible bindings. They are read live at each call, not frozen at the tag. A mentioned `let` can be reassigned by the model; the write-back is version-checked.
 - Template interpolations `${expr}` are evaluated at call time and become part of the instructions.
 - An inline `nl` in application code may call the items of the nearest `natlang.d/` folder above it. Inside a callable folder it sees that folder's items. With no context it has only its inputs and captures.
@@ -54,6 +55,14 @@ Assess every observation against the criterion with assess, then summarize the a
 - `natlang.d/` follows the same rules and is the callable context for inline `nl` in application code below it (nearest wins, no merging).
 - Child names must be identifiers and must not collide with function properties (`call`, `apply`, `bind`, `name`, `length`, `prototype`, `then`, `iterateOn`, and similar).
 
+## The program's code, and what it only calls
+
+A callable folder holds code the program owns: helpers it was given and code it may fix. The interpreter can read all of it with `read_function` and edit it with `edit_function`, and it does. Something that stands for the world outside the program (a store, a ticket board, a simulated environment, a verifier, an API) is a service instead: the model sees and reads its TypeScript declaration and calls it, but its implementation runs in the host and cannot be changed. Put such a system in a callable folder and a stuck run will edit it: in teacher data every run whose board refused a move rewrote the board module to accept it.
+
+- Give each service a declaration (`serviceDeclarations`, see the integration skill's host reference): its members' types and doc comments are what the model learns the service from. Without one it sees method names only.
+- Scope a service to the functions that should use it (`serviceScopes`): a specialist's data, reachable from its calls and the calls they make. The caller can still read every declaration and instruction, and is told who can use it; it asks. This is how to make delegation the way to the evidence. Hiding code is not: never design a program whose correctness depends on the interpreter not reading source, because it reads everything it can reach.
+- Importable packages are external too: `read_function("pkg")` lists a package's exports from its type declarations, `read_function("pkg.name")` shows one.
+
 ## Callable-folder TypeScript
 
 ```ts
@@ -79,7 +88,7 @@ Live values (functions, class instances, DOM nodes, native handles) are passed b
 
 ## What the interpreter does
 
-The model carries out the instructions for one call. Work that takes only reading and judgment it answers directly; for computation, data work, and calls it uses a persistent TypeScript eval scope, where parameters (`const`), captures, callable items (as `helper(...)` and `folder.child(...)`), and services are bindings. It finishes with `return_result(value)`, by returning a value from an eval (`return value;`, staged) and then replying done, or, for a string result, by replying with the text. It reports `blocked` for missing information and `failed` for invalid work, and may inspect or edit callable items with `read_function`, `edit_function`, and `diff_functions`. Directory reducers additionally get file tools; the folder changes present when they finish are kept. Write instructions so the next meaningful action is apparent from them and the typed scope.
+The model carries out the instructions for one call. Work that takes only reading and judgment it answers directly; for computation, data work, and calls it uses a persistent TypeScript eval scope, where parameters (`const`), captures, callable items (as `helper(...)` and `folder.child(...)`), and services are bindings; the call's opening names them and declares them with their doc comments. It finishes with `return_result` and a status: `success` with a value of the declared type, `blocked` with a reason when information the instructions point to is missing, `failed` with a reason when they require an invalid operation. It can also return a value from an eval (`return value;`, staged) and reply done, or, for a string result, reply with the text. It may read callable items, service declarations, and packages with `read_function`, and edit its own callable items with `edit_function` and `diff_functions`. Output too long to show is cut off with a `<<cut off: …>>` note naming the variable that holds all of it; `read_page` shows the rest of a long text. In a long call the model compacts its conversation into a note (`compact_history`), and `transcript.search(…)` / `transcript.entry(n)` in eval recover any earlier call in full. Directory reducers additionally get file tools; the folder changes present when they finish are kept. Write instructions so the next meaningful action is apparent from them and the typed scope.
 
 ## Iteration
 
