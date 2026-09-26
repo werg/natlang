@@ -71,6 +71,17 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
   'no-such-path': 'Use a variable or field that exists in the scope.',
   'capture-conflict': 'Another caller changed that captured variable; run the eval again with its current value.',
 };
+/** Every tool the runtime can apply; a call's offer is a subset. */
+const NATIVE_TOOLS = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
+  'read_function', 'edit_function', 'diff_functions',
+  'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
+/** Names eval provides that have no source in the program to read. */
+const BUILT_INS: Record<string, string> = {
+  nl: 'nl is built into eval, as your instructions describe; it has no source to read',
+  iterateOn: 'iterateOn is built into eval, as your instructions describe; it has no source to read',
+  transcript: 'transcript is built into eval: search it with transcript.search(...) in eval',
+};
+
 function rejected(error: Reject): NativeResult {
   const hint = error.diagnostics.map(diagnostic => DIAGNOSTIC_HINTS[diagnostic.code]).find(Boolean);
   return { kind: 'rejected', text: `rejected\n${error.message}${hint ? `\nhint: ${hint}` : ''}`,
@@ -579,10 +590,7 @@ export class NativeSession {
   async applyAsync(name: string, args: Record<string, unknown>): Promise<NativeResult> {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    const tools = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
-      'read_function', 'edit_function', 'diff_functions',
-      'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
-    if (!tools.includes(name))
+    if (!NATIVE_TOOLS.includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a scope-eval tool' }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
@@ -644,8 +652,10 @@ export class NativeSession {
       const status = args.status ?? 'success';
       if (status === 'blocked' || status === 'failed') {
         const reason = String(args.reason ?? '').trim();
+        // A value with no reason is an answer sent under the wrong status: say so, or the model resends it.
         if (reason.length < 8) throw new Reject([{ path: 'reason', code: 'bad-action',
-          expected: status === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining why the instructions cannot be carried out' }]);
+          expected: (status === 'blocked' ? 'a sentence saying what is missing' : 'a sentence explaining why the instructions cannot be carried out') +
+            (Object.hasOwn(args, 'value') ? `; status "${status}" returns no value, so to return this value as your answer use status "success"` : '') }]);
         return { kind: 'blocked', text: `${status === 'blocked' ? 'blocked' : 'error'}: ${reason}` };
       }
       if (status !== 'success') throw new Reject([{ path: 'status', code: 'bad-action', expected: '"success", "blocked", or "failed"' }]);
@@ -698,7 +708,14 @@ export class NativeSession {
         `a function of this program; ${requested} belongs to an imported package, which can be read but not changed` }]);
       return { kind: 'ok', text: this.show(packaged), value: packaged };
     }
-    if (!found) throw new Reject([{ path: requested, code: 'no-such-function', expected: listCodebase(this.lam.codebase).join(', ') }]);
+    if (!found) {
+      // Say what the name is when it is not the program's: a model asks for the source of its tools and built-ins.
+      const own = listCodebase(this.lam.codebase);
+      const readable = own.length ? `a function of this program: ${own.join(', ')}` : 'a function of this program, and this program has none of its own';
+      const what = BUILT_INS[requested] ?? (NATIVE_TOOLS.includes(requested) ?
+        `${requested} is one of your tools, not a function of this program; call it directly` : undefined);
+      throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
+    }
     const record = found.record;
     if (record.kind === 'namespace')
       throw new Reject([{ path: requested, code: 'no-such-function', expected: `an item inside ${requested}: ${Object.keys(record.codebase).join(', ')}` }]);

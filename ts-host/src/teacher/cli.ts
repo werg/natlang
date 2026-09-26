@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
       'Options: --server URL --start N --limit N|--all --workers N --context-tokens N\n' +
-      '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide\n' +
+      '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
+    ...(flags.has('--temperature') ? { temperature: Number(flags.get('--temperature')) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),

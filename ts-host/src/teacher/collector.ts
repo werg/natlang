@@ -27,6 +27,9 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   contextTokens: number; toolSurfaceSha256: string;
   /** Model turns allowed per call; unlimited unless set. A collection run should set one. */
   maxTurns?: number;
+  /** Sampling temperature; greedy unless set. Reasoning models are tuned for sampling (Ling: 1.0) and, decoded
+   * greedily, can skip their thinking. */
+  temperature?: number;
   endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean;
   handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
 export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
@@ -104,6 +107,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: 'openai-compatible',
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
+    ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     collection_role: options.collectionRole ?? 'teacher',
     ...(handoff ? { handoff_sha256: sha256(canonical(handoff)) } : {}) };
@@ -456,7 +460,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
 }
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
-  maxTurns?: number; rootSeed: number; runId: string; signal?: AbortSignal };
+  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
 /**
@@ -476,7 +480,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   }
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
-  const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: 0,
+  const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
     contextTokens: options.contextTokens, maxTurns: options.maxTurns });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};
