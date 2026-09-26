@@ -29,6 +29,27 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
 import torch
 
 
+def require_adapter_coverage(model, targets):
+    """Fail unless every linear layer a target names received an adapter; report how many each target got."""
+    import torch.nn as nn
+    wrapped, missed = {}, {}
+    for name, module in model.named_modules():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf not in targets or ".lora_" in name or ".base_layer" in name:
+            continue
+        if hasattr(module, "lora_A"):
+            wrapped[leaf] = wrapped.get(leaf, 0) + 1
+        elif isinstance(module, nn.Linear):
+            missed.setdefault(leaf, []).append(name)
+    print("adapters per target: " + ", ".join(f"{t}={wrapped.get(t, 0)}" for t in targets), flush=True)
+    if missed:
+        raise RuntimeError("target modules left without an adapter: " +
+                           "; ".join(f"{leaf} ({len(names)}, e.g. {names[0]})" for leaf, names in missed.items()))
+    absent = [t for t in targets if not wrapped.get(t)]
+    if absent:
+        raise RuntimeError(f"target modules match no layer: {', '.join(absent)}")
+
+
 def restore_lfm_expert_quantization(model, model_dir):
     """Attach the saved NF4 state to LFM's raw MoE expert tensors.
 
@@ -487,13 +508,19 @@ def main():
                           sorted({n.split(".")[-1] for n, m in model.named_modules()
                                   if isinstance(m, torch.nn.Linear) and "lm_head" not in n}))
             if use_unsloth:
+                # With any layer family filtered out (a text model leaves vision out), Unsloth keeps only the
+                # listed modules it finds under an attention or MLP block, silently dropping others such as LFM's
+                # conv projections. The list is already exact; take it as given.
                 model = FastLanguageModel.get_peft_model(
                     model, r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
-                    target_modules=linear, use_gradient_checkpointing="unsloth", random_state=a.seed)
+                    target_modules=linear, use_gradient_checkpointing="unsloth", random_state=a.seed,
+                    finetune_vision_layers=True, finetune_language_layers=True,
+                    finetune_attention_modules=True, finetune_mlp_modules=True)
             else:
                 model = get_peft_model(model, LoraConfig(
                     r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
                     target_modules=linear, task_type="CAUSAL_LM"))
+            require_adapter_coverage(model, linear)
         model.enable_input_require_grads()
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())

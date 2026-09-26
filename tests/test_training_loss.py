@@ -91,3 +91,24 @@ def test_partial_layer_checkpointing_retains_sparse_activations():
     assert model.is_gradient_checkpointing
     set_layer_checkpointing(model, False)
     assert not model.is_gradient_checkpointing
+
+
+def test_adapter_coverage_names_linear_layers_left_without_an_adapter():
+    import pytest
+    import torch.nn as nn
+    from scripts.train_lora import require_adapter_coverage
+
+    class Wrapped(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.lora_A = nn.ModuleDict()
+
+    model = nn.Module()
+    model.attn = nn.Module(); model.attn.q_proj = Wrapped()
+    model.conv = nn.Module(); model.conv.in_proj = nn.Linear(2, 2)
+    with pytest.raises(RuntimeError, match="in_proj"):
+        require_adapter_coverage(model, ["q_proj", "in_proj"])
+    model.conv.in_proj = Wrapped()
+    require_adapter_coverage(model, ["q_proj", "in_proj"])
+    with pytest.raises(RuntimeError, match="match no layer: w1"):
+        require_adapter_coverage(model, ["q_proj", "w1"])
