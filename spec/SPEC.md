@@ -112,12 +112,12 @@ not repeat an effect record operation identities and reconcile unknown outcomes.
 
 A service may come with a declaration: the TypeScript declaration of its members,
 with their doc comments, as a declaration file would give them. The model is
-shown it as `declare namespace name { … }` and can read it with `read_function`,
+shown it as `declare namespace name { … }` and can read it with `read_code`,
 but the implementation runs in the host and is neither readable nor editable. A
 task gives external modules (a board, a simulated world, a store, a checker) this
 way, so that only code the program owns can be changed. Importable packages are
-external in the same way: `read_function("pkg")` lists a package's exports from
-its type declarations, and `read_function("pkg.name")` shows one with its docs.
+external in the same way: `read_code("pkg")` lists a package's exports from
+its type declarations, and `read_code("pkg.name")` shows one with its docs.
 
 A service can be scoped to functions: it is then usable only in their calls and
 the calls they make, as a specialist can reach systems its caller cannot. Its
@@ -135,9 +135,10 @@ A natural-language invocation offers the model these tools:
   `value`, of the declared type; `blocked` stops because required information is
   absent, and `failed` because the instructions require an invalid or contradictory
   operation, each with a `reason` sentence instead of a value.
-- `read_function`, `edit_function`, `diff_functions`: inspect and edit callable items;
-  `read_function` also reads the declaration of a service or an importable package,
-  which cannot be edited.
+- `read_code`, `edit_code`, `diff_code`: inspect and edit the program's codebase
+  (its callable items); `read_code` also reads the declaration of a service or an
+  importable package, which cannot be edited, and the documentation of eval's
+  built-ins (`nl`, `iterateOn`, `transcript`). It is offered on every call.
 
 A directory reducer additionally receives `list_files`, `search_files`,
 `read_file`, `write_file`, `edit_file`, and `diff_files`, and the conversation

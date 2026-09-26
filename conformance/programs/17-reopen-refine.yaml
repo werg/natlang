@@ -52,7 +52,7 @@ reference:
           const headline = await write_headline(report);
           const bad = await too_long(headline);
           ({ headline, bad })
-      - edit_function:
+      - edit_code:
           name: write_headline
           find: Write a headline for `report`, at most 15 words.
           replace_with: Write a headline for `report`, at most 8 words.

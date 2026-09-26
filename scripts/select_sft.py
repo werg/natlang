@@ -15,8 +15,8 @@ from pathlib import Path
 
 
 # Skill labels are the native tool names of a turn joined by "+", or "reply" for a turn without a tool call.
-FAILURE_OR_REPAIR = {"failed", "blocked", "edit_function"}
-READ_SKILLS = {"read_page", "read_file", "search_files", "list_files", "diff_files", "read_function", "diff_functions"}
+FAILURE_OR_REPAIR = {"failed", "blocked", "edit_code"}
+READ_SKILLS = {"read_page", "read_file", "search_files", "list_files", "diff_files", "read_code", "diff_code"}
 WRITE_SKILLS = {"write_file", "edit_file"}
 RETURN_SKILLS = {"return_result"}
 

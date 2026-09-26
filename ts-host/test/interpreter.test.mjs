@@ -139,7 +139,7 @@ test('scope eval persists locals, calls imports positionally, and treats result 
   const repairedMap = await session.applyAsync('eval', { code: 'const repaired = flags.map(flag => await as_num(flag)); repaired' });
   assert.notEqual(repairedMap.kind, 'ok');
   const names = new NativeToolAgent(() => ({ calls: [] })).tools(session).map(entry => entry.function.name);
-  assert.deepEqual(names, ['eval', 'read_page', 'read_function', 'edit_function', 'diff_functions',
+  assert.deepEqual(names, ['eval', 'read_page', 'read_code', 'edit_code', 'diff_code',
     'compact_history', 'return_result']);
   const nullCase = open({ type: '() => null', instructions: 'Return null.' });
   assert.equal((await nullCase.session.applyAsync('eval', { code: 'return null' })).kind, 'ok');
@@ -348,20 +348,20 @@ test('codebase edits are live and reparsed; nested items are addressed by dotted
     label: ts('label', 'export default function label(): string { return "old"; }'),
     outer: nl('outer', { returns: 'string', instructions: 'Call inner.' },
       { inner: ts('inner', 'export default function inner(): string { return "old"; }') }) } });
-  assert.match((await session.applyAsync('read_function', { name: 'label' })).value, /return "old";/);
-  assert.equal((await session.applyAsync('edit_function', { name: 'label', find: 'return "old";', replace_with: 'return "new";' })).kind, 'ok');
+  assert.match((await session.applyAsync('read_code', { name: 'label' })).value, /return "old";/);
+  assert.equal((await session.applyAsync('edit_code', { name: 'label', find: 'return "old";', replace_with: 'return "new";' })).kind, 'ok');
   const called = await session.applyAsync('eval', { code: 'label()' });
   assert.equal(called.kind, 'ok', called.text); assert.equal(called.value, 'new');
-  assert.match((await session.applyAsync('read_function', { name: 'outer' })).text, /Natural-language function source/);
-  assert.match((await session.applyAsync('read_function', { name: 'inner' })).value, /return "old";/);
-  assert.equal((await session.applyAsync('edit_function', { name: 'outer.inner', find: '"old"', replace_with: '"newer"' })).kind, 'ok');
+  assert.match((await session.applyAsync('read_code', { name: 'outer' })).text, /Natural-language function source/);
+  assert.match((await session.applyAsync('read_code', { name: 'inner' })).value, /return "old";/);
+  assert.equal((await session.applyAsync('edit_code', { name: 'outer.inner', find: '"old"', replace_with: '"newer"' })).kind, 'ok');
   assert.match(lam.codebase.outer.codebase.inner.text, /"newer"/);
-  assert.equal((await session.applyAsync('edit_function', { name: 'outer', find: 'Call inner.', replace_with: 'Call the inner helper.' })).kind, 'ok');
+  assert.equal((await session.applyAsync('edit_code', { name: 'outer', find: 'Call inner.', replace_with: 'Call the inner helper.' })).kind, 'ok');
   assert.deepEqual(Object.keys(lam.codebase.outer.codebase), ['inner']);
-  const invalid = await session.applyAsync('edit_function', { name: 'label', find: 'return "new";', replace_with: 'while (true) {}' });
+  const invalid = await session.applyAsync('edit_code', { name: 'label', find: 'return "new";', replace_with: 'while (true) {}' });
   assert.equal(invalid.kind, 'error'); assert.match(invalid.text, /while/);
   assert.match(lam.codebase.label.text, /return "new";/, 'an invalid edit leaves the previous version live');
-  assert.deepEqual(JSON.parse((await session.applyAsync('diff_functions', {})).text).map(item => item.function).sort(), ['inner.ts', 'label.ts', 'outer.nl']);
+  assert.deepEqual(JSON.parse((await session.applyAsync('diff_code', {})).text).map(item => item.function).sort(), ['inner.ts', 'label.ts', 'outer.nl']);
   assert.equal(new NativeToolAgent(() => ({ calls: [] })).tools(session).some(entry => entry.function.name === 'write_file'), false);
 });
 
@@ -526,21 +526,21 @@ test('an external service is called and read by its declaration, and cannot be e
     { services: { board: board.exports }, declarations: { board: board.declaration } });
   const moved = await session.applyAsync('eval', { code: 'await board.commit_move({ card: "fub", to: "done" })' });
   assert.match(moved.text, /event rejected: card fub is locked/);
-  const read = session.apply('read_function', { name: 'board.commit_move' });
-  assert.equal(read.kind, 'ok'); assert.match(read.text, /^declare namespace board \{/); assert.doesNotMatch(read.text, /REJECT/);
-  const edited = session.apply('edit_function', { name: 'board', find: 'x', replace_with: 'y' });
+  const read = session.apply('read_code', { name: 'board.commit_move' });
+  assert.equal(read.kind, 'ok', read.text); assert.match(read.text, /^declare namespace board \{/); assert.doesNotMatch(read.text, /REJECT/);
+  const edited = session.apply('edit_code', { name: 'board', find: 'x', replace_with: 'y' });
   assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /board is an external service/);
 });
 
-test('read_function shows an importable package by its declarations, and will not edit it', async () => {
+test('read_code shows an importable package by its declarations, and will not edit it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Look something up.' });
-  const listed = session.apply('read_function', { name: 'undici' });
-  assert.equal(listed.kind, 'ok', listed.text); assert.match(listed.text, /^declare module "undici" \{ {2}\/\/ \d+ exports; read_function\("undici\.<name>"\)/);
-  const one = session.apply('read_function', { name: 'undici.fetch' });
+  const listed = session.apply('read_code', { name: 'undici' });
+  assert.equal(listed.kind, 'ok', listed.text); assert.match(listed.text, /^declare module "undici" \{ {2}\/\/ \d+ exports; read_code\("undici\.<name>"\)/);
+  const one = session.apply('read_code', { name: 'undici.fetch' });
   assert.match(one.text, /^\/\/ fetch, from "undici" .*\nexport declare function fetch/);
-  const edited = session.apply('edit_function', { name: 'undici.fetch', find: 'a', replace_with: 'b' });
+  const edited = session.apply('edit_code', { name: 'undici.fetch', find: 'a', replace_with: 'b' });
   assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /belongs to an imported package/);
-  assert.equal(session.apply('read_function', { name: 'no_such_package' }).kind, 'rejected');
+  assert.equal(session.apply('read_code', { name: 'no_such_package' }).kind, 'rejected');
 });
 
 test('read_page on a name in scope says to use it in eval', () => {

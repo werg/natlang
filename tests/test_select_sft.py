@@ -13,10 +13,10 @@ def row(identity, program, skill):
 def test_selection_keeps_rare_behavior_and_caps_common_turns():
     rows = ([row(f"w{i}", "p", "write_file") for i in range(8)] +
             [row(f"t{i}", "p", "return_result" if i % 2 else "reply") for i in range(4)] +
-            [row("code", "p", "eval"), row("fn", "p", "read_function"), row("edit", "p", "edit_function")])
+            [row("code", "p", "eval"), row("fn", "p", "read_code"), row("edit", "p", "edit_code")])
     kept, dropped = select(rows, max_per_program=8, max_writes=2, max_terminals=1)
     skills = [r["skill"] for r in kept]
-    assert {"eval", "read_function", "edit_function"} <= set(skills)
+    assert {"eval", "read_code", "edit_code"} <= set(skills)
     assert skills.count("write_file") == 2
     assert skills.count("reply") + skills.count("return_result") == 1
     assert sum(dropped.values()) == len(rows) - len(kept)
@@ -54,11 +54,11 @@ def test_selection_prefers_iterated_function_calls():
 def test_selection_preserves_minimum_contrast_and_state_access():
     rows = [row("read", "p", "read_page"), row("write-a", "p", "write_file"),
             row("write-b", "p", "write_file"), row("reply", "p", "reply"),
-            row("error", "p", "failed"), row("edit", "p", "edit_function"),
+            row("error", "p", "failed"), row("edit", "p", "edit_code"),
             row("code", "p", "eval")]
     kept, _ = select(rows, max_per_program=2, max_writes=1, max_terminals=1)
     skills = {r["skill"] for r in kept}
-    assert {"read_page", "write_file", "reply", "failed", "edit_function"} <= skills
+    assert {"read_page", "write_file", "reply", "failed", "edit_code"} <= skills
     assert sum(r["skill"] == "write_file" for r in kept) == 1
 
 

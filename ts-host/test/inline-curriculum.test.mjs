@@ -70,7 +70,7 @@ test('inline and edit expectations are enforced by admission', async () => {
   // Editing a helper that already meets its contract.
   const [, sound] = FAMILIES.contract_diagnosis.build(7, 0);
   const meddling = structuredClone(sound);
-  meddling.curriculum.reference.root.splice(1, 0, ['edit_function', { name: 'line_total', find: 'Math.max(0,', replace_with: 'Math.max(0, 0 +' }]);
+  meddling.curriculum.reference.root.splice(1, 0, ['edit_code', { name: 'line_total', find: 'Math.max(0,', replace_with: 'Math.max(0, 0 +' }]);
   const edited = await replayReference(meddling, TOOLS_PROMPT);
   assert.deepEqual(admitRow({ task: { program_ir: meddling }, outcome: edited.run.outcome, trajectory: edited.trajectory }).reasons, ['unwarranted_edit']);
   const summary = coverage([admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory })]);

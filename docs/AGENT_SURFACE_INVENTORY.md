@@ -4,7 +4,7 @@
 > answers judgment work directly with `return_result` (status `success`, `blocked`, or `failed`), and
 > uses a persistent TypeScript evaluation scope for exact work, where a top-level `return` stages the
 > result and a reply without a tool call finishes. The other actions are `read_page`, `compact_history`,
-> and `read_function`, `edit_function`, and `diff_functions` when functions are imported. Directory
+> and `read_code`, `edit_code`, and `diff_code` when functions are imported. Directory
 > reducers additionally receive file tools. A call keeps one conversation (the checkpoint continuations
 > described below were removed). The observations below were recorded against earlier surfaces.
 >

@@ -155,8 +155,8 @@ export function contractDiagnosis(seed, index) {
   const shape = `invoice${index}`;
   const variants = { defect: { source: buggy, edits: 'required' }, sound: { source: correct, edits: 'forbidden' } };
   return Object.entries(variants).map(([variant, v]) => {
-    const reference = variant === 'defect' ? [evalCall('lines.map(l => line_total(l))'), ['read_function', { name: 'line_total' }],
-      ['edit_function', { name: 'line_total', find: 'return line.quantity * line.unit_cents - line.discount_cents;',
+    const reference = variant === 'defect' ? [evalCall('lines.map(l => line_total(l))'), ['read_code', { name: 'line_total' }],
+      ['edit_code', { name: 'line_total', find: 'return line.quantity * line.unit_cents - line.discount_cents;',
         replace_with: 'return Math.max(0, line.quantity * line.unit_cents - line.discount_cents);' }],
       evalCall('lines.reduce((sum, l) => sum + line_total(l), 0)'), returnCall(clampTotal)] :
       [evalCall('lines.map(l => line_total(l))'), evalCall('lines.reduce((sum, l) => sum + line_total(l), 0)'), returnCall(clampTotal)];

@@ -32,8 +32,15 @@ test('a blocked call without a value is asked only for its reason', async () => 
   assert.doesNotMatch(results[0], /use status "success"/);
 });
 
-test('read_function says what a name is when it is a tool or a built-in, not a function of the program', async () => {
-  const { results } = await script([['read_function', { name: 'nl' }], ['read_function', { name: 'read_page' }]]);
-  assert.match(results[0], /none of its own\. nl is built into eval/);
-  assert.match(results[1], /read_page is one of your tools, not a function of this program; call it directly/);
+test('read_code documents the built-ins of eval, which cannot be edited', async () => {
+  const { results } = await script([['read_code', { name: 'nl' }], ['read_code', { name: 'iterateOn' }],
+    ['edit_code', { name: 'nl', find: 'a', replace_with: 'b' }]]);
+  assert.match(results[0], /^nl: create a natural-language function/);
+  assert.match(results[1], /^iterateOn: repeat a step/);
+  assert.match(results[2], /nl is built into eval and cannot be changed/);
+});
+
+test('read_code says when a name is one of the tools, not a function of the program', async () => {
+  const { results } = await script([['read_code', { name: 'read_page' }]]);
+  assert.match(results[0], /none of its own\. read_page is one of your tools, not a function of this program; call it directly/);
 });

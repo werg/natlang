@@ -56,7 +56,7 @@ export function packageDeclaration(workspace: string, name: string): string | un
         const type = checker.typeToString(checker.getTypeOfSymbolAtLocation(target(item), file!), undefined, ts.TypeFormatFlags.NoTruncation);
         return `  ${item.name}: ${type.length > 160 ? `${type.slice(0, 157)}...` : type};`;
       });
-      return `declare module "${specifier}" {  // ${exports.length} exports; read_function("${specifier}.<name>") shows one with its docs\n${lines.join('\n')}\n}`;
+      return `declare module "${specifier}" {  // ${exports.length} exports; read_code("${specifier}.<name>") shows one with its docs\n${lines.join('\n')}\n}`;
     }
     const found = exports.find(item => item.name === member);
     if (!found) continue;

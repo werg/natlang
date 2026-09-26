@@ -9,6 +9,14 @@ import { DIRECTORY_REDUCER_PROMPT, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT } from '.
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 
+/** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
+export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not show: the source of a function in the program\'s codebase ' +
+  'by its listed name; the documentation of a built-in of eval (nl, iterateOn, transcript); or the declaration of an external ' +
+  'service or an importable package ("pkg" lists its exports, "pkg.name" shows one).';
+export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase: replace one exact or uniquely fuzzy span of its source. ' +
+  'The function is validated before the edit becomes live.';
+export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
+
 /** Assistant turns the model has taken, not counting the runtime's pre-filled scope calls. */
 export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): number {
   return messages.filter(message => message.role === 'assistant' &&
@@ -318,16 +326,15 @@ export class NativeToolAgent {
           reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
     ];
     const ownCode = Object.keys(session.lam.codebase).length > 0;
-    const readFunction = tool('read_function', 'Read the source of an imported function by its listed name, or the declaration of an external service or an importable package ("pkg" lists its exports, "pkg.name" shows one).',
-      { name: { type: 'string' } }, ['name']);
-    const external = Object.keys(session.runtime.declarations).length > 0 || !!session.runtime.environment.declarationOf;
-    if (!ownCode && external) tools.splice(2, 0, readFunction);
+    // Built-in documentation is always there to read, so read_code is always offered; editing needs code of the program's own.
+    const readCode = tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']);
+    if (!ownCode) tools.splice(2, 0, readCode);
     if (ownCode) tools.splice(2, 0,
-      readFunction,
-      tool('edit_function', 'Replace one exact or uniquely fuzzy span in an imported function source. The function is validated before the edit becomes live.',
+      readCode,
+      tool('edit_code', EDIT_CODE_DESCRIPTION,
         { name: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['name', 'find', 'replace_with']),
-      tool('diff_functions', 'Inspect source changes made to imported functions in this call.', {}, []));
+      tool('diff_code', DIFF_CODE_DESCRIPTION, {}, []));
     if (session.lam.projectTransaction) {
       const fileTools = [
       tool('list_files', 'List files in the current folder. Paths are relative.',
@@ -458,7 +465,7 @@ export class NativeToolAgent {
       ...(lam.projectTransaction ? [...FOLDER_DECLARATIONS, 'declare const folder: Folder;  // your working copy of the input folder'] : []),
       // A service scoped to other functions is named, with who can use it, so the call knows to ask them.
       ...Object.keys(session.runtime.services).filter(name => !Object.hasOwn(session.availableServices(), name)).map(name =>
-        `// ${name}: only ${session.runtime.serviceScopes[name]!.map(path => path.split('/').pop()!.replace(/\.nl$/, '')).join(', ')} can use it (read_function("${name}") shows its declaration)`),
+        `// ${name}: only ${session.runtime.serviceScopes[name]!.map(path => path.split('/').pop()!.replace(/\.nl$/, '')).join(', ')} can use it (read_code("${name}") shows its declaration)`),
     ]);
     const params = lam.type.params.fields.map(field => field.name);
     if (params.length) {
@@ -634,7 +641,7 @@ export class NativeToolAgent {
         const confidence = typeof rawConfidence === 'number' ? rawConfidence : rawConfidence?.geometric_mean;
         const lowValue = review.threshold !== undefined && confidence !== undefined && confidence < review.threshold;
         const structural = review.scope === 'actions' &&
-          ['eval', 'edit_function', 'edit_file', 'write_file'].includes(name);
+          ['eval', 'edit_code', 'edit_file', 'write_file'].includes(name);
         if (!lowValue && !structural) continue;
         if (exhausted())
           return 'careful review budget exhausted before applying proposal';

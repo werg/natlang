@@ -222,7 +222,7 @@ test('a runtime shows services by their declarations and limits scoped ones to t
   const agent = async session => {
     const name = session.lam.functionName;
     seen[name] = { used: (await session.applyAsync('eval', { code: 'const found = records.find("x"); found' })).text,
-      read: session.apply('read_function', { name: 'records' }).text };
+      read: session.apply('read_code', { name: 'records' }).text };
     if (name === 'answer') await session.applyAsync('eval', { code: 'const asked = await lookup("x"); asked' });
     session.lam.return = 'ok';
   };

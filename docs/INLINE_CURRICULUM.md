@@ -7,7 +7,7 @@ well, or decline to, and whose later choices depend on observations the opening 
 `ts-host/scripts/inline-curriculum/` (families, source adapters, build, acquisition, admission CLI).
 
 **No case may depend on code being private.** A program's callable modules (world simulations included) are
-readable with `read_function`, and reading them is a legitimate, desirable way to learn how things work. If reading
+readable with `read_code`, and reading them is a legitimate, desirable way to learn how things work. If reading
 a module's source would trivialize a case, the case is poorly posed and is redesigned; the read is never penalized.
 
 **Only the program's own code is editable.** A module that stands for something outside the program (a board, a
@@ -68,7 +68,7 @@ collector accepted its contract **and**:
 - `inline: avoid` saw no inline child. For `inline: required`, a correct answer judged directly is admitted with the
   note `judged_directly`; an eval that tests text against a keyword regular expression instead is rejected
   (`regex_judgment`);
-- `edits: required` saw an `edit_function`, and `edits: forbidden` saw none;
+- `edits: required` saw an `edit_code`, and `edits: forbidden` saw none;
 - `named: required` saw a named child call, and `iterate: required` an eval that runs `iterateOn`.
 
 Rejection reasons: `wrong_return`, `fabricated_result` (a value where the honest outcome is a blocker),
@@ -257,7 +257,7 @@ field reaches training input.
   checks no longer need `nl<T>`. Before, 17 of 20 natural unannotated uses were rejected.
 - In eval, `await nl`...`` without a call runs the judgment (a live run awaited the function itself, so every
   verdict was truthy); project source gets an `nl-not-called` diagnostic instead.
-- External modules are services with declarations (see above), and `read_function` reads importable packages
+- External modules are services with declarations (see above), and `read_code` reads importable packages
   by their type declarations. An eval declares `let x: T;` without a value as not kept, instead of letting a later
   eval fail on the name. An inline `nl` saved without parameters and not called where it was created takes
   whatever arguments each call passes (in train3, `const fits = nl<boolean>`...`` called in a later eval failed with

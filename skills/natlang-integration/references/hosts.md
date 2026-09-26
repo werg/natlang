@@ -42,13 +42,13 @@ Anything that stands for the world outside the program (stores, boards, simulato
 
 ```ts
 const runtime = createNatlangRuntime({ model, services: { records, tables },
-  // What the model is shown and read_function returns: a .d.ts body, wrapped as `declare namespace records { … }`.
+  // What the model is shown and read_code returns: a .d.ts body, wrapped as `declare namespace records { … }`.
   serviceDeclarations: { records: '/** Look a question up in the records. */\nexport function find(question: string): string;' },
   // tables is usable only in calls of answer/table_expert.nl and the calls they make; others see who can use it.
   serviceScopes: { tables: ['answer/table_expert.nl'] } });
 ```
 
-Both options also exist per task (`runtime.run(fn, { services, serviceDeclarations, serviceScopes })`). A service without a declaration is listed by its method names only. Scopes name functions by their source path relative to the loaded program. Importable packages need no declaration: `read_function("pkg")` reads a package's exports from its own type declarations.
+Both options also exist per task (`runtime.run(fn, { services, serviceDeclarations, serviceScopes })`). A service without a declaration is listed by its method names only. Scopes name functions by their source path relative to the loaded program. Importable packages need no declaration: `read_code("pkg")` reads a package's exports from its own type declarations.
 
 ## Model transport
 

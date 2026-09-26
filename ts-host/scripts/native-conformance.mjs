@@ -20,7 +20,7 @@ function referenceAgent(specs) {
     const lam = session.lam, spec = specs[lam.functionName];
     if (!spec) throw new Error(`no reference for ${lam.functionName}`);
     const act = async (tool, args) => {
-      const result = ['eval', 'read_function', 'edit_function', 'diff_functions'].includes(tool) ?
+      const result = ['eval', 'read_code', 'edit_code', 'diff_code'].includes(tool) ?
         await session.applyAsync(tool, args) : session.apply(tool, args);
       if (['error', 'rejected', 'refused'].includes(result.kind))
         throw new Error(`${tool} ${JSON.stringify(args)} -> ${result.kind}: ${result.text}`);

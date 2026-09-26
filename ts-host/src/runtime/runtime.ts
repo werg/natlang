@@ -35,7 +35,7 @@ export type NatlangRuntimeOptions = {
   /**
    * What the model is shown of each service: TypeScript declarations of its members with doc comments (a `.d.ts`
    * body of `export` declarations, or a whole `declare namespace name { … }`). The model can read them with
-   * read_function; without one a service is listed by its method names only.
+   * read_code; without one a service is listed by its method names only.
    */
   serviceDeclarations?: Record<string, string>;
   /** Services only some functions may use, by each function's source path (`review/assess.nl`); see SPEC. */

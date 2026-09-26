@@ -47,7 +47,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
   services?: Record<string, object>;
   /**
    * Declarations of external services by name (see external.ts): what the model is shown of them, and what
-   * read_function returns. Their implementations are not part of the program and cannot be read or edited.
+   * read_code returns. Their implementations are not part of the program and cannot be read or edited.
    */
   declarations?: Record<string, string>;
   /**
@@ -73,13 +73,34 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
 };
 /** Every tool the runtime can apply; a call's offer is a subset. */
 const NATIVE_TOOLS = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
-  'read_function', 'edit_function', 'diff_functions',
+  'read_code', 'edit_code', 'diff_code',
   'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
-/** Names eval provides that have no source in the program to read. */
-const BUILT_INS: Record<string, string> = {
-  nl: 'nl is built into eval, as your instructions describe; it has no source to read',
-  iterateOn: 'iterateOn is built into eval, as your instructions describe; it has no source to read',
-  transcript: 'transcript is built into eval: search it with transcript.search(...) in eval',
+const CODE_TOOLS = ['read_code', 'edit_code', 'diff_code'];
+/** What read_code shows for the built-ins of eval, which have no source in the program. */
+export const BUILT_IN_DOCS: Record<string, string> = {
+  nl: `nl: create a natural-language function inside eval code. Calling it runs another call like this one, with its own
+instructions, on the arguments you pass; await the call.
+  nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
+  nl<T>\`instructions\`               the same with its result type T written out
+  const f: (item: Item) => Promise<T> = nl\`instructions\`   a named function with a signature, to call many times
+Parameters take their names from the call (nl\`Is item urgent?\`(item) names it item) or the signature; a saved nl
+without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
+instructions also see variables in scope that they mention by exact name. The result type comes from how the result
+is used (an annotation, a comparison, a field read); write nl<T> when nothing says it.
+Examples:
+  const verdicts = await Promise.all(items.map(item => nl\`Does item meet policy?\`(item)));
+  const risk: 'low' | 'high' = await nl\`Rate the risk in note.\`(note);
+An nl function also has .iterateOn(initial).until(check); see iterateOn.`,
+  iterateOn: `iterateOn: repeat a step an open-ended number of times (eval has no while).
+  const final = await iterateOn(step, initialState, ...otherArgs).until(state => isFinished(state));
+step(state, ...otherArgs) returns the next state and may be async or an nl function; until's check receives each
+state and says when to stop. The state keeps the type of the initial value. An nl function has it as a method:
+  const plan2 = await nl\`Make plan more concrete.\`.iterateOn(plan).until(nl\`plan names an owner for every task.\`);`,
+  transcript: `transcript: this call's earlier tool calls, with their full outputs, in eval's scope.
+  transcript.search(textOrRegex, { in, status, tool })   matching lines of your earlier reasoning, code and outputs
+  transcript.entry(n)   call n: { turn, reasoning, tool, code, arguments, status, value, console, output }
+status is ok, rejected or error; value is what an eval returned, as data. Search for something specific rather than
+reading it through, and rather than repeating work.`,
 };
 
 function rejected(error: Reject): NativeResult {
@@ -602,7 +623,7 @@ export class NativeSession {
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive whole number of milliseconds' }]);
         return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined));
       }
-      if (['read_function', 'edit_function', 'diff_functions'].includes(name)) return this.record(name, args, this.functionTool(name, args));
+      if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
       if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name))
         return this.record(name, args, await this.fileTool(name, args));
       return this.record(name, args, this.scopeTool(name, args));
@@ -615,13 +636,13 @@ export class NativeSession {
   apply(name: string, args: Record<string, unknown>): NativeResult {
     this.runtime.checkInterruption();
     if (this.completed) return this.record(name, args, { kind: 'error', text: 'the task has already finished' });
-    if (!['read_page', 'compact_history', 'return_result', 'blocked', 'failed', 'read_function', 'edit_function', 'diff_functions'].includes(name))
+    if (!['read_page', 'compact_history', 'return_result', 'blocked', 'failed', 'read_code', 'edit_code', 'diff_code'].includes(name))
       return this.record(name, args, rejected(new Reject([{ path: name, code: 'bad-action', expected: 'a synchronous scope-eval tool' }])));
     if (this.actionLimitReached()) return this.record(name, args, { kind: 'budget', text: 'action or tool-call budget exhausted' });
     this.toolCalls++;
     this.actions++; this.lam.steps++;
     try {
-      return this.record(name, args, name.endsWith('_function') || name === 'diff_functions' ? this.functionTool(name, args) : this.scopeTool(name, args));
+      return this.record(name, args, CODE_TOOLS.includes(name) ? this.functionTool(name, args) : this.scopeTool(name, args));
     } catch (error) {
       if (error instanceof Reject) return this.record(name, args, rejected(error));
       return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
@@ -685,9 +706,9 @@ export class NativeSession {
     }));
   }
 
-  /** read_function, edit_function, diff_functions over the codebase record tree. */
+  /** read_code, edit_code, diff_code over the codebase record tree. */
   private functionTool(name: string, args: Record<string, unknown>): NativeResult {
-    if (name === 'diff_functions') {
+    if (name === 'diff_code') {
       const changed = [...this.originalSources.keys()].map(source => ({ function: source, kind: 'modified' }));
       return { kind: 'ok', text: JSON.stringify(changed, null, 2), value: changed as Value };
     }
@@ -695,16 +716,22 @@ export class NativeSession {
     // An external service is shown by its declaration, and is not the program's to change.
     const service = requested.split('.')[0]!;
     if (Object.hasOwn(this.runtime.declarations, service) && !findCodebaseItem(this.lam.codebase, requested)) {
-      if (name === 'edit_function') throw new Reject([{ path: requested, code: 'external', expected:
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected:
         `a function of this program; ${service} is an external service: its declaration can be read, but it runs outside this program and cannot be changed` }]);
       const declaration = this.runtime.declarations[service]!;
       return { kind: 'ok', text: `${declaration}\n// ${service} is an external service: this declaration is all of it there is to read.`, value: declaration };
     }
     const found = findCodebaseItem(this.lam.codebase, requested);
+    // A built-in of eval is documented, not defined, here: read shows its documentation; it cannot be edited.
+    if (!found && Object.hasOwn(BUILT_IN_DOCS, requested)) {
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'built-in', expected:
+        `a function of this program's codebase; ${requested} is built into eval and cannot be changed` }]);
+      return { kind: 'ok', text: BUILT_IN_DOCS[requested]!, value: BUILT_IN_DOCS[requested]! };
+    }
     // An importable package is read by its type declarations; it is not part of this program either.
     const packaged = found ? undefined : this.runtime.environment.declarationOf?.(requested);
     if (packaged !== undefined) {
-      if (name === 'edit_function') throw new Reject([{ path: requested, code: 'external', expected:
+      if (name === 'edit_code') throw new Reject([{ path: requested, code: 'external', expected:
         `a function of this program; ${requested} belongs to an imported package, which can be read but not changed` }]);
       return { kind: 'ok', text: this.show(packaged), value: packaged };
     }
@@ -712,14 +739,14 @@ export class NativeSession {
       // Say what the name is when it is not the program's: a model asks for the source of its tools and built-ins.
       const own = listCodebase(this.lam.codebase);
       const readable = own.length ? `a function of this program: ${own.join(', ')}` : 'a function of this program, and this program has none of its own';
-      const what = BUILT_INS[requested] ?? (NATIVE_TOOLS.includes(requested) ?
-        `${requested} is one of your tools, not a function of this program; call it directly` : undefined);
+      const what = NATIVE_TOOLS.includes(requested) ?
+        `${requested} is one of your tools, not a function of this program; call it directly` : undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
     const record = found.record;
     if (record.kind === 'namespace')
       throw new Reject([{ path: requested, code: 'no-such-function', expected: `an item inside ${requested}: ${Object.keys(record.codebase).join(', ')}` }]);
-    if (name === 'read_function') {
+    if (name === 'read_code') {
       let explanation = '';
       if (record.kind === 'natlang' && !this.explainedNaturalFunctions.has(record.id)) {
         this.explainedNaturalFunctions.add(record.id);

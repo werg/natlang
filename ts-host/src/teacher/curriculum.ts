@@ -44,7 +44,7 @@ export type Curriculum = {
   mode: 'single_call' | 'followup';
   /** Whether a correct trajectory creates an inline `nl`: needed, allowed, or a gratuitous child. */
   inline: 'required' | 'optional' | 'avoid';
-  /** Whether a correct trajectory edits a callable function (edit_function): a real defect, or a correct helper. */
+  /** Whether a correct trajectory edits a callable function (edit_code): a real defect, or a correct helper. */
   edits?: 'required' | 'forbidden' | 'optional';
   /** A correct trajectory calls a named callable `.nl` function (the helper that fits), or runs `iterateOn`. */
   named?: 'required';
@@ -147,8 +147,8 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
         if (/\/[^/\n]*\w+\|\w+[^/\n]*\/[gimsuy]*\.test\s*\(/.test(String(args.code ?? ''))) regexJudgment = true;
         if (/\b(?:for|while|forEach|map)\b[\s\S]{0,300}transcript\.entry\s*\(/.test(String(args.code ?? ''))) transcriptDump = true;
       }
-      if (call.tool === 'edit_function') functionEdits++;
-      if (call.tool === 'edit_function' || call.tool === 'edit_file' || call.tool === 'write_file') edits++;
+      if (call.tool === 'edit_code') functionEdits++;
+      if (call.tool === 'edit_code' || call.tool === 'edit_file' || call.tool === 'write_file') edits++;
       if (call.tool === 'read_page') pageReads++;
       if (firstDecision === -1 && (TERMINAL.has(call.tool) || (call.tool === 'eval' && stagesResult(String(args.code ?? '')) &&
           !evalFailed(trajectory, index, rootName))))
