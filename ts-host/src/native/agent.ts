@@ -22,6 +22,19 @@ export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase
  * thought for the same reason.
  */
 const thought = (reasoning: string | undefined) => reasoning ? { reasoning_content: reasoning } : {};
+/**
+ * The finishing tool. The last sentence is for judgments: asked "does review recommend the product?", a model answered
+ * "it does not" with status blocked, and the caller got an error for a perfectly good answer.
+ */
+export const RETURN_RESULT_DESCRIPTION = 'Finish the call. With status "success", value is the result and must have the declared ' +
+  'return type. With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an ' +
+  'invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty ' +
+  'list) is a result like any other: return it with status "success".';
+/** The finishing tool's description before its sentence on negative answers; kept for migrating collected data. */
+export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "success", value is the result and must have the ' +
+  'declared return type. With status "blocked" (required information is missing; do not guess) or "failed" (the instructions ' +
+  'require an invalid or contradictory operation), give the reason instead of a value.';
+
 /** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
 export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
@@ -79,53 +92,22 @@ const DEFAULT_CONTEXT_TOKENS = 16384;
 /** Appended to the latest tool result when the next turn must compact. */
 const COMPACTION_NOTICE = '\n\n[This conversation is near its context limit. Call compact_history with a short note on what you are ' +
   'doing, what you have found, and what is left, written so that you can continue from the note alone.]';
-/** Messages at the end of the conversation that budget compaction keeps whole if it can: the latest exchanges. */
-const RECENT_MESSAGES = 6;
-/** What replaces an old tool output when the conversation is compacted; `entry` is its transcript index. */
-export const elidedOutput = (entry?: number) => entry === undefined ?
-  cutNote('elided to keep this conversation within its context budget; values it stored are still in scope') :
-  cutNote('elided to keep this conversation within its context budget', { holder: `transcript.entry(${entry}).output` });
-/** What replaces the code of an old eval call when outputs alone do not bring the conversation under budget. */
-export const elidedCode = (entry?: number) => entry === undefined ?
-  cutNote('elided to keep this conversation within its context budget; its declarations are still in scope') :
-  cutNote('elided to keep this conversation within its context budget', { holder: `transcript.entry(${entry}).code` });
-const ELIDED = /^<<elided /;
+/** Pinned when the conversation is shortened without a note from the model. */
+const AUTOMATIC_NOTE = 'This conversation reached its context limit, so your earlier turns were moved to transcript. Values ' +
+  'you stored are still in scope. Look into the history only when something specific matters for the next step, and then ' +
+  'search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.';
 
 /**
- * Deterministic compaction: replace the oldest tool outputs after the opening with a stub, oldest first, until
- * `over()` is false; if that is not enough, replace the code of the oldest eval calls the same way. The opening and
- * the last `recent` messages stay whole; the messages keep their order and number. `entry` maps a tool message, or
- * a tool call's id, to its transcript index, which the stub names so the model can read the original with code.
- * Returns how many outputs and calls were elided.
+ * Compaction: everything between the kept start (the opening, and the pinned note once there is one) and the latest
+ * exchange (the last assistant turn and what followed it) leaves the conversation. It is all in transcript, and every
+ * value the model stored is still in eval's scope. Returns how many messages were removed.
  */
-export function compactMessages(messages: Record<string, unknown>[], openingLength: number, recent: number,
-  over: () => boolean, entry: (callId: string) => number | undefined = () => undefined): number {
-  let elided = 0;
-  for (let index = openingLength; index < messages.length - recent && over(); index++) {
-    const message = messages[index]!;
-    if (message.role !== 'tool' || typeof message.content !== 'string' || ELIDED.test(message.content)) continue;
-    const stub = elidedOutput(entry(String(message.tool_call_id)));
-    if (message.content.length <= stub.length) continue;
-    messages[index] = { ...message, content: stub };
-    elided++;
-  }
-  for (let index = openingLength; index < messages.length - recent && over(); index++) {
-    const message = messages[index]!;
-    if (message.role !== 'assistant' || !Array.isArray(message.tool_calls)) continue;
-    let changed = false;
-    const calls = (message.tool_calls as Array<Record<string, unknown>>).map(call => {
-      const fn = call.function as { name?: unknown; arguments?: unknown } | undefined;
-      if (fn?.name !== 'eval' || typeof fn.arguments !== 'string') return call;
-      let args: Record<string, unknown>;
-      try { args = JSON.parse(fn.arguments) as Record<string, unknown>; } catch { return call; }
-      const stub = elidedCode(entry(String(call.id)));
-      if (typeof args.code !== 'string' || ELIDED.test(args.code) || args.code.length <= stub.length) return call;
-      changed = true;
-      return { ...call, function: { ...fn, arguments: JSON.stringify({ ...args, code: stub }) } };
-    });
-    if (changed) { messages[index] = { ...message, tool_calls: calls }; elided++; }
-  }
-  return elided;
+export function collapseHistory(messages: Record<string, unknown>[], keptStart: number): number {
+  let latest = messages.length - 1;
+  while (latest >= keptStart && messages[latest]!.role !== 'assistant') latest--;
+  if (latest <= keptStart) return 0;
+  messages.splice(keptStart, latest - keptStart);
+  return latest - keptStart;
 }
 
 
@@ -329,9 +311,7 @@ export class NativeToolAgent {
         'stay in transcript.',
         { note: { type: 'string', maxLength: COMPACTION_NOTE_CHARS,
           description: 'What you are doing, what you have found and ruled out, and what is left.' } }, ['note']),
-      tool('return_result', 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
-        'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
-        'or contradictory operation), give the reason instead of a value.',
+      tool('return_result', RETURN_RESULT_DESCRIPTION,
         { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
           value: session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {},
           reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
@@ -535,9 +515,19 @@ export class NativeToolAgent {
     let tokensPerChar = 1 / 3.5;
     const requestChars = (tools: unknown[]) => JSON.stringify(messages).length + JSON.stringify(tools).length;
     // Tool call id -> index in session.transcript, for compaction stubs.
-    const transcriptEntries = new Map<string, number>();
     // Messages compaction never touches: the opening, and the latest compaction note once there is one.
     let protectedLength = openingLength;
+    // Pins the model's compaction note after the opening (null: the automatic note, unless a note is already pinned).
+    // Returns 0, so it can be added to a count of removed messages.
+    const pinNote = (note: string | null): number => {
+      if (note === null && protectedLength > openingLength) return 0;
+      const pinned = { role: 'user', content: note === null ? AUTOMATIC_NOTE : `Your note from compacting this conversation: ` +
+        `${note}\n\nContinue from where this note leaves off. Look into the history only when something specific matters for ` +
+        'the next step, and then search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.' };
+      if (protectedLength > openingLength) messages[openingLength] = pinned;
+      else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
+      return 0;
+    };
     // Estimated prompt size right after the last compaction.
     let compactedAt = 0;
     // The turn of the model's last compaction: the next turn is not asked again (what it could not remove is elided).
@@ -558,7 +548,9 @@ export class NativeToolAgent {
     while (true) {
       if (exhausted()) return 'episode turn, token, or wall-clock budget exhausted';
       messages[0]!.content = systemPrompt();
-      const limit = allowance();
+      // One turn may not take the window: without a limit a model can think for most of it in a single reply. The default
+      // is the reply room the budget keeps free below.
+      const limit = allowance() ?? (budget === null ? null : Math.floor(budget / 4));
       // On the last turn of a budget only return_result is offered: the call ends with a result or an honest
       // blocked or failed status, not by running out.
       const lastTurn = maxTurns !== undefined && maxTurns - turns === 1;
@@ -570,9 +562,9 @@ export class NativeToolAgent {
       // After a compaction the next one waits until the conversation has grown by another quarter of the budget, so
       // what compaction cannot remove (the opening, stubs, the note) never makes it ask again and again.
       // The budget is the whole context window, which holds the reply as well as the prompt: a prompt must leave room
-      // for the turn's reply (its allowance, at most a quarter of the window; an eighth when unlimited). Reaching that
-      // ceiling always asks for a compaction, however recent the last one.
-      const reply = budget === null ? 0 : Math.min(limit ?? Math.floor(budget / 8), Math.floor(budget / 4));
+      // for the turn's reply (its limit, at most a quarter of the window). Reaching that ceiling always asks for a
+      // compaction, however recent the last one.
+      const reply = budget === null ? 0 : Math.min(limit ?? Math.floor(budget / 4), Math.floor(budget / 4));
       const nearLimit = budget !== null && compactedTurn !== turns && estimate(allTools) >
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
@@ -583,17 +575,12 @@ export class NativeToolAgent {
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
       }
       if (budget !== null && estimate(availableTools) > budget - reply) {
-        // A request never exceeds the budget: if the model has not compacted, the oldest outputs are elided without
-        // a note. Program state lives in the eval scope and every output in transcript, so no values are lost.
-        // Keep the latest exchanges if that is enough; otherwise keep only the last call and its result.
-        let elided = 0;
-        for (const recent of [RECENT_MESSAGES, 2])
-          if (estimate(availableTools) > budget * 0.5)
-            elided += compactMessages(messages, protectedLength, recent, () => estimate(availableTools) > budget * 0.5,
-              callId => transcriptEntries.get(callId));
+        // A request never exceeds the budget: if the model has not compacted, the conversation is shortened for it,
+        // with a note saying where the earlier turns are.
+        const removed = pinNote(null) + collapseHistory(messages, protectedLength);
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
-          elided, note: null, estimated_tokens: Math.round(estimate(availableTools)) });
+          elided: removed, note: null, estimated_tokens: Math.round(estimate(availableTools)) });
       }
       const sentChars = requestChars(availableTools);
       const callId = session.runtime.currentCallId ?? null;
@@ -640,8 +627,7 @@ export class NativeToolAgent {
         return 'episode token or wall-clock budget exhausted';
       if (!response.calls?.length && availableTools !== allTools && !lastTurn) {
         // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
-        const elided = compactMessages(messages, protectedLength, RECENT_MESSAGES, () => estimate(allTools) > budget! * 0.5,
-          callId => transcriptEntries.get(callId));
+        const elided = pinNote(null) + collapseHistory(messages, protectedLength);
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
           elided, note: null, estimated_tokens: Math.round(estimate(allTools)) });
@@ -739,18 +725,12 @@ export class NativeToolAgent {
       for (const [index, result] of results.entries()) {
         const [name, args] = calls[index]!, id = String(raw[index]!.id);
         messages.push({ role: 'tool', tool_call_id: id, content: result.text + (index === results.length - 1 ? notice : '') });
-        if (result.entry !== undefined) transcriptEntries.set(id, result.entry);
         if (name === 'compact_history' && result.kind === 'ok') note = String(args.note).trim();
       }
       if (note !== undefined) {
-        // Everything older than the latest exchange moves to transcript; the note is kept after the opening.
-        const pinned = { role: 'user', content: `Your note from compacting this conversation: ${note}\n\n` +
-          'Continue from where this note leaves off. Look into the history only when something specific matters for the next ' +
-          'step, and then search it (transcript.search("…"), then transcript.entry(n) for a match) instead of reading it through.' };
-        if (protectedLength > openingLength) messages[openingLength] = pinned;
-        else { messages.splice(openingLength, 0, pinned); protectedLength = openingLength + 1; }
-        // The note speaks for everything before it: only the compaction call and its result stay whole.
-        const elided = compactMessages(messages, protectedLength, 2, () => true, callId => transcriptEntries.get(callId));
+        // The note speaks for everything before it: the conversation becomes the opening, the note, and the compaction
+        // call with its result.
+        const elided = pinNote(note) + collapseHistory(messages, protectedLength);
         compactedAt = requestChars(this.tools(session)) * tokensPerChar;
         compactedTurn = turns;
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,

@@ -1,35 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NativeToolAgent, compactMessages, elidedCode, elidedOutput } from '../dist/native/agent.js';
+import { NativeToolAgent, collapseHistory } from '../dist/native/agent.js';
 import { session as open } from './support/natlang.mjs';
 
-const elided = message => typeof message.content === 'string' && message.content.startsWith('<<elided');
+const automaticNote = message => message.role === 'user' && /^This conversation reached its context limit/.test(message.content);
 
-test('compaction elides the oldest tool outputs first and keeps the opening and the latest exchange', () => {
-  const big = 'x'.repeat(500);
-  const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'task' },
-    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'a', content: big + '1' },
-    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'b', content: 'short' },
-    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'c', content: big + '2' },
-    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'd', content: big + '3' }];
-  const size = () => JSON.stringify(messages).length;
-  const target = size() - 300;
-  const entries = { a: 0, b: 1, c: 2, d: 3 };
-  assert.equal(compactMessages(messages, 2, 2, () => size() > target, id => entries[id]), 1);
-  assert.equal(messages[3].content, elidedOutput(0), 'the oldest large output goes first, and its stub names its transcript entry');
-  assert.match(messages[3].content, /transcript\.entry\(0\)\.output/);
-  assert.equal(messages[7].content, big + '2', 'later outputs stay while the target is met');
-  assert.equal(compactMessages(messages, 2, 2, () => true, id => entries[id]), 1, 'short outputs and the latest exchange are never elided');
-  assert.equal(messages[5].content, 'short'); assert.equal(messages[9].content, big + '3');
-  assert.equal(compactMessages(messages, 2, 2, () => true, id => entries[id]), 0, 'a stub is never elided again');
-  assert.deepEqual(messages.map(message => message.role), ['system', 'user', 'assistant', 'tool', 'assistant', 'tool',
-    'assistant', 'tool', 'assistant', 'tool'], 'messages keep their order and number');
-  const code = 'const total = items.reduce((sum, item) => sum + item.value, 0);\n'.repeat(5);
-  const calls = [{ role: 'system', content: 's' }, { role: 'user', content: 't' },
-    { role: 'assistant', content: '', tool_calls: [{ id: 'e', type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] },
-    { role: 'tool', tool_call_id: 'e', content: elidedOutput(4) }, { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', content: 'ok' }];
-  assert.equal(compactMessages(calls, 2, 2, () => true, id => id === 'e' ? 4 : undefined), 1, 'with outputs already elided, old eval code goes next');
-  assert.equal(JSON.parse(calls[2].tool_calls[0].function.arguments).code, elidedCode(4));
+test('compaction keeps the opening, the note, and the latest exchange; everything between leaves the conversation', () => {
+  const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'task' }, { role: 'user', content: 'note' },
+    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'a', content: 'one' },
+    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'b', content: 'two' },
+    { role: 'assistant', content: '', tool_calls: [] }, { role: 'tool', tool_call_id: 'c', content: 'three' }];
+  assert.equal(collapseHistory(messages, 3), 4);
+  assert.deepEqual(messages.map(message => message.content), ['system', 'task', 'note', '', 'three']);
+  assert.equal(collapseHistory(messages, 3), 0, 'the latest exchange itself is never removed');
 });
 
 test('a long call compacts old outputs instead of rolling over, and the model can read them back from transcript', async () => {
@@ -49,17 +32,10 @@ test('a long call compacts old outputs instead of rolling over, and the model ca
   await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 20 }).run(session);
   assert.equal(session.lam.return, 13);
   const last = requests.at(-1);
-  const stub = last.find(elided);
-  assert.ok(stub, 'old outputs were elided');
-  const index = Number(stub.content.match(/transcript\.entry\((\d+)\)/)[1]);
-  assert.match(session.transcript[index].output, /y{2000} mark/, 'the stub names the entry that holds the output');
-  assert.match(recovered, /\[\s*1\s*\]/, 'an eval found the elided first output in transcript');
-  assert.ok(last.length > 20, 'the conversation was never cut: every earlier message is still there');
-  assert.equal(last.filter(message => message.role === 'user').length, 1, 'no checkpoint request was sent');
-  assert.ok(Math.round(JSON.stringify(last).length / 4) < 4096, 'the prompt stays within the budget');
-  const previous = requests.at(-2);
-  assert.deepEqual(last.slice(0, previous.length - 6), previous.slice(0, previous.length - 6),
-    'once elided, an output stays elided, so consecutive requests share their prefix');
+  assert.match(recovered, /\[\s*1\s*\]/, 'an eval found the first output in transcript after it left the conversation');
+  assert.equal(last.filter(automaticNote).length, 1, 'the automatic note says where the earlier turns are');
+  assert.ok(!JSON.stringify(last).includes('mark1\''), 'the first turns left the conversation');
+  assert.ok(requests.every(request => Math.round(JSON.stringify(request).length / 4) < 4096), 'every prompt stays within the budget');
 });
 
 test('without a budget nothing is compacted, and a parameter named transcript keeps its meaning', async () => {
@@ -69,7 +45,8 @@ test('without a budget nothing is compacted, and a parameter named transcript ke
     return turn < 8 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: 100000 } :
       { calls: [['eval', { code: 'return transcript' }]] }; };
   await new NativeToolAgent(driver, { contextTokens: null, maxTurns: 20 }).run(session);
-  assert.equal(last.some(elided), false);
+  assert.equal(last.some(automaticNote), false);
+  assert.ok(last.length > 14, 'every turn is still in the conversation');
   assert.equal(session.lam.return, 'mine');
 });
 
@@ -103,7 +80,7 @@ test('near the budget the model is asked to compact: only compact_history is off
   assert.equal(pinned.length, 1, 'only the latest note is kept');
   assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
   assert.match(pinned[0].content, /Continue from where this note leaves off\. Look into the history only when something specific matters/);
-  assert.ok(last.messages.some(elided), 'older outputs moved to transcript');
+  assert.ok(last.messages.length < requests.length, 'turns before the last compaction left the conversation');
   assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the window');
   assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');
 });
@@ -197,4 +174,24 @@ test('a request the server refuses as too long teaches the agent its true size, 
   assert.equal(session.completed, true);
   assert.ok(refused >= 1, 'the server refused at least one request');
   assert.ok(sizes.every(size => size < 4096));
+});
+
+test('a turn is limited to a quarter of the window, and long reasoning leaves the conversation with its turn', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  const requests = [];
+  let turn = 0;
+  const driver = request => {
+    requests.push(structuredClone(request)); turn++;
+    const long = 'Thinking hard. '.repeat(400);
+    if (request.tools.map(tool => tool.function.name).join() === 'compact_history')
+      return { calls: [['compact_history', { note: `Counting; reached ${turn}.` }]], prompt_tokens: promptOf(request) };
+    return turn < 12 ? { reasoning: long, calls: [['eval', { code: `${turn}` }]], prompt_tokens: promptOf(request) } :
+      { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: promptOf(request) };
+  };
+  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30 }).run(session);
+  assert.equal(session.completed, true);
+  assert.ok(requests.every(request => request.max_tokens === 1024), 'each turn may use at most a quarter of the window');
+  assert.ok(requests.every(request => promptOf(request) < 4096));
+  assert.ok(session.transcript.every(entry => entry.tool !== 'eval' || /Thinking hard/.test(entry.reasoning ?? '')),
+    'the reasoning that left the conversation is still in transcript');
 });
