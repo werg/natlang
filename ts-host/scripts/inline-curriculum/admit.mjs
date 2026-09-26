@@ -24,15 +24,19 @@ if (import.meta.url === `file://${process.argv[1]}`) await main();
 
 async function main() {
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  ledger: { type: 'string' }, admitted: { type: 'string' }, show: { type: 'boolean', default: false } } });
-if (!positionals.length || !values.ledger) throw new Error('usage: admit.mjs RESULTS.jsonl... --ledger LEDGER.jsonl [--admitted OUT.jsonl] [--show]');
+  ledger: { type: 'string' }, admitted: { type: 'string' }, show: { type: 'boolean', default: false },
+  'require-technique': { type: 'boolean', default: false } } });
+if (!positionals.length || !values.ledger) throw new Error('usage: admit.mjs RESULTS.jsonl... --ledger LEDGER.jsonl [--admitted OUT.jsonl] [--require-technique] [--show]');
+// With --require-technique, a correct run that skipped the technique its case requires (judged directly) is not
+// written to the admitted output: training data meant to teach the technique. The ledger still admits it.
+const written = item => item.admitted && !(values['require-technique'] && item.notes?.includes('judged_directly'));
 
 const rows = [];
 for (const path of positionals) for (const line of (await readFile(path, 'utf8')).split('\n')) if (line.trim()) rows.push(JSON.parse(line));
 const curriculumRows = rows.filter(row => row.task?.program_ir?.curriculum);
 const admissions = curriculumRows.map(admitRow);
 await writeFile(values.ledger, admissions.map(item => JSON.stringify(item)).join('\n') + (admissions.length ? '\n' : ''));
-if (values.admitted) await writeFile(values.admitted, curriculumRows.filter((_, i) => admissions[i].admitted)
+if (values.admitted) await writeFile(values.admitted, curriculumRows.filter((_, i) => written(admissions[i]))
   .map(row => JSON.stringify(stripHint(row))).join('\n') + '\n');
 const summary = coverage(admissions);
 await writeFile(values.ledger.replace(/\.jsonl$/, '') + '.coverage.json', JSON.stringify(summary, null, 2) + '\n');
