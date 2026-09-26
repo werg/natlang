@@ -163,9 +163,16 @@ async function mergeCompleted(records: IndexedRecord[], config: CollectorConfig)
   return { completed: lines.length, missing };
 }
 
+const errorText = (error: unknown) => String(error instanceof Error ? `${error.name}: ${error.message}` : error).toLowerCase();
+
+/** A provider refusing for request rate or concurrency (a subscription's burst limit): wait longer, then go on. */
+function rateLimited(error: unknown): boolean {
+  return /rate limit|too many requests|\b429\b/.test(errorText(error));
+}
+
 function transportFailure(error: unknown): boolean {
-  const text = String(error instanceof Error ? `${error.name}: ${error.message}` : error).toLowerCase();
-  return ['connection refused', 'connection reset', 'fetch failed', 'socket', 'timed out', 'econnreset',
+  const text = errorText(error);
+  return rateLimited(error) || ['connection refused', 'connection reset', 'fetch failed', 'socket', 'timed out', 'econnreset',
     'econnrefused', 'remote end closed', 'headerstimeout', 'bodytimeout'].some(phrase => text.includes(phrase)) ||
     // A restarting server answers 502/503 (llama.cpp: "Loading model") until it is ready.
     /\bmodel http (?:502|503|504)\b/.test(text) ||
@@ -266,14 +273,17 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         break;
       } catch (error) {
         if (signal?.aborted) return;
-        if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8)) {
+        const limited = rateLimited(error);
+        if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id,
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
           break;
         }
         // Jitter spreads out jobs that failed together, so they do not all return at once.
-        const wait = Math.min(30_000, (config.retryDelayMs ?? 5_000) * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random());
+        // A rate limit lifts on the provider's clock, not ours: those waits start longer and grow further.
+        const wait = limited ? Math.min(120_000, (config.retryDelayMs ?? 5_000) * 3 * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random()) :
+          Math.min(30_000, (config.retryDelayMs ?? 5_000) * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random());
         if (wait) await delay(wait);
       }
     }
@@ -413,9 +423,11 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
       try {
         planned = await send({ ...request, messages: retryMessages, tools: [EXECUTION_PLAN_TOOL],
           tool_choice: 'required', max_tokens: maxTokens });
-      } catch {
-        // Required tool selection is not universal. Planning is deliberately best-effort: the ordinary action still
-        // runs, and will surface any real provider outage itself instead of treating a missing plan as job failure.
+      } catch (error) {
+        // An outage or rate limit fails the job, which resumes from its journal: skipping the plan would leave a
+        // training turn without reasoning.
+        if (transportFailure(error)) throw error;
+        // Required tool selection is not universal. Otherwise planning is best-effort: the ordinary action still runs.
         break;
       }
       planningCompletionTokens += planned.completion_tokens ?? maxTokens;

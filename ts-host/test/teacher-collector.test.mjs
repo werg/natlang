@@ -56,6 +56,16 @@ test('execution planning falls through when required tools are unsupported', asy
   assert.equal(result.calls[0][0], 'eval');
 });
 
+test('a rate limit while planning fails the turn for a retry instead of dropping its plan', async () => {
+  const send = async request => {
+    if (request.tools[0].function.name === 'execution_plan') throw new Error('{"detail":"Rate limit exceeded"}');
+    return { calls: [['eval', { code: 'n + 1' }]], completion_tokens: 5 };
+  };
+  const request = { messages: [{ role: 'user', content: 'Increment n.' }], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object' } } }], seed: 9, max_tokens: 100 };
+  await assert.rejects(withExecutionPlans(send)(request), /Rate limit exceeded/);
+});
+
 test('focused loader keeps source indexes and selects an exact range', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-load-')), path = join(dir, 'ir.jsonl');
   await writeFile(path, Array.from({ length: 12 }, (_, index) => JSON.stringify(record(`r${index}`))).join('\n') + '\n');
