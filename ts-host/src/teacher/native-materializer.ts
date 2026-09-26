@@ -110,6 +110,9 @@ function openingLength(context: Dict[]): number {
   return length;
 }
 
+/** A checker's verdict on an attempt ({ ok, certificate, problem }), refusing it. */
+const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
+
 /**
  * Convert accepted native teacher runs to one self-contained model decision per row.
  * Context is copied from that exact native request, never assembled by appending one decision onto another.
@@ -135,6 +138,8 @@ export function materializeNativeRows(input: unknown[]): {
     const logs = new Map<string, Dict[]>();
     for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
     const next = new Map<string, number>(), claimed = new Map<string, string>(), owners = new Set<string>();
+    // Per call (by its opening): each call signature already made, with the result it got.
+    const sentBefore = new Map<string, Map<string, string>>();
     let linked = 0;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
@@ -149,7 +154,7 @@ export function materializeNativeRows(input: unknown[]): {
       const caller = JSON.stringify(contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage));
       // A decision that sees nothing but its opening starts a call: even a call identical to an earlier one (the
       // same instructions on the same input) has its own actions.
-      if (contextSource.length === openingLength(contextSource)) claimed.delete(caller);
+      if (contextSource.length === openingLength(contextSource)) { claimed.delete(caller); sentBefore.delete(caller); }
       const calls = Array.isArray(assistant.calls) ? assistant.calls.map((value, callIndex) => {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
@@ -184,10 +189,20 @@ export function materializeNativeRows(input: unknown[]): {
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
       const handoff = row.handoff as Dict | undefined;
       const fromStudentPrefix = handoff !== undefined && index < Number(handoff.handoff_at);
-      const decisionApproved = !fromStudentPrefix && calls.every(call =>
+      const ranCleanly = calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
           .some(code => String(code).startsWith('coerced-')));
+      // Two kinds of step run cleanly and still teach nothing to repeat: a call this call already made with the same
+      // result (a detour), and an attempt the task's own checker rejected (the code worked; the attempt did not).
+      // Both stay in the context of later steps, where they are what the model recovers from.
+      const earlier = sentBefore.get(caller) ?? sentBefore.set(caller, new Map()).get(caller)!;
+      const signature = (call: Dict) => JSON.stringify([call.tool, call.arguments]);
+      const resultOf = (call: Dict) => String(record(call.outcome, 'call outcome').result ?? '');
+      const detour = calls.length > 0 && calls.every(call => earlier.get(signature(call)) === resultOf(call));
+      const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
+      for (const call of calls) earlier.set(signature(call), resultOf(call));
+      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
@@ -212,7 +227,10 @@ export function materializeNativeRows(input: unknown[]): {
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(decisionApproved ? {} : { reason: fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
-              'the outcome of a call in this decision was not recorded' : 'decision contains a failed or unexecuted proposal' }) },
+              'the outcome of a call in this decision was not recorded' :
+            !ranCleanly ? 'decision contains a failed or unexecuted proposal' :
+            detour ? 'repeats an earlier call of this call with the same result' :
+              "the task's checker rejected this attempt" }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: nativeRowDigest(row.outcome) },
         decision: { index,

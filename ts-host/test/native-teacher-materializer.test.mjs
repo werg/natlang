@@ -152,3 +152,24 @@ test('a call with no action log is marked not recorded and kept out of training,
   assert.equal(child.training_admission.approved, false);
   assert.match(child.training_admission.reason, /not recorded/);
 });
+
+test('a repeat with the same result and an attempt the checker refused are context, not training targets', () => {
+  const verify = { tool: 'eval', source_tool: 'eval', arguments: { code: 'proof.verify(steps)' }, call_id: null };
+  const refused = '{"ok":false,"certificate":null,"problem":"step 2: F1 does not apply"}';
+  const row = nativeRow('checker');
+  row.outcome.action_ledger = [
+    { seq: 1, name: 'eval', arguments: verify.arguments, outcome: 'ok', result_text: refused },
+    { seq: 2, name: 'eval', arguments: verify.arguments, outcome: 'ok', result_text: refused },
+    { seq: 3, name: 'write', arguments: firstCall.arguments, outcome: 'ok', result_text: 'stored value' },
+    { seq: 4, name: 'write', arguments: firstCall.arguments, outcome: 'ok', result_text: 'stored value' },
+    { seq: 5, name: 'write', arguments: firstCall.arguments, outcome: 'ok', result_text: 'stored again' },
+  ];
+  const turn = (calls, raw) => ({ phase: 'action', context: row.trajectory[1].context, tools_offered: schema,
+    assistant: { content: '', calls }, raw_response_sha256: raw });
+  row.trajectory = [{ ...row.trajectory[0], assistant: { content: '', calls: [verify] } },
+    turn([verify], 'r2'), turn([firstCall], 'r3'), turn([firstCall], 'r4'), turn([firstCall], 'r5')];
+  const admissions = materializeNativeRows([row]).turns.map(t => t.training_admission);
+  assert.deepEqual(admissions.map(a => a.approved), [false, false, true, false, true]);
+  assert.equal(admissions[0].reason, "the task's checker rejected this attempt");
+  assert.equal(admissions[3].reason, 'repeats an earlier call of this call with the same result');
+});
