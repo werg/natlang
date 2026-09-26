@@ -609,8 +609,11 @@ export class NativeToolAgent {
         if (!response.truncated) session.acceptTextResult(response.text ?? '');
         const missing = this.missing(session);
         if (!response.truncated && !missing && session.finish()) { session.lam.note = response.text ?? ''; return; }
+        // Code written into a reply has not run; saying so is what a model that wrote its eval out as text needs.
+        const unrun = /```(?:ts|typescript|js|javascript)?\s*\n/.test(response.text ?? '') ?
+          'The code in your reply was not run: code runs only when you call eval with it. ' : '';
         const feedback = response.truncated ? `Your reply was cut off at the ${limit}-token limit before any tool call. Take the next step with one tool call.` :
-          missing || 'The staged result is incomplete.';
+          unrun + (missing || 'The staged result is incomplete.');
         messages.push({ role: 'assistant', content: response.text ?? '' }, { role: 'user', content: feedback });
         continue;
       }

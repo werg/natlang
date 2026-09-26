@@ -540,3 +540,20 @@ test('read_function shows an importable package by its declarations, and will no
   assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /belongs to an imported package/);
   assert.equal(session.apply('read_function', { name: 'no_such_package' }).kind, 'rejected');
 });
+
+test('read_page on a name in scope says to use it in eval', () => {
+  const facts = { page: () => [{ id: 'F1', text: 'Leaves make sugar.' }], pages: () => 1 };
+  const { session } = open({ type: '() => number', instructions: 'Read the facts.' }, { services: { facts } });
+  const paged = session.apply('read_page', { id: 'facts', page: 1 });
+  assert.equal(paged.kind, 'rejected'); assert.match(paged.text, /facts is a name in eval's scope, so use it in eval \(for example facts\.page\(1\)/);
+  assert.match(session.apply('read_page', { id: 'amber', page: 1 }).text, /no cut-off output is named "amber"/);
+});
+
+test('code written into a reply is answered with a note that it did not run', async () => {
+  const requests = [];
+  const replies = [{ text: 'The answer:\n```ts\nreturn 6 * 7;\n```' }, { calls: [['return_result', { status: 'success', value: 42 }]] }];
+  const result = await run({ type: '() => number', instructions: 'Compute six times seven.' }, { agent: session =>
+    new NativeToolAgent(request => { requests.push(structuredClone(request.messages)); return replies[requests.length - 1]; }, { maxTurns: 3 }).run(session) });
+  assert.equal(result.value, 42);
+  assert.match(requests[1].at(-1).content, /^The code in your reply was not run: code runs only when you call eval with it\. There is no result yet/);
+});

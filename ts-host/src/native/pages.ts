@@ -34,6 +34,7 @@ export class PageStore {
     return { id, count: pages.length };
   }
 
+  has(id: string): boolean { return this.pages.has(id); }
   read(id: string, page: number): string {
     const pages = this.pages.get(id);
     if (!pages) throw new Error(`no cut-off output is named ${JSON.stringify(id)}; use an ID from a cut-off message`);

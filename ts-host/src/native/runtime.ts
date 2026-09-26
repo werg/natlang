@@ -608,7 +608,15 @@ export class NativeSession {
   }
 
   private scopeTool(name: string, args: Record<string, unknown>): NativeResult {
-    if (name === 'read_page') return { kind: 'ok', text: this.pages.read(String(args.id ?? ''), Number(args.page ?? 1)) };
+    if (name === 'read_page') {
+      // A value in scope that pages itself (a store with page(n)) is read by calling it in eval, not with read_page.
+      const id = String(args.id ?? ''), root = id.split('.')[0]!;
+      const inScope = Object.hasOwn(this.runtime.services, root) || Object.hasOwn(this.lam.let, root) ||
+        Object.hasOwn(this.lam.args, root) || !!findCodebaseItem(this.lam.codebase, root);
+      if (inScope && !this.pages.has(id)) throw new Reject([{ path: id, code: 'no-such-page', expected:
+        `an ID from a cut-off message; ${root} is a name in eval's scope, so use it in eval (for example ${root}.page(${Number(args.page ?? 1)}) if it has pages)` }]);
+      return { kind: 'ok', text: this.pages.read(id, Number(args.page ?? 1)) };
+    }
     // The agent carries out the compaction itself once this call is accepted (it owns the conversation).
     if (name === 'compact_history') {
       const note = typeof args.note === 'string' ? args.note.trim() : '';
