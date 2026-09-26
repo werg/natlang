@@ -116,11 +116,10 @@ function openingLength(context: Dict[]): number {
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
  */
 export function materializeNativeRows(input: unknown[]): {
-  turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: string[];
+  turns: Dict[]; acceptedRows: number; rejectedRows: number;
 } {
   const turns: Dict[] = [];
   let acceptedRows = 0, rejectedRows = 0;
-  const unlinked: string[] = [];
   for (const candidate of input) {
     const row = validateRow(candidate);
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
@@ -130,7 +129,13 @@ export function materializeNativeRows(input: unknown[]): {
     const student = row.provenance.collection_role === 'student';
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
-    let actionIndex = 0;
+    // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
+    // decisions. A call's decisions, recognised by their opening, claim the one action log whose next action their
+    // first call matches, and are linked to it in order from then on.
+    const logs = new Map<string, Dict[]>();
+    for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
+    const next = new Map<string, number>(), claimed = new Map<string, string>(), owners = new Set<string>();
+    let linked = 0;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
       const source = record(row.trajectory[index], `${row.id}.trajectory[${index}]`);
@@ -140,20 +145,29 @@ export function materializeNativeRows(input: unknown[]): {
 
       const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
+      const caller = JSON.stringify(contextSource[1]?.content ?? '');
       const calls = Array.isArray(assistant.calls) ? assistant.calls.map((value, callIndex) => {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
-        const event = ledger[actionIndex];
+        let log = claimed.get(caller);
+        if (log === undefined) {
+          log = [...logs.keys()].find(key => !owners.has(key) && callMatches(normalized, logs.get(key)![next.get(key) ?? 0] ?? {}));
+          if (log !== undefined) { claimed.set(caller, log); owners.add(log); }
+        }
+        const at = log === undefined ? 0 : next.get(log) ?? 0, event = log === undefined ? undefined : logs.get(log)![at];
         if (event && callMatches(normalized, event)) {
-          normalized.outcome = { event_index: actionIndex, trace_seq: event.seq ?? null,
+          normalized.outcome = { event_index: ledger.indexOf(event), trace_seq: event.seq ?? null,
             name: event.name, arguments: structuredClone(event.arguments ?? {}),
             status: event.outcome ?? null, result: event.result_text ?? null,
             diagnostics: structuredClone(event.diagnostics ?? []) };
-          actionIndex++;
+          next.set(log!, at + 1); linked++;
         } else normalized.outcome = { event_index: null, trace_seq: null,
           name: normalized.source_tool, arguments: structuredClone(normalized.arguments),
-          status: 'not_executed', result: null, diagnostics: [] };
+          // No action log to link to at all: rows collected before child calls' actions were recorded. The call may
+          // well have run; its outcome is unknown, so it is not a training target, and says why.
+          status: log === undefined && [...logs.keys()].every(key => owners.has(key)) ? 'not_recorded' : 'not_executed',
+          result: null, diagnostics: [] };
         return normalized;
       }) : [];
 
@@ -163,7 +177,7 @@ export function materializeNativeRows(input: unknown[]): {
       const programId = record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null;
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
-      const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed']);
+      const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
       const handoff = row.handoff as Dict | undefined;
       const fromStudentPrefix = handoff !== undefined && index < Number(handoff.handoff_at);
       const decisionApproved = !fromStudentPrefix && calls.every(call =>
@@ -193,7 +207,8 @@ export function materializeNativeRows(input: unknown[]): {
         teacher_trajectory_digest: nativeRowDigest(row),
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(decisionApproved ? {} : { reason: fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
-            'decision contains a failed or unexecuted proposal' }) },
+            calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
+              'the outcome of a call in this decision was not recorded' : 'decision contains a failed or unexecuted proposal' }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: nativeRowDigest(row.outcome) },
         decision: { index,
@@ -207,10 +222,9 @@ export function materializeNativeRows(input: unknown[]): {
         outcome: structuredClone(row.outcome),
         capture_limits: structuredClone(row.capture_limits ?? []) });
     }
-    // A row whose runtime actions do not all trace back to model decisions cannot be split into turns faithfully:
-    // it is set aside and named, not allowed to stop the export.
-    if (actionIndex !== ledger.length) { unlinked.push(row.id); acceptedRows--; rejectedRows++; continue; }
+    if (linked !== ledger.length)
+      throw new Error(`${row.id}: ${ledger.length - linked} action outcomes have no teacher decision link`);
     turns.push(...rowTurns);
   }
-  return { turns, acceptedRows, rejectedRows, unlinked };
+  return { turns, acceptedRows, rejectedRows };
 }

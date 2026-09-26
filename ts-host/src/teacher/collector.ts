@@ -523,7 +523,10 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
       ...(worldScore ? { world: worldScore } : {}), accepted,
-      action_ledger: trace.filter(event => event.kind === 'action'),
+      // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
+      // the task (call_id tells them apart), so its decisions can be linked to what they did.
+      action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]
+        .filter(event => event.kind === 'action'),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
       host_events: trace.filter(event => event.kind === 'host') } };
   } finally { environment.close(); world?.close(); }

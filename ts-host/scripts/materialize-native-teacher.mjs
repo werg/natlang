@@ -13,7 +13,6 @@ if (!inputPath || !outputPath || positional.length !== 2 || args.some(value => v
 const input = resolve(inputPath), output = resolve(outputPath);
 const rows = (await readFile(input, 'utf8')).split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
 const result = materializeNativeRows(rows);
-if (result.unlinked.length) console.error(`set aside ${result.unlinked.length} rows whose actions do not all link to a model decision: ${result.unlinked.join(', ')}`);
 console.error(`${result.acceptedRows} rows -> ${result.turns.length} turns (${result.rejectedRows} rows not used)`);
 await mkdir(dirname(output), { recursive: true });
 const staged = `${output}.building-${process.pid}-${randomUUID()}`;

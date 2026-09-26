@@ -6,11 +6,13 @@
  *
  * Tool calls (model responses, assistant records, and the calls replayed in later contexts), offered tool schemas,
  * turn notices, the system prompt's finishing sentences, and blocked(...)/failed(...) inside eval code are rewritten.
- * The model's reasoning text is left as it was. Each rewritten row is marked in provenance.finish_surface_migration.
+ * So are the calls in the outcome's action ledger (version 2; version 1 rewrote only the trajectory, which left the
+ * ledger unable to link to the rewritten decisions). Any row can be passed again. The model's reasoning text is left as it was. Each rewritten row
+ * is marked in provenance.finish_surface_migration.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const MIGRATION = 'return_result-status/1';
+const MIGRATION = 'return_result-status/2';
 const RETURN_TOOL = value => ({ type: 'function', function: { name: 'return_result',
   description: 'Finish the call. With status "success", value is the result and must have the declared return type. ' +
     'With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an invalid ' +
@@ -40,7 +42,9 @@ function rewriteCall(name, args = {}) {
   if (name === 'blocked') return ['return_result', { status: 'blocked', reason: args.missing ?? args.reason ?? '' }];
   if (name === 'failed') return ['return_result', { status: 'failed', reason: args.message ?? args.reason ?? '' }];
   if (name === 'return_result' && args.status === undefined) return ['return_result', { status: 'success', ...args }];
-  if (name === 'eval' && typeof args.code === 'string') return ['eval', { ...args, code: rewriteCode(args.code) }];
+  if (name === 'eval' && typeof args.code === 'string' && rewriteCode(args.code) !== args.code)
+    return ['eval', { ...args, code: rewriteCode(args.code) }];
+  // Unchanged calls stay the same objects, so their raw text is never re-serialized.
   return [name, args];
 }
 const parse = text => { try { return JSON.parse(text); } catch { return undefined; } };
@@ -48,10 +52,11 @@ function rewriteFunctionCall(call) {
   const args = parse(call.function?.arguments ?? '');
   if (!args || typeof args !== 'object') return call;
   const [name, next] = rewriteCall(call.function.name, args);
+  if (name === call.function.name && next === args) return call;
   return { ...call, function: { ...call.function, name, arguments: JSON.stringify(next) } };
 }
 function rewriteTools(tools) {
-  if (!Array.isArray(tools)) return tools;
+  if (!Array.isArray(tools) || !tools.some(tool => ['blocked', 'failed'].includes(tool.function?.name))) return tools;
   const old = tools.find(tool => tool.function?.name === 'return_result');
   return tools.filter(tool => !['blocked', 'failed'].includes(tool.function?.name))
     .map(tool => tool === old ? RETURN_TOOL(old.function.parameters?.properties?.value ?? {}) : tool);
@@ -78,10 +83,23 @@ function rewriteTurn(turn) {
   return next;
 }
 
+function rewriteLedger(outcome) {
+  if (!outcome || !Array.isArray(outcome.action_ledger)) return outcome;
+  return { ...outcome, action_ledger: outcome.action_ledger.map(event => {
+    const [name, args] = rewriteCall(event.name, event.arguments);
+    return name === event.name && args === event.arguments ? event : { ...event, name, arguments: args };
+  }) };
+}
+
+/**
+ * A row in the new surface. Every rewrite is idempotent, so any row can be passed, whatever it was collected on or
+ * migrated with before; only a row that changes is marked, since the mark lets the collector reuse it across surfaces.
+ */
 export function migrateRow(row) {
-  if (row.provenance?.finish_surface_migration === MIGRATION) return row;
-  return { ...row, trajectory: (row.trajectory ?? []).map(rewriteTurn),
-    provenance: { ...row.provenance, finish_surface_migration: MIGRATION } };
+  const trajectory = (row.trajectory ?? []).map(rewriteTurn), outcome = rewriteLedger(row.outcome);
+  if (JSON.stringify(trajectory) === JSON.stringify(row.trajectory ?? []) && JSON.stringify(outcome) === JSON.stringify(row.outcome))
+    return row;
+  return { ...row, trajectory, outcome, provenance: { ...row.provenance, finish_surface_migration: MIGRATION } };
 }
 
 const [input, output] = process.argv.slice(2);

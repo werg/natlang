@@ -191,3 +191,35 @@ test('requests wait for room in the shared KV buffer, first come first served, a
   kv.release(500);
 });
 
+
+test('the native collector records the actions of child nl calls in the ledger, by their own call', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-child-ledger-'));
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const { messages } = JSON.parse(body);
+      // The root evaluates once, which stages its result, and then replies done.
+      const child = String(messages[1].content).includes('nl@');
+      const started = messages.some(message => message.role === 'tool' && String(message.content).includes('Staged'));
+      const reply = child ? ['return_result', { status: 'success', value: true }] :
+        started ? null : ['eval', { code: 'const odd = await nl<boolean>`Is value odd?`(1); return odd ? 1 : 0;' }];
+      const message = reply ? { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function',
+        function: { name: reply[0], arguments: JSON.stringify(reply[1]) } }] } : { role: 'assistant', content: '' };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 4 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('child-ledger') };
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, toolSurfaceSha256: await defaultToolSurfaceHash(), transportRetries: 1, retryDelayMs: 0 };
+    await collectBatch([item], options, nativeJobRunner(options));
+    const output = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    const ledger = output.outcome.action_ledger;
+    const calls = new Set(ledger.map(event => event.call_id));
+    assert.equal(calls.size, 2, 'the root call and its child each have actions');
+    assert.ok(ledger.some(event => event.name === 'return_result' && event.arguments.value === true), 'the child finish is logged');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
