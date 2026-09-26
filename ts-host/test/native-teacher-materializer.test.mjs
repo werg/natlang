@@ -56,6 +56,27 @@ test('accepted native rows become linked template neutral decisions with their e
   }] });
 });
 
+test('a captured execution plan is the training reasoning instead of provider reasoning', () => {
+  const row = nativeRow('planned');
+  row.trajectory[0].assistant.execution_plan = 'Compute twice n, then store it.';
+  row.trajectory[0].assistant.reasoning = 'opaque provider reasoning';
+  const [turn] = materializeNativeRows([row]).turns;
+  assert.equal(turn.teacher_execution_plan, 'Compute twice n, then store it.');
+  assert.equal(turn.teacher_reasoning, 'Compute twice n, then store it.');
+  assert.equal(turn.decision.assistant.execution_plan, 'Compute twice n, then store it.');
+  assert.equal(turn.decision.assistant.reasoning, 'Compute twice n, then store it.');
+});
+
+test('an attempted but missing execution plan does not fall back to provider reasoning', () => {
+  const row = nativeRow('plan-unsupported');
+  row.trajectory[0].assistant.execution_plan = null;
+  row.trajectory[0].assistant.reasoning = 'opaque provider reasoning';
+  const [turn] = materializeNativeRows([row]).turns;
+  assert.equal(turn.teacher_execution_plan, null);
+  assert.equal(turn.teacher_reasoning, null);
+  assert.equal(turn.decision.assistant.reasoning, null);
+});
+
 test('rows collected with conversation rollover are rejected', () => {
   const row = nativeRow('rolled-over');
   row.trajectory.splice(1, 0, { phase: 'checkpoint', context: [system, opening], tools_offered: [],

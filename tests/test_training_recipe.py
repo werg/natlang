@@ -79,6 +79,21 @@ def test_recipe_applies_model_teacher_docker_and_training_overrides(tmp_path):
     assert stages['teacher']['command'][stages['teacher']['command'].index('--server') + 1] == 'http://127.0.0.1:8181'
 
 
+def test_execution_plan_collection_is_opt_in_and_reaches_every_teacher_track(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    ordinary = stages_by_id(recipe(repo))
+    assert '--execution-plans' not in ordinary['teacher']['command']
+    planned = stages_by_id(recipe(repo, teacher_execution_plans=True,
+                                  teacher_execution_plan_tokens=384))
+    collection = [stage for name, stage in planned.items()
+                  if name == 'teacher' or name.startswith('collect-')]
+    assert collection
+    for stage in collection:
+        command = stage['command']
+        assert command[command.index('--execution-plan-tokens') + 1] == '384'
+        assert '--execution-plans' in command
+
+
 @pytest.mark.parametrize('model', ['LiquidAI/LFM2.5-350M', 'org/8B-A1B', '/models/local-student'])
 def test_student_selection_propagates_to_every_render_and_training_stage(tmp_path, model):
     revision = 'a' * 40

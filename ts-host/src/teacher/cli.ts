@@ -29,6 +29,7 @@ async function main(): Promise<void> {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
       'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
+      '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
@@ -59,6 +60,8 @@ async function main(): Promise<void> {
   if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
+  if (flags.has('--execution-plan-tokens') && !flags.has('--execution-plans'))
+    throw new Error('--execution-plan-tokens requires --execution-plans');
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
@@ -67,6 +70,9 @@ async function main(): Promise<void> {
     transportRetries: integer(flags, '--transport-retries', 8),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),
+    executionPlans: flags.has('--execution-plans'),
+    ...(flags.has('--execution-plan-tokens') ?
+      { executionPlanTokens: integer(flags, '--execution-plan-tokens', 512) } : {}),
     ...(handoffs ? { handoffs } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
     // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens); 0 turns admission off.

@@ -150,6 +150,10 @@ export function materializeNativeRows(input: unknown[]): {
 
       const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
+      const planningAttempted = Object.hasOwn(assistant, 'execution_plan');
+      const executionPlan = typeof assistant.execution_plan === 'string' && assistant.execution_plan.trim() ?
+        assistant.execution_plan : null;
+      const retainedReasoning = planningAttempted ? executionPlan : assistant.reasoning ?? null;
       // A call's whole opening, its inputs included: parallel nl calls can share their instructions word for word.
       const caller = JSON.stringify(contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage));
       // A decision that sees nothing but its opening starts a call: even a call identical to an earlier one (the
@@ -221,7 +225,8 @@ export function materializeNativeRows(input: unknown[]): {
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
         target,
-        teacher_reasoning: assistant.reasoning ?? null,
+        teacher_reasoning: retainedReasoning,
+        teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: nativeRowDigest(row),
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
@@ -236,7 +241,8 @@ export function materializeNativeRows(input: unknown[]): {
         decision: { index,
           context, durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
           tool_schemas: offered,
-          assistant: { content: assistant.content ?? '', reasoning: assistant.reasoning ?? null,
+          assistant: { content: assistant.content ?? '', reasoning: retainedReasoning,
+            execution_plan: executionPlan,
             calls },
           training_approved: decisionApproved,
           source_raw_response_sha256: source.raw_response_sha256 ?? null,

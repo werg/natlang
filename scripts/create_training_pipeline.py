@@ -12,7 +12,8 @@ from run_training_pipeline import atomic_json
 
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,
            source_limit=25000, synthetic=1000, teacher_programs=1000,
-           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
+           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081",
+           teacher_execution_plans=False, teacher_execution_plan_tokens=512, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -24,6 +25,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     budget, _ = budget_parser.parse_known_args(list(train_args))
     if budget.max_len < 2:
         raise ValueError('training context budget must be at least two tokens')
+    if not isinstance(teacher_execution_plan_tokens, int) or teacher_execution_plan_tokens < 1:
+        raise ValueError('teacher execution plan tokens must be positive')
     r = "${run}"
     p = "${repo}"
     def py(args, gpu=False):
@@ -180,8 +183,11 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     train("general", None, "0.0001")
     render("coding", f"{r}/prepared/coding.jsonl")
     train("coding", "general", "0.00005")
+    teacher_planning = (["--execution-plans", "--execution-plan-tokens", str(teacher_execution_plan_tokens)]
+                        if teacher_execution_plans else [])
     add("teacher", ["node", f"{p}/ts-host/scripts/teacher-collector.mjs", f"{r}/teacher-programs.jsonl", f"{r}/teacher-jobs", f"{r}/teacher-trajectories.jsonl",
-                    "--model-id", teacher_model, "--server", teacher_server, "--root-seed", "42", "--limit", str(teacher_programs), "--workers", "1"],
+                    "--model-id", teacher_model, "--server", teacher_server, *teacher_planning,
+                    "--root-seed", "42", "--limit", str(teacher_programs), "--workers", "1"],
         [f"{r}/teacher-programs.jsonl", f"{p}/ts-host/dist/teacher/collector.js", f"{p}/ts-host/dist/native/runtime.js"],
         [f"{r}/teacher-trajectories.jsonl", f"{r}/teacher-trajectories.jsonl.manifest.json"])
     add("materialize-teacher", ["node", f"{p}/ts-host/scripts/materialize-native-teacher.mjs", f"{r}/teacher-trajectories.jsonl", f"{r}/teacher-turns.jsonl", "--replace"],
@@ -214,6 +220,10 @@ def main():
     parser.add_argument("--teacher-programs", type=int, default=1000)
     parser.add_argument("--teacher-model", default="Ternary-Bonsai-2-27B")
     parser.add_argument("--teacher-server", default="http://127.0.0.1:8081")
+    parser.add_argument("--teacher-execution-plans", action="store_true",
+                        help="elicit a required-tool execution plan before each teacher action")
+    parser.add_argument("--teacher-execution-plan-tokens", type=int, default=512,
+                        help="maximum tokens for each optional execution plan")
     parser.add_argument("--token-file", type=Path)
     parser.add_argument("--init-adapter", type=Path)
     parser.add_argument("--inventory", action="append", type=Path, help="explicit existing repository task file (repeatable); defaults to collected repository snapshots")
@@ -225,7 +235,9 @@ def main():
     args = parser.parse_args()
     config = recipe(Path(__file__).resolve().parents[1], args.model, args.revision, args.image, args.python,
                     source_limit=args.source_limit, synthetic=args.synthetic, teacher_programs=args.teacher_programs,
-                    teacher_model=args.teacher_model, teacher_server=args.teacher_server, token_file=args.token_file,
+                    teacher_model=args.teacher_model, teacher_server=args.teacher_server,
+                    teacher_execution_plans=args.teacher_execution_plans,
+                    teacher_execution_plan_tokens=args.teacher_execution_plan_tokens, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
                     workspace_cases=args.workspace_case)

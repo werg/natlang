@@ -9,6 +9,10 @@ SEED="${TEACHER_SEED:-909}"
 # Bonsai already saturates this 8 GiB GPU with one decode. Two full agent
 # contexts exceed the server's 5 GiB host-memory cgroup on complex programs.
 WORKERS="${TEACHER_WORKERS:-6}"
+PLAN_ARGS=()
+if [ "${TEACHER_EXECUTION_PLANS:-0}" = "1" ]; then
+  PLAN_ARGS=(--execution-plans --execution-plan-tokens "${TEACHER_EXECUTION_PLAN_TOKENS:-512}")
+fi
 # A typical nested algorithm episode needs 12-20 tool turns.  Keep it in one
 # conversation when possible; longer work still checkpoints into durable state.
 CONTEXT_TOKENS="${TEACHER_CONTEXT_TOKENS:-16384}"
@@ -64,6 +68,7 @@ while true; do
     --server "$SERVER" --model-id "$MODEL" --root-seed "$SEED" \
     --limit "$(wc -l < "$SELECTION")" --workers "$WORKERS" \
     --context-tokens "$CONTEXT_TOKENS" \
+    "${PLAN_ARGS[@]}" \
     --cache-stable-tools
   node ts-host/scripts/materialize-native-teacher.mjs \
     "$PROGRAM_OUT" "$PROGRAM_TURNS" --replace

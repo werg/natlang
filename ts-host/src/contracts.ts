@@ -11,5 +11,8 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   raw_response?: Record<string, unknown>;
   /** The model's reasoning before this turn's reply, when the backend returns it. */
   reasoning?: string;
+  /** A synthetic plan elicited in a separate required-tool turn before this reply. */
+  /** null means planning was requested but the provider did not produce a valid plan. */
+  execution_plan?: string | null;
   /** The reply stopped at max_tokens. */
   truncated?: boolean };

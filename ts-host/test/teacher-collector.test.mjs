@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { KvBudget, collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, expectedProvenance, jobKey,
-  loadRecords, nativeJobRunner, recordDigest } from '../dist/teacher/collector.js';
+  loadRecords, nativeJobRunner, recordDigest, withExecutionPlans } from '../dist/teacher/collector.js';
 
 const record = id => ({ version: 'natlang.program/2', id, kind: 'lambda_source', source: 'fixture',
   split: 'test', source_ids: [id], source_groups: [id], license: 'test', semantics: {
@@ -16,6 +16,45 @@ const config = (dir, surface = 'surface-a') => ({ jobs: join(dir, 'jobs'), outpu
   toolSurfaceSha256: surface });
 const row = (item, provenance) => ({ version: 'test', task: { program_ir: item.record }, provenance,
   outcome: { status: 'done', accepted: true } });
+
+test('execution planning is opt-in, conditions the action, and replaces provider reasoning', async () => {
+  const requests = [];
+  const send = async request => {
+    requests.push(structuredClone(request));
+    if (requests.length === 1) return { calls: [['execution_plan', { plan: 'Read n, then compute exactly.' }]],
+      completion_tokens: 7 };
+    return { calls: [['eval', { code: 'n + 1' }]], reasoning: 'opaque provider trace', completion_tokens: 5 };
+  };
+  const request = { messages: [{ role: 'user', content: 'Increment n.' }], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object' } } }], seed: 9, max_tokens: 100 };
+  const result = await withExecutionPlans(send)(request);
+  assert.equal(requests[0].tool_choice, 'required');
+  assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['execution_plan']);
+  assert.deepEqual(requests[1].messages.slice(-2).map(message => message.role), ['assistant', 'tool']);
+  assert.equal(JSON.parse(requests[1].messages.at(-2).tool_calls[0].function.arguments).plan,
+    'Read n, then compute exactly.');
+  assert.deepEqual(requests[1].tools, request.tools);
+  assert.equal(result.execution_plan, 'Read n, then compute exactly.');
+  assert.equal(result.reasoning, result.execution_plan);
+  assert.equal(result.completion_tokens, 12);
+});
+
+test('execution planning falls through when required tools are unsupported', async () => {
+  const requests = [];
+  const send = async request => {
+    requests.push(structuredClone(request));
+    if (request.tools[0].function.name === 'execution_plan') throw new Error('tool_choice is unsupported');
+    return { calls: [['eval', { code: 'n + 1' }]], reasoning: 'provider trace', completion_tokens: 5 };
+  };
+  const request = { messages: [{ role: 'user', content: 'Increment n.' }], tools: [{ type: 'function', function: {
+    name: 'eval', parameters: { type: 'object' } } }], seed: 9, max_tokens: 100 };
+  const result = await withExecutionPlans(send)(request);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1], request, 'the ordinary action proceeds unchanged');
+  assert.equal(result.execution_plan, null);
+  assert.equal(result.reasoning, undefined, 'opaque provider reasoning is not retained in planning mode');
+  assert.equal(result.calls[0][0], 'eval');
+});
 
 test('focused loader keeps source indexes and selects an exact range', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-load-')), path = join(dir, 'ir.jsonl');

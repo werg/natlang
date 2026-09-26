@@ -245,7 +245,20 @@ architecture. No teacher process is stopped and no GPU training is performed by
 these checks.
 
 Native teacher IR keeps the teacher's original tool calls, arguments, reasoning,
-decision order, and execution outcomes. Failed proposals remain in the IR but
+decision order, and execution outcomes. For capable non-reasoning models, pass
+`--execution-plans` to `teacher-collector.mjs`, pass `--teacher-execution-plans`
+to `create_training_pipeline.py`, or set `TEACHER_EXECUTION_PLANS=1` for
+`run_teacher_generation.sh`. Before each action the collector makes a
+separate request offering only a required `execution_plan` tool. It validates the
+call, feeds the plan into the action request, and stores the plan as
+`assistant.execution_plan` and as the turn's training reasoning instead of any
+provider reasoning trace. `--execution-plan-tokens` controls the planning reply
+limit (default 512). Pi providers use their native required/any tool-choice mode
+where available. Planning remains best-effort: if a provider rejects or ignores
+required tool choice, the ordinary action continues and that turn records no
+synthetic reasoning.
+
+Failed proposals remain in the IR but
 are denied positive SFT admission. The training renderer converts JSON-encoded
 tool arguments to objects when the selected tokenizer's chat template requires
 that shape; it does not change the stored IR. For a small end-to-end CPU smoke

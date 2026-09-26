@@ -20,6 +20,14 @@ export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
 const TOOL_SCHEMA = 'scope-eval-v1';
+export const EXECUTION_PLAN_VERSION = 'execution-plan-tool/1';
+export const EXECUTION_PLAN_PROMPT = 'Before taking the next action, make a concise execution plan from the current ' +
+  'instructions and evidence. Plan only the next useful step and any immediate checks it needs; do not execute the ' +
+  'step yet. Call execution_plan exactly once with the plan.';
+const EXECUTION_PLAN_TOOL = { type: 'function', function: { name: 'execution_plan',
+  description: 'Record the concise plan that will guide the next action. This tool does not execute the plan.',
+  parameters: { type: 'object', properties: { plan: { type: 'string',
+    description: 'A concise, actionable plan for the next step.' } }, required: ['plan'], additionalProperties: false } } };
 
 export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
@@ -33,6 +41,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   temperature?: number;
   endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
   request?: Record<string, unknown>; cacheStableTools?: boolean;
+  /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
+  executionPlans?: boolean; executionPlanTokens?: number;
   handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
 export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   program_ir_sha256: string; student_trajectory_id: string; student_trajectory_sha256: string;
@@ -112,6 +122,8 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
+    ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
+      max_tokens: options.executionPlanTokens ?? 512 } } : {}),
     collection_role: options.collectionRole ?? 'teacher',
     ...(handoff ? { handoff_sha256: sha256(canonical(handoff)) } : {}) };
 }
@@ -311,14 +323,19 @@ function effectHarness(specs: Record<string, unknown>): {
 function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
+  const planned = Object.hasOwn(response, 'execution_plan');
+  const retainedReasoning = planned ? response.execution_plan :
+    response.reasoning ?? message.reasoning_content ?? message.reasoning ?? message.thinking ?? null;
   return { phase: 'action', context: structuredClone(request.messages),
     request_sha256: sha256(canonical(request)),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
+      ...(planned ? { execution_plan: response.execution_plan } : {}),
       ...(response.completion_tokens === undefined ? {} : { completion_tokens: response.completion_tokens }),
       ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }) },
     tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
-      reasoning: message.reasoning_content ?? message.reasoning ?? message.thinking ?? null,
+      ...(planned ? { execution_plan: response.execution_plan } : {}),
+      reasoning: retainedReasoning,
       calls: (response.calls ?? []).map(([tool, args]) => ({ tool, source_tool: tool, arguments: args, call_id: null })) },
     raw_response_sha256: raw ? sha256(canonical(raw)) : null };
 }
@@ -377,6 +394,57 @@ export class KvBudget {
 const requestTokens = (request: ModelTurnRequest) =>
   Math.ceil((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4) + 512;
 
+/**
+ * Wrap an action driver with a separate planning turn. The action request itself remains the collector's canonical
+ * request: the synthetic prompt/tool exchange is visible to the action model, but is not spliced into training IR.
+ * Required tool choice is sent when the backend supports it, and the result is checked here for every backend.
+ */
+export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<ModelTurn>,
+  options: { maxTokens?: number; attempts?: number } = {}): (request: ModelTurnRequest) => Promise<ModelTurn> {
+  const planLimit = options.maxTokens ?? 512, attempts = options.attempts ?? 2;
+  if (!Number.isInteger(planLimit) || planLimit < 1) throw new RangeError('execution plan token limit must be positive');
+  if (!Number.isInteger(attempts) || attempts < 1) throw new RangeError('execution plan attempts must be positive');
+  return async request => {
+    const maxTokens = request.max_tokens === null ? planLimit : Math.min(planLimit, request.max_tokens);
+    let plan = '', planningCompletionTokens = 0;
+    let retryMessages: unknown[] = [...request.messages, { role: 'user', content: EXECUTION_PLAN_PROMPT }];
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      let planned: ModelTurn;
+      try {
+        planned = await send({ ...request, messages: retryMessages, tools: [EXECUTION_PLAN_TOOL],
+          tool_choice: 'required', max_tokens: maxTokens });
+      } catch {
+        // Required tool selection is not universal. Planning is deliberately best-effort: the ordinary action still
+        // runs, and will surface any real provider outage itself instead of treating a missing plan as job failure.
+        break;
+      }
+      planningCompletionTokens += planned.completion_tokens ?? maxTokens;
+      const calls = planned.calls ?? [], value = calls.length === 1 && calls[0]![0] === 'execution_plan' ?
+        calls[0]![1].plan : undefined;
+      if (typeof value === 'string' && value.trim()) { plan = value.trim(); break; }
+      retryMessages = [...retryMessages,
+        { role: 'assistant', content: planned.text ?? '' },
+        { role: 'user', content: 'The plan was not recorded. Call execution_plan exactly once with a nonempty plan.' }];
+    }
+    if (!plan) {
+      const action = await send(request);
+      // Presence of null suppresses an opaque provider reasoning trace in captured IR: this mode retains plans only.
+      return { ...action, execution_plan: null, reasoning: undefined,
+        completion_tokens: planningCompletionTokens + (action.completion_tokens ?? 0) };
+    }
+    const planCall = { id: 'execution_plan_0', type: 'function',
+      function: { name: 'execution_plan', arguments: JSON.stringify({ plan }) } };
+    const actionLimit = request.max_tokens === null ? null : Math.max(1, request.max_tokens - planningCompletionTokens);
+    const action = await send({ ...request, max_tokens: actionLimit, messages: [...request.messages,
+      { role: 'assistant', content: '', tool_calls: [planCall] },
+      { role: 'tool', tool_call_id: planCall.id, content: 'Plan recorded. Now take the planned next step.' }] });
+    // The plan deliberately replaces provider reasoning: it is the reproducible thinking signal retained in IR and
+    // threaded through later action history. Keep the action response otherwise intact for execution and accounting.
+    return { ...action, execution_plan: plan, reasoning: plan,
+      completion_tokens: planningCompletionTokens + (action.completion_tokens ?? actionLimit ?? 0) };
+  };
+}
+
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
@@ -405,11 +473,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     try {
-    const transport = kv ? async (request: ModelTurnRequest) => {
+    const admittedSend = kv ? async (request: ModelTurnRequest) => {
       const need = requestTokens(request);
       await kv.acquire(need);
       try { return await send(request); } finally { kv.release(need); }
     } : send;
+    const transport = config.executionPlans ? withExecutionPlans(admittedSend,
+      { maxTokens: config.executionPlanTokens }) : admittedSend;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
     const saved = await loadPartial(partialPath, item, expected);
