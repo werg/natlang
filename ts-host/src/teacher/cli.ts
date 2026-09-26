@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const { positionals, flags } = argumentsOf(process.argv.slice(2));
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
-      'Options: --server URL --start N --limit N|--all --workers N --context-tokens N\n' +
+      'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
@@ -57,6 +57,8 @@ async function main(): Promise<void> {
   const collectionRole = flags.get('--collection-role') ?? 'teacher';
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');
+  const provider = flags.get('--provider');
+  if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
@@ -68,10 +70,12 @@ async function main(): Promise<void> {
     ...(handoffs ? { handoffs } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
     // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens); 0 turns admission off.
-    ...(integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
+    ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
-    toolSurfaceSha256: await defaultToolSurfaceHash(), endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081',
+    toolSurfaceSha256: await defaultToolSurfaceHash(),
+    ...(provider ? { provider, piOptions: { reasoningEffort: flags.get('--reasoning-effort') ?? 'low' } } :
+      { endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081' }),
     // The thinking budget is the server's (serve_bonsai.sh --reasoning-budget) unless given: a server that enforces a
     // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
     request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
@@ -79,12 +83,14 @@ async function main(): Promise<void> {
       chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } } };
   // A call is compacted as it nears its context budget, so the server must accept a request of that size; a server
   // with a smaller context would reject the call's later requests. llama.cpp reports its per-request context in /props.
-  const served = await fetch(new URL('/props', config.endpoint)).then(response => response.ok ? response.json() : undefined, () => undefined)
-    .then(props => (props as { default_generation_settings?: { n_ctx?: number } } | undefined)?.default_generation_settings?.n_ctx);
-  if (typeof served === 'number' && served < config.contextTokens)
-    throw new Error(`the server accepts ${served} tokens per request, less than --context-tokens ${config.contextTokens}; ` +
-      'serve with a larger context per slot or lower --context-tokens');
-  if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
+  if (config.endpoint) {
+    const served = await fetch(new URL('/props', config.endpoint)).then(response => response.ok ? response.json() : undefined, () => undefined)
+      .then(props => (props as { default_generation_settings?: { n_ctx?: number } } | undefined)?.default_generation_settings?.n_ctx);
+    if (typeof served === 'number' && served < config.contextTokens)
+      throw new Error(`the server accepts ${served} tokens per request, less than --context-tokens ${config.contextTokens}; ` +
+        'serve with a larger context per slot or lower --context-tokens');
+    if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
+  }
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
   if (handoffs) for (const item of records) {
     const handoff = handoffs.get(item.record.id);

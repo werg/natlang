@@ -170,7 +170,9 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const maxTokens = request.max_tokens === null ? configuredMax :
         configuredMax === undefined ? request.max_tokens : Math.min(request.max_tokens, configuredMax);
       const options = { ...requestOverride,
-        ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+        // Codex Responses rejects temperature, including natlang's usual zero default.
+        ...(request.temperature === undefined || model.api === 'openai-codex-responses' ? {} :
+          { temperature: request.temperature }),
         ...(maxTokens === undefined ? {} : { maxTokens }),
         samplingParams: { ...record(requestOverride.samplingParams, 'piOptions.samplingParams'),
           ...(request.seed === null ? {} : { seed: request.seed }) },

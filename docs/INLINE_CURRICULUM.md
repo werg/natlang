@@ -226,6 +226,26 @@ node scripts/teacher-collector.mjs ../data/teacher/inline-curriculum/smoke-s1.ir
 node scripts/inline-curriculum/admit.mjs ../runs/ic.results.jsonl --ledger ../runs/ic.ledger.jsonl --admitted ../runs/ic.admitted.jsonl --show
 ```
 
+To collect with an OpenAI Codex subscription through Pi, first run
+`natlang auth login openai-codex`. Then replace the collector's `--server` with
+`--provider openai-codex` and use a model ID from `natlang models openai-codex`:
+
+```sh
+node scripts/teacher-collector.mjs ../data/teacher/inline-curriculum/smoke-s1.ir.jsonl ../runs/ic-luna.jobs ../runs/ic-luna.results.jsonl \
+  --provider openai-codex --model-id gpt-6-luna --root-seed 927 --start 0 --limit 3 \
+  --workers 1 --context-tokens 12000 --max-turns 12 --reasoning-effort low
+node scripts/inline-curriculum/admit.mjs ../runs/ic-luna.results.jsonl \
+  --ledger ../runs/ic-luna.ledger.jsonl --admitted ../runs/ic-luna.admitted.jsonl
+node scripts/materialize-native-teacher.mjs ../runs/ic-luna.admitted.jsonl ../runs/ic-luna.turns.jsonl
+```
+
+The provider path uses Pi's saved subscription credentials, records the provider
+and request options in each row's provenance, and preserves the collector's
+durable job and admission checks. The resulting `turns.jsonl` contains training
+decisions; the separate SFT exporter still renders them with the target
+student model's chat template server. The Codex Responses route does not accept
+temperature, so natlang omits its runtime temperature for that route.
+
 A collection resumes from its job directory. `--reuse A.results.jsonl,B.results.jsonl` also takes finished rows of
 earlier runs (other shards, pilots) for the same programs, matched by program digest, model, turn budget, and role;
 rows from before the finishing-status change count only after `migrate-status.mjs`. Reused rows record their origin in
@@ -275,4 +295,3 @@ Pilot 4 (Bonsai 27B, 80 cases, one counterfactual group per family, before the f
 direction pilot 3 misread. Rejections were a policy review that awaited `nl` functions without calling them
 (fixed in the surface), a review whose "judgment" was keyword regexes (a correct rejection), and the invented
 reservation ids above.
-

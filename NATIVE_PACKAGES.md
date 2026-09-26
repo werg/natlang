@@ -221,6 +221,8 @@ reasoning, cache, transport, metadata, regional and sampling settings. Its
 `maxTokens` caps natlang's per-turn allowance. Natlang's configured temperature
 overrides `piOptions.temperature`, and its seed overrides
 `piOptions.samplingParams.seed` unless `runtime.seed.mode` is `backend`.
+The OpenAI Codex Responses route rejects temperature, so natlang omits its
+runtime temperature there.
 `piOptions.env` supplies provider environment values for that profile. Top-level
 `headers` take precedence over `piOptions.headers`. Per-request callbacks,
 SDK `fetch` implementations, and direct API keys are unavailable in JSON

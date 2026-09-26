@@ -3,6 +3,7 @@ import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
+import { createManagedModelSession } from '../model/local-server.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { TOOLS_PROMPT } from '../native/prompt.js';
@@ -30,7 +31,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** Sampling temperature; greedy unless set. Reasoning models are tuned for sampling (Ling: 1.0) and, decoded
    * greedily, can skip their thinking. */
   temperature?: number;
-  endpoint?: string; request?: Record<string, unknown>; cacheStableTools?: boolean;
+  endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
+  request?: Record<string, unknown>; cacheStableTools?: boolean;
   handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
 export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   program_ir_sha256: string; student_trajectory_id: string; student_trajectory_sha256: string;
@@ -105,7 +107,8 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
-    transport: 'openai-compatible',
+    transport: options.provider ? 'pi-provider' : 'openai-compatible',
+    ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {} } : {}),
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
@@ -375,7 +378,8 @@ const requestTokens = (request: ModelTurnRequest) =>
   Math.ceil((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4) + 512;
 
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
-  if (!config.endpoint) throw new Error('endpoint is required for native teacher collection');
+  if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
+  if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
     const handoff = config.handoffs?.get(item.record.id);
@@ -392,8 +396,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         (handoff.student_provenance.seed_policy as Record<string, unknown>)?.root !== config.rootSeed ||
         handoff.student_provenance.context_tokens !== config.contextTokens))
       throw new Error(`${item.record.id}: student handoff runtime/prompt/seed settings differ`);
-    const send = openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
+    const session = config.provider ? createManagedModelSession({ provider: config.provider,
+      model: config.modelId, piOptions: config.piOptions }) : undefined;
+    let ready: Promise<unknown> | undefined;
+    const send = session ? async (request: ModelTurnRequest) => {
+      await (ready ??= session.prepare());
+      return session.turn(request);
+    } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
+    try {
     const transport = kv ? async (request: ModelTurnRequest) => {
       const need = requestTokens(request);
       await kv.acquire(need);
@@ -456,6 +467,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);
     return row;
+    } finally { await session?.close(); }
   };
 }
 
