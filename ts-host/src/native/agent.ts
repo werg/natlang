@@ -542,6 +542,8 @@ export class NativeToolAgent {
     let compactedAt = 0;
     // The turn of the model's last compaction: the next turn is not asked again (what it could not remove is elided).
     let compactedTurn = -1;
+    // Requests of this turn the server refused as longer than its context.
+    let overflowRetries = 0;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
@@ -613,8 +615,17 @@ export class NativeToolAgent {
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
           duration_ms: Math.round(performance.now() - started),
           error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` });
+        // A server that refuses the request as too long says how long it was: learn the true size and take the turn
+        // again, which compacts it. Twice at most per turn; beyond that the estimate is not the problem.
+        const measured = /exceed_context_size_error[\s\S]*?"n_prompt_tokens":(\d+)/.exec(error instanceof Error ? error.message : '');
+        if (measured && overflowRetries < 2 && sentChars > 0) {
+          overflowRetries++;
+          tokensPerChar = Math.max(tokensPerChar, Number(measured[1]) / sentChars);
+          continue;
+        }
         throw error;
       }
+      overflowRetries = 0;
       session.runtime.trace.emit('model_request', { call_id: callId, phase: 'end', turn: turns + 1,
         duration_ms: Math.round(performance.now() - started),
         prompt_tokens: response.prompt_tokens ?? null, completion_tokens: response.completion_tokens ?? null });

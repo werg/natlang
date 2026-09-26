@@ -174,3 +174,27 @@ test('transcript keeps the reasoning of the turn that made each call, and search
   assert.match(found, /\[\[0, 1\]\]/);
 });
 
+
+test('a request the server refuses as too long teaches the agent its true size, and the turn is taken again, compacted', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  let turn = 0, refused = 0;
+  const sizes = [];
+  const driver = request => {
+    const size = promptOf(request);
+    if (size >= 4096) {
+      refused++;
+      throw new Error(`model HTTP 400: {"error":{"code":400,"type":"exceed_context_size_error","n_prompt_tokens":${size},"n_ctx":4096}}`);
+    }
+    sizes.push(size); turn++;
+    // The server's reported size is half the truth, so the agent's own estimate runs low until it is corrected.
+    const reported = Math.round(size / 2);
+    if (toolNames(request).join() === 'compact_history')
+      return { calls: [['compact_history', { note: `Counting; reached ${turn}.` }]], prompt_tokens: reported };
+    return turn < 14 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turn}` }]], prompt_tokens: reported } :
+      { calls: [['return_result', { status: 'success', value: turn }]], prompt_tokens: reported };
+  };
+  await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 40 }).run(session);
+  assert.equal(session.completed, true);
+  assert.ok(refused >= 1, 'the server refused at least one request');
+  assert.ok(sizes.every(size => size < 4096));
+});
