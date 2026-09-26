@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { APPROACH_PROMPT } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
   if (flags.has('--help')) {
     process.stdout.write('usage: teacher-collector IR JOBS OUT --model-id ID --root-seed N [options]\n\n' +
       'Options: --server URL --start N --limit N|--all --workers N --context-tokens N\n' +
-      '         --thinking-tokens N --reasoning-effort LEVEL\n' +
+      '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide\n' +
       '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
@@ -50,7 +51,9 @@ async function main(): Promise<void> {
       handoffs.set(handoff.id, handoff);
     }
   }
-  const systemPrompt = flags.has('--system-file') ? await readFile(resolve(flags.get('--system-file')!), 'utf8') : defaultSystemPrompt;
+  // --approach-guide appends the schematic of how calls usually go (native/prompt.ts APPROACH_PROMPT).
+  const systemPrompt = (flags.has('--system-file') ? await readFile(resolve(flags.get('--system-file')!), 'utf8') : defaultSystemPrompt) +
+    (flags.has('--approach-guide') ? APPROACH_PROMPT : '');
   const collectionRole = flags.get('--collection-role') ?? 'teacher';
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');

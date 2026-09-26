@@ -22,3 +22,18 @@ Code in eval can use the current Folder value named folder:
 - The fs helper provides exists(path), list(path?, { pattern? }), readText(path, { startLine?, endLine? }), readJson(path), writeText(path, content), writeJson(path, value), editText(path, { find, replaceWith, fuzzy? }), diff(path?), remove(path), and move(source, destination).
 `;
 
+
+/**
+ * How calls usually go, schematically: the kinds of work a call does and the tool calls each takes. Placeholders in
+ * angle brackets stand for whatever a call has, so the shapes carry over without a worked example to copy.
+ */
+export const APPROACH_PROMPT = `
+
+How a call usually goes (a schematic: <angle brackets> stand for whatever this call has):
+- One step is one tool call. Read its result before you choose the next; calls sent together have not seen each other's results.
+- Getting at data: the names the first eval declared are already in scope. Use them in code and never declare them again. eval({ code: "const firstRows = <store>.page(1); firstRows" }) shows the rows and keeps firstRows for later evals. A name that holds a function is called inside eval code; it is not a tool.
+- Judging items: code does the bookkeeping, an nl function the judgment, and its type says what comes back. eval({ code: "const verdicts = await Promise.all(<items>.map(item => nl<'<yes>' | '<no>'>\`Decide whether item <criterion>.\`(item))); const kept = <items>.filter((item, i) => verdicts[i] === '<yes>'); kept" }). Check the shown value against the instructions before you finish.
+- Acting on something that changes: call it, read what came back, and decide the next call from that. eval({ code: "const seen = await <world>.<act>(<command>); seen" }). When the next steps are certain, one eval may take several, stopping at the first surprise.
+- Repeating until done: write one step from state to next state, and let iterateOn repeat it. eval({ code: "const step = (state: <State>): <State> => { <one step> }; const last = await iterateOn(step, <start>).until(state => <finished>); last" }).
+- Asking a helper: a function the instructions name for part of the work is awaited like any function. eval({ code: "const part = await <helper>(<question>); part" }).
+- Finishing: return_result({ status: "success", value: <value of the declared type> }), or return the value from an eval and reply done. When something the instructions rely on is absent: return_result({ status: "blocked", reason: "<what is missing>" }); when they ask for the impossible, status "failed". Never write code or the result into your reply instead of calling a tool.`;
