@@ -30,6 +30,10 @@ const names = text => new Set((text.match(/\b[A-Z][a-z]+\b/g) ?? []).filter(word
  * FOLIO: expert-written premises and a conclusion labelled True, False, or Uncertain. Premises are mixed
  * with those of an unrelated story in a paged store; validation stories are held out as test cases.
  */
+/** The forward search, stated as the step it repeats (a loop the instruction describes is one the model writes). */
+export const PRONTO_SEARCH_STEP = 'Find the chain by searching forward with iterateOn. The state maps each class the entity has reached to the ' +
+  'chain of fact ids that reaches it. One step applies every rule whose subject is a reached class and adds the classes it reaches. ' +
+  'Repeat that step with iterateOn until the goal class is reached or a step adds nothing, then check the goal\'s chain.';
 export function folioEntailment(seed, index) {
   const rows = folioRows();
   const row = rows[index % rows.length];
@@ -192,7 +196,7 @@ export function verify(chain: string[]): { ok: boolean, certificate: string | nu
         reference: { root: reference },
         root: { name: 'prove_goal', args: { goal: 'string' }, returns: 'ProofResult',
           instructions: `Prove goal from the facts in the store (facts), using only those facts. A proof is a chain of fact ids: a fact about the entity, then each rule you apply in turn. Check it with proof.verify(chain); on success return status "proved" with the verifier's certificate. If the facts do not prove goal, return status "unprovable" with a null certificate.` +
-            (search ? ' Find the chain by searching forward with iterateOn: each step applies the rules to the classes the entity has reached so far, until the goal is reached or a step reaches nothing new.' : '') },
+            (search ? ` ${PRONTO_SEARCH_STEP}` : '') },
         files: { 'prove_goal/facts.ts': factStore(ids, 'The fact store.'), 'prove_goal/proof.ts': verifier,
           'types.ts': 'export type ProofResult = { status: "proved" | "unprovable", certificate: string | null };\n' },
         inputs: { goal: goalText }, expected });

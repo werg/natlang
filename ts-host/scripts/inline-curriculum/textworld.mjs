@@ -13,6 +13,9 @@ import { SOURCES, cachePath } from './acquire.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 let games;
+/** The play loop, stated as the step it repeats (a loop the instruction describes is one the model writes). */
+export const TEXTWORLD_ITERATE = 'Play with iterateOn: make one nl step function that looks around and carries out the single most ' +
+  'useful command with world.act, returning what happened, and repeat it with iterateOn until world.certificate() is not null. When it is,';
 function loadGames() {
   if (games) return games;
   const dir = cachePath(CACHE, 'textworld', SOURCES.textworld.revision, 'games');
@@ -206,7 +209,7 @@ outcome`;
         reference: { root: [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`), playable ? returnCall(record.semantics.expected) :
           blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children } },
       semantics: { ...record.semantics, files: { ...record.semantics.files,
-        'play_quest.nl': record.semantics.files['play_quest.nl'].replace('When the task is accomplished', 'Play by running an inline step function with iterateOn until the task is accomplished. When it is,') } },
+        'play_quest.nl': record.semantics.files['play_quest.nl'].replace('When the task is accomplished', TEXTWORLD_ITERATE) } },
     };
   });
 }
