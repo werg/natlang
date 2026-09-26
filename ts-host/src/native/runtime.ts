@@ -498,9 +498,14 @@ export class NativeSession {
     // Tool-call markup is a failed tool call, never the answer.
     if (/<tool_call>|<\/tool_call>|<function=|<\/function>|<parameter=|<\/parameter>/.test(answer)) return false;
     let value: Value;
-    try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { return false; }
-    // Only string-typed results: "7" is not silently a number.
-    if (typeof value !== 'string') return false;
+    try { value = coerce(answer, this.lam.type.returns, this.env, 'return'); } catch { value = MISSING; }
+    if (typeof value === 'string') { this.lam.return = value; return true; }
+    // Any other result may be written as JSON: a reply that is nothing but a value of the declared type (optionally
+    // in a code fence) is that value. Prose around it is a reply, not a result.
+    const body = answer.replace(/^```(?:json)?\s*\n([\s\S]*?)\n?```$/, '$1').trim();
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { return false; }
+    try { value = coerce(parsed as Value, this.lam.type.returns, this.env, 'return'); } catch { return false; }
     this.lam.return = value;
     return true;
   }

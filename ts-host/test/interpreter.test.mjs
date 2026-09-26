@@ -93,15 +93,17 @@ test('return_result finishes with a typed value; an eval return only stages one'
   assert.equal(doubled.lam.return, 14); assert.equal(doubled.session.completed, false);
 });
 
-test('a final text reply is the result of a string-typed call, but never a number, and done asks for the staged value', async () => {
+test('a final text reply is the result: text for a string, a JSON value for any other type; prose and done are not', async () => {
   const replies = (texts, type) => { let turn = 0;
     return run({ type, instructions: 'Answer.' }, { agent: session => new NativeToolAgent(() => ({ text: texts[turn++] ?? 'done' }), { maxTurns: 3 }).run(session) }); };
   const label = await replies(['positive'], '() => "positive" | "negative"');
   assert.equal(label.outcome.kind, 'done'); assert.equal(label.value, 'positive');
   const summary = await replies(['The rollout is on track.'], '() => string');
   assert.equal(summary.value, 'The rollout is on track.');
-  const number = await replies(['7', '7', '7'], '() => number');
-  assert.equal(number.outcome.kind, 'quiesced');
+  const number = await replies(['7'], '() => number');
+  assert.equal(number.outcome.kind, 'done'); assert.equal(number.value, 7);
+  const prose = await replies(['Seven.', 'Seven.', 'Seven.'], '() => number');
+  assert.equal(prose.outcome.kind, 'quiesced');
   const early = await replies(['done', 'done', 'done'], '() => string');
   assert.equal(early.outcome.kind, 'quiesced', 'done is not an answer');
 });
@@ -460,13 +462,13 @@ test('a returned value is staged and a reply without a tool call returns it', as
 
 test('saying done before returning a value is answered, and only budgets the caller sets end a stuck call', async () => {
   const requests = [];
-  const chatty = new NativeToolAgent(request => { requests.push(structuredClone(request)); return { calls: [], text: '7', completion_tokens: 1 }; },
+  const chatty = new NativeToolAgent(request => { requests.push(structuredClone(request)); return { calls: [], text: 'Seven.', completion_tokens: 1 }; },
     { maxTurns: 3 });
   const stuck = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => chatty.run(session) });
   assert.equal(stuck.outcome.kind, 'quiesced'); assert.match(stuck.outcome.detail, /budget exhausted/);
   assert.match(requests[1].messages.at(-1).content, /There is no result yet\. Call return_result with status "success" and a number/);
   let turns = 0;
-  const recovering = new NativeToolAgent(() => ++turns === 1 ? { calls: [], text: '7', completion_tokens: 1 } :
+  const recovering = new NativeToolAgent(() => ++turns === 1 ? { calls: [], text: 'Seven.', completion_tokens: 1 } :
     turns === 2 ? { calls: [['eval', { code: 'return 7' }]], completion_tokens: 1 } : { text: 'done', completion_tokens: 1 });
   const second = await run({ type: '() => number', instructions: 'Write a number.' }, { agent: session => recovering.run(session) });
   assert.equal(second.outcome.kind, 'done'); assert.equal(second.value, 7); assert.equal(turns, 3);
@@ -576,4 +578,17 @@ test('a service scoped to a function is usable in its calls only, and named else
   assert.match(seen.root, /tables is not defined|Cannot find name 'tables'/, 'the root call cannot use it');
   assert.match(seen.expert, /Gigabut threw 60\.4/, 'the expert call can');
   assert.match(seen.asked, /60\.4/);
+});
+
+test('a reply that is only a JSON value of the declared type is the result; prose is not', () => {
+  const record = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
+  assert.equal(record.session.acceptTextResult('\n\n{\n  "verdict": "unknown"\n}'), true);
+  assert.deepEqual(record.lam.return, { verdict: 'unknown' });
+  const fenced = open({ type: '() => number[]', instructions: 'List.' });
+  assert.equal(fenced.session.acceptTextResult('```json\n[1, 2]\n```'), true); assert.deepEqual(fenced.lam.return, [1, 2]);
+  const number = open({ type: '() => number', instructions: 'Count.' });
+  assert.equal(number.session.acceptTextResult('The total is 1523.'), false, 'prose is a reply');
+  assert.equal(number.session.acceptTextResult('1523'), true); assert.equal(number.lam.return, 1523);
+  const wrong = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
+  assert.equal(wrong.session.acceptTextResult('{"verdict": "maybe"}'), false, 'a value of another type is not the result');
 });
