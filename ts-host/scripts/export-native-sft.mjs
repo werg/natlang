@@ -45,8 +45,15 @@ async function main() {
   const props = propsResponse.ok ? await propsResponse.json() : {};
   const template = props.chat_template_tool_use ?? props.chat_template ?? null;
   const render = async (messages, tools) => {
-    const response = await fetch(`${server}/apply-template`, { method: 'POST',
+    // The server closes idle keep-alive connections, and a request can race that close. Rendering is idempotent, so a
+    // request that failed before any response is sent again; HTTP errors are not retried.
+    const post = () => fetch(`${server}/apply-template`, { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages, tools }) });
+    let response;
+    for (let attempt = 1; ; attempt++) {
+      try { response = await post(); break; }
+      catch (error) { if (attempt >= 3 || !(error instanceof TypeError)) throw error; }
+    }
     if (!response.ok) throw new Error(`template server returned HTTP ${response.status}`);
     const body = await response.json();
     if (typeof body.prompt !== 'string') throw new Error('template server returned no prompt');
@@ -55,7 +62,11 @@ async function main() {
   const turns = (await readFile(input, 'utf8')).split(/\r?\n/).filter(Boolean).map(JSON.parse);
   const results = new Array(turns.length); let cursor = 0;
   await Promise.all(Array.from({ length: Math.min(workers, Math.max(1, turns.length)) }, async () => {
-    while (cursor < turns.length) { const index = cursor++; results[index] = await renderSftTurn(turns[index], render, endToken); }
+    while (cursor < turns.length) {
+      const index = cursor++;
+      try { results[index] = await renderSftTurn(turns[index], render, endToken); }
+      catch (error) { throw new Error(`${turns[index].id}: ${error.message}${error.cause ? ` (${error.cause.code ?? ''} ${error.cause.message ?? error.cause})` : ''}`, { cause: error }); }
+    }
   }));
   const selected = results.filter(Boolean), data = selected.map(row => JSON.stringify(row)).join('\n') +
     (selected.length ? '\n' : '');
