@@ -19,6 +19,7 @@ helper it was given, code it is asked to repair (`line_total`), and the scoped m
 (`semantics.service_scopes`): the CommaQA stores belong to their experts, so asking the expert is the way to the
 evidence, while every declaration and instruction stays readable.
 
+
 ## Case format
 
 A case is an ordinary program IR record plus a `curriculum` block (`natlang.inline_curriculum/1`). The collector
@@ -124,7 +125,6 @@ running out of turns also quiesces a call and was previously accepted.
 | `counterexample_revision` | follow-up | other | follow-up | A late record shows that a shared email is a household inbox (revise the rule) or the same person (keep it) |
 | `parallel_labels` | inline | other | single call | Concurrent `nl<Label>` children whose labels must stay attached to their items |
 | `inline_late_binding` | inline | other | single call | One saved inline judgment captures a `let` budget reassigned between screening rounds |
-| `inline_type_repair` | inline | other | follow-up | A seeded eval reads fields of an untyped inline lambda's result; the diagnostic proposes the annotation, which leads to a typed lambda (or a direct answer) |
 | `idempotent_retry` | failure | other | follow-up | A send succeeds but its acknowledgement is lost; the same command is retried under its key |
 | `live_inventory` | nested | actor | single call | A live class instance from a module: reserve every line, or roll back on a short line; the stock fingerprint proves the rollback |
 | `inline_multi_capture` | inline | other | single call | Exact per-service metrics and release notes judged together under a policy: notes announce the failures, are unrelated, or announce another path |
@@ -140,6 +140,9 @@ running out of turns also quiesces a call and was previously accepted.
 | `iterate_frontier` | iterate | relational | single call | Breadth-first search link by link with `iterateOn`: near, far (past the progress review), or unreachable |
 | `relational_late_argmax` | follow-up | relational | single call | The supplier with the most late Q3 shipments; late, other-quarter, or cancelled rows on the last page decide it |
 | `actor_greenhouse` | iterate | actor | single call | A controller stepped with `iterateOn` until the temperature holds: sun arrives, a cold start runs past the review, or a broken heater makes it blocked |
+
+Retired families: `inline_type_repair` (an `nl` result with no known type is no longer refused; it runs with an
+open result, so the diagnostic it taught a model to repair does not occur; admission rejects its rows as `retired_family`).
 
 ## TypeScript authoring track
 

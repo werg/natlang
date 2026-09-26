@@ -33,3 +33,8 @@ test('the rewrite keeps positions, and instructions built at run time are report
   const output = await run('const q = "Add one to n.";\nconst answer: number = await nl(q);\nanswer', 3);
   assert.match(output, /nl is a template tag, not a function taking a string/);
 });
+
+test('an nl result nothing types runs open, shaped by the fields the code reads', async () => {
+  assert.match(await run('const r = await nl`Read the amount in n.`(n);\nr.amount + 1', { amount: 2 }), /^3\b/);
+  assert.match(await run('const r = await nl`Say something about n.`(n);\nr', 'anything at all'), /anything at all/);
+});

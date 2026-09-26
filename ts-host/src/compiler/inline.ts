@@ -113,6 +113,8 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     try { return describeTarget(within.program, within.program.getTypeChecker(), type, { allowHost, location: within.location }); }
     catch (error) {
       if (!(error instanceof TargetError)) throw error;
+      // A result typed any or unknown is an open result, as when nothing says what it is.
+      if (what === 'return' && type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { text: 'any', natlang: 'unknown', aliases: {} };
       report(node, what === 'return' ? 'nl-unknown-return' : 'nl-unknown-parameter', what === 'return' ?
         `Return type of this \`nl\` expression is unknown (${error.message}); annotate the target or write \`nl<Verdict>\`.` :
         `Type of ${what} for this \`nl\` expression cannot be used (${error.message}); annotate it.`);
@@ -301,7 +303,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   const deferred: { node: ts.TaggedTemplateExpression; call: ts.CallExpression | undefined; signature: Signature }[] = [];
 
   const finish = (node: ts.TaggedTemplateExpression, call: ts.CallExpression | undefined, signature: Signature,
-    solved?: { program: ts.Program; location: ts.Node }): void => {
+    solved?: { program: ts.Program; location: ts.Node }, openReturns?: TargetDescriptor): void => {
     const file = node.getSourceFile();
     const parameters = signature.parameters ?? [];
     const seen = new Set<string>();
@@ -313,7 +315,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       }
       seen.add(parameter.name);
     }
-    const returns = target(signature.returns!, node, 'return', true, solved);
+    const returns = openReturns ?? target(signature.returns!, node, 'return', true, solved);
     if (!returns) return;
     const parameterTargets: InlineLambdaPlan['parameters'] = [];
     for (const parameter of parameters) {
@@ -439,11 +441,12 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         report(entry.node, 'nl-ambiguous-signature', 'Uses of this `nl` result need different types: ' +
           solution.uses.map(use => `${use.typeText} (${use.why} in \`${use.text}\`)`).join('; ') + '. Write `nl<T>` with the one you mean.');
       } else {
-        const hint = solution?.fields.length ? ` Its result is used as an object with ${solution.fields.map(name => `\`${name}\``).join(', ')}; ` +
-          `write \`nl<{ ${solution.fields.map(name => `${name}: …`).join('; ')} }>\`.` :
-          solution?.indexed ? ' Its result is used as a list; write `nl<T[]>` with its element type.' :
-          ' Annotate the variable it is assigned to, or write `nl<T>` (for example `nl<boolean>`).';
-        report(entry.node, 'nl-unknown-return', `Return type of this \`nl\` expression is unknown: nothing that uses it says what it should be.${hint}`);
+        // Nothing says what the result is: the call runs with an open result instead of being refused. How the code
+        // uses it still shapes what it asks for: the fields it reads, or a list.
+        const open = solution?.fields.length ? `{ ${solution.fields.map(name => `${name}: unknown`).join(', ')} }` :
+          solution?.indexed ? 'unknown[]' : 'unknown';
+        finish(entry.node, entry.call, { ...entry.signature, origin: 'use' }, undefined,
+          { text: 'any', natlang: open, aliases: {} });
       }
     });
     const order = new Map(files.map((file, index) => [displayPath(file), index]));

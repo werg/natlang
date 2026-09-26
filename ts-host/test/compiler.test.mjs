@@ -49,13 +49,15 @@ test('later uses of an unannotated local supply a unique return type', () => {
 });
 
 test('missing, synchronous, any-typed and colliding signatures produce precise diagnostics', () => {
+  // Nothing says what the result is: the call runs with an open result instead of being refused.
   const unknown = analyze('async function f() { const x = await nl`Check policy`(note); }', DECLS);
-  assert.equal(unknown.diagnostics[0].code, 'nl-unknown-return');
-  assert.match(unknown.diagnostics[0].message, /nothing that uses it says what it should be.*write `nl<T>`/);
+  assert.deepEqual(unknown.diagnostics, []);
+  assert.equal(unknown.plans[0].returns.natlang, 'unknown');
   const sync = analyze('function f() { [note].filter(nl`Keep?`); }', DECLS);
   assert.equal(sync.diagnostics[0].code, 'nl-sync-callback');
   const anyTarget = analyze('async function f() { const x: any = await nl`Anything`(); }', DECLS);
-  assert.equal(anyTarget.diagnostics[0].code, 'nl-unknown-return');
+  assert.deepEqual(anyTarget.diagnostics, []);
+  assert.equal(anyTarget.plans[0].returns.natlang, 'unknown');
   const collision = analyze('async function f(a: { note: string }, note2: string) { const note = "x"; result = await nl`Judge`(note, note); }', DECLS);
   assert.equal(collision.diagnostics[0].code, 'nl-parameter-collision');
   const spread = analyze('async function f(items: string[]) { result = await nl`Judge`(...items); }', DECLS);

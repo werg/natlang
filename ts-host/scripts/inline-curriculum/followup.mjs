@@ -120,35 +120,6 @@ return Object.fromEntries(items.map((item, i) => [item.id, labels[i]]));`), retu
   });
 }
 
-const REPORTS = [
-  { text: 'After the rollback, error rates returned to baseline and customers confirm checkout works.', status: 'recovered' },
-  { text: 'The restart helped a little, but a third of requests still time out.', status: 'degraded' },
-  { text: 'Every request to the payment service fails; the service does not respond at all.', status: 'down' },
-  { text: 'Latency is still twice the normal level, although no requests are failing.', status: 'degraded' },
-  { text: 'Monitoring has been green for an hour and the incident channel was closed.', status: 'recovered' },
-];
-/**
- * A seeded eval uses an untyped inline lambda's result as an object. Nothing says what its fields are, so the
- * compiler rejects it and proposes an annotation; the repair types the lambda (or answers directly).
- */
-export function inlineTypeRepair(seed, index) {
-  const report = REPORTS[index % REPORTS.length];
-  const shape = `status${index}`;
-  return [curriculumCase({ family: 'inline_type_repair', shape, variant: 'seeded', slice: 'inline_placement', domain: 'other',
-    mode: 'followup', inline: 'optional',
-    evidence: { world: [report.text], retrieved: ['nl-unknown-return'], background: [] },
-    decisive: [{ marker: 'nl-unknown-return', source: 'error', note: 'the compiler diagnostic for the untyped inline lambda' }],
-    plausibleActions: ['annotate the inline lambda\'s target type', 'judge the report directly'],
-    minimumSequence: ['read the diagnostic', 'give the lambda its type or answer directly'],
-    reference: { root: [evalCall('const outcome: Status = await nl`Decide from report whether the service has recovered, is degraded, or is down.`(report);\noutcome'),
-      returnCall(report.status)], children: [{ match: 'Decide from report', value: report.status }] },
-    root: { name: 'incident_status', args: { report: 'string' }, returns: 'Status',
-      instructions: 'Classify the service status described in report.' },
-    files: { 'types.ts': 'export type Status = "recovered" | "degraded" | "down";\n' },
-    failureSeed: { kind: 'compile', code: 'const assessment = await nl`Decide from report whether the service has recovered, is degraded, or is down, and quote the evidence.`(report);\nassessment.status' },
-    inputs: { report: report.text }, expected: report.status })];
-}
-
 /** Idempotent retry: a send succeeds but its acknowledgement is lost; the same command is retried, never a new one. */
 export function idempotentRetry(seed, index) {
   const rng = new Random(seed, `retry:${index}`);

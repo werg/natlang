@@ -29,7 +29,9 @@ const summarize: (text: string) => Promise<string> = nl`Summarize text in one se
 The compiler determines the signature before the model runs, from, in order:
 an explicit type argument (`nl<F>`), the contextual type of the expression, an
 immediate call's arguments and result context, and later uses of a local.
-Missing or conflicting evidence is a compile error. Template interpolations are
+Conflicting evidence is a compile error. With no evidence (or an `any` or
+`unknown` annotation) the result is open: the call may return any value, shaped
+by the fields the code reads from it (`{ severity: unknown, … }`) or as a list. Template interpolations are
 evaluated at call time and become part of the instructions.
 
 In eval code, `nl` called like a function on literal instructions, as in

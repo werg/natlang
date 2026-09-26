@@ -37,13 +37,13 @@ test('an nl step of iterateOn takes the initial state\'s type, and its stopping 
   assert.deepEqual(signatures('const final = await iterateOn(nl`Improve plan.`, plan).until(d => d.length > 100);'), ['(plan: string) => string']);
 });
 
-test('uses that disagree, or say nothing about fields, produce diagnostics that propose the annotation', () => {
+test('uses that disagree produce a diagnostic that proposes the annotation; fields read from an untyped result shape it', () => {
   const conflict = analyzeEvalSnippet('const v = await nl`Judge note.`(note);\nif (v) {}\nconst n: number = v;', scope).diagnostics;
   assert.equal(conflict[0].code, 'nl-ambiguous-signature');
   assert.match(conflict[0].message, /boolean \(tested as a condition in `if \(v\) \{\}`\); number \(expected here in `const n: number = v;`\)/);
-  const fields = analyzeEvalSnippet('const a = await nl`Assess note.`(note);\nif (a.severity > 3) console.log(a.reason);', scope).diagnostics;
-  assert.equal(fields[0].code, 'nl-unknown-return');
-  assert.match(fields[0].message, /write `nl<\{ severity: …; reason: … \}>`/);
+  const fields = analyzeEvalSnippet('const a = await nl`Assess note.`(note);\nif (a.severity > 3) console.log(a.reason);', scope);
+  assert.deepEqual(fields.diagnostics, []);
+  assert.equal(fields.plans[0].returns.natlang, '{ severity: unknown, reason: unknown }');
 });
 
 test('an awaited nl expression without a call runs the judgment in eval', async () => {

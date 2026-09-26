@@ -20,7 +20,7 @@ export async function triage(ticket: Ticket, style: string): Promise<Report> {
 ```
 
 - In eval code, ``await nl(`Is ${x} large?`)`` is a one-shot call, the same as ``nl`Is ${x} large?`()``; the instructions must be a literal the compiler can see.
-- The compiler plans every `nl` expression before the model runs: parameters, return type, and captures. Unresolvable cases are compile errors (`nl-unknown-return`, `nl-ambiguous-signature`, `nl-unknown-parameter`, `nl-sync-callback`). Use `nl<T>` or an annotation to pin a type.
+- The compiler plans every `nl` expression before the model runs: parameters, return type, and captures. Conflicting cases are compile errors (`nl-ambiguous-signature`, `nl-unknown-parameter`, `nl-sync-callback`); a result nothing types runs open (any value, shaped by the fields the code reads). Use `nl<T>` or an annotation to pin a type: the call is then asked for exactly that.
 - Parameters come from a function-type annotation, the callback slot, an immediate call, or calls later in the same compilation unit. A saved `nl` with none of these (`const judge = nl<boolean>`...`` called only later, typical of a REPL eval) accepts whatever each call passes, as `input`, `input2`, …: name the parameters with a signature, `nl<(application: Application) => boolean>`, so its instructions and its arguments agree.
 - Captures are exact-name mentions of visible bindings. They are read live at each call, not frozen at the tag. A mentioned `let` can be reassigned by the model; the write-back is version-checked.
 - Template interpolations `${expr}` are evaluated at call time and become part of the instructions.

@@ -169,11 +169,19 @@ export type Admission = { id: string; program_id: string; admitted: boolean; rea
  * case is admitted only when every decisive observation was visible before the root's first result
  * decision; the inline mode requires or forbids an inline child. The number of evals is never a criterion.
  */
+/**
+ * Families whose premise the runtime no longer has; their collected rows teach behaviour it no longer calls for.
+ * inline_type_repair seeded an nl result with no known type, which the compiler used to refuse (nl-unknown-return);
+ * such a call now runs with an open result.
+ */
+const RETIRED_FAMILIES = new Set(['inline_type_repair']);
+
 export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; outcome?: Record<string, unknown>;
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
   const reasons: string[] = [];
+  if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
   const outcome = row.outcome ?? {};
   if (!['done', 'quiesced', 'failed'].includes(String(outcome.status))) reasons.push('incomplete_trajectory');
   else if (!outcome.accepted) reasons.push(record.semantics.operation === 'blocked' && outcome.status === 'done' ?

@@ -1,7 +1,7 @@
 // The family registry. `weight` scales the number of shapes per build toward the plan's domain shares.
 import { abductionTest, entailmentException, proofVerifier } from './logic.mjs';
 import { childSufficiency, cohortPolicy, contractDiagnosis, folderCriteria, moduleDiscovery, pagedLateRow, reviewEach } from './applications.mjs';
-import { counterexampleRevision, idempotentRetry, inlineTypeRepair, lateBinding, liveInventory, parallelLabels, policyAfterMeasure } from './followup.mjs';
+import { counterexampleRevision, idempotentRetry, lateBinding, liveInventory, parallelLabels, policyAfterMeasure } from './followup.mjs';
 import { folioBatch, folioEntailment, prontoProof, prontoSearch } from './sources.mjs';
 import { followUpDue, namedVersusInline, receiptTotals, releaseGate, triageUnion } from './inline.mjs';
 import { childOptOut, eventRetry, loopRewrite, recursionRewrite, reducerApply } from './failure.mjs';
@@ -33,7 +33,6 @@ export const FAMILIES = {
   policy_after_measure: { build: policyAfterMeasure, weight: 1 },
   counterexample_revision: { build: counterexampleRevision, weight: 1 },
   parallel_labels: { build: parallelLabels, weight: 1 },
-  inline_type_repair: { build: inlineTypeRepair, weight: 2 },
   idempotent_retry: { build: idempotentRetry, weight: 3 },
   live_inventory: { build: liveInventory, weight: 1.5 },
   inline_late_binding: { build: lateBinding, weight: 1.5 },

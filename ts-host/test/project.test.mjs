@@ -89,7 +89,7 @@ test('natlang check reports inline type errors and callable-folder policy violat
   const result = checkProject(root, { runtimeModule: RUNTIME });
   assert.equal(result.ok, false);
   const codes = result.diagnostics.map(item => `${item.file}:${item.code}`);
-  assert.ok(codes.includes('src/bad.ts:nl-unknown-return'), codes.join('\n'));
+  assert.ok(!codes.includes('src/bad.ts:nl-unknown-return'), 'an untyped nl result runs open: ' + codes.join('\n'));
   assert.ok(result.diagnostics.some(item => item.file.endsWith('natlang.d') && /while/.test(item.message)), codes.join('\n'));
   assert.equal(existsSync(join(root, 'dist/app.js')), false, 'check does not emit JavaScript');
 });
