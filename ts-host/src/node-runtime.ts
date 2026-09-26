@@ -12,7 +12,9 @@ export type NodeNativeRuntimeOptions = Partial<NativeRuntimeOptions>;
  */
 export class NodeNativeRuntime extends PlatformRuntime {
   constructor(options: NodeNativeRuntimeOptions = {}) {
-    const frame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent })).frame;
+    // Calls this one makes run in the task, so the task holds what they are shown of the services too.
+    const frame = options.frame ?? new NatlangTask(new NatlangRuntime({ services: options.services, agent: options.agent }),
+      { serviceDeclarations: options.declarations, serviceScopes: options.serviceScopes }).frame;
     super({ ...options, environment: options.environment ?? new TypeScriptEnvironment({ mode: 'fresh' }),
       frame, hooks: options.hooks ?? kernelHooks, services: options.services ?? frame.task.services });
   }

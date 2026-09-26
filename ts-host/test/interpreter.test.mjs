@@ -551,6 +551,30 @@ test('an external service is called and read by its declaration, and cannot be e
   assert.equal(edited.kind, 'rejected'); assert.match(edited.text, /board is an external service/);
 });
 
+test('a call made from eval is shown the services by their declarations too', async () => {
+  const { externalModule } = await import('../dist/native/external.js');
+  const facts = externalModule('facts', '/** The number of pages. */\nexport function pages(): number { return 2; }\n');
+  const { WorldBridge } = await import('../dist/teacher/world-bridge.js');
+  const world = WorldBridge.declaration('alfworld');
+  const seen = [];
+  const { session } = open({ type: '() => number', instructions: 'Count the pages.' }, {
+    services: { facts: facts.exports, world: { look: async () => 'a room' } }, declarations: { facts: facts.declaration, world },
+    agent: child => { seen.push({ ...child.runtime.declarations }); child.lam.return = 2; } });
+  const called = await session.applyAsync('eval', { code: 'const n = await nl<number>`Count the pages of facts.`(); n' });
+  assert.equal(called.kind, 'ok', called.text);
+  assert.equal(seen[0].facts, facts.declaration);
+  assert.equal(seen[0].world, world, 'a declared const is kept as it is');
+  assert.match(world, /look\(\): Promise<string>;/); assert.match(world, /actions\(\): Promise<\{ commands: string\[\] \}>/);
+});
+
+test('an iteration that was never run says how to run it', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  const shown = await session.applyAsync('eval', { code: 'const it = await iterateOn((n: number) => n + 1, 0, (n: number) => n > 3);\nconsole.log(String(it));\nit' });
+  assert.equal(shown.kind, 'ok', shown.text);
+  assert.match(shown.text, /iterateOn\(…\) that has not run: it runs when you await \.until\(done\)/);
+  assert.doesNotMatch(shown.text, /observers/, 'its internals are not listed');
+});
+
 test('read_code shows an importable package by its declarations, and will not edit it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Look something up.' });
   const listed = session.apply('read_code', { name: 'undici' });

@@ -499,7 +499,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   }
   const worldSpec = (record.semantics as { world?: WorldSpec }).world;
   const world = worldSpec ? await WorldBridge.open(worldSpec) : undefined;
-  if (world) services.world = world.service();
+  if (world) { services.world = world.service(); declarations.world = WorldBridge.declaration(worldSpec!.kind); }
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     ...(serviceScopes ? { serviceScopes } : {}),

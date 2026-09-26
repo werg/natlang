@@ -83,7 +83,7 @@ export class NatlangTask {
     this.id = `${options.name ?? 'task'}-${++taskSequence}-${Math.random().toString(36).slice(2, 8)}`;
     this.services = options.services ?? runtime.options.services ?? {};
     this.serviceDeclarations = Object.fromEntries(Object.entries(options.serviceDeclarations ?? runtime.options.serviceDeclarations ?? {})
-      .map(([name, text]) => [name, /^\s*declare namespace /.test(text) ? text.trim() : declarationNamespace(name, text)]));
+      .map(([name, text]) => [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)]));
     this.serviceScopes = options.serviceScopes ?? runtime.options.serviceScopes ?? {};
     this.signal = options.signal ? AbortSignal.any([options.signal, this.abort.signal]) : this.abort.signal;
     this.episodeBudget = { limit: runtime.options.limits?.maxEpisodes, used: 0 };

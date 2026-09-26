@@ -192,6 +192,9 @@ export function livePreview(value: object): string {
     if (tag === '[object Date]') detail = ` ${(value as Date).toISOString()}`;
     else if (tag === '[object Map]' || tag === '[object Set]') detail = ` size ${(value as Map<unknown, unknown>).size}`;
     else if (typeof value === 'function') detail = (value as Function).length ? ` (${(value as Function).length} parameters)` : '';
+    // A class that says what its instances are is shown by that instead of its fields.
+    else if (typeof (value as { toString?: unknown }).toString === 'function' &&
+        (value as { toString: unknown }).toString !== Object.prototype.toString) detail = `: ${String(value)}`;
     else {
       const keys = Object.keys(value).slice(0, 6);
       if (keys.length) detail = ` { ${keys.join(', ')}${Object.keys(value).length > 6 ? ', …' : ''} }`;
@@ -642,7 +645,7 @@ export class NativeToolAgent {
         // Code written into a reply has not run; saying so is what a model that wrote its eval out as text needs.
         const unrun = /```(?:ts|typescript|js|javascript)?\s*\n/.test(response.text ?? '') ?
           'The code in your reply was not run: code runs only when you call eval with it. ' : '';
-        const feedback = response.truncated ? `Your reply was cut off at the ${limit}-token limit before any tool call. Take the next step with one tool call.` :
+        const feedback = response.truncated ? `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. Take the next step with one tool call.` :
           unrun + (missing || 'The staged result is incomplete.');
         messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;

@@ -166,6 +166,13 @@ export class Iteration<T> {
 
   until(done: Done<T>): Promise<T> { return this.run(done, async () => {}); }
 
+  /** What a printed iteration is: nothing runs until `.until(done)` is awaited. */
+  toString(): string {
+    return this.started ? 'iterateOn(…), running or run by .until' :
+      'iterateOn(…) that has not run: it runs when you await .until(done), as in ' +
+      'await iterateOn(step, initial).until(state => done(state)), and gives the final state';
+  }
+
   streamUntil(done: Done<T>): AsyncIterable<IterationEvent<T>> & { readonly __natlangIterationStream: true } {
     const queue: IterationEvent<T>[] = [];
     let wake: (() => void) | undefined, finished = false, failure: unknown, cancelled = false;

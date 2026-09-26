@@ -48,6 +48,28 @@ export class WorldBridge {
     });
   }
 
+  /** The TypeScript declaration of `world` the program is shown: every method is asynchronous. */
+  static declaration(kind: WorldSpec['kind']): string {
+    const actions = kind === 'alfworld' ? '{ commands: string[] }' :
+      '{ templates: string[]; objects: string[] }  // fill a template\'s OBJ slots with objects';
+    return [
+      'declare const world: {',
+      '  /** The task to accomplish. */',
+      '  task(): Promise<string>;',
+      '  /** A description of where you are. */',
+      '  look(): Promise<string>;',
+      '  /** What you are carrying. */',
+      '  inventory(): Promise<string>;',
+      `  /** The commands possible right now. */`,
+      `  actions(): Promise<${actions}>;`,
+      '  /** Carry out one command, as written in actions(). */',
+      '  act(command: string): Promise<{ observation: string; score: number; done: boolean }>;',
+      '  /** How far the task is: done when score reaches 100. */',
+      '  score(): Promise<{ score: number; done: boolean; moves: number }>;',
+      '}',
+    ].join('\n');
+  }
+
   /** The service the program sees as `world`. */
   service(): Record<string, (...args: unknown[]) => unknown> {
     return {
