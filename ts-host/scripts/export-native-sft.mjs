@@ -11,7 +11,9 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>') {
   if (!Array.isArray(turn.messages) || !Array.isArray(turn.tools) || !turn.target)
     throw new Error(`${turn.id}: missing messages/tools/target training view`);
   const messages = structuredClone(turn.messages), target = structuredClone(turn.target);
-  if (turn.teacher_reasoning) target.reasoning_content = turn.teacher_reasoning;
+  // Whitespace around the reasoning carries nothing, and templates differ in whether they keep it (Ling's strips it).
+  const reasoning = turn.teacher_reasoning?.trim();
+  if (reasoning) target.reasoning_content = reasoning;
   if (Array.isArray(target.tool_calls)) target.tool_calls = target.tool_calls.map((call, index) =>
     ({ ...call, id: `teacher_${index}` }));
   const prompt = await render(messages, turn.tools);
@@ -22,7 +24,7 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>') {
   const suffix = complete.slice(prompt.length), end = suffix.indexOf(endToken);
   if (end < 0) throw new Error(`${turn.id}: assistant end token is absent from rendered target`);
   const completion = suffix.slice(0, end + endToken.length);
-  if (turn.teacher_reasoning && !completion.includes(turn.teacher_reasoning))
+  if (reasoning && !completion.includes(reasoning))
     throw new Error(`${turn.id}: template dropped teacher reasoning`);
   return { id: turn.id, program_id: turn.program_id, source_groups: turn.source_groups ?? [],
     family: turn.family, skill: turn.skill, renderer: 'server-chat-template',
