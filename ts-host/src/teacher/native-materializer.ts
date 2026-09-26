@@ -130,7 +130,7 @@ export function materializeNativeRows(input: unknown[]): {
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
-    // decisions. A call's decisions, recognised by their opening, claim the one action log whose next action their
+    // decisions. A call's decisions, recognised by their opening (with the inputs it lists), claim the one action log whose next action their
     // first call matches, and are linked to it in order from then on.
     const logs = new Map<string, Dict[]>();
     for (const event of ledger) { const key = String(event.call_id ?? ''); logs.set(key, [...logs.get(key) ?? [], event]); }
@@ -145,7 +145,11 @@ export function materializeNativeRows(input: unknown[]): {
 
       const offered = toolSchemas(source.tools_offered ?? [], `${row.id}.trajectory[${index}].tools_offered`);
       const assistant = record(source.assistant, `${row.id}.trajectory[${index}].assistant`);
-      const caller = JSON.stringify(contextSource[1]?.content ?? '');
+      // A call's whole opening, its inputs included: parallel nl calls can share their instructions word for word.
+      const caller = JSON.stringify(contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage));
+      // A decision that sees nothing but its opening starts a call: even a call identical to an earlier one (the
+      // same instructions on the same input) has its own actions.
+      if (contextSource.length === openingLength(contextSource)) claimed.delete(caller);
       const calls = Array.isArray(assistant.calls) ? assistant.calls.map((value, callIndex) => {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),

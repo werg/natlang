@@ -120,11 +120,25 @@ test('each call links to its own actions when the trajectory interleaves a root 
   // Root, then its child (whose call looks exactly like the root's own finish), then the root again.
   row.trajectory = [row.trajectory[0],
     { phase: 'action', context: [system, judge], tools_offered: schema, assistant: { content: '', calls: [childCall] }, raw_response_sha256: 'raw-c' },
-    { phase: 'action', context: [system, opening], tools_offered: schema, assistant: { content: '', calls: [rootFinish] }, raw_response_sha256: 'raw-f' }];
+    { phase: 'action', context: row.trajectory[1].context, tools_offered: schema, assistant: { content: '', calls: [rootFinish] }, raw_response_sha256: 'raw-f' }];
   const [write, child, finish] = materializeNativeRows([row]).turns.map(turn => turn.decision.assistant.calls[0].outcome);
   assert.equal(write.trace_seq, 12);
   assert.equal(child.trace_seq, 21, 'the child links to its own log, not to the root finish it resembles');
   assert.equal(finish.trace_seq, 30);
+});
+
+test('a call identical to an earlier one, the same instructions on the same input, links to its own actions', () => {
+  const judge = { role: 'user', content: 'You are inside this call: nl@eval:1(item): boolean' };
+  const childCall = { tool: 'return_result', source_tool: 'return_result', arguments: { status: 'success', value: true }, call_id: null };
+  const row = nativeRow('repeated');
+  row.outcome.action_ledger = [...row.outcome.action_ledger,
+    { seq: 13, call_id: 'first', name: 'return_result', arguments: childCall.arguments, outcome: 'ok', result_text: 'done' },
+    { seq: 15, call_id: 'second', name: 'return_result', arguments: childCall.arguments, outcome: 'ok', result_text: 'done' }];
+  const child = raw => ({ phase: 'action', context: [system, judge], tools_offered: schema,
+    assistant: { content: '', calls: [childCall] }, raw_response_sha256: raw });
+  row.trajectory.splice(1, 0, child('raw-a'), child('raw-b'));
+  const seqs = materializeNativeRows([row]).turns.map(turn => turn.decision.assistant.calls[0].outcome.trace_seq);
+  assert.deepEqual(seqs, [12, 13, 15, 17]);
 });
 
 test('a call with no action log is marked not recorded and kept out of training, not treated as unexecuted', () => {
