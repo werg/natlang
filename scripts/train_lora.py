@@ -29,13 +29,17 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
 import torch
 
 
-def require_adapter_coverage(model, targets):
-    """Fail unless every linear layer a target names received an adapter; report how many each target got."""
+def require_adapter_coverage(model, targets, exclude=None):
+    """Fail unless every linear layer a target names, and `exclude` does not, received an adapter; report how many
+    each target got."""
+    import re
     import torch.nn as nn
     wrapped, missed = {}, {}
     for name, module in model.named_modules():
         leaf = name.rsplit(".", 1)[-1]
         if leaf not in targets or ".lora_" in name or ".base_layer" in name:
+            continue
+        if exclude and re.fullmatch(exclude, name):
             continue
         if hasattr(module, "lora_A"):
             wrapped[leaf] = wrapped.get(leaf, 0) + 1
@@ -335,6 +339,8 @@ def main():
                     help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
     ap.add_argument("--target-modules",
                     help="comma-separated LoRA module suffixes; LFM uses its architecture-specific linear layers")
+    ap.add_argument("--exclude-modules",
+                    help="regex over full module names kept out of the adapter, e.g. a MoE's routed experts")
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--holdout", type=int, default=200, help="minimum turns held out, reserving whole programs")
@@ -380,6 +386,8 @@ def main():
     if a.init_adapter is not None and not a.init_adapter.is_dir():
         ap.error("--init-adapter must be an adapter directory")
     targets = [x.strip() for x in a.target_modules.split(",") if x.strip()] if a.target_modules else None
+    if a.exclude_modules and (a.unsloth or a.unsloth_lfm_experts):
+        ap.error("--exclude-modules applies to the PEFT path, not Unsloth")
     if a.target_modules and not targets:
         ap.error("--target-modules must name at least one module")
     default_targets = (["q_proj", "k_proj", "v_proj", "out_proj", "in_proj", "w1", "w2", "w3"]
@@ -418,6 +426,8 @@ def main():
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens,
                     "require_audit": a.require_audit}
+        if a.exclude_modules:
+            identity["exclude_modules"] = a.exclude_modules
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.device != "cuda":
@@ -519,8 +529,8 @@ def main():
             else:
                 model = get_peft_model(model, LoraConfig(
                     r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
-                    target_modules=linear, task_type="CAUSAL_LM"))
-            require_adapter_coverage(model, linear)
+                    target_modules=linear, exclude_modules=a.exclude_modules, task_type="CAUSAL_LM"))
+            require_adapter_coverage(model, linear, a.exclude_modules)
         model.enable_input_require_grads()
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())

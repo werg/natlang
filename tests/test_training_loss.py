@@ -112,3 +112,18 @@ def test_adapter_coverage_names_linear_layers_left_without_an_adapter():
     require_adapter_coverage(model, ["q_proj", "in_proj"])
     with pytest.raises(RuntimeError, match="match no layer: w1"):
         require_adapter_coverage(model, ["q_proj", "w1"])
+
+
+def test_adapter_coverage_skips_excluded_layers():
+    import torch.nn as nn
+    from scripts.train_lora import require_adapter_coverage
+
+    class Wrapped(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.lora_A = nn.ModuleDict()
+
+    model = nn.Module()
+    model.mlp = nn.Module(); model.mlp.gate_proj = Wrapped()
+    model.mlp.experts = nn.ModuleList([nn.Module()]); model.mlp.experts[0].gate_proj = nn.Linear(2, 2)
+    require_adapter_coverage(model, ["gate_proj"], r".*\.experts\.\d+\..*")
