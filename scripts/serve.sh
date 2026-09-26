@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Serve a GGUF model on the GPU with llama.cpp's official CUDA image.
 # Needs Docker with the NVIDIA runtime; no system CUDA toolkit, no particular glibc.
-# Usage: scripts/serve.sh [MODEL.gguf in models/] [PORT] [SLOTS] [CTX]  stop: docker stop natlang-llama
+# Usage: [NATLANG_KV_TYPE=q8_0] scripts/serve.sh [MODEL.gguf in models/] [PORT] [SLOTS] [CTX]  stop: docker stop natlang-llama
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${1:-LFM2.5-350M-Q8_0.gguf}"
@@ -20,6 +20,9 @@ EXTRA=()
 # A template's options (a JSON object beside it, e.g. Sharp-Spark's {"terse": false}) apply to every request.
 KWARGS="${TEMPLATE%.jinja}.kwargs.json"
 [ -f "$TEMPLATE" ] && [ -f "$KWARGS" ] && EXTRA+=(--chat-template-kwargs "$(cat "$KWARGS")")
+# NATLANG_KV_TYPE=q8_0 stores the KV cache at 8 bits (half of f16), for more slots; a quantized V cache needs flash attention.
+KV_TYPE="${NATLANG_KV_TYPE:-}"
+[ -n "$KV_TYPE" ] && EXTRA+=(-ctk "$KV_TYPE" -ctv "$KV_TYPE" -fa on)
 DRAFT_MODEL="${NATLANG_DRAFT_MODEL:-}"
 DRAFT=()
 if [ -n "$DRAFT_MODEL" ]; then
