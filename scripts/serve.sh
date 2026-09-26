@@ -17,6 +17,9 @@ MODEL_STEM="$(basename "${MODEL%%-Q*}")"
 TEMPLATE="${NATLANG_TEMPLATE:-$ROOT/models/templates/${MODEL_STEM}.jinja}"
 EXTRA=()
 [ -f "$TEMPLATE" ] && EXTRA=(--jinja --chat-template-file "/models/templates/$(basename "$TEMPLATE")")
+# A template's options (a JSON object beside it, e.g. Sharp-Spark's {"terse": false}) apply to every request.
+KWARGS="${TEMPLATE%.jinja}.kwargs.json"
+[ -f "$TEMPLATE" ] && [ -f "$KWARGS" ] && EXTRA+=(--chat-template-kwargs "$(cat "$KWARGS")")
 DRAFT_MODEL="${NATLANG_DRAFT_MODEL:-}"
 DRAFT=()
 if [ -n "$DRAFT_MODEL" ]; then
