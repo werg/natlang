@@ -27,7 +27,7 @@ export type NativeRuntimeHooks = {
   /** Create an inline natlang callable from an eval plan. */
   inline(session: NativeSession, plan: InlineLambdaPlan, values: unknown[], accessors: Record<string, unknown>): unknown;
   iterateOn(session: NativeSession, step: unknown, initial: unknown, ...args: unknown[]): unknown;
-  finite(source: unknown): unknown;
+  finite(source: unknown, label?: string): unknown;
   guard(id: string, fn: () => unknown): unknown;
   /** Type-checked analysis of `nl` in eval snippets. */
   analyze(session: NativeSession, source: string): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] };
@@ -966,8 +966,9 @@ export class NativeSession {
         { result?: unknown; bindings: Record<string, unknown> }, captures: raw.captures };
       const thenable = (value: unknown) => !!value && (typeof value === 'object' || typeof value === 'function') &&
         typeof (value as PromiseLike<unknown>).then === 'function';
-      if ([output.result, ...Object.values(output.bindings), ...Object.values(output.captures ?? {})].some(thenable))
-        throw new Error('await the asynchronous function call before using its value');
+      const unsettled = [['the result', output.result], ...Object.entries(output.bindings),
+        ...Object.entries(output.captures ?? {})].find(([, value]) => thenable(value));
+      if (unsettled) throw new Error(`${unsettled[0]} holds a promise that could not be kept: await the call that made it`);
       const annotations = new Map(compiled.bindings.map(binding => [binding.name, binding.annotation]));
       const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
       const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));

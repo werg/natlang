@@ -157,13 +157,31 @@ test('synchronous TypeScript imports return values directly, including nested ca
   assert.equal(child.kind, 'ok', child.text); assert.equal(child.value, 10);
 });
 
-test('an unawaited asynchronous call is reported instead of escaping eval', async () => {
+test('what an eval leaves unawaited is awaited before it is kept', async () => {
   const { session } = open({ type: '() => number', instructions: 'Get a number.',
     codebase: { get_number: ts('get_number', 'export default async function get_number(): Promise<number> { return 7; }') } });
   const forgotten = await session.applyAsync('eval', { code: 'const pending = get_number(); pending' });
-  assert.equal(forgotten.kind, 'error'); assert.match(forgotten.text, /await the asynchronous function call/);
+  assert.equal(forgotten.kind, 'ok', forgotten.text); assert.equal(forgotten.value, 7);
+  const kept = await session.applyAsync('eval', { code: 'pending + 1' });
+  assert.equal(kept.kind, 'ok', kept.text); assert.equal(kept.value, 8);
+  const many = await session.applyAsync('eval', { code: 'const all = [1, 2].map(() => get_number()); const box = { n: get_number() }; [all, box]' });
+  assert.equal(many.kind, 'ok', many.text); assert.deepEqual(many.value, [[7, 7], { n: 7 }]);
+  const chained = await session.applyAsync('eval', { code: 'get_number().then(n => n * 2)' });
+  assert.equal(chained.kind, 'ok', chained.text); assert.equal(chained.value, 14);
+  const wrapped = await session.applyAsync('eval', { code: '(async () => { const n = await get_number(); return n + 3; })()' });
+  assert.equal(wrapped.kind, 'ok', wrapped.text); assert.equal(wrapped.value, 10);
   const awaited = await session.applyAsync('eval', { code: 'const result = await get_number(); result' });
   assert.equal(awaited.kind, 'ok'); assert.equal(awaited.value, 7);
+});
+
+test('a for...of over a missing value names the loop and the fallback', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count.', codebase: {} });
+  const missing = await session.applyAsync('eval', { code: 'let total = 0;\nfor (const m of "no digits".match(/\\d/g)) total++;\ntotal' });
+  assert.equal(missing.kind, 'error');
+  assert.match(missing.text, /`for \(… of "no digits"\.match\(\/\\d\/g\)\)` iterates an array, string, Map or Set, but got null/);
+  assert.match(missing.text, /\?\? \[\]/);
+  const plain = await session.applyAsync('eval', { code: 'const o = { a: 1 };\nlet n = 0;\nfor (const k of o as any) n++;\nn' });
+  assert.match(plain.text, /got a plain object; iterate Object\.keys, Object\.values or Object\.entries of it/);
 });
 
 test('a failed natlang child bubbles to eval without leaving a local', async () => {

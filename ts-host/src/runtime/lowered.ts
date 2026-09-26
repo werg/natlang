@@ -71,8 +71,8 @@ export function named(name: string, record: NatlangRecord): NatlangCallable { re
 /** A callable folder such as `natlang.d/`, as a record of callables. */
 export function folder(codebase: Record<string, ItemRecord>): Record<string, unknown> { return callableTree(codebase); }
 
-/** Runtime half of the finite-iteration policy: `for (x of y)` becomes `for (x of finite(y))`. */
-export function finite<T>(source: Iterable<T>): Iterable<T> {
+/** Runtime half of the finite-iteration policy: `for (x of y)` becomes `for (x of finite(y, "y"))`. */
+export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
   if (typeof source === 'string') return source;
   if (Array.isArray(source)) {
     const array = source, length = array.length;
@@ -96,7 +96,21 @@ export function finite<T>(source: Iterable<T>): Iterable<T> {
       } };
     } };
   }
-  throw new TypeError('`for ... of` in natlang callable code must iterate an array, string, Map, or Set');
+  throw new TypeError(notIterable(source, label));
+}
+
+/** Why a `for ... of` source was refused, with the usual way to give the loop what it needs. */
+function notIterable(source: unknown, label: string | undefined): string {
+  const loop = label ? `\`for (… of ${label})\`` : '`for ... of`';
+  const lead = `${loop} iterates an array, string, Map or Set`;
+  if (source === null || source === undefined)
+    return `${lead}, but got ${source}. A value that can be missing, such as String.match's result when nothing ` +
+      `matches, needs a fallback: \`for (… of ${label ?? 'value'} ?? [])\`.`;
+  if (typeof source === 'object' && typeof (source as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function')
+    return `${lead}; spread other iterables into an array first: \`for (… of [...${label ?? 'value'}])\`.`;
+  if (typeof source === 'object')
+    return `${lead}, but got a plain object; iterate Object.keys, Object.values or Object.entries of it.`;
+  return `${lead}, but got a ${typeof source}.`;
 }
 
 /** Attach the compiler's call-site identity to an `iterateOn` expression. */

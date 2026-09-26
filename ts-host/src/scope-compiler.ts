@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import type { InlineLambdaPlan, NatlangDiagnostic } from './compiler/inline.js';
-import { authoredCallables, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
+import { authoredCallables, loopLabel, checkConstrainedSource, findRecursion, lexicalResolver } from './compiler/policy.js';
 
 /** Stable front-end contract for model-authored scope eval snippets. */
 export const SCOPE_COMPILE_VERSION = 2 as const;
@@ -96,8 +96,20 @@ const __natlang_frozen = (value: any): any => {
 };
 const __natlang_callable = (name: string) => __live.callables[name];
 const __natlang_output = (value: unknown) => { __live.finish(value); return null; };
+const __natlang_thenable = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function') &&
+  typeof value.then === 'function';
+const __natlang_pending = (value: any, depth = 0): boolean => __natlang_thenable(value) || depth < 4 &&
+  (Array.isArray(value) || __natlang_plain(value)) && Object.values(value).some(item => __natlang_pending(item, depth + 1));
+// What an eval leaves unawaited (a promise, or data holding promises) is awaited before it is kept, as \`await\` would.
+const __natlang_settle = async (value: any, depth = 0): Promise<any> => {
+  if (__natlang_thenable(value)) return __natlang_settle(await value, depth);
+  if (depth >= 4 || !__natlang_pending(value)) return value;
+  if (Array.isArray(value)) return Promise.all(value.map(item => __natlang_settle(item, depth + 1)));
+  return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, item]) =>
+    [key, await __natlang_settle(item, depth + 1)])));
+};
 const __natlang_inline = (index: number, values: unknown[], accessors: unknown) => __live.inline(index, values, accessors);
-const __natlang_finite = (source: any) => __live.finite(source);
+const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
 const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
 const iterateOn = __live.iterateOn;
 `;
@@ -453,7 +465,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     }
     if (ts.isForOfStatement(node) && !node.awaitModifier) {
       const at = rel(node.expression);
-      primitive.push({ start: at.start, end: at.start, text: '__natlang_finite(' }, { start: at.end, end: at.end, text: ')' });
+      primitive.push({ start: at.start, end: at.start, text: '__natlang_finite(' },
+        { start: at.end, end: at.end, text: `, ${JSON.stringify(loopLabel(source.slice(at.start, at.end)))})` });
     }
     if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isMethodDeclaration(node)) &&
         node.body && node !== fn) {
@@ -529,10 +542,12 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     ...serviceNames.map(name => `const ${name} = __live.services[${JSON.stringify(name)}];`),
     `const __natlang_present = (value: Record<string, unknown>) => Object.fromEntries(` +
       `Object.entries(value).filter(([, item]) => item !== undefined));`,
-    `const __natlang_finish = (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}, ` +
-      `__natlang_returned = false) => __natlang_output({ result: __natlang_result === undefined ? null : __natlang_result, ` +
-      `returned: __natlang_returned, ` +
-      `bindings: __natlang_present(__natlang_bindings)${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''} });`,
+    `const __natlang_finish = async (__natlang_result: unknown, __natlang_bindings: Record<string, unknown> = ${capture}, ` +
+      `__natlang_returned = false) => { const __natlang_settled = await __natlang_settle(` +
+      `{ result: __natlang_result, bindings: __natlang_bindings }); ` +
+      `return __natlang_output({ result: __natlang_settled.result === undefined ? null : __natlang_settled.result, ` +
+      `returned: __natlang_returned, bindings: __natlang_present(__natlang_settled.bindings)` +
+      `${mutableCaptures.length ? `, captures: { ${mutableCaptures.join(', ')} }` : ''} }); };`,
   ].filter(Boolean).join('\n');
   const typescript = `async function ${ENTRYPOINT}(__inputs: Readonly<Record<string, unknown>>, ` +
     `__locals: Readonly<Record<string, unknown>>, ` +

@@ -109,6 +109,20 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   return;
 }
 
+/** How a runtime `for ... of` refusal names the loop's source: its text (or the expression's), on one line and short. */
+export function loopLabel(source: ts.Expression | string): string {
+  const file = typeof source === 'string' ? undefined : parsedFile(source);
+  const text = (typeof source === 'string' ? source : file ? source.getText(file) : 'value').replace(/\s+/g, ' ');
+  return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+}
+
+const parsedFile = (node: ts.Node): ts.SourceFile | undefined => {
+  if (node.pos < 0) return undefined;
+  let at: ts.Node | undefined = node;
+  while (at && !ts.isSourceFile(at)) at = at.parent;
+  return at;
+};
+
 /** Diagnose forbidden loops and dynamic code in a constrained source file. */
 export function checkConstrainedSource(file: ts.SourceFile, options: PolicyOptions = {}): NatlangDiagnostic[] {
   const diagnostics: NatlangDiagnostic[] = [];

@@ -13,7 +13,7 @@ export const kernelHooks: NativeRuntimeHooks = {
   inline: (session, plan, values, accessors) => inline(plan, values, accessors as CaptureAccessors, session.lam.codebase,
     undefined, session.runtime.frame),
   iterateOn: (session, step, initial, ...args) => iterateOn(step as never, initial, ...args).inFrame(session.runtime.frame),
-  finite: source => finite(source as Iterable<unknown>),
+  finite: (source, label) => finite(source as Iterable<unknown>, label),
   guard: (id, fn) => guard(id, fn),
   analyze: (session, source) => analyzeEvalSnippet(source, evalDeclarations(session)),
 };
