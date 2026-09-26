@@ -127,3 +127,23 @@ def test_adapter_coverage_skips_excluded_layers():
     model.mlp = nn.Module(); model.mlp.gate_proj = Wrapped()
     model.mlp.experts = nn.ModuleList([nn.Module()]); model.mlp.experts[0].gate_proj = nn.Linear(2, 2)
     require_adapter_coverage(model, ["gate_proj"], r".*\.experts\.\d+\..*")
+
+
+def test_adapter_coverage_counts_lora_on_stacked_expert_parameters():
+    import re
+    import torch.nn as nn
+    from scripts.train_lora import EXPERTS, require_adapter_coverage
+
+    class ParamWrapper(nn.Module):
+        def __init__(self, parameter_name):
+            super().__init__()
+            self.lora_A = nn.ModuleDict()
+            self.parameter_name = parameter_name
+
+    model = nn.Module()
+    model.feed_forward = nn.Module()
+    model.feed_forward.experts = ParamWrapper("down_proj")
+    model.feed_forward.experts.base_layer = ParamWrapper("gate_up_proj")
+    require_adapter_coverage(model, ["gate_up_proj", "down_proj"])
+    assert re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.feed_forward.experts.gate_up_proj")
+    assert not re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.self_attn.q_proj")

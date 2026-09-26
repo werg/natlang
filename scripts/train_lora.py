@@ -29,6 +29,11 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
 import torch
 
 
+# A MoE's stacked expert parameters, as PEFT names them when matching rank patterns: the experts module, or one of
+# its parameters ("…experts.gate_up_proj").
+EXPERTS = r"experts(\.\w+)?"
+
+
 def require_adapter_coverage(model, targets, exclude=None):
     """Fail unless every linear layer a target names, and `exclude` does not, received an adapter; report how many
     each target got."""
@@ -36,6 +41,11 @@ def require_adapter_coverage(model, targets, exclude=None):
     import torch.nn as nn
     wrapped, missed = {}, {}
     for name, module in model.named_modules():
+        parameter = getattr(module, "parameter_name", None)
+        if parameter in targets and hasattr(module, "lora_A"):
+            # LoRA on a raw parameter, such as a MoE's stacked experts; two on one module nest via base_layer.
+            wrapped[parameter] = wrapped.get(parameter, 0) + 1
+            continue
         leaf = name.rsplit(".", 1)[-1]
         if leaf not in targets or ".lora_" in name or ".base_layer" in name:
             continue
@@ -90,6 +100,8 @@ def restore_lfm_expert_quantization(model, model_dir):
             packed = Params4bit(param.data, requires_grad=False, quant_state=states[name],
                                 blocksize=64, compress_statistics=True, quant_type="nf4",
                                 bnb_quantized=True)
+            # The logical (experts, out, in) shape, which LoRA on the stacked experts needs to see past the packing.
+            packed._original_shape = torch.Size(states[name].shape)
             packed.data.copy_(weights.get_tensor(name).to(device))
             parent = model
             parts = name.split(".")
@@ -339,6 +351,8 @@ def main():
                     help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
     ap.add_argument("--target-modules",
                     help="comma-separated LoRA module suffixes; LFM uses its architecture-specific linear layers")
+    ap.add_argument("--expert-rank", type=int,
+                    help="LoRA rank for a MoE's stacked expert parameters (default: --rank); they hold most weights")
     ap.add_argument("--exclude-modules",
                     help="regex over full module names kept out of the adapter, e.g. a MoE's routed experts")
     ap.add_argument("--full", action="store_true")
@@ -428,6 +442,8 @@ def main():
                     "require_audit": a.require_audit}
         if a.exclude_modules:
             identity["exclude_modules"] = a.exclude_modules
+        if a.expert_rank:
+            identity["expert_rank"] = a.expert_rank
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.device != "cuda":
@@ -524,6 +540,8 @@ def main():
                 model = FastLanguageModel.get_peft_model(
                     model, r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
                     target_modules=linear, use_gradient_checkpointing="unsloth", random_state=a.seed,
+                    **({"rank_pattern": {EXPERTS: a.expert_rank}, "alpha_pattern": {EXPERTS: 2 * a.expert_rank}}
+                       if a.expert_rank else {}),
                     finetune_vision_layers=True, finetune_language_layers=True,
                     finetune_attention_modules=True, finetune_mlp_modules=True)
             else:
