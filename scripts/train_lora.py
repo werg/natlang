@@ -304,6 +304,8 @@ def main():
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--load-in-4bit", action="store_true",
                     help="QLoRA base loading for models that do not fit in bf16 (checkpoint stores the adapter)")
+    ap.add_argument("--trust-remote-code", action="store_true",
+                    help="load a model whose repository ships its own modeling code (for example Ling-3.0's bailing_hybrid)")
     ap.add_argument("--unsloth", action="store_true",
                     help="load and patch a dense model through Unsloth")
     ap.add_argument("--unsloth-lfm-experts", action="store_true",
@@ -454,10 +456,11 @@ def main():
         if a.unsloth_lfm_experts:
             restore_lfm_expert_quantization(model, base_src)
     else:
-        tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision)
+        tok = AutoTokenizer.from_pretrained(a.model, revision=a.model_revision, trust_remote_code=a.trust_remote_code)
         if audit_manifest is not None:
             validate_training_audit_tokenizer(audit_manifest, tok, a.model, a.model_revision)
-        load_options = {"dtype": torch.bfloat16 if device == "cuda" else torch.float32}
+        load_options = {"dtype": torch.bfloat16 if device == "cuda" else torch.float32,
+                        "trust_remote_code": a.trust_remote_code}
         if a.model_revision:
             load_options["revision"] = a.model_revision
         if a.load_in_4bit:

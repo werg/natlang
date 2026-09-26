@@ -76,6 +76,14 @@ async function main(): Promise<void> {
     request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
       top_p: 0.95, top_k: 20,
       chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } } };
+  // A call is compacted as it nears its context budget, so the server must accept a request of that size; a server
+  // with a smaller context would reject the call's later requests. llama.cpp reports its per-request context in /props.
+  const served = await fetch(new URL('/props', config.endpoint)).then(response => response.ok ? response.json() : undefined, () => undefined)
+    .then(props => (props as { default_generation_settings?: { n_ctx?: number } } | undefined)?.default_generation_settings?.n_ctx);
+  if (typeof served === 'number' && served < config.contextTokens)
+    throw new Error(`the server accepts ${served} tokens per request, less than --context-tokens ${config.contextTokens}; ` +
+      'serve with a larger context per slot or lower --context-tokens');
+  if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
   if (handoffs) for (const item of records) {
     const handoff = handoffs.get(item.record.id);
