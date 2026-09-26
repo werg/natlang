@@ -51,6 +51,8 @@ export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   student_provenance: Record<string, unknown> };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
+  /** Worker n starts its first job n times this later, so a rate-limited provider does not see them all at once. */
+  workerStaggerMs?: number;
   /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusedRow). */
   reuse?: string[];
   /** The model server's shared KV buffer in tokens; requests wait to fit into it (see KvBudget). Unset: no limit. */
@@ -261,7 +263,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   pending.sort((a, b) => sha256(jobKey(a)).localeCompare(sha256(jobKey(b))));
   await mergeCompleted(records, config);
   let cursor = 0;
-  const worker = async () => {
+  const worker = async (slot: number) => {
+    if (slot && config.workerStaggerMs) await delay(slot * config.workerStaggerMs);
     while (cursor < pending.length && !signal?.aborted) {
       const item = pending[cursor++]!, expected = expectedProvenance(item.record, config);
       let attempt = 0;
@@ -288,7 +291,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(config.workers, Math.max(1, pending.length)) }, worker));
+  await Promise.all(Array.from({ length: Math.min(config.workers, Math.max(1, pending.length)) }, (_, slot) => worker(slot)));
   return mergeCompleted(records, config);
 }
 

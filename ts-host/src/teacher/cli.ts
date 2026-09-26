@@ -30,7 +30,7 @@ async function main(): Promise<void> {
       'Options: --server URL | --provider PI_ID --start N --limit N|--all --workers N --context-tokens N\n' +
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
-      '         --transport-retries N --retry-delay-ms N --system-file PATH\n' +
+      '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
       '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
@@ -68,6 +68,7 @@ async function main(): Promise<void> {
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     ...(flags.has('--temperature') ? { temperature: Number(flags.get('--temperature')) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
+    ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),
     executionPlans: flags.has('--execution-plans'),

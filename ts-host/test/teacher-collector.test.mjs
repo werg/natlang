@@ -85,6 +85,16 @@ test('all-mode permits an empty hard-state queue without inventing a teacher job
   assert.equal(await readFile(options.output, 'utf8'), '');
 });
 
+test('staggered workers start their first jobs apart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-stagger-'));
+  const records = [record('a'), record('b'), record('c')].map((value, index) => ({ index, record: value }));
+  const started = [], t0 = Date.now();
+  await collectBatch(records, { ...config(dir), workers: 3, workerStaggerMs: 40 }, async (item, provenance) => {
+    started.push(Date.now() - t0); await new Promise(resolve => setTimeout(resolve, 150)); return row(item, provenance);
+  });
+  assert.ok(started[0] < 30 && started[1] >= 40 && started[2] >= 80, `start times ${started}`);
+});
+
 test('parallel completion merges in source order and matching jobs resume without calls', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'teacher-resume-'));
   const records = [record('first'), record('second'), record('third')].map((value, index) => ({ index, record: value }));
