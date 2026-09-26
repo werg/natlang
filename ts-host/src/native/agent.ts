@@ -364,8 +364,12 @@ export class NativeToolAgent {
     const signature = `${lam.functionName || 'run'}(` +
       lam.type.params.fields.map(field => `${field.name}${field.optional ? '?' : ''}: ${formatType(field.type)}`).join(', ') +
       `): ${formatType(lam.type.returns)}`;
+    // What eval can use, by name: a model that reads only this message should know it can call these in code.
+    const names = [...lam.type.params.fields.map(field => field.name), ...Object.keys(lam.captures ?? {}),
+      ...Object.keys(lam.codebase), ...Object.keys(session.runtime.services)];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
+      ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
     ].join('\n');
   }
 
