@@ -517,7 +517,11 @@ export class NativeSession {
       .filter(event => event.kind === 'effect' || event.kind === 'host')
       .map(event => String(event.capability ?? event.operation ?? event.kind));
     this.evalDetail = { console: logs.join('\n') };
-    return (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
+    // A model reaching for something the scope does not have (a name, a Node module, eval) is shown what it does have,
+    // or it goes on probing the environment.
+    const reaching = /is not defined|unavailable in eval|is not a function|Cannot find name/.test(message +
+      diagnostics.map(item => String(item.message ?? '')).join('\n'));
+    return (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
       '\nNothing else from this eval was kept.';
   }
@@ -700,6 +704,15 @@ export class NativeSession {
   }
 
   /** The services this call may use: all but those scoped to functions it is not running within. */
+  /** What eval code in this call can use, for a model looking for something it does not have. */
+  private scopeGuide(): string {
+    const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
+    const locals = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
+    const names = [...new Set([...inputs, ...locals, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins nl, iterateOn ` +
+      'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
+  }
+
   availableServices(): Record<string, object> {
     const chain = currentFrame()?.chain ?? [];
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
@@ -1016,6 +1029,16 @@ export class NativeSession {
       const logStatus = evaluated.logs?.length ? `console:\n${this.show(evaluated.logs.join('\n'))}\n` : '';
       // return_result in eval stages its value like a top-level return: the value was computed, so the model
       // sees it before the call finishes. The blocker and error reports carry the model's own text and end the call.
+      // return_result({ status, value | reason }) in eval is the tool's request written as code; read it as that when
+      // the object is not itself a value of the return type.
+      const shaped = requested?.args.value as Record<string, unknown> | undefined;
+      if (requested?.tool === 'return_result' && requested.args.status === 'success' && requested.args.reason === undefined &&
+          shaped && typeof shaped === 'object' && !Array.isArray(shaped) && ['success', 'blocked', 'failed'].includes(String(shaped.status)) &&
+          Object.keys(shaped).every(key => ['status', 'value', 'reason'].includes(key)) && this.lam.type.kind === 'lambda') {
+        let fits = true;
+        try { coerce(shaped as Value, this.lam.type.returns, this.env, 'return'); } catch { fits = false; }
+        if (!fits) requested = { tool: 'return_result', args: { status: shaped.status, value: shaped.value, reason: shaped.reason } };
+      }
       if (requested?.tool === 'return_result' && requested.args.status === 'success' && this.lam.type.kind === 'lambda') {
         let staged: Value | undefined, refusal = '';
         try { staged = coerce(requested.args.value, this.lam.type.returns, this.env, 'return'); }

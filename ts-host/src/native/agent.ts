@@ -22,6 +22,8 @@ export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase
  * thought for the same reason.
  */
 const thought = (reasoning: string | undefined) => reasoning ? { reasoning_content: reasoning } : {};
+/** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
+export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
@@ -386,6 +388,7 @@ export class NativeToolAgent {
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
+      '', BUILT_INS_LINE,
     ].join('\n');
   }
 

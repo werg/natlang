@@ -210,7 +210,7 @@ test('compile failure reports source diagnostics and redeclaring a parameter say
   assert.match(failed.text, /typescript-syntax/);
   const redeclared = await session.applyAsync('eval', { code: 'const ticket = "x"; return 2;' });
   assert.equal(redeclared.kind, 'rejected');
-  assert.match(redeclared.text, /ticket is already defined in this scope; use it directly/);
+  assert.match(redeclared.text, /ticket is this call's input and already holds the caller's value; use it directly/);
 });
 
 test('model repairs an eval failure under an unchanged system prompt', async () => {

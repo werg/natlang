@@ -410,7 +410,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
   for (const name of injected) if (declared.has(name) && !shadowedLocals.has(name))
     {
       const binding = bindings.find(item => item.name === name)!;
-      diagnostics.push({ code: 'invalid-binding', message: `${name} is already defined in this scope; use it directly instead of declaring it again.`,
+      // An input redeclared is usually test data about to replace the caller's real values; say whose they are.
+      const whose = options.inputBindings?.includes(name) ? `${name} is this call's input and already holds the caller's value` :
+        `${name} is already defined in this scope`;
+      diagnostics.push({ code: 'invalid-binding', message: `${whose}; use it directly instead of declaring it again.`,
         ...rawSpan(binding.start, binding.end) });
     }
 
