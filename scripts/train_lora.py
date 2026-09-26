@@ -34,6 +34,22 @@ import torch
 EXPERTS = r"experts(\.\w+)?"
 
 
+def split_targets(model, targets):
+    """Target names as PEFT takes them: linear layers by leaf name, and stacked expert weights (a MoE's experts
+    module holding one parameter for all experts) as "module.parameter"; a name can be both."""
+    import torch.nn as nn
+    layers, stacked = set(), set()
+    for name, module in model.named_modules():
+        leaf = name.rsplit(".", 1)[-1]
+        if isinstance(module, nn.Linear) and leaf in targets:
+            layers.add(leaf)
+        for target in targets:
+            weight = module._parameters.get(target)
+            if weight is not None and (weight.dim() == 3 or getattr(weight, "_original_shape", None) is not None):
+                stacked.add(f"{leaf}.{target}")
+    return sorted(layers), sorted(stacked)
+
+
 def require_adapter_coverage(model, targets, exclude=None):
     """Fail unless every linear layer a target names, and `exclude` does not, received an adapter; report how many
     each target got."""
@@ -351,6 +367,11 @@ def main():
                     help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
     ap.add_argument("--target-modules",
                     help="comma-separated LoRA module suffixes; LFM uses its architecture-specific linear layers")
+    ap.add_argument("--optimizer", choices=("adamw", "paged-adamw-8bit"), default="adamw",
+                    help="paged-adamw-8bit keeps optimizer state in 8 bits and pages it to CPU memory under pressure")
+    ap.add_argument("--unsloth-moe", action="store_true",
+                    help="load through Transformers but with Unsloth's MoE support: stacked experts quantized to 4 "
+                         "bits, run as one grouped matmul, and adaptable by LoRA (for models Unsloth cannot load)")
     ap.add_argument("--expert-rank", type=int,
                     help="LoRA rank for a MoE's stacked expert parameters (default: --rank); they hold most weights")
     ap.add_argument("--exclude-modules",
@@ -400,6 +421,8 @@ def main():
     if a.init_adapter is not None and not a.init_adapter.is_dir():
         ap.error("--init-adapter must be an adapter directory")
     targets = [x.strip() for x in a.target_modules.split(",") if x.strip()] if a.target_modules else None
+    if a.unsloth_moe and (a.unsloth or a.unsloth_lfm_experts):
+        ap.error("--unsloth-moe is for the Transformers loader; Unsloth's loader brings its MoE support itself")
     if a.exclude_modules and (a.unsloth or a.unsloth_lfm_experts):
         ap.error("--exclude-modules applies to the PEFT path, not Unsloth")
     if a.target_modules and not targets:
@@ -444,6 +467,10 @@ def main():
             identity["exclude_modules"] = a.exclude_modules
         if a.expert_rank:
             identity["expert_rank"] = a.expert_rank
+        if a.unsloth_moe:
+            identity["unsloth_moe"] = True
+        if a.optimizer != "adamw":
+            identity["optimizer"] = a.optimizer
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.device != "cuda":
@@ -482,6 +509,11 @@ def main():
             os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
             os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
         from unsloth import FastLanguageModel
+    elif a.unsloth_moe:  # Its MoE patches to Transformers and PEFT apply on import, before either is used.
+        import unsloth  # noqa: F401
+        if a.gradient_checkpointing:  # as Unsloth's loader does: checkpointed layer inputs wait in CPU memory
+            from unsloth_zoo.gradient_checkpointing import patch_unsloth_smart_gradient_checkpointing
+            patch_unsloth_smart_gradient_checkpointing(dtype=torch.bfloat16)
     from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     device = a.device
@@ -521,7 +553,9 @@ def main():
         model.gradient_checkpointing_enable()
     model.config.use_cache = False
     if not a.full:
-        if a.load_in_4bit and not a.unsloth_lfm_experts:
+        # PEFT's preparation upcasts every unquantized weight to fp32, and with them the activations; Unsloth
+        # trains in bf16, and fp32 would double the embeddings and each dequantized expert stack.
+        if a.load_in_4bit and not a.unsloth_lfm_experts and not a.unsloth_moe:
             model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=a.gradient_checkpointing)
         if resume:
             model = PeftModel.from_pretrained(model, str(ckpt / "weights"), is_trainable=True)
@@ -545,14 +579,20 @@ def main():
                     finetune_vision_layers=True, finetune_language_layers=True,
                     finetune_attention_modules=True, finetune_mlp_modules=True)
             else:
+                # Stacked expert weights are parameters, not layers; PEFT adapts them through target_parameters.
+                layers, stacked = split_targets(model, linear)
                 model = get_peft_model(model, LoraConfig(
                     r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
-                    target_modules=linear, exclude_modules=a.exclude_modules, task_type="CAUSAL_LM"))
+                    target_modules=layers, target_parameters=stacked or None, exclude_modules=a.exclude_modules, task_type="CAUSAL_LM",
+                    **({"rank_pattern": {EXPERTS: a.expert_rank}, "alpha_pattern": {EXPERTS: 2 * a.expert_rank}}
+                       if a.expert_rank else {})))
             require_adapter_coverage(model, linear, a.exclude_modules)
         model.enable_input_require_grads()
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in model.parameters())
         print(f"trainable parameters: {trainable:,} / {total:,} ({100 * trainable / total:.3f}%)", flush=True)
+        if device == "cuda":
+            print(f"model memory: {torch.cuda.memory_allocated() / 2**30:.2f} GiB", flush=True)
 
     if a.gradient_checkpointing:
         layer_count, checkpointed_count = set_layer_checkpointing(
@@ -619,7 +659,12 @@ def main():
             raise ValueError("Every held-out example exceeds --max-len")
         return tot / n if n else None
 
-    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=a.lr, weight_decay=0.0)
+    trained = [p for p in model.parameters() if p.requires_grad]
+    if a.optimizer == "paged-adamw-8bit":
+        import bitsandbytes as bnb
+        opt = bnb.optim.PagedAdamW8bit(trained, lr=a.lr, weight_decay=0.0)
+    else:
+        opt = torch.optim.AdamW(trained, lr=a.lr, weight_decay=0.0)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / 20) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / a.steps))))
     if resume:
         opt.load_state_dict(torch.load(ckpt / "optimizer.pt", map_location=device))

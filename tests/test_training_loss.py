@@ -147,3 +147,18 @@ def test_adapter_coverage_counts_lora_on_stacked_expert_parameters():
     require_adapter_coverage(model, ["gate_up_proj", "down_proj"])
     assert re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.feed_forward.experts.gate_up_proj")
     assert not re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.self_attn.q_proj")
+
+
+def test_split_targets_separates_linear_layers_from_stacked_expert_weights():
+    import torch
+    import torch.nn as nn
+    from scripts.train_lora import split_targets
+
+    model = nn.Module()
+    model.shared = nn.Module(); model.shared.down_proj = nn.Linear(4, 4)
+    model.experts = nn.Module()
+    model.experts.gate_up_proj = nn.Parameter(torch.zeros(3, 8, 4))
+    model.experts.down_proj = nn.Parameter(torch.zeros(3, 4, 4))
+    layers, stacked = split_targets(model, ["down_proj", "gate_up_proj", "q_proj"])
+    assert layers == ["down_proj"]
+    assert stacked == ["experts.down_proj", "experts.gate_up_proj"]
