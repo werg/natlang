@@ -540,6 +540,8 @@ export class NativeToolAgent {
     let protectedLength = openingLength;
     // Estimated prompt size right after the last compaction.
     let compactedAt = 0;
+    // The turn of the model's last compaction: the next turn is not asked again (what it could not remove is elided).
+    let compactedTurn = -1;
     const maxTurns = this.options.maxTurns, maxTokens = this.options.maxTokens;
     const deadline = this.options.maxSeconds === undefined ? null : Date.now() + this.options.maxSeconds * 1000;
     let tokens = 0, turns = 0, withdrawals = 0, failureRepairs = 0;
@@ -565,7 +567,12 @@ export class NativeToolAgent {
       // compact_history, whose note says what matters. The last turn of a call still belongs to return_result.
       // After a compaction the next one waits until the conversation has grown by another quarter of the budget, so
       // what compaction cannot remove (the opening, stubs, the note) never makes it ask again and again.
-      const nearLimit = budget !== null && estimate(allTools) > Math.max(budget * 0.75, compactedAt + budget * 0.25);
+      // The budget is the whole context window, which holds the reply as well as the prompt: a prompt must leave room
+      // for the turn's reply (its allowance, at most a quarter of the window; an eighth when unlimited). Reaching that
+      // ceiling always asks for a compaction, however recent the last one.
+      const reply = budget === null ? 0 : Math.min(limit ?? Math.floor(budget / 8), Math.floor(budget / 4));
+      const nearLimit = budget !== null && compactedTurn !== turns && estimate(allTools) >
+        Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
       if (availableTools !== allTools && !lastTurn) {
         // Say why only compact_history is offered, on the latest tool result, as the turns-left notice does.
@@ -573,7 +580,7 @@ export class NativeToolAgent {
         if (latest?.role === 'tool' && typeof latest.content === 'string' && !latest.content.includes(COMPACTION_NOTICE))
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
       }
-      if (budget !== null && estimate(availableTools) > budget) {
+      if (budget !== null && estimate(availableTools) > budget - reply) {
         // A request never exceeds the budget: if the model has not compacted, the oldest outputs are elided without
         // a note. Program state lives in the eval scope and every output in transcript, so no values are lost.
         // Keep the latest exchanges if that is enough; otherwise keep only the last call and its result.
@@ -734,6 +741,7 @@ export class NativeToolAgent {
         // The note speaks for everything before it: only the compaction call and its result stay whole.
         const elided = compactMessages(messages, protectedLength, 2, () => true, callId => transcriptEntries.get(callId));
         compactedAt = requestChars(this.tools(session)) * tokensPerChar;
+        compactedTurn = turns;
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns,
           elided, note, estimated_tokens: Math.round(compactedAt) });
       }

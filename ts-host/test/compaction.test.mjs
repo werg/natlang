@@ -104,7 +104,7 @@ test('near the budget the model is asked to compact: only compact_history is off
   assert.match(pinned[0].content, new RegExp(`Note ${notes}\\.`));
   assert.match(pinned[0].content, /Continue from where this note leaves off\. Look into the history only when something specific matters/);
   assert.ok(last.messages.some(elided), 'older outputs moved to transcript');
-  assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the budget');
+  assert.ok(requests.every(request => promptOf(request) < 4096), 'no request exceeded the window');
   assert.ok(session.transcript.some(entry => entry.tool === 'compact_history'), 'the compaction is part of the transcript');
 });
 
