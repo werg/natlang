@@ -421,7 +421,9 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
 
   // Inline `nl` analysis, only when the snippet mentions it.
   let plans: InlineLambdaPlan[] = [];
-  if (options.analyze && /\bnl\s*(?:<[^`]*>)?\s*`/.test(source)) {
+  // nl written as code is analyzed: besides the template sites, uses of nl as a value are reported with the form that
+  // works. A mention in a file name ("x.nl") is not code.
+  if (options.analyze && /(?<![.\w$])nl\s*[`<(.]|\btypeof\s+nl\b|\b(?:const|let|var|function|class)\s+nl\b/.test(source)) {
     const analysis = options.analyze(source);
     plans = analysis.plans;
     for (const item of analysis.diagnostics) diagnostics.push({ ...rawSpan(item.start, item.end), code: item.code, message: item.message });

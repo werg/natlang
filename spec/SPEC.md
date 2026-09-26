@@ -32,6 +32,11 @@ immediate call's arguments and result context, and later uses of a local.
 Missing or conflicting evidence is a compile error. Template interpolations are
 evaluated at call time and become part of the instructions.
 
+In eval code, `nl` called like a function on literal instructions, as in
+``await nl(`Is ${x} large?`)`` or `nl<T>("…")`, is the one-shot call it reads as:
+``nl`…`()``, whose result is the answer. Instructions built at run time, and
+other uses of `nl` as a value, are compile errors that show the template form.
+
 **Named.** A `.nl` file with YAML frontmatter and instructions:
 
 ```yaml

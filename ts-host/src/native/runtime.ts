@@ -16,6 +16,7 @@ import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, typ
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
+import { desugarNlCalls } from '../compiler/nl-call.js';
 import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 
@@ -83,6 +84,7 @@ instructions, on the arguments you pass; await the call.
   nl\`instructions\`(arg, ...)        a one-off judgment, extraction or transformation on these arguments
   nl<T>\`instructions\`               the same with its result type T written out
   const f: (item: Item) => Promise<T> = nl\`instructions\`   a named function with a signature, to call many times
+  await nl(\`instructions with \${values}\`)   a one-shot question: the same as nl\`...\`(), its result is the answer
 Parameters take their names from the call (nl\`Is item urgent?\`(item) names it item) or the signature; a saved nl
 without either receives input, input2, ...: give it a signature so its instructions and arguments agree. The
 instructions also see variables in scope that they mention by exact name. The result type comes from how the result
@@ -862,8 +864,9 @@ export class NativeSession {
   }
 
   /** Execute one eval action as an atomic scope transaction. */
-  private async evaluate(code: string, timeoutMs?: number): Promise<NativeResult> {
-    if (!code.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
+  private async evaluate(written: string, timeoutMs?: number): Promise<NativeResult> {
+    if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
+    const code = desugarNlCalls(written);
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
     const inputNames = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const localNames = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));

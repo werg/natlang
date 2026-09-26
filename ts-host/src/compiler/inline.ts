@@ -6,7 +6,7 @@ import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDes
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
 
 export type NatlangDiagnostic = SourceSpan & {
-  code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
+  code: 'nl-unknown-return' | 'nl-unknown-parameter' | 'nl-not-called' | 'nl-not-tag' | 'nl-shadowed' | 'nl-ambiguous-signature' | 'nl-sync-callback' |
     'nl-parameter-collision' | 'nl-unknown-name' | 'nl-spread' | 'nl-const-capture-write' |
     'forbidden-loop' | 'forbidden-dynamic-code' | 'recursion' | 'callable-scope' | 'reserved-property' |
     'duplicate-site' | 'iterate-step' | 'iterate-predicate' | 'module-collision' | 'typescript';
@@ -400,9 +400,31 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       inheritedCodebaseRevision: options.codebaseRevision ?? '' });
   };
 
+  // nl exists only as a template tag; anything else it could be mistaken for fails at run time as "nl is not
+  // defined", which reads as "there is no nl", so each is named here with the form that works.
+  const TAG_FORM = 'write the instructions as a template, nl`...`, and pass the values as arguments, for example ' +
+    'await nl<{ amount: number }>`Read the amount paid on receipt.`(receipt). read_code("nl") shows more.';
+  const misuse = (node: ts.Identifier): void => {
+    const parent = node.parent;
+    if (ts.isCallExpression(parent) && parent.expression === node)
+      report(parent, 'nl-not-tag', `nl is a template tag, not a function taking a string: ${TAG_FORM}`);
+    else report(node, 'nl-not-tag', `nl is a template tag with no value of its own to inspect or pass around: ${TAG_FORM}`);
+  };
   for (const file of files) {
     const visit = (node: ts.Node): void => {
       if (ts.isTaggedTemplateExpression(node) && resolveIntrinsic(checker, node.tag) === 'nl') analyze(node);
+      else if (ts.isIdentifier(node) && node.text === 'nl') {
+        const parent = node.parent;
+        const declared = (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isParameter(parent) ||
+          ts.isClassDeclaration(parent)) && parent.name === node;
+        // Importing or re-exporting nl names it, which is how application code gets it.
+        if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) {}
+        else if (declared) report(node, 'nl-shadowed', `nl is built in; declaring your own nl hides it. ${TAG_FORM}`);
+        else if (!(ts.isTaggedTemplateExpression(parent) && parent.tag === node) && !ts.isPropertyAccessExpression(parent) ||
+          ts.isPropertyAccessExpression(parent) && parent.expression === node && !ts.isTaggedTemplateExpression(parent.parent)) {
+          if (resolveIntrinsic(checker, node) === 'nl') misuse(node);
+        }
+      }
       ts.forEachChild(node, visit);
     };
     visit(file);
