@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -12,8 +13,9 @@ from run_training_pipeline import atomic_json
 
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,
            source_limit=25000, synthetic=1000, teacher_programs=1000,
-           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081",
-           teacher_execution_plans=False, teacher_execution_plan_tokens=512, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
+           teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
+           teacher_execution_plans=False, teacher_execution_plan_tokens=512,
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -25,8 +27,16 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     budget, _ = budget_parser.parse_known_args(list(train_args))
     if budget.max_len < 2:
         raise ValueError('training context budget must be at least two tokens')
+    if inline_shapes < 1:
+        raise ValueError('inline shapes must be positive')
+    if teacher_provider and teacher_server != "http://127.0.0.1:8081":
+        raise ValueError('choose a teacher provider or server, not both')
     if not isinstance(teacher_execution_plan_tokens, int) or teacher_execution_plan_tokens < 1:
         raise ValueError('teacher execution plan tokens must be positive')
+    track_registry = repo / 'ts-host/scripts/inline-curriculum/list-tracks.mjs'
+    tracks = json.loads(subprocess.check_output(['node', str(track_registry)], cwd=repo, text=True))
+    if not tracks or any(not track['generated_families'] for track in tracks):
+        raise ValueError('each discovered inline track needs generated families')
     r = "${run}"
     p = "${repo}"
     def py(args, gpu=False):
@@ -157,6 +167,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             [f"{p}/scripts/render_training_corpus.py", source], [f"{r}/{name}.sft.jsonl", f"{r}/{name}.sft.jsonl.manifest.json", f'{r}/{name}.sft.jsonl.rejected.jsonl'])
         add(f'audit-{name}', py([f'{p}/scripts/audit_training_corpus.py', '--input', f'{r}/{name}.sft.jsonl',
                                 '--output', f'{r}/{name}.ready.jsonl', '--max-len', str(budget.max_len), *model_args,
+                                *([arg for track in ['seed-teacher', *(item['id'] for item in tracks)]
+                                   for arg in ('--require-track', track)] if name == 'joint' else []),
                                 *[arg for ledger in ledgers for arg in ('--rejection-ledger', ledger)]]),
             [f'{p}/scripts/audit_training_corpus.py', f'{p}/scripts/render_training_corpus.py',
              f'{r}/{name}.sft.jsonl', f'{r}/{name}.sft.jsonl.manifest.json', *ledgers],
@@ -168,7 +180,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
                   f'{r}/training-readiness.json']
         args = [f"{p}/scripts/train_lora.py", f"{r}/{name}.ready.jsonl", f"{r}/train-{name}", *train_model_args, '--require-audit',
                 "--epochs", "1", "--lr", lr, "--rank", "32", "--accum", "16", "--microbatch", "1", "--batch-tokens", "16384", "--max-len", "16384",
-                "--save-every", "10", "--data-order", "source", "--skip-heldout-loss", "--no-merge", "--token-cache", f"{r}/{name}.tokens.sqlite"]
+                "--save-every", "10", "--data-order", "shuffle" if name == 'joint' else "source",
+                "--skip-heldout-loss", "--no-merge", "--token-cache", f"{r}/{name}.tokens.sqlite"]
         if previous:
             args += ["--init-adapter", f"{r}/train-{previous}/checkpoint/weights"]
             inputs += [f"{r}/train-{previous}/checkpoint/state.json", f"{r}/train-{previous}/checkpoint/weights/adapter_model.safetensors"]
@@ -183,28 +196,66 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     train("general", None, "0.0001")
     render("coding", f"{r}/prepared/coding.jsonl")
     train("coding", "general", "0.00005")
-    teacher_planning = (["--execution-plans", "--execution-plan-tokens", str(teacher_execution_plan_tokens)]
+    teacher_connection = ['--provider', teacher_provider] if teacher_provider else ['--server', teacher_server]
+    teacher_planning = (['--execution-plans', '--execution-plan-tokens', str(teacher_execution_plan_tokens)]
                         if teacher_execution_plans else [])
     add("teacher", ["node", f"{p}/ts-host/scripts/teacher-collector.mjs", f"{r}/teacher-programs.jsonl", f"{r}/teacher-jobs", f"{r}/teacher-trajectories.jsonl",
-                    "--model-id", teacher_model, "--server", teacher_server, *teacher_planning,
+                    "--model-id", teacher_model, *teacher_connection, *teacher_planning,
                     "--root-seed", "42", "--limit", str(teacher_programs), "--workers", "1"],
         [f"{r}/teacher-programs.jsonl", f"{p}/ts-host/dist/teacher/collector.js", f"{p}/ts-host/dist/native/runtime.js"],
         [f"{r}/teacher-trajectories.jsonl", f"{r}/teacher-trajectories.jsonl.manifest.json"])
     add("materialize-teacher", ["node", f"{p}/ts-host/scripts/materialize-native-teacher.mjs", f"{r}/teacher-trajectories.jsonl", f"{r}/teacher-turns.jsonl", "--replace"],
         [f"{r}/teacher-trajectories.jsonl", f"{p}/ts-host/dist/teacher/native-materializer.js"], [f"{r}/teacher-turns.jsonl"])
-    add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", f"{r}/teacher-turns.jsonl", "--registry", f"{r}/prepared/splits.json"]),
-        [f"{p}/scripts/prepare_training_stages.py", f"{r}/teacher-turns.jsonl", f"{r}/prepared/splits.json"],
+    teacher_tracks = [('seed-teacher', f'{r}/teacher-turns.jsonl')]
+    for track in tracks:
+        name = track['id']
+        if not name.replace('_', '').replace('-', '').isalnum():
+            raise ValueError(f'invalid track id: {name}')
+        base = f'{r}/tracks/{name}'
+        pool = f'{base}/cases.ir.jsonl'
+        trajectories = f'{base}/trajectories.jsonl'
+        admitted = f'{base}/admitted.jsonl'
+        turns = f'{base}/turns.jsonl'
+        add(f'build-{name}', ['node', f'{p}/ts-host/scripts/inline-curriculum/build.mjs',
+                             '--seed', '42', '--shapes', str(inline_shapes), '--track', name,
+                             '--families', ','.join(track['generated_families']), '--out', pool],
+            [f'{p}/ts-host/scripts/inline-curriculum/list-tracks.mjs',
+             f'{p}/ts-host/scripts/inline-curriculum/build.mjs', f'{p}/ts-host/scripts/inline-curriculum/families.mjs',
+             f'{r}/runtime-host/frozen-runtime.json'], [pool, f'{pool}.report.json'])
+        add(f'collect-{name}', ['node', f'{p}/ts-host/scripts/teacher-collector.mjs', pool, f'{base}/jobs', trajectories,
+                               '--model-id', teacher_model, *teacher_connection, *teacher_planning,
+                               '--root-seed', '42', '--all', '--workers', '1'],
+            [pool, f'{r}/runtime-host/frozen-runtime.json', f'{p}/ts-host/dist/teacher/collector.js'],
+            [trajectories, f'{trajectories}.manifest.json'])
+        add(f'admit-{name}', ['node', f'{p}/ts-host/scripts/inline-curriculum/admit.mjs', trajectories,
+                             '--ledger', f'{base}/admission.jsonl', '--admitted', admitted],
+            [trajectories, f'{p}/ts-host/scripts/inline-curriculum/admit.mjs', f'{r}/runtime-host/frozen-runtime.json'],
+            [f'{base}/admission.jsonl', f'{base}/admission.coverage.json', admitted])
+        add(f'materialize-{name}', ['node', f'{p}/ts-host/scripts/materialize-native-teacher.mjs', admitted, turns, '--replace'],
+            [admitted, f'{p}/ts-host/dist/teacher/native-materializer.js', f'{r}/runtime-host/frozen-runtime.json'], [turns])
+        teacher_tracks.append((name, turns))
+    turn_paths = [path for _, path in teacher_tracks]
+    add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json"]),
+        [f"{p}/scripts/prepare_training_stages.py", *turn_paths, f"{r}/prepared/splits.json"],
         [f"{r}/prepared-teacher/manifest.json", f"{r}/prepared-teacher/teacher.jsonl"])
-    render("teacher", f"{r}/prepared-teacher/teacher.jsonl")
-    train("teacher", "coding", "0.00002")
+    add('assemble-joint', py([f'{p}/scripts/assemble_joint_curriculum.py', '--output', f'{r}/joint.jsonl',
+                              '--general', f'{r}/prepared/general.jsonl', '--coding', f'{r}/prepared/coding.jsonl',
+                              '--teacher', f'{r}/prepared-teacher/teacher.jsonl',
+                              *[arg for name, path in teacher_tracks for arg in ('--track', name, path)]]),
+        [f'{p}/scripts/assemble_joint_curriculum.py', f'{r}/prepared/general.jsonl', f'{r}/prepared/coding.jsonl',
+         f'{r}/prepared-teacher/teacher.jsonl', *turn_paths],
+        [f'{r}/joint.jsonl', f'{r}/joint.jsonl.manifest.json'])
+    render('joint', f'{r}/joint.jsonl')
+    train('joint', 'coding', '0.00002')
     # All source observation/replay/teacher work uses one frozen interpreter build.
     frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher"}
     for stage in stages:
-        if stage["id"] in frozen_stages or stage['id'].startswith('capture-unit-test-'):
+        if stage["id"] in frozen_stages or stage['id'].startswith(('capture-unit-test-', 'build-', 'collect-', 'admit-', 'materialize-')):
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
     return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
+            "training_tracks": tracks,
             "unit_test_corpus": {"included": [str(path) for path in new_unit_turns], "excluded": excluded_unit_captures}}
 
 
@@ -220,10 +271,12 @@ def main():
     parser.add_argument("--teacher-programs", type=int, default=1000)
     parser.add_argument("--teacher-model", default="Ternary-Bonsai-2-27B")
     parser.add_argument("--teacher-server", default="http://127.0.0.1:8081")
+    parser.add_argument("--teacher-provider", help="Pi provider for teacher collection, using saved subscription/API credentials")
     parser.add_argument("--teacher-execution-plans", action="store_true",
                         help="elicit a required-tool execution plan before each teacher action")
     parser.add_argument("--teacher-execution-plan-tokens", type=int, default=512,
                         help="maximum tokens for each optional execution plan")
+    parser.add_argument("--inline-shapes", type=int, default=2, help="generated cases per inline curriculum family")
     parser.add_argument("--token-file", type=Path)
     parser.add_argument("--init-adapter", type=Path)
     parser.add_argument("--inventory", action="append", type=Path, help="explicit existing repository task file (repeatable); defaults to collected repository snapshots")
@@ -235,9 +288,10 @@ def main():
     args = parser.parse_args()
     config = recipe(Path(__file__).resolve().parents[1], args.model, args.revision, args.image, args.python,
                     source_limit=args.source_limit, synthetic=args.synthetic, teacher_programs=args.teacher_programs,
-                    teacher_model=args.teacher_model, teacher_server=args.teacher_server,
+                    teacher_model=args.teacher_model, teacher_server=args.teacher_server, teacher_provider=args.teacher_provider,
                     teacher_execution_plans=args.teacher_execution_plans,
-                    teacher_execution_plan_tokens=args.teacher_execution_plan_tokens, token_file=args.token_file,
+                    teacher_execution_plan_tokens=args.teacher_execution_plan_tokens,
+                    inline_shapes=args.inline_shapes, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
                     workspace_cases=args.workspace_case)

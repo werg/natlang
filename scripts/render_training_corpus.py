@@ -85,7 +85,7 @@ def _as_turn(row: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{row.get('id', '<unknown>')}: code_sft row must be syntax_checked and have completion")
         return {
             **{key: row[key] for key in ('behavioral_evidence', 'evidence', 'generation', 'verification',
-                                        'curriculum_lane', 'difficulty', 'syntax_checked') if key in row},
+                                        'curriculum_lane', 'training_track', 'difficulty', 'syntax_checked') if key in row},
             "id": row.get("id"), "program_id": row.get("program_id"),
             "source_groups": row.get("source_groups", []), "family": row.get("family", "code_corpus"),
             "skill": row.get("skill", "code_generation"), "split": row.get("split"),
@@ -163,7 +163,7 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
         "training_admission", "source", "license", "source_ids", "source_revisions",
         "teacher_trajectory_id", "teacher_trajectory_digest", "execution_verified",
         "implementation_sha256", "behavioral_evidence", "evidence", "generation", "verification",
-        "curriculum_lane", "difficulty", "syntax_checked") if key in turn}
+        "curriculum_lane", "training_track", "difficulty", "syntax_checked") if key in turn}
     result.update(renderer="transformers-chat-template", context_items=len(messages),
                   prompt=prompt, completion=suffix[:end + len(end_token)])
     return result

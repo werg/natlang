@@ -15,13 +15,16 @@ import { hintFor, hinted } from './lib.mjs';
 
 const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
   start: { type: 'string', default: '0' },
-  families: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
+  families: { type: 'string' }, track: { type: 'string' }, out: { type: 'string' }, 'allow-failures': { type: 'boolean', default: false },
   // Held-out generated problems: --split test marks this build's synthetic cases as test (use a seed no training build uses).
   split: { type: 'string', default: 'train' }, hints: { type: 'boolean', default: true } } });
 if (!values.out) throw new Error('--out FILE is required');
 const seed = Number(values.seed), shapes = Number(values.shapes), start = Number(values.start);
 const selected = values.families ? values.families.split(',') : Object.keys(FAMILIES);
 for (const name of selected) if (!FAMILIES[name]) throw new Error(`unknown family ${name}; known: ${Object.keys(FAMILIES).join(', ')}`);
+if (values.track && selected.some(name => (FAMILIES[name].track ?? 'interpreter') !== values.track))
+  throw new Error(`--families contains a family outside track ${values.track}`);
+if (!selected.length) throw new Error('no families selected');
 
 const records = [];
 for (const name of selected) {

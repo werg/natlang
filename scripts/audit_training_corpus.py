@@ -40,6 +40,7 @@ def assess(row, tokenizer, end_token, max_len):
     summary = {'id': row.get('id'), 'source': source.get('name', 'unknown'),
                'repository': source.get('repository') or source.get('repo') or source.get('name', 'unknown'),
                'family': row.get('family', 'unknown'), 'evidence': evidence(row),
+               'training_track': row.get('training_track', 'unspecified'),
                'split': row.get('split', 'unspecified'),
                'implementation': row.get('implementation_sha256'),
                'template': (row.get('generation') or {}).get('family') or row.get('family', 'unknown'),
@@ -85,7 +86,7 @@ def report_for(assessed, max_len):
         if item['summary']['reason']:
             rejected[item['summary']['reason']] += 1
     result['rejections'] = dict(sorted(rejected.items()))
-    for axis in ('source', 'repository', 'family', 'template', 'evidence', 'split'):
+    for axis in ('source', 'repository', 'family', 'template', 'evidence', 'split', 'training_track'):
         groups = {}
         for item in assessed:
             row = item['summary']
@@ -125,7 +126,7 @@ def report_for(assessed, max_len):
 
 
 def audit_corpus(source, output, *, model, revision=None, max_len=8192, chunk_rows=128,
-                 tokenizer=None, should_stop=lambda: False, rejection_ledgers=()):
+                 tokenizer=None, should_stop=lambda: False, rejection_ledgers=(), required_tracks=()):
     source, output = Path(source), Path(output)
     if max_len < 2 or chunk_rows < 1:
         raise ValueError('max_len >= 2 and chunk_rows >= 1 are required')
@@ -147,7 +148,8 @@ def audit_corpus(source, output, *, model, revision=None, max_len=8192, chunk_ro
     identity = {'version': 'natlang.token_audit/1', 'source_sha256': _file_sha(source),
                 'manifest_sha256': _file_sha(source_manifest_path), 'renderer': renderer,
                 'max_len': max_len, 'chunk_rows': chunk_rows, 'auditor_sha256': _file_sha(Path(__file__)),
-                'rejection_ledgers': {str(Path(path).resolve()): _file_sha(Path(path)) for path in rejection_ledgers}}
+                'rejection_ledgers': {str(Path(path).resolve()): _file_sha(Path(path)) for path in rejection_ledgers},
+                'required_tracks': sorted(required_tracks)}
     identity_sha = _sha(json.dumps(identity, sort_keys=True).encode())
     cache = output.with_name(output.name + '.audit-cache')
     cache.mkdir(parents=True, exist_ok=True)
@@ -207,6 +209,10 @@ def audit_corpus(source, output, *, model, revision=None, max_len=8192, chunk_ro
         if _file_sha(source) != identity['source_sha256'] or _file_sha(source_manifest_path) != identity['manifest_sha256']:
             raise ValueError('source changed during audit')
         report = report_for(assessed, max_len)
+        missing_tracks = [name for name in required_tracks
+                          if report['distributions']['training_track'].get(name, {}).get('train_rows', 0) < 1]
+        report['missing_required_tracks'] = missing_tracks
+        report['ready'] = report['ready'] and not missing_tracks
         report['renderer'] = renderer
         report['upstream_render_rejections'] = source_manifest.get('rejections', {})
         report['upstream_rejection_ledgers'] = {}
@@ -253,6 +259,7 @@ def main():
     parser.add_argument('--max-len', type=int, default=8192)
     parser.add_argument('--chunk-rows', type=int, default=128)
     parser.add_argument('--rejection-ledger', action='append', type=Path, default=[])
+    parser.add_argument('--require-track', action='append', default=[])
     args = parser.parse_args()
     stopping = False
     def stop(*_):
@@ -262,7 +269,7 @@ def main():
         signal.signal(sig, stop)
     return audit_corpus(args.input, args.output, model=args.model, revision=args.revision,
                         max_len=args.max_len, chunk_rows=args.chunk_rows, should_stop=lambda: stopping,
-                        rejection_ledgers=args.rejection_ledger)
+                        rejection_ledgers=args.rejection_ledger, required_tracks=args.require_track)
 
 
 if __name__ == '__main__':

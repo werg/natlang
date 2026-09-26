@@ -1,8 +1,10 @@
 # Staged training pipeline
 
 The repository has one staged production recipe. It builds a source and native
-curriculum, then trains one adapter through the general code, coding, and teacher
-stages in sequence. The recipe does not launch baseline runs, ablations, or
+curriculum, then trains one adapter through the general code, coding, and joint
+stages in sequence. The joint stage contains admitted teacher decisions from
+every discovered curriculum track and bounded general/coding rehearsal. The
+recipe does not launch baseline runs, ablations, or
 comparison runs, and creating the recipe does not launch any work.
 
 For verified student-failure corrections after that initial curriculum, use the
@@ -14,7 +16,7 @@ single-GPU model swapping.
 The base model defaults to `LiquidAI/LFM2.5-350M`. The teacher collector defaults
 to model id `Ternary-Bonsai-2-27B` at `http://127.0.0.1:8081`. Both can be
 configured. The recipe preserves the configured split registry across stages and
-chains adapters: coding starts from the general checkpoint adapter, and teacher
+chains adapters: coding starts from the general checkpoint adapter, and joint
 starts from the coding checkpoint adapter. Every stage has its own optimizer and
 resumable checkpoint. Intermediate merged models are skipped.
 
@@ -64,6 +66,13 @@ options; for example:
   --train-arg=--rank --train-arg=32
 ```
 
+For a Pi subscription or API provider, use `--teacher-provider` with a model
+ID supported by that provider, instead of `--teacher-server`. For example, after
+`natlang auth login openai-codex`, pass `--teacher-provider openai-codex
+--teacher-model gpt-6-luna`. The same connection is used for the seed teacher
+and every discovered curriculum track. `--inline-shapes` controls the generated
+cases per family (default 2); increasing it creates a new recipe and run.
+
 The default trainer arguments are one epoch per stage, rank 32, accumulation
 16, microbatch 1, an 8,192-token padded batch budget and maximum length, source
 file order, skipped held-out loss evaluation, and no merged export. Trainer
@@ -84,11 +93,45 @@ flowchart LR
   G --> R[CPU training-readiness gate]
   R --> H[Render general] --> AH[Token audit general] --> I[Train general]
   I --> J[Render coding] --> AJ[Token audit coding] --> K[Train coding]
-  K --> L[Collect teacher trajectories]
-  L --> M[Materialize teacher turns]
-  M --> N[Prepare with frozen splits]
-  N --> O[Render teacher] --> AO[Token audit teacher] --> P[Train teacher]
+  K --> L[Collect seed teacher and discovered tracks]
+  L --> M[Admit and materialize teacher turns]
+  M --> N[Prepare all teacher tracks with frozen splits]
+  N --> Q[Assemble joint corpus with rehearsal]
+  Q --> O[Render joint] --> AO[Token audit every track] --> P[Train joint]
 ```
+
+The recipe creator reads `ts-host/scripts/inline-curriculum/families.mjs` through
+`list-tracks.mjs`. Every track with generated families is added automatically;
+today this includes `interpreter` and `authoring`. Adding a family to that
+registry causes a newly created recipe to include it in the appropriate track.
+The recipe freezes the discovered family names and the runtime build, so a
+source edit cannot change a running job. Source-backed families require their
+pinned external dataset caches and remain in the separate acquisition workflow
+in [Inline curriculum](INLINE_CURRICULUM.md); production discovery currently
+includes generated families only. A new track with no generated families fails
+recipe creation instead of silently being skipped.
+
+Each discovered track builds cases, collects trajectories, checks admission,
+and materializes teacher turns under `${run}/tracks/<track>/`. `prepare-teacher`
+passes every track's turns through the same group-safe split registry. The
+`assemble-joint` stage includes every prepared teacher decision, then samples
+at most that many coding rows and at most that many general rows by stable ID
+hash. It removes repeated IDs across those lanes. Joint training shuffles the
+rows deterministically so the final phase does not finish on just one track.
+Its manifest records source
+hashes and row counts per track. `audit-joint` records usable rows and training
+tokens by `training_track` and stops if any teacher track has no usable training
+row. This prevents a collection or tokenizer rejection from quietly removing a
+track from the final training set. It does not prove the trained model retained
+every skill; that still needs evaluation.
+
+Generated case pools, trajectories, admission ledgers, rendered corpora, and
+token caches are run-local working files needed for resume and audit. They are
+never auto-discovered as inputs to later recipes. There is no persistent
+"artifact registry" to curate: create a fresh run for a new source revision,
+and remove an old run directory when its checkpoint and evidence are no longer
+needed. Do not remove files from an active or resumable run, because the runner
+checks completed output hashes before continuing.
 
 `freeze-runtime` snapshots the already-built `ts-host/dist`, `ts-host/scripts`,
 the TypeScript source used to fingerprint the tool surface, `prelude.js`, and

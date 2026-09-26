@@ -216,6 +216,14 @@ read only the cache and keep source labels and formal annotations in the oracle 
 
 ## Commands
 
+The production training recipe discovers generated families by track from
+`families.mjs` when the recipe is created. It collects and admits the
+`interpreter` and `authoring` tracks under the run directory, then includes
+them in the joint final curriculum; see [Staged training pipeline](TRAINING_PIPELINE.md).
+Use the commands below for standalone collection and for source-backed families
+that need separately acquired pinned datasets. Old generated JSONL files are
+not used as a registry for future training.
+
 ```sh
 npm --workspace @natlang/typescript-host run build:node
 cd ts-host
