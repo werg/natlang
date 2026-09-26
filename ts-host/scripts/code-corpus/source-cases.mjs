@@ -1,6 +1,6 @@
 #!/usr/bin/env node
+import { runIsolated, serveIsolated } from './isolated.mjs';
 import ts from 'typescript';
-import { fork } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile, link } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -127,16 +127,9 @@ export function sourceCases(record) {
 }
 
 export function observeSourceCase(record, args, timeout = CASE_TIMEOUT_MS) {
-  return new Promise((resolvePromise, reject) => {
-    const child = fork(new URL('./source-cases.mjs', import.meta.url), ['--worker'], { stdio: ['ignore','ignore','pipe','ipc'], execArgv: [] });
-    let settled = false;
-    const finish = (error, expected) => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGKILL'); error ? reject(error) : resolvePromise(expected); };
-    const timer = setTimeout(() => finish(new Error('source observation timeout')), timeout);
-    child.on('message', message => message.error ? finish(new Error(message.error)) : finish(null, message.observation));
-    child.on('error', finish);
-    child.on('exit', code => finish(new Error(`source observer exited ${code}`)));
-    child.send({ record, args });
-  });
+  // The source runs under a vm time limit of CASE_TIMEOUT_MS; the worker's limit is a safety net above it.
+  return runIsolated(new URL('./source-cases.mjs', import.meta.url), { record, args },
+    { timeout: Math.max(timeout, CASE_TIMEOUT_MS) * 5, name: 'source observation' });
 }
 
 async function executeSourceCase(record, args) {
@@ -153,10 +146,7 @@ async function executeSourceCase(record, args) {
   return {expected:structuredClone(output),input_after:inputAfter};
 }
 
-if (process.argv.includes('--worker')) process.once('message', async ({ record, args }) => {
-  try { process.send({ observation: await executeSourceCase(record, args) }); }
-  catch (error) { process.send({ error: String(error) }); }
-});
+if (process.argv.includes('--worker')) await serveIsolated(({ record, args }) => executeSourceCase(record, args), () => import('node:vm'));
 
 async function atomicWrite(path, value) {
   const target = resolve(path); await mkdir(dirname(target), { recursive: true }); const staging = `${target}.building-${randomUUID()}`;

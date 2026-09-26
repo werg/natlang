@@ -2,7 +2,7 @@ id: 16-quiesce-with-note
 title: Stop with a useful closing note when the inputs do not determine the answer
 kind: program
 exercises:
-  - report_blocker
+  - return_result blocked
   - quiesced root
   - note quality
   - no guessing
@@ -16,7 +16,7 @@ files:
     returns: "\"accept\" | \"reject\""
     ---
     Decide `item` strictly by `rubric`. If the rubric does not cover the case,
-    call report_blocker and say what is missing.
+    you are blocked: say what is missing.
 inputs:
   rubric: |
     accept: expense claims under 50 EUR with a receipt.
@@ -30,7 +30,7 @@ expect:
       answer: true
 lint:
   must:
-    - the episode ends with report_blocker
+    - the episode ends with return_result, status blocked
     - return left unset
   must_not:
     - writing accept or reject

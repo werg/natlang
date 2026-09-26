@@ -27,9 +27,10 @@ test('wrong outputs are not admitted, mutation and nonportable shapes are reject
   const b=task(); b.cases[0].args=[{}]; assert.throws(()=>project(b),/portable replay/);
   const c=task(); c.cases[1].args=[3]; assert.throws(()=>project(c),/conflicting outputs/);
 });
-test('runaway code is terminated', async () => {
+test('runaway code is stopped by its eval time limit and fails closed', async () => {
   const a=task(); a.function.body='{ for (let i = 0; i < 1e15; i++) {} return x; }';
-  await assert.rejects(replayIsolated(a,0,500),/timeout/);
+  const replay=await replayIsolated(a,0,500);
+  assert.equal(replay.outcome.accepted,false); assert.match(replay.outcome.detail,/timed out|time/i);
 });
 test('nested arrays replay using native list type syntax', async () => {
   const a=task(); a.function.body='{ return [x]; }';

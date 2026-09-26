@@ -47,7 +47,7 @@ function referenceAgent(specs) {
     }
     let entry = spec;
     if (spec.variants) entry = spec.variants.find(v => !v.if_body_contains || lam.body.includes(v.if_body_contains)) ?? spec.variants.at(-1);
-    if (entry.blocker) return (await act('blocked', { missing: entry.blocker })).text;
+    if (entry.blocker) return (await act('return_result', { status: 'blocked', reason: entry.blocker })).text;
     let value = entry.answer;
     if (spec.answer_by) {
       const key = Object.hasOwn(lam.args, 'item') ? lam.args.item : Object.values(lam.args)[0] ?? null;

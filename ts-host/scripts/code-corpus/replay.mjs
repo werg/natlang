@@ -1,7 +1,7 @@
+import { runIsolated, serveIsolated } from './isolated.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { fork } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { digest, readJsonl, writeJsonl } from './common.mjs';
@@ -132,8 +132,9 @@ export async function replayCase(record, index = 0, options = {}) {
   };
   const workspaceBefore = await workspaceSnapshot(options.workspace);
   const hostEvents = [];
+  // Generated code that runs away is stopped by its eval's time limit, where it runs.
   const environment = new TypeScriptEnvironment({ mode: 'fresh', workspace: options.workspace, network: options.network,
-    observe: event => hostEvents.push(event) });
+    timeoutMs: options.evalTimeoutMs ?? 10000, observe: event => hostEvents.push(event) });
   const agent = new NativeToolAgent(driver, { systemPrompt: TOOLS_PROMPT });
   const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), seedPolicy: {mode:'derived', root: 42}, runId: program.id });
   try {
@@ -151,21 +152,15 @@ export async function replayCase(record, index = 0, options = {}) {
   } finally { environment.close(); }
 }
 
+// The replayed code is bounded by its eval's time limit (options.evalTimeoutMs, default timeout); the worker's limit
+// is a safety net above it (isolated.mjs).
 export function replayIsolated(record, index, timeout = 10000, options = {}) {
-  return new Promise((accept, reject) => {
-    const child = fork(new URL('./replay.mjs', import.meta.url), ['--worker'], {stdio:['ignore','ignore','pipe','ipc'], execArgv:[]});
-    let settled = false;
-    const finish = (error, row) => { if (settled) return; settled = true; clearTimeout(timer); child.kill('SIGKILL'); error ? reject(error) : accept(row); };
-    const timer = setTimeout(() => finish(new Error('replay timeout')), timeout);
-    child.on('message', message => finish(message.error ? new Error(message.error) : null, message.row));
-    child.on('error', error => finish(error));
-    child.on('exit', code => finish(new Error(`replay worker exited ${code}`)));
-    child.send({record,index,options});
-  });
+  return runIsolated(new URL('./replay.mjs', import.meta.url),
+    { record, index, options: { ...options, evalTimeoutMs: options.evalTimeoutMs ?? timeout } }, { timeout: timeout * 6, name: 'replay' });
 }
-if (process.argv.includes('--worker')) process.once('message', async ({record,index,options}) => {
-  try { process.send({row:await replayCase(record,index,options)}); } catch (error) { process.send({error:String(error)}); }
-});
+if (process.argv.includes('--worker')) await serveIsolated(({ record, index, options }) => replayCase(record, index, options),
+  () => Promise.all(['environment.js', 'native/agent.js', 'native/prompt.js', 'node-runtime.js', 'native/values.js',
+    'teacher/program.js'].map(path => import(`../../dist/${path}`))));
 else if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2);
   const get = key => args[args.indexOf(key)+1];
