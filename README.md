@@ -33,9 +33,12 @@ natlang run applications/evidence       # a citation-checked question-answering 
 natlang check examples/triage           # type- and policy-check a project
 ```
 
-`natlang setup` prepares a managed local model runtime; see
-[development setup](DEV_SETUP.md) for model profiles, the browser build, and
-tests.
+`natlang setup` prepares the selected model backend. The CLI can use its managed
+local model, an OpenAI-compatible endpoint, or a Pi provider with an API key or
+supported subscription login. See
+[model configuration](NATIVE_PACKAGES.md#authority-and-the-model-runtime)
+for profiles, overrides, and provider options; see
+[development setup](DEV_SETUP.md) for the browser build and tests.
 
 ## Read next
 

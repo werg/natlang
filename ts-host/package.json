@@ -24,6 +24,7 @@
     "build:applications": "node scripts/build-applications.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^0.87.1",
     "@noble/hashes": "^2.4.0",
     "@types/node": "^24.0.0",
     "@wllama/wllama": "^3.6.1",
@@ -52,6 +53,10 @@
     "./model": {
       "types": "./dist/model/index.d.ts",
       "default": "./dist/model/index.js"
+    },
+    "./model/pi": {
+      "types": "./dist/model/pi-provider.d.ts",
+      "default": "./dist/model/pi-provider.js"
     },
     "./package": {
       "types": "./dist/package/index.d.ts",

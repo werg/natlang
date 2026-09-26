@@ -121,23 +121,148 @@ interactive run asks before installing the pinned official archive under the
 user data directory; downloads are checked against a static byte length and
 SHA-256 digest and never alter a system installation. `natlang setup` does this
 ahead of time (`--yes` for unattended installs), and `natlang runtime status
---json` explains resolution. A run starts preparing the model immediately,
-concurrently with building the application, and closes an owned server with the
-command. Model profiles in the platform config directory select externally
-owned services:
+--json` explains resolution. A run starts an owned server when its first model
+turn needs one and closes it with the command. Model profiles in the platform
+config directory select a backend. For an externally owned service:
 
 ```json
 {
-  "defaultProfile": "local",
+  "defaultProfile": "remote",
   "profiles": {
-    "local": { "endpoint": "http://127.0.0.1:8081", "model": "MODEL_ID", "apiKeyEnv": "NATLANG_API_KEY" }
+    "remote": { "endpoint": "http://127.0.0.1:8081", "model": "MODEL_ID", "apiKeyEnv": "NATLANG_API_KEY" }
   }
 }
 ```
 
-`NATLANG_SERVER`, `NATLANG_MODEL`, and `NATLANG_PROFILE` override the selected
-profile. `NATLANG_MODEL_PATH`, `NATLANG_TEMPLATE`, and `NATLANG_LLAMA_SERVER`
-customize managed local execution. Secrets remain in environment variables.
+The same profile resolution is used by `run`, `call`, `ask`, `setup`, and
+`doctor`. Choose a profile with `--profile`, then `NATLANG_PROFILE`, then
+`defaultProfile`. `--provider` or `NATLANG_PROVIDER` selects a Pi backend;
+otherwise `NATLANG_SERVER` selects an OpenAI-compatible endpoint. `--model`
+then `NATLANG_MODEL` override the profile's model ID. Provider selection takes
+precedence over `NATLANG_SERVER`. Switching backend through an override drops
+settings specific to the previous backend; shared `headers`, `apiKeyEnv`, and
+`runtime` settings remain. A model ID without a provider or endpoint is invalid;
+the managed local profile uses its pinned model. `NATLANG_MODEL_PATH`,
+`NATLANG_TEMPLATE`, and `NATLANG_LLAMA_SERVER` customize managed local
+execution. Secrets remain in environment variables.
+
+| Profile field | Managed local | OpenAI-compatible endpoint | Pi provider |
+| --- | --- | --- | --- |
+| Selection | Neither `endpoint` nor `provider` | `endpoint`; optional `model` | `provider` and `model` |
+| Credentials | None | `apiKeyEnv` (defaults to `NATLANG_API_KEY`) | Pi's provider environment variables, saved login, or `apiKeyEnv` |
+| Request controls | `headers`, `request`, `local` | `headers`, `request` | `headers`, `piOptions`, `piPayload`, `piMode`, `modelOptions` |
+| Natlang controls | `runtime` | `runtime` | `runtime` |
+
+`request` adds fields to the OpenAI-compatible chat completion body. `local`
+configures natlang's managed llama-server. `runtime` configures natlang's own
+generation loop, independent of the backend. Pi's JSON fields cannot specify
+JavaScript callbacks or SDK clients.
+
+For a provider with a native API or a supported subscription, set `provider`
+and `model` instead of `endpoint`:
+
+```json
+{
+  "defaultProfile": "hosted",
+  "profiles": {
+    "hosted": { "provider": "anthropic", "model": "MODEL_ID" }
+  }
+}
+```
+
+`natlang models` lists Pi providers; `natlang models PROVIDER` lists their
+model IDs. `natlang auth login PROVIDER` starts a supported OAuth sign-in,
+and `natlang auth status` and `natlang auth logout PROVIDER` inspect or remove it.
+API-key providers can use their usual environment variables, or set `apiKeyEnv`
+on the profile. Natlang stores sign-in credentials under its platform config
+directory and Pi refreshes expiring tokens. The Pi catalog in this version
+supports subscription sign-in for `anthropic` (Claude Pro/Max), `openai-codex`
+(ChatGPT Plus/Pro), `github-copilot`, `kimi-coding`, `xai`, and `meta`. Other
+providers may offer OAuth without a subscription; `natlang auth login PROVIDER`
+reports when a provider has no login flow. Availability of a particular model
+depends on the provider account.
+
+`natlang run`, `call`, `ask`, `setup`, and `doctor` also accept `--provider ID`
+and `--model ID` for a single invocation.
+
+Profiles can also set `piOptions` (Pi request options), `modelOptions` (catalog
+model overrides), and `runtime` (natlang generation controls):
+
+```json
+{
+  "profiles": {
+    "reasoning": {
+      "provider": "openai-codex",
+      "model": "MODEL_ID",
+      "piOptions": {
+        "reasoningEffort": "high",
+        "reasoningSummary": "auto",
+        "cacheRetention": "long",
+        "transport": "sse",
+        "timeoutMs": 120000,
+        "maxRetries": 1,
+        "samplingParams": { "top_p": 0.9 }
+      },
+      "modelOptions": { "contextWindow": 128000, "maxTokens": 16384 },
+      "runtime": {
+        "temperature": 0,
+        "turnTokens": 4096,
+        "contextTokens": 120000,
+        "maxTurns": 24,
+        "seed": { "mode": "backend" }
+      }
+    }
+  }
+}
+```
+
+`piOptions` passes JSON request settings to Pi, including provider-specific
+reasoning, cache, transport, metadata, regional and sampling settings. Its
+`maxTokens` caps natlang's per-turn allowance. Natlang's configured temperature
+overrides `piOptions.temperature`, and its seed overrides
+`piOptions.samplingParams.seed` unless `runtime.seed.mode` is `backend`.
+`piOptions.env` supplies provider environment values for that profile. Top-level
+`headers` take precedence over `piOptions.headers`. Per-request callbacks,
+SDK `fetch` implementations, and direct API keys are unavailable in JSON
+profiles; use the environment, `apiKeyEnv`, or the programmatic Pi backend.
+Set `piMode` to `"simple"` to use Pi's provider-neutral `reasoning` and
+`thinkingBudgets` options; the default `"native"` mode accepts each provider's
+own options, such as `reasoningEffort` for OpenAI or `thinkingEnabled` for
+Anthropic. Required-tool turns use the native mode in either case. Deferred
+responses are not supported by natlang's synchronous turn contract.
+`piPayload` shallowly merges JSON fields into Pi's formatted provider request
+body for protocol experiments. It is applied after Pi builds the body, so fields
+such as `messages` or `tools` can replace natlang's generated values if set.
+`modelOptions` can override Pi catalog metadata such as `baseUrl`, `headers`,
+`compat`, `samplingParams`, `contextWindow` and `maxTokens`; it cannot change the
+selected model's `id`, `provider` or `api`. `natlang models PROVIDER --json`
+shows the full catalog entry; `--refresh` refreshes dynamic catalogs.
+For a model ID absent from Pi's catalog, set `modelOptions.inherit` to a listed
+model from the same provider with the same API protocol. Natlang sends the new
+`model` ID while using the template's protocol and capability defaults; override
+its differing limits in `modelOptions`.
+`runtime` accepts `maxTurns`, `maxTokens`, `turnTokens`, `temperature`,
+`contextTokens` (or `null` to disable context compaction), `maxSeconds`,
+`maxFailureRepairs`, `review`, and `seed`. Seed modes are `compatibility`,
+`derived`, and `backend`; a numeric `seed.root` can be set when applicable.
+These runtime settings apply to CLI `run`, `call`, and `ask` commands using that
+profile. `runtime.review.driver` can only be supplied programmatically.
+
+Managed local profiles can set `request` fields for llama.cpp chat completions,
+plus a `local` object with `contextTokens`, `gpuLayers`, `parallel`,
+`cacheRamMiB`, and extra llama-server `args`. The managed model path, loopback
+host, port, and process lifecycle remain owned by natlang. The same `runtime`
+controls apply. Endpoint profiles also accept `request` for raw chat-completion
+body fields.
+
+The Pi backend translates natlang's model turns and tool calls to provider
+formats. Natlang still owns planning, guided tool selection, retries, execution,
+and tracing. The managed local and endpoint backends retain direct access to raw
+request fields and chat-completion wire behavior. The adapter maps natlang's
+required-tool turns to Pi's native tool-choice option for APIs that provide one.
+Sampling parameters, including seeds, only reach provider APIs that support
+them. Profile JSON cannot carry callbacks or SDK client instances; those remain
+programmatic integration points through `@natlang/node/model/pi`.
 
 ## Included packages
 

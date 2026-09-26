@@ -145,6 +145,35 @@ Persistent profiles live in `~/.config/natlang/config.json`:
 }
 ```
 
+For native provider APIs and supported subscriptions, use a Pi provider profile:
+
+```json
+{
+  "defaultProfile": "hosted",
+  "profiles": {
+    "hosted": { "provider": "anthropic", "model": "MODEL_ID" }
+  }
+}
+```
+
+Run `natlang models anthropic` for current model IDs. API-key providers read
+their documented environment variables, or a profile's `apiKeyEnv`. For a
+supported subscription, run `natlang auth login PROVIDER`; credentials are kept
+in natlang's config directory and refreshed by Pi. `natlang auth status` lists
+configured providers, and `natlang auth logout PROVIDER` removes a credential.
+`run`, `call`, `ask`, `setup`, and `doctor` resolve the same profile and accept
+`--profile`, `--provider`, and `--model` overrides.
+
+The Pi path handles provider protocol and authentication; natlang's local and
+OpenAI-compatible endpoint paths remain available for raw request controls.
+Pi profiles also accept `piOptions` for provider request settings, `modelOptions`
+for model catalog overrides, and `runtime` for natlang's turn budget, temperature,
+context budget, and seed policy. See [native package model configuration](NATIVE_PACKAGES.md#authority-and-the-model-runtime)
+for an example and precedence rules. `natlang models PROVIDER --json` shows
+catalog capabilities and defaults; add `--refresh` for dynamic providers.
+Managed local profiles can set raw `request` fields and a `local` object for
+context size, GPU layers, parallel slots, cache RAM and extra llama-server args.
+
 The default is deliberately pinned, including its byte length and SHA-256
 digest. `scripts/publish_browser_model.mjs` updates the browser catalog and
 regenerates `ts-host/src/model-default.ts` in the same successful publication

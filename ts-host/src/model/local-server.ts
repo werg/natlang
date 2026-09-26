@@ -12,12 +12,12 @@ import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './opena
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
+import { resolveModelChoice, type ModelProfile, type ResolvedModelChoice } from './config.js';
 
 export const DEFAULT_LOCAL_MODEL = DEFAULT_MODEL_RELEASE;
 
-export type ModelProfile = { endpoint?: string; model?: string; apiKeyEnv?: string;
-  headers?: Record<string, string>; request?: Record<string, unknown> };
-export type ManagedModelStatus = { source: 'external' | 'managed-local'; endpoint: string | null;
+export type { ModelProfile } from './config.js';
+export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
   turn(request: ModelTurnRequest): Promise<ModelTurn>;
@@ -116,18 +116,30 @@ async function stopChild(child: ChildProcess): Promise<void> {
 export function createManagedModelSession(profile: ModelProfile,
   environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
   runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
-  const external = profile.endpoint ? { endpoint: profile.endpoint,
-    model: profile.model ?? DEFAULT_LOCAL_MODEL.id } : null;
-  if (!profile.endpoint && profile.model)
-    throw new Error('a configured model ID needs an endpoint; omit both to use the managed local default');
+  return createResolvedModelSession(resolveModelChoice(profile), environment, error, runtimeOptions);
+}
+
+export function createResolvedModelSession(choice: ResolvedModelChoice,
+  environment: NodeJS.ProcessEnv = process.env, error: NodeJS.WritableStream = process.stderr,
+  runtimeOptions: ManagedModelRuntimeOptions = {}): ManagedModelSession {
+  const external = choice.kind === 'external' ? choice : null;
+  const localSettings = choice.kind === 'managed-local' ? choice.local : undefined;
+  type PiBackend = ReturnType<(typeof import('./pi-provider.js'))['createPiModelBackend']>;
+  let pi: Promise<PiBackend> | null = null;
+  const piBackend = () => {
+    if (choice.kind !== 'pi-provider') throw new Error('Pi backend requires a Pi provider choice');
+    return pi ??= import('./pi-provider.js').then(module =>
+      module.createPiModelBackend(choice.provider, choice.model, environment, choice.apiKeyEnv,
+        choice.headers, choice.piOptions, choice.modelOptions, choice.piMode, choice.piPayload));
+  };
   let child: ChildProcess | null = null, local: OpenAICompatibleOptions | null = null;
   let starting: Promise<OpenAICompatibleOptions> | null = null, recentError = '', closed = false;
   let prerequisites = localModelPrerequisites(environment);
 
   const start = async (): Promise<OpenAICompatibleOptions> => {
     if (closed) throw new Error('model session is closed');
-    if (external) return { ...profile, endpoint: external.endpoint, model: external.model,
-      apiKey: environment[profile.apiKeyEnv ?? 'NATLANG_API_KEY'] };
+    if (external) return { endpoint: external.endpoint, model: external.model, headers: external.headers,
+      request: external.request, apiKey: environment[external.apiKeyEnv] };
     if (local) return local;
     if (starting) return starting;
     starting = (async () => {
@@ -144,9 +156,11 @@ export function createManagedModelSession(profile: ModelProfile,
       if (closed) throw new Error('model session is closed');
       const port = await freePort();
       const endpoint = `http://127.0.0.1:${port}`;
-      const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel', '1',
-        '-c', String(DEFAULT_LOCAL_MODEL.contextTokens), '-ngl', '99', '--cache-ram', '256', '--no-webui',
-        '--jinja', '--chat-template-file', templatePath(environment)];
+      const args = ['-m', modelPath, '--host', '127.0.0.1', '--port', String(port), '--parallel',
+        String(localSettings?.parallel ?? 1),
+        '-c', String(localSettings?.contextTokens ?? DEFAULT_LOCAL_MODEL.contextTokens), '-ngl',
+        String(localSettings?.gpuLayers ?? 99), '--cache-ram', String(localSettings?.cacheRamMiB ?? 256), '--no-webui',
+        '--jinja', '--chat-template-file', templatePath(environment), ...(localSettings?.args ?? [])];
       error.write(`natlang: starting managed model ${basename(modelPath)}\n`);
       child = spawn(prerequisites.executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr?.on('data', chunk => { recentError = (recentError + String(chunk)).slice(-16000); });
@@ -156,7 +170,8 @@ export function createManagedModelSession(profile: ModelProfile,
         if (child.exitCode !== null || child.signalCode !== null)
           throw new Error(`managed model server exited during startup\n${recentError.trim()}`);
         try { const response = await fetch(endpoint + '/health'); if (response.ok) {
-          local = { endpoint, model: environment.NATLANG_MODEL ?? DEFAULT_LOCAL_MODEL.id }; return local;
+          local = { endpoint, model: environment.NATLANG_MODEL ?? choice.model,
+            headers: choice.headers, request: choice.kind === 'managed-local' ? choice.request : undefined }; return local;
         } } catch { /* server is still loading */ }
         await new Promise(resolveWait => setTimeout(resolveWait, 250));
       }
@@ -177,14 +192,16 @@ export function createManagedModelSession(profile: ModelProfile,
   const onExit = () => { if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); };
   process.once('exit', onExit);
   return {
-    async prepare() { await start(); return this.status(); },
-    async turn(request) { const options = await start(); return openAICompatibleModelTurn(options)(request); },
-    status() { return external ? { source: 'external', endpoint: external.endpoint, model: external.model,
+    async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
+    async turn(request) { if (choice.kind === 'pi-provider') return (await piBackend()).turn(request); const options = await start(); return openAICompatibleModelTurn(options)(request); },
+    status() { return choice.kind === 'pi-provider' ? { source: 'pi-provider', endpoint: null, model: `${choice.provider}/${choice.model}`,
+      executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
-      model: environment.NATLANG_MODEL ?? DEFAULT_LOCAL_MODEL.id, executable: prerequisites.executable,
+      model: environment.NATLANG_MODEL ?? choice.model, executable: prerequisites.executable,
       modelPath: environment.NATLANG_MODEL_PATH ? resolve(environment.NATLANG_MODEL_PATH) : null, running: Boolean(child) }; },
     async close() {
       closed = true;
+      if (pi) await pi.then(backend => backend.close(), () => undefined);
       process.removeListener('SIGINT', terminate); process.removeListener('SIGTERM', terminate);
       process.removeListener('exit', onExit);
       if (child) await stopChild(child);

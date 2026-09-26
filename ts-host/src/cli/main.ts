@@ -5,17 +5,20 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { createPackageArchive, NatlangPackageStore, readPackageArchive,
-  writePackageArchive, defaultNatlangConfigDirectory, defaultNatlangStateDirectory } from '../package/index.js';
+  writePackageArchive, defaultNatlangStateDirectory } from '../package/index.js';
 import { compareVersions, satisfiesVersion } from '../package/store.js';
 import type { NatlangTarget } from '../package/manifest.js';
 import type { TargetContext, TargetExecutable, TargetMain } from '../package/target.js';
-import { createManagedModelSession, DEFAULT_LOCAL_MODEL, describeLlamaRuntime, discoverLlamaRuntime,
+import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntime, discoverLlamaRuntime,
   installManagedLlamaRuntime, LLAMA_RUNTIME_RELEASE, localModelPrerequisites,
-  type LlamaRuntimeDiscovery, type LlamaServerInspection } from '../model/index.js';
+  type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
+  type ModelSelectionOverrides, type ResolvedModelChoice } from '../model/index.js';
+import type { AuthPrompt } from '@earendil-works/pi-ai';
 import { openFolder } from '../native/node-files.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { buildProject } from '../compiler/node-project.js';
-import { createNatlangRuntime, type ModelDriver, type NatlangRuntime } from '../runtime/runtime.js';
+import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
+  type NatlangRuntimeOptions } from '../runtime/runtime.js';
 import { fileTraceSink, applicationContextRecords, loadNatlang } from '../runtime/node-files.js';
 import { invokeDefinition } from '../runtime/kernel.js';
 import { resolveFrame } from '../runtime/runtime.js';
@@ -40,6 +43,8 @@ Usage:
   natlang package pack|verify|install ...    Pack, verify, or install a distribution archive.
   natlang setup                              Prepare the local model runtime.
   natlang runtime status|install             Inspect or install the model runtime.
+  natlang models [PROVIDER]                   List Pi providers and models.
+  natlang auth login|status|logout ...        Manage Pi subscription credentials.
   natlang doctor                             Check this natlang installation.
 
 Run natlang help COMMAND for focused usage and options.`; }
@@ -61,6 +66,8 @@ Options:
   --state DIRECTORY   Override durable application state.
   --traces DIRECTORY  Override application trace storage.
   --profile NAME      Select a model profile.
+  --provider ID       Override the profile's Pi provider.
+  --model ID          Override the profile's model ID.
   --store DIR         Package store for installed applications.
   --plain             Disable interactive terminal formatting.
   --no-color          Disable terminal color.
@@ -72,11 +79,11 @@ Options:
 PROJECT is a directory or tsconfig.json (default: .). Both commands write a
 typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.`;
   if (topic === 'call') return `Call one named natural-language function:
-  natlang call FILE.nl [--inputs FILE] [--trace DIR] [--profile NAME] [--json]
+  natlang call FILE.nl [--inputs FILE] [--trace DIR] [--profile NAME] [--provider ID] [--model ID] [--json]
 
 --inputs is a JSON object keyed by parameter name.`;
   if (topic === 'ask') return `Answer an instruction:
-  natlang ask INSTRUCTION... [--trace DIR] [--profile NAME]
+  natlang ask INSTRUCTION... [--trace DIR] [--profile NAME] [--provider ID] [--model ID]
 
 The instruction runs as an inline natural-language function over the nearest
 natlang.d/ callable folder and a read-only view of the current directory's files.`;
@@ -90,7 +97,7 @@ natlang.d/ callable folder and a read-only view of the current directory's files
   natlang package install ARCHIVE... [--store DIR] [--json]
   natlang packages [--store DIR] [--json]`;
   if (topic === 'runtime' || topic === 'setup') return `Model runtime commands:
-  natlang setup [--yes] [--json]
+  natlang setup [--profile NAME] [--provider ID] [--model ID] [--yes] [--json]
   natlang runtime status [--json]
   natlang runtime install [--yes] [--json]
 
@@ -98,15 +105,25 @@ Setup reuses a compatible explicit, managed, or PATH llama-server. If none is
 compatible, interactive use asks before installing the verified managed build.
 Profiles live in ~/.config/natlang/config.json. Environment overrides are
 NATLANG_SERVER, NATLANG_MODEL, NATLANG_MODEL_PATH, NATLANG_LLAMA_SERVER,
-NATLANG_RUNTIME_HOME, and NATLANG_API_KEY.`;
+NATLANG_RUNTIME_HOME, NATLANG_PROVIDER, and NATLANG_API_KEY.`;
+  if (topic === 'models') return `List Pi providers and models:
+  natlang models [PROVIDER] [--json] [--refresh]
+
+--json includes model capabilities and catalog defaults.`;
+  if (topic === 'auth') return `Manage Pi provider credentials:
+  natlang auth login PROVIDER
+  natlang auth status [--json]
+  natlang auth logout PROVIDER
+
+API-key providers can also use their documented environment variables.`;
   if (topic === 'doctor') return `Check the natlang installation and model configuration:
-  natlang doctor [--profile NAME] [--store DIR] [--json]`;
+  natlang doctor [--profile NAME] [--provider ID] [--model ID] [--store DIR] [--json]`;
   throw new Error(`unknown help topic ${topic}`);
 }
 type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
-  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes']);
+  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -168,18 +185,6 @@ function text(item: unknown): string {
   return String(item);
 }
 
-type Profile = { endpoint?: string; model?: string; apiKeyEnv?: string; headers?: Record<string, string>;
-  request?: Record<string, unknown> };
-function loadProfile(name?: string): { name: string; profile: Profile; configPath: string } {
-  const configPath = join(defaultNatlangConfigDirectory(), 'config.json');
-  let config: { defaultProfile?: string; profiles?: Record<string, Profile> } = {};
-  if (existsSync(configPath)) config = JSON.parse(readFileSync(configPath, 'utf8')) as typeof config;
-  const selected = name ?? process.env.NATLANG_PROFILE ?? config.defaultProfile ?? 'default';
-  const configured = config.profiles?.[selected] ?? {};
-  return { name: selected, configPath, profile: { ...configured,
-    endpoint: process.env.NATLANG_SERVER ?? configured.endpoint,
-    model: process.env.NATLANG_MODEL ?? configured.model } };
-}
 async function confirm(question: string): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stderr.isTTY) return false;
   const terminal = createInterface({ input: process.stdin, output: process.stderr });
@@ -215,11 +220,19 @@ function outputRuntime(discovery: LlamaRuntimeDiscovery, json: boolean): void {
   output(`llama.cpp runtime unavailable\n${describeLlamaRuntime(discovery)}`, false);
 }
 
-function modelSession(profileName?: string, assumeYes = false) {
-  const { profile } = loadProfile(profileName);
-  return createManagedModelSession({ ...profile,
-    request: profile.request, headers: profile.headers }, process.env, process.stderr,
+function modelSelection(parsed: Parsed): LoadedModelConfiguration {
+  const overrides: ModelSelectionOverrides = { provider: option(parsed, '--provider'), model: option(parsed, '--model') };
+  return loadModelConfiguration(option(parsed, '--profile'), overrides);
+}
+
+function modelSession(choice: ResolvedModelChoice, assumeYes = false) {
+  return createResolvedModelSession(choice, process.env, process.stderr,
   { ensureRuntime: discovery => ensureRuntime(discovery, assumeYes) });
+}
+
+function runtimeModel(choice: ResolvedModelChoice, driver: ModelDriver): Pick<NatlangRuntimeOptions, 'model' | 'seed'> {
+  const { seed, ...settings } = choice.runtime ?? {};
+  return { model: { ...settings, driver }, ...(seed ? { seed } : {}) };
 }
 
 
@@ -266,21 +279,29 @@ function commandAvailable(command: string): boolean {
 }
 
 
-function doctorReport(parsed: Parsed, store: NatlangPackageStore): { report: Record<string, unknown>; okay: boolean } {
-  const selected = loadProfile(option(parsed, '--profile'));
-  const hasExternal = Boolean(selected.profile.endpoint);
-  const partialExternal = Boolean(selected.profile.model) && !hasExternal;
-  const local = localModelPrerequisites();
-  const modelOkay = hasExternal || (!partialExternal && local.available);
+async function doctorReport(parsed: Parsed, store: NatlangPackageStore): Promise<{ report: Record<string, unknown>; okay: boolean }> {
+  const selected = modelSelection(parsed), choice = selected.choice;
+  const local = choice.kind === 'managed-local' ? localModelPrerequisites() : null;
+  let piReady = false;
+  if (choice.kind === 'pi-provider') {
+    let session: ReturnType<typeof createResolvedModelSession> | undefined;
+    try {
+      session = createResolvedModelSession(choice);
+      await session.prepare();
+      piReady = true;
+    } catch { /* doctor reports a provider profile that cannot prepare as unavailable */ }
+    finally { await session?.close(); }
+  }
+  const modelOkay = choice.kind === 'pi-provider' ? piReady : choice.kind === 'external' || Boolean(local?.available);
   const okay = Boolean(modelOkay);
   return { okay, report: { ok: okay, node: process.version, packageStore: store.root,
     installedPackages: store.list().length, config: selected.configPath, profile: selected.name,
-    modelSource: hasExternal ? 'external' : partialExternal ? 'invalid-partial-profile' : 'managed-local',
-    endpoint: selected.profile.endpoint ?? null,
-    model: selected.profile.model ?? DEFAULT_LOCAL_MODEL.id,
-    modelPath: hasExternal ? null : local.modelPath, modelServer: hasExternal ? null : local.executable,
-    modelDownloadAvailable: hasExternal ? null : local.downloadable,
-    apiKey: Boolean(process.env[selected.profile.apiKeyEnv ?? 'NATLANG_API_KEY']) } };
+    modelSource: choice.kind, endpoint: choice.kind === 'external' ? choice.endpoint : null,
+    model: choice.model, provider: choice.kind === 'pi-provider' ? choice.provider : null,
+    modelPath: local?.modelPath ?? null, modelServer: local?.executable ?? null,
+    modelDownloadAvailable: local?.downloadable ?? null,
+    apiKey: choice.kind === 'external' ? Boolean(process.env[choice.apiKeyEnv]) : null,
+    providerAuthConfigured: choice.kind === 'pi-provider' ? piReady : null } };
 }
 
 function applicationSpecifier(store: NatlangPackageStore, query: string, requestedTarget?: string): string {
@@ -341,9 +362,10 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const entry = join(spec.root, ...spec.target.entry.split('/'));
   const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
     join(spec.root, '.natlang', 'build'), spec.installed === true);
-  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  const { choice } = modelSelection(parsed);
+  const model = modelSession(choice, parsed.options.has('--yes'));
   const driver: ModelDriver = request => model.turn(request);
-  const runtime = createNatlangRuntime({ model: driver, trace: fileTraceSink(traceDirectory) });
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), trace: fileTraceSink(traceDirectory) });
   try {
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
@@ -363,7 +385,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
 }
 
 async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
-  acceptOptions(parsed, ['--target', '--export', '--profile', '--workspace', '--state', '--traces', '--store',
+  acceptOptions(parsed, ['--target', '--export', '--profile', '--provider', '--model', '--workspace', '--state', '--traces', '--store',
     '--plain', '--no-color', '--yes']);
   const path = resolve(value);
   if (existsSync(path) && statSync(path).isFile() && /\.(?:m?ts|m?js)$/.test(path)) {
@@ -397,15 +419,17 @@ async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
 }
 
 async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime) => Promise<T>): Promise<T> {
-  const model = modelSession(option(parsed, '--profile'), parsed.options.has('--yes'));
+  const { choice } = modelSelection(parsed);
+  const model = modelSession(choice, parsed.options.has('--yes'));
   const trace = option(parsed, '--trace');
-  const runtime = createNatlangRuntime({ model: request => model.turn(request), ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, request => model.turn(request)),
+    ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }
   finally { runtime.close(); await model.close(); }
 }
 
 async function callCommand(parsed: Parsed, file: string): Promise<number> {
-  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--json', '--yes']); noTrailingArguments(parsed);
+  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes']); noTrailingArguments(parsed);
   const fn = loadNatlang(resolve(file));
   const inputsPath = option(parsed, '--inputs');
   const inputs = inputsPath ? JSON.parse(readFileSync(resolve(inputsPath), 'utf8')) as Record<string, unknown> : {};
@@ -418,7 +442,7 @@ async function callCommand(parsed: Parsed, file: string): Promise<number> {
 }
 
 async function askCommand(parsed: Parsed, instruction: string): Promise<number> {
-  acceptOptions(parsed, ['--trace', '--profile', '--yes']); noTrailingArguments(parsed);
+  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--yes']); noTrailingArguments(parsed);
   const context = applicationContextRecords(process.cwd());
   const value = await withModelRuntime(parsed, runtime => runtime.run(() => invokeDefinition(resolveFrame(), {
     id: 'natlang:ask', name: 'ask', body: `${instruction.trim()}\n`,
@@ -465,6 +489,69 @@ function inspectTarget(manifest: ReturnType<NatlangPackageStore['manifest']>, ta
     engines: manifest.engines ?? {}, engineError };
 }
 
+async function authCommand(parsed: Parsed, words: string[]): Promise<number> {
+  acceptOptions(parsed, ['--json']); noTrailingArguments(parsed);
+  const [action, provider] = words;
+  const { piModels } = await import('../model/pi-provider.js');
+  const models = piModels();
+  if (action === 'status' && !provider) {
+    const rows = await Promise.all(models.getProviders().map(async item => {
+      const auth = await models.checkAuth(item.id);
+      return auth ? { provider: item.id, type: auth.type, source: auth.source ?? null } : null;
+    }));
+    const configured = rows.filter((row): row is NonNullable<typeof row> => row !== null);
+    output(parsed.options.has('--json') ? configured : configured.length ?
+      configured.map(row => `${row.provider}: ${row.source ?? row.type}`).join('\n') : 'No Pi provider credentials found.',
+    parsed.options.has('--json'));
+    return 0;
+  }
+  if (!provider || !models.getProvider(provider)) throw new Error('usage: natlang auth login|logout PROVIDER, or natlang auth status');
+  if (action === 'logout') { await models.logout(provider); output(`Logged out of ${provider}.`, false); return 0; }
+  if (action !== 'login') throw new Error('usage: natlang auth login|logout PROVIDER, or natlang auth status');
+  if (!process.stdin.isTTY || !process.stderr.isTTY) throw new Error('provider login requires an interactive terminal');
+  if (!models.getProvider(provider)?.auth.oauth) throw new Error(`${provider} has no subscription login; use its API key environment variable`);
+  const terminal = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    await models.login(provider, 'oauth', {
+      async prompt(prompt: AuthPrompt) {
+        if (prompt.type === 'select') {
+          for (const choice of prompt.options) process.stderr.write(`  ${choice.id}: ${choice.label}${choice.description ? ` — ${choice.description}` : ''}\n`);
+        }
+        return terminal.question(`${prompt.message}: `, { signal: prompt.signal });
+      },
+      notify(event) {
+        if (event.type === 'auth_url') process.stderr.write(`${event.instructions ?? 'Open this URL'}: ${event.url}\n`);
+        else if (event.type === 'device_code') process.stderr.write(`Open ${event.verificationUri} and enter ${event.userCode}\n`);
+        else if (event.type === 'info' || event.type === 'progress') process.stderr.write(`${event.message}\n`);
+      },
+    });
+  } finally { terminal.close(); }
+  output(`Logged in to ${provider}.`, false);
+  return 0;
+}
+
+async function modelsCommand(parsed: Parsed, provider?: string): Promise<number> {
+  acceptOptions(parsed, ['--json', '--refresh']); noTrailingArguments(parsed);
+  const { piModels } = await import('../model/pi-provider.js');
+  const models = piModels();
+  if (provider && !models.getProvider(provider)) throw new Error(`unknown Pi provider ${provider}`);
+  if (parsed.options.has('--refresh')) {
+    const refreshed = await models.refresh({ force: true, ...(provider ? { providers: [provider] } : {}) });
+    if (refreshed.errors.size) throw new Error([...refreshed.errors].map(([id, error]) =>
+      `${id}: ${error.message}`).join('\n'));
+  }
+  if (!provider) {
+    const rows = models.getProviders().map(item => ({ provider: item.id, name: item.name }));
+    output(parsed.options.has('--json') ? rows : rows.map(row => `${row.provider}\t${row.name}`).join('\n'),
+      parsed.options.has('--json'));
+    return 0;
+  }
+  const rows = models.getModels(provider);
+  output(parsed.options.has('--json') ? rows : rows.map(row => `${row.id}\t${row.name}`).join('\n'),
+    parsed.options.has('--json'));
+  return 0;
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const parsed = parseArgs(argv);
   const json = parsed.options.has('--json');
@@ -489,16 +576,24 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === 'run') return runCommand(parsed, words[0]);
   if (command === 'call') { if (words.length !== 1) throw new Error('usage: natlang call FILE.nl [--inputs FILE]'); return callCommand(parsed, words[0]!); }
   if (command === 'ask') { if (!words.length) throw new Error('usage: natlang ask INSTRUCTION...'); return askCommand(parsed, words.join(' ')); }
+  if (command === 'auth') return authCommand(parsed, words);
+  if (command === 'models') { if (words.length > 1) throw new Error('usage: natlang models [PROVIDER]'); return modelsCommand(parsed, words[0]); }
   if (command === 'setup' || command === 'runtime') {
     const action = command === 'setup' ? 'ensure' : words[0] ?? 'status';
-    acceptOptions(parsed, command === 'setup' ? ['--yes', '--json', '--profile'] : action === 'install' ? ['--yes', '--json'] : ['--json']);
+    acceptOptions(parsed, command === 'setup' ? ['--yes', '--json', '--profile', '--provider', '--model'] : action === 'install' ? ['--yes', '--json'] : ['--json']);
     noTrailingArguments(parsed);
     if (command === 'setup') {
-      const selected = loadProfile(option(parsed, '--profile'));
-      if (selected.profile.endpoint) {
-        const report = { ok: true, modelSource: 'external', endpoint: selected.profile.endpoint,
-          model: selected.profile.model ?? DEFAULT_LOCAL_MODEL.id, runtimeRequired: false };
-        output(json ? report : `external model profile ready\nendpoint: ${report.endpoint}\nmodel: ${report.model}`, json);
+      const { choice } = modelSelection(parsed);
+      if (choice.kind !== 'managed-local') {
+        if (choice.kind === 'pi-provider') {
+          const session = modelSession(choice, parsed.options.has('--yes'));
+          try { await session.prepare(); } finally { await session.close(); }
+        }
+        const report = { ok: true, modelSource: choice.kind,
+          endpoint: choice.kind === 'external' ? choice.endpoint : null,
+          provider: choice.kind === 'pi-provider' ? choice.provider : null,
+          model: choice.model, runtimeRequired: false };
+        output(json ? report : `model profile ready\n${report.provider ? `provider: ${report.provider}` : `endpoint: ${report.endpoint}`}\nmodel: ${report.model}`, json);
         return 0;
       }
     }
@@ -556,8 +651,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     throw new Error('usage: natlang package pack|verify|install ...');
   }
   if (command === 'doctor') {
-    acceptOptions(parsed, ['--store', '--profile', '--json']); noTrailingArguments(parsed);
-    const { report, okay } = doctorReport(parsed, new NatlangPackageStore(option(parsed, '--store')));
+    acceptOptions(parsed, ['--store', '--profile', '--provider', '--model', '--json']); noTrailingArguments(parsed);
+    const { report, okay } = await doctorReport(parsed, new NatlangPackageStore(option(parsed, '--store')));
     output(report, json); return okay ? 0 : 1;
   }
   throw new Error(`unknown command ${command}; run natlang help`);
