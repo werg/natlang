@@ -361,7 +361,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     else if (ts.isIdentifier(node) && (MODULE_AMBIENTS.has(node.text) || (node.text === 'fetch' && !options.allowNetwork)) &&
         !topLevelNames.has(node.text) && !isPropertyName(node) && !isDeclarationName(node))
       add('forbidden-ambient', node.text === 'fetch' ? 'Network access is turned off for this runtime, so fetch is unavailable.' :
-        `${node.text} is unavailable in eval; import packages with import instead.`, node);
+        `${node.text} is unavailable in eval: eval code works with this call's scope, not the host's files, processes or ` +
+        'system (npm packages of the project can be imported; Node\'s own modules cannot).', node);
 
     const target = assignmentTarget(node);
     const targetProperty = target && propertyText(target);

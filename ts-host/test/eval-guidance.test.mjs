@@ -46,3 +46,10 @@ test("redeclaring an input says it already holds the caller's value", async () =
   const { results } = await script([['eval', { code: 'const name = "Test";\nname' }]]);
   assert.match(results[0], /name is this call's input and already holds the caller's value; use it directly/);
 });
+
+test('Node\'s own modules cannot be imported in eval; they are not packages', async () => {
+  const { results } = await script([['eval', { code: "import * as fs from 'fs';\nfs.readdirSync('/')" }],
+    ['eval', { code: "const cp = await import('child_process');\ncp" }]]);
+  for (const text of results) assert.match(text, /is part of Node, not a package: eval code works with this call's scope/);
+  assert.ok(results.every(text => !text.includes('bin')), 'no directory listing came back');
+});

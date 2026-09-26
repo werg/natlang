@@ -72,7 +72,7 @@ test('scope compiler reports forbidden capabilities with original source spans',
   assert.equal(compiled.program, undefined);
   assert.ok(compiled.diagnostics.some(item => item.code === 'forbidden-dynamic-code' && item.line === 1));
   assert.ok(compiled.diagnostics.some(item => item.code === 'forbidden-ambient' && item.line === 2 && /Network access is turned off/.test(item.message)));
-  assert.ok(compiled.diagnostics.some(item => item.code === 'forbidden-ambient' && item.line === 3 && /import packages with import/.test(item.message)));
+  assert.ok(compiled.diagnostics.some(item => item.code === 'forbidden-ambient' && item.line === 3 && /not the host's files, processes or system/.test(item.message)));
 });
 
 test('eval code may use try/catch, classes, and host globals; generators stay under the finite-iteration policy', () => {

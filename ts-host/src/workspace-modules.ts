@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { createRequire, isBuiltin } from 'node:module';
 import ts from 'typescript';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -26,6 +26,9 @@ export class WorkspaceModules {
   }
   load(specifier: string): unknown {
     packageNameFromSpecifier(specifier);
+    // A Node built-in is not a package: it would give eval code the host's files, processes and network.
+    if (isBuiltin(specifier)) throw new Error(`${specifier} is part of Node, not a package: eval code works with this ` +
+      "call's scope and cannot reach the host's files, processes or system");
     const loaded = this.requirer(specifier);
     this.observe({ operation: 'packages.import', specifier, workspace: this.workspace });
     return loaded;
@@ -43,6 +46,7 @@ export function packageDeclaration(workspace: string, name: string): string | un
     target: ts.ScriptTarget.ES2022, noEmit: true, skipLibCheck: true, types: [] };
   for (const [specifier, member] of tries) {
     try { packageNameFromSpecifier(specifier); } catch { continue; }
+    if (isBuiltin(specifier)) continue;
     const resolved = ts.resolveModuleName(specifier, join(workspace, 'index.ts'), options, ts.sys).resolvedModule;
     if (!resolved?.resolvedFileName.endsWith('.d.ts') && !resolved?.resolvedFileName.endsWith('.d.mts') &&
         !resolved?.resolvedFileName.endsWith('.d.cts')) continue;
