@@ -15,6 +15,15 @@ export const READ_CODE_DESCRIPTION = 'Read code this call can use but does not s
   'service or an importable package ("pkg" lists its exports, "pkg.name" shows one).';
 export const EDIT_CODE_DESCRIPTION = 'Edit a function in the program\'s codebase: replace one exact or uniquely fuzzy span of its source. ' +
   'The function is validated before the edit becomes live.';
+/**
+ * Each assistant turn goes back into the conversation with its reasoning. The template decides whether to show it:
+ * some drop earlier reasoning, others keep it (Ling's "preserved thinking"), and there a turn sent without it reads
+ * as an empty <think></think> that teaches the model to skip thinking. The runtime's own opening turns carry a short
+ * thought for the same reason.
+ */
+const thought = (reasoning: string | undefined) => reasoning ? { reasoning_content: reasoning } : {};
+export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
+export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
 
 /** Assistant turns the model has taken, not counting the runtime's pre-filled scope calls. */
@@ -509,10 +518,10 @@ export class NativeToolAgent {
       const reading = this.scopeReading(session);
       return [{ role: 'system', content: systemPrompt() },
         { role: 'user', content: this.scopeOpening(session) },
-        ...(reading ? [{ role: 'assistant', content: '', tool_calls: [{ id: 'scope_0', type: 'function',
+        ...(reading ? [{ role: 'assistant', content: '', ...thought(OPENING_THOUGHT), tool_calls: [{ id: 'scope_0', type: 'function',
           function: { name: 'eval', arguments: JSON.stringify({ code: reading.code }) } }] },
         { role: 'tool', tool_call_id: 'scope_0', content: reading.text }] : []),
-        ...(session.lam.projectTransaction ? [{ role: 'assistant', content: '', tool_calls: [{ id: 'scope_1', type: 'function',
+        ...(session.lam.projectTransaction ? [{ role: 'assistant', content: '', ...thought(FOLDER_THOUGHT), tool_calls: [{ id: 'scope_1', type: 'function',
           function: { name: 'list_files', arguments: '{}' } }] },
         { role: 'tool', tool_call_id: 'scope_1', content: this.folderListing(session) }] : [])];
     };
@@ -628,7 +637,7 @@ export class NativeToolAgent {
           'The code in your reply was not run: code runs only when you call eval with it. ' : '';
         const feedback = response.truncated ? `Your reply was cut off at the ${limit}-token limit before any tool call. Take the next step with one tool call.` :
           unrun + (missing || 'The staged result is incomplete.');
-        messages.push({ role: 'assistant', content: response.text ?? '' }, { role: 'user', content: feedback });
+        messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;
       }
       const proposal: Record<string, unknown> = { calls, value_confidence: response.value_confidence ?? [],
@@ -699,7 +708,7 @@ export class NativeToolAgent {
         if (result.kind === 'blocked') return result.text;
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
       }
-      messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length) });
+      messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished
       // ends with an honest blocked or failed rather than by running out.
       const left = maxTurns === undefined ? Infinity : maxTurns - turns;
