@@ -13,6 +13,8 @@ export type Frame = Readonly<{
   chain: readonly string[];
   /** Call ID of the natlang invocation that created this frame, if any. */
   parentCallId?: string;
+  /** Whether that invocation is an inline `nl` function: a judgment eval code handed over. */
+  inline?: boolean;
 }>;
 
 export interface ContextStore {

@@ -171,6 +171,8 @@ An unannotated inline `nl` gets its parameter types from its arguments and its
 result type from how the eval uses the result (a condition makes it `boolean`,
 a typed variable gives that type); when no use says it, the result is open:
 the fields the eval reads, or any value, as the call chooses.
+A call made by an inline `nl` makes its judgment itself: calling another inline
+`nl` from inside it is an error (named functions of the program stay callable).
 In eval, awaiting an inline `nl` without calling it (`await nl`...``) calls it
 with no arguments: it judges the names its instructions mention and its
 interpolated values.

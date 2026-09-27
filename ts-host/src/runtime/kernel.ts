@@ -84,6 +84,12 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
   const task = frame.task;
   task.checkOpen();
   if (frame.chain.includes(definition.id)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
+  // A judgment handed over with an inline nl is made by the call it was handed to. Handed on again it only reaches
+  // another call asked the same thing, and models that do it keep doing it, call after call.
+  if (options.manifest?.inline && frame.inline)
+    throw new Error('This call is itself a judgment handed over with nl, so make it here instead of handing it on: ' +
+      'read what you need in eval, decide, and return the answer. An nl function made inside it would only be asked ' +
+      'the same question. Functions of the program can still be called.');
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
     throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', []);
@@ -123,7 +129,8 @@ export async function invokeDefinition(frame: Frame, definition: CallableDefinit
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
 
   const callId = task.nextCallId();
-  const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId };
+  const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId,
+    ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model();
   const environment = task.environment();
   let runtime: NativeRuntime | undefined;

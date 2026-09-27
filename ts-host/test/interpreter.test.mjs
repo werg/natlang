@@ -567,6 +567,18 @@ test('a call made from eval is shown the services by their declarations too', as
   assert.match(world, /look\(\): Promise<string>;/); assert.match(world, /actions\(\): Promise<\{ commands: string\[\] \}>/);
 });
 
+test('a judgment handed over with nl is made by the call it went to, not handed on again', async () => {
+  const texts = [];
+  const { session } = open({ type: '() => boolean', instructions: 'Judge.' }, { agent: async child => {
+    const handed = await child.applyAsync('eval', { code: 'const again = await nl<boolean>`Is the sky blue?`(); again' });
+    texts.push(handed.text); child.lam.return = true;
+  } });
+  const judged = await session.applyAsync('eval', { code: 'const v = await nl<boolean>`Is the sky blue?`(); v' });
+  assert.equal(judged.kind, 'ok', judged.text); assert.equal(judged.value, true);
+  assert.equal(texts.length, 1, 'only the first handover reached a call');
+  assert.match(texts[0], /This call is itself a judgment handed over with nl, so make it here/);
+});
+
 test('an iteration that was never run says how to run it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Count up.' });
   const shown = await session.applyAsync('eval', { code: 'const it = await iterateOn((n: number) => n + 1, 0, (n: number) => n > 3);\nconsole.log(String(it));\nit' });
