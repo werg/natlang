@@ -20,14 +20,18 @@ export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
 const TOOL_SCHEMA = 'scope-eval-v1';
-export const EXECUTION_PLAN_VERSION = 'execution-plan-tool/1';
+export const EXECUTION_PLAN_VERSION = 'execution-plan-tool/2';
+// The plan is the turn's training reasoning: it says what decides the step (for a conclusion, the reasons that settle
+// it) before the step, so a concluding turn does not train a conclusion without its reasons.
 export const EXECUTION_PLAN_PROMPT = 'Before taking the next action, make a concise execution plan from the current ' +
-  'instructions and evidence. Plan only the next useful step and any immediate checks it needs; do not execute the ' +
-  'step yet. Call execution_plan exactly once with the plan.';
+  'instructions and evidence. First state briefly what the evidence so far shows that decides this step (for a ' +
+  'conclusion, the reasons that settle it), then plan only the next useful step and any immediate checks it needs; ' +
+  'do not execute the step yet. Call execution_plan exactly once with the plan.';
 const EXECUTION_PLAN_TOOL = { type: 'function', function: { name: 'execution_plan',
   description: 'Record the concise plan that will guide the next action. This tool does not execute the plan.',
   parameters: { type: 'object', properties: { plan: { type: 'string',
-    description: 'A concise, actionable plan for the next step.' } }, required: ['plan'], additionalProperties: false } } };
+    description: 'Briefly, what the evidence shows that decides the next step and why; then the step.' } },
+    required: ['plan'], additionalProperties: false } } };
 
 export type { ProgramRecord };
 export type IndexedRecord = { index: number; record: ProgramRecord };
