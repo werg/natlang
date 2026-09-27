@@ -93,8 +93,9 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
   const convert = (candidate: ts.Type, depth: number): string => {
     if (depth > 24) throw new TargetError('the type is nested too deeply to check');
     const flags = candidate.flags;
-    if (flags & ts.TypeFlags.Any) throw new TargetError('the type resolves to `any`');
-    if (flags & ts.TypeFlags.Unknown) throw new TargetError('the type is unconstrained `unknown`');
+    // Nothing says what an any or unknown part is, so it is open: its value is kept as it is, as a whole target
+    // typed any is (compiler/inline.ts).
+    if (flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return 'unknown';
     if (flags & ts.TypeFlags.Never) throw new TargetError('the type is `never`');
     if (flags & ts.TypeFlags.TypeParameter) throw new TargetError('the type is an unresolved generic parameter');
     if (flags & (ts.TypeFlags.BigInt | ts.TypeFlags.BigIntLiteral | ts.TypeFlags.ESSymbolLike))

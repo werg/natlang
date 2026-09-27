@@ -110,11 +110,11 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
 
   const target = (type: ts.Type, node: ts.Node, what: string, allowHost = true,
     within: { program: ts.Program; location: ts.Node } = { program, location: node }): TargetDescriptor | undefined => {
+    // A result or parameter typed any or unknown is open, as when nothing says what it is; so is any such part of one.
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { text: 'any', natlang: 'unknown', aliases: {} };
     try { return describeTarget(within.program, within.program.getTypeChecker(), type, { allowHost, location: within.location }); }
     catch (error) {
       if (!(error instanceof TargetError)) throw error;
-      // A result or parameter typed any or unknown is open, as when nothing says what it is.
-      if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return { text: 'any', natlang: 'unknown', aliases: {} };
       report(node, what === 'return' ? 'nl-unknown-return' : 'nl-unknown-parameter', what === 'return' ?
         `Return type of this \`nl\` expression is unknown (${error.message}); annotate the target or write \`nl<Verdict>\`.` :
         `Type of ${what} for this \`nl\` expression cannot be used (${error.message}); annotate it.`);

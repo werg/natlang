@@ -53,6 +53,10 @@ test('missing, synchronous, any-typed and colliding signatures produce precise d
   const unknown = analyze('async function f() { const x = await nl`Check policy`(note); }', DECLS);
   assert.deepEqual(unknown.diagnostics, []);
   assert.equal(unknown.plans[0].returns.natlang, 'unknown');
+  // A parameter with a part nothing types (a service's untyped rows) is open in that part.
+  const partly = analyze('async function f(rows: any[]) { const facts = { n: rows.length, first: rows[0] }; const x: string = await nl`Judge facts`(facts); }', DECLS);
+  assert.deepEqual(partly.diagnostics, []);
+  assert.deepEqual(summary(partly.plans[0]).params, ['facts:{ n: number, first: unknown }']);
   const sync = analyze('function f() { [note].filter(nl`Keep?`); }', DECLS);
   assert.equal(sync.diagnostics[0].code, 'nl-sync-callback');
   const anyTarget = analyze('async function f() { const x: any = await nl`Anything`(); }', DECLS);

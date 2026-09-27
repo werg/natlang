@@ -183,6 +183,8 @@ const RETIRED_FAMILIES = new Set(['inline_type_repair']);
 const OBSOLETE_OUTCOMES: [string, RegExp][] = [
   // nl results nothing typed run open now.
   ['nl_unknown_return', /nothing that uses it says what it should be/],
+  // Parts of an nl parameter or result that nothing types are open.
+  ['nl_untyped_part', /the type resolves to `any`|the type is unconstrained `unknown`/],
   // Eval awaits what it keeps, so no local holds a promise.
   ['unawaited_promise', /\[Promise #\d+; live value/],
   // nl called like a function is the one-shot call it reads as.
@@ -347,6 +349,7 @@ export async function verifyCases(records: CurriculumRecord[], systemPrompt: str
         if (opening.includes(item.marker)) problems.push(`decisive marker ${JSON.stringify(item.marker)} is visible in the opening`);
       const { run, trajectory } = await replayReference(record, systemPrompt);
       const admission = admitRow({ task: { program_ir: record }, outcome: run.outcome, trajectory });
+      if (admission.notes.includes('judged_directly')) problems.push('reference does not use the technique its case requires');
       if (!admission.admitted) problems.push(`reference not admitted: ${admission.reasons.join(', ')}` +
         (run.outcome.accepted ? '' : ` (status ${String(run.outcome.status)}, value ${JSON.stringify(run.outcome.value)}, detail ${JSON.stringify(run.outcome.detail)})`));
     } catch (error) { problems.push(error instanceof Error ? error.message : String(error)); }
