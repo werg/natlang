@@ -601,6 +601,12 @@ test('an iteration that was never run says how to run it', async () => {
   assert.doesNotMatch(shown.text, /observers/, 'its internals are not listed');
 });
 
+test('any function runs with .iterateOn(initial), as a natural-language function does', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count up.' });
+  const run = await session.applyAsync('eval', { code: 'const step = (n: number): number => n + 1;\nconst last = await step.iterateOn(0).until(n => n > 3);\nlast' });
+  assert.equal(run.kind, 'ok', run.text); assert.equal(run.value, 4);
+});
+
 test('read_code shows an importable package by its declarations, and will not edit it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Look something up.' });
   const listed = session.apply('read_code', { name: 'undici' });

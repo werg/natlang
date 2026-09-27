@@ -186,6 +186,8 @@ const OBSOLETE_OUTCOMES: [string, RegExp][] = [
   ['nl_unknown_return', /nothing that uses it says what it should be/],
   // Parts of an nl parameter or result that nothing types are open.
   ['nl_untyped_part', /the type resolves to `any`|the type is unconstrained `unknown`/],
+  // Any function runs with .iterateOn(initial), not only a natural-language one.
+  ['iterate_method', /\.iterateOn is not a function/],
   // Eval awaits what it keeps, so no local holds a promise.
   ['unawaited_promise', /\[Promise #\d+; live value/],
   // nl called like a function is the one-shot call it reads as.

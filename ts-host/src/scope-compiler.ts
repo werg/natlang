@@ -112,6 +112,9 @@ const __natlang_inline = (index: number, values: unknown[], accessors: unknown) 
 const __natlang_finite = (source: any, label?: string) => __live.finite(source, label);
 const __natlang_guard = (id: string, fn: () => unknown) => __live.guard(id, fn);
 const iterateOn = __live.iterateOn;
+// step.iterateOn(initial) is iterateOn(step, initial) for any function, as it is a method of natural-language ones.
+const __natlang_iterate = (step: any, ...rest: any[]) =>
+  typeof step?.iterateOn === 'function' ? step.iterateOn(...rest) : iterateOn(step, ...rest);
 `;
 const SUFFIX = '\n}\n';
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -462,6 +465,13 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
         primitive.push({ ...at, text: `__natlang_inline(${index}, [${values.join(', ')}], { ${accessors.join(', ')} })` });
         return;
       }
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'iterateOn' &&
+        !ts.isTaggedTemplateExpression(node.expression.expression)) {
+      // From the end of the receiver through the call's opening parenthesis (type arguments included).
+      const receiver = rel(node.expression.expression), argumentsStart = node.arguments.pos - PREFIX.length;
+      primitive.push({ start: receiver.start, end: receiver.start, text: '__natlang_iterate(' },
+        { start: receiver.end, end: argumentsStart, text: node.arguments.length ? ', ' : '' });
     }
     if (ts.isForOfStatement(node) && !node.awaitModifier) {
       const at = rel(node.expression);
