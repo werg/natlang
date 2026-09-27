@@ -15,6 +15,7 @@ import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
 import { hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
+import { labeledJudgments } from './labeled.mjs';
 
 export const FAMILIES = {
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
@@ -53,6 +54,8 @@ export const FAMILIES = {
   actor_greenhouse: { build: greenhouseControl, weight: 2 },
   composed_helpers: { build: composedHelpers, weight: 2 },
   composed_process: { build: composedProcess, weight: 2 },
+  // Generated per seed from labeled datasets in the cache (acquire.mjs): sms_spam, sst2, ag_news, emotion, banking77, clinc_oos.
+  labeled_judgments: { build: labeledJudgments, weight: 3 },
   folio_entailment: { build: folioEntailment, weight: 3, source: 'folio' },
   folio_batch: { build: folioBatch, weight: 2, source: 'folio' },
   prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },

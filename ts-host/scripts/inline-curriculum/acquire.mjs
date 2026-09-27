@@ -8,7 +8,27 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+
+const PYTHON = process.env.NATLANG_PYTHON ?? fileURLToPath(new URL('../../../.venv/bin/python', import.meta.url));
+const TABLE_TO_JSONL = `
+import csv, json, sys
+kind, source, target = sys.argv[1:]
+if kind == 'parquet':
+    import pyarrow.parquet as pq
+    table = pq.read_table(source)
+    rows = table.to_pylist()
+    # Class labels are stored as indexes; the Hugging Face features in the metadata name them.
+    features = json.loads((table.schema.metadata or {}).get(b'huggingface', b'{}')).get('info', {}).get('features', {})
+    for column, feature in features.items():
+        if isinstance(feature, dict) and feature.get('names'):
+            for row in rows: row[column] = feature['names'][row[column]]
+else:
+    with open(source, newline='') as f: rows = list(csv.DictReader(f))
+with open(target, 'w') as out:
+    for row in rows: out.write(json.dumps(row) + '\\n')
+`;
 
 export const SOURCES = {
   folio: {
@@ -103,6 +123,44 @@ export const SOURCES = {
     files: [{ path: 'commaqa_explicit.zip', split: 'mixed', sha256: '5305ad2cdf471a358fbb3ef57e5b19024761e910e2a94def10bd19847f3314a0', extract: true }, { path: 'commaqa_numeric.zip', split: 'mixed', sha256: 'b296251c9cd9d63469a88cb44e1048f9050d8bc2866f9f3d87af4180a4ddfdbe', extract: true }],
     url: (revision, path) => `https://ai2-public-datasets.s3.amazonaws.com/commaqa/${revision}/${path}`,
   },
+  // Labeled text for per-item nl judgments (labeled.mjs). Tables are converted to JSONL beside the download
+  // (convert: parquet or csv), one object per row with the table's columns, class labels by name.
+  sms_spam: {
+    name: 'SMS Spam Collection', homepage: 'https://archive.ics.uci.edu/dataset/228/sms+spam+collection', license: 'CC-BY-4.0',
+    release: 'Hugging Face ucirvine/sms_spam', revision: 'cae486f927c250fe1d4a5b55f11357964ed1646c',
+    files: [{ path: 'plain_text/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    url: (revision, path) => `https://huggingface.co/datasets/ucirvine/sms_spam/resolve/${revision}/${path}`,
+  },
+  sst2: {
+    name: 'SST-2', homepage: 'https://nlp.stanford.edu/sentiment/', license: 'unknown (research use)',
+    release: 'Hugging Face stanfordnlp/sst2', revision: '8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb',
+    files: [{ path: 'data/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    url: (revision, path) => `https://huggingface.co/datasets/stanfordnlp/sst2/resolve/${revision}/${path}`,
+  },
+  ag_news: {
+    name: 'AG News', homepage: 'http://groups.di.unipi.it/~gulli/AG_corpus_of_news_articles.html', license: 'unknown (non-commercial research use)',
+    release: 'Hugging Face fancyzhx/ag_news', revision: 'eb185aade064a813bc0b7f42de02595523103ca4',
+    files: [{ path: 'data/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    url: (revision, path) => `https://huggingface.co/datasets/fancyzhx/ag_news/resolve/${revision}/${path}`,
+  },
+  emotion: {
+    name: 'Emotion (dair-ai)', homepage: 'https://github.com/dair-ai/emotion_dataset', license: 'other (educational and research use)',
+    release: 'Hugging Face dair-ai/emotion, split configuration', revision: 'cab853a1dbdf4c42c2b3ef2173804746df8825fe',
+    files: [{ path: 'split/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    url: (revision, path) => `https://huggingface.co/datasets/dair-ai/emotion/resolve/${revision}/${path}`,
+  },
+  banking77: {
+    name: 'BANKING77', homepage: 'https://github.com/PolyAI-LDN/task-specific-datasets', license: 'CC-BY-4.0',
+    release: 'banking_data CSVs (GitHub)', revision: '57ec275d8078af65b7731c2a98be812d844a6d6b',
+    files: [{ path: 'banking_data/train.csv', split: 'train', convert: 'csv' }],
+    url: (revision, path) => `https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/${revision}/${path}`,
+  },
+  clinc_oos: {
+    name: 'CLINC150', homepage: 'https://github.com/clinc/oos-eval', license: 'CC-BY-3.0',
+    release: 'Hugging Face clinc/clinc_oos, plus configuration', revision: '155b9c710419136e17307b80d0a13e68cd46b4ec',
+    files: [{ path: 'plus/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
+    url: (revision, path) => `https://huggingface.co/datasets/clinc/clinc_oos/resolve/${revision}/${path}`,
+  },
 };
 
 export const cachePath = (cache, source, revision, path) => join(cache, source, revision, path);
@@ -143,6 +201,8 @@ async function main() {
       // Archives are unpacked next to themselves, into a directory named after the archive.
       // extract: true unpacks everything; a list of patterns unpacks only the members an adapter reads.
       if (file.extract) execFileSync('unzip', ['-o', '-q', target, ...(Array.isArray(file.extract) ? file.extract : []), '-d', target.replace(/\.zip$/, '')]);
+      // A table becomes JSONL beside itself (TABLE.jsonl), read by the adapters without a table library.
+      if (file.convert) execFileSync(PYTHON, ['-c', TABLE_TO_JSONL, file.convert, target, `${target}.jsonl`]);
       files.push({ path: file.path, url, revision: source.revision, split: file.split, sha256, bytes: bytes.length });
       console.log(`${key} ${file.path} ${sha256.slice(0, 12)} ${bytes.length} bytes`);
     }

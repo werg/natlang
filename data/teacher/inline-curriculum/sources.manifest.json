@@ -174,6 +174,141 @@
           "bytes": 12486571
         }
       ]
+    },
+    "textworld": {
+      "name": "TextWorld",
+      "homepage": "https://github.com/microsoft/TextWorld",
+      "license": "MIT",
+      "release": "games generated with textworld 1.7.0 (tw-make custom, seeds 1-300) and exported by textworld_export.py",
+      "revision": "textworld-1.7.0-seeds-1-300",
+      "acquired": "2026-09-23",
+      "files": []
+    },
+    "scienceworld": {
+      "name": "ScienceWorld",
+      "homepage": "https://github.com/allenai/ScienceWorld",
+      "license": "Apache-2.0",
+      "release": "scienceworld 1.2.2 (pinned below 1.3.0, whose action-ordering change alters trajectories); tasks, descriptions, and gold paths for variations 0-2 of every task",
+      "revision": "scienceworld-1.2.2-v0-2",
+      "acquired": "2026-09-23",
+      "files": []
+    },
+    "alfworld": {
+      "name": "ALFWorld",
+      "homepage": "https://github.com/alfworld/alfworld",
+      "license": "MIT",
+      "release": "alfworld 0.4.2 text games (json_2.1.1, via alfworld-download into vendor/datasets/alfworld/data); 100 games per split with handcoded-expert command lists",
+      "revision": "alfworld-0.4.2-100-per-split",
+      "acquired": "2026-09-24",
+      "files": []
+    },
+    "sms_spam": {
+      "name": "SMS Spam Collection",
+      "homepage": "https://archive.ics.uci.edu/dataset/228/sms+spam+collection",
+      "license": "CC-BY-4.0",
+      "release": "Hugging Face ucirvine/sms_spam",
+      "revision": "cae486f927c250fe1d4a5b55f11357964ed1646c",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "plain_text/train-00000-of-00001.parquet",
+          "url": "https://huggingface.co/datasets/ucirvine/sms_spam/resolve/cae486f927c250fe1d4a5b55f11357964ed1646c/plain_text/train-00000-of-00001.parquet",
+          "revision": "cae486f927c250fe1d4a5b55f11357964ed1646c",
+          "split": "train",
+          "sha256": "6e5518e4a49cb2de8af9c89a38b742825cdddbb55942701fc2237d4364288abd",
+          "bytes": 358869
+        }
+      ]
+    },
+    "sst2": {
+      "name": "SST-2",
+      "homepage": "https://nlp.stanford.edu/sentiment/",
+      "license": "unknown (research use)",
+      "release": "Hugging Face stanfordnlp/sst2",
+      "revision": "8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "data/train-00000-of-00001.parquet",
+          "url": "https://huggingface.co/datasets/stanfordnlp/sst2/resolve/8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb/data/train-00000-of-00001.parquet",
+          "revision": "8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb",
+          "split": "train",
+          "sha256": "c7921283b75a42e685f50edecb96798607ea0fcbfd0739ee8975f22c12d55f09",
+          "bytes": 3110458
+        }
+      ]
+    },
+    "ag_news": {
+      "name": "AG News",
+      "homepage": "http://groups.di.unipi.it/~gulli/AG_corpus_of_news_articles.html",
+      "license": "unknown (non-commercial research use)",
+      "release": "Hugging Face fancyzhx/ag_news",
+      "revision": "eb185aade064a813bc0b7f42de02595523103ca4",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "data/train-00000-of-00001.parquet",
+          "url": "https://huggingface.co/datasets/fancyzhx/ag_news/resolve/eb185aade064a813bc0b7f42de02595523103ca4/data/train-00000-of-00001.parquet",
+          "revision": "eb185aade064a813bc0b7f42de02595523103ca4",
+          "split": "train",
+          "sha256": "fc508d6d9868594e3da960a8cfeb63ab5a4746598b93428c224397080c1f52ee",
+          "bytes": 18585438
+        }
+      ]
+    },
+    "emotion": {
+      "name": "Emotion (dair-ai)",
+      "homepage": "https://github.com/dair-ai/emotion_dataset",
+      "license": "other (educational and research use)",
+      "release": "Hugging Face dair-ai/emotion, split configuration",
+      "revision": "cab853a1dbdf4c42c2b3ef2173804746df8825fe",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "split/train-00000-of-00001.parquet",
+          "url": "https://huggingface.co/datasets/dair-ai/emotion/resolve/cab853a1dbdf4c42c2b3ef2173804746df8825fe/split/train-00000-of-00001.parquet",
+          "revision": "cab853a1dbdf4c42c2b3ef2173804746df8825fe",
+          "split": "train",
+          "sha256": "10817f0f2ea42358bc62f69a09dfb8bd71701727df6d5a387bea742f3ea06417",
+          "bytes": 1030740
+        }
+      ]
+    },
+    "banking77": {
+      "name": "BANKING77",
+      "homepage": "https://github.com/PolyAI-LDN/task-specific-datasets",
+      "license": "CC-BY-4.0",
+      "release": "banking_data CSVs (GitHub)",
+      "revision": "57ec275d8078af65b7731c2a98be812d844a6d6b",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "banking_data/train.csv",
+          "url": "https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/train.csv",
+          "revision": "57ec275d8078af65b7731c2a98be812d844a6d6b",
+          "split": "train",
+          "sha256": "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b",
+          "bytes": 839073
+        }
+      ]
+    },
+    "clinc_oos": {
+      "name": "CLINC150",
+      "homepage": "https://github.com/clinc/oos-eval",
+      "license": "CC-BY-3.0",
+      "release": "Hugging Face clinc/clinc_oos, plus configuration",
+      "revision": "155b9c710419136e17307b80d0a13e68cd46b4ec",
+      "acquired": "2026-09-27",
+      "files": [
+        {
+          "path": "plus/train-00000-of-00001.parquet",
+          "url": "https://huggingface.co/datasets/clinc/clinc_oos/resolve/155b9c710419136e17307b80d0a13e68cd46b4ec/plus/train-00000-of-00001.parquet",
+          "revision": "155b9c710419136e17307b80d0a13e68cd46b4ec",
+          "split": "train",
+          "sha256": "30188119cf9f86fc9db27e1c22442d091cb5cb0913c9496f945fe11e7a02a28f",
+          "bytes": 312096
+        }
+      ]
     }
   }
 }
