@@ -45,6 +45,15 @@ laid out as a folder tree: an inbox, a contract archive, a set of meeting notes,
   - front matter (YAML) for typed fields above free text
 - **The reverse, `folderToData(folder, layout)`,** reads results back: moved files become labels, edited front matter
   becomes updated records, written reports become outputs. Callers never parse file trees themselves.
+- **Identity and round trips.**
+  - Every record has a stable id: the layout names a unique key, and the id is also written into the file's front
+    matter, so a moved or renamed file keeps its identity.
+  - A key that is not unique fails the build, unless the layout names a disambiguation (a deterministic suffix).
+  - `folderToData` identifies records by their front-matter id (by path only for formats without front matter).
+    A record whose file is gone is reported as deleted. A file that matches no record is returned as unknown,
+    never silently dropped.
+  - A layout has one writable representation: either the table or the per-record files. The other is a read-only
+    view regenerated from it, so there is no precedence between two edited copies.
 - **The same layouts serve three uses:** the curriculum generators synthesize folders with them, eval sets are built
   with them from datasets, and host applications use them. There is one implementation, with tests for round trips.
 
@@ -57,6 +66,26 @@ A. **Delegation per file and per subfolder.** Make `nl` over a `FileHandle` or a
    `await Promise.all((await folder.files('inbox/*.eml')).map(file => nl<Label>`Classify the email in file.`(file)))`
    is the natural map, and `folder.dir(d).apply(reducer)` the natural map over subfolders. Put one example of each in
    the prompt, and have the generated references use them instead of reading everything into one eval.
+
+   **Evidence.** A child that gets a handle must see what is in it before it answers.
+   - A small file (up to a few thousand characters) is shown in the child's opening, as argument values are now.
+   - A larger file or a folder is not; the child reads or searches it first.
+   - Scripted references do the same: a per-file child's reference reads, then answers.
+   - Admission checks it: a case names, per child, markers from the evidence (a quote from the file), and a child
+     whose answer comes before any output showing them is refused. This extends today's `missing_observation` check,
+     which covers only the root call, to children.
+
+   **Capabilities and transactions** (settled in phase 1, before anything uses them).
+   - A handle passed to a child is rebased: the child gets a folder rooted at the handle's path, with no `.folder`,
+     `.parent` or path above its root. Today's handles keep their whole backing folder and expose `parent`, so passing
+     one as it is does not scope anything.
+   - A child given several handles gets each as its own root.
+   - A read-only parent gives read-only handles.
+   - A writable child works on its own overlay. When it finishes successfully, its change set is committed into the
+     parent's overlay; when it fails, its changes are discarded.
+   - Writes are locked per subtree, not per root. Today one writer lock covers the root and every copy made from it,
+     so sibling subfolder reducers serialize. With subtree locks, `a/` and `b/` commit independently; a commit that
+     touches a path another commit changed since its copy was taken fails with the existing `FolderConflictError`.
 
 B. **Document views.** Reading a `.pdf`, `.docx`, `.xlsx`, `.pptx` or `.html` gives a text rendering (read-only, with
    a note saying so); writes go to text formats. Conversion happens in the host (for example MarkItDown or pdftotext).
@@ -133,8 +162,23 @@ D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).**
 
    **Policy, as in eval.**
    - `while` is refused, and so is a function that calls itself, directly or through another.
-   - Every `for` and comprehension iterates a finite iterable: the lowering wraps its iterable, as `__natlang_finite`
-     does in TypeScript, so `itertools.count()` and other endless iterators are refused at run time.
+   - Every `for` loop and comprehension goes through a guard (the lowering wraps its iterable, as `__natlang_finite`
+     does in TypeScript). Concrete collections pass as they are: list, tuple, str, bytes, dict and its views, set,
+     frozenset, range, and numpy and pandas objects. Anything else (a generator, `zip`, `itertools` objects) is taken
+     up to a cap of 100k items, and a longer one raises with a message pointing to `iterate_on`. The TypeScript guard is
+     stricter, a whitelist; Python code iterates generators too routinely for that.
+
+   **Entry points and capabilities.**
+   - Code runs only through the `python` tool's cells and through `python3` in the shell (scripts in the folder and
+     `-c`). Every source that runs passes the check and lowering, including a module imported from the folder: an
+     import hook applies them to local sources.
+   - `exec`, `eval`, `compile` and `__import__` of strings, and `importlib`, are refused.
+   - So are `js`, `pyodide.ffi`, `pyodide.http`, `pyodide_js` and `micropip`. Pyodide is loaded with a restricted
+     `jsglobals` object, so even the foreign-function interface reaches no `fetch` and no host object beyond the
+     `natlang` module.
+   - Only the vendored packages import.
+   - Pyodide runs in a worker, so a time limit or a cancelled call interrupts it (Pyodide's interrupt buffer) without
+     stopping the host.
 
    **Where it runs.** One engine serves two places:
    - `python3` inside the shell, for scripts and one-liners over the folder's files;
@@ -239,7 +283,7 @@ Priorities: **A** first wave, **B** second wave, **E** evaluation only.
 | [CUAD](https://huggingface.co/datasets/theatticusproject/cuad) | CC-BY-4.0 | 510 contracts, 41 clause types | `contracts/*.md` | "which contracts have a non-compete; quote it", "write clauses.csv" | span or exact (yes/no) | A |
 | HotpotQA (CC-BY-SA-4.0), MuSiQue (CC-BY-4.0) | as noted | ~90k and ~25k questions | the question's paragraphs plus distractors as `wiki/*.md` | multi-hop questions that need search and reading several files | normalized | A |
 | [EnronQA](https://huggingface.co/datasets/MichaelR207/enron_qa_0922) | CC (variant to confirm) | 103k emails, 528k QA pairs, 150 inboxes | a maildir per user (the corpus is one) | QA over an inbox; the original Enron mailbox folders give real "file these emails" labels | normalized (gold plus alternates); exact for folder moves | A |
-| WikiTableQuestions (CC-BY-SA-4.0), BIRD (CC-BY-SA-4.0), [InfiAgent-DABench](https://arxiv.org/pdf/2401.05507) | as noted (DABench to confirm) | ~22k, ~12k, 257 questions | CSV or SQLite files in a folder | questions mixing code over tables with judgment over text columns | normalized | B (much better with `run`) |
+| WikiTableQuestions (CC-BY-SA-4.0), BIRD (CC-BY-SA-4.0), [InfiAgent-DABench](https://arxiv.org/pdf/2401.05507) | as noted (DABench to confirm) | ~22k, ~12k, 257 questions | CSV or SQLite files in a folder | questions mixing code over tables with judgment over text columns | normalized | B (with `bash` and `python`) |
 | [QMSum](https://github.com/Yale-LILY/QMSum) | MIT | 232 meetings, 1.8k queries | `meetings/*.md` transcripts | query-focused summaries, decision logs | judged | B |
 | [Workspace-Bench](https://github.com/OpenDataBox/Workspace-Bench) | Apache-2.0 | 20k files, 5 roles, 388 tasks (Lite: 100) | real workspaces, 74 file types | under-specified workplace tasks across many files | rubric | E, plus workspaces to write tasks over |
 | [MuDABench](https://github.com/Zhanli-Li/MuDABench) | Apache-2.0 | 80k pages, 332 questions | documents per entity | analytical QA across many documents | normalized | E |
@@ -256,15 +300,24 @@ The trajectories are worth more than their tasks only where their actions transl
     `search_files`/`list_files`.
   - **Heavy edit:** check out the repo at the task's commit as a folder, and replay the translated actions through our
     runtime to regenerate observations.
-  - **Test runs:** drop them, or map them to `run` once it exists.
+  - **Actions that don't replay.** Test runs, package installs, and commands neither `bash` nor `python` can run
+    (arbitrary test suites need the repo's dependencies, C extensions included, which Pyodide does not have) are not
+    dropped from the middle of a trajectory: a later edit may depend on their output.
+    - A trajectory whose every action translates and replays is kept whole.
+    - Otherwise it is cut before the first action that does not replay, and the continuation is recollected by our
+      teacher from that state in our runtime, with the final-patch oracle (the collector's hand-off does this now for a
+      student's failed state).
+    - Failing that, the trajectory is dropped.
   - **Oracle:** the final files equal the trajectory's verified patch, so no tests need to run.
   - **Scope:** keep trajectories whose actions all translate. This is code, not semantic processing, but it is the
     largest supply of in-distribution file editing, and a first filter could keep only prose-heavy repos.
 - **Terminal trajectories** ([OpenThoughts-Agent-SFT-100K](https://huggingface.co/datasets/open-thoughts/OpenThoughts-Agent-SFT-100K),
   Apache-2.0, 94k; [LiteCoder-Terminal-SFT](https://huggingface.co/datasets/Lite-Coder/LiteCoder-Terminal-SFT),
   MIT, 11k).
-  - These are batches of bash commands. They translate only with `run`, and their environments would need rebuilding.
-  - Without `run`, mine the tasks and checkers, and have our teachers solve them in our environment.
+  - These are batches of bash commands. They translate to `bash` where every command is one just-bash has (its 80-odd
+    built-ins plus `python3` from Pyodide's package set); their environments are rebuilt from the task files.
+  - Tasks that need other binaries (compilers, package managers, services) are not converted. Their tasks and
+    checkers can still be mined for our teachers to solve in our environment.
 - **Not usable:** [Nemotron-SFT-Agentic-v2](https://huggingface.co/datasets/nvidia/Nemotron-SFT-Agentic-v2) (tool
   calling, search and customer service; no files) and similar general tool-calling sets.
 
