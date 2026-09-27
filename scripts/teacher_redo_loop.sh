@@ -11,7 +11,7 @@
 # ts-host whose dist runs the collector (default: this checkout's).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SHARD="$(realpath "${1:?shard}")"; FIRST="$(realpath "${2:?first teacher results}")"; OUT="${3:?output prefix}"; shift 3
+SHARD="$(realpath "${1:?shard}")"; FIRST="$(realpath -m "${2:?first teacher results}")"; OUT="${3:?output prefix}"; shift 3
 OUT="$(realpath -m "$OUT")"
 WHILE_PID=""
 if [ "${1:-}" = "--while-pid" ]; then WHILE_PID="$2"; shift 2; fi
@@ -19,13 +19,21 @@ if [ "${1:-}" = "--while-pid" ]; then WHILE_PID="$2"; shift 2; fi
 TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 INTERVAL="${NATLANG_REDO_INTERVAL:-1200}"
 round() {
-  node --max-old-space-size=3000 "$ROOT/ts-host/scripts/inline-curriculum/admit.mjs" "$FIRST" \
+  # The export covers only the selected range. Include completed jobs from earlier ranges too.
+  # Override for collectors whose jobs directory does not use the conventional sibling name.
+  local source="$FIRST"
+  local jobs="${NATLANG_REDO_JOBS:-${FIRST%.results.jsonl}.jobs}"
+  if [ -d "$jobs" ]; then
+    source="$OUT.first-snapshot.jsonl"
+    node "$ROOT/scripts/snapshot_teacher_jobs.mjs" "$jobs" "$source"
+  fi
+  node --max-old-space-size=3000 "$ROOT/ts-host/scripts/inline-curriculum/admit.mjs" "$source" \
     --ledger "$OUT.first-ledger.jsonl" --require-technique | tail -3 | head -1
   node "$ROOT/ts-host/scripts/inline-curriculum/redo.mjs" "$SHARD" --ledger "$OUT.first-ledger.jsonl" --out "$OUT.ir.jsonl"
   [ -s "$OUT.ir.jsonl" ] || return 0
   (cd "$TS_HOST" && node dist/teacher/cli.js "$OUT.ir.jsonl" "$OUT.jobs" "$OUT.results.jsonl" --all "$@")
 }
-while true; do
+for ((;;)); do
   alive=0; [ -n "$WHILE_PID" ] && kill -0 "$WHILE_PID" 2>/dev/null && alive=1
   echo "[$(date +%FT%T)] round (first teacher running: $alive)"
   round "$@"

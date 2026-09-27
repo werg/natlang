@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 import pytest
 
 from scripts.create_training_pipeline import recipe
@@ -8,11 +9,12 @@ from scripts.run_training_pipeline import run_pipeline
 
 
 def base(tmp_path):
-    config = recipe(tmp_path, python='python')
+    config = recipe(Path(__file__).resolve().parents[1], python='python')
     base_recipe = tmp_path / 'base-recipe.json'
+    config['repository'] = str(tmp_path)
     base_recipe.write_text(json.dumps(config))
     run = tmp_path / 'base-run'
-    checkpoint = run / 'train-teacher/checkpoint'
+    checkpoint = run / 'train-joint/checkpoint'
     (checkpoint / 'weights').mkdir(parents=True)
     (checkpoint / 'weights/adapter_model.safetensors').write_bytes(b'adapter')
     (checkpoint / 'state.json').write_text(json.dumps({'trained_examples': 1,
@@ -21,7 +23,7 @@ def base(tmp_path):
     (run / 'prepared/splits.json').write_text('{"groups":{}}')
     (run / 'pipeline-state.json').write_text(json.dumps({
         'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(),
-        'stages': {'train-teacher': {'status': 'complete'}}}))
+        'stages': {'train-joint': {'status': 'complete'}}}))
     programs = tmp_path / 'programs.jsonl'
     programs.write_text('{}\n')
     return base_recipe, run, programs
@@ -48,7 +50,7 @@ def test_round_is_single_durable_pipeline_with_frozen_runtime(tmp_path):
     assert '--all' in stages['collect-corrections']['command']
     assert str(run / 'verified-turns.jsonl') in stages['validate-corrections']['inputs']
     assert str(base_run / 'prepared/splits.json') in stages['prepare-correction']['inputs']
-    assert str(base_run / 'train-teacher/checkpoint/weights') in stages['train-correction']['command']
+    assert str(base_run / 'train-joint/checkpoint/weights') in stages['train-correction']['command']
     config_path = tmp_path / 'round-recipe.json'
     config_path.write_text(json.dumps(config))
     with pytest.raises(ValueError, match='different run directory'):

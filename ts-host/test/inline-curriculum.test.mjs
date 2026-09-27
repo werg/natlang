@@ -148,3 +148,25 @@ test('a judgment handed over with nl says so in its opening instead of offering 
   assert.doesNotMatch(child, /built-ins nl,/);
   assert.match(openings[0], /Eval also has the built-ins nl, iterateOn and transcript/);
 });
+
+test('child evidence is attributed by arguments, not another item in captured collections', () => {
+  const [record] = FAMILIES.inline_review_each.build(7, 0);
+  record.curriculum.decisive = [];
+  record.curriculum.inline = 'optional';
+  record.curriculum.reference.children = [{ match: 'item-b.txt', evidence: ['evidence for item B'] }];
+  const child = (argument, capture) => ({ context: [
+    { role: 'system', content: '' },
+    { role: 'user', content: 'You are inside this call: nl@eval:1(item: string): string\nInstructions: Read item.' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'scope_0', function: { name: 'eval', arguments: JSON.stringify({
+      code: `const inputs = read_inputs();\nconst item = inputs.item;\n// Variables of the calling code, captured by this call:\nconst collection = ${JSON.stringify(capture)};`,
+    }) } }] },
+    { role: 'tool', tool_call_id: 'scope_0', content: argument },
+  ], assistant: { calls: [{ tool: 'return_result', arguments: { status: 'success', value: 'ok' } }] } });
+  const a = child('item-a.txt: evidence for item A', 'item-b.txt: evidence for item B');
+  const b = child('item-b.txt: evidence for item B', 'item-a.txt: evidence for item A');
+  const verdict = trajectory => admitRow({ task: { program_ir: record }, outcome: { status: 'done', accepted: true }, trajectory });
+  assert.deepEqual(verdict([a, b]).reasons, []);
+  assert.ok(verdict([a]).reasons.some(reason => reason.startsWith('missing_child:')));
+  b.context[3].content = 'item-b.txt: unread';
+  assert.ok(verdict([a, b]).reasons.includes('missing_child_observation:evidence for item B'));
+});

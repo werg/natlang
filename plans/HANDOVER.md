@@ -1,5 +1,13 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> Continuation 2026-09-27 night: see [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
+> Bonsai generation and **five total Luna workers** resumed (2 folder, 2 handoffs, 1 redo).
+> This supersedes the two-worker limit below. Isolated runner refreshed; train4 restart now needs explicit reuse
+> of `train4.resume.jsonl` (redo: `train4-luna.resume.jsonl`) with
+> `--reuse-surfaces 58ec5990ab293f66d29b2a34115663a2371cf4b8fa5e10f3dc43ecdbb5b232d7`.
+> Correction: current collectors publish after each job, but exports cover only their selected range. Use
+> `node scripts/snapshot_teacher_jobs.mjs JOBS_DIR OUTPUT.jsonl` to gather all completed ranges.
+
 Everything was shut down gracefully for a machine power-off: collectors finished their current step (partial runs are
 journaled in each `*.jobs/` directory and resume on restart), the Bonsai server container (`natlang-bonsai`) was
 stopped. Nothing is lost by restarting any collector below with the same arguments.

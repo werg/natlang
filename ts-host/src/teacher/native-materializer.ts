@@ -244,7 +244,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         skill,
         provisional_gold: false,
         source_program_ids: programId === null ? [] : [programId],
-        source_groups: programId === null ? [] : [programId],
+        source_groups: [...new Set([...(programId === null ? [] : [programId]),
+          ...(Array.isArray(taskIr.source_groups) ? taskIr.source_groups.filter((group): group is string => typeof group === 'string') : [])])],
         source: `${role}-native`,
         gold_sources: [`checked-${role}-trajectory`, 'exact-runtime-oracle'],
         license: 'project-generated',
@@ -257,6 +258,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
+        // Keep the final verdict with each decision for downstream continuation validation, without copying files.
+        outcome: { accepted: row.outcome.accepted, status: row.outcome.status,
+          ...(row.outcome.oracle ? { oracle: row.outcome.oracle } : {}) },
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
           ...(decisionApproved ? {} : { reason: variantContext ? 'context of a corrected variant' :

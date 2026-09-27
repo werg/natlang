@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -9,10 +10,11 @@ from scripts.create_training_pipeline import recipe
 
 def fixture(tmp_path, image=None):
     base_recipe = tmp_path / 'base-recipe.json'
-    config = recipe(tmp_path, image=image, python='python')
+    config = recipe(Path(__file__).resolve().parents[1], image=image, python='python')
+    config['repository'] = str(tmp_path)
     base_recipe.write_text(json.dumps(config))
     base_run = tmp_path / 'base-run'
-    checkpoint = base_run / 'train-teacher/checkpoint'
+    checkpoint = base_run / 'train-joint/checkpoint'
     (checkpoint / 'weights').mkdir(parents=True)
     (checkpoint / 'weights/adapter_model.safetensors').write_bytes(b'weights')
     (checkpoint / 'state.json').write_text(json.dumps({'trained_examples': 3,
@@ -22,7 +24,7 @@ def fixture(tmp_path, image=None):
     (base_run / 'training-readiness.json').write_text('{}')
     (base_run / 'pipeline-state.json').write_text(json.dumps({
         'config_sha256': hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest(),
-        'stages': {'train-teacher': {'status': 'complete'}}}))
+        'stages': {'train-joint': {'status': 'complete'}}}))
     turns = tmp_path / 'corrections.jsonl'
     turns.write_text(json.dumps({'version': 'natlang.teacher_training_turn.native/1',
                                  'id': 'task:decision:0001', 'program_id': 'task',
@@ -45,21 +47,21 @@ def test_continuation_uses_frozen_splits_and_last_adapter(tmp_path):
     assert str(turns) in stages['prepare-correction']['inputs']
     assert '--require-audit' in stages['train-correction']['command']
     assert stages['train-correction']['command'][
-        stages['train-correction']['command'].index('--init-adapter') + 1] == str(base_run / 'train-teacher/checkpoint/weights')
+        stages['train-correction']['command'].index('--init-adapter') + 1] == str(base_run / 'train-joint/checkpoint/weights')
     assert str(base_run / 'training-readiness.json') in stages['train-correction']['inputs']
     assert stages['train-correction']['training_state'] == '${run}/train-correction/checkpoint/state.json'
-    assert all('${run}/train-teacher/' not in str(stage) for stage in stages.values())
+    assert all('${run}/train-joint/' not in str(stage) for stage in stages.values())
 
 
 def test_continuation_rejects_partial_or_unrelated_run(tmp_path):
     base_recipe, base_run, turns = fixture(tmp_path)
     state_path = base_run / 'pipeline-state.json'
     state = json.loads(state_path.read_text())
-    state['stages']['train-teacher']['status'] = 'stopped'
+    state['stages']['train-joint']['status'] = 'stopped'
     state_path.write_text(json.dumps(state))
     with pytest.raises(ValueError, match='must be complete'):
         improvement_recipe(base_recipe, base_run, turns)
-    state['stages']['train-teacher']['status'] = 'complete'
+    state['stages']['train-joint']['status'] = 'complete'
     state['config_sha256'] = 'different'
     state_path.write_text(json.dumps(state))
     with pytest.raises(ValueError, match='does not match'):

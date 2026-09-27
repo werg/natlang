@@ -50,7 +50,7 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
     base_recipe = tmp_path / 'base-recipe.json'
     base_recipe.write_text(json.dumps(base_config))
     base_run = tmp_path / 'base-run'
-    checkpoint = base_run / 'train-teacher/checkpoint'
+    checkpoint = base_run / 'train-joint/checkpoint'
     (checkpoint / 'weights').mkdir(parents=True)
     (checkpoint / 'weights/adapter_model.safetensors').write_bytes(b'fixture')
     (checkpoint / 'state.json').write_text(json.dumps({'trained_examples': 1,
@@ -60,7 +60,7 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
     (base_run / 'training-readiness.json').write_text('{}')
     (base_run / 'pipeline-state.json').write_text(json.dumps({
         'config_sha256': hashlib.sha256(json.dumps(base_config, sort_keys=True).encode()).hexdigest(),
-        'stages': {'train-teacher': {'status': 'complete'}}}))
+        'stages': {'train-joint': {'status': 'complete'}}}))
     program = {'version': 'natlang.program/2', 'id': 'runner-case', 'kind': 'lambda_source',
                'source_groups': ['runner-case'], 'split': 'train',
                'semantics': {'root': 'one.nl',
@@ -69,7 +69,7 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
     programs = tmp_path / 'programs.jsonl'
     programs.write_text(json.dumps(program) + '\n')
     student, student_thread, _ = server([[('eval', {'code': 'throw new Error("wrong branch")'})], None])
-    teacher, teacher_thread, _ = server([[('return_result', {'value': 1})]])
+    teacher, teacher_thread, _ = server([[('return_result', {'status': 'success', 'value': 1})]])
     try:
         run = tmp_path / 'round'
         config = improvement_pipeline(base_recipe, base_run, programs, run,

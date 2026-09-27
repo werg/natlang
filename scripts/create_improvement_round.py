@@ -53,7 +53,8 @@ def improvement_recipe(base_recipe, base_run, teacher_turns, *, deferred_turns=F
     if source.get('version') != 'natlang.training_pipeline/1':
         raise ValueError('base recipe must be a natlang training pipeline')
     stages = {stage['id']: stage for stage in source['stages']}
-    prior_phase = 'correction' if 'train-correction' in stages else 'teacher'
+    prior_phase = next((phase for phase in ('correction', 'joint', 'teacher')
+                        if f'train-{phase}' in stages), 'teacher')
     needed = tuple(f'{kind}-{prior_phase}' for kind in ('render', 'audit', 'train'))
     if any(name not in stages for name in needed):
         raise ValueError('base recipe lacks a completed distillation training phase')
@@ -113,18 +114,20 @@ def improvement_recipe(base_recipe, base_run, teacher_turns, *, deferred_turns=F
     prepare['inputs'].append('${run}/corrections.validation.json')
     render = substitute(stages[f'render-{prior_phase}'], [
         ('${run}/prepared-teacher/teacher.jsonl', f'{prepared}/teacher.jsonl'),
-        ('${run}/teacher.sft.jsonl', '${run}/correction.sft.jsonl')])
+        ('${run}/prepared-correction/teacher.jsonl', f'{prepared}/teacher.jsonl'),
+        ('${run}/joint.jsonl', f'{prepared}/teacher.jsonl'),
+        (f'${{run}}/{prior_phase}.sft.jsonl', '${run}/correction.sft.jsonl')])
     render['id'] = 'render-correction'
     audit = substitute(stages[f'audit-{prior_phase}'], [
-        ('${run}/teacher.sft.jsonl', '${run}/correction.sft.jsonl'),
-        ('${run}/teacher.ready.jsonl', '${run}/correction.ready.jsonl')])
+        (f'${{run}}/{prior_phase}.sft.jsonl', '${run}/correction.sft.jsonl'),
+        (f'${{run}}/{prior_phase}.ready.jsonl', '${run}/correction.ready.jsonl')])
     audit['id'] = 'audit-correction'
     train = substitute(stages[f'train-{prior_phase}'], [
         ('${run}/train-coding/checkpoint/weights', str(checkpoint / 'weights')),
         ('${run}/train-coding/checkpoint/state.json', str(checkpoint / 'state.json')),
-        ('${run}/teacher.ready.jsonl', '${run}/correction.ready.jsonl'),
-        ('${run}/train-teacher/', '${run}/train-correction/'),
-        ('${run}/teacher.tokens.sqlite', '${run}/correction.tokens.sqlite'),
+        (f'${{run}}/{prior_phase}.ready.jsonl', '${run}/correction.ready.jsonl'),
+        (f'${{run}}/train-{prior_phase}/', '${run}/train-correction/'),
+        (f'${{run}}/{prior_phase}.tokens.sqlite', '${run}/correction.tokens.sqlite'),
         ('${run}/training-readiness.json', str(base_run / 'training-readiness.json'))])
     train['id'] = 'train-correction'
     train['training_state'] = '${run}/train-correction/checkpoint/state.json'

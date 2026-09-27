@@ -257,16 +257,21 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   const pending: IndexedRecord[] = [];
   const reusable = config.reuse?.length ? await reusableRows(config.reuse) :
     new Map<string, Array<{ row: TeacherRow; path: string }>>();
-  let reused = 0;
+  let reused = 0, resumed = 0, incompatible = 0;
   for (const item of records) {
     const expected = expectedProvenance(item.record, config), path = join(config.jobs, `${jobKey(item)}.result.json`);
-    if (await readMatching(path, item.record, expected)) continue;
+    if (await readMatching(path, item.record, expected)) { resumed++; continue; }
+    try { await readFile(path, 'utf8'); incompatible++; } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
     // The last listed file with a qualifying row wins; a row that does not qualify never hides an earlier one.
     const row = (reusable.get(expected.program_ir_sha256 as string) ?? []).map(found => reusedRow(found, expected, config.reuseSurfaces))
       .filter(Boolean).at(-1);
     if (row) { await writeAtomic(path, JSON.stringify(row) + '\n'); reused++; continue; }
     pending.push(item);
   }
+  process.stderr.write(`queue: ${records.length} selected, ${resumed} already complete, ${reused} reused, ${pending.length} pending; ${config.workers} workers\n`);
+  if (incompatible) process.stderr.write(`${incompatible} existing results did not match current provenance; inspect --reuse/--reuse-surfaces before recollecting\n`);
   if (reused) process.stderr.write(`reused ${reused} finished rows from ${config.reuse!.length} earlier result files\n`);
   // Work is picked up in a fixed pseudo-random order rather than shard order: a shard keeps a case's variants and
   // hint twins together, and running several long cases of one family at once fills the server's shared KV buffer.
@@ -283,7 +288,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         const row = await runner(item, expected, signal);
         if (!resultMatches(row, item.record, expected)) throw new Error('job returned mismatched provenance');
         await writeAtomic(join(config.jobs, `${jobKey(item)}.result.json`), JSON.stringify(row) + '\n');
-        await mergeCompleted(records, config);
+        const progress = await mergeCompleted(records, config);
+        process.stderr.write(`completed ${item.index} ${item.record.id}: accepted=${row.outcome?.accepted ?? false}; ${progress.completed}/${records.length} complete\n`);
         break;
       } catch (error) {
         if (signal?.aborted) return;

@@ -28,11 +28,14 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
 
 test('accepted native rows become linked template neutral decisions with their exact contexts', () => {
   const accepted = nativeRow('teacher-1'), rejected = nativeRow('teacher-rejected', false);
+  accepted.task.program_ir.source_groups = ['original-program'];
   const result = materializeNativeRows([accepted, rejected]);
   assert.equal(result.acceptedRows, 1);
   assert.equal(result.rejectedRows, 1);
   assert.equal(result.turns.length, 2);
   const [actionTurn, nextTurn] = result.turns;
+  assert.deepEqual(actionTurn.outcome, { accepted: true, status: 'done' });
+  assert.deepEqual(actionTurn.source_groups, ['program-1', 'original-program']);
   const action = actionTurn.decision, next = nextTurn.decision;
   assert.equal(action.assistant.reasoning, 'The result is twice n.');
   assert.deepEqual(action.tool_schemas, [{ name: 'write', description: 'Write a value.',

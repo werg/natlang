@@ -229,6 +229,23 @@ export function obsoleteOutcomes(trajectory: Turn[]): string[] {
 /** Whether text shows a marker: as it is, or escaped inside JSON (a quote in a tool result shown as data). */
 const shows = (text: string, marker: string) => text.includes(marker) || text.includes(JSON.stringify(marker).slice(1, -1));
 
+/** Identify an item by the child's instructions and arguments, excluding unrelated captured collections. */
+function childIdentity(context: Message[]): string {
+  const opening = context.slice(1, openingLength(context)).map(message => ({ ...message,
+    tool_calls: message.tool_calls?.map(call => {
+      const args = call.function?.arguments;
+      if (!args) return call;
+      try {
+        const parsed = JSON.parse(args);
+        if (typeof parsed.code === 'string' && parsed.code.includes('const inputs = read_inputs();')) parsed.code = parsed.code.split('// Variables of the calling code, captured by this call:')[0];
+        return { ...call, function: { ...call.function, arguments: JSON.stringify(parsed) } };
+      } catch { return call; }
+    }),
+  }));
+  return opening.map(message => text(message.content) +
+    (message.tool_calls ?? []).map(call => call.function?.arguments ?? '').join('\n')).join('\n');
+}
+
 export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; outcome?: Record<string, unknown>;
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
@@ -251,7 +268,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     // an item's text instead of its file sees the text, not the file's name).
     const turns = ((row.trajectory ?? []) as Turn[]).filter(turn => {
       if (callName(turn.context ?? []) === record.semantics.root.replace(/\.nl$/, '').split('/').pop()) return false;
-      const opening = openingText(turn.context ?? []);
+      const opening = childIdentity(turn.context ?? []);
       return matches.every(fragment => opening.includes(fragment)) ||
         !!child.evidence?.length && child.evidence.every(marker => shows(opening, marker));
     });
@@ -261,7 +278,8 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
       call.tool === 'return_result' || call.tool === 'eval' && stagesResult(String((call.arguments as Record<string, unknown>)?.code ?? ''))) ||
       Boolean(turn.assistant?.content?.trim()));
     if (firstAnswer) {
-      const seen = (firstAnswer.context ?? []).filter(message => message.role === 'tool').map(message => text(message.content)).join('\n');
+      const seen = childIdentity(firstAnswer.context ?? []) + '\n' + (firstAnswer.context ?? [])
+        .filter(message => message.role === 'tool').map(message => text(message.content)).join('\n');
       for (const marker of child.evidence ?? []) if (!shows(seen, marker))
         reasons.push(`missing_child_observation:${marker}`);
     }
