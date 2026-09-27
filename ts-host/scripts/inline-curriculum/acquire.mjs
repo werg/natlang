@@ -15,19 +15,21 @@ const PYTHON = process.env.NATLANG_PYTHON ?? fileURLToPath(new URL('../../../.ve
 const TABLE_TO_JSONL = `
 import csv, json, sys
 kind, source, target = sys.argv[1:]
-if kind == 'parquet':
-    import pyarrow.parquet as pq
-    table = pq.read_table(source)
-    rows = table.to_pylist()
-    # Class labels are stored as indexes; the Hugging Face features in the metadata name them.
-    features = json.loads((table.schema.metadata or {}).get(b'huggingface', b'{}')).get('info', {}).get('features', {})
-    for column, feature in features.items():
-        if isinstance(feature, dict) and feature.get('names'):
-            for row in rows: row[column] = feature['names'][row[column]]
-else:
-    with open(source, newline='') as f: rows = list(csv.DictReader(f))
 with open(target, 'w') as out:
-    for row in rows: out.write(json.dumps(row) + '\\n')
+    if kind == 'parquet':
+        import pyarrow.parquet as pq
+        parquet = pq.ParquetFile(source)
+        # Class labels are stored as indexes; the Hugging Face features in metadata name them.
+        features = json.loads((parquet.schema_arrow.metadata or {}).get(b'huggingface', b'{}')).get('info', {}).get('features', {})
+        for batch in parquet.iter_batches(batch_size=512):
+            for row in batch.to_pylist():
+                for column, feature in features.items():
+                    if isinstance(feature, dict) and feature.get('names') and row.get(column) is not None:
+                        row[column] = feature['names'][row[column]]
+                out.write(json.dumps(row) + '\\n')
+    else:
+        with open(source, newline='') as f:
+            for row in csv.DictReader(f): out.write(json.dumps(row) + '\\n')
 `;
 
 export const SOURCES = {
@@ -160,6 +162,39 @@ export const SOURCES = {
     release: 'Hugging Face clinc/clinc_oos, plus configuration', revision: '155b9c710419136e17307b80d0a13e68cd46b4ec',
     files: [{ path: 'plus/train-00000-of-00001.parquet', split: 'train', convert: 'parquet' }],
     url: (revision, path) => `https://huggingface.co/datasets/clinc/clinc_oos/resolve/${revision}/${path}`,
+  },
+  coedit: {
+    name: 'CoEdIT', homepage: 'https://huggingface.co/datasets/grammarly/coedit', license: 'Apache-2.0',
+    release: 'grammarly/coedit train and validation JSONL', revision: 'e9a255c33ef910bc33a9d2b522653fa87521583e',
+    files: [{ path: 'train.jsonl', split: 'train', sha256: '2913249158d6a178dc638e870212ff8a432d128eb6b4bdbe969ee805e6063ce3' },
+      { path: 'validation.jsonl', split: 'validation', sha256: '9827b75183d6d06d1e0a48cfb4d5c849a8ae2eec4e05a6f887c40824cf2c1dc9' }],
+    url: (revision, path) => `https://huggingface.co/datasets/grammarly/coedit/resolve/${revision}/${path}`,
+  },
+  hotpotqa: {
+    name: 'HotpotQA distractor', homepage: 'https://huggingface.co/datasets/hotpotqa/hotpot_qa', license: 'CC-BY-SA-4.0',
+    release: 'hotpotqa/hotpot_qa distractor train', revision: '1908d6afbbead072334abe2965f91bd2709910ab',
+    files: [{ path: 'distractor/train-00000-of-00002.parquet', split: 'train', convert: 'parquet',
+      sha256: '76d3bb3048a7cc73c1958107c0c5872a00d7e7d00c105b81e92f6769e7822e68' },
+    { path: 'distractor/train-00001-of-00002.parquet', split: 'train', convert: 'parquet',
+      sha256: '713661628434fbb19fff7392e2e321e4ed107e3c7c7784d0690946e5f722763f' }],
+    url: (revision, path) => `https://huggingface.co/datasets/hotpotqa/hotpot_qa/resolve/${revision}/${path}`,
+  },
+  cuad: {
+    name: 'CUAD v1', homepage: 'https://huggingface.co/datasets/theatticusproject/cuad', license: 'CC-BY-4.0',
+    release: 'CUAD v1 SQuAD-style JSON and master clauses CSV', revision: 'a3c393f5d103fd0c516374e4fdff676c8176dcb1',
+    files: [{ path: 'CUAD_v1/CUAD_v1.json', split: 'mixed',
+      sha256: 'ed0b77d85bdf4014d7495800e8e4a70565b48ee6f8a2e5dca9cf8655dbf10eae' },
+      { path: 'CUAD_v1/master_clauses.csv', split: 'mixed', convert: 'csv',
+        sha256: '4da237bec677bf5b02212d523857cd57a801adde60e8021de063c8cc06823720' }],
+    url: (revision, path) => `https://huggingface.co/datasets/theatticusproject/cuad/resolve/${revision}/${path}`,
+  },
+  enronqa: {
+    name: 'EnronQA', homepage: 'https://huggingface.co/datasets/MichaelR207/enron_qa_0922', license: 'dataset-card terms',
+    release: 'MichaelR207/enron_qa_0922 train/dev/test', revision: 'c0b3a9190fd970e83cfbe7d399a08860e43e221e',
+    files: ['data/train-00000-of-00002.parquet', 'data/train-00001-of-00002.parquet',
+      'data/dev-00000-of-00001.parquet', 'data/test-00000-of-00001.parquet']
+      .map(path => ({ path, split: path.split('/')[1].split('-')[0], convert: 'parquet' })),
+    url: (revision, path) => `https://huggingface.co/datasets/MichaelR207/enron_qa_0922/resolve/${revision}/${path}`,
   },
 };
 

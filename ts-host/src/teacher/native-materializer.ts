@@ -27,6 +27,13 @@ function record(value: unknown, label: string): Dict {
   return value as Dict;
 }
 
+function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'judged' | undefined {
+  const level = typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) ?
+    (value as Dict).level : undefined;
+  return ['exact', 'normalized', 'span', 'judged'].includes(String(level)) ?
+    level as 'exact' | 'normalized' | 'span' | 'judged' : undefined;
+}
+
 function messages(value: unknown, label: string): Dict[] {
   if (!Array.isArray(value) || value.some(item => !item || typeof item !== 'object' || Array.isArray(item)))
     throw new TypeError(`${label} must be an array of messages`);
@@ -132,6 +139,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     if ((!row.outcome.accepted && !options.failedRuns) || rolledOver) { rejectedRows++; continue; }
     acceptedRows++;
     const role = String(row.provenance.collection_role ?? 'teacher');
+    const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
+    const semantics = taskIr.semantics && typeof taskIr.semantics === 'object' && !Array.isArray(taskIr.semantics) ?
+      taskIr.semantics as Dict : {};
+    const evidenceOracle = oracleLevel(semantics.oracle);
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
@@ -188,7 +199,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         return normalized;
       }) : [];
 
-      const programId = record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null;
+      const programId = taskIr.id ?? null;
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
@@ -227,6 +238,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         task: row.task,
         program_id: programId,
         family: `${role}_program`,
+        ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
         skill,
         provisional_gold: false,
         source_program_ids: programId === null ? [] : [programId],
@@ -244,6 +256,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
+          ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
           ...(decisionApproved ? {} : { reason: variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :

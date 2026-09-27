@@ -61,7 +61,9 @@ export type Curriculum = {
   // A child answer with `call` answers with that tool call (such as `return_result` with status `blocked`) instead of a value; `calls` plays
   // several turns in order (for example an eval that acts, then return_result).
   /** failures: how many of the reference's actions meet the obstacle the case is about (a closed road, a locked card). */
-  reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
+  reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[];
+    /** Evidence the child must see in its own opening or tool output before answering. */
+    evidence?: string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
 export type CurriculumRecord = ProgramRecord & { curriculum: Curriculum; family: string; split: string };
 
@@ -163,7 +165,16 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
 export type Admission = { id: string; program_id: string; admitted: boolean; reasons: string[];
   /** Observations that do not reject a row, such as a correct answer judged directly rather than inline. */
   notes: string[]; facts: RunFacts;
-  family: string; slice: Slice; domain: Domain; mode: string; inline: string; pair_group: string | null };
+  family: string; slice: Slice; domain: Domain; mode: string; inline: string; pair_group: string | null;
+  /** Strength of the case's answer oracle, when declared in program semantics. */
+  oracle_level?: 'exact' | 'normalized' | 'span' | 'judged' };
+
+function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'judged' | undefined {
+  const level = typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) ?
+    (value as Record<string, unknown>).level : undefined;
+  return ['exact', 'normalized', 'span', 'judged'].includes(String(level)) ?
+    level as 'exact' | 'normalized' | 'span' | 'judged' : undefined;
+}
 
 /**
  * Admission for one collected row: the collector's contract verdict plus the causal checks. A follow-up
@@ -231,6 +242,23 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
     if (at === -1) reasons.push(`missing_observation:${item.marker}`);
     else if (c.mode === 'followup' && at > facts.firstDecision) reasons.push(`premature_choice:${item.marker}`);
   }
+  for (const child of c.reference.children ?? []) {
+    const matches = Array.isArray(child.match) ? child.match : [child.match];
+    const turns = ((row.trajectory ?? []) as Turn[]).filter(turn => {
+      if (callName(turn.context ?? []) === record.semantics.root.replace(/\.nl$/, '').split('/').pop()) return false;
+      const opening = openingText(turn.context ?? []);
+      return matches.every(fragment => opening.includes(fragment));
+    });
+    if (!turns.length && child.evidence?.length) reasons.push(`missing_child:${matches.join('|')}`);
+    const firstAnswer = turns.find(turn => (turn.assistant?.calls ?? []).some(call =>
+      call.tool === 'return_result' || call.tool === 'eval' && stagesResult(String((call.arguments as Record<string, unknown>)?.code ?? ''))) ||
+      Boolean(turn.assistant?.content?.trim()));
+    if (firstAnswer) {
+      const seen = (firstAnswer.context ?? []).filter(message => message.role === 'tool').map(message => text(message.content)).join('\n');
+      for (const marker of child.evidence ?? []) if (!seen.includes(marker))
+        reasons.push(`missing_child_observation:${marker}`);
+    }
+  }
   // A correct answer judged directly is a fine sample; a keyword or regex stand-in for a judgment is not.
   const notes: string[] = [];
   if (c.inline === 'required' && !facts.inlineCalls) {
@@ -244,7 +272,8 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.named === 'required' && !facts.namedChildCalls) reasons.push('named_helper_unused');
   if (c.iterate === 'required' && !facts.usesIterateOn) reasons.push('iterate_missing');
   return { id: String(row.id ?? record.id), program_id: record.id, admitted: !reasons.length, reasons, notes, facts,
-    family: c.family, slice: c.slice, domain: c.domain, mode: c.mode, inline: c.inline, pair_group: c.pair_group };
+    family: c.family, slice: c.slice, domain: c.domain, mode: c.mode, inline: c.inline, pair_group: c.pair_group,
+    ...(oracleLevel(record.semantics.oracle) ? { oracle_level: oracleLevel(record.semantics.oracle) } : {}) };
 }
 
 // ---- Build-time verification -----------------------------------------------------------------

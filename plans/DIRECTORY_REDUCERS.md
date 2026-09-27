@@ -1,6 +1,11 @@
 # Directory reducers: data, affordances and training
 
-Status: plan, 2026-09-27. Nothing here is implemented yet.
+Status: implementation in progress, 2026-09-27. Folder data layouts and archive loading, scoped handle
+delegation, subtree transactions, bash/Python folder tools, shared `natlang ask`/`call` pipelines and `apply` entry
+points, editor/delegate tools, oracle checks, six generated folder families, hashed source-record splits, a separate
+model judge, and held-out score reporting are implemented. The GPU collection commands are in
+[`DIRECTORY_REDUCERS_GPU_RUNBOOK.md`](DIRECTORY_REDUCERS_GPU_RUNBOOK.md). The browser worker, document views,
+external trajectory conversion, and Workspace-Bench/MuDABench adapters remain.
 
 ## Why
 
@@ -17,12 +22,11 @@ laid out as a folder tree: an inbox, a contract archive, a set of meeting notes,
   helper. `folder.dir(p).apply(reducer)` runs a sub-reducer on a subfolder, and the changes present when it replies
   done are kept (`scoped-fs.ts`, `DIRECTORY_REDUCER_PROMPT`).
 - **Host.** `openFolder(path)` gives a lazy disk folder, `saveFolder(path, changes)` writes changes back atomically,
-  and `Folder.fromFiles({...})` builds one in memory. Nothing builds a folder from data.
-- **Delegation.** The inline compiler already treats `Folder` and `FileHandle` as handle types, so an `nl` can in
-  principle take a file or a folder. Neither the prompt nor any training row shows this.
-- **Training data.** Folder work is a sliver: `folder_criteria_reducer`, `reducer_apply`, `event_retry`-style
-  failures and the five authoring families, each with about five small files. The references read every file in one
-  eval and decide directly, which is the opposite of what larger folders need.
+  and `Folder.fromFiles({...})` or `Folder.fromData(data, layout)` build one in memory; `folderToData` reverses a layout.
+- **Delegation.** `nl` accepts scoped `Folder` and `FileHandle` values. The prompt and folder-family references show
+  per-file and per-subfolder calls, including a child reading a large file before making a judgment.
+- **Training data.** `folder_triage`, `folder_index`, `folder_edit`, `folder_find`, `folder_extract`, and `folder_mixed`
+  generate larger cases. Dataset-backed families partition source records by content hash before sampling them.
 
 ## Principles
 

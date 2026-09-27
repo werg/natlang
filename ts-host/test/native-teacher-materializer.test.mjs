@@ -56,6 +56,19 @@ test('accepted native rows become linked template neutral decisions with their e
   }] });
 });
 
+test('materialized turns retain case oracle evidence levels as metadata', () => {
+  for (const level of ['exact', 'normalized', 'span', 'judged']) {
+    const row = nativeRow(`oracle-${level}`);
+    row.task.program_ir.semantics = { oracle: level };
+    const turn = materializeNativeRows([row]).turns[0];
+    assert.equal(turn.oracle_level, level);
+    assert.equal(turn.training_admission.oracle_level, level);
+  }
+  const row = nativeRow('oracle-object');
+  row.task.program_ir.semantics = { oracle: { level: 'normalized', method: 'trim-and-casefold' } };
+  assert.equal(materializeNativeRows([row]).turns[0].oracle_level, 'normalized');
+});
+
 test('a captured execution plan is the training reasoning instead of provider reasoning', () => {
   const row = nativeRow('planned');
   row.trajectory[0].assistant.execution_plan = 'Compute twice n, then store it.';

@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
+import { sourceRecordId, sourceRecordSplit } from './folder-data.mjs';
 import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
@@ -41,7 +42,7 @@ const DATASETS = {
 };
 
 const loaded = new Map();
-function rowsOf(name) {
+function rowsOf(name, split = 'train') {
   if (!loaded.has(name)) {
     const source = SOURCES[name], [file] = source.files, spec = DATASETS[name];
     let text;
@@ -52,21 +53,21 @@ function rowsOf(name) {
       .filter(row => row.text.length >= (spec.minLength ?? 15) && row.text.length <= 320 && !(spec.exclude ?? []).includes(row.label));
     loaded.set(name, rows);
   }
-  return loaded.get(name);
+  return loaded.get(name).filter(row => sourceRecordSplit(sourceRecordId(name, row.text, '')) === split);
 }
 
 /** The labels a case uses, each with its question and statement. */
-function labelsFor(rng, name) {
+function labelsFor(rng, name, split) {
   const spec = DATASETS[name];
   if (spec.labels) return spec.labels;
-  const all = [...new Set(rowsOf(name).map(row => row.label))].sort();
+  const all = [...new Set(rowsOf(name, split).map(row => row.label))].sort();
   return Object.fromEntries(rng.sample(all, rng.int(...spec.subset)).map(label => [label, {
     question: `Is request about ${spec.describe(label)}?`, about: `are about ${spec.describe(label)}` }]));
 }
 
 /** Items of the given labels, sampled with at least one of the target label and one other when asked. */
-function itemsFor(rng, name, labels, count, target) {
-  const pool = rowsOf(name).filter(row => labels.includes(row.label));
+function itemsFor(rng, name, labels, count, target, split) {
+  const pool = rowsOf(name, split).filter(row => labels.includes(row.label));
   for (;;) {
     const picked = rng.sample(pool, count);
     const hits = picked.filter(row => row.label === target).length;
@@ -116,16 +117,17 @@ const CLASS_TASKS = [
       code: `const labels = await Promise.all(${d.plural}.map(${d.singular} => nl<${d.union}>\`${question}\`(${d.singular})));\nconst counts: Record<string, number> = {};\nfor (const label of labels) counts[label] = (counts[label] ?? 0) + 1;\nreturn Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))[0] as ${d.union};` }; },
 ];
 
-export function labeledJudgments(seed, index) {
+export function labeledJudgments(seed, index, split = 'train') {
   const rng = new Random(seed, `labeled:${index}`);
   const name = rng.pick(Object.keys(DATASETS)), d = DATASETS[name];
-  const labelSpecs = labelsFor(rng, name), labels = Object.keys(labelSpecs);
+  const labelSpecs = labelsFor(rng, name, split), labels = Object.keys(labelSpecs);
   const byClass = !!d.union && rng.next() < 0.4;
   const target = byClass ? undefined : rng.pick(d.only ?? labels);
   // Items of the case's labels; a single-label dataset (spam) takes its other items from the rest of the dataset.
-  const pool = d.labels && d.only ? [...new Set(rowsOf(name).map(row => row.label))] : labels;
-  const items = itemsFor(rng, name, pool, rng.int(5, 9), target)
-    .map((row, i) => ({ id: `${d.idPrefix}${i + 1}`, text: row.text, day: rng.int(1, 15), label: row.label }));
+  const pool = d.labels && d.only ? [...new Set(rowsOf(name, split).map(row => row.label))] : labels;
+  const items = itemsFor(rng, name, pool, rng.int(5, 9), target, split)
+    .map((row, i) => ({ id: `${d.idPrefix}${i + 1}`, text: row.text, day: rng.int(1, 15), label: row.label,
+      sourceId: sourceRecordId(name, row.text, '') }));
   const question = d.classify ?? `Which of ${labels.map(l => JSON.stringify(l)).join(', ')} is request about?`;
   const task = byClass ? rng.pick(CLASS_TASKS)(d, labels, items, question) :
     rng.pick(TASKS)(d, target, items, labelSpecs[target], rng);
@@ -145,6 +147,8 @@ export function labeledJudgments(seed, index) {
     files: { 'types.ts': types }, inputs, expected: task.expected })].map(record => {
       record.license = SOURCES[name].license;
       record.gold_sources = [`${name}-labels`];
+      record.dataset = name;
+      record.dataset_records = items.map(item => item.sourceId);
       return record;
     });
 }

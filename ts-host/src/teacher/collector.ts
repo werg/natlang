@@ -12,6 +12,8 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
+import { checkOracle } from './oracle.js';
+import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { Handoff } from './handoff.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
@@ -50,7 +52,9 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
   executionPlans?: boolean; executionPlanTokens?: number;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
-  collectionRole?: 'student' | 'teacher' | 'reference' };
+  collectionRole?: 'student' | 'teacher' | 'reference';
+  /** A separately identified model for rubric-backed `judged` oracles. */
+  judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
   /** Worker n starts its first job n times this later, so a rate-limited provider does not see them all at once. */
@@ -126,7 +130,11 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
       max_tokens: options.executionPlanTokens ?? 512 } } : {}),
-    collection_role: options.collectionRole ?? 'teacher' };
+    collection_role: options.collectionRole ?? 'teacher',
+    ...(options.judgeModel ? { judge: { model: options.judgeModel.modelId,
+      transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
+      ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
+        pi_options: options.judgeModel.piOptions ?? {} } : {}) } } : {}) };
 }
 
 export function resultMatches(row: unknown, record: ProgramRecord, expected: Record<string, unknown>): row is TeacherRow {
@@ -463,6 +471,9 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
 export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (!config.endpoint && !config.provider) throw new Error('endpoint or Pi provider is required for native teacher collection');
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
+  if (config.judgeModel && (!config.judgeModel.modelId ||
+      Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
+    throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
@@ -471,7 +482,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let handedOver: number | undefined;
     const session = config.provider ? createManagedModelSession({ provider: config.provider,
       model: config.modelId, piOptions: config.piOptions }) : undefined;
+    const judgeConfig = config.judgeModel;
+    const judgeSession = judgeConfig?.provider ? createManagedModelSession({ provider: judgeConfig.provider,
+      model: judgeConfig.modelId, piOptions: judgeConfig.piOptions }) : undefined;
     let ready: Promise<unknown> | undefined;
+    let judgeReady: Promise<unknown> | undefined;
     const send = session ? async (request: ModelTurnRequest) => {
       await (ready ??= session.prepare());
       return session.turn(request);
@@ -485,6 +500,15 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : send;
     const transport = config.executionPlans ? withExecutionPlans(admittedSend,
       { maxTokens: config.executionPlanTokens }) : admittedSend;
+    const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest) => {
+      await (judgeReady ??= judgeSession.prepare());
+      return judgeSession.turn(request);
+    } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
+    const judge = judgeTransport ? modelOracleJudge(async request => {
+      if (kv) await kv.acquire(requestTokens(request));
+      try { return await judgeTransport(request); }
+      finally { if (kv) kv.release(requestTokens(request)); }
+    }) : undefined;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
     const saved = await loadPartial(partialPath, item, expected);
@@ -519,7 +543,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       return response;
     };
     const runId = programRunId(item.index, expected);
-    const run = await executeProgram(item.record, driver, { ...config, runId, signal });
+    const run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) });
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, prefix_turns: prefixTurns,
         at: handedOver ?? null, run_id: runId } } : {});
@@ -527,7 +551,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);
     return row;
-    } finally { await session?.close(); }
+    } finally { await session?.close(); await judgeSession?.close(); }
   };
 }
 
@@ -551,7 +575,8 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 }
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
-  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal };
+  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal;
+  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string }> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
 /**
@@ -612,12 +637,13 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     const worldOk = !worldScore || worldScore.score >= 100;
+    const oracle = await checkOracle(actual, record.semantics.expected, record.semantics.oracle, options.judge);
     const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk && worldOk &&
-      (expectedKind !== 'done' || !!authoring || !!world || same(actual, record.semantics.expected));
+      (expectedKind !== 'done' || !!authoring || !!world || oracle.accepted);
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
-      ...(worldScore ? { world: worldScore } : {}), accepted,
+      ...(worldScore ? { world: worldScore } : {}), oracle, accepted,
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]

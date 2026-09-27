@@ -16,6 +16,7 @@ import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relation
 import { hintFor, hinted } from './lib.mjs';
 import { composedHelpers, composedProcess } from './composed.mjs';
 import { labeledJudgments } from './labeled.mjs';
+import { folderTriage, folderIndex, folderMixed, folderEdit, folderFind, folderExtract } from './folder-families.mjs';
 
 export const FAMILIES = {
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
@@ -55,7 +56,13 @@ export const FAMILIES = {
   composed_helpers: { build: composedHelpers, weight: 2 },
   composed_process: { build: composedProcess, weight: 2 },
   // Generated per seed from labeled datasets in the cache (acquire.mjs): sms_spam, sst2, ag_news, emotion, banking77, clinc_oos.
-  labeled_judgments: { build: labeledJudgments, weight: 3 },
+  labeled_judgments: { build: labeledJudgments, weight: 3, externalData: true },
+  folder_triage: { build: folderTriage, weight: 1, externalData: true },
+  folder_index: { build: folderIndex, weight: 1, externalData: true },
+  folder_mixed: { build: folderMixed, weight: 1 },
+  folder_edit: { build: folderEdit, weight: 1, externalData: true },
+  folder_find: { build: folderFind, weight: 1, externalData: true },
+  folder_extract: { build: folderExtract, weight: 1, externalData: true },
   folio_entailment: { build: folioEntailment, weight: 3, source: 'folio' },
   folio_batch: { build: folioBatch, weight: 2, source: 'folio' },
   prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },
@@ -88,15 +95,15 @@ export function buildRecords({ seed, shapes, start = 0, families, split = 'train
   for (const name of families) {
     const family = FAMILIES[name];
     const count = Math.max(1, Math.round(shapes * (family.weight ?? 1)));
-    for (let index = start; index < start + count; index++) for (const record of family.build(seed, index)) {
+    for (let index = start; index < start + count; index++) for (const record of family.build(seed, index, split)) {
       // Generated problems are distinct per seed; a source's problems are its own (story, world) groups across shards.
       const tag = family.source ? `${family.source}` : `s${seed}`;
       record.id = record.id.replace('inline-curriculum:', `inline-curriculum:${tag}:`);
-      record.source_ids = [record.id];
+      record.source_ids = record.dataset_records ?? [record.id];
       if (!family.source) {
         record.split = split;
         record.curriculum.split_group = `s${seed}:${record.curriculum.split_group}`;
-        record.source_groups = [record.curriculum.split_group];
+        record.source_groups = record.dataset_records?.map(id => `${record.dataset}:${id}`) ?? [record.curriculum.split_group];
         if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;
       }
       // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.

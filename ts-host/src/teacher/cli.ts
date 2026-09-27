@@ -32,6 +32,7 @@ async function main(): Promise<void> {
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
+      '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
       '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
@@ -47,6 +48,10 @@ async function main(): Promise<void> {
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
+  const judgeModelId = flags.get('--judge-model-id');
+  if ([judgeModelId, flags.get('--judge-server'), flags.get('--judge-provider')].some(Boolean) &&
+      (!judgeModelId || Number(flags.has('--judge-server')) + Number(flags.has('--judge-provider')) !== 1))
+    throw new Error('--judge-model-id needs exactly one of --judge-server or --judge-provider');
   if (flags.has('--execution-plan-tokens') && !flags.has('--execution-plans'))
     throw new Error('--execution-plan-tokens requires --execution-plans');
   const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
@@ -66,6 +71,10 @@ async function main(): Promise<void> {
     ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
+    ...(judgeModelId ? { judgeModel: { modelId: judgeModelId,
+      ...(flags.has('--judge-provider') ? { provider: flags.get('--judge-provider'),
+        piOptions: { reasoningEffort: flags.get('--judge-reasoning-effort') ?? 'low' } } :
+        { endpoint: flags.get('--judge-server') }) } } : {}),
     toolSurfaceSha256: await defaultToolSurfaceHash(),
     ...(provider ? { provider, piOptions: { reasoningEffort: flags.get('--reasoning-effort') ?? 'low' } } :
       { endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081' }),

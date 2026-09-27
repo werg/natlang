@@ -4,7 +4,7 @@ import { admitRow, coverage, renderOpening, replayReference, verifyCases } from 
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { FAMILIES } from '../scripts/inline-curriculum/families.mjs';
 
-const synthetic = Object.entries(FAMILIES).filter(([, family]) => !family.source);
+const synthetic = Object.entries(FAMILIES).filter(([, family]) => !family.source && !family.externalData);
 
 test('every synthetic curriculum family builds cases that verify', async () => {
   const records = synthetic.flatMap(([, family]) => family.build(7, 0));
@@ -44,6 +44,36 @@ test('admission requires the decisive observation before the first result decisi
   const staged = await replayReference(late, TOOLS_PROMPT);
   const early = admitRow({ task: { program_ir: late }, outcome: staged.run.outcome, trajectory: staged.trajectory });
   assert.deepEqual(early.reasons.map(reason => reason.split(':')[0]), ['premature_choice']);
+});
+
+test('admission preserves the declared evidence level of a case oracle', async () => {
+  const [base] = FAMILIES.relational_dynamic_snapshot.build(7, 0);
+  const { run, trajectory } = await replayReference(base, TOOLS_PROMPT);
+  for (const level of ['exact', 'normalized', 'span', 'judged']) {
+    const record = structuredClone(base);
+    record.semantics.oracle = level;
+    const verdict = admitRow({ task: { program_ir: record }, outcome: run.outcome, trajectory });
+    assert.equal(verdict.oracle_level, level);
+  }
+  const described = structuredClone(base);
+  described.semantics.oracle = { level: 'span', source: 'checked-excerpt' };
+  assert.equal(admitRow({ task: { program_ir: described }, outcome: run.outcome, trajectory }).oracle_level, 'span');
+});
+
+test('admission requires each child to observe its specified file evidence', async () => {
+  const [, record] = FAMILIES.inline_review_each.build(7, 0);
+  record.curriculum.reference.root = [['eval',
+    { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
+    record.curriculum.reference.root.at(-1)];
+  record.curriculum.inline = 'optional';
+  record.curriculum.reference.children = inboxAnswers(record);
+  const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
+  const observed = structuredClone(record);
+  observed.curriculum.reference.children[0].evidence = [observed.curriculum.reference.children[0].match];
+  assert.equal(admitRow({ task: { program_ir: observed }, outcome: run.outcome, trajectory }).admitted, true);
+  observed.curriculum.reference.children[0].evidence = ['marker-never-shown'];
+  assert.match(admitRow({ task: { program_ir: observed }, outcome: run.outcome, trajectory }).reasons.join(' '),
+    /missing_child_observation:marker-never-shown/);
 });
 
 test('a row showing an outcome the runtime no longer produces is not admitted', async () => {
