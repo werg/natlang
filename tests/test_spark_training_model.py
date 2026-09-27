@@ -70,6 +70,9 @@ def test_chunked_training_loss_and_gradients_match_the_released_model_with_check
     after.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     assert sum(isinstance(m, patched.GradientCheckpointingLayer) and m.gradient_checkpointing
                for m in after.modules()) == 4
+    for module in after.modules():  # MLP chunks shorter than the sequence, so the chunked path is what is compared
+        if hasattr(module, "token_chunk"):
+            module.token_chunk = 7
     ids = torch.randint(0, 300, (2, 20))
     labels = ids.clone()
     labels[:, :5] = -100

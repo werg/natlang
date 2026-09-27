@@ -383,9 +383,9 @@ def main():
     ap.add_argument("--moe-backend", choices=("grouped_mm", "unsloth_triton", "native_torch"),
                     help="with --unsloth-moe, the expert matmul backend (default: Unsloth's choice, grouped_mm when "
                          "torch has it; it loops over experts below sm90, where unsloth_triton runs one kernel)")
-    ap.add_argument("--offload-checkpoints", action=argparse.BooleanOptionalAction, default=None,
-                    help="keep checkpointed layer inputs in CPU memory (Unsloth's smart checkpointing): on by default "
-                         "with --unsloth-moe, else off; for long sequences of a model with a wide or fp32 residual")
+    ap.add_argument("--offload-checkpoints", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --unsloth-moe, keep checkpointed layer inputs in CPU memory (Unsloth's smart "
+                         "checkpointing); --no-offload-checkpoints keeps them on the GPU when they fit")
     ap.add_argument("--no-kbit-upcast", action="store_true",
                     help="with --load-in-4bit, skip PEFT's k-bit preparation, which upcasts every unquantized weight "
                          "(a large vocabulary's embedding among them) to fp32; train in bf16 as Unsloth does")
@@ -544,12 +544,9 @@ def main():
             moe_utils.select_moe_backend.cache_clear()
             if moe_utils.select_moe_backend() != a.moe_backend:
                 raise RuntimeError(f"MoE backend {a.moe_backend} is not available here")
-    if a.gradient_checkpointing and not use_unsloth and (
-            a.offload_checkpoints or (a.offload_checkpoints is None and a.unsloth_moe)):
-        # As Unsloth's loader does: checkpointed layer inputs wait in CPU memory until backward needs them.
-        import unsloth  # noqa: F401
-        from unsloth_zoo.gradient_checkpointing import patch_unsloth_smart_gradient_checkpointing
-        patch_unsloth_smart_gradient_checkpointing(dtype=torch.bfloat16)
+        if a.gradient_checkpointing and a.offload_checkpoints:  # as Unsloth's loader does: layer inputs wait in CPU memory
+            from unsloth_zoo.gradient_checkpointing import patch_unsloth_smart_gradient_checkpointing
+            patch_unsloth_smart_gradient_checkpointing(dtype=torch.bfloat16)
     from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     device = a.device
