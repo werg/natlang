@@ -34,6 +34,10 @@ laid out as a folder tree: an inbox, a contract archive, a set of meeting notes,
 3. **Exact oracles first.** A row is admitted by a check, as now. Where a check has to be softer (normalized
    answers, span overlap, a judge), it is a separate evidence level, recorded on the row.
 4. **One way in.** A host brings a folder in with one call, whether it is a directory, an archive or data.
+5. **Browser parity.** Everything a call can do in Node it can do in the browser: shell, Python, sqlite, `natlang`.
+   The one difference is where folders come from: in the browser they are in memory (data, archives, files the user
+   hands over), never the real filesystem.
+6. **Network as eval has it.** Network follows the runtime's `network` setting, on by default, in every tool.
 
 ## 1. Bringing data in
 
@@ -117,8 +121,15 @@ C. **A shell: bash on [just-bash](https://github.com/vercel-labs/just-bash/tree/
    - `bash(command)` returns the exit code, stdout and stderr (capped and paged like other output) and the paths it
      changed.
    - The clock and file times are pinned, so a replay reproduces a command's output.
-   - The fork cuts network (`curl`), `js-exec` (eval runs TypeScript), compression and HTML conversion. It replaces
-     python3 with the Python of D and adds the `natlang` command of E.
+   - The fork cuts `js-exec` (eval runs TypeScript), compression and HTML conversion. `curl` stays and follows the
+     runtime's network setting.
+   - It replaces `python3` with D's Python, and `sqlite3` with a small shim over Python's `sqlite3` module on the same
+     interpreter, so one WebAssembly runtime serves both and both work in the browser. (just-bash's own `python3` and
+     `sqlite3` are Node-only.) Python's built-in `python -m sqlite3` is not a drop-in: in the spike it refused a script
+     ("You can only execute one statement at a time"). So the shim runs scripts with `executescript` and prints in the
+     sqlite3 tool's formats: pipe-separated by default, plus `-header`, `-csv`, `-json` and `-separator`. sqlite in the
+     browser can come after Python.
+   - It adds the `natlang` command of E.
 
    **What it unlocks:**
    - the command-line text processing models are strongest at;
@@ -127,9 +138,10 @@ C. **A shell: bash on [just-bash](https://github.com/vercel-labs/just-bash/tree/
    - the bash half of the OpenHands SWE trajectories.
 
    **Costs:**
-   - It runs in-process without VM isolation. just-bash has guards of its own (limits, prototype-pollution defences,
-     no network), and both the commands and the hosts are ours.
-   - In the browser the core shell runs; D's Python runs there too.
+   - It runs in-process without VM isolation. just-bash has guards of its own (limits, prototype-pollution defences),
+     and both the commands and the hosts are ours.
+   - In the browser, just-bash's core shell (parser, interpreter, built-in commands) runs as it is. With D's Python and
+     the sqlite built on it, the fork has the same commands in the browser as in Node.
 
    **Alternatives checked.**
    - [@cloudflare/shell](https://github.com/cloudflare/agents/tree/main/packages/shell) (MIT, experimental) runs
@@ -138,54 +150,106 @@ C. **A shell: bash on [just-bash](https://github.com/vercel-labs/just-bash/tree/
      with interchangeable execution backends. Its lightweight "isolate shell" backend is just-bash, which confirms the
      pattern rather than offering another engine.
 
-D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).**
+D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).** Spiked on 2026-09-27; the prototype
+   and its tests are in `plans/spikes/python-folder/` until phase 3 replaces them.
 
-   **What it is.** Pyodide (MPL-2.0) is CPython 3.14 for WebAssembly, with numpy, pandas and several hundred other
-   packages as prebuilt wheels. It runs in Node and in the browser. Measured on 2026-09-27 (0.314):
-   - it loads in 1.8 s; numpy and pandas add 2.2 s; the first pandas run takes 2.8 s, and later ones are fast;
-   - `sqlite3` and `ast` work;
-   - a JavaScript module registered as `natlang` is importable, and Python can `await` its async functions.
+   **Engine.** Pyodide (MPL-2.0) is CPython 3.14 for WebAssembly, with numpy, pandas and several hundred other packages
+   as prebuilt wheels, and `sqlite3` in the standard library. It runs in Node and in the browser.
+   - It loads in 1.8 s, numpy and pandas add 2.2 s, and a first pandas run takes about 2.8 s. So there is one warm
+     instance per process, loaded on first use, with packages loaded from a cell's imports
+     (`loadPackagesFromImports`).
+   - Packages are vendored and locked, not fetched from a CDN at run time.
 
-   So one warm instance per session is the right shape, with the packages vendored and locked (not fetched from a
-   CDN at run time).
+   **Where it runs.** On the host's main thread, not in a worker, so that file access stays synchronous and in-process
+   (a worker would need a cross-thread call for every file operation). A small watchdog worker enforces time limits:
+   it sets Pyodide's interrupt buffer, a shared array the interpreter polls. That stopped a pure-Python loop of 10¹⁰
+   iterations after 0.55 s with `KeyboardInterrupt`, which the tool reports as a timeout.
 
-   **Python extended as TypeScript is.** The `natlang` module gives the same constructs:
-   - `urgent = await nl[bool]("Is ticket urgent?")(ticket)`; with no type argument, the annotation of the target or
-     later use types it, as in TypeScript, or the result is open;
-   - `labels = await gather(*(nl[Label]("Label item.")(item) for item in items))`;
-   - `final = await iterate_on(step, initial).until(lambda state: state.done)`, and `step.iterate_on(initial)`;
-   - `await folder.dir("packages/api").apply(bump_version)` and `folder.files("inbox/*.eml")`, as in eval;
-   - the call's arguments, functions and services are bound by name, as in eval.
+   **Folder as filesystem.** An Emscripten filesystem is mounted over the call's folder, and Python works in it as its
+   working directory. `open`, `pathlib`, `os.walk`, `shutil`, pandas and sqlite then act on the folder itself, and
+   their changes appear in `diff`, transactions and `apply` like any other tool's.
+   - **Built on MEMFS.** Its file nodes are MEMFS nodes, so reading, writing, seeking and mmap are MEMFS's code. Ours
+     adds lookup and listing from the folder, contents loaded on first open, and write-back on close or sync.
+     Directories are implicit, as in our folders: an empty `mkdir` lives in the mount until a file is written under it.
+     File times are pinned.
+   - **Talks to a minimal view,** which the folder core (F) provides: `kind(path)`, `entries(dir)`, `size(path)`,
+     `read`, `write`, `remove`, `move`, and `revision()`, a counter that moves on every change.
+   - **Coherence.** Another tool, or a child call, can change the folder only while Python is waiting on the host.
+     Cached nodes are therefore dropped (from Emscripten's name table too) at exactly those points: when Python is
+     entered, and when it resumes after awaiting a host call. An open file keeps its contents, as an open descriptor
+     does. A later open reloads it if the folder changed and it holds no unsaved writes.
+   - **Measured over a 10k-file folder:**
 
-   Instructions see the variables they name, as in TypeScript. The type inference and capture analysis are done over
-   Python's own `ast`.
+     | Operation | Time | File contents read |
+     |---|---|---|
+     | list a directory | 14 ms | none |
+     | walk the folder | 34 ms | none |
+     | stat all 10k files | 83 ms | none (sizes from the source) |
+     | read 1k files | 40 ms | 1k |
 
-   **Policy, as in eval.**
-   - `while` is refused, and so is a function that calls itself, directly or through another.
-   - Every `for` loop and comprehension goes through a guard (the lowering wraps its iterable, as `__natlang_finite`
-     does in TypeScript). Concrete collections pass as they are: list, tuple, str, bytes, dict and its views, set,
-     frozenset, range, and numpy and pandas objects. Anything else (a generator, `zip`, `itertools` objects) is taken
-     up to a cap of 100k items, and a longer one raises with a message pointing to `iterate_on`. The TypeScript guard is
-     stricter, a whitelist; Python code iterates generators too routinely for that.
+     Also checked: `open`/append, `rglob`, `makedirs`, pandas `to_csv`, rename, delete, `shutil.copy`, sqlite with its
+     journal, `FileNotFoundError`, and a change made outside becoming visible on the same mount.
+   - **One fix is required:** MEMFS can hold a view of WebAssembly memory (an `Int8Array` over the heap) that later
+     writes reuse, so write-back copies contents out as a fresh `Uint8Array`.
+   - **To add:** evicting clean cached contents past a memory budget, since a 100k-file corpus read end to end would
+     otherwise stay in the WebAssembly heap.
 
-   **Entry points and capabilities.**
-   - Code runs only through the `python` tool's cells and through `python3` in the shell (scripts in the folder and
-     `-c`). Every source that runs passes the check and lowering, including a module imported from the folder: an
-     import hook applies them to local sources.
-   - `exec`, `eval`, `compile` and `__import__` of strings, and `importlib`, are refused.
-   - So are `js`, `pyodide.ffi`, `pyodide.http`, `pyodide_js` and `micropip`. Pyodide is loaded with a restricted
-     `jsglobals` object, so even the foreign-function interface reaches no `fetch` and no host object beyond the
-     `natlang` module.
-   - Only the vendored packages import.
-   - Pyodide runs in a worker, so a time limit or a cancelled call interrupts it (Pyodide's interrupt buffer) without
-     stopping the host.
+   **Concurrent calls.** Parallel calls (say, a per-file `nl` map whose children each use Python) share one
+   interpreter, which is single-threaded but interleaves at `await`s.
+   - Each call gets its own mount (`/calls/<id>`) and its own namespace.
+   - The working directory is global to the interpreter. So the same resume hook that refreshes the mount also restores
+     the resuming call's working directory, and the local-module import hook resolves against it.
 
-   **Where it runs.** One engine serves two places:
-   - `python3` inside the shell, for scripts and one-liners over the folder's files;
-   - a separate `python` tool (decided), a persistent session with the call's scope, beside `eval`.
+   **In the browser.** The same design, with three differences:
+   - Python runs on the runtime's thread. A page that runs the runtime on its main thread blocks while Python computes,
+     so Python-heavy applications run the runtime in a worker they own, as the browser guide already suggests.
+   - The watchdog's interrupt needs `SharedArrayBuffer`, which browsers grant only to cross-origin-isolated pages
+     (COOP/COEP, which multithreaded inference already asks for). Without isolation, the loop caps still bound every
+     loop, but a time limit cannot stop a running computation.
+   - `wait()` needs JavaScript Promise Integration: shipped in Chrome, not yet in every browser. Where it is missing,
+     `wait()` raises and says to `await` instead. Async code works everywhere.
 
-   Python's file system is the call's folder (see F), so `open("notes/a.md")` and `pd.read_csv("sales.csv")` read the
-   same files as the other tools.
+   Pyodide and its packages are served beside `natlang.js` and loaded on first use (numpy and pandas are tens of MB).
+   Folders are in memory; Pyodide's native-filesystem mount (`NATIVEFS`) is not used.
+
+   **The `natlang` module.** It gives the host's own objects Python's shapes; it adds no second implementation. Checked
+   in the spike:
+   - `await nl[bool]("Is ticket urgent?")(ticket)`. `nl[T]` takes Python types: `bool`, numbers, `str`, `Literal`,
+     unions, `list`, `dict`, `TypedDict` and dataclasses become natlang type text, for example
+     `list[Ticket]` → `{ id: string, text: string }[]`. Plain `nl(...)` is an open result, as in TypeScript.
+   - `wait(nl[bool]("Is it spam?")(m))` runs a call from synchronous code, such as a function pandas applies. It uses
+     Pyodide's `run_sync`, which needs JavaScript Promise Integration (`--experimental-wasm-jspi` on Node 24.0; on by
+     default in current browsers). It worked inside `DataFrame.apply`.
+   - `await iterate_on(step, initial).until(done)` is the host's `iterateOn`, with its progress reviews, limits and
+     trace. The Python step and check are kept alive (`create_proxy`) for the whole run and released after it: a
+     plain Python callable passed to JavaScript is destroyed when the call returns.
+   - Folder handles are plain `pathlib.Path`s into the mount, so the standard library is the folder API.
+     `folder("packages/api").apply(bump_version)` and `nl` over a path hand a child call that subfolder or file,
+     rebased as in A.
+   - The call's arguments, functions and services are bound in the namespace by name, as in eval.
+   - Later: static inference of `nl`'s type from the target's annotation (`level: Literal[...] = await nl(...)(x)`),
+     over `ast`, as the TypeScript compiler does from contextual types.
+
+   **Policy, as in eval.** Checked in the spike; the check and lowering are about 100 lines over `ast`.
+   - Refused, with messages that say what to use instead: `while`; a function that calls itself, directly or through
+     another in the module; calls to `exec`, `eval`, `compile` and `breakpoint`; imports of `js`, `pyodide_js`,
+     `pyodide.ffi`, `micropip`, `importlib` and `ctypes`.
+   - Every `for` loop and comprehension goes through `__natlang_finite`. Concrete collections pass as they are: list,
+     tuple, str, bytes, dict and its views, set, frozenset, range, and numpy and pandas objects. Anything else (a
+     generator, `zip`, `itertools` objects) is taken up to 100k items, and beyond that raises with a pointer to
+     `iterate_on`. The spike's `itertools.count()` loop stopped at the cap; `zip`, generators and `islice` passed.
+   - **Scope: user code only.** Cells and local modules run with builtins that lack `exec`, `eval` and `compile`, so
+     looking one up by name fails. Library code keeps the real builtins, which it uses (`dataclasses` runs `exec`),
+     and Pyodide's own modules stay importable for the libraries that need them. Removing them globally broke both in
+     the spike.
+   - Local modules imported from the folder are checked and lowered by an import hook (a meta-path finder). A module
+     with a `while` loop was refused on import.
+   - **Entry points:** the `python` tool's cells, and `python3` in the shell (scripts in the folder and `-c`), both on
+     the same interpreter.
+   - **Network follows the runtime's setting,** as `fetch` in eval does: on by default. When it is on, `pyfetch` and
+     patched `requests` work; when a host turns it off, the `fetch` they use is absent. Pyodide is loaded with a
+     `jsglobals` object that carries only what the host grants, so even Pyodide's own foreign-function interface
+     reaches no `process`, `require` or host objects.
 
 E. **The `natlang` command, identical inside the shell and on the command line.**
 
@@ -221,8 +285,13 @@ F. **The folder, redesigned around mounts and overlays.** Today's `Folder` (an o
    - lazy files, so a 100k-email corpus built from data is not materialized;
    - mounts, so a read-only corpus sits beside a writable workspace and a sub-reducer's folder is a view;
    - one change set across every tool;
-   - adapters for just-bash (`IFileSystem`), Pyodide (an Emscripten filesystem mounted over it, instead of copying
-     files in and out), Node disks and browser storage.
+   - adapters for just-bash (`IFileSystem`) and Pyodide (the Emscripten filesystem of D, over the same view);
+   - sources: Node disks, and in memory (data, archives, files handed over) in both Node and the browser, where
+     nothing reaches the real filesystem;
+   - listing and stat that do not read contents. Today `Folder.statSync` hashes every file to fill in `digest`, and
+     `list()` calls it for every entry, so listing a folder reads all of it. Sizes come from the source instead, and
+     digests are computed when a diff needs them. The spike's view (D) shows the shape: a path index, sizes from the
+     source, and a revision counter.
 
    **Options:**
    1. Keep `Folder` and write the three adapters over it.
@@ -256,7 +325,7 @@ H. **A `delegate` tool: a directory-reducer subagent without code.**
    long task over a large folder stays within a small model's context. The code form stays for maps over many
    subfolders; the tool is for the one-off delegation.
 
-I. **Deliberately not added:** network access, git, and package installation at run time (the Python packages are a
+I. **Deliberately not added:** git, and package installation at run time (the Python packages are a
    fixed, vendored set).
 
 ## 3. Oracles and admission
