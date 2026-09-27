@@ -4,7 +4,9 @@ import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { LABELED_FIELDS, labeledRows, coeditRows, hotpotRows, cuadContracts, sourceRecordId } from './folder-data.mjs';
 import { SOURCES } from './acquire.mjs';
 
-const LABEL_DATASETS = Object.keys(LABELED_FIELDS);
+// AG News (business against technology news) and emotion are labeled too loosely to check a folder of judgments
+// against: a careful teacher disagrees with a tenth or more of their labels.
+const LABEL_DATASETS = Object.keys(LABELED_FIELDS).filter(name => !['ag_news', 'emotion'].includes(name));
 const visibleName = label => label.replace(/_/g, ' ');
 const labelType = labels => labels.map(label => JSON.stringify(label)).join(' | ');
 const templateText = text => String(text).replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${');
@@ -46,6 +48,8 @@ function caseFor(seed, index, split, kind, chosenDataset) {
   const rng = new Random(seed, `${kind}:${index}`), dataset = chosenDataset ?? rng.pick(LABEL_DATASETS);
   if (!LABELED_FIELDS[dataset]) throw new Error(`unknown labeled dataset ${dataset}`);
   const { labels, rows } = pickRows(rng, dataset, split), files = folderFiles(rows);
+  // Labels name folders (by-<label>/), so they must be plain names.
+  for (const label of labels) if (!/^[\w-]+$/.test(label)) throw new Error(`${dataset} label ${label} is not a folder name`);
   const labelsText = labels.map(visibleName).join(', ');
   const question = `${LABELED_FIELDS[dataset].question} Choose exactly one of: ${labels.map(label => JSON.stringify(label)).join(', ')}.`;
   const code = kind === 'folder_triage' ?
@@ -236,6 +240,9 @@ export function folderFind(seed, index, split = 'train') {
   return [record];
 }
 
+const NON_COMPETE = 'Quote the non-compete clause of this contract: the sentence or sentences restricting a party from ' +
+  'competing with the counterparty or operating in a geography, business or technology sector (not non-solicitation or ' +
+  'exclusivity). Return their exact text, or an empty string if there is none.';
 const csvCell = value => `"${String(value).replaceAll('"', '""')}"`;
 /** Non-compete extraction from contract texts, with an exact report oracle. */
 export function folderExtract(seed, index, split = 'train') {
@@ -253,7 +260,7 @@ export function folderExtract(seed, index, split = 'train') {
   const expectedFiles = { ...files, 'clauses.csv': report };
   const code = `const entries: Array<[string, string]> = [];\n` +
     `for (const file of await folder.files('contracts/*.md')) {\n` +
-    `  const clause = await nl<string>\`Find the non-compete clause in this contract and quote its exact text. If there is none, return an empty string.\`(file);\n` +
+    `  const clause = await nl<string>\`${NON_COMPETE}\`(file);\n` +
     `  entries.push([file.name.slice(0, -3), clause]);\n` +
     `}\n` +
     `const cell = (value: string) => '"' + value.replaceAll('"', '""') + '"';\n` +
@@ -282,11 +289,16 @@ export function folderExtract(seed, index, split = 'train') {
     minimumSequence: ['inspect contracts', 'extract clauses per file', 'write clauses.csv'],
     reference: { root: [evalCall(code), returnCall(positive)], children },
     root: { name: 'extract_noncompete', kind: 'directory-reducer', args: {}, returns: 'number',
-      instructions: 'For every contract in contracts/, find a non-compete clause. Write clauses.csv with id and exact clause text; use an empty clause when absent. Sort rows by id and return the number with a clause.' },
+      instructions: 'For every contract in contracts/, find its non-compete clause: a restriction on a party\'s ability to ' +
+        'compete with the counterparty, or to operate in a certain geography, business or technology sector. ' +
+        'Non-solicitation and exclusivity clauses are not non-compete clauses. Write clauses.csv with columns id and clause: ' +
+        'the file name without .md, and the exact text of the sentence or sentences that impose the restriction (not the ' +
+        'whole section), or an empty clause when there is none. Sort rows by id and return the number with a clause.' },
     folderFiles: files, expectedFiles, inputs: {}, expected: positive, split });
   // A quoted clause matches CUAD's span by token overlap (its annotations differ in extent); rows by id.
-  record.semantics.oracle = { level: 'agreement', threshold: 0.85 };
-  record.semantics.files_oracle = { compare: 'csv', span: 0.5, threshold: 0.85 };
+  // CUAD's annotations are uneven (a span can be a fragment next to the restriction), so 0.8 of rows suffice.
+  record.semantics.oracle = { level: 'agreement', threshold: 0.8 };
+  record.semantics.files_oracle = { compare: 'csv', span: 0.5, threshold: 0.8 };
   record.license = SOURCES.cuad.license;
   record.gold_sources = ['cuad-non-compete-spans'];
   record.dataset = 'cuad';
