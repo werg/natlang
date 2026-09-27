@@ -14,6 +14,7 @@ import { anliBatch, commaqaNumeric, commaqaQuestion, entailmentPremises, proofwr
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
 import { hintFor, hinted } from './lib.mjs';
+import { composedHelpers, composedProcess } from './composed.mjs';
 
 export const FAMILIES = {
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
@@ -50,6 +51,8 @@ export const FAMILIES = {
   iterate_frontier: { build: frontierSearch, weight: 1.5 },
   relational_late_argmax: { build: lateArgmax, weight: 1.5 },
   actor_greenhouse: { build: greenhouseControl, weight: 2 },
+  composed_helpers: { build: composedHelpers, weight: 2 },
+  composed_process: { build: composedProcess, weight: 2 },
   folio_entailment: { build: folioEntailment, weight: 3, source: 'folio' },
   folio_batch: { build: folioBatch, weight: 2, source: 'folio' },
   prontoqa_proof: { build: prontoProof, weight: 2, source: 'prontoqa' },

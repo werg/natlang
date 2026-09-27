@@ -158,7 +158,7 @@ return { revision: view2.revision, column: view2.cards.find(item => item.id === 
       decisive: [{ marker: spec.reject ? 'locked by an open audit' : 'view renderer timed out', source: 'error', note: spec.reject ? 'the event is rejected' : 'only the view failed' }],
       plausibleActions: ['apply the event again', 'render again', 'report failure'],
       minimumSequence: spec.reject ? ['apply the event', 'see the rejection', 'report it'] : ['apply the event once', 'see the view time out', 'render again without re-applying'],
-      reference: { root: reference },
+      reference: { root: reference, failures: spec.reject ? 1 : 0 },
       root: { name: 'move_card', args: {}, returns: '{ revision: number, column: string }',
         instructions: `Move card ${card} to column "${column}" with board.commit_move, then render the board with board.render() and return the rendered revision and the card's column. The move must be applied exactly once.` },
       files: { 'move_card/board.ts': module },
@@ -199,7 +199,7 @@ levels(chart.find(p => p.manager === null)!.name)`;
       decisive: [{ marker: 'recursion is not allowed', source: 'error', note: 'natlang code rejects the recursive helper' }],
       plausibleActions: ['retry the recursive helper', 'rewrite it with an explicit work list', 'guess the depth'],
       minimumSequence: ['read the rejection', 'compute each person\'s chain length with a bounded loop'],
-      reference: { root: [evalCall(`const chart = org.people();
+      reference: { failures: 1, root: [evalCall(`const chart = org.people();
 const managerOf: Record<string, string | null> = {};
 for (const p of chart) managerOf[p.name] = p.manager;
 let deepest = 0;

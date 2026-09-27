@@ -60,7 +60,8 @@ export type Curriculum = {
   /** A replayable solution: root tool calls in order, and answers for child calls keyed by fragments of the child's opening (all must appear). */
   // A child answer with `call` answers with that tool call (such as `return_result` with status `blocked`) instead of a value; `calls` plays
   // several turns in order (for example an eval that acts, then return_result).
-  reference: { root: ReferenceCall[]; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
+  /** failures: how many of the reference's actions meet the obstacle the case is about (a closed road, a locked card). */
+  reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
 export type CurriculumRecord = ProgramRecord & { curriculum: Curriculum; family: string; split: string };
 
@@ -350,6 +351,11 @@ export async function verifyCases(records: CurriculumRecord[], systemPrompt: str
       const { run, trajectory } = await replayReference(record, systemPrompt);
       const admission = admitRow({ task: { program_ir: record }, outcome: run.outcome, trajectory });
       if (admission.notes.includes('judged_directly')) problems.push('reference does not use the technique its case requires');
+      // Every scripted action runs, except a seeded failure's own eval and the obstacles the reference declares.
+      const failed = ((run.outcome.action_ledger ?? []) as Record<string, unknown>[]).filter(event => ['rejected', 'refused', 'error'].includes(String(event.outcome)));
+      const expectedFailures = (record.semantics.failure_seed ? 1 : 0) + (record.curriculum.reference.failures ?? 0);
+      if (failed.length !== expectedFailures)
+        problems.push(`${failed.length} reference actions failed where ${expectedFailures} should: ${failed.map(event => `${String(event.name)}: ${String(event.result_text ?? '').slice(0, 300)}`).join('; ')}`);
       if (!admission.admitted) problems.push(`reference not admitted: ${admission.reasons.join(', ')}` +
         (run.outcome.accepted ? '' : ` (status ${String(run.outcome.status)}, value ${JSON.stringify(run.outcome.value)}, detail ${JSON.stringify(run.outcome.detail)})`));
     } catch (error) { problems.push(error instanceof Error ? error.message : String(error)); }
