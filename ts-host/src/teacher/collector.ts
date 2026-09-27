@@ -12,7 +12,7 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
-import { checkOracle } from './oracle.js';
+import { checkFiles, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { Handoff } from './handoff.js';
@@ -632,7 +632,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.
     const authoringSpec = (record.semantics as { authoring?: AuthoringSpec }).authoring;
     const authoring = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
-    const filesOk = !folder || (authoring ? authoring.ok : same(actualFiles, record.semantics.expected_files ?? folderFiles));
+    // A folder's result files: exactly as expected, or as its files oracle checks them (oracle.ts checkFiles).
+    const filesCheck = folder && !authoring && record.semantics.files_oracle && actualFiles ?
+      checkFiles(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!, record.semantics.files_oracle) : undefined;
+    const filesOk = !folder || (authoring ? authoring.ok : filesCheck ? filesCheck.accepted :
+      same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
@@ -643,7 +647,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
-      ...(worldScore ? { world: worldScore } : {}), oracle, accepted,
+      ...(worldScore ? { world: worldScore } : {}), ...(filesCheck ? { files_check: filesCheck } : {}), oracle, accepted,
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]

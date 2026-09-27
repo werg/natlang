@@ -167,13 +167,13 @@ export type Admission = { id: string; program_id: string; admitted: boolean; rea
   notes: string[]; facts: RunFacts;
   family: string; slice: Slice; domain: Domain; mode: string; inline: string; pair_group: string | null;
   /** Strength of the case's answer oracle, when declared in program semantics. */
-  oracle_level?: 'exact' | 'normalized' | 'span' | 'judged' };
+  oracle_level?: 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' };
 
-function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'judged' | undefined {
+function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | undefined {
   const level = typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) ?
     (value as Record<string, unknown>).level : undefined;
-  return ['exact', 'normalized', 'span', 'judged'].includes(String(level)) ?
-    level as 'exact' | 'normalized' | 'span' | 'judged' : undefined;
+  return ['exact', 'normalized', 'span', 'agreement', 'judged'].includes(String(level)) ?
+    level as 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' : undefined;
 }
 
 /**
@@ -249,7 +249,8 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
       const opening = openingText(turn.context ?? []);
       return matches.every(fragment => opening.includes(fragment));
     });
-    if (!turns.length && child.evidence?.length) reasons.push(`missing_child:${matches.join('|')}`);
+    // A run that delegates must delegate every item the reference does; one that judges directly is noted below.
+    if (!turns.length && child.evidence?.length && facts.inlineCalls + facts.namedChildCalls) reasons.push(`missing_child:${matches.join('|')}`);
     const firstAnswer = turns.find(turn => (turn.assistant?.calls ?? []).some(call =>
       call.tool === 'return_result' || call.tool === 'eval' && stagesResult(String((call.arguments as Record<string, unknown>)?.code ?? ''))) ||
       Boolean(turn.assistant?.content?.trim()));

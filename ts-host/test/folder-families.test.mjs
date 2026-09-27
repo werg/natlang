@@ -42,6 +42,12 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
     return { title, paragraphs: [{ context: `Agreement ${index}.\n${index % 2 ? clause : 'The parties agree to cooperate.'}\nEnd of agreement.`,
       qas: [{ id: `${title}__Non-Compete`, answers: index % 2 ? [{ text: clause, answer_start: 14 }] : [] }] }] };
   }) }));
+  const bankingDirectory = join(root, 'banking77', '57ec275d8078af65b7731c2a98be812d844a6d6b', 'banking_data');
+  mkdirSync(bankingDirectory, { recursive: true });
+  const intents = ['card_payment_not_recognised', 'transaction_charged_twice', 'card_arrival', 'change_pin', 'exchange_rate'];
+  writeFileSync(join(bankingDirectory, 'train.csv.jsonl'), Array.from({ length: 600 }, (_, index) => JSON.stringify({
+    text: `Request ${index} about ${intents[index % intents.length].replaceAll('_', ' ')}, please help.`,
+    category: intents[index % intents.length] })).join('\n') + '\n');
   process.env.NATLANG_DATASETS = root;
   const { folderTriage, folderIndex, folderEdit, folderFind, folderExtract } = await import('../scripts/inline-curriculum/folder-families.mjs');
   const train = folderTriage(3, 0, 'train', 'sms_spam')[0];
@@ -66,11 +72,13 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
   }
 });
 
-test('mixed CSV and notes case replays a checked aggregate', async () => {
+test('mixed CSV and customer messages case replays a checked aggregate', async () => {
   const { folderMixed } = await import('../scripts/inline-curriculum/folder-families.mjs');
   const [record] = folderMixed(3, 0);
-  assert.ok(record.semantics.folder_files['invoices.csv']);
-  assert.ok(Object.keys(record.semantics.folder_files).some(path => path.startsWith('notes/')));
+  assert.ok(record.semantics.folder_files['payments.csv']);
+  const messages = Object.entries(record.semantics.folder_files).filter(([path]) => path.startsWith('messages/'));
+  assert.ok(messages.length >= 20);
+  assert.ok(new Set(messages.map(([, text]) => text)).size > messages.length / 2, 'messages are real, varied text');
   const [verified] = await verifyCases([record], TOOLS_PROMPT);
   assert.equal(verified.ok, true, verified.problems.join('\n'));
 });

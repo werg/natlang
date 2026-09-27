@@ -27,11 +27,11 @@ function record(value: unknown, label: string): Dict {
   return value as Dict;
 }
 
-function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'judged' | undefined {
+function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' | undefined {
   const level = typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) ?
     (value as Dict).level : undefined;
-  return ['exact', 'normalized', 'span', 'judged'].includes(String(level)) ?
-    level as 'exact' | 'normalized' | 'span' | 'judged' : undefined;
+  return ['exact', 'normalized', 'span', 'agreement', 'judged'].includes(String(level)) ?
+    level as 'exact' | 'normalized' | 'span' | 'agreement' | 'judged' : undefined;
 }
 
 function messages(value: unknown, label: string): Dict[] {

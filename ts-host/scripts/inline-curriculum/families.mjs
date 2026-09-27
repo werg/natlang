@@ -59,7 +59,7 @@ export const FAMILIES = {
   labeled_judgments: { build: labeledJudgments, weight: 3, externalData: true },
   folder_triage: { build: folderTriage, weight: 1, externalData: true },
   folder_index: { build: folderIndex, weight: 1, externalData: true },
-  folder_mixed: { build: folderMixed, weight: 1 },
+  folder_mixed: { build: folderMixed, weight: 1, externalData: true },
   folder_edit: { build: folderEdit, weight: 1, externalData: true },
   folder_find: { build: folderFind, weight: 1, externalData: true },
   folder_extract: { build: folderExtract, weight: 1, externalData: true },
