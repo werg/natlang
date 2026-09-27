@@ -226,6 +226,9 @@ export function obsoleteOutcomes(trajectory: Turn[]): string[] {
   return [...found];
 }
 
+/** Whether text shows a marker: as it is, or escaped inside JSON (a quote in a tool result shown as data). */
+const shows = (text: string, marker: string) => text.includes(marker) || text.includes(JSON.stringify(marker).slice(1, -1));
+
 export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; outcome?: Record<string, unknown>;
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
@@ -244,10 +247,13 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   }
   for (const child of c.reference.children ?? []) {
     const matches = Array.isArray(child.match) ? child.match : [child.match];
+    // A child is the item's by what it was given: the fragments naming it, or else the item's evidence (a child given
+    // an item's text instead of its file sees the text, not the file's name).
     const turns = ((row.trajectory ?? []) as Turn[]).filter(turn => {
       if (callName(turn.context ?? []) === record.semantics.root.replace(/\.nl$/, '').split('/').pop()) return false;
       const opening = openingText(turn.context ?? []);
-      return matches.every(fragment => opening.includes(fragment));
+      return matches.every(fragment => opening.includes(fragment)) ||
+        !!child.evidence?.length && child.evidence.every(marker => shows(opening, marker));
     });
     // A run that delegates must delegate every item the reference does; one that judges directly is noted below.
     if (!turns.length && child.evidence?.length && facts.inlineCalls + facts.namedChildCalls) reasons.push(`missing_child:${matches.join('|')}`);
@@ -256,7 +262,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
       Boolean(turn.assistant?.content?.trim()));
     if (firstAnswer) {
       const seen = (firstAnswer.context ?? []).filter(message => message.role === 'tool').map(message => text(message.content)).join('\n');
-      for (const marker of child.evidence ?? []) if (!seen.includes(marker))
+      for (const marker of child.evidence ?? []) if (!shows(seen, marker))
         reasons.push(`missing_child_observation:${marker}`);
     }
   }

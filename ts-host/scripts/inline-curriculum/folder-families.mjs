@@ -1,5 +1,6 @@
 /** Dataset-backed folder cases. Reference actions run through the same collector as a teacher. */
 import { Folder } from '../../dist/index.js';
+import { spanF1 } from '../../dist/teacher/oracle.js';
 import { Random, curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { LABELED_FIELDS, labeledRows, coeditRows, hotpotRows, cuadContracts, sourceRecordId } from './folder-data.mjs';
 import { SOURCES } from './acquire.mjs';
@@ -161,7 +162,9 @@ export function folderEdit(seed, index, split = 'train', chosenTask) {
   const rng = new Random(seed, `folder_edit:${index}`);
   const task = chosenTask ?? rng.pick(Object.keys(EDIT_TASKS));
   if (!EDIT_TASKS[task]) throw new Error(`unknown CoEdIT task ${task}`);
-  const pool = coeditRows(task, split);
+  // Only drafts that need the edit: CoEdIT keeps many pairs whose target barely differs from the source, and a teacher
+  // rightly leaves such a draft as it is.
+  const pool = coeditRows(task, split).filter(row => spanF1(row.text, row.target) < 0.8);
   const count = Math.min(pool.length, rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
   if (count < 20) throw new Error(`CoEdIT ${task}/${split} has only ${count} suitable edits; need at least 20`);
   const rows = rng.sample(pool, count).map(row => ({ ...row, fileId: row.id.slice(0, 16) }));
@@ -191,7 +194,7 @@ export function folderEdit(seed, index, split = 'train', chosenTask) {
         ['return_result', { status: 'success', value: row.target }]],
     })) },
     root: { name: 'edit_drafts', kind: 'directory-reducer', args: {}, returns: 'number',
-      instructions: `For every file in drafts/, ${EDIT_TASKS[task]} while preserving its front matter and filename. Return the number of drafts edited.` },
+      instructions: `Every file in drafts/ needs this edit: ${EDIT_TASKS[task]}. Edit each one, preserving its front matter and filename. Return the number of drafts edited.` },
     folderFiles: files, expectedFiles, inputs: {}, expected: count, split });
   record.semantics.oracle = 'exact';
   // CoEdIT's target is one good rewrite of many; each draft must be rewritten, its front matter kept.
