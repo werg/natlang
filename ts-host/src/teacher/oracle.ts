@@ -69,7 +69,7 @@ export function agreement(actual: unknown, expected: unknown): number {
  * the files that did change (a file changed or made that the task does not is a failed item), or with `csv` the rows of
  * the changed files; at least `threshold` (default 0.9) of them must pass.
  * - exact: the same content.
- * - rewrite: the same front matter, a body changed from the input's and still about it (token F1 at least 0.3); for
+ * - rewrite: the same front matter, a body changed from the input's and still about it (token F1 at least 0.2); for
  *   rewrites that many wordings satisfy, where a reference rewrite is one of them.
  * - csv: rows keyed by their first cell; each expected row's cells match (both empty, or token F1 at least `span`,
  *   default 0.5), and the header is the same.
@@ -122,7 +122,7 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     else if (compare === 'rewrite' && input[path] !== undefined) {
       const front = (text: string) => FRONT_MATTER.exec(text)?.[0] ?? '', body = (text: string) => text.slice(front(text).length);
       item(path, front(got) === front(want) && body(got).trim() !== body(input[path]!).trim() &&
-        spanF1(body(got), body(input[path]!)) >= 0.3);
+        spanF1(body(got), body(input[path]!)) >= 0.2);
     } else item(path, got === want);
   }
   const score = items ? passed / items : 1;

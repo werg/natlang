@@ -5,7 +5,7 @@ judge calls start only at the `teacher/cli.js` step. Use separate train and test
 disjoint source-record hash pools. Raw datasets and generated rows live outside git.
 
 The acquisition and build commands below have already been run for this checkout. The ready shards are
-`data/teacher/directory/train.ir.jsonl` (48 verified cases) and `test.ir.jsonl` (24 verified cases), with reports beside
+`data/teacher/directory/train.ir.jsonl` (35 verified cases) and `test.ir.jsonl` (16 verified cases), with reports beside
 them. Their source groups have zero train/test overlap. When the GPU is free, start at the collector commands below;
 rerun the CPU commands only to refresh a shard after changing its generator.
 

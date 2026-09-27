@@ -155,8 +155,10 @@ export function folderMixed(seed, index, split = 'train') {
 
 const EDIT_TASKS = {
   gec: 'correct grammar and usage', simplification: 'simplify the wording',
-  paraphrase: 'paraphrase the wording', coherence: 'improve coherence', neutralize: 'make the tone neutral',
+  coherence: 'improve coherence', neutralize: 'make the tone neutral',
 };
+// CoEdIT's paraphrase pairs are often not paraphrases ("I'm still trying to figure it out" -> "I try to explain this
+// all the time"), and a true paraphrase shares few words with its source to check it by: not used.
 
 export function folderEdit(seed, index, split = 'train', chosenTask) {
   const rng = new Random(seed, `folder_edit:${index}`);
