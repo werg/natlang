@@ -201,8 +201,7 @@ D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).** 
      the resuming call's working directory, and the local-module import hook resolves against it.
 
    **In the browser.** The same design, with three differences:
-   - Python runs on the runtime's thread. A page that runs the runtime on its main thread blocks while Python computes,
-     so Python-heavy applications run the runtime in a worker they own, as the browser guide already suggests.
+   - Python runs on the runtime's thread, which in the browser is the natlang worker (I), so it never blocks the page.
    - The watchdog's interrupt needs `SharedArrayBuffer`, which browsers grant only to cross-origin-isolated pages
      (COOP/COEP, which multithreaded inference already asks for). Without isolation, the loop caps still bound every
      loop, but a time limit cannot stop a running computation.
@@ -325,7 +324,32 @@ H. **A `delegate` tool: a directory-reducer subagent without code.**
    long task over a large folder stays within a small model's context. The code form stays for maps over many
    subfolders; the tool is for the one-off delegation.
 
-I. **Deliberately not added:** git, and package installation at run time (the Python packages are a
+I. **In the browser, natlang runs in a worker.** The page's main thread holds only a thin client and the DOM renderer;
+   the runtime runs in a dedicated worker by default, not in the page. Python, the shell and long calls then never
+   block the page, and D's synchronous file access and watchdog work unchanged, since the worker is the runtime's
+   thread.
+   - **What already fits.** Eval runs through `new Function`, which workers have. Natural-language applications
+     already reach the DOM only through data: they produce `UiNode` trees, and `BrowserDomRenderer` draws them and
+     dispatches actions back. The event loop moves to the worker, the renderer stays on the page, and trees and actions
+     cross as messages. Local inference (wllama) is already a worker; the runtime worker starts it as a nested worker,
+     and WebGPU and the model cache (OPFS) are available to workers.
+   - **The client API.** `createNatlangWorker(options)` returns a client with the shape of today's module (load a
+     model, compile a project, call functions, run an application's event loop, make folders), implemented as messages
+     to the worker.
+     - Values cross by structured clone. File contents and folder data cross as transferred buffers, and a folder's
+       changes come back as a change set.
+     - Streams (steps, traces, iteration events) come back over a `MessagePort`.
+     - Cancelling a call aborts it in the worker, and interrupts Python when the page is cross-origin isolated.
+   - **Host services.** Services and functions an application defines on the page reach the worker as asynchronous
+     proxies. Eval already awaits what it is handed, but a service that must answer synchronously belongs in the worker.
+     The guide says so, and the scaffolds put services in the worker.
+   - **Data** that is large (a corpus, an archive) is fetched or unpacked in the worker, not copied across.
+   - **Cross-origin isolation** (COOP/COEP) is recommended: it enables `SharedArrayBuffer`, and with it Python's
+     interrupt and multithreaded inference. Without it, everything still runs, with the fallbacks in D.
+   - **Running on the page itself** stays possible for tests and the smallest demos, but it is not the default in the
+     documentation, the examples or `natlang` app scaffolds.
+
+J. **Deliberately not added:** git, and package installation at run time (the Python packages are a
    fixed, vendored set).
 
 ## 3. Oracles and admission
@@ -448,6 +472,9 @@ reasoning towards it, is still a direct answer, trained only with `--direct-answ
    task calls for them; the normalized and span oracle levels; teacher collection on dataset-backed folders.
    Conversion of the OpenHands and terminal trajectories (section 5), broken into delegated sub-tasks.
 6. **Document views and the evals** (Workspace-Bench-Lite, MuDABench).
+
+The browser worker (I) comes before Python reaches the browser: phase 3's browser work runs on it. It is also useful
+on its own, for inference-heavy pages, so it can start any time.
 
 Phases 1 to 3 can overlap: they touch different code.
 
