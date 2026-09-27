@@ -6,6 +6,9 @@
 # with the model's GGUF and template, so prompts and completions are byte-for-byte what the model sees when served.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# NATLANG_TS_HOST picks the ts-host whose scripts and dist run the build (default: this checkout's), so a build can run
+# while a collector uses this checkout's dist.
+TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 MODEL="${1:?model: lfm, ling or spark}"; OUT="${2:?output directory}"; shift 2
 [ "$#" -gt 0 ] || { echo "no results files given"; exit 2; }
 case "$MODEL" in
@@ -21,9 +24,9 @@ PORT="${NATLANG_TEMPLATE_PORT:-8083}"; NAME="natlang-template-$MODEL"
 KWARGS="$ROOT/models/templates/${TEMPLATE%.jinja}.kwargs.json"
 KWARG_ARGS=(); [ -f "$KWARGS" ] && KWARG_ARGS=(--chat-template-kwargs "$(cat "$KWARGS")")
 mkdir -p "$OUT"
-node "$ROOT/ts-host/scripts/inline-curriculum/admit.mjs" "$@" --ledger "$OUT/admission.jsonl" \
+node "$TS_HOST/scripts/inline-curriculum/admit.mjs" "$@" --ledger "$OUT/admission.jsonl" \
   --admitted "$OUT/admitted.jsonl" --require-technique | tail -2 | head -1
-node --max-old-space-size=6000 "$ROOT/ts-host/scripts/materialize-native-teacher.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" --replace
+node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" --replace
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" "$IMAGE" \
@@ -31,5 +34,5 @@ docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PO
   --chat-template-file "/models/templates/$TEMPLATE" "${KWARG_ARGS[@]}" --no-webui >/dev/null
 trap 'docker stop "$NAME" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 90); do curl -fsS "127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 2; done
-node --max-old-space-size=4000 "$ROOT/ts-host/scripts/export-native-sft.mjs" "$OUT/turns.jsonl" "$OUT/sft.jsonl" \
+node --max-old-space-size=4000 "$TS_HOST/scripts/export-native-sft.mjs" "$OUT/turns.jsonl" "$OUT/sft.jsonl" \
   --server "http://127.0.0.1:$PORT" --workers 4 --end-token "$END"

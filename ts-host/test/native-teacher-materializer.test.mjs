@@ -41,7 +41,7 @@ test('accepted native rows become linked template neutral decisions with their e
     name: 'write', arguments: firstCall.arguments, status: 'ok', result: 'stored value', diagnostics: [] });
   assert.equal(next.assistant.calls[0].outcome.trace_seq, 17);
   // The conversation continues: the next decision sees the earlier call and its result.
-  assert.deepEqual(next.context.map(message => message.role), ['system', 'user', 'assistant', 'tool']);
+  assert.deepEqual(nextTurn.messages.map(message => message.role), ['system', 'user', 'assistant', 'tool']);
   assert.deepEqual(next.durable_opening.map(message => message.role), ['system', 'user']);
   assert.equal(actionTurn.source_ref.trajectory_id, 'teacher-1');
   assert.deepEqual(actionTurn.provenance, accepted.provenance);

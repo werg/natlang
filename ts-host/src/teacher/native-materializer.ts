@@ -141,6 +141,8 @@ export function materializeNativeRows(input: unknown[]): {
     const next = new Map<string, number>(), claimed = new Map<string, string>(), owners = new Set<string>();
     // Per call (by its opening): each call signature already made, with the result it got.
     const sentBefore = new Map<string, Map<string, string>>();
+    // Once per row: every decision names the row it came from, and hashing a long row per decision is quadratic.
+    const rowDigest = nativeRowDigest(row), outcomeDigest = nativeRowDigest(row.outcome);
     let linked = 0;
     const rowTurns: Dict[] = [];
     for (let index = 0; index < row.trajectory.length; index++) {
@@ -185,9 +187,6 @@ export function materializeNativeRows(input: unknown[]): {
         return normalized;
       }) : [];
 
-      // Every decision owns the exact request snapshot, normalized to roles and semantic
-      // calls. This preserves within-segment evidence while preventing cross-segment stitching.
-      const context = contextSource.map(normalizeContextMessage);
       const programId = record(row.task.program_ir, `${row.id}.task.program_ir`).id ?? null;
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
@@ -210,10 +209,10 @@ export function materializeNativeRows(input: unknown[]): {
       const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
-        source_ref: { trajectory_id: row.id, source_row_sha256: nativeRowDigest(row),
+        source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
           program_ir_id: programId },
-        provenance: structuredClone(row.provenance),
-        task: structuredClone(row.task),
+        provenance: row.provenance,
+        task: row.task,
         program_id: programId,
         family: student ? 'student_program' : 'teacher_program',
         skill,
@@ -229,7 +228,7 @@ export function materializeNativeRows(input: unknown[]): {
         teacher_reasoning: retainedReasoning,
         teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
-        teacher_trajectory_digest: nativeRowDigest(row),
+        teacher_trajectory_digest: rowDigest,
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
           ...(decisionApproved ? {} : { reason: fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
@@ -238,9 +237,9 @@ export function materializeNativeRows(input: unknown[]): {
             detour ? 'repeats an earlier call of this call with the same result' :
               "the task's checker rejected this attempt" }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
-          final_outcome_sha256: nativeRowDigest(row.outcome) },
+          final_outcome_sha256: outcomeDigest },
         decision: { index,
-          context, durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
+          durable_opening: contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage),
           tool_schemas: offered,
           assistant: { content: assistant.content ?? '', reasoning: retainedReasoning,
             execution_plan: executionPlan,
@@ -248,8 +247,7 @@ export function materializeNativeRows(input: unknown[]): {
           training_approved: decisionApproved,
           source_raw_response_sha256: source.raw_response_sha256 ?? null,
           source_tools_offered: structuredClone(source.tools_offered ?? []) },
-        outcome: structuredClone(row.outcome),
-        capture_limits: structuredClone(row.capture_limits ?? []) });
+      });
     }
     // A decision linked to another call's outcome would train the wrong target, so a row whose outcomes cannot all
     // be linked is not used (concurrent calls with the very same opening cannot be told apart), and is reported.
