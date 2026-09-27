@@ -380,6 +380,16 @@ def main():
                          "bits, run as one grouped matmul, and adaptable by LoRA (for models Unsloth cannot load)")
     ap.add_argument("--expert-rank", type=int,
                     help="LoRA rank for a MoE's stacked expert parameters (default: --rank); they hold most weights")
+    ap.add_argument("--moe-backend", choices=("grouped_mm", "unsloth_triton", "native_torch"),
+                    help="with --unsloth-moe, the expert matmul backend (default: Unsloth's choice, grouped_mm when "
+                         "torch has it; it loops over experts below sm90, where unsloth_triton runs one kernel)")
+    ap.add_argument("--offload-checkpoints", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --unsloth-moe, keep checkpointed layer inputs in CPU memory (Unsloth's smart "
+                         "checkpointing); --no-offload-checkpoints keeps them on the GPU when they fit")
+    ap.add_argument("--no-expert-lora", action="store_true",
+                    help="adapt no stacked MoE expert weights (attention, shared experts and dense layers only): "
+                         "faster, since routed-expert LoRA runs per expert when its rank misaligns grouped matmuls, "
+                         "and smaller")
     ap.add_argument("--exclude-modules",
                     help="regex over full module names kept out of the adapter, e.g. a MoE's routed experts")
     ap.add_argument("--full", action="store_true")
@@ -473,6 +483,8 @@ def main():
                     "require_audit": a.require_audit}
         if a.exclude_modules:
             identity["exclude_modules"] = a.exclude_modules
+        if a.no_expert_lora:
+            identity["no_expert_lora"] = True
         if a.expert_rank:
             identity["expert_rank"] = a.expert_rank
         if a.unsloth_moe:
@@ -518,8 +530,18 @@ def main():
             os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
         from unsloth import FastLanguageModel
     elif a.unsloth_moe:  # Its MoE patches to Transformers and PEFT apply on import, before either is used.
+        if a.moe_backend:
+            os.environ["UNSLOTH_MOE_BACKEND"] = a.moe_backend
         import unsloth  # noqa: F401
-        if a.gradient_checkpointing:  # as Unsloth's loader does: checkpointed layer inputs wait in CPU memory
+        if a.moe_backend:
+            # Unsloth picks the backend once, while it is still importing, when its own Triton kernels cannot be
+            # imported yet; both answers are cached. Ask again now that they can.
+            from unsloth_zoo.temporary_patches import moe_utils
+            moe_utils._GROUPED_GEMM_AVAILABLE = None
+            moe_utils.select_moe_backend.cache_clear()
+            if moe_utils.select_moe_backend() != a.moe_backend:
+                raise RuntimeError(f"MoE backend {a.moe_backend} is not available here")
+        if a.gradient_checkpointing and a.offload_checkpoints:  # as Unsloth's loader does: layer inputs wait in CPU memory
             from unsloth_zoo.gradient_checkpointing import patch_unsloth_smart_gradient_checkpointing
             patch_unsloth_smart_gradient_checkpointing(dtype=torch.bfloat16)
     from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
@@ -589,6 +611,8 @@ def main():
             else:
                 # Stacked expert weights are parameters, not layers; PEFT adapts them through target_parameters.
                 layers, stacked = split_targets(model, linear)
+                if a.no_expert_lora:
+                    stacked = []
                 model = get_peft_model(model, LoraConfig(
                     r=a.rank, lora_alpha=2 * a.rank, lora_dropout=0.0,
                     target_modules=layers, target_parameters=stacked or None, exclude_modules=a.exclude_modules, task_type="CAUSAL_LM",

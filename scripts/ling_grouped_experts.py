@@ -137,13 +137,13 @@ LOGITS_NEW = """        hidden_states = outputs[0]
         logits_to_keep = kwargs.get("logits_to_keep", 0)
         if isinstance(logits_to_keep, int) and logits_to_keep:
             hidden_states = hidden_states[:, -logits_to_keep:]
-        if labels is not None and self.training and self.num_nextn_predict_layers == 0:
+        if labels is not None and self.num_nextn_predict_layers == 0:
             loss = _chunked_causal_lm_loss(self.lm_head, hidden_states, labels)
             return MoEV3CausalLMOutputWithPast(loss=loss, past_key_values=outputs.past_key_values)
         logits = self.lm_head(hidden_states)
 """
-# In training, the loss block by block, each block's logits recomputed in backward: full-width fp32 logits over the
-# vocabulary, and their gradient, cost about 1.2 GB per thousand positions.
+# With labels (in training, and in held-out evaluation), the loss block by block, each block's logits recomputed in
+# backward: full-width fp32 logits over the vocabulary, and their gradient, cost about 1.2 GB per thousand positions.
 LOSS_FN = '''
 
 def _chunked_causal_lm_loss(lm_head, hidden_states, labels, block=512):
