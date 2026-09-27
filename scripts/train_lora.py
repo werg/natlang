@@ -239,17 +239,21 @@ def completion_loss(model, encoded):
 
 
 def collate_completions(examples, pad_id=0, device="cuda"):
-    """Right padding preserves causal/convolution history; prompts never carry loss."""
-    length = max(len(x) + len(y) for x, y in examples)
-    start = min(len(x) for x, y in examples) - 1
+    """Right padding preserves causal/convolution history; prompts never carry loss.
+
+    An example is (prompt, completion) or, for a merged conversation, (prompt, rest, trained): rest holds each later
+    turn's context and completion, and trained marks which of its tokens carry loss."""
+    length = max(len(e[0]) + len(e[1]) for e in examples)
+    start = min(len(e[0]) for e in examples) - 1
     inputs = torch.full((len(examples), length), pad_id, dtype=torch.long)
     mask = torch.zeros_like(inputs)
     labels = torch.full_like(inputs, -100)
-    for i, (x, y) in enumerate(examples):
+    for i, e in enumerate(examples):
+        x, y = e[0], e[1]
         end = len(x) + len(y)
         inputs[i, :end] = torch.tensor(x + y)
         mask[i, :end] = 1
-        labels[i, len(x):end] = torch.tensor(y)
+        labels[i, len(x):end] = torch.tensor(y if len(e) == 2 else [t if keep else -100 for t, keep in zip(y, e[2])])
     return {"input_ids": inputs.to(device), "attention_mask": mask.to(device),
             "labels": labels[:, start:].to(device)}
 
@@ -350,6 +354,8 @@ def main():
                     help="retain activations for every Nth decoder layer; zero checkpoints every layer")
     ap.add_argument("--token-cache", type=Path)
     ap.add_argument("--benchmark-steps", type=int, default=0, help="isolated throughput run, no heldout evaluation or saved model")
+    ap.add_argument("--profile", action="store_true",
+                    help="with --benchmark-steps N >= 2, profile the last step and print the operators by GPU time")
     ap.add_argument("--max-len", type=int, default=3072)
     ap.add_argument("--require-audit", action="store_true",
                     help="require a ready sibling .manifest.json matching the data bytes and --max-len")
@@ -436,6 +442,8 @@ def main():
         shutil.rmtree(ckpt)
     resume = state_file.exists()
     state = json.loads(state_file.read_text()) if resume else {"step": 0, "cursor": 0, "skipped": 0, "log": []}
+    if a.profile and a.benchmark_steps < 2:
+        ap.error("--profile needs --benchmark-steps 2 or more: the earlier steps warm up kernels and allocator")
     if a.benchmark_steps and (resume or a.merge_only):
         ap.error("benchmarks require a separate output directory without a checkpoint")
     if a.merge_only and not resume:
@@ -621,19 +629,42 @@ def main():
         if cached is None:
             data_stream.seek(offset)
             p = json.loads(data_stream.readline())
-            x = tok(p["prompt"], add_special_tokens=False)["input_ids"]
-            y = tok(p["completion"], add_special_tokens=False)["input_ids"]
             family = p.get("family", "unknown")
+            if "segments" in p:   # a merged conversation (scripts/merge_sft_chains.py)
+                cached = ["segments", [[tok(text, add_special_tokens=False)["input_ids"], trained]
+                                       for text, trained in p["segments"]], family]
+            else:
+                cached = [tok(p["prompt"], add_special_tokens=False)["input_ids"],
+                          tok(p["completion"], add_special_tokens=False)["input_ids"], family]
             if cache:
-                cache.put(offset, [x, y, family])
-        else:
-            x, y, family = cached
+                cache.put(offset, cached)
+        counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})
+        if cached[0] == "segments":
+            # Each completion is trained with everything before it, so a later turn is only ever longer: keep the
+            # turns up to the last that fits, as those turns alone would have been kept.
+            _, segments, family = cached
+            sequence, trained, turns = [], [], 0
+            for tokens, is_completion in segments:
+                if is_completion and len(sequence) + len(tokens) > a.max_len:
+                    break
+                sequence += tokens
+                trained += [is_completion] * len(tokens)
+                turns += is_completion
+            dropped = sum(1 for _, is_completion in segments if is_completion) - turns
+            if dropped:
+                counts[family] = counts.get(family, 0) + dropped
+            if not turns:
+                return None
+            while not trained[-1]:
+                sequence.pop(); trained.pop()
+            first = trained.index(True)
+            return sequence[:first], sequence[first:], trained[first:]
+        x, y, family = cached
         if not x or not y:
             raise ValueError("Training pairs require a nonempty prompt and completion")
         if len(x) + len(y) > a.max_len:
             if a.require_audit:
                 raise ValueError(f"audited training example at offset {offset} exceeds --max-len {a.max_len}")
-            counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})
             counts[family] = counts.get(family, 0) + 1
             return None
         return x, y
@@ -737,6 +768,11 @@ def main():
         boundary = (state["cursor"], state["skipped"], state["trained_examples"])
         rng_boundary = capture_rng_state()
         optimizer_started = False
+        profiler = None
+        if a.profile and state["step"] == target_steps - 1:
+            profiler = torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
+                                                          torch.profiler.ProfilerActivity.CUDA], with_stack=True)
+            profiler.__enter__()
         step_start = time.perf_counter()
         try:
             examples = []
@@ -779,12 +815,21 @@ def main():
                 save_checkpoint()
             raise
         running = running.item()  # one synchronization per optimizer step, not per sequence
+        if profiler is not None:
+            torch.cuda.synchronize()
+            profiler.__exit__(None, None, None)
+            print(profiler.key_averages().table(sort_by="self_cuda_time_total", row_limit=45, max_name_column_width=70),
+                  flush=True)
+            # The same, by the Python code that issued the operators.
+            print(profiler.key_averages(group_by_stack_n=6).table(sort_by="self_cuda_time_total", row_limit=25,
+                                                                  max_name_column_width=40, max_src_column_width=120),
+                  flush=True)
         if cache:
             cache.db.commit()
         metrics.append({"step": state["step"], "seconds": time.perf_counter() - step_start,
                         "prepare_seconds": ready - step_start, "examples": len(examples),
-                        "tokens": sum(len(x) + len(y) for x, y in examples),
-                        "completion_tokens": sum(len(y) for x, y in examples),
+                        "tokens": sum(len(e[0]) + len(e[1]) for e in examples),
+                        "completion_tokens": sum(len(e[1]) if len(e) == 2 else sum(e[2]) for e in examples),
                         "padded_tokens": padded_tokens, "microbatches": batches, "loss": running})
         if state["step"] % 10 == 0 or state["step"] == target_steps:
             save_metrics_at_boundary()
