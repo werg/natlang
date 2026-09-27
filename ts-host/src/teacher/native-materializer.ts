@@ -118,7 +118,7 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
  * Context is copied from that exact native request, never assembled by appending one decision onto another.
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
  */
-export function materializeNativeRows(input: unknown[]): {
+export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean } = {}): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: { id: string; outcomes: number }[];
 } {
   const turns: Dict[] = [];
@@ -206,9 +206,10 @@ export function materializeNativeRows(input: unknown[]): {
       const detour = calls.length > 0 && calls.every(call => earlier.get(signature(call)) === resultOf(call));
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
       for (const call of calls) earlier.set(signature(call), resultOf(call));
-      // A step the row itself says not to train, such as a scripted conclusion its note does not reason towards.
-      const untrained = typeof assistant.untrained === 'string' ? assistant.untrained : undefined;
-      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !untrained;
+      // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
+      // student to answer without reasoning; a student that answers directly is trained on it (options.directAnswers).
+      const heldDirect = assistant.direct_answer === true && !options.directAnswers;
+      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !heldDirect;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
@@ -234,7 +235,8 @@ export function materializeNativeRows(input: unknown[]): {
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
-          ...(decisionApproved ? {} : { reason: untrained ?? (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
+          ...(decisionApproved ? {} : { reason: heldDirect ? 'an answer given without reasoning towards it' :
+            (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
               'the outcome of a call in this decision was not recorded' :
             !ranCleanly ? 'decision contains a failed or unexecuted proposal' :

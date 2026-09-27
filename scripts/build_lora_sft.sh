@@ -29,7 +29,10 @@ KWARG_ARGS=(); [ -f "$KWARGS" ] && KWARG_ARGS=(--chat-template-kwargs "$(cat "$K
 mkdir -p "$OUT"
 node "$TS_HOST/scripts/inline-curriculum/admit.mjs" "$@" --ledger "$OUT/admission.jsonl" \
   --admitted "$OUT/admitted.jsonl" --require-technique | tail -2 | head -1
-node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" --replace
+# NATLANG_DIRECT_ANSWERS=1 trains answers given without reasoning towards them (a child's judgment, a scripted verdict),
+# for a small student that answers directly.
+DIRECT=(); [ "${NATLANG_DIRECT_ANSWERS:-}" = 1 ] && DIRECT=(--direct-answers)
+node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" --replace "${DIRECT[@]}"
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" "$IMAGE" \

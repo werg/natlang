@@ -197,3 +197,17 @@ test('a repeat with the same result and an attempt the checker refused are conte
   assert.equal(admissions[0].reason, "the task's checker rejected this attempt");
   assert.equal(admissions[3].reason, 'repeats an earlier call of this call with the same result');
 });
+
+test('a direct answer and synthetic reasoning are marked for training as the student calls for', () => {
+  const row = nativeRow('reference');
+  row.provenance = { ...row.provenance, collection_role: 'reference', synthetic_reasoning: 'action-notes/1' };
+  row.trajectory[0].assistant.direct_answer = true;
+  const [held, other] = materializeNativeRows([row]).turns;
+  assert.equal(held.training_admission.approved, false);
+  assert.equal(held.training_admission.reason, 'an answer given without reasoning towards it');
+  assert.equal(other.training_admission.approved, true);
+  assert.equal(held.teacher_reasoning_trained, false);
+  assert.equal(held.family, 'reference_program');
+  const [trained] = materializeNativeRows([row], { directAnswers: true }).turns;
+  assert.equal(trained.training_admission.approved, true);
+});

@@ -6,13 +6,14 @@ import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
 
 const args = process.argv.slice(2), positional = args.filter(value => !value.startsWith('--'));
 const [inputPath, outputPath] = positional;
-if (!inputPath || !outputPath || positional.length !== 2 || args.some(value => value.startsWith('--') && value !== '--replace')) {
-  console.error('usage: node scripts/materialize-native-teacher.mjs INPUT.jsonl OUTPUT.jsonl [--replace]');
+if (!inputPath || !outputPath || positional.length !== 2 || args.some(value => value.startsWith('--') && !['--replace', '--direct-answers'].includes(value))) {
+  console.error('usage: node scripts/materialize-native-teacher.mjs INPUT.jsonl OUTPUT.jsonl [--replace] [--direct-answers]');
   process.exit(2);
 }
 const input = resolve(inputPath), output = resolve(outputPath);
 const rows = (await readFile(input, 'utf8')).split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
-const result = materializeNativeRows(rows);
+// --direct-answers: train answers given without reasoning towards them, for a student that answers directly.
+const result = materializeNativeRows(rows, { directAnswers: args.includes('--direct-answers') });
 console.error(`${result.acceptedRows} rows -> ${result.turns.length} turns (${result.rejectedRows} rows not used)`);
 for (const row of result.unlinked)
   console.error(`  ${row.id}: not used, ${row.outcomes} action outcomes could not be linked to their decisions`);

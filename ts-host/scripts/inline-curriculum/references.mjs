@@ -14,8 +14,8 @@
  *
  * The reasoning is one line saying what the action does (actionNote), marked in provenance.synthetic_reasoning so that
  * export keeps it as context and trains the action only. A scripted result that no earlier output of its call shows,
- * such as a verdict worked out from facts it only read, is left untrained (assistant.untrained): the note does not
- * reason towards it, and training it would teach answering without reasoning. Every row must be admitted.
+ * such as a verdict worked out from facts it only read or a child's judgment, is a direct answer (assistant.direct_answer):
+ * the note does not reason towards it, so it trains only a student that answers directly (materialize --direct-answers). Every row must be admitted.
  */
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
@@ -27,7 +27,6 @@ import { FAMILIES, buildRecords } from './families.mjs';
 
 const EVALUATION_SEEDS = new Set([102, 900]);
 const SYNTHETIC_REASONING = 'action-notes/1';
-const UNSUPPORTED = 'a scripted result that no earlier output of its call shows';
 
 /**
  * Whether the last output before this turn shows the value (spacing and quotes aside): an eval's output shows its
@@ -48,7 +47,7 @@ async function referenceRow(record, index, options) {
     const response = await reference(request), turn = trajectoryTurn(request, response);
     const [tool, args] = response.calls[0];
     if (tool === 'return_result' && args.status === 'success' && !shown(args.value, request.messages))
-      turn.assistant.untrained = UNSUPPORTED;
+      turn.assistant.direct_answer = true;
     trajectory.push(turn);
     return response;
   };
@@ -96,7 +95,7 @@ const refused = rows.map(row => [row, admitRow(row)]).filter(([, admission]) => 
 if (refused.length) throw new Error(`references not admitted:\n${refused.map(([row, admission]) =>
   `${row.task.program_ir.id}: ${admission.reasons.join(', ')}`).join('\n')}`);
 await writeFile(values.out, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
-const turns = rows.flatMap(row => row.trajectory), untrained = turns.filter(turn => turn.assistant.untrained).length;
+const turns = rows.flatMap(row => row.trajectory), direct = turns.filter(turn => turn.assistant.direct_answer).length;
 console.log(`${rows.length} reference rows from ${families.length} families (${boosted.length} weighted ${weight}x), ` +
   `seeds ${seeds.join(',')}: ` +
-  `${turns.length} turns, ${untrained} left untrained -> ${values.out}`);
+  `${turns.length} turns, ${direct} direct answers -> ${values.out}`);
