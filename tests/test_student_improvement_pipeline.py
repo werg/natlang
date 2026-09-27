@@ -34,17 +34,17 @@ def test_round_is_single_durable_pipeline_with_frozen_runtime(tmp_path):
                                   'http://student:8080', 'student-1',
                                   'http://teacher:8081', 'teacher-1')
     stages = {stage['id']: stage for stage in config['stages']}
-    assert list(stages) == ['freeze-runtime', 'collect-student', 'build-hard-states',
+    assert list(stages) == ['freeze-runtime', 'collect-student', 'build-handoffs',
                             'collect-corrections', 'materialize-student', 'materialize-teacher',
                             'build-preferences', 'combine-verified', 'validate-corrections', 'prepare-correction',
                             'render-correction', 'audit-correction', 'train-correction']
     assert config['run_directory'] == str(run)
-    for name in ('collect-student', 'build-hard-states', 'collect-corrections',
+    for name in ('collect-student', 'build-handoffs', 'collect-corrections',
                  'materialize-student', 'materialize-teacher', 'build-preferences'):
         assert '${run}/runtime-host/frozen-runtime.json' in stages[name]['inputs']
         assert any('/runtime-host/' in item for item in stages[name]['command'])
     assert '--collection-role' in stages['collect-student']['command']
-    assert '--handoff-queue' in stages['collect-corrections']['command']
+    assert '${run}/handoffs.ir.jsonl' in stages['collect-corrections']['command']
     assert '--all' in stages['collect-corrections']['command']
     assert str(run / 'verified-turns.jsonl') in stages['validate-corrections']['inputs']
     assert str(base_run / 'prepared/splits.json') in stages['prepare-correction']['inputs']

@@ -112,7 +112,7 @@ The service plan gives each container a run-specific name; unlike manual
 `serve.sh`/`serve_bonsai.sh`, managed launches do not remove an existing
 default-named container. It pins the student GGUF and base adapter file hashes;
 the operator must still ensure that the GGUF was exported from that adapter.
-The supervisor refuses a live endpoint it does not own. It waits for student readiness, runs through `build-hard-states`, stops
+The supervisor refuses a live endpoint it does not own. It waits for student readiness, runs through `build-handoffs`, stops
 the student container and waits for the endpoint to go down, starts Bonsai,
 runs through `combine-verified`, stops Bonsai, then resumes preparation and
 GPU training. Student and teacher may use the **same port**. Signals propagate
@@ -138,68 +138,54 @@ surface used by the collector. A service plan automates **switching**, not
 checkpoint export: ensure the student launch actually serves the completed
 adapter.
 
-Each student job records exact model request hashes, offered tools, response
-including raw tool-call IDs, action outcomes, scope failures, and final oracle
-result. Decoded replies are journaled before actions execute; a stopped job
-replays them locally on restart. A hard-state queue selects a post-failed-eval
-request when available, otherwise the last request of an unsolved task. It
-contains the student prefix responses and target request hash. Teacher
-collection replays the prefix into a fresh instance of the *same frozen
-runtime*, checks every request hash, and switches to teacher decoding at the
-target request. A divergence fails the job rather than silently teaching from
-a different state.
+Each student job records its model requests, offered tools, responses, action
+outcomes, scope failures, and final oracle result. Decoded replies are journaled
+before actions execute; a stopped job replays them locally on restart.
 
-The selection/admission rules are:
+`build-handoffs` (`ts-host/scripts/build-handoffs.mjs`, `teacher/handoff.ts`)
+turns each failed run into handoff tasks, one per site: a decision that failed
+(an action the runtime rejected or refused, one that raised, an attempt the
+task's checker refused; the first of a call's failures in a row), or the result
+a run returned that the task did not accept. A handoff task is the program
+record with the run's earlier turns attached, per call. The collector replays
+them call by call, calls identified by the order they start rather than by
+their opening text (which changes with runtime versions), and the teacher
+answers the failed turn and every turn after it. A site is used only if the
+failed turn, replayed under the current runtime, sees the results it saw and
+fails again, so runs from older runtimes, other models and evaluation runs all
+qualify.
 
-- Keep failed or stalled states whose task has an exact executable oracle.
-- Prioritize distinct semantic failure mechanisms and model-request prefixes,
-  not many parameter variants of the same implementation.
-- Oracle-accepted student successes become cheap positive SFT with distinct
+The rules are:
+
+- Oracle-accepted student successes become positive SFT with distinct
   `student-native` provenance. Failed proposals within an accepted run remain
   in the IR but are not positive targets.
-- For a teacher correction, resume from the **student's actual state** after
-  the failed tool result, with its current scope and the reported error. A teacher
-  solution from the original task opening is useful general SFT but is not an
-  on-policy correction for that failure.
-- Admit a correction only after the exact frozen runtime executes its full
-  continuation and the task oracle accepts the outcome. Failed teacher tries
-  belong in the trace ledger, never the positive target set.
+- The teacher takes over **at** the failed decision, from the student's actual
+  state before it: its decision there is what the student should have done.
+- A correction is admitted only after the runtime executes its full
+  continuation and the task oracle (and a curriculum case's admission) accepts
+  it. Replayed student decisions are never positive targets.
 
-Student-prefix decisions in a teacher-repaired run are always denied teacher
-SFT admission. The teacher correction and student successes are combined,
-validated, prepared against the original frozen split registry, rendered,
-token-audited, and trained in the new round. Every stage has hash-checked
-inputs/outputs and resumes through the normal runner. Stop with SIGINT/SIGTERM
-to request an optimizer-boundary checkpoint.
+The teacher correction and student successes are combined, validated, prepared
+against the original frozen split registry, rendered, token-audited, and
+trained in the new round. Every stage has hash-checked inputs/outputs and
+resumes through the normal runner. Stop with SIGINT/SIGTERM to request an
+optimizer-boundary checkpoint.
 
-`build-preferences` also writes a separate, unused-by-SFT
-`preference-pairs.jsonl` ledger. It admits only the teacher's approved decision
-against the student's failed action or premature reply at the **identical
-model-request hash**. This preserves candidates for later preference training
-without turning post-failure repairs at a different prefix into false DPO
-pairs. The current production round trains with correction SFT, not DPO.
+## Preference pairs and DPO
 
-The hard-state selector rejects observed host operations other than the
-runtime's own `typescript.eval` bookkeeping. Mocked declared capabilities and
-in-memory folder transactions can replay from fresh state; real network calls,
-package installation/import side effects, and other external effects cannot
-yet be safely rewound or replayed. Such programs may still be used in the
-general coding curriculum, but not this replay-and-handoff lane until a
-record/replay or disposable external-service boundary is built. The selector
-cannot prove the absence of an unobserved side effect; keep the focused
-program set to controlled fixtures. Arbitrary package/network capability in
-the application runtime is unchanged.
-
-## Where preference training fits
-
-Start with correction SFT. If later adding DPO, only form a pair when the
-chosen and rejected decisions share the **same exact request prefix and tool
-schema**, and the chosen continuation passes while the rejected one fails a
-reliable oracle. A teacher repair after observing a failed student eval has a
-different prefix from the original bad eval; those are not a DPO pair. Keep
-raw failures and pair metadata now, but do not delay the correction loop for a
-preference trainer. Cross-tokenizer teacher logits are not required for this
-SFT workflow.
+`build-preferences` (`ts-host/scripts/build-preference-pairs.mjs`) writes
+`preference-pairs.jsonl`: at the handoff point, the teacher's approved decision
+is chosen and the student's failed decision rejected, both after the same
+context. The pair is checked again by replay: the rejected response, put in
+the chosen decision's place, sees the same results and fails. Corrected
+variants (`corrections.mjs`: a run whose call failed and then fixed itself,
+rewritten to make the fix first) give pairs too: the fix over the failed
+attempt, with the same reasoning on both sides. `build_lora_sft.sh` builds the
+corrected-variant pairs with every SFT set (and handoff pairs given
+`NATLANG_HANDOFFS`), rendered to `preferences.jsonl` by
+`export-preference-pairs.mjs`. `scripts/train_dpo.py` trains a short DPO stage
+on top of the SFT adapter, its reference being that adapter.
 
 ## Operational admission rules
 

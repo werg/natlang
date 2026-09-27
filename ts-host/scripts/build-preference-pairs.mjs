@@ -1,87 +1,59 @@
 #!/usr/bin/env node
-/** Preserve only same-request, oracle-supported preference candidates. */
-import { createHash } from 'node:crypto';
-import { readFile, writeFile, rename } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+/**
+ * Preference pairs (teacher/handoff.ts preferencePair): a decision preferred to a failed one made in its place.
+ *
+ *   node scripts/build-preference-pairs.mjs OUT.jsonl [--handoffs RESULTS.jsonl,...]
+ *     [--variants CORRECTED.jsonl --parents ADMITTED.jsonl] [--workers 6]
+ *
+ * --handoffs: runs of handoff tasks (build-handoffs.mjs); an accepted, admitted run gives its teacher's decision at the
+ * handoff over the failed one. --variants: corrected variants (corrections.mjs) with the rows they came from; the fix
+ * made first is preferred to the parent's first failed attempt, with the same reasoning.
+ */
+import { writeFile } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
+import { admitRow } from '../dist/teacher/curriculum.js';
+import { preferencePair } from '../dist/teacher/handoff.js';
+import { recorded } from '../dist/teacher/replay.js';
+import { pool, replayOptions, rowsOf } from './build-handoffs.mjs';
 
-const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-const rows = async path => (await readFile(path, 'utf8')).split(/\r?\n/).filter(Boolean).map(JSON.parse);
-async function immutable(path, content) {
-  try {
-    if (await readFile(path, 'utf8') === content) return;
-    throw new Error(`refusing to overwrite changed preference artifact: ${path}`);
-  } catch (error) { if (error?.code !== 'ENOENT') throw error; }
-  const pending = `${path}.pending-${process.pid}`;
-  await writeFile(pending, content);
-  await rename(pending, path);
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { handoffs: { type: 'string' },
+  variants: { type: 'string' }, parents: { type: 'string' }, workers: { type: 'string', default: '6' } } });
+const [output] = positionals;
+if (!output || (!values.handoffs && !values.variants) || (!values.variants !== !values.parents))
+  throw new Error('usage: build-preference-pairs.mjs OUT.jsonl [--handoffs RESULTS,...] [--variants CORRECTED --parents ADMITTED]');
+
+const jobs = [];
+for await (const row of rowsOf((values.handoffs ?? '').split(',').filter(Boolean))) {
+  const handoff = row.task.program_ir.handoff;
+  if (!handoff || !row.outcome?.accepted || row.handoff?.at == null) continue;
+  jobs.push({ row, index: row.handoff.at, rejected: handoff.rejected, kind: handoff.kind, runId: row.handoff.run_id,
+    evidence: { kind: 'handoff', site: handoff.kind, source: handoff.source, teacher: row.provenance.model } });
 }
-function target(assistant, index) {
-  const response = { role: 'assistant', content: assistant.content ?? '' };
-  if (assistant.calls?.length) response.tool_calls = assistant.calls.map((call, offset) => ({
-    id: `pair_${index}_${offset}`, type: 'function', function: { name: call.source_tool ?? call.tool,
-      arguments: JSON.stringify(call.arguments ?? {}) } }));
-  return response;
-}
-function actionSignature(message) {
-  return JSON.stringify({ content: message.content ?? '',
-    calls: (message.tool_calls ?? []).map(call => call.function) });
-}
-function linkedFailure(student, index) {
-  const decision = student.trajectory[index];
-  if (!decision.assistant?.calls?.length) return 'premature_reply';
-  const ledger = student.outcome?.action_ledger ?? [];
-  return decision.assistant.calls.some(call => ledger.some(event =>
-    event.name === (call.source_tool ?? call.tool) && JSON.stringify(event.arguments) === JSON.stringify(call.arguments) &&
-    ['rejected', 'refused', 'error'].includes(event.outcome))) ? 'failed_action' : null;
-}
-export function preferencePairs(studentRows, teacherRows, teacherTurns) {
-  const students = new Map(studentRows.map(row => [row.id, row]));
-  const turns = new Map(teacherTurns.map(row => [`${row.source_ref?.trajectory_id}:${row.decision?.index}`, row]));
-  const pairs = [], excluded = {};
-  for (const teacher of teacherRows) {
-    const handoff = teacher.handoff;
-    if (!handoff || teacher.outcome?.accepted !== true) continue;
-    const student = students.get(handoff.student_trajectory_id);
-    const index = handoff.handoff_at;
-    const chosen = turns.get(`${teacher.id}:${index}`);
-    const bad = student?.trajectory?.[index], good = teacher.trajectory?.[index];
-    let reason = null;
-    if (!student || student.outcome?.accepted !== false) reason = 'missing_failed_student';
-    else if (!bad || !good || bad.request_sha256 !== good.request_sha256) reason = 'different_request';
-    else if (bad.phase !== 'action' || good.phase !== 'action') reason = 'not_action_decisions';
-    else if (!chosen?.training_admission?.approved) reason = 'unapproved_teacher_decision';
-    else if (!(reason = linkedFailure(student, index))) reason = 'rejected_action_not_locally_failed';
-    if (reason && !['premature_reply', 'failed_action'].includes(reason)) {
-      excluded[reason] = (excluded[reason] ?? 0) + 1; continue;
-    }
-    const rejected = target(bad.assistant, index);
-    if (actionSignature(rejected) === actionSignature(chosen.target)) {
-      excluded.identical_decisions = (excluded.identical_decisions ?? 0) + 1; continue;
-    }
-    pairs.push({ version: 'natlang.preference_pair.native/1',
-      id: `${teacher.id}:preference:${index}`, program_id: chosen.program_id,
-      source_groups: chosen.source_groups, split: chosen.split ?? null,
-      request_sha256: bad.request_sha256, messages: chosen.messages, tools: chosen.tools,
-      chosen: chosen.target, rejected,
-      evidence: { kind: reason, student_trajectory_id: student.id,
-        teacher_trajectory_id: teacher.id, student_final_accepted: false,
-        teacher_final_accepted: true, teacher_decision_training_approved: true } });
+if (values.variants) {
+  const parents = new Map();
+  for await (const row of rowsOf([values.parents])) parents.set(row.id, row);
+  for await (const row of rowsOf([values.variants])) {
+    const variant = row.provenance.variant, parent = parents.get(variant.parent);
+    if (!parent) continue;
+    jobs.push({ row, index: variant.decision, rejected: recorded(parent.trajectory[variant.left_out[0]]), kind: 'failed_action',
+      runId: variant.run_id, evidence: { kind: 'corrected', parent: parent.id, model: row.provenance.model } });
   }
-  return { pairs, excluded };
 }
-export async function buildPreferencePairs(studentPath, teacherPath, turnsPath, output) {
-  const result = preferencePairs(await rows(studentPath), await rows(teacherPath), await rows(turnsPath));
-  const data = result.pairs.map(row => JSON.stringify(row)).join('\n') + (result.pairs.length ? '\n' : '');
-  await immutable(output, data);
-  const manifest = { version: 'natlang.preference_pairs/1', count: result.pairs.length,
-    excluded: result.excluded, student_sha256: digest(await readFile(studentPath)),
-    teacher_sha256: digest(await readFile(teacherPath)), turns_sha256: digest(await readFile(turnsPath)),
-    output_sha256: digest(await readFile(output)) };
-  await immutable(`${output}.manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
-  return manifest;
-}
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [student, teacher, turns, output] = process.argv.slice(2);
-  if (!output) throw new Error('usage: build-preference-pairs.mjs STUDENT-ROWS TEACHER-ROWS TEACHER-TURNS OUT');
-  console.log(JSON.stringify(await buildPreferencePairs(student, teacher, turns, output)));
-}
+const pairs = [], skipped = {};
+const skip = reason => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
+await pool(jobs, Number(values.workers), async ({ row, index, rejected, kind, runId, evidence }) => {
+  if (row.task.program_ir.curriculum) {
+    const admission = admitRow(row);
+    if (!admission.admitted || admission.notes.includes('judged_directly')) return skip('the chosen run is not admitted');
+  }
+  try {
+    const pair = await preferencePair(row, index, rejected, kind, evidence, replayOptions(row.provenance), runId);
+    if ('rejected' in pair && typeof pair.rejected === 'string') return skip(pair.rejected);
+    pairs.push(pair);
+  } catch (error) { skip(`replay failed: ${String(error?.message ?? error).split('\n')[0].slice(0, 80)}`); }
+});
+pairs.sort((a, b) => a.id.localeCompare(b.id));
+await writeFile(output, pairs.map(pair => JSON.stringify(pair)).join('\n') + (pairs.length ? '\n' : ''));
+const kinds = {};
+for (const pair of pairs) kinds[`${pair.evidence.kind} ${pair.kind}`] = (kinds[`${pair.evidence.kind} ${pair.kind}`] ?? 0) + 1;
+console.log(JSON.stringify({ output, pairs: pairs.length, candidates: jobs.length, kinds, skipped }, null, 1));

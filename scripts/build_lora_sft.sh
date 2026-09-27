@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build one model's LoRA training set from admitted teacher runs, rendered with that model's own chat template.
 # Usage: scripts/build_lora_sft.sh lfm|ling|spark OUT_DIR RESULTS.jsonl [MORE.jsonl ...]
+# NATLANG_HANDOFFS=RUNS.jsonl[,...] adds the preference pairs of handoff runs (build-handoffs.mjs) to preferences.jsonl.
 # Runs are admitted with --require-technique (a correct run that skipped a required technique teaches the wrong
 # thing), materialized into one training decision per model turn, and rendered by a CPU-only llama-server loaded
 # with the model's GGUF and template, so prompts and completions are byte-for-byte what the model sees when served.
@@ -40,6 +41,11 @@ node --max-old-space-size=6000 "$TS_HOST/scripts/inline-curriculum/corrections.m
 node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/corrected.jsonl" "$OUT/corrected.turns.jsonl" \
   --replace "${DIRECT[@]}"
 cat "$OUT/corrected.turns.jsonl" >> "$OUT/turns.jsonl" && rm "$OUT/corrected.turns.jsonl"
+# Preference pairs for a DPO stage after SFT (scripts/train_dpo.py): each corrected fix over the failed attempt it
+# replaces, and each handoff teacher's decision over the failed one it was handed.
+HANDOFFS=(); [ -n "${NATLANG_HANDOFFS:-}" ] && HANDOFFS=(--handoffs "$NATLANG_HANDOFFS")
+node --max-old-space-size=6000 "$TS_HOST/scripts/build-preference-pairs.mjs" "$OUT/pairs.jsonl" \
+  --variants "$OUT/corrected.jsonl" --parents "$OUT/admitted.jsonl" "${HANDOFFS[@]}" --workers 6
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" "$IMAGE" \
@@ -48,4 +54,6 @@ docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PO
 trap 'docker stop "$NAME" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 90); do curl -fsS "127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 2; done
 node --max-old-space-size=4000 "$TS_HOST/scripts/export-native-sft.mjs" "$OUT/turns.jsonl" "$OUT/sft.jsonl" \
+  --server "http://127.0.0.1:$PORT" --workers 4 --end-token "$END" "${REASONING_END[@]}"
+node "$TS_HOST/scripts/export-preference-pairs.mjs" "$OUT/pairs.jsonl" "$OUT/preferences.jsonl" \
   --server "http://127.0.0.1:$PORT" --workers 4 --end-token "$END" "${REASONING_END[@]}"

@@ -3,7 +3,7 @@ import { APPROACH_PROMPT } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
-  recordDigest, sha256, writeAtomic, type CollectorConfig, type HandoffRecord } from './collector.js';
+  sha256, writeAtomic, type CollectorConfig } from './collector.js';
 
 function argumentsOf(argv: string[]): { positionals: string[]; flags: Map<string, string> } {
   const positionals: string[] = [], flags = new Map<string, string>();
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
-      '         --cache-stable-tools --handoff-queue PATH --collection-role student|teacher\n' +
+      '         --cache-stable-tools --collection-role student|teacher\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
       '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
@@ -40,24 +40,11 @@ async function main(): Promise<void> {
   if (positionals.length !== 3 || !flags.get('--model-id') || !flags.get('--root-seed'))
     throw new Error('usage: collect-teacher-batch IR JOBS OUT --model-id ID --root-seed N [--limit 10 --workers 6]');
   const [ir, jobs, output] = positionals.map(value => resolve(value)) as [string, string, string];
-  let handoffs: Map<string, HandoffRecord> | undefined;
-  if (flags.has('--handoff-queue')) {
-    handoffs = new Map();
-    for (const line of (await readFile(resolve(flags.get('--handoff-queue')!), 'utf8')).split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      const handoff = JSON.parse(line) as HandoffRecord;
-      if (handoff.version !== 'natlang.hard_state/1' || !handoff.id || handoffs.has(handoff.id) ||
-          !Array.isArray(handoff.prefix) || handoff.handoff_at !== handoff.prefix.length)
-        throw new Error('invalid or duplicate student handoff');
-      handoffs.set(handoff.id, handoff);
-    }
-  }
   // --approach-guide appends the schematic of how calls usually go (native/prompt.ts APPROACH_PROMPT).
   const systemPrompt = (flags.has('--system-file') ? await readFile(resolve(flags.get('--system-file')!), 'utf8') : defaultSystemPrompt) +
     (flags.has('--approach-guide') ? APPROACH_PROMPT : '');
   const collectionRole = flags.get('--collection-role') ?? 'teacher';
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
-  if (handoffs && collectionRole !== 'teacher') throw new Error('handoff collection must use the teacher role');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
   if (flags.has('--execution-plan-tokens') && !flags.has('--execution-plans'))
@@ -74,7 +61,6 @@ async function main(): Promise<void> {
     executionPlans: flags.has('--execution-plans'),
     ...(flags.has('--execution-plan-tokens') ?
       { executionPlanTokens: integer(flags, '--execution-plan-tokens', 512) } : {}),
-    ...(handoffs ? { handoffs } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
     // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens); 0 turns admission off.
     ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
@@ -99,11 +85,6 @@ async function main(): Promise<void> {
     if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
   }
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
-  if (handoffs) for (const item of records) {
-    const handoff = handoffs.get(item.record.id);
-    if (!handoff || handoff.program_ir_sha256 !== recordDigest(item.record))
-      throw new Error(`${item.record.id}: handoff does not match the selected program`);
-  }
   const controller = new AbortController();
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
   const result = await collectBatch(records, config, nativeJobRunner(config), controller.signal);
@@ -113,8 +94,6 @@ async function main(): Promise<void> {
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
     root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
-    ...(handoffs ? { handoff_queue: resolve(flags.get('--handoff-queue')!),
-      handoff_queue_sha256: sha256(await readFile(resolve(flags.get('--handoff-queue')!))) } : {}),
     workers: config.workers, completed: result.completed,
     missing: result.missing, output_sha256: sha256(merged) }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);

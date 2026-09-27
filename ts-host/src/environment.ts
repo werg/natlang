@@ -109,6 +109,25 @@ function compile(code: string, body: boolean, asyncBody = false, modules = false
  * Node evaluator: a `vm` context in this process. Portable scope data arrives as a frozen snapshot
  * (`self`); live objects, callables, captures and the output sink arrive by reference (`__live`).
  */
+/**
+ * Rejections nothing handles of promises eval code made: its realm's Promise is theirs. Model code can drop a promise
+ * (an async callback given to forEach) whose rejection would end the host as an unhandled rejection; it is recorded
+ * as a host event of the eval's environment instead. Any other unhandled rejection is the host's own and, with no
+ * other listener, still ends the process as it would without this one.
+ */
+const evalRealms = new WeakMap<object, (reason: unknown) => void>();
+let watchingRejections = false;
+function watchEvalRejections(realmPromise: PromiseConstructor, report: (reason: unknown) => void): void {
+  evalRealms.set(realmPromise, report);
+  if (watchingRejections) return;
+  watchingRejections = true;
+  process.on('unhandledRejection', function evalRejection(reason, promise) {
+    const owner = evalRealms.get((promise as { constructor?: object }).constructor ?? {});
+    if (owner) return owner(reason);
+    if (process.listenerCount('unhandledRejection') === 1) throw reason;
+  });
+}
+
 export class TypeScriptEnvironment implements EvalEnvironment {
   readonly authority = 'shared-node-host';
   readonly mode: EnvironmentMode;
@@ -155,6 +174,8 @@ export class TypeScriptEnvironment implements EvalEnvironment {
       structuredClone, performance, crypto: globalThis.crypto,
       TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, AbortSignal, Blob });
     runInContext(prelude, context);
+    watchEvalRejections(runInContext('Promise', context) as PromiseConstructor, reason => this.packageEvents.push({
+      operation: 'eval.unhandled-rejection', message: reason instanceof Error ? reason.message : String(reason) }));
     if (this.scopeCapabilities.allowNetwork) Object.assign(context, {
       fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input));

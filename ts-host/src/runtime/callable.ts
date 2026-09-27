@@ -42,7 +42,12 @@ export function defineChild(target: object, name: string, value: unknown): void 
 }
 
 export function makeCallable(meta: CallableMeta): NatlangCallable {
-  const fn = async function (...args: unknown[]) { return meta.invoke(args, meta.bound ?? resolveFrame(meta.created)); };
+  // A call model code starts and never awaits must not end the host as an unhandled rejection (see invokeDefinition).
+  const fn = function (...args: unknown[]) {
+    const call = (async () => meta.invoke(args, meta.bound ?? resolveFrame(meta.created)))();
+    call.catch(() => {});
+    return call;
+  };
   Object.defineProperty(fn, 'name', { value: meta.definition.name });
   Object.defineProperty(fn, NATLANG_CALLABLE, { value: meta });
   Object.defineProperty(fn, 'iterateOn', { value: (initial: unknown, ...fixed: unknown[]) =>

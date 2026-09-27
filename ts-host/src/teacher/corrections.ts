@@ -7,14 +7,12 @@
  * predate runtime changes): the control must end accepted; the variant must end accepted too, and its fix must show
  * exactly what the control's fix showed. A fix that relied on what the failure changed or taught fails there.
  */
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
-import { executeProgram, programRow, programRunId, trajectoryTurn, type ProgramRecord, type TeacherRow } from './collector.js';
-import { openingText, text, type Message } from './opening.js';
+import { executeProgram, programRow, programRunId, type ProgramRecord, type TeacherRow } from './collector.js';
+import { callNumbers, openingsOf, placeOf, scriptedDriver, scriptOf, type Turn } from './replay.js';
+import { admitRow, type CurriculumRecord } from './curriculum.js';
+import { text } from './opening.js';
 
 export const CORRECTION_VERSION = 'corrected-first-attempt/1';
-
-type Turn = { context: Message[]; assistant: { reasoning?: string | null; execution_plan?: string | null; content?: string;
-  calls?: { tool: string; arguments: Record<string, unknown> }[] } };
 
 /** Failed attempts of one call (flat trajectory indices) and the successful turn of that call that followed them. */
 export type CorrectionSite = { failed: number[]; fixed: number };
@@ -22,14 +20,6 @@ export type CorrectionSite = { failed: number[]; fixed: number };
 export type CorrectionResult = { row: TeacherRow; decision: number } | { rejected: string };
 
 export type ReplayOptions = { systemPrompt: string; contextTokens: number; maxTurns?: number; rootSeed: number };
-
-/** The response a recorded turn gave, as the reply to replay. */
-function recorded(turn: Turn): ModelTurn {
-  const assistant = turn.assistant;
-  return { calls: (assistant.calls ?? []).map(call => [call.tool, call.arguments] as [string, Record<string, unknown>]),
-    text: assistant.content ?? '', reasoning: assistant.reasoning ?? undefined,
-    ...(Object.hasOwn(assistant, 'execution_plan') ? { execution_plan: assistant.execution_plan ?? null } : {}) };
-}
 
 /** The strings in a value (code in call arguments, not its JSON escapes). */
 function strings(value: unknown): string[] {
@@ -55,26 +45,9 @@ export function reasoningFitsFix(reasoning: string, error: string, failed: unkno
     used.has(word) && !kept.has(word) && said.has(word));
 }
 
-/**
- * Calls in the order they start: a call is identified by its number, not its opening text, which changes with the
- * runtime (a recorded row's openings can predate the current wording). The same code starts the same calls in the
- * same order; when it does not, the replay diverges and is not accepted.
- */
-function callNumbers(trajectory: Turn[]): number[] {
-  const seen = new Map<string, number>();
-  return trajectory.map(turn => { const key = openingText(turn.context);
-    if (!seen.has(key)) seen.set(key, seen.size);
-    return seen.get(key)!; });
-}
-
-/** A turn's place: its call's number and its number among that call's turns. */
-function placeOf(calls: number[], index: number) {
-  return { call: calls[index]!, nth: calls.slice(0, index).filter(call => call === calls[index]).length };
-}
-
 /** What a call's turn showed: the tool results in the context of that call's next turn, or the run's end. */
-function outputOf(trajectory: Turn[], call: number, nth: number, ending: string): string {
-  const calls = callNumbers(trajectory), turns = trajectory.filter((_, index) => calls[index] === call);
+function outputOf(trajectory: Turn[], calls: number[], call: number, nth: number, ending: string): string {
+  const turns = trajectory.filter((_, index) => calls[index] === call);
   const turn = turns[nth], next = turns[nth + 1];
   if (!turn) return '(missing)';
   if (!next) return ending;
@@ -85,30 +58,16 @@ function outputOf(trajectory: Turn[], call: number, nth: number, ending: string)
 /** Replay a row's recorded responses, call by call in order, leaving out some turns and changing the reasoning of one. */
 async function replay(row: TeacherRow, options: ReplayOptions, runId: string, leftOut: Set<number>,
     reasoned?: { index: number; reasoning: string; planned: boolean }) {
-  const trajectory = row.trajectory as unknown as Turn[], recordedCalls = callNumbers(trajectory);
-  const script = new Map<number, ModelTurn[]>();
-  trajectory.forEach((turn, index) => {
-    if (leftOut.has(index)) return;
-    const response = recorded(turn);
-    if (reasoned?.index === index) {
-      if (reasoned.planned) response.execution_plan = reasoned.reasoning; else response.reasoning = reasoned.reasoning;
-    }
-    script.set(recordedCalls[index]!, [...script.get(recordedCalls[index]!) ?? [], response]);
-  });
-  const started = new Map<string, number>(), used = new Map<number, number>(), turns: Record<string, unknown>[] = [];
-  const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
-    const key = openingText(request.messages as Message[]);
-    if (!started.has(key)) started.set(key, started.size);
-    const call = started.get(key)!, at = used.get(call) ?? 0;
-    used.set(call, at + 1);
-    const response = script.get(call)?.[at] ??
-      { calls: [['return_result', { status: 'failed', reason: 'The replay ran past the recorded trajectory.' }]] as [string, Record<string, unknown>][] };
-    turns.push(trajectoryTurn(request, response));
-    return response;
-  };
+  const trajectory = row.trajectory as unknown as Turn[];
+  const changed = trajectory.map(turn => structuredClone(turn));
+  if (reasoned) {
+    const assistant = changed[reasoned.index]!.assistant;
+    if (reasoned.planned) assistant.execution_plan = reasoned.reasoning; else assistant.reasoning = reasoned.reasoning;
+  }
+  const { driver, turns, places } = scriptedDriver(scriptOf(changed, leftOut), openingsOf(trajectory));
   const record = (row.task as { program_ir: ProgramRecord }).program_ir;
   const run = await executeProgram(record, driver, { ...options, runId });
-  return { run, turns: turns as unknown as Turn[], ending: JSON.stringify([run.outcome.status, run.outcome.value]) };
+  return { run, turns, calls: places.map(place => place.call), ending: JSON.stringify([run.outcome.status, run.outcome.value]) };
 }
 
 /** The corrected variant of a row at one site, or why there is none. */
@@ -122,7 +81,7 @@ export async function correctedVariant(row: TeacherRow, site: CorrectionSite, op
   const planned = Object.hasOwn(first.assistant, 'execution_plan');
   const reasoning = (planned ? first.assistant.execution_plan : first.assistant.reasoning) ?? '';
   const place = placeOf(calls, site.fixed), failedPlace = placeOf(calls, site.failed[0]!);
-  const error = outputOf(trajectory, failedPlace.call, failedPlace.nth, '');
+  const error = outputOf(trajectory, calls, failedPlace.call, failedPlace.nth, '');
   if (!reasoningFitsFix(reasoning, error, first.assistant.calls, fix.assistant.calls))
     return { rejected: 'the reasoning before the failed attempt names what failed' };
   const provenance = row.provenance as Record<string, unknown>;
@@ -132,14 +91,20 @@ export async function correctedVariant(row: TeacherRow, site: CorrectionSite, op
   const variant = await replay(row, options, runId, new Set(site.failed), { index: site.fixed, reasoning, planned });
   if (!variant.run.outcome.accepted) return { rejected: 'the program no longer ends accepted without the failed attempts' };
   const nthInVariant = place.nth - site.failed.length;
-  if (outputOf(variant.turns, place.call, nthInVariant, variant.ending) !== outputOf(control.turns, place.call, place.nth, control.ending))
+  if (outputOf(variant.turns, variant.calls, place.call, nthInVariant, variant.ending) !==
+      outputOf(control.turns, control.calls, place.call, place.nth, control.ending))
     return { rejected: 'the fix shows something other than it showed after the failure' };
-  const variantCalls = callNumbers(variant.turns);
-  const decision = variantCalls.findIndex((call, index) => call === place.call &&
-    variantCalls.slice(0, index).filter(other => other === call).length === nthInVariant);
+  const decision = variant.calls.findIndex((call, index) => call === place.call &&
+    variant.calls.slice(0, index).filter(other => other === call).length === nthInVariant);
   const record = (row.task as { program_ir: ProgramRecord }).program_ir;
   const variantRow = programRow(record, String(provenance.model), runId, { ...provenance,
-    variant: { version: CORRECTION_VERSION, parent: row.id, left_out: site.failed, fixed: site.fixed, decision } },
+    variant: { version: CORRECTION_VERSION, parent: row.id, left_out: site.failed, fixed: site.fixed, decision, run_id: runId } },
     variant.run, variant.turns as unknown as Record<string, unknown>[]);
+  // A curriculum case's checks hold for the variant too: a failed attempt may have made the observation it needs.
+  if ((record as CurriculumRecord).curriculum) {
+    const admission = admitRow(variantRow as Parameters<typeof admitRow>[0]);
+    if (!admission.admitted || admission.notes?.includes('judged_directly'))
+      return { rejected: `the variant is not admitted: ${[...admission.reasons, ...admission.notes ?? []].join(', ')}` };
+  }
   return { row: { ...variantRow, id: `${row.id}:corrected:${site.failed[0]}` }, decision };
 }

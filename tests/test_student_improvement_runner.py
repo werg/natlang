@@ -80,12 +80,12 @@ def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
         assert run_pipeline(config_path, run, until='prepare-correction') == 0
         prepared = [json.loads(line) for line in (run / 'prepared-correction/teacher.jsonl').read_text().splitlines()]
         assert sum(row['training_admission']['approved'] for row in prepared) == 1
-        assert json.loads((run / 'hard-state-queue.jsonl.manifest.json').read_text())['count'] == 1
-        assert json.loads((run / 'preference-pairs.jsonl.manifest.json').read_text())['count'] == 1
+        # The teacher took over at the failed eval: its return is the correction, preferred to the failed eval.
+        assert len((run / 'handoffs.ir.jsonl').read_text().splitlines()) == 1
+        pairs = [json.loads(line) for line in (run / 'preference-pairs.jsonl').read_text().splitlines()]
+        assert [pair['kind'] for pair in pairs] == ['failed_action']
         turns = [json.loads(line) for line in (run / 'verified-turns.jsonl').read_text().splitlines()]
-        assert len(turns) == 2
-        assert turns[0]['training_admission']['approved'] is False
-        assert turns[1]['training_admission']['approved'] is True
+        assert [turn['training_admission']['approved'] for turn in turns] == [True]
         assert run_pipeline(config_path, run, until='combine-verified') == 0
     finally:
         student.shutdown()

@@ -78,9 +78,20 @@ export function definitionNode(definition: CallableDefinition, inputs: unknown[]
   return node;
 }
 
-/** Run one natlang definition in the given frame and return its checked value. */
-export async function invokeDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
+/**
+ * Run one natlang definition in the given frame and return its checked value. Model code can start a call and never
+ * await it (an eval that fails first, a promise left in a variable): its failure is then no one's to handle, and it must
+ * not end the host process as an unhandled rejection. Whoever awaits the call still gets the failure.
+ */
+export function invokeDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions = {}): Promise<unknown> {
+  const call = runDefinition(frame, definition, positional, options);
+  call.catch(() => {});
+  return call;
+}
+
+async function runDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
+  options: InvokeOptions): Promise<unknown> {
   const task = frame.task;
   task.checkOpen();
   if (frame.chain.includes(definition.id)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);

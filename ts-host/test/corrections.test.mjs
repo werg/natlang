@@ -31,7 +31,9 @@ test('a corrected variant makes the fix first, with the reasoning from before th
   assert.equal(variant.trajectory[0].assistant.reasoning, 'I read the snapshot and the events for the team.');
   assert.deepEqual(variant.trajectory[0].assistant.calls.map(call => call.arguments), row.trajectory[1].assistant.calls.map(call => call.arguments));
   assert.doesNotMatch(JSON.stringify(variant.trajectory), /while \(/);
-  assert.deepEqual(variant.provenance.variant, { version: 'corrected-first-attempt/1', parent: row.id, left_out: [0], fixed: 1, decision: 0 });
+  const { run_id: runId, ...variantOf } = variant.provenance.variant;
+  assert.deepEqual(variantOf, { version: 'corrected-first-attempt/1', parent: row.id, left_out: [0], fixed: 1, decision: 0 });
+  assert.equal(typeof runId, 'string');
   const turns = materializeNativeRows([variant]).turns;
   assert.deepEqual(turns.filter(turn => turn.training_admission.approved).map(turn => turn.decision.index), [0]);
   assert.ok(turns.slice(1).every(turn => turn.training_admission.reason === 'context of a corrected variant'));

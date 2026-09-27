@@ -117,7 +117,7 @@ def run_managed(recipe, run, spec_path):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if (run / 'model-swap-service.json').exists():
             stop_owned(run, spec)
-        for role, boundary in (('student', 'build-hard-states'), ('teacher', 'combine-verified')):
+        for role, boundary in (('student', 'build-handoffs'), ('teacher', 'combine-verified')):
             service = spec[role]
             if stage_complete(run, boundary):
                 code = run_pipeline_phase(recipe, run, boundary)

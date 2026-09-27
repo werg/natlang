@@ -201,6 +201,24 @@ test('a failed natlang child bubbles to eval without leaving a local', async () 
   assert.deepEqual(attempts, [1, 1]);
 });
 
+test('natlang calls an eval starts and never awaits fail without ending the process', async () => {
+  // In a process of its own: the test runner reports every unhandled rejection, where a host would end.
+  const { execFile } = await import('node:child_process');
+  const script = `
+    import { nl, session as open } from ${JSON.stringify(new URL('./support/natlang.mjs', import.meta.url).href)};
+    const { session } = open({ type: '(value: number) => number', instructions: 'Ask the helper.', args: { value: 4 },
+      codebase: { inspect: nl('inspect', { args: { value: 'number' }, returns: 'number', instructions: 'Inspect the value.' }) } },
+    { agent: async () => { await new Promise(resolve => setTimeout(resolve, 20)); return 'the child gave up'; } });
+    // A call left in a variable by an eval that fails, and calls in async callbacks forEach drops.
+    const failed = await session.applyAsync('eval', { code: 'const pending = inspect(value); throw new Error("first")' });
+    const dropped = await session.applyAsync('eval', { code: '[1, 2].forEach(async v => { await inspect(v); }); 1' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    console.log(JSON.stringify([failed.kind, dropped.kind]));`;
+  const output = await new Promise((resolve, reject) => execFile(process.execPath, ['--input-type=module', '-e', script],
+    (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
+  assert.deepEqual(JSON.parse(output.trim()), ['error', 'ok']);
+});
+
 test('failed eval reports its console output and commits no partial locals', async () => {
   const { lam, session } = open({ type: '(item: { deep: { count: number } }) => number',
     instructions: 'Return the count plus one.', args: { item: { deep: { count: 4 } } } });

@@ -53,16 +53,8 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>', reaso
     training_admission: turn.training_admission, prompt, completion, ...(masked ? { completion_masked: masked } : {}) };
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const positional = args.filter((value, index) => !value.startsWith('--') && !args[index - 1]?.startsWith('--'));
-  if (positional.length !== 2)
-    throw new Error('usage: export-native-sft.mjs INPUT.jsonl OUTPUT.jsonl [--server URL] [--workers N] [--end-token TOKEN] [--reasoning-end TOKEN]');
-  const take = (flag, fallback) => { const index = args.indexOf(flag); return index < 0 ? fallback : args[index + 1]; };
-  const input = resolve(positional[0]), output = resolve(positional[1]);
-  const server = take('--server', 'http://127.0.0.1:8081'), workers = Number(take('--workers', '4'));
-  const endToken = take('--end-token', '<|im_end|>'), reasoningEnd = take('--reasoning-end', undefined);
-  if (!Number.isInteger(workers) || workers < 1) throw new Error('workers must be positive');
+/** Rendering by a llama-server's chat template (/apply-template), and the template it renders with. */
+export async function templateRenderer(server) {
   const propsResponse = await fetch(`${server}/props`);
   const props = propsResponse.ok ? await propsResponse.json() : {};
   const template = props.chat_template_tool_use ?? props.chat_template ?? null;
@@ -81,6 +73,20 @@ async function main() {
     if (typeof body.prompt !== 'string') throw new Error('template server returned no prompt');
     return body.prompt;
   };
+  return { render, template };
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const positional = args.filter((value, index) => !value.startsWith('--') && !args[index - 1]?.startsWith('--'));
+  if (positional.length !== 2)
+    throw new Error('usage: export-native-sft.mjs INPUT.jsonl OUTPUT.jsonl [--server URL] [--workers N] [--end-token TOKEN] [--reasoning-end TOKEN]');
+  const take = (flag, fallback) => { const index = args.indexOf(flag); return index < 0 ? fallback : args[index + 1]; };
+  const input = resolve(positional[0]), output = resolve(positional[1]);
+  const server = take('--server', 'http://127.0.0.1:8081'), workers = Number(take('--workers', '4'));
+  const endToken = take('--end-token', '<|im_end|>'), reasoningEnd = take('--reasoning-end', undefined);
+  if (!Number.isInteger(workers) || workers < 1) throw new Error('workers must be positive');
+  const { render, template } = await templateRenderer(server);
   // Streamed: a corpus's turns (each with its whole context) outgrow a single string. Up to `workers` render at
   // once, and rows are written in input order.
   await mkdir(dirname(output), { recursive: true });

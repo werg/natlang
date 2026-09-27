@@ -39,7 +39,7 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
             args += ['--all']
         return args
     student_rows = f'{r}/student-trajectories.jsonl'
-    queue = f'{r}/hard-state-queue.jsonl'
+    handoffs = f'{r}/handoffs.ir.jsonl'
     teacher_rows = f'{r}/teacher-corrections.jsonl'
     student_turns = f'{r}/student-success-turns.jsonl'
     teacher_turns = f'{r}/teacher-correction-turns.jsonl'
@@ -49,14 +49,11 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
                       [str(programs), runtime_hash, f'{frozen}/dist/teacher/collector.js',
                        f'{frozen}/dist/native/runtime.js'],
                       [student_rows, f'{student_rows}.manifest.json']))
-    stages.append(add('build-hard-states', ['node', f'{frozen}/scripts/build-hard-state-queue.mjs',
-                                            student_rows, queue],
-                      [student_rows, runtime_hash, f'{frozen}/scripts/build-hard-state-queue.mjs'],
-                      [queue, f'{queue}.programs.jsonl', f'{queue}.manifest.json']))
-    stages.append(add('collect-corrections', collect('teacher', f'{queue}.programs.jsonl', teacher_server,
-                                                    teacher_model, teacher_rows, ('--handoff-queue', queue)),
-                      [queue, f'{queue}.programs.jsonl', runtime_hash,
-                       f'{frozen}/dist/teacher/collector.js', f'{frozen}/dist/native/runtime.js'],
+    # Each failed student run becomes handoff tasks: the run replayed up to a failure, the rest the teacher's.
+    stages.append(add('build-handoffs', ['node', f'{frozen}/scripts/build-handoffs.mjs', handoffs, student_rows],
+                      [student_rows, runtime_hash, f'{frozen}/scripts/build-handoffs.mjs'], [handoffs]))
+    stages.append(add('collect-corrections', collect('teacher', handoffs, teacher_server, teacher_model, teacher_rows),
+                      [handoffs, runtime_hash, f'{frozen}/dist/teacher/collector.js', f'{frozen}/dist/native/runtime.js'],
                       [teacher_rows, f'{teacher_rows}.manifest.json']))
     for role, source, target in (('student', student_rows, student_turns),
                                  ('teacher', teacher_rows, teacher_turns)):
@@ -65,10 +62,8 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
                           [source, runtime_hash, f'{frozen}/dist/teacher/native-materializer.js'], [target]))
     preferences = f'{r}/preference-pairs.jsonl'
     stages.append(add('build-preferences', ['node', f'{frozen}/scripts/build-preference-pairs.mjs',
-                                            student_rows, teacher_rows, teacher_turns, preferences],
-                      [student_rows, teacher_rows, teacher_turns, runtime_hash,
-                       f'{frozen}/scripts/build-preference-pairs.mjs'],
-                      [preferences, f'{preferences}.manifest.json']))
+                                            preferences, '--handoffs', teacher_rows],
+                      [teacher_rows, runtime_hash, f'{frozen}/scripts/build-preference-pairs.mjs'], [preferences]))
     stages.append(add('combine-verified', ['python', f'{p}/scripts/combine_verified_turns.py',
                                            '--student', student_turns, '--teacher', teacher_turns,
                                            '--output', combined],

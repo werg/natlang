@@ -116,9 +116,10 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
 /**
  * Convert accepted native teacher runs to one self-contained model decision per row.
  * Context is copied from that exact native request, never assembled by appending one decision onto another.
- * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
+ * Rows with checkpoint turns (conversation rollover, since retired) are rejected. With `failedRuns`, runs that were not
+ * accepted are materialized too, none of their decisions approved, so their failed decisions can be found.
  */
-export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean } = {}): {
+export function materializeNativeRows(input: unknown[], options: { directAnswers?: boolean; failedRuns?: boolean } = {}): {
   turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: { id: string; outcomes: number }[];
 } {
   const turns: Dict[] = [];
@@ -128,7 +129,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const row = validateRow(candidate);
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
     const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
-    if (!row.outcome.accepted || rolledOver) { rejectedRows++; continue; }
+    if ((!row.outcome.accepted && !options.failedRuns) || rolledOver) { rejectedRows++; continue; }
     acceptedRows++;
     const role = String(row.provenance.collection_role ?? 'teacher');
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
@@ -191,8 +192,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
-      const handoff = row.handoff as Dict | undefined;
-      const fromStudentPrefix = handoff !== undefined && index < Number(handoff.handoff_at);
+      // A handoff row (teacher/handoff.ts) replays a student's turns up to where a teacher took over.
+      const prefixTurns = (row.handoff as { prefix_turns?: number[] } | undefined)?.prefix_turns;
+      const fromStudentPrefix = prefixTurns?.includes(index) ?? false;
       const ranCleanly = calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])
@@ -205,6 +207,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const resultOf = (call: Dict) => String(record(call.outcome, 'call outcome').result ?? '');
       const detour = calls.length > 0 && calls.every(call => earlier.get(signature(call)) === resultOf(call));
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
+      // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
+      const failedAction = refusedAttempt || calls.some(call =>
+        ['rejected', 'refused', 'error'].includes(String(record(call.outcome, 'call outcome').status)));
       for (const call of calls) earlier.set(signature(call), resultOf(call));
       // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
       // student to answer without reasoning; a student that answers directly is trained on it (options.directAnswers).
@@ -212,7 +217,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       // A corrected variant (teacher/corrections.ts) trains its fix only; the rest repeats its parent's turns.
       const variant = row.provenance.variant as { decision?: number } | undefined;
       const variantContext = variant !== undefined && index !== variant.decision;
-      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !heldDirect && !variantContext;
+      const decisionApproved = row.outcome.accepted && !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt &&
+        !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
@@ -245,7 +251,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
               'the outcome of a call in this decision was not recorded' :
             !ranCleanly ? 'decision contains a failed or unexecuted proposal' :
             detour ? 'repeats an earlier call of this call with the same result' :
-              "the task's checker rejected this attempt") }) },
+            refusedAttempt ? "the task's checker rejected this attempt" : 'the run was not accepted') }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: outcomeDigest },
         decision: { index,
@@ -254,6 +260,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           assistant: { content: assistant.content ?? '', reasoning: retainedReasoning,
             execution_plan: executionPlan,
             calls },
+          failed_action: failedAction,
           training_approved: decisionApproved,
           source_raw_response_sha256: source.raw_response_sha256 ?? null,
           source_tools_offered: structuredClone(source.tools_offered ?? []) },

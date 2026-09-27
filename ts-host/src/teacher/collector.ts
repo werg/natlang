@@ -12,6 +12,8 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
+import { callMatcher } from './replay.js';
+import type { Handoff } from './handoff.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -47,14 +49,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   request?: Record<string, unknown>; cacheStableTools?: boolean;
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
   executionPlans?: boolean; executionPlanTokens?: number;
-  handoffs?: Map<string, HandoffRecord>;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
   collectionRole?: 'student' | 'teacher' | 'reference' };
-export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
-  program_ir_sha256: string; student_trajectory_id: string; student_trajectory_sha256: string;
-  handoff_at: number; target_request_sha256: string;
-  prefix: { request_sha256: string; response: ModelTurn }[]; failure: Record<string, unknown>;
-  student_provenance: Record<string, unknown> };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
   /** Worker n starts its first job n times this later, so a rate-limited provider does not see them all at once. */
@@ -119,8 +115,6 @@ export function jobKey({ index, record }: IndexedRecord): string {
 }
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
-  const handoff = options.handoffs?.get(record.id);
-  if (options.handoffs && !handoff) throw new Error(`${record.id}: missing student handoff`);
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
     runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
@@ -132,8 +126,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
     ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
       max_tokens: options.executionPlanTokens ?? 512 } } : {}),
-    collection_role: options.collectionRole ?? 'teacher',
-    ...(handoff ? { handoff_sha256: sha256(canonical(handoff)) } : {}) };
+    collection_role: options.collectionRole ?? 'teacher' };
 }
 
 export function resultMatches(row: unknown, record: ProgramRecord, expected: Record<string, unknown>): row is TeacherRow {
@@ -208,7 +201,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'handoff_sha256'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -472,20 +465,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.endpoint && config.provider) throw new Error('teacher collection cannot use both endpoint and Pi provider');
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
-    const handoff = config.handoffs?.get(item.record.id);
-    if (config.handoffs && (!handoff || handoff.program_ir_sha256 !== recordDigest(item.record) ||
-        handoff.handoff_at !== handoff.prefix.length || !handoff.target_request_sha256))
-      throw new Error(`${item.record.id}: invalid or missing student handoff`);
-    if (handoff && (!handoff.student_provenance ||
-        handoff.student_provenance.tool_surface_sha256 !== config.toolSurfaceSha256 ||
-        handoff.student_provenance.system_prompt_sha256 !== sha256(config.systemPrompt) ||
-        handoff.student_provenance.collection_role !== 'student' ||
-        handoff.student_provenance.runtime !== 'typescript-native' ||
-        handoff.student_provenance.tool_schema !== TOOL_SCHEMA ||
-        handoff.student_provenance.program_ir_sha256 !== recordDigest(item.record) ||
-        (handoff.student_provenance.seed_policy as Record<string, unknown>)?.root !== config.rootSeed ||
-        handoff.student_provenance.context_tokens !== config.contextTokens))
-      throw new Error(`${item.record.id}: student handoff runtime/prompt/seed settings differ`);
+    // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
+    const handoff = item.record.handoff as Handoff | undefined;
+    const placeOf = callMatcher(handoff?.openings ?? []), prefixTurns: number[] = [];
+    let handedOver: number | undefined;
     const session = config.provider ? createManagedModelSession({ provider: config.provider,
       model: config.modelId, piOptions: config.piOptions }) : undefined;
     let ready: Promise<unknown> | undefined;
@@ -507,7 +490,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const saved = await loadPartial(partialPath, item, expected);
     const partial: PartialJob = saved ?? { version: TEACHER_PARTIAL_VERSION,
       program_id: item.record.id, provenance: structuredClone(expected), turns: [] };
-    let replayIndex = 0;
     // Journaled responses are replayed by their exact request, not by position: the child calls of one eval run
     // concurrently, so their requests can reach the model in a different order after a restart. A request with no
     // unused journal entry is decoded live.
@@ -516,20 +498,16 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
       const requestSha256 = sha256(canonical(request));
       const recorded = unused.get(requestSha256)?.shift();
+      const place = placeOf(request), replayed = handoff?.prefix[place.call]?.[place.nth];
+      if (replayed) prefixTurns.push(trajectory.length);
+      else if (handoff && place.call === handoff.call && place.nth === (handoff.prefix[handoff.call]?.length ?? 0))
+        handedOver = trajectory.length;
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
       } else {
-        if (handoff && replayIndex < handoff.prefix.length) {
-          const prefix = handoff.prefix[replayIndex]!;
-          if (prefix.request_sha256 !== requestSha256)
-            throw new Error(`student prefix replay diverged at model turn ${replayIndex}`);
-          response = structuredClone(prefix.response);
-        } else if (handoff && replayIndex === handoff.prefix.length) {
-          if (handoff.target_request_sha256 !== requestSha256)
-            throw new Error(`teacher handoff request diverged at model turn ${replayIndex}`);
-          response = await transport(request);
-        } else response = replayIndex === 0 && item.record.semantics.failure_seed ?
+        response = replayed ? structuredClone(replayed) :
+          trajectory.length === 0 && item.record.semantics.failure_seed ?
           { calls: [['eval', { code: item.record.semantics.failure_seed.code }]], completion_tokens: 1 } :
           await transport(request);
         partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
@@ -537,16 +515,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         // replay it into the deterministic frozen harness without another decode.
         await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
       }
-      replayIndex++;
       trajectory.push(trajectoryTurn(request, response));
       return response;
     };
     const runId = programRunId(item.index, expected);
     const run = await executeProgram(item.record, driver, { ...config, runId, signal });
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
-      handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
-        student_trajectory_sha256: handoff.student_trajectory_sha256,
-        handoff_at: handoff.handoff_at, failure: handoff.failure } } : {});
+      handoff ? { handoff: { kind: handoff.kind, source: handoff.source, prefix_turns: prefixTurns,
+        at: handedOver ?? null, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);

@@ -61,7 +61,7 @@ def fixture(tmp_path):
     config = {'version': 'natlang.training_pipeline/1', 'repository': str(tmp_path),
               'run_directory': str(run), 'collection': {'student_server': endpoint,
                                                          'teacher_server': endpoint},
-              'stages': [stage('build-hard-states', 'student'),
+              'stages': [stage('build-handoffs', 'student'),
                          stage('combine-verified', 'teacher'),
                          stage('train-correction', 'down')]}
     recipe = tmp_path / 'recipe.json'
