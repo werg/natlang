@@ -13,8 +13,13 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>') {
   if (turn.training_admission?.approved === false) return null;
   if (!Array.isArray(turn.messages) || !Array.isArray(turn.tools) || !turn.target)
     throw new Error(`${turn.id}: missing messages/tools/target training view`);
-  const messages = structuredClone(turn.messages), target = structuredClone(turn.target);
-  // Whitespace around the reasoning carries nothing, and templates differ in whether they keep it (Ling's strips it).
+  // Whitespace around reasoning carries nothing, and templates differ in whether they keep it (Ling's strips it,
+  // Sharp-Spark's keeps it). It is trimmed in the target and in the history alike: the history of a served call holds
+  // the student's own reasoning, trimmed as it was trained, and a later turn's prompt then extends an earlier turn's
+  // prompt and completion (scripts/merge_sft_chains.py).
+  const messages = structuredClone(turn.messages).map(message => typeof message.reasoning_content === 'string' ?
+    { ...message, reasoning_content: message.reasoning_content.trim() } : message);
+  const target = structuredClone(turn.target);
   const reasoning = turn.teacher_reasoning?.trim();
   if (reasoning) target.reasoning_content = reasoning;
   if (Array.isArray(target.tool_calls)) target.tool_calls = target.tool_calls.map((call, index) =>
