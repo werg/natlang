@@ -14,6 +14,8 @@ const input = resolve(inputPath), output = resolve(outputPath);
 const rows = (await readFile(input, 'utf8')).split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
 const result = materializeNativeRows(rows);
 console.error(`${result.acceptedRows} rows -> ${result.turns.length} turns (${result.rejectedRows} rows not used)`);
+for (const row of result.unlinked)
+  console.error(`  ${row.id}: not used, ${row.outcomes} action outcomes could not be linked to their decisions`);
 await mkdir(dirname(output), { recursive: true });
 const staged = `${output}.building-${process.pid}-${randomUUID()}`;
 // Line by line: every turn carries its whole context, and thousands of them do not fit in one string.

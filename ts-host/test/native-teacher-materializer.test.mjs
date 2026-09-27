@@ -88,7 +88,10 @@ test('rows collected with conversation rollover are rejected', () => {
 test('accepted rows with an unlinked or reordered action outcome are rejected', () => {
   const row = nativeRow('bad-link');
   row.outcome.action_ledger[0].arguments = { path: 'return', value: 99 };
-  assert.throws(() => materializeNativeRows([row]), /action outcomes have no teacher decision link/);
+  const result = materializeNativeRows([row, nativeRow('good-link')]);
+  assert.equal(result.acceptedRows, 1); assert.equal(result.rejectedRows, 1);
+  assert.deepEqual(result.unlinked, [{ id: row.id, outcomes: row.outcome.action_ledger.length }]);
+  assert.ok(result.turns.every(turn => turn.teacher_trajectory_id !== row.id), 'no turn of the unlinked row is used');
 });
 
 test('failed and unexecuted proposals remain in IR but are excluded from SFT admission', () => {

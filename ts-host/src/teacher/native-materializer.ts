@@ -119,9 +119,10 @@ const CHECKER_REFUSAL = /"?ok"?\s*:\s*false\s*,\s*"?certificate"?\s*:/;
  * Rows with checkpoint turns (conversation rollover, since retired) are rejected.
  */
 export function materializeNativeRows(input: unknown[]): {
-  turns: Dict[]; acceptedRows: number; rejectedRows: number;
+  turns: Dict[]; acceptedRows: number; rejectedRows: number; unlinked: { id: string; outcomes: number }[];
 } {
   const turns: Dict[] = [];
+  const unlinked: { id: string; outcomes: number }[] = [];
   let acceptedRows = 0, rejectedRows = 0;
   for (const candidate of input) {
     const row = validateRow(candidate);
@@ -250,9 +251,14 @@ export function materializeNativeRows(input: unknown[]): {
         outcome: structuredClone(row.outcome),
         capture_limits: structuredClone(row.capture_limits ?? []) });
     }
-    if (linked !== ledger.length)
-      throw new Error(`${row.id}: ${ledger.length - linked} action outcomes have no teacher decision link`);
+    // A decision linked to another call's outcome would train the wrong target, so a row whose outcomes cannot all
+    // be linked is not used (concurrent calls with the very same opening cannot be told apart), and is reported.
+    if (linked !== ledger.length) {
+      acceptedRows--; rejectedRows++;
+      unlinked.push({ id: row.id, outcomes: ledger.length - linked });
+      continue;
+    }
     turns.push(...rowTurns);
   }
-  return { turns, acceptedRows, rejectedRows };
+  return { turns, acceptedRows, rejectedRows, unlinked };
 }
