@@ -176,12 +176,47 @@ export type Admission = { id: string; program_id: string; admitted: boolean; rea
  */
 const RETIRED_FAMILIES = new Set(['inline_type_repair']);
 
+/**
+ * Outcomes the runtime no longer produces. A row that met one worked around a limitation a served model will not
+ * meet, and its history shows the model something untrue about the runtime.
+ */
+const OBSOLETE_OUTCOMES: [string, RegExp][] = [
+  // nl results nothing typed run open now.
+  ['nl_unknown_return', /nothing that uses it says what it should be/],
+  // Eval awaits what it keeps, so no local holds a promise.
+  ['unawaited_promise', /\[Promise #\d+; live value/],
+  // nl called like a function is the one-shot call it reads as.
+  ['nl_call_arity', /nl@eval:\d+ expects \d+ arguments/],
+  // Compaction keeps the opening, the note and the latest exchange instead of eliding outputs.
+  ['elided_output', /elided to keep this conversation within its context budget/],
+  // A request the server refuses as too long is retried, compacted.
+  ['context_exceeded', /Context size has been exceeded/],
+];
+
+/** The obsolete outcomes a trajectory's tool results show, including a type an eval declared and then could not use. */
+export function obsoleteOutcomes(trajectory: Turn[]): string[] {
+  const found = new Set<string>();
+  for (const turn of trajectory) {
+    const context = turn.context ?? [];
+    const code = context.flatMap(message => (message.tool_calls ?? []).map(call => call.function?.arguments ?? '')).join('\n');
+    for (const message of context) {
+      if (message.role !== 'tool') continue;
+      const content = text(message.content);
+      for (const [name, pattern] of OBSOLETE_OUTCOMES) if (pattern.test(content)) found.add(name);
+      for (const [, type] of content.matchAll(/unknown type name (\w+)/g))
+        if (new RegExp(`\\b(?:type|interface)\\s+${type}\\b`).test(code)) found.add('eval_declared_type');
+    }
+  }
+  return [...found];
+}
+
 export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; outcome?: Record<string, unknown>;
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
   const reasons: string[] = [];
   if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
+  for (const name of obsoleteOutcomes((row.trajectory ?? []) as Turn[])) reasons.push(`obsolete_outcome:${name}`);
   const outcome = row.outcome ?? {};
   if (!['done', 'quiesced', 'failed'].includes(String(outcome.status))) reasons.push('incomplete_trajectory');
   else if (!outcome.accepted) reasons.push(record.semantics.operation === 'blocked' && outcome.status === 'done' ?

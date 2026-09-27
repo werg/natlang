@@ -46,6 +46,20 @@ test('admission requires the decisive observation before the first result decisi
   assert.deepEqual(early.reasons.map(reason => reason.split(':')[0]), ['premature_choice']);
 });
 
+test('a row showing an outcome the runtime no longer produces is not admitted', async () => {
+  const [record] = FAMILIES.relational_dynamic_snapshot.build(7, 0);
+  const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
+  const withTool = (content, code = 'const x = 1') => trajectory.map(turn => ({ ...turn, context: [...turn.context,
+    { role: 'assistant', content: '', tool_calls: [{ id: 'c', type: 'function', function: { name: 'eval', arguments: JSON.stringify({ code }) } }] },
+    { role: 'tool', tool_call_id: 'c', content }] }));
+  const reasons = trajectory => admitRow({ task: { program_ir: record }, outcome: run.outcome, trajectory }).reasons;
+  assert.deepEqual(reasons(withTool('Stored local results = [[Promise #2; live value, use it in eval]]')), ['obsolete_outcome:unawaited_promise']);
+  assert.deepEqual(reasons(withTool('unknown type name State', 'type State = { n: number };\nlet s: State = { n: 1 };')),
+    ['obsolete_outcome:eval_declared_type']);
+  // A type nothing declared is still unknown, and the row stands.
+  assert.deepEqual(reasons(withTool('unknown type name State')), []);
+});
+
 test('inline and edit expectations are enforced by admission', async () => {
   const [semantic, crisp] = FAMILIES.inline_review_each.build(7, 0);
   // Answering a per-item semantic filter directly, without inline children.

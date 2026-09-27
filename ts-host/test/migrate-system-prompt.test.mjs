@@ -13,13 +13,12 @@ test('an earlier prompt made of known parts becomes the current one, keeping its
   assert.equal(currentPrompt('old base and something else', history), undefined);
 });
 
-test('rows are rewritten once and unknown prompts are counted, not changed', () => {
-  const row = { provenance: {}, trajectory: [{ context: [{ role: 'system', content: 'old base' }] },
-    { context: [{ role: 'system', content: 'custom' }] }] };
-  const { row: once, unknown } = migrateRow(row, history);
-  assert.equal(unknown, 1);
+test('rows are rewritten once, and a row with an unknown prompt is left out', () => {
+  const row = { provenance: {}, trajectory: [{ context: [{ role: 'system', content: 'old base' }] }] };
+  const once = migrateRow(row, history);
   assert.equal(once.trajectory[0].context[0].content, TOOLS_PROMPT);
-  assert.equal(once.trajectory[1].context[0].content, 'custom');
   assert.equal(once.provenance.system_prompt_migration, 'current-prompt/1');
-  assert.equal(migrateRow(once, { ...history, TOOLS_PROMPT: [TOOLS_PROMPT, ...history.TOOLS_PROMPT] }).row, once);
+  assert.equal(migrateRow(once, { ...history, TOOLS_PROMPT: [TOOLS_PROMPT, ...history.TOOLS_PROMPT] }), once);
+  const custom = { provenance: {}, trajectory: [...row.trajectory, { context: [{ role: 'system', content: 'custom' }] }] };
+  assert.equal(migrateRow(custom, history), null);
 });

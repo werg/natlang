@@ -10,9 +10,9 @@
  * (native/agent.ts). Every version of those parts in the history of native/prompt.ts is read from git (also as
  * migrate-code-tools.mjs renamed the code tools in it); a system
  * message made of versions of them is rebuilt from the current parts, keeping the function-tools and folder parts it
- * had and leaving out the approach guide, which the student is not served with. A message not made of known parts is
- * left as it is and counted. Any row can be passed again; each rewritten row is marked in
- * provenance.system_prompt_migration.
+ * had and leaving out the approach guide, which the student is not served with. A row with a system message not made of
+ * known parts was collected under a prompt, and a runtime, that is not recorded: it is left out and counted. Any row can
+ * be passed again; each rewritten row is marked in provenance.system_prompt_migration.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -60,16 +60,16 @@ export function currentPrompt(message, history) {
   return undefined;
 }
 
-/** The row with current system prompts, with a count of system messages that could not be read as known parts. */
+/** The row with current system prompts, or null when one of its system messages is not made of known parts. */
 export function migrateRow(row, history) {
-  let changed = false, unknown = 0;
+  let changed = false, unknown = false;
   const trajectory = (row.trajectory ?? []).map(turn => {
     if (!Array.isArray(turn.context)) return turn;
     let turnChanged = false;
     const context = turn.context.map(message => {
       if (message.role !== 'system' || typeof message.content !== 'string') return message;
       const current = currentPrompt(message.content, history);
-      if (current === undefined) { unknown++; return message; }
+      if (current === undefined) { unknown = true; return message; }
       if (current === message.content) return message;
       turnChanged = true;
       return { ...message, content: current };
@@ -78,8 +78,9 @@ export function migrateRow(row, history) {
     changed = true;
     return { ...turn, context };
   });
-  if (!changed) return { row, unknown };
-  return { row: { ...row, trajectory, provenance: { ...row.provenance, system_prompt_migration: MIGRATION } }, unknown };
+  if (unknown) return null;
+  if (!changed) return row;
+  return { ...row, trajectory, provenance: { ...row.provenance, system_prompt_migration: MIGRATION } };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -87,15 +88,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!input || !output) throw new Error('usage: migrate-system-prompt.mjs IN.results.jsonl OUT.results.jsonl');
   const history = await promptHistory();
   const lines = readFileSync(input, 'utf8').split('\n').filter(Boolean);
-  let changed = 0, unknown = 0;
-  const out = lines.map(line => {
+  let changed = 0, dropped = 0;
+  const out = lines.flatMap(line => {
     const row = JSON.parse(line), next = migrateRow(row, history);
-    unknown += next.unknown;
-    if (next.row === row) return line;
+    if (next === null) { dropped++; return []; }
+    if (next === row) return [line];
     changed++;
-    return JSON.stringify(next.row);
+    return [JSON.stringify(next)];
   });
   writeFileSync(output, out.join('\n') + '\n');
-  process.stdout.write(`${changed}/${lines.length} rows given the current system prompt; ${unknown} system messages ` +
-    `not made of known prompt parts were left as they were -> ${output}\n`);
+  process.stdout.write(`${changed}/${lines.length} rows given the current system prompt; ${dropped} with a prompt not ` +
+    `made of known parts left out -> ${output}\n`);
 }
