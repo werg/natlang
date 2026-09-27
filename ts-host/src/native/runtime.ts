@@ -9,6 +9,7 @@ import { EvalFailure, type EvalEnvironment, type HostEvent } from './evaluator.j
 import { PageStore } from './pages.js';
 import { isRecording, recordingServices } from './effects.js';
 import { TypeEnv, formatType, parseType, type Type } from './types.js';
+import { evalTypeDeclarations, inlineDeclaredTypes } from './eval-types.js';
 import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel, problems, unboundParts,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
@@ -485,6 +486,8 @@ export class NativeSession {
   private evalDetail?: { value?: unknown; console?: string };
   /** Texts the current call's result shows cut off, with their full versions for its transcript entry. */
   private cuts: { shown: string; full: string }[] = [];
+  /** Types this call's evals declared (`type X = …`, `interface X { … }`), by name. */
+  private localTypes: Record<string, Type> = {};
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
   /** Whether the model declared this persistent local with let (true) or const. */
@@ -970,6 +973,8 @@ export class NativeSession {
         ...Object.entries(output.captures ?? {})].find(([, value]) => thenable(value));
       if (unsettled) throw new Error(`${unsettled[0]} holds a promise that could not be kept: await the call that made it`);
       const annotations = new Map(compiled.bindings.map(binding => [binding.name, binding.annotation]));
+      // A local annotated with a type an eval declared stores that type's definition, which later evals can read.
+      const typesHere = evalTypeDeclarations(code), localTypes = { ...this.localTypes, ...typesHere };
       const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
       const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));
       const staged: [string, Type, Value][] = [];
@@ -982,7 +987,7 @@ export class NativeSession {
         const stored = this.lam.letTypes[name];
         let type = annotations.has(name) || (stored?.kind === 'prim' && stored.name === 'null' && value !== null) ? undefined : stored;
         const annotation = annotations.get(name);
-        if (annotation) type = parseType(annotation);
+        if (annotation) type = inlineDeclaredTypes(parseType(annotation), localTypes);
         if (!type && initializers.get(name)) type = this.scopeInitializerType(initializers.get(name)!, inferred);
         if (!type) {
           try { type = parseType(this.inferScopeType(value)); }
@@ -1016,6 +1021,7 @@ export class NativeSession {
       const before = new Map(Object.entries(this.lam.let).map(([name, value]) => [name, containsLive(value) ? value : JSON.stringify(dump(value))]));
       const changed = staged.filter(([name, , value]) => !before.has(name) ||
         (containsLive(value) ? before.get(name) !== value : before.get(name) !== JSON.stringify(dump(value))));
+      Object.assign(this.localTypes, typesHere);
       for (const [name, type, value] of staged) {
         this.lam.letTypes[name] = type;
         this.lam.let[name] = value;

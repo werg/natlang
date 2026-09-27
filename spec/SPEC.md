@@ -176,6 +176,9 @@ A call made by an inline `nl` makes its judgment itself: calling another inline
 In eval, awaiting an inline `nl` without calling it (`await nl`...``) calls it
 with no arguments: it judges the names its instructions mention and its
 interpolated values.
+Types an eval declares (`type State = …`, `interface Row { … }`, without type
+parameters) annotate its locals like the call's own types, in that eval and in
+later ones; a type the runtime cannot express leaves a local so annotated open.
 What an eval leaves unawaited (a promise in a local, the final value or a
 `return`, or arrays and objects holding promises) is awaited before it is kept.
 A top-level `return value` stages the value as the call's result if it has the

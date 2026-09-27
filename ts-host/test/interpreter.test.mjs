@@ -579,6 +579,20 @@ test('a judgment handed over with nl is made by the call it went to, not handed 
   assert.match(texts[0], /This call is itself a judgment handed over with nl, so make it here/);
 });
 
+test('types an eval declares annotate its locals, then and in later evals', async () => {
+  const { session } = open({ type: '() => number', instructions: 'Count.' });
+  const declared = await session.applyAsync('eval', { code: 'type State = { n: number };\nconst s: State = { n: 1 };\ns' });
+  assert.equal(declared.kind, 'ok', declared.text);
+  const later = await session.applyAsync('eval', { code: 'const t: State = { n: 2 };\nt.n' });
+  assert.equal(later.kind, 'ok', later.text); assert.equal(later.value, 2);
+  const wrong = await session.applyAsync('eval', { code: 'const u: State = { n: "two" } as any;\nu' });
+  assert.notEqual(wrong.kind, 'ok', 'a declared type is checked like any other');
+  const shaped = await session.applyAsync('eval', { code: 'interface Row { id: string; n: number }\nconst rows: Row[] = [{ id: "a", n: 1 }];\nrows.length' });
+  assert.equal(shaped.kind, 'ok', shaped.text);
+  const open_ = await session.applyAsync('eval', { code: 'type Pair = Array<number>;\nconst p: Pair = [1, 2];\np' });
+  assert.equal(open_.kind, 'ok', 'a type the runtime cannot express is left open');
+});
+
 test('an iteration that was never run says how to run it', async () => {
   const { session } = open({ type: '() => number', instructions: 'Count up.' });
   const shown = await session.applyAsync('eval', { code: 'const it = await iterateOn((n: number) => n + 1, 0, (n: number) => n > 3);\nconsole.log(String(it));\nit' });
