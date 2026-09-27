@@ -138,8 +138,7 @@ D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).**
 
    **Where it runs.** One engine serves two places:
    - `python3` inside the shell, for scripts and one-liners over the folder's files;
-   - Python as a second eval language, with the call's scope. This is either `eval` with a `language` argument or a
-     `python` tool, whichever the corpora we convert favour; that is a decision.
+   - a separate `python` tool (decided), a persistent session with the call's scope, beside `eval`.
 
    Python's file system is the call's folder (see F), so `open("notes/a.md")` and `pd.read_csv("sales.csv")` read the
    same files as the other tools.
@@ -191,17 +190,29 @@ F. **The folder, redesigned around mounts and overlays.** Today's `Folder` (an o
    and 3 with that experience. The API models see (`folder.file(…)`, `folder.dir(…).apply(…)`, the fs helper) stays,
    and gets a Python twin.
 
-G. **The tool surface, aligned with the corpora.** The largest open agentic corpora use two shapes:
-   - OpenHands: `str_replace_editor` (view, create, str_replace, insert) plus `execute_bash`;
-   - Claude-Code style: Read, Write, Edit, Glob, Grep, Bash.
+G. **The tool surface: one editor tool plus `bash`** (decided 2026-09-27). The file tools collapse:
+   - listing and searching become `ls` and `rg`;
+   - reading, creating and exact-replace editing become one editor, with view (line numbers, ranges), create,
+     str_replace and insert;
+   - `diff_files` becomes a shell command, `changes`, that shows this call's changes.
 
-   Our file tools are close to the second. With a shell, listing and searching become `ls` and `rg`, which models use
-   by reflex. So the proposal is to collapse the file tools to one editor tool in whichever shape the converted corpora
-   use most (view with line numbers and ranges, create, exact replace, insert) plus `bash`. `eval` stays, Python per D
-   is added, and `return_result`, `read_page` and `compact_history` stay. `diff_files` becomes a shell command
-   (`changes`) that shows this call's changes. Converting trajectories then needs no renaming.
+   `eval` stays, Python (D) is a separate `python` tool (decided), and `return_result`, `read_page` and
+   `compact_history` stay.
 
-H. **Deliberately not added:** network access, git, and package installation at run time (the Python packages are a
+   **The editor's shape is chosen by measurement.** The largest open corpora use OpenHands' `str_replace_editor`
+   (one tool with a `command` argument); Claude-Code style splits it into Read, Write and Edit. The semantics are the
+   same, and conversion between them is mechanical. So the editor is implemented once and rendered in both shapes. The
+   untrained student and the teachers run a small folder probe with each, and the shape with fewer malformed calls and
+   more solved tasks wins. Recorded trajectories are then migrated to it.
+
+H. **A `delegate` tool: a directory-reducer subagent without code.**
+   `delegate(path, instructions, returns?)` runs a directory reducer on a subfolder, with its own context and the same
+   tools, and returns its result. Its changes are kept, as with `folder.dir(path).apply(reducer)`, which is what it
+   lowers to. Models are post-trained with subagent tools of this shape (Claude Code's Task tool), and it is the way a
+   long task over a large folder stays within a small model's context. The code form stays for maps over many
+   subfolders; the tool is for the one-off delegation.
+
+I. **Deliberately not added:** network access, git, and package installation at run time (the Python packages are a
    fixed, vendored set).
 
 ## 3. Oracles and admission
@@ -211,7 +222,7 @@ H. **Deliberately not added:** network access, git, and package installation at 
 | exact | result equals the expected value; files equal the expected files | generated folders, moves, labels, CoEdIT and CommitPack edits |
 | normalized | answer matches the gold or an alternate after normalization (case, whitespace, number formats, dates) | EnronQA, HotpotQA, MuSiQue, table QA |
 | span | extracted spans overlap the annotated ones (F1 at or above a threshold) | CUAD clauses, extraction reports |
-| judged | a strong model grades against a rubric and the gold, and the verdict is recorded | summaries, reports, knowledge-base writing; eval only at first |
+| judged | a strong model grades against a rubric and the gold, and the verdict is recorded | summaries, reports, knowledge-base writing |
 
 `admitRow` gets the evidence level from the case (`semantics.oracle`), and the materializer copies it onto every
 turn, so a training build can choose which levels to include.
@@ -257,6 +268,20 @@ The trajectories are worth more than their tasks only where their actions transl
 - **Not usable:** [Nemotron-SFT-Agentic-v2](https://huggingface.co/datasets/nvidia/Nemotron-SFT-Agentic-v2) (tool
   calling, search and customer service; no files) and similar general tool-calling sets.
 
+### Long trajectories broken into delegated sub-tasks
+
+A long trajectory is better training data for a small model as a short parent that delegates plus short children.
+
+- **Mechanically, by subfolder.** Find maximal segments of a trajectory whose actions stay inside one subfolder, for
+  example a run of reads and edits under `src/parser/`. Replace each segment in the parent with one `delegate` call on
+  that subfolder; the segment becomes the child's trajectory. The child's instructions are written afterwards by a
+  teacher from the segment's actions and diff, as a request that would lead to them.
+- **Checked exactly.** Replay the child's instructions: the child must reproduce the segment's changes, and the parent
+  must reach the original end state. Both are exact oracles, whatever the original task's oracle was.
+- **Existing subagent trajectories.** Where a corpus already contains subagent calls (the Claude Code trajectories in
+  LiteCoder-Terminal, for example), they map directly onto `delegate`.
+- **The same applies to our own long teacher runs,** and to terminal trajectories once they are converted.
+
 ## 6. Generated folder families
 
 These follow the composed and labeled families: every part carries its code, its sentence and its layout, and the
@@ -292,24 +317,28 @@ answer, trained only with `--direct-answers`.
    - Pyodide with a vendored, locked package set, and the `natlang` module (`nl`, `iterate_on`, folder handles, scope
      bindings).
    - The `ast`-based policy and lowering.
-   - `python3` in the shell, then Python as an eval language.
+   - `python3` in the shell, then the `python` tool.
    - The Emscripten mount over the folder.
 4. **The folder core and the tool surface.** Decide between F's options with the adapters' experience, then collapse
-   the file tools per G. Migrate recorded trajectories to the new tool names, as earlier surface changes were.
+   the file tools per G, including the editor-shape probe, and add `delegate` (H). Migrate recorded trajectories to the new tool names, as earlier surface changes were.
 5. **Data.** The generated folder families and first-wave datasets (section 4), using the shell and Python where the
    task calls for them; the normalized and span oracle levels; teacher collection on dataset-backed folders.
-   Conversion of the OpenHands and terminal trajectories (section 5).
+   Conversion of the OpenHands and terminal trajectories (section 5), broken into delegated sub-tasks.
 6. **Document views and the evals** (Workspace-Bench-Lite, MuDABench).
 
 Phases 1 to 3 can overlap: they touch different code.
 
-## Decisions for you
+## Decisions
 
-1. **Python's place.** Should it be a second eval language (`eval` with `language: "python"`) or a separate `python`
-   tool? The corpora favour a separate tool; one tool is more minimal.
-2. **The tool collapse (G).** Should the file tools become one editor tool plus `bash`, and in which shape, OpenHands
-   `str_replace_editor` or Claude-Code style?
-3. **Softer oracles in training.** May normalized and span-level rows train, or only exact ones, with the softer
-   levels kept for evaluation?
-4. **Share of code-centric SWE trajectories.** They are the largest supply of file-editing data, but not semantic
-   processing. Should they be included, and how much?
+Taken on 2026-09-27:
+- Bash loops (`while`, `until`, C-style `for`) and recursion are refused, as in eval; so are Python `while`, recursion
+  and endless iteration.
+- Python and bash both get natlang's constructs; the `natlang` command is identical in the shell and on the CLI.
+- Python libraries are in scope (Pyodide).
+- Python is a separate `python` tool.
+- The file tools collapse to one editor plus `bash`; the editor's shape is decided by the probe in G.
+- Training is not limited to exact oracles: normalized, span and judged rows may train, with their evidence level
+  recorded so that builds can weight or filter them.
+- Code-centric SWE trajectories are included, to train coding and file editing, preferably broken into delegated
+  sub-tasks.
+- The tools and the folder structure may be changed wholesale.
