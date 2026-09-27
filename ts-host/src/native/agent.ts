@@ -37,6 +37,13 @@ export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "s
 
 /** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
 export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each.';
+/**
+ * A judgment handed over with an inline nl is made by the call it was handed to (runtime/kernel.ts refuses to hand it
+ * on); its opening says so instead of offering nl, which models otherwise reach for first.
+ */
+export const INLINE_BUILT_INS_LINE = 'This call is a judgment handed over with nl: make it here (read what you need in eval, ' +
+  'decide, and return the answer); nl is not available in it. Eval also has the built-ins iterateOn and transcript; ' +
+  'read_code shows how to use each.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
@@ -393,7 +400,7 @@ export class NativeToolAgent {
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
-      '', BUILT_INS_LINE,
+      '', session.runtime.frame?.inline ? INLINE_BUILT_INS_LINE : BUILT_INS_LINE,
     ].join('\n');
   }
 

@@ -1,3 +1,4 @@
+import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -143,6 +144,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
     const semantics = taskIr.semantics && typeof taskIr.semantics === 'object' && !Array.isArray(taskIr.semantics) ?
       taskIr.semantics as Dict : {};
     const evidenceOracle = oracleLevel(semantics.oracle);
+    // A handoff row (teacher/handoff.ts) replays another model's turns up to where a teacher took over.
+    const handoff = taskIr.handoff as Parameters<typeof handoffTurns>[1] | undefined;
+    const replayedTurns = new Set(handoff ? handoffTurns(row.trajectory as unknown as Turn[], handoff).prefix : []);
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
@@ -203,9 +207,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const target = trainingTarget(assistant, calls, index);
       const skill = calls.length ? calls.map(call => String(call.source_tool)).join('+') : 'reply';
       const badStatuses = new Set(['rejected', 'refused', 'error', 'not_executed', 'not_recorded']);
-      // A handoff row (teacher/handoff.ts) replays a student's turns up to where a teacher took over.
-      const prefixTurns = (row.handoff as { prefix_turns?: number[] } | undefined)?.prefix_turns;
-      const fromStudentPrefix = prefixTurns?.includes(index) ?? false;
+      const fromStudentPrefix = replayedTurns.has(index);
       const ranCleanly = calls.every(call =>
         !badStatuses.has(String(record(call.outcome, 'call outcome').status)) &&
         !(record(call.outcome, 'call outcome').diagnostics as unknown[] ?? [])

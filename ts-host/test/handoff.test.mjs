@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, nativeJobRunner } from '../dist/teacher/collector.js';
 import { failsInPlace, handoffAt, handoffRecord, handoffSites, preferencePair } from '../dist/teacher/handoff.js';
 import { materializeNativeRows } from '../dist/teacher/native-materializer.js';
+import { handoffTurns } from '../dist/teacher/replay.js';
 
 const record = { version: 'natlang.program/2', id: 'student-hard-case', kind: 'lambda_source',
   source_groups: ['student-hard-case'], split: 'train', semantics: {
@@ -63,7 +64,7 @@ test('a teacher takes over a failed run at its failure, and its decision is pref
     await collectBatch([{ index: 0, record: task }], teacherConfig, nativeJobRunner(teacherConfig));
     const repaired = JSON.parse((await readFile(teacherConfig.output, 'utf8')).trim());
     assert.equal(repaired.outcome.accepted, true);
-    assert.deepEqual([repaired.handoff.prefix_turns, repaired.handoff.at], [[0], 1]);
+    assert.deepEqual(handoffTurns(repaired.trajectory, task.handoff), { prefix: [0], at: 1 });
     assert.equal(student.count(), 3);
     assert.equal(teacher.count(), 1, 'the student prefix replays without another decode');
     const { turns } = materializeNativeRows([repaired]);

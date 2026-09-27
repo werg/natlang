@@ -116,3 +116,21 @@ export function scriptedDriver(script: ModelTurn[][], openings: string[],
   };
   return { driver, turns: turns as unknown as Turn[], places };
 }
+
+/**
+ * The turns of a handoff run (teacher/handoff.ts) that replayed the handoff's prefix, and the turn handed over (-1 when
+ * the run never reached it). Derived from the run's own turns: a collector sees requests arrive concurrently, before
+ * their turns take their places in the trajectory.
+ */
+export function handoffTurns(trajectory: Turn[], handoff: { prefix: ModelTurn[][]; openings: string[]; call: number }):
+    { prefix: number[]; at: number } {
+  const place = callMatcher(handoff.openings), prefix: number[] = [];
+  let at = -1;
+  trajectory.forEach((turn, index) => {
+    const { call, nth } = place({ messages: turn.context } as unknown as ModelTurnRequest);
+    const replayed = handoff.prefix[call]?.length ?? 0;
+    if (nth < replayed) prefix.push(index);
+    else if (call === handoff.call && nth === replayed) at = index;
+  });
+  return { prefix, at };
+}

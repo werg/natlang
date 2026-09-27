@@ -482,8 +482,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   return async (item, expected, signal) => {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
-    const placeOf = callMatcher(handoff?.openings ?? []), prefixTurns: number[] = [];
-    let handedOver: number | undefined;
+    const placeOf = callMatcher(handoff?.openings ?? []);
     const session = config.provider ? createManagedModelSession({ provider: config.provider,
       model: config.modelId, piOptions: config.piOptions }) : undefined;
     const judgeConfig = config.judgeModel;
@@ -527,9 +526,6 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       const requestSha256 = sha256(canonical(request));
       const recorded = unused.get(requestSha256)?.shift();
       const place = placeOf(request), replayed = handoff?.prefix[place.call]?.[place.nth];
-      if (replayed) prefixTurns.push(trajectory.length);
-      else if (handoff && place.call === handoff.call && place.nth === (handoff.prefix[handoff.call]?.length ?? 0))
-        handedOver = trajectory.length;
       let response: ModelTurn;
       if (recorded) {
         response = structuredClone(recorded.response);
@@ -549,8 +545,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const runId = programRunId(item.index, expected);
     const run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) });
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
-      handoff ? { handoff: { kind: handoff.kind, source: handoff.source, prefix_turns: prefixTurns,
-        at: handedOver ?? null, run_id: runId } } : {});
+      handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);

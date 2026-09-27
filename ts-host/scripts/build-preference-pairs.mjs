@@ -13,7 +13,7 @@ import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { admitRow } from '../dist/teacher/curriculum.js';
 import { preferencePair } from '../dist/teacher/handoff.js';
-import { recorded } from '../dist/teacher/replay.js';
+import { handoffTurns, recorded } from '../dist/teacher/replay.js';
 import { pool, replayOptions, rowsOf } from './build-handoffs.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { handoffs: { type: 'string' },
@@ -25,8 +25,10 @@ if (!output || (!values.handoffs && !values.variants) || (!values.variants !== !
 const jobs = [];
 for await (const row of rowsOf((values.handoffs ?? '').split(',').filter(Boolean))) {
   const handoff = row.task.program_ir.handoff;
-  if (!handoff || !row.outcome?.accepted || row.handoff?.at == null) continue;
-  jobs.push({ row, index: row.handoff.at, rejected: handoff.rejected, kind: handoff.kind, runId: row.handoff.run_id,
+  if (!handoff || !row.outcome?.accepted || !row.handoff) continue;
+  const { at } = handoffTurns(row.trajectory, handoff);
+  if (at < 0) continue;
+  jobs.push({ row, index: at, rejected: handoff.rejected, kind: handoff.kind, runId: row.handoff.run_id,
     evidence: { kind: 'handoff', site: handoff.kind, source: handoff.source, teacher: row.provenance.model } });
 }
 if (values.variants) {

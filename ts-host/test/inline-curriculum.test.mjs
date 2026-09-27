@@ -134,3 +134,17 @@ test('the function listing shows TypeScript and natlang doc comments, and an ext
   assert.match(opening, /declare namespace records \{\\n {2}\/\*\* The first-line records for a refund claim\. \*\/\\n {2}export function basic\(/);
   assert.match(opening, /\/\*\* Judge whether evidence settles a refund claim, and which way\. \*\/\\ndeclare function assess\(/);
 });
+
+test('a judgment handed over with nl says so in its opening instead of offering nl', async () => {
+  const [, record] = FAMILIES.inline_review_each.build(7, 0);
+  record.curriculum.reference.root = [['eval',
+    { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
+    record.curriculum.reference.root.at(-1)];
+  record.curriculum.reference.children = inboxAnswers(record);
+  const { trajectory } = await replayReference(record, TOOLS_PROMPT);
+  const openings = trajectory.map(turn => String(turn.context[1].content));
+  const child = openings.find(text => text.includes('Is priority of ticket at least 3?'));
+  assert.match(child, /This call is a judgment handed over with nl: make it here/);
+  assert.doesNotMatch(child, /built-ins nl,/);
+  assert.match(openings[0], /Eval also has the built-ins nl, iterateOn and transcript/);
+});
