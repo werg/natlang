@@ -24,7 +24,9 @@ const AGREEMENT = 0.9;
 function pickRows(rng, dataset, split) {
   const rows = labeledRows(dataset, split), fields = LABELED_FIELDS[dataset];
   const labels = fields.labels ?? rng.sample([...new Set(rows.map(row => row.label))].sort(), rng.int(3, 5));
-  const pool = rows.filter(row => labels.includes(row.label));
+  // SST-2's training rows include phrase fragments labeled by the sentences around them ("utter authority":
+  // negative); whole sentences only.
+  const pool = rows.filter(row => labels.includes(row.label) && (dataset !== 'sst2' || row.text.length >= 80));
   const count = Math.min(pool.length, rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
   if (count < 20) throw new Error(`${dataset}/${split} has only ${count} suitable records; need at least 20`);
   return { labels, rows: rng.sample(pool, count).map(row => ({ ...row, fileId: row.id.slice(0, 16) })) };
@@ -121,7 +123,7 @@ export function folderMixed(seed, index, split = 'train') {
   const files = Object.fromEntries(folder.listFiles().map(file =>
     [file.path, new TextDecoder().decode(folder.readBytesSync(file.path))]));
   const total = rows.filter(row => row.disputed).reduce((sum, row) => sum + row.amount, 0);
-  const question = 'Does the customer dispute this payment: not recognise it, or say it was charged twice or charged extra?';
+  const question = 'Is this customer message about a charge they do not recognise, a duplicate charge, or an extra charge?';
   const code = `const lines = (await folder.file('payments.csv').readText()).trim().split(/\\r?\\n/).slice(1);\n` +
     `const verdicts = await Promise.all(lines.map(async line => {\n` +
     `  const [id, amount] = line.split(',');\n` +
@@ -138,7 +140,8 @@ export function folderMixed(seed, index, split = 'train') {
     })) },
     root: { name: 'sum_disputed_payments', kind: 'directory-reducer', args: {}, returns: 'number',
       instructions: 'payments.csv lists payments; messages/<id>.md is the customer\'s message about payment <id>. ' +
-        'Return the total amount of the payments the customer disputes: does not recognise, or says was charged twice or charged extra.' },
+        'Return the total amount of the payments whose message is about a charge the customer does not recognise, a charge ' +
+        'made twice, or an extra charge; not the payments whose message is about something else.' },
     folderFiles: files, expectedFiles: files, inputs: {}, expected: total, split });
   record.semantics.oracle = { level: 'agreement', threshold: AGREEMENT };
   record.license = SOURCES.banking77.license;
