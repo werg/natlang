@@ -15,6 +15,7 @@ import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
 import { checkFiles, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
+import type { FileToolSurface } from '../native/prompt.js';
 import type { Handoff } from './handoff.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
@@ -51,6 +52,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   request?: Record<string, unknown>; cacheStableTools?: boolean;
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
   executionPlans?: boolean; executionPlanTokens?: number;
+  /** The file tools directory reducers offer (native/prompt.ts); all unless set. */
+  fileTools?: FileToolSurface;
   /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
   collectionRole?: 'student' | 'teacher' | 'reference';
   /** A separately identified model for rubric-backed `judged` oracles. */
@@ -131,6 +134,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
       max_tokens: options.executionPlanTokens ?? 512 } } : {}),
     collection_role: options.collectionRole ?? 'teacher',
+    ...(options.fileTools && options.fileTools !== 'all' ? { file_tools: options.fileTools } : {}),
     ...(options.judgeModel ? { judge: { model: options.judgeModel.modelId,
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
       ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
@@ -575,7 +579,7 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 }
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
-  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal;
+  maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
   judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string }> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
@@ -597,6 +601,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
+    ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     contextTokens: options.contextTokens, maxTurns: options.maxTurns });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, Record<string, (...args: unknown[]) => unknown>> = {};

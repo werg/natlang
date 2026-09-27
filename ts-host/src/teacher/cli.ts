@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-import { APPROACH_PROMPT } from '../native/prompt.js';
+import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
+
+function fileToolSurface(value: string): FileToolSurface {
+  if (!FILE_TOOL_SURFACES.includes(value as FileToolSurface)) throw new Error(`--file-tools must be one of ${FILE_TOOL_SURFACES.join(', ')}`);
+  return value as FileToolSurface;
+}
 
 function argumentsOf(argv: string[]): { positionals: string[]; flags: Map<string, string> } {
   const positionals: string[] = [], flags = new Map<string, string>();
@@ -32,6 +37,7 @@ async function main(): Promise<void> {
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
+      '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
@@ -64,6 +70,7 @@ async function main(): Promise<void> {
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
     cacheStableTools: flags.has('--cache-stable-tools'),
     executionPlans: flags.has('--execution-plans'),
+    ...(flags.has('--file-tools') ? { fileTools: fileToolSurface(flags.get('--file-tools')!) } : {}),
     ...(flags.has('--execution-plan-tokens') ?
       { executionPlanTokens: integer(flags, '--execution-plan-tokens', 512) } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),

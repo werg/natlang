@@ -3,21 +3,40 @@ export const TOOLS_PROMPT = "You are running one call of a natural-language func
 /** Added when the call has functions it can call, which is when the function tools are offered. */
 export const FUNCTION_TOOLS_PROMPT = "\nIf a function you call is unclear or wrong, read it with read_code and fix it with edit_code.\nSome functions are also directory reducers. Call await reducer(someFolder, ...args) to run one on that Folder handle, using just its typed result, and discarding its file changes (if any). Call const responseValue = await someFolder.apply(reducer, ...args) to run it there and merge its committed file changes, capturing any return value as well. For example, await folder.dir(\"packages/api\").apply(reducer, ...args) gives it only that subdirectory as its folder root. Inside the child reducer, that selected handle is available as folder.\nA compatible final expression in eval returns the typed value and, when this reducer was applied to a folder, retains every change.";
 
-export const DIRECTORY_REDUCER_PROMPT = `
+/**
+ * The file tools a directory reducer offers: all of them, the editor and bash (shape of SWE agents), or the separate
+ * list/search/read/write/edit/diff tools. Which suits our models best is measured, not assumed (a probe per surface).
+ */
+export type FileToolSurface = 'all' | 'editor' | 'files';
+export const FILE_TOOL_SURFACES: readonly FileToolSurface[] = ['all', 'editor', 'files'];
+const FILE_TOOL_LINES: Record<string, string> = {
+  bash: '- bash(command) runs shell pipelines in this folder, including ls, cat, rg, sed, awk, jq and CSV tools.',
+  python: '- python(code) runs a Python cell over this folder. It can use pathlib, pandas and sqlite3; import nl, wait and iterate_on from natlang for child calls.',
+  delegate: '- delegate(path, instructions, returns?) gives a subfolder to a directory reducer child with its own context and merges successful changes.',
+  editor: '- editor(command, path, ...) views numbered lines, creates a file, replaces one exact span or inserts text after a line.',
+  list_files: '- list_files(path?, pattern?) lists files recursively.',
+  search_files: '- search_files(query, path?, pattern?, regex?) searches text files.',
+  read_file: '- read_file(path, start_line?, end_line?) reads text. Line numbers are one-based and inclusive.',
+  write_file: '- write_file(path, content) creates or replaces a text file.',
+  edit_file: '- edit_file(path, find, replace_with, fuzzy?) replaces one exact or uniquely fuzzy span.',
+  diff_files: '- diff_files(path?) shows changes made in this trajectory.',
+};
+/** The file tools of a surface, in the order they are offered. */
+export function fileToolNames(surface: FileToolSurface = 'all'): string[] {
+  const files = ['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
+  return surface === 'editor' ? ['editor', 'bash', 'python', 'delegate'] :
+    surface === 'files' ? [...files, 'python', 'delegate'] : [...files, 'bash', 'python', 'delegate', 'editor'];
+}
+
+export function directoryReducerPrompt(surface: FileToolSurface = 'all'): string {
+  const order = ['bash', 'python', 'delegate', 'editor', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
+  const names = new Set(fileToolNames(surface));
+  return `
 This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.
 Paths are relative POSIX paths such as "notes/todo.md".
 
 File tools:
-- bash(command) runs shell pipelines in this folder, including ls, rg, sed, awk, jq and CSV tools. Its writes appear in diff_files.
-- python(code) runs a Python cell over this folder. It can use pathlib, pandas and sqlite3; import nl, wait and iterate_on from natlang for child calls.
-- delegate(path, instructions, returns?) gives a subfolder to a directory reducer child with its own context and merges successful changes.
-- editor(command, path, ...) views numbered lines, creates a file, replaces one exact span or inserts text after a line.
-- list_files(path?, pattern?) lists files recursively.
-- search_files(query, path?, pattern?, regex?) searches text files.
-- read_file(path, start_line?, end_line?) reads text. Line numbers are one-based and inclusive.
-- write_file(path, content) creates or replaces a text file.
-- edit_file(path, find, replace_with, fuzzy?) replaces one exact or uniquely fuzzy span.
-- diff_files(path?) shows changes made in this trajectory.
+${order.filter(name => names.has(name)).map(name => FILE_TOOL_LINES[name]).join('\n')}
 
 Code in eval can use the current Folder value named folder:
 - folder.file(path) and folder.dir(path) return file and subfolder handles.
@@ -31,6 +50,9 @@ const labels = await Promise.all(files.map(file => nl<'keep' | 'archive'>\`Class
 For subfolders, use a reducer: await Promise.all((await folder.folders('teams/*')).map(dir => dir.apply(summarizeTeam)));
 Each child sees only its selected root. A small file's contents appear in the child's opening; otherwise the child must read or search before answering.
 `;
+}
+
+export const DIRECTORY_REDUCER_PROMPT = directoryReducerPrompt();
 
 
 /**

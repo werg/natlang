@@ -5,7 +5,7 @@ import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { DIRECTORY_REDUCER_PROMPT, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT } from './prompt.js';
+import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, type FileToolSurface } from './prompt.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 
@@ -269,6 +269,8 @@ export class NativeToolAgent {
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string);
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
+      /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
+      fileTools?: FileToolSurface;
       /**
        * Context budget in prompt tokens (default 16384; null never compacts). Past three quarters of it the oldest
        * tool outputs are elided until the prompt is back under half.
@@ -362,7 +364,9 @@ export class NativeToolAgent {
           start_line: { type: 'integer' }, end_line: { type: 'integer' }, file_text: { type: 'string' },
           old_str: { type: 'string' }, new_str: { type: 'string' }, insert_line: { type: 'integer' } },
         ['command', 'path'])];
-      tools.splice(2, 0, ...fileTools);
+      const offered = fileToolNames(this.options.fileTools);
+      tools.splice(2, 0, ...fileTools.filter(item => offered.includes(item.function.name))
+        .sort((a, b) => offered.indexOf(a.function.name) - offered.indexOf(b.function.name)));
     }
     return tools;
   }
@@ -517,7 +521,7 @@ export class NativeToolAgent {
     const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
       ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? DIRECTORY_REDUCER_PROMPT : '');
+      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools) : '');
     const openingMessages = (): Record<string, unknown>[] => {
       const reading = this.scopeReading(session);
       return [{ role: 'system', content: systemPrompt() },

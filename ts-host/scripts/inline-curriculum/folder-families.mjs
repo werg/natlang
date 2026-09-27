@@ -7,7 +7,6 @@ import { SOURCES } from './acquire.mjs';
 // AG News (business against technology news) and emotion are labeled too loosely to check a folder of judgments
 // against: a careful teacher disagrees with a tenth or more of their labels.
 const LABEL_DATASETS = Object.keys(LABELED_FIELDS).filter(name => !['ag_news', 'emotion'].includes(name));
-const visibleName = label => label.replace(/_/g, ' ');
 const labelType = labels => labels.map(label => JSON.stringify(label)).join(' | ');
 const templateText = text => String(text).replaceAll('\\', '\\\\').replaceAll('`', '\\`').replaceAll('${', '\\${');
 /**
@@ -50,7 +49,8 @@ function caseFor(seed, index, split, kind, chosenDataset) {
   const { labels, rows } = pickRows(rng, dataset, split), files = folderFiles(rows);
   // Labels name folders (by-<label>/), so they must be plain names.
   for (const label of labels) if (!/^[\w-]+$/.test(label)) throw new Error(`${dataset} label ${label} is not a folder name`);
-  const labelsText = labels.map(visibleName).join(', ');
+  // The labels exactly as they are to be written: they name folders and INDEX.md lines, and the counts' keys.
+  const labelsText = labels.map(label => JSON.stringify(label)).join(', ');
   const question = `${LABELED_FIELDS[dataset].question} Choose exactly one of: ${labels.map(label => JSON.stringify(label)).join(', ')}.`;
   const code = kind === 'folder_triage' ?
     `const files = await folder.files('inbox/*.md');\n` +
