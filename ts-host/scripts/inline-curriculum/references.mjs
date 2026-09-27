@@ -4,7 +4,10 @@
  * the collector's execution path, written as the collector writes a teacher's rows.
  *
  *   node scripts/inline-curriculum/references.mjs --seeds 2001-2004 --shapes 2 --out ../runs/inline-curriculum/ref.results.jsonl
- *     [--families a,b] [--workers 8]
+ *     [--families a,b] [--technique-weight 3] [--workers 8]
+ *
+ * --technique-weight N makes N times as many cases of the families whose references use an inline nl or iterateOn,
+ * the techniques teacher runs show least.
  *
  * Only generated families of the interpreter track are used: a sourced family samples a fixed dataset whatever the
  * seed. Seeds must be ones no evaluation shard is built from (the probe is s102, the test pool s900).
@@ -54,8 +57,16 @@ async function referenceRow(record, index, options) {
   return programRow(record, options.modelId, runId, expected, run, trajectory);
 }
 
+/** Whether a family's references use an inline nl or iterateOn, judged by its first case. */
+function technique(name) {
+  const [record] = FAMILIES[name].build(1, 0);
+  return record.curriculum.reference.root.some(([tool, args]) => tool === 'eval' &&
+    /\biterateOn\s*\(|\bnl\s*(?:<[^`]*>)?`/.test(String(args.code ?? '')));
+}
+
 const { values } = parseArgs({ options: { seeds: { type: 'string' }, shapes: { type: 'string', default: '1' },
-  families: { type: 'string' }, out: { type: 'string' }, workers: { type: 'string', default: '8' } } });
+  families: { type: 'string' }, out: { type: 'string' }, workers: { type: 'string', default: '8' },
+  'technique-weight': { type: 'string', default: '1' } } });
 if (!values.seeds || !values.out) throw new Error('usage: references.mjs --seeds A-B|A,B,... --shapes N --out OUT.jsonl');
 const seeds = values.seeds.includes('-') ?
   (([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i))(values.seeds.split('-').map(Number)) :
@@ -67,7 +78,12 @@ for (const name of families) if (!generated.includes(name)) throw new Error(`${n
 
 const options = { modelId: 'curriculum-reference', rootSeed: 909, systemPrompt: TOOLS_PROMPT, contextTokens: 16384,
   maxTurns: 60, toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
-const records = seeds.flatMap(seed => buildRecords({ seed, shapes: Number(values.shapes), families, hints: false }));
+const shapes = Number(values.shapes), weight = Number(values['technique-weight']);
+const boosted = families.filter(technique);
+// The extra shapes start past every family's base range (weights are at most 3), so no case repeats.
+const records = seeds.flatMap(seed => [...buildRecords({ seed, shapes, families, hints: false }),
+  ...(weight > 1 && boosted.length ? buildRecords({ seed, shapes: shapes * (weight - 1), start: Math.ceil(shapes * 3),
+    families: boosted, hints: false }) : [])]);
 const rows = new Array(records.length);
 let next = 0;
 await Promise.all(Array.from({ length: Number(values.workers) }, async () => {
@@ -81,5 +97,6 @@ if (refused.length) throw new Error(`references not admitted:\n${refused.map(([r
   `${row.task.program_ir.id}: ${admission.reasons.join(', ')}`).join('\n')}`);
 await writeFile(values.out, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
 const turns = rows.flatMap(row => row.trajectory), untrained = turns.filter(turn => turn.assistant.untrained).length;
-console.log(`${rows.length} reference rows from ${families.length} families, seeds ${seeds.join(',')}: ` +
+console.log(`${rows.length} reference rows from ${families.length} families (${boosted.length} weighted ${weight}x), ` +
+  `seeds ${seeds.join(',')}: ` +
   `${turns.length} turns, ${untrained} left untrained -> ${values.out}`);
