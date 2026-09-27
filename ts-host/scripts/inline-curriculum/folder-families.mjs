@@ -248,7 +248,7 @@ export function folderFind(seed, index, split = 'train') {
 
 const NON_COMPETE = 'Quote the non-compete clause of this contract: the sentence or sentences restricting a party from ' +
   'competing with the counterparty or operating in a geography, business or technology sector (not non-solicitation or ' +
-  'exclusivity). Return their exact text, or an empty string if there is none.';
+  'exclusivity), quoted from the contract, or an empty string if there is none.';
 const csvCell = value => `"${String(value).replaceAll('"', '""')}"`;
 /** Non-compete extraction from contract texts, with an exact report oracle. */
 export function folderExtract(seed, index, split = 'train') {
@@ -298,8 +298,8 @@ export function folderExtract(seed, index, split = 'train') {
       instructions: 'For every contract in contracts/, find its non-compete clause: a restriction on a party\'s ability to ' +
         'compete with the counterparty, or to operate in a certain geography, business or technology sector. ' +
         'Non-solicitation and exclusivity clauses are not non-compete clauses. Write clauses.csv with columns id and clause: ' +
-        'the file name without .md, and the exact text of the sentence or sentences that impose the restriction (not the ' +
-        'whole section), or an empty clause when there is none. Sort rows by id and return the number with a clause.' },
+        'the file name without .md, and the sentence or sentences that impose the restriction, quoted from the contract (not ' +
+        'the whole section), or an empty clause when there is none. Sort rows by id and return the number with a clause.' },
     folderFiles: files, expectedFiles, inputs: {}, expected: positive, split });
   // A quoted clause matches CUAD's span by token overlap (its annotations differ in extent); rows by id.
   // CUAD's annotations are uneven (a span can be a fragment next to the restriction), so 0.8 of rows suffice.
