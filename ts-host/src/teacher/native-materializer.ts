@@ -209,7 +209,10 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
       // student to answer without reasoning; a student that answers directly is trained on it (options.directAnswers).
       const heldDirect = assistant.direct_answer === true && !options.directAnswers;
-      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !heldDirect;
+      // A corrected variant (teacher/corrections.ts) trains its fix only; the rest repeats its parent's turns.
+      const variant = row.provenance.variant as { decision?: number } | undefined;
+      const variantContext = variant !== undefined && index !== variant.decision;
+      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !heldDirect && !variantContext;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
@@ -235,7 +238,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
-          ...(decisionApproved ? {} : { reason: heldDirect ? 'an answer given without reasoning towards it' :
+          ...(decisionApproved ? {} : { reason: variantContext ? 'context of a corrected variant' :
+            heldDirect ? 'an answer given without reasoning towards it' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
               'the outcome of a call in this decision was not recorded' :

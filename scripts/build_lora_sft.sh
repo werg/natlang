@@ -33,6 +33,13 @@ node "$TS_HOST/scripts/inline-curriculum/admit.mjs" "$@" --ledger "$OUT/admissio
 # for a small student that answers directly.
 DIRECT=(); [ "${NATLANG_DIRECT_ANSWERS:-}" = 1 ] && DIRECT=(--direct-answers)
 node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" --replace "${DIRECT[@]}"
+# Corrected variants: where a call failed and then fixed it, the same run with the fix made first, so the student
+# learns the right action as well as recovery. Only the fix is trained in a variant.
+node --max-old-space-size=6000 "$TS_HOST/scripts/inline-curriculum/corrections.mjs" "$OUT/admitted.jsonl" "$OUT/turns.jsonl" \
+  "$OUT/corrected.jsonl" --workers 6
+node --max-old-space-size=6000 "$TS_HOST/scripts/materialize-native-teacher.mjs" "$OUT/corrected.jsonl" "$OUT/corrected.turns.jsonl" \
+  --replace "${DIRECT[@]}"
+cat "$OUT/corrected.turns.jsonl" >> "$OUT/turns.jsonl" && rm "$OUT/corrected.turns.jsonl"
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PORT:8080" "$IMAGE" \
