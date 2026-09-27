@@ -80,9 +80,13 @@ A. **Delegation per file and per subfolder.** Make `nl` over a `FileHandle` or a
      which covers only the root call, to children.
 
    **Capabilities and transactions** (settled in phase 1, before anything uses them).
-   - A handle passed to a child is rebased: the child gets a folder rooted at the handle's path, with no `.folder`,
-     `.parent` or path above its root. Today's handles keep their whole backing folder and expose `parent`, so passing
-     one as it is does not scope anything.
+   - A handle passed to a child is rebased: the child gets a folder rooted at the handle's path, and its tools and
+     handles resolve paths under that root. Today's handles keep their whole backing folder and expose `parent`, so
+     passing one as it is does not scope anything.
+   - This scoping organizes calls; it is not isolation. The environment is high-trust: code in one call runs in the
+     same process (and the same Python interpreter) as others, and could reach them deliberately. Path checks catch
+     accidental escapes: a path that resolves outside the call's root (`..`, an absolute path into another call's
+     mount) is refused with a message naming the root.
    - A child given several handles gets each as its own root.
    - A read-only parent gives read-only handles.
    - A writable child works on its own overlay. When it finishes successfully, its change set is committed into the
@@ -120,7 +124,9 @@ C. **A shell: bash on [just-bash](https://github.com/vercel-labs/just-bash/tree/
    **The tool.**
    - `bash(command)` returns the exit code, stdout and stderr (capped and paged like other output) and the paths it
      changed.
-   - The clock and file times are pinned, so a replay reproduces a command's output.
+   - The clock and file times are pinned, so a replay reproduces a command's output when its inputs are the folder,
+     the arguments and the clock. Live network responses and host services are not reproduced. Recording their
+     responses for replay is added only where a deterministic replay needs it.
    - The fork cuts `js-exec` (eval runs TypeScript), compression and HTML conversion. `curl` stays and follows the
      runtime's network setting.
    - It replaces `python3` with D's Python, and `sqlite3` with a small shim over Python's `sqlite3` module on the same
@@ -199,6 +205,14 @@ D. **Python, with libraries and with natlang: [Pyodide](https://pyodide.org).** 
    - Each call gets its own mount (`/calls/<id>`) and its own namespace.
    - The working directory is global to the interpreter. So the same resume hook that refreshes the mount also restores
      the resuming call's working directory, and the local-module import hook resolves against it.
+   - So is `sys.modules`: two calls whose folders both have a `helpers.py` would share the first one imported. Each
+     call keeps its own table of local modules (those found in its folder, and what they import from it). The resume
+     hook swaps that table into `sys.modules` and takes the previous call's out. Installed packages stay shared.
+   - **Open files and connections.** A Python write reaches the folder when its file is closed or flushed (Python
+     buffers it first). At the points where other code can run (the end of a cell or command, and each `await` of a
+     host call), the adapter checks Emscripten's open streams. If a file under the call's mount is open for writing,
+     the cell or the call is refused, with a message to close the file (or the sqlite connection) first. Keeping open
+     resources coherent across tools can come later, if it is ever needed.
 
    **In the browser.** The same design, with three differences:
    - Python runs on the runtime's thread, which in the browser is the natlang worker (I), so it never blocks the page.
@@ -424,6 +438,13 @@ A long trajectory is better training data for a small model as a short parent th
   teacher from the segment's actions and diff, as a request that would lead to them.
 - **Checked exactly.** Replay the child's instructions: the child must reproduce the segment's changes, and the parent
   must reach the original end state. Both are exact oracles, whatever the original task's oracle was.
+- **Instructions the parent could have written.** Instructions written in hindsight can carry what the child was
+  meant to find out: a file name, a line, a value first seen inside the segment. Such an instruction is refused. The
+  check: every specific it names (paths, identifiers, numbers, quoted text) must appear in what the parent had seen
+  before the delegation, or in the task.
+- **Segments that only read.** An empty diff says nothing about what a read-only child found. So at first only
+  segments that change files are delegated; read-only exploration stays in the parent. Delegating one later needs a
+  stated result the parent then uses, checked against the segment's own observations.
 - **Existing subagent trajectories.** Where a corpus already contains subagent calls (the Claude Code trajectories in
   LiteCoder-Terminal, for example), they map directly onto `delegate`.
 - **The same applies to our own long teacher runs,** and to terminal trajectories once they are converted.
@@ -448,7 +469,12 @@ reasoning towards it, is still a direct answer, trained only with `--direct-answ
 
 ## 7. Evaluation
 
-- **Held-out seeds of each generated family**, as now.
+- **Held-out seeds of each generated family**, as now. They test orchestration: new compositions, over records a
+  training case may also have used.
+- **Unseen records.** Every dataset-backed family (the labeled sets, CoEdIT, CUAD, HotpotQA and the rest, and the
+  existing `labeled_judgments`) splits its source records into training and evaluation pools by a hash of the
+  record, before any folder is generated. Evaluation cases draw only from the evaluation pool, so they test
+  generalization to records no training case contains.
 - **EnronQA and CUAD test splits**, with users and contracts disjoint from training.
 - **Workspace-Bench-Lite and MuDABench**, never trained on, scored with their own rubrics.
 
