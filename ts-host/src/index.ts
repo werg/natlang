@@ -16,7 +16,15 @@ export { TerminalSessionStore, renderTerminalView, runTerminalShell } from './te
 export type { TerminalCheckpoint, TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
 export { Folder, FolderHandle, FileHandle, EntryHandle, FolderTransaction, FolderBusyError, FolderConflictError } from './native/scoped-fs.js';
 export type { FolderSource, FolderAccess, FileContents, EntryStat, SearchMatch, Change, ChangeSet, ChangeKind, EntryKind } from './native/scoped-fs.js';
-export { openFolder, saveFolder } from './native/node-files.js';
+export { folderFromData, folderToData } from './native/data-layout.js';
+export type { FolderDataLayout, FolderDataResult } from './native/data-layout.js';
+export { FolderFs, checkBashPolicy, runFolderBash } from './native/folder-shell.js';
+export type { FolderBashResult } from './native/folder-shell.js';
+export { runFolderPython } from './native/folder-python.js';
+export type { PythonHost, PythonResult } from './native/folder-python.js';
+export { openFolder, openArchiveFile, saveFolder } from './native/node-files.js';
+export { openArchive } from './native/archive.js';
+export type { ArchiveFormat } from './native/archive.js';
 export type { SavedChange } from './native/node-files.js';
 export { DesktopBindings } from './desktop.js';
 export type { JobState } from './desktop.js';

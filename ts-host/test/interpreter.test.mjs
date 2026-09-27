@@ -486,6 +486,83 @@ test('folder and file handles persist as live scope values', async () => {
   lam.projectTransaction.abort();
 });
 
+test('an inline child given a file receives a rebased one-file folder', async () => {
+  const folder = Folder.fromFiles({ 'inbox/a.txt': 'urgent request', 'inbox/b.txt': 'private sibling' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Classify the first file.' }, { agent: async child => {
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['a.txt']);
+    assert.equal((await child.applyAsync('read_file', { path: 'a.txt' })).value, 'urgent request');
+    assert.equal((await child.applyAsync('read_file', { path: 'b.txt' })).kind, 'error');
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const verdict: boolean = await nl<boolean>`Is this file urgent?`(folder.file("inbox/a.txt")); verdict' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value, true);
+  lam.projectTransaction.abort();
+});
+
+test('a child given two file handles receives two disjoint roots', async () => {
+  const folder = Folder.fromFiles({ 'a/one.txt': 'one', 'b/two.txt': 'two' });
+  const { lam, session } = open({ type: '() => boolean', subtype: 'directory-reducer',
+    instructions: 'Hand both files to a child.' }, { agent: async child => {
+    const [first, second] = Object.values(child.lam.args);
+    assert.deepEqual(first.folder.listFiles().map(entry => entry.path), ['one.txt']);
+    assert.deepEqual(second.folder.listFiles().map(entry => entry.path), ['two.txt']);
+    await first.writeText('ONE'); await second.writeText('TWO');
+    child.apply('return_result', { status: 'success', value: true });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const result = await session.applyAsync('eval', { code:
+    'const both: boolean = await nl<boolean>`Read both files.`(folder.file("a/one.txt"), folder.file("b/two.txt")); both' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(await lam.projectTransaction.folder.readText('a/one.txt'), 'ONE');
+  assert.equal(await lam.projectTransaction.folder.readText('b/two.txt'), 'TWO');
+  lam.projectTransaction.abort();
+});
+
+test('the Python tool shares the reducer folder and records its writes', async () => {
+  const { lam, session } = await reducerSession({ 'message.txt': 'hello\n' });
+  const result = await session.applyAsync('python', { code:
+    'from pathlib import Path\nPath("answer.txt").write_text(Path("message.txt").read_text().upper())\nPath("answer.txt").read_text()' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(result.value.value, 'HELLO\n');
+  assert.equal(await lam.projectTransaction.folder.readText('answer.txt'), 'HELLO\n');
+  lam.projectTransaction.abort();
+});
+
+test('delegate runs a child on one subfolder and merges its successful edits', async () => {
+  const folder = Folder.fromFiles({ 'a/note.txt': 'old', 'b/note.txt': 'untouched' });
+  const { lam, session } = open({ type: '() => string', subtype: 'directory-reducer',
+    instructions: 'Delegate the first folder.' }, { agent: async child => {
+    assert.deepEqual(child.lam.projectTransaction.folder.listFiles().map(entry => entry.path), ['note.txt']);
+    assert.equal((await child.applyAsync('read_file', { path: 'note.txt' })).value, 'old');
+    await child.applyAsync('write_file', { path: 'note.txt', content: 'new' });
+    child.apply('return_result', { status: 'success', value: 'done' });
+  } });
+  lam.projectTransaction = await folder.beginTransaction(); lam.reducerMode = 'apply';
+  const delegated = await session.applyAsync('delegate',
+    { path: 'a', instructions: 'Update note.txt.', returns: 'string' });
+  assert.equal(delegated.kind, 'ok', delegated.text);
+  assert.equal(await lam.projectTransaction.folder.readText('a/note.txt'), 'new');
+  assert.equal(await lam.projectTransaction.folder.readText('b/note.txt'), 'untouched');
+  lam.projectTransaction.abort();
+});
+
+test('editor views numbered lines and applies exact edits to the folder', async () => {
+  const { lam, session } = await reducerSession({ 'message.txt': 'hello\nworld\n' });
+  const view = await session.applyAsync('editor', { command: 'view', path: 'message.txt', start_line: 2 });
+  assert.equal(view.value, '2\tworld');
+  assert.equal((await session.applyAsync('editor',
+    { command: 'str_replace', path: 'message.txt', old_str: 'world', new_str: 'earth' })).kind, 'ok');
+  assert.equal((await session.applyAsync('editor',
+    { command: 'create', path: 'new.txt', file_text: 'created' })).kind, 'ok');
+  assert.equal(await lam.projectTransaction.folder.readText('message.txt'), 'hello\nearth\n');
+  assert.equal(await lam.projectTransaction.folder.readText('new.txt'), 'created');
+  lam.projectTransaction.abort();
+});
+
 test('a returned value is staged and a reply without a tool call returns it', async () => {
   let turn = 0;
   const requests = [];

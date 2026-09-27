@@ -84,3 +84,31 @@ test('a transaction holds the parent lock and installs without reacquiring it', 
   await nested.commit();
   assert.equal(await folder.file('nested/inside.txt').readText(), 'scoped');
 });
+
+test('sibling transactions commit independently while overlapping roots conflict', async () => {
+  const folder = Folder.fromFiles({ 'a/one': '1', 'b/two': '2' });
+  const a = await folder.dir('a').beginTransaction(false);
+  const b = await folder.dir('b').beginTransaction(false);
+  await assert.rejects(folder.beginTransaction(false), FolderBusyError);
+  a.folder.writeText('one', 'A');
+  b.folder.writeText('two', 'B');
+  await Promise.all([a.commit(), b.commit()]);
+  assert.equal(await folder.readText('a/one'), 'A');
+  assert.equal(await folder.readText('b/two'), 'B');
+});
+
+test('file transactions expose only their file and reject stale commits', async () => {
+  const folder = Folder.fromFiles({ 'inbox/a.txt': 'alpha', 'inbox/b.txt': 'beta' });
+  const tx = await folder.beginFileTransaction('inbox/a.txt');
+  assert.deepEqual(tx.folder.listFiles().map(entry => entry.path), ['a.txt']);
+  assert.throws(() => tx.folder.file('../b.txt'));
+  tx.folder.writeText('a.txt', 'changed');
+  await tx.commit();
+  assert.equal(await folder.readText('inbox/a.txt'), 'changed');
+  assert.equal(await folder.readText('inbox/b.txt'), 'beta');
+
+  const readonly = Folder.fromFiles({ 'a.txt': 'a' }, 'read');
+  const child = await readonly.beginFileTransaction('a.txt');
+  assert.throws(() => child.folder.writeText('a.txt', 'b'), /read-only/);
+  child.abort();
+});

@@ -26,6 +26,10 @@ if (kind === 'node') {
     throw new Error('the published default model needs an HTTPS downloadUrl before @natlang/node can be packed');
   // The whole Node build, without the browser bundle and the repository's teacher tooling.
   copyTree(source, destination, () => true, [join(source, 'browser'), join(source, 'teacher')]);
+  const pythonAssets = join(root, 'npm-packages', 'node', 'vendor', 'pyodide');
+  mkdirSync(pythonAssets, { recursive: true });
+  for (const name of readdirSync(join(root, 'ts-host', 'vendor', 'pyodide')))
+    cpSync(join(root, 'ts-host', 'vendor', 'pyodide', name), join(pythonAssets, name));
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
   rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
@@ -34,6 +38,8 @@ if (kind === 'node') {
   // The single-file bundle and its WASM assets at the package root; declarations keep the build's layout.
   for (const name of readdirSync(join(source, 'browser')))
     if (['natlang.js', 'wllama-compat.js'].includes(name) || name.endsWith('.wasm')) cpSync(join(source, 'browser', name), join(destination, name));
+  cpSync(join(source, 'browser', 'pyodide'), join(destination, 'pyodide'), { recursive: true });
+  cpSync(join(source, 'browser', 'chunks'), join(destination, 'chunks'), { recursive: true });
   const types = join(destination, 'types'); mkdirSync(types, { recursive: true });
   copyTree(source, types, path => path.endsWith('.d.ts'), [join(source, 'teacher')]);
 }

@@ -13,6 +13,9 @@
     "@earendil-works/pi-ai": "^0.87.1",
     "@noble/hashes": "^2.4.0",
     "@types/node": "^24.0.0",
+    "fflate": "^0.8.3",
+    "just-bash": "3.4.2",
+    "pyodide": "314.0.7",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },

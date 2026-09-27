@@ -212,6 +212,34 @@ test('directory reducers take a Folder and folder.apply installs their committed
   await assert.rejects(() => runtime.run(() => tidy('no folder')), /directory reducer/);
 });
 
+test('bash natlang call and apply run children in the parent folder transaction', async () => {
+  const root = tree({
+    'outer.nl': nlFile({}, 'string', 'Use natlang commands on this folder.', 'kind: directory-reducer\n'),
+    'outer/upper.nl': nlFile({ input: 'string' }, 'string', 'Uppercase input.'),
+    'outer/tidy.nl': nlFile({}, 'string', 'Rewrite a.txt.', 'kind: directory-reducer\n'),
+  });
+  const outer = loadNatlang(join(root, 'outer.nl'));
+  const runtime = createNatlangRuntime({ agent: async session => {
+    if (session.lam.functionName === 'upper') {
+      assert.equal((await session.applyAsync('eval', { code: 'return input.toUpperCase()' })).kind, 'ok');
+    } else if (session.lam.functionName === 'tidy') {
+      assert.equal((await session.applyAsync('eval', { code:
+        'await folder.file("a.txt").writeText("changed"); return "done"' })).kind, 'ok');
+    } else {
+      const called = await session.applyAsync('bash', { command: "printf 'hi\\n' | natlang call upper --lines" });
+      assert.equal(called.kind, 'ok', called.text);
+      assert.equal(called.value.stdout, 'HI\n');
+      const applied = await session.applyAsync('bash', { command: 'natlang apply tidy sub' });
+      assert.equal(applied.kind, 'ok', applied.text);
+      assert.equal(applied.value.stdout, 'done\n');
+      session.lam.return = 'ok';
+    }
+  } });
+  const folder = Folder.fromFiles({ 'sub/a.txt': 'old' });
+  assert.equal(await runtime.run(() => folder.apply(outer)), 'ok');
+  assert.equal(await folder.readText('sub/a.txt'), 'changed');
+});
+
 test('a runtime shows services by their declarations and limits scoped ones to their functions', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'natlang-scoped-'));
   mkdirSync(join(dir, 'answer'));

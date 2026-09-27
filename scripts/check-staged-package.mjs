@@ -10,7 +10,7 @@ function files(path) {
 }
 const missing = [];
 for (const file of files(root).filter(path => ['.js', '.ts'].includes(extname(path)))) {
-  const text = readFileSync(file, 'utf8');
+  const text = readFileSync(file, 'utf8').replace(/^\s*\/\/.*$/gm, '');
   for (const match of text.matchAll(/from\s+['"](\.[^'"]+)['"]/g)) {
     const target = resolve(dirname(file), match[1]);
     const declaration = target.endsWith('.js') ? target.slice(0, -3) + '.d.ts' : '';

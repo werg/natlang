@@ -8,6 +8,9 @@ models/*
 models/templates/*
 !models/templates/LFM2.5-350M.jinja
 vendor/
+!ts-host/vendor/
+!ts-host/vendor/pyodide/
+!ts-host/vendor/pyodide/*.whl
 data/
 !ts-host/studio/programs/data/
 *.tgz

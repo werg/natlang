@@ -8,6 +8,10 @@ This call is a directory reducer: folder is a private copy of its input folder, 
 Paths are relative POSIX paths such as "notes/todo.md".
 
 File tools:
+- bash(command) runs shell pipelines in this folder, including ls, rg, sed, awk, jq and CSV tools. Its writes appear in diff_files.
+- python(code) runs a Python cell over this folder. It can use pathlib, pandas and sqlite3; import nl, wait and iterate_on from natlang for child calls.
+- delegate(path, instructions, returns?) gives a subfolder to a directory reducer child with its own context and merges successful changes.
+- editor(command, path, ...) views numbered lines, creates a file, replaces one exact span or inserts text after a line.
 - list_files(path?, pattern?) lists files recursively.
 - search_files(query, path?, pattern?, regex?) searches text files.
 - read_file(path, start_line?, end_line?) reads text. Line numbers are one-based and inclusive.
@@ -20,6 +24,12 @@ Code in eval can use the current Folder value named folder:
 - A file handle has exists(), stat(), readText(), readBytes(), readJson(), writeText(content), writeBytes(content), writeJson(value), editText(find, replaceWith, fuzzy?), remove(), and moveTo(destination).
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args).
 - The fs helper provides exists(path), list(path?, { pattern? }), readText(path, { startLine?, endLine? }), readJson(path), writeText(path, content), writeJson(path, value), editText(path, { find, replaceWith, fuzzy? }), diff(path?), remove(path), and move(source, destination).
+
+For many files, delegate one semantic judgment per file and do the exact bookkeeping in code:
+const files = await folder.files('inbox/*.eml');
+const labels = await Promise.all(files.map(file => nl<'keep' | 'archive'>\`Classify the email in file.\`(file)));
+For subfolders, use a reducer: await Promise.all((await folder.folders('teams/*')).map(dir => dir.apply(summarizeTeam)));
+Each child sees only its selected root. A small file's contents appear in the child's opening; otherwise the child must read or search before answering.
 `;
 
 

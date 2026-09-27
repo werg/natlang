@@ -1,6 +1,7 @@
 /** Standalone copy-on-write folder handles for scoped lambda filesystems. */
 
 import { sha256 } from '@noble/hashes/sha2.js';
+import { folderFromData, type FolderDataLayout } from './data-layout.js';
 
 export type FolderAccess = 'read' | 'write' | 'overlay';
 export type FileContents = string | Uint8Array;
@@ -65,23 +66,25 @@ function selectChanges(changes: ChangeSet, include?: string[], exclude?: string[
 export class FolderBusyError extends Error { constructor() { super('folder writer is busy'); } }
 export class FolderConflictError extends Error { constructor(path: string) { super(`folder changed at ${path}`); } }
 
-/** A per-root writer semaphore.  Read operations never acquire it. */
+/** A subtree writer lock. Disjoint directories may run and commit together. */
 export class WriterLock {
-  private busy = false;
+  private readonly held = new Set<string>();
   private waiters: Array<() => void> = [];
 
-  async acquire(blocking = true): Promise<() => void> {
-    if (!this.busy) { this.busy = true; return () => this.release(); }
-    if (!blocking) throw new FolderBusyError();
-    await new Promise<void>(resolve => this.waiters.push(resolve));
-    this.busy = true;
-    return () => this.release();
+  async acquire(blocking = true, path = ''): Promise<() => void> {
+    const conflicts = () => [...this.held].some(item => under(item, path) || under(path, item));
+    while (conflicts()) {
+      if (!blocking) throw new FolderBusyError();
+      await new Promise<void>(resolve => this.waiters.push(resolve));
+    }
+    this.held.add(path);
+    return () => this.release(path);
   }
 
-  release(): void {
-    if (!this.busy) throw new Error('folder writer is not held');
-    const next = this.waiters.shift();
-    if (next) next(); else this.busy = false;
+  release(path = ''): void {
+    if (!this.held.delete(path)) throw new Error('folder writer is not held');
+    const waiters = this.waiters.splice(0);
+    for (const wake of waiters) wake();
   }
 }
 
@@ -188,16 +191,24 @@ export class FolderHandle extends EntryHandle {
 
 export class FolderTransaction {
   private closed = false;
-  constructor(readonly parent: Folder, readonly folder: Folder, readonly prefix = '') {}
+  constructor(readonly parent: Folder, readonly folder: Folder, readonly prefix = '',
+    private readonly release: () => void = () => {}) {}
   get open(): boolean { return !this.closed; }
   private ensureOpen(): void { if (this.closed) throw new Error('folder transaction is closed'); }
+  private rootedChanges(include?: string[], exclude?: string[]): ChangeSet {
+    const selected = selectChanges(this.folder.diffSync(), include, exclude);
+    const rooted = (path: string) => this.prefix ? this.parent.join(this.prefix, path) : path;
+    return { changes: selected.changes.map(change => ({ ...change, path: rooted(change.path) })),
+      moves: selected.moves.map(([from, to]) => [rooted(from), rooted(to)] as [string, string]) };
+  }
+  validateSync(include?: string[], exclude?: string[]): void {
+    this.ensureOpen(); this.parent.validateInstall(this.rootedChanges(include, exclude));
+  }
   commitSync(include?: string[], exclude?: string[]): ChangeSet {
     this.ensureOpen();
     try {
       const selected = selectChanges(this.folder.diffSync(), include, exclude);
-      const rooted = (path: string) => this.prefix ? this.parent.join(this.prefix, path) : path;
-      this.parent.installLocked({ changes: selected.changes.map(change => ({ ...change, path: rooted(change.path) })),
-        moves: selected.moves.map(([from, to]) => [rooted(from), rooted(to)]) });
+      this.parent.installLocked(this.rootedChanges(include, exclude));
       this.close(); return selected;
     }
     catch (error) { this.abort(); throw error; }
@@ -206,7 +217,7 @@ export class FolderTransaction {
     return this.commitSync(include, exclude);
   }
   abort(): void { this.ensureOpen(); this.close(); }
-  private close(): void { if (!this.closed) { this.closed = true; this.parent.writer().release(); } }
+  private close(): void { if (!this.closed) { this.closed = true; this.release(); } }
 }
 
 /**
@@ -216,12 +227,14 @@ export class FolderTransaction {
 export interface FolderSource {
   paths(): Iterable<string>;
   get(path: string): Uint8Array | undefined;
+  size?(path: string): number | undefined;
 }
 
 class MapSource implements FolderSource {
   constructor(private readonly files: Map<string, Uint8Array>) {}
   paths(): Iterable<string> { return this.files.keys(); }
   get(path: string): Uint8Array | undefined { return this.files.get(path); }
+  size(path: string): number | undefined { return this.files.get(path)?.length; }
 }
 
 /** A frozen view of a source with an overlay applied: forks and transactions start from one. */
@@ -242,6 +255,11 @@ class LayeredSource implements FolderSource {
     const value = this.overlay.get(full);
     return value === TOMBSTONE ? undefined : value ?? this.base.get(full);
   }
+  size(path: string): number | undefined {
+    const full = this.prefix ? `${this.prefix}/${path}` : path;
+    const value = this.overlay.get(full);
+    return value === TOMBSTONE ? undefined : value?.length ?? this.base.size?.(full) ?? this.base.get(full)?.length;
+  }
 }
 
 export class Folder {
@@ -249,19 +267,30 @@ export class Folder {
   private readonly overlay = new Map<string, Uint8Array | typeof TOMBSTONE>();
   private readonly moves: Array<[string, string]> = [];
   private readonly writerLock: WriterLock;
+  private revisionNumber = 0;
+  private readonly computed: Map<string, (folder: Folder) => Uint8Array>;
 
   constructor(files: Record<string, FileContents> | FolderSource = {}, readonly access: FolderAccess = 'write',
-              options: { writer?: WriterLock } = {}) {
+              options: { writer?: WriterLock; computed?: Map<string, (folder: Folder) => Uint8Array> } = {}) {
     if (!['read', 'write', 'overlay'].includes(access)) throw new RangeError('invalid folder access');
     this.source = isSource(files) ? files :
       new MapSource(new Map(Object.entries(files).map(([path, value]) => [cleanPath(path, false), bytes(value)])));
     this.writerLock = options.writer ?? new WriterLock();
+    this.computed = new Map(options.computed);
   }
 
   static fromFiles(files: Record<string, FileContents>, access: FolderAccess = 'write'): Folder {
     return new Folder(files, access);
   }
+  static fromData(records: Record<string, unknown>[], layout: FolderDataLayout,
+    access: FolderAccess = 'write'): Folder { return folderFromData(records, layout, access); }
   root(): FolderHandle { return new FolderHandle(this, ''); }
+  registerComputedFile(path: string, render: (folder: Folder) => Uint8Array): void {
+    const clean = cleanPath(path, false);
+    if (this.isFile(clean) || this.isFolder(clean)) throw new Error(`computed file collides with entry: ${clean}`);
+    this.computed.set(clean, render);
+  }
+  filePaths(): string[] { return this.allPaths(); }
   dir(path = ''): FolderHandle {
     const clean = cleanPath(path.replace(/\/+$/, ''));
     checkedKind(this, clean, path, 'folder');
@@ -279,6 +308,8 @@ export class Folder {
 
   /** The current contents of one file, or undefined. */
   private current(path: string): Uint8Array | undefined {
+    const computed = this.computed.get(path);
+    if (computed) return computed(this);
     const value = this.overlay.get(path);
     return value === TOMBSTONE ? undefined : value ?? this.source.get(path);
   }
@@ -287,9 +318,14 @@ export class Folder {
     const result = new Set<string>();
     for (const path of this.source.paths()) if (this.overlay.get(path) !== TOMBSTONE) result.add(path);
     for (const [path, value] of this.overlay) if (value !== TOMBSTONE) result.add(path);
+    for (const path of this.computed.keys()) result.add(path);
     return [...result];
   }
   private checkWrite(): void { if (this.access === 'read') throw new Error('folder is read-only'); }
+  private checkWritablePath(path: string): void {
+    this.checkWrite();
+    if (this.computed.has(path)) throw new Error(`computed file is read-only: ${path}`);
+  }
   private read(path: string): Uint8Array {
     const value = this.current(cleanPath(path, false));
     if (!value) throw new Error(`file not found: ${path}`);
@@ -300,11 +336,20 @@ export class Folder {
   isFolder(path: string): boolean { const clean = cleanPath(path); return !clean || this.allPaths().some(item => item.startsWith(`${clean}/`)); }
   async stat(path: string): Promise<EntryStat> { return this.statSync(path); }
   private statSync(path: string): EntryStat {
-    const clean = cleanPath(path), value = clean ? this.current(clean) : undefined;
-    if (value) return { path: clean, kind: 'file', bytes: value.length, digest: hexDigest(value) };
+    const clean = cleanPath(path), value = clean ? this.overlay.get(clean) : undefined;
+    const size = this.computed.has(clean) ? this.computed.get(clean)!(this).length :
+      value === TOMBSTONE ? undefined : value?.length ?? this.source.size?.(clean) ?? (clean ? this.source.get(clean)?.length : undefined);
+    if (size !== undefined) return { path: clean, kind: 'file', bytes: size, digest: null };
     if (this.isFolder(clean)) return { path: clean, kind: 'folder', bytes: 0, digest: null };
     throw new Error(`entry not found: ${clean}`);
   }
+  revision(): number { return this.revisionNumber; }
+  kind(path: string): 'file' | 'dir' | null { return this.isFile(path) ? 'file' : this.isFolder(path) ? 'dir' : null; }
+  childNames(path = ''): string[] {
+    const prefix = path ? `${cleanPath(path)}/` : '';
+    return this.list(path).map(entry => entry.path.slice(prefix.length));
+  }
+  size(path: string): number { return this.statSync(path).bytes; }
   private paths(path = ''): string[] { const clean = cleanPath(path); return this.allPaths().filter(item => under(item, clean)).sort(); }
 
   list(path = '', patternText?: string): EntryStat[] {
@@ -331,16 +376,23 @@ export class Folder {
     return value.split(/(?<=\n)/).slice(start - 1, end).join('');
   }
   async readJson<T = unknown>(path: string): Promise<T> { return JSON.parse(await this.readText(path)) as T; }
-  writeBytes(path: string, content: FileContents): void { this.checkWrite(); this.overlay.set(cleanPath(path, false), bytes(content)); }
+  writeBytes(path: string, content: FileContents): void {
+    const clean = cleanPath(path, false); this.checkWritablePath(clean);
+    this.overlay.set(clean, bytes(content)); this.revisionNumber++;
+  }
   writeText(path: string, content: string): void { this.writeBytes(path, content); }
   async writeJson(path: string, value: unknown): Promise<void> { this.writeText(path, `${JSON.stringify(value, null, 2)}\n`); }
   remove(path: string): void {
     this.checkWrite(); const clean = cleanPath(path, false);
+    if ([...this.computed.keys()].some(item => under(item, clean))) throw new Error(`computed file is read-only: ${clean}`);
     if (!this.isFile(clean) && !this.isFolder(clean)) throw new Error(`entry not found: ${clean}`);
     for (const item of this.allPaths()) if (item === clean || item.startsWith(`${clean}/`)) this.overlay.set(item, TOMBSTONE);
+    this.revisionNumber++;
   }
   move(source: string, destination: string): void {
     this.checkWrite(); const from = cleanPath(source, false), to = cleanPath(destination, false);
+    if ([...this.computed.keys()].some(item => under(item, from) || under(item, to)))
+      throw new Error(`computed file is read-only: ${from}`);
     if (from === to || to.startsWith(`${from}/`)) throw new Error('cannot move an entry into itself');
     const selected = this.allPaths().filter(path => path === from || path.startsWith(`${from}/`));
     if (!selected.length) throw new Error(`entry not found: ${from}`);
@@ -350,6 +402,7 @@ export class Folder {
       this.overlay.set(`${to}${suffix ? `/${suffix}` : ''}`, this.current(path)!); this.overlay.set(path, TOMBSTONE);
     }
     this.moves.push([from, to]);
+    this.revisionNumber++;
   }
   async editText(path: string, find: string, replaceWith: string, fuzzy = false): Promise<Record<string, unknown>> {
     const updated = editTextContent(await this.readText(path), find, replaceWith, fuzzy);
@@ -374,19 +427,36 @@ export class Folder {
   }
   async diff(path = ''): Promise<ChangeSet> { return this.diffSync(path); }
   /** A copy-on-write fork of the current contents, sharing this folder's writer lock. */
-  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshot(), access, { writer: this.writerLock }); }
+  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshot(), access, { writer: this.writerLock, computed: this.computed }); }
   private snapshot(prefix = ''): FolderSource { return new LayeredSource(this.source, new Map(this.overlay), prefix); }
   writer(): WriterLock { return this.writerLock; }
   async beginTransaction(blocking = true, path = ''): Promise<FolderTransaction> {
-    this.checkWrite(); await this.writerLock.acquire(blocking);
     const prefix = cleanPath(path);
-    return new FolderTransaction(this, new Folder(this.snapshot(prefix), 'overlay'), prefix);
+    const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, prefix);
+    const computed = new Map([...this.computed].filter(([item]) => under(item, prefix)).map(([item, render]) =>
+      [prefix ? item.slice(prefix.length + 1) : item, render] as [string, (folder: Folder) => Uint8Array]));
+    return new FolderTransaction(this, new Folder(this.snapshot(prefix), this.access === 'read' ? 'read' : 'overlay', { computed }), prefix, release);
+  }
+  /** A one-file view for a child call. Only the named file exists in its root. */
+  async beginFileTransaction(path: string, blocking = true): Promise<FolderTransaction> {
+    const clean = cleanPath(path, false);
+    const name = clean.split('/').at(-1)!, parent = clean.includes('/') ? clean.slice(0, clean.lastIndexOf('/')) : '';
+    const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, clean);
+    try {
+      const content = this.readBytesSync(clean);
+      return new FolderTransaction(this, Folder.fromFiles({ [name]: content }, this.access === 'read' ? 'read' : 'overlay'), parent, release);
+    } catch (error) { release(); throw error; }
   }
   installLocked(changes: ChangeSet, include?: string[], exclude?: string[]): ChangeSet {
     const selectedSet = selectChanges(changes, include, exclude), selected = selectedSet.changes;
-    for (const change of selected) if (!equalBytes(this.current(change.path), change.before)) throw new FolderConflictError(change.path);
+    this.validateInstall(selectedSet);
     for (const change of selected) this.overlay.set(change.path, change.after === undefined ? TOMBSTONE : change.after.slice());
+    if (selected.length) this.revisionNumber++;
     return selectedSet;
+  }
+  validateInstall(changes: ChangeSet): void {
+    for (const change of changes.changes)
+      if (!equalBytes(this.current(change.path), change.before)) throw new FolderConflictError(change.path);
   }
   async install(changes: ChangeSet, include?: string[], exclude?: string[], blocking = true): Promise<ChangeSet> {
     this.checkWrite();

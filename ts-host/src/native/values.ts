@@ -21,6 +21,7 @@ export type LambdaNode = { nodeKind: 'lambda'; type: Type; types: Record<string,
   /** Callable context: the record tree of the function's callable folder (see runtime/loader.ts). */
   codebase: Record<string, unknown>; functionName: string;
   subtype: 'function' | 'directory-reducer'; projectTransaction?: FolderTransaction;
+  extraTransactions?: FolderTransaction[];
   reducerMode: '' | 'apply' | 'direct';
   captures?: Record<string, CaptureCell>;
   /** Constructors for class-typed host contracts. */

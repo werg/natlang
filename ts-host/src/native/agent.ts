@@ -69,7 +69,13 @@ export function inputsListing(session: NativeSession): string {
   return lam.type.params.fields.map(field => {
     const value = Object.hasOwn(lam.args, field.name) ? lam.args[field.name]! : undefined;
     const shown = renderValue(value, { root, holder: field.name });
-    return `${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = ${shown}`;
+    const opening = value instanceof FileHandle && value.folder === root ? (() => {
+      const stat = root!.listFiles().find(entry => entry.path === value.path);
+      if (!stat || stat.bytes > 4000) return '  // Read this file with read_file or file.readText() before answering.';
+      try { return `\n  // File contents:\n${JSON.stringify(new TextDecoder('utf-8', { fatal: true }).decode(root!.readBytesSync(value.path)))}`; }
+      catch { return '  // Binary file: use file.readBytes() before answering.'; }
+    })() : '';
+    return `${field.name}: ${formatType(field.type)}${field.optional ? ' | undefined' : ''} = ${shown}${opening}`;
   }).join('\n');
 }
 
@@ -343,7 +349,19 @@ export class NativeToolAgent {
         { path: { type: 'string' }, find: { type: 'string' }, replace_with: { type: 'string' }, fuzzy: { type: 'boolean' } },
         ['path', 'find', 'replace_with']),
       tool('diff_files', 'Inspect changes in the current folder.',
-        { path: { type: 'string' } }, [])];
+        { path: { type: 'string' } }, []),
+      tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr and changed paths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
+        { command: { type: 'string' } }, ['command']),
+      tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr and changed paths. Use finite for loops; while and recursion are refused.',
+        { code: { type: 'string' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
+      tool('delegate', 'Give one subfolder to a directory reducer child with its own context. Its successful file changes are merged into this folder.',
+        { path: { type: 'string' }, instructions: { type: 'string' }, returns: { type: 'string' } },
+        ['path', 'instructions']),
+      tool('editor', 'View numbered lines, create a file, replace one exact span, or insert after a line.',
+        { command: { type: 'string', enum: ['view', 'create', 'str_replace', 'insert'] }, path: { type: 'string' },
+          start_line: { type: 'integer' }, end_line: { type: 'integer' }, file_text: { type: 'string' },
+          old_str: { type: 'string' }, new_str: { type: 'string' }, insert_line: { type: 'integer' } },
+        ['command', 'path'])];
       tools.splice(2, 0, ...fileTools);
     }
     return tools;
@@ -499,7 +517,7 @@ export class NativeToolAgent {
     const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
       ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.subtype === 'directory-reducer' ? DIRECTORY_REDUCER_PROMPT : '');
+      (session.lam.projectTransaction ? DIRECTORY_REDUCER_PROMPT : '');
     const openingMessages = (): Record<string, unknown>[] => {
       const reading = this.scopeReading(session);
       return [{ role: 'system', content: systemPrompt() },

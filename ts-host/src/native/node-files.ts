@@ -4,6 +4,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Folder, type ChangeSet, type FolderAccess, type FolderSource } from './scoped-fs.js';
+import { openArchive, type ArchiveFormat } from './archive.js';
 
 /** Directory names never listed from disk. */
 const IGNORED = new Set(['.git', 'node_modules']);
@@ -17,6 +18,7 @@ function inside(root: string, target: string): boolean {
 class DiskSource implements FolderSource {
   private listed?: string[];
   private readonly cache = new Map<string, Uint8Array | undefined>();
+  private readonly sizes = new Map<string, number>();
   constructor(readonly root: string) {}
   paths(): Iterable<string> {
     if (this.listed) return this.listed;
@@ -32,7 +34,7 @@ class DiskSource implements FolderSource {
         }
         const status = statSync(target);
         if (status.isDirectory()) { if (!entry.isSymbolicLink()) walk(absolute, path); }
-        else if (status.isFile()) found.push(path);
+        else if (status.isFile()) { found.push(path); this.sizes.set(path, status.size); }
       }
     };
     walk(this.root, '');
@@ -49,6 +51,7 @@ class DiskSource implements FolderSource {
     this.cache.set(path, value);
     return value;
   }
+  size(path: string): number | undefined { this.paths(); return this.sizes.get(path); }
 }
 
 /**
@@ -59,6 +62,10 @@ export function openFolder(root: string, access: FolderAccess = 'read'): Folder 
   const real = realpathSync(resolve(root));
   if (!statSync(real).isDirectory()) throw new RangeError(`not a directory: ${root}`);
   return new Folder(new DiskSource(real), access);
+}
+
+export function openArchiveFile(path: string, format?: ArchiveFormat, access: FolderAccess = 'read'): Folder {
+  return openArchive(new Uint8Array(readFileSync(path)), format, access);
 }
 
 export type SavedChange = { path: string; kind: 'added' | 'modified' | 'deleted'; bytes: number };

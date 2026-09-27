@@ -40,5 +40,15 @@ export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, v
 export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from '../app/playground.js';
 export { TypeScriptEnvironment } from './environment.js';
 export { Folder, FolderHandle, FileHandle } from '../native/scoped-fs.js';
+export { folderFromData, folderToData } from '../native/data-layout.js';
+export type { FolderDataLayout, FolderDataResult } from '../native/data-layout.js';
+export { openArchive } from '../native/archive.js';
+export type { ArchiveFormat } from '../native/archive.js';
+export async function runFolderBash(...args: Parameters<typeof import('../native/folder-shell.js').runFolderBash>) {
+  return (await import('../native/folder-shell.js')).runFolderBash(...args);
+}
+export async function runFolderPython(...args: Parameters<typeof import('../native/folder-python.js').runFolderPython>) {
+  return (await import('../native/folder-python.js')).runFolderPython(...args);
+}
 export { TypeEnv, parseType, formatType, fitsType } from '../native/types.js';
 export type { ModelTurn, ModelTurnRequest } from '../contracts.js';

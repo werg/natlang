@@ -14,6 +14,7 @@ import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
+import type { PythonHost } from './folder-python.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
@@ -76,7 +77,7 @@ const DIAGNOSTIC_HINTS: Record<string, string> = {
 /** Every tool the runtime can apply; a call's offer is a subset. */
 const NATIVE_TOOLS = ['eval', 'read_page', 'compact_history', 'return_result', 'blocked', 'failed',
   'read_code', 'edit_code', 'diff_code',
-  'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
+  'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files', 'bash', 'python', 'delegate', 'editor'];
 const CODE_TOOLS = ['read_code', 'edit_code', 'diff_code'];
 /** What read_code shows for the built-ins of eval, which have no source in the program. */
 export const BUILT_IN_DOCS: Record<string, string> = {
@@ -350,6 +351,7 @@ export class NativeRuntime {
       node.projectTransaction.abort();
       this.trace.emit('folder', { call_id: this.currentCallId ?? null, phase: 'discarded', mode: node.reducerMode, reason: detail });
     }
+    for (const transaction of node.extraTransactions ?? []) if (transaction.open) transaction.abort();
     return { kind: 'quiesced', detail };
   }
 
@@ -561,8 +563,15 @@ export class NativeSession {
     if (problems(this.lam.return, this.lam.type.returns, this.env, 'return').holes.length) return false;
     const tx = this.lam.projectTransaction;
     if (tx?.open) {
+      if (this.lam.reducerMode === 'apply') {
+        tx.validateSync();
+        for (const transaction of this.lam.extraTransactions ?? []) transaction.validateSync();
+      }
       const delta = tx.folder.diffSync();
       const selected = this.lam.reducerMode === 'apply' ? tx.commitSync() : (tx.abort(), delta);
+      for (const transaction of this.lam.extraTransactions ?? []) {
+        if (this.lam.reducerMode === 'apply') transaction.commitSync(); else transaction.abort();
+      }
       this.runtime.trace.emit('folder', { call_id: this.runtime.currentCallId ?? null,
         phase: this.lam.reducerMode === 'apply' ? 'installed' : 'discarded', mode: this.lam.reducerMode,
         changes: selected.changes.map(change => ({ path: change.path, kind: change.kind })) });
@@ -637,6 +646,70 @@ export class NativeSession {
         return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined));
       }
       if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
+      if (name === 'bash') {
+        const folder = this.lam.projectTransaction?.folder;
+        if (!folder) throw new Reject([{ path: name, code: 'bad-action', expected: 'a folder call' }]);
+        const { runFolderBash } = await import('./folder-shell.js');
+        const { invokeDefinition } = await import('../runtime/kernel.js');
+        const value = await runFolderBash(folder, String(args.command ?? ''),
+          { network: this.runtime.environment.scopeCapabilities?.allowNetwork !== false,
+            python: await this.pythonHost(),
+            ask: (instructions, returns, input) => invokeDefinition(this.runtime.frame!, {
+              id: `bash:ask:${instructions}`, name: 'natlang-ask', body: instructions,
+              params: [{ name: 'input', type: inferValueType(input) }], returns,
+              types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'function',
+            }, [input]),
+            call: async (name, input, mode) => {
+              const { callableMeta } = await import('../runtime/callable.js');
+              const callable = await this.folderCommandCallable(name, folder), meta = callableMeta(callable);
+              if (!meta || meta.definition.subtype === 'directory-reducer')
+                throw new TypeError(`${name} is not a callable function`);
+              const params = meta.definition.params;
+              if (mode === 'line' && params.length !== 1) throw new TypeError('--lines requires a function with one parameter');
+              const values = input && typeof input === 'object' && !Array.isArray(input) ?
+                params.map(param => (input as Record<string, unknown>)[param.name]) :
+                params.length === 1 ? [input] : undefined;
+              if (!values) throw new TypeError('call input must be a JSON object keyed by parameter name');
+              return meta.invoke(values, this.runtime.frame!);
+            },
+            apply: async (name, path) => {
+              const { callableMeta } = await import('../runtime/callable.js');
+              const callable = await this.folderCommandCallable(name, folder), meta = callableMeta(callable);
+              if (!meta || meta.definition.subtype !== 'directory-reducer')
+                throw new TypeError(`${name} is not a directory reducer`);
+              if (meta.definition.params.length) throw new TypeError(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
+              const handle = folder.dir(path), transaction = await handle.beginTransaction(true);
+              return invokeDefinition(this.runtime.frame!, meta.definition, [handle],
+                { folder: { transaction, mode: 'apply' } });
+            } });
+        return this.record(name, args, { kind: value.exitCode === 0 ? 'ok' : 'error',
+          text: this.show(JSON.stringify(value)), value: value as unknown as Value });
+      }
+      if (name === 'python') {
+        const folder = this.lam.projectTransaction?.folder;
+        if (!folder) throw new Reject([{ path: name, code: 'bad-action', expected: 'a folder call' }]);
+        const timeout = args.timeout_ms === undefined ? undefined : Number(args.timeout_ms);
+        if (timeout !== undefined && (!Number.isSafeInteger(timeout) || timeout < 1))
+          throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive timeout in milliseconds' }]);
+        const { runFolderPython } = await import('./folder-python.js');
+        const value = await runFolderPython(folder, String(args.code ?? ''), await this.pythonHost(), timeout);
+        return this.record(name, args, { kind: 'ok', text: this.show(JSON.stringify(value)), value: value as unknown as Value });
+      }
+      if (name === 'delegate') {
+        const folder = this.lam.projectTransaction?.folder;
+        if (!folder) throw new Reject([{ path: name, code: 'bad-action', expected: 'a folder call' }]);
+        const path = String(args.path ?? ''), instructions = String(args.instructions ?? '');
+        if (!instructions.trim()) throw new Reject([{ path: 'instructions', code: 'bad-action', expected: 'nonempty child instructions' }]);
+        const handle = folder.dir(path), transaction = await handle.beginTransaction(true);
+        const { invokeDefinition } = await import('../runtime/kernel.js');
+        const value = await invokeDefinition(this.runtime.frame!, {
+          id: `delegate:${this.runtime.options.runId}:${this.lam.steps}`, name: 'delegate',
+          body: instructions, params: [], returns: String(args.returns ?? 'unknown'),
+          types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'directory-reducer',
+        }, [handle], { folder: { transaction, mode: 'apply' }, manifest: { delegate: true, path } });
+        return this.record(name, args, { kind: 'ok', text: this.show(JSON.stringify(value) ?? 'null'), value: value as Value });
+      }
+      if (name === 'editor') return this.record(name, args, await this.editorTool(args));
       if (['list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'].includes(name))
         return this.record(name, args, await this.fileTool(name, args));
       return this.record(name, args, this.scopeTool(name, args));
@@ -644,6 +717,60 @@ export class NativeSession {
       if (error instanceof Reject) return this.record(name, args, rejected(error));
       return this.record(name, args, { kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
+  }
+  private async folderCommandCallable(name: string, folder: Folder): Promise<unknown> {
+    if (name.endsWith('.nl')) {
+      const { defineNatlang } = await import('../runtime/callable.js');
+      const source = await folder.readText(name);
+      return defineNatlang(source, { name: name.split('/').at(-1)!.slice(0, -3),
+        codebase: this.lam.codebase as Record<string, ItemRecord> });
+    }
+    return name.split('.').reduce<unknown>((part, key) =>
+      part && (typeof part === 'object' || typeof part === 'function') ?
+        (part as Record<string, unknown>)[key] : undefined, this.callables());
+  }
+  private async pythonHost(): Promise<PythonHost> {
+    const { invokeDefinition } = await import('../runtime/kernel.js');
+    const { iterateOn } = await import('../runtime/iterate.js');
+    return {
+      nl: (instructions, returns) => (...inputs) => invokeDefinition(this.runtime.frame!, {
+        id: `python:${instructions}`, name: 'nl@python', body: instructions, params: [], openParameters: true,
+        returns, types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'function',
+      }, inputs),
+      iterateOn: (step, initial, ...fixed) => iterateOn(step as never, initial, ...fixed).inFrame(this.runtime.frame),
+    };
+  }
+  private async editorTool(args: Record<string, unknown>): Promise<NativeResult> {
+    const folder = this.lam.projectTransaction?.folder;
+    if (!folder) throw new Reject([{ path: 'editor', code: 'bad-action', expected: 'a folder call' }]);
+    const command = String(args.command ?? ''), path = String(args.path ?? '');
+    if (!path) throw new Reject([{ path: 'path', code: 'bad-action', expected: 'a file path' }]);
+    let value: unknown;
+    if (command === 'view') {
+      const start = args.start_line === undefined ? 1 : Number(args.start_line);
+      const end = args.end_line === undefined ? undefined : Number(args.end_line);
+      const content = await folder.readText(path);
+      const lines = content.split('\n');
+      if (lines.at(-1) === '') lines.pop();
+      if (!Number.isInteger(start) || start < 1 || end !== undefined && (!Number.isInteger(end) || end < start))
+        throw new Reject([{ path: 'start_line', code: 'bad-action', expected: 'a valid line range' }]);
+      value = lines.slice(start - 1, end).map((line, i) => `${start + i}\t${line}`).join('\n');
+    } else if (command === 'create') {
+      if (folder.isFile(path)) throw new Error(`file already exists: ${path}`);
+      folder.writeText(path, String(args.file_text ?? ''));
+      value = { path, changed: true };
+    } else if (command === 'str_replace') {
+      value = await folder.editText(path, String(args.old_str ?? ''), String(args.new_str ?? ''));
+    } else if (command === 'insert') {
+      const line = Number(args.insert_line ?? 0), content = await folder.readText(path);
+      const lines = content.split('\n');
+      if (!Number.isInteger(line) || line < 0 || line > lines.length)
+        throw new Reject([{ path: 'insert_line', code: 'bad-action', expected: 'a line number in the file' }]);
+      lines.splice(line, 0, String(args.new_str ?? ''));
+      folder.writeText(path, lines.join('\n'));
+      value = { path, changed: true };
+    } else throw new Reject([{ path: 'command', code: 'bad-action', expected: 'view, create, str_replace or insert' }]);
+    return { kind: 'ok', text: this.show(typeof value === 'string' ? value : JSON.stringify(value)), value: value as Value };
   }
   /** Synchronous tools (no eval). */
   apply(name: string, args: Record<string, unknown>): NativeResult {

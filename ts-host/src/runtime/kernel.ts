@@ -106,6 +106,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
     throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', []);
   let inputs = positional;
   let folder = options.folder;
+  const extraTransactions: FolderTransaction[] = [];
   if (definition.subtype === 'directory-reducer') {
     const handle = inputs[0];
     if (!folder) {
@@ -114,6 +115,36 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
       folder = { transaction: await handle.beginTransaction(true), mode: 'direct' };
     }
     if (handle instanceof Folder || handle instanceof FolderHandle) inputs = inputs.slice(1);
+  } else {
+    // A handle is a capability, not a reference to its caller's whole backing folder.
+    // Give the child its own copy and merge its changes only when it completes.
+    const handles = inputs.map((value, index) => ({ value, index })).filter(({ value }) =>
+      value instanceof Folder || value instanceof FolderHandle || value instanceof FileHandle);
+    if (handles.length) {
+      const roots = handles.map(({ value }) => ({ backing: value instanceof Folder ? value :
+        (value as FolderHandle | FileHandle).folder, path: value instanceof Folder ? '' :
+        (value as FolderHandle | FileHandle).path }));
+      for (let left = 0; left < roots.length; left++) for (let right = left + 1; right < roots.length; right++) {
+        const a = roots[left]!, b = roots[right]!;
+        if (a.backing === b.backing && a.backing.access !== 'read' &&
+          (!a.path || !b.path || a.path === b.path || a.path.startsWith(`${b.path}/`) || b.path.startsWith(`${a.path}/`)))
+          throw new TypeError('overlapping writable handles in one child call; pass disjoint roots');
+      }
+      inputs = [...inputs];
+      try {
+        for (const { value, index } of handles) {
+          const transaction = value instanceof FileHandle ? await value.folder.beginFileTransaction(value.path) :
+            await (value as Folder | FolderHandle).beginTransaction(true);
+          if (!folder) folder = { transaction, mode: 'apply' };
+          else extraTransactions.push(transaction);
+          inputs[index] = value instanceof FileHandle ? transaction.folder.file(value.name) : transaction.folder.root();
+        }
+      } catch (error) {
+        if (folder?.transaction.open) folder.transaction.abort();
+        for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
+        throw error;
+      }
+    }
   }
   // An open inline function takes whatever each call passes, typed from its values (a splat).
   if (definition.openParameters) definition = { ...definition, params: inputs.map((input, index) =>
@@ -133,11 +164,13 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   const required = definition.params.filter(parameter => !parameter.optional).length;
   if (inputs.length < required || inputs.length > definition.params.length) {
     if (folder?.transaction.open) folder.transaction.abort();
+    for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
     throw new TypeError(`${definition.name} expects ${required === definition.params.length ? required :
       `${required} to ${definition.params.length}`} arguments, got ${inputs.length}`);
   }
   const node = definitionNode(definition, inputs, options);
   if (folder) { node.projectTransaction = folder.transaction; node.reducerMode = folder.mode; }
+  if (extraTransactions.length) node.extraTransactions = extraTransactions;
 
   const callId = task.nextCallId();
   const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId,
@@ -168,6 +201,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   } catch (error) {
     if (!(error instanceof NatlangCallError)) detail = error instanceof Error ? error.message : String(error);
     if (folder?.transaction.open) folder.transaction.abort();
+    for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
     throw error;
   } finally {
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,

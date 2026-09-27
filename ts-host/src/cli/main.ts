@@ -14,12 +14,14 @@ import { createResolvedModelSession, loadModelConfiguration, describeLlamaRuntim
   type LlamaRuntimeDiscovery, type LlamaServerInspection, type LoadedModelConfiguration,
   type ModelSelectionOverrides, type ResolvedModelChoice } from '../model/index.js';
 import type { AuthPrompt } from '@earendil-works/pi-ai';
-import { openFolder } from '../native/node-files.js';
+import { openFolder, saveFolder } from '../native/node-files.js';
+import { executeNatlangAsk, executeNatlangCall } from '../native/natlang-command.js';
+import { inferValueType } from '../native/runtime.js';
 import { formatDiagnostics } from '../compiler/project.js';
 import { buildProject } from '../compiler/node-project.js';
 import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
   type NatlangRuntimeOptions } from '../runtime/runtime.js';
-import { fileTraceSink, applicationContextRecords, loadNatlang } from '../runtime/node-files.js';
+import { fileTraceSink, applicationContextRecords, loadCallables, loadNatlang } from '../runtime/node-files.js';
 import { invokeDefinition } from '../runtime/kernel.js';
 import { resolveFrame } from '../runtime/runtime.js';
 import '../runtime/node.js';
@@ -35,8 +37,9 @@ Usage:
   natlang run [SOURCE] [OPTIONS] [-- ARGS]   Build and run an application or TS entry module.
   natlang check [PROJECT]                    Type-check and natlang-check a project.
   natlang build [PROJECT] [--out DIR]        Compile a project (lowering nl, embedding .nl functions).
-  natlang call FILE.nl [--inputs FILE]       Call one named natural-language function.
-  natlang ask INSTRUCTION...                 Answer an instruction over the local natlang.d/ and files.
+  natlang call NAME|FILE.nl                  Call a natural-language function.
+  natlang apply REDUCER DIR                  Apply a directory reducer to a folder.
+  natlang ask INSTRUCTION...                 Ask over stdin, local files, or the folder.
   natlang apps [DIRECTORY]                   Find runnable applications (natlang.json).
   natlang inspect SOURCE                     Explain how a source resolves without running it.
   natlang packages                           List installed distribution packages.
@@ -78,15 +81,24 @@ Options:
 
 PROJECT is a directory or tsconfig.json (default: .). Both commands write a
 typed foo.d.nl.ts beside every foo.nl so editors and tsc see typed imports.`;
-  if (topic === 'call') return `Call one named natural-language function:
-  natlang call FILE.nl [--inputs FILE] [--trace DIR] [--profile NAME] [--provider ID] [--model ID] [--json]
+  if (topic === 'call') return `Call a named natural-language function:
+  natlang call NAME|FILE.nl [--inputs FILE] [--lines|--jsonl] [--trace DIR]
 
---inputs is a JSON object keyed by parameter name.`;
+NAME resolves in the current application's natlang.d context. --inputs and whole
+stdin are JSON objects keyed by parameter name. --lines passes each text line to
+a single-parameter function; --jsonl reads a JSON object per line.`;
+  if (topic === 'apply') return `Apply a directory reducer:
+  natlang apply REDUCER DIR [--trace DIR] [--profile NAME] [--provider ID] [--model ID]
+
+REDUCER is a name in the current natlang.d context or a .nl file. Successful
+changes are saved to DIR after the reducer completes.`;
   if (topic === 'ask') return `Answer an instruction:
+  natlang ask INSTRUCTION... [--returns TYPE] [--lines|--jsonl|--files GLOB] [--filter] [--jobs N]
   natlang ask INSTRUCTION... [--trace DIR] [--profile NAME] [--provider ID] [--model ID]
 
-The instruction runs as an inline natural-language function over the nearest
-natlang.d/ callable folder and a read-only view of the current directory's files.`;
+Without input, the instruction receives a read-only view of the current directory.
+Piped stdin is passed as a whole, or one line/JSON record at a time. --files calls
+once per matching file and prints path<TAB>result. --filter prints matching inputs.`;
   if (topic === 'apps') return `Discover applications:
   natlang apps [DIRECTORY] [--json]`;
   if (topic === 'inspect') return `Resolve a source without running it:
@@ -123,7 +135,8 @@ API-key providers can also use their documented environment variables.`;
 type Parsed = { words: string[]; options: Map<string, string | true>; rest: string[] };
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
-  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh']);
+  const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
+    '--lines', '--jsonl', '--filter']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -428,28 +441,101 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   finally { runtime.close(); await model.close(); }
 }
 
-async function callCommand(parsed: Parsed, file: string): Promise<number> {
-  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes']); noTrailingArguments(parsed);
-  const fn = loadNatlang(resolve(file));
+function commandCallable(name: string): ((...args: unknown[]) => Promise<unknown>) &
+  { [key: symbol]: { definition: { params: { name: string }[]; subtype: string } } } {
+  let value: unknown;
+  if (name.endsWith('.nl')) value = loadNatlang(resolve(name));
+  else {
+    const context = applicationContextRecords(process.cwd());
+    if (!context) throw new Error(`no natlang.d context found for ${name}`);
+    value = name.split('.').reduce<unknown>((part, key) =>
+      part && typeof part === 'object' || typeof part === 'function' ?
+        (part as Record<string, unknown>)[key] : undefined, loadCallables(context.dir));
+  }
+  if (typeof value !== 'function' || !(Symbol.for('natlang.callable') in value))
+    throw new Error(`${name} is not a natural-language function`);
+  return value as ReturnType<typeof commandCallable>;
+}
+
+async function pipedStdin(waitForEnd = false): Promise<string> {
+  if (process.stdin.isTTY) return '';
+  return new Promise<string>(resolve => {
+    const chunks: string[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (timer) clearTimeout(timer);
+      process.stdin.off('data', data); process.stdin.off('end', end);
+      process.stdin.pause(); resolve(chunks.join(''));
+    };
+    const data = (chunk: Buffer | string) => { chunks.push(chunk.toString()); if (timer) { clearTimeout(timer); timer = undefined; } };
+    const end = () => finish();
+    process.stdin.on('data', data); process.stdin.once('end', end);
+    if (!waitForEnd) timer = setTimeout(finish, 150);
+    process.stdin.resume();
+  });
+}
+
+function commandInputArgs(input: unknown, params: { name: string }[]): unknown[] {
+  if (input && typeof input === 'object' && !Array.isArray(input))
+    return params.map(parameter => (input as Record<string, unknown>)[parameter.name]);
+  if (params.length === 1) return [input];
+  throw new Error('call input must be a JSON object keyed by parameter name');
+}
+
+const pipelineValue = (value: unknown) =>
+  value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+async function callCommand(parsed: Parsed, name: string): Promise<number> {
+  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl']);
+  noTrailingArguments(parsed);
+  if (parsed.options.has('--lines') && parsed.options.has('--jsonl')) throw new Error('--lines and --jsonl are mutually exclusive');
+  if (option(parsed, '--inputs') && (parsed.options.has('--lines') || parsed.options.has('--jsonl')))
+    throw new Error('--inputs cannot be combined with --lines or --jsonl');
+  const fn = commandCallable(name), params = fn[Symbol.for('natlang.callable')]!.definition.params;
+  if (fn[Symbol.for('natlang.callable')]!.definition.subtype === 'directory-reducer')
+    throw new Error(`${name} is a directory reducer; use natlang apply`);
   const inputsPath = option(parsed, '--inputs');
-  const inputs = inputsPath ? JSON.parse(readFileSync(resolve(inputsPath), 'utf8')) as Record<string, unknown> : {};
-  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('--inputs must contain a JSON object');
-  const record = (fn as unknown as { [key: symbol]: { definition: { params: { name: string }[] } } })[Symbol.for('natlang.callable')]!;
-  const args = record.definition.params.map(parameter => inputs[parameter.name]);
-  const value = await withModelRuntime(parsed, runtime => runtime.run(() => fn(...args)));
-  output(value, true);
+  const stdin = inputsPath ? readFileSync(resolve(inputsPath), 'utf8') : await pipedStdin(
+    parsed.options.has('--lines') || parsed.options.has('--jsonl'));
+  const mode = parsed.options.has('--lines') ? 'line' : parsed.options.has('--jsonl') ? 'jsonl' : 'whole';
+  if (parsed.options.has('--lines') && params.length !== 1)
+    throw new Error('--lines requires a function with one parameter');
+  const result = await withModelRuntime(parsed, runtime => runtime.run(() => executeNatlangCall(name, stdin, mode,
+    (_name, input) => fn(...commandInputArgs(input, params)))));
+  process.stdout.write(result);
+  return 0;
+}
+
+async function applyCommand(parsed: Parsed, name: string, directory: string): Promise<number> {
+  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes']); noTrailingArguments(parsed);
+  const fn = commandCallable(name), definition = fn[Symbol.for('natlang.callable')]!.definition;
+  if (definition.subtype !== 'directory-reducer') throw new Error(`${name} is not a directory reducer`);
+  if (definition.params.length) throw new Error(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
+  const path = resolve(directory), folder = openFolder(path, 'write');
+  const value = await withModelRuntime(parsed, runtime => runtime.run(() => folder.apply(fn)));
+  saveFolder(path, folder);
+  process.stdout.write(`${pipelineValue(value)}\n`);
   return 0;
 }
 
 async function askCommand(parsed: Parsed, instruction: string): Promise<number> {
-  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--yes']); noTrailingArguments(parsed);
+  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--yes', '--lines', '--jsonl', '--filter',
+    '--returns', '--files', '--jobs']); noTrailingArguments(parsed);
   const context = applicationContextRecords(process.cwd());
-  const value = await withModelRuntime(parsed, runtime => runtime.run(() => invokeDefinition(resolveFrame(), {
-    id: 'natlang:ask', name: 'ask', body: `${instruction.trim()}\n`,
-    params: [{ name: 'project', type: 'Folder' }], returns: 'string',
-    types: {}, codebase: context?.records ?? {}, subtype: 'function' },
-    [openFolder(process.cwd()).root()])));
-  process.stdout.write(`${String(value).replace(/\n?$/, '\n')}`);
+  const folder = openFolder(process.cwd());
+  const stdin = option(parsed, '--files') ? '' : await pipedStdin(parsed.options.has('--lines') || parsed.options.has('--jsonl'));
+  const jobs = numericOption(parsed, '--jobs', 1);
+  const result = await withModelRuntime(parsed, runtime => runtime.run(() => executeNatlangAsk(folder,
+    instruction.trim(), stdin, {
+      lines: parsed.options.has('--lines'), jsonl: parsed.options.has('--jsonl'),
+      filter: parsed.options.has('--filter'), files: option(parsed, '--files'),
+      returns: option(parsed, '--returns'), jobs,
+    }, (instructions, returns, input) => invokeDefinition(resolveFrame(), {
+      id: `natlang:ask:${instructions}`, name: 'ask', body: `${instructions}\n`,
+      params: [{ name: inferValueType(input) === 'Folder' ? 'project' : 'input', type: inferValueType(input) }], returns,
+      types: {}, codebase: context?.records ?? {}, subtype: 'function',
+    }, [input]))));
+  process.stdout.write(result);
   return 0;
 }
 
@@ -574,7 +660,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return result.ok ? 0 : 1;
   }
   if (command === 'run') return runCommand(parsed, words[0]);
-  if (command === 'call') { if (words.length !== 1) throw new Error('usage: natlang call FILE.nl [--inputs FILE]'); return callCommand(parsed, words[0]!); }
+  if (command === 'call') { if (words.length !== 1) throw new Error('usage: natlang call NAME|FILE.nl'); return callCommand(parsed, words[0]!); }
+  if (command === 'apply') { if (words.length !== 2) throw new Error('usage: natlang apply REDUCER DIR'); return applyCommand(parsed, words[0]!, words[1]!); }
   if (command === 'ask') { if (!words.length) throw new Error('usage: natlang ask INSTRUCTION...'); return askCommand(parsed, words.join(' ')); }
   if (command === 'auth') return authCommand(parsed, words);
   if (command === 'models') { if (words.length > 1) throw new Error('usage: natlang models [PROVIDER]'); return modelsCommand(parsed, words[0]); }

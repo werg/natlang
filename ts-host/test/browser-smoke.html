@@ -6,8 +6,8 @@
 <script type="module">
   import * as natlang from '../dist/browser/natlang.js';
   // A scripted model: the check is the in-page compiler, runtime, eval, and service wiring, not inference.
-  const model = ({ messages }) => messages.length > 2 ? { text: 'done' } :
-    { calls: [['eval', { code: 'result = counter.add(3)' }], ['mark_lines', { start: 1 }]] };
+  let turns = 0;
+  const model = () => turns++ ? { text: 'done' } : { calls: [['eval', { code: 'return counter.add(3)' }]] };
   const counter = { count: 2, add(amount) { this.count += amount; return this.count; } };
   try {
     const project = natlang.compileVirtualProject({ files: { 'main.ts': "import { nl } from '@natlang/browser';\n" +

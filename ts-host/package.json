@@ -29,6 +29,9 @@
     "@types/node": "^24.0.0",
     "@wllama/wllama": "^3.6.1",
     "@wllama/wllama-compat": "^3.6.1",
+    "fflate": "^0.8.3",
+    "just-bash": "^3.4.2",
+    "pyodide": "^314.0.7",
     "typescript": "^5.9.3",
     "undici": "^7.29.1",
     "yaml": "^2.9.1"

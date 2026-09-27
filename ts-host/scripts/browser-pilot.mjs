@@ -9,6 +9,7 @@ import { chromium } from 'playwright-core';
 const root = resolve(import.meta.dirname, '../..');
 const liveModel = process.argv.includes('--model');
 const application = process.argv.includes('--application');
+const python = process.argv.includes('--python');
 const cpu = process.argv.includes('--cpu');
 const gpu = process.argv.includes('--gpu');
 const headed = process.argv.includes('--headed');
@@ -26,6 +27,7 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const server = createServer(async (request, response) => {
   try {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname === '/favicon.ico') { response.writeHead(204); response.end(); return; }
     if (!pathname.startsWith('/ts-host/') && !pathname.startsWith('/models/'))
       throw new Error('path is not a pilot asset');
     const file = resolve(root, '.' + decodeURIComponent(pathname), pathname.endsWith('/') ? 'index.html' : '');
@@ -60,15 +62,35 @@ try {
   const errors = [];
   const backendLogs = [];
   page.on('pageerror', error => errors.push(String(error)));
+  page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
   page.on('console', message => {
     const line = message.text();
+    if (message.type() === 'error') errors.push(line);
     if (/webgpu|offload|gpu.layers|backend|shader.f16/i.test(line) && backendLogs.length < 200)
       backendLogs.push(line.slice(0, 500));
   });
-  await page.goto(`${url}/ts-host/test/browser-smoke.html`);
-  await page.getByText('PASS browser interpreter').waitFor({ timeout: 30000 });
-  console.log('PASS actual Chromium browser interpreter smoke');
-  if (errors.length) throw new Error(errors.join('\n'));
+  if (python) await page.goto(`${url}/ts-host/test/browser-folder-smoke.html`);
+  else {
+    await page.goto(`${url}/ts-host/test/browser-smoke.html`, { waitUntil: 'commit' });
+    try { await page.getByText('PASS browser interpreter').waitFor({ timeout: 30000 }); }
+    catch (error) { throw new Error(`browser smoke did not complete: ${errors.join('; ')}`, { cause: error }); }
+    console.log('PASS actual Chromium browser interpreter smoke');
+    if (errors.length) throw new Error(errors.join('\n'));
+  }
+  if (python) {
+    const result = await page.evaluate(async () => {
+      const { Folder, runFolderPython, runFolderBash } = await import('/ts-host/dist/browser/natlang.js');
+      const folder = Folder.fromFiles({ 'notes/a.txt': 'hello' });
+      const shell = await runFolderBash(folder, 'cat notes/a.txt');
+      const cell = await runFolderPython(folder,
+        'from pathlib import Path\nPath("notes/b.txt").write_text(Path("notes/a.txt").read_text().upper())\nPath("notes/b.txt").read_text()');
+      return { shell: shell.stdout, value: cell.value, file: await folder.readText('notes/b.txt') };
+    });
+    if (JSON.stringify(result) !== JSON.stringify({ shell: 'hello', value: 'HELLO', file: 'HELLO' }))
+      throw new Error(`browser folder tools failed: ${JSON.stringify(result)}`);
+    console.log('PASS browser bash and Python folder tools');
+    if (errors.length) throw new Error(errors.join('\n'));
+  }
   if (application) {
   await page.goto(`${url}/ts-host/examples/browser-board/?fixture`);
   try { await page.getByText('Revision 0 ready').waitFor({ timeout: 30000 }); }
