@@ -60,8 +60,24 @@ class BailingMoeV3Experts(nn.Module):
             nn.init.normal_(weight, mean=0.0, std=config.initializer_range)
         self.act_fn = ACT2FN[config.hidden_act]
 
+    # Tokens per pass through the experts. A long sequence's routed rows (tokens x top_k) and their intermediate
+    # activations would not fit at once; each chunk is checkpointed in training, so backward holds one chunk's too.
+    token_chunk = 4096
+
     def forward(self, hidden_states, top_k_index, top_k_weights):
         """Tokens (T, H), each routed to top_k experts with weights (T, top_k); returns the weighted sum (T, H)."""
+        if hidden_states.shape[0] <= self.token_chunk:
+            return self._forward(hidden_states, top_k_index, top_k_weights)
+        from torch.utils.checkpoint import checkpoint
+        parts = []
+        for start in range(0, hidden_states.shape[0], self.token_chunk):
+            chunk = (hidden_states[start:start + self.token_chunk], top_k_index[start:start + self.token_chunk],
+                     top_k_weights[start:start + self.token_chunk])
+            parts.append(checkpoint(self._forward, *chunk, use_reentrant=False) if torch.is_grad_enabled()
+                         else self._forward(*chunk))
+        return torch.cat(parts)
+
+    def _forward(self, hidden_states, top_k_index, top_k_weights):
         backend = _unsloth_moe_backend()
         if backend is not None:
             return backend(self, hidden_states, top_k_index, top_k_weights)

@@ -77,3 +77,28 @@ def test_chunked_loss_equals_the_transformers_causal_lm_loss_and_its_gradient():
     (reference_grad,) = torch.autograd.grad(reference, hidden)
     torch.testing.assert_close(chunked, reference)
     torch.testing.assert_close(chunked_grad, reference_grad)
+
+
+def test_experts_run_in_token_chunks_with_the_same_output_and_gradients():
+    import torch
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from ling_grouped_experts import patch_modeling
+
+    source = (SOURCE / "modeling_bailing_moe_v3.py").read_text()
+    config_values = json.loads((SOURCE / "config.json").read_text())
+    config_values.update(hidden_size=64, moe_intermediate_size=32, num_experts=16, num_experts_per_tok=4)
+    config_module, grouped = _load(SOURCE, "ling_chunked", patch_modeling(source))
+    torch.manual_seed(1)
+    experts = grouped.BailingMoeV3Experts(config_module.BailingMoeV3Config(**config_values)).float()
+    x = torch.randn(23, 64, requires_grad=True)
+    index, weights = torch.randint(0, 16, (23, 4)), torch.rand(23, 4)
+    whole = experts(x, index, weights)
+    whole.square().sum().backward()
+    grads = [x.grad.clone()] + [p.grad.clone() for p in experts.parameters()]
+    x.grad = None; experts.zero_grad()
+    experts.token_chunk = 5
+    chunked = experts(x, index, weights)
+    chunked.square().sum().backward()
+    torch.testing.assert_close(chunked, whole)
+    for before, after in zip(grads, [x.grad] + [p.grad for p in experts.parameters()]):
+        torch.testing.assert_close(after, before, atol=1e-5, rtol=1e-5)
