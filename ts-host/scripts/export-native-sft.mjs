@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { once } from 'node:events';
+import { createInterface } from 'node:readline';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,25 +64,37 @@ async function main() {
     if (typeof body.prompt !== 'string') throw new Error('template server returned no prompt');
     return body.prompt;
   };
-  const turns = (await readFile(input, 'utf8')).split(/\r?\n/).filter(Boolean).map(JSON.parse);
-  const results = new Array(turns.length); let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(workers, Math.max(1, turns.length)) }, async () => {
-    while (cursor < turns.length) {
-      const index = cursor++;
-      try { results[index] = await renderSftTurn(turns[index], render, endToken); }
-      catch (error) { throw new Error(`${turns[index].id}: ${error.message}${error.cause ? ` (${error.cause.code ?? ''} ${error.cause.message ?? error.cause})` : ''}`, { cause: error }); }
-    }
-  }));
-  const selected = results.filter(Boolean), data = selected.map(row => JSON.stringify(row)).join('\n') +
-    (selected.length ? '\n' : '');
+  // Streamed: a corpus's turns (each with its whole context) outgrow a single string. Up to `workers` render at
+  // once, and rows are written in input order.
   await mkdir(dirname(output), { recursive: true });
   const staged = `${output}.building-${process.pid}-${randomUUID()}`;
-  await writeFile(staged, data, { flag: 'wx' }); await rename(staged, output);
+  const sink = createWriteStream(staged, { flags: 'wx' });
+  const write = async text => { if (!sink.write(text)) await once(sink, 'drain'); };
+  let rows = 0, turns = 0;
+  const inFlight = [];
+  const settle = async () => {
+    const row = await inFlight.shift();
+    if (row) { rows++; await write(JSON.stringify(row) + '\n'); }
+  };
+  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+    if (!line) continue;
+    const turn = JSON.parse(line);
+    turns++;
+    inFlight.push(renderSftTurn(turn, render, endToken).catch(error => {
+      throw new Error(`${turn.id}: ${error.message}${error.cause ? ` (${error.cause.code ?? ''} ${error.cause.message ?? error.cause})` : ''}`, { cause: error });
+    }));
+    if (inFlight.length >= workers) await settle();
+  }
+  while (inFlight.length) await settle();
+  sink.end(); await once(sink, 'finish');
+  await rename(staged, output);
+  const sourceHash = createHash('sha256');
+  for await (const chunk of createReadStream(input)) sourceHash.update(chunk);
   await writeFile(`${output}.manifest.json`, JSON.stringify({ version: 'natlang.sft.native/1',
-    source: input, source_sha256: digest(await readFile(input)), rows: selected.length,
-    skipped_unapproved: turns.length - selected.length, renderer: { server,
+    source: input, source_sha256: sourceHash.digest('hex'), rows,
+    skipped_unapproved: turns - rows, renderer: { server,
       template_sha256: typeof template === 'string' ? digest(template) : null, end_token: endToken } }, null, 2) + '\n');
-  console.log(`${selected.length} approved SFT turns -> ${output}`);
+  console.log(`${rows} approved SFT turns -> ${output}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
