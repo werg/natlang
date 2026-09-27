@@ -257,24 +257,26 @@ export async function renderOpening(record: ProgramRecord, systemPrompt: string)
   return opening;
 }
 
-/** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
-export async function replayReference(record: CurriculumRecord, systemPrompt: string):
-    Promise<{ run: ProgramRun; trajectory: Turn[] }> {
+/**
+ * A case's reference solution as a model: the root call's scripted actions in order, and each child call's scripted
+ * answer, found by the fragments of its opening. Each action comes with a short line saying what it does
+ * (actionNote), in place of the reasoning a model would give; it does not argue for a result.
+ */
+export function referenceDriver(record: CurriculumRecord): (request: ModelTurnRequest) => Promise<ModelTurn> {
   const rootName = record.semantics.root.replace(/\.nl$/, '').split('/').pop()!;
-  const trajectory: Turn[] = [];
   let step = 0, seeded = !record.semantics.failure_seed;
   const childTurns = new Map<string, number>();
-  const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
-    const context = structuredClone(request.messages) as Message[], name = callName(context);
-    let response: ModelTurn;
+  return async request => {
+    const context = request.messages as Message[], name = callName(context);
+    let calls: [string, Record<string, unknown>][];
     if (name === rootName && !seeded) {
       // The collector answers a seeded program's first root turn with the failing eval; so does the replay.
       seeded = true;
-      response = { calls: [['eval', { code: record.semantics.failure_seed!.code }]] };
+      calls = [['eval', { code: record.semantics.failure_seed!.code }]];
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
-      response = call ? { calls: [[call[0], call[1]]] } :
-        { calls: [['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]] };
+      calls = [call ? [call[0], call[1]] :
+        ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
     } else {
       const opening = openingText(context);
       const answer = record.curriculum.reference.children?.find(child =>
@@ -282,11 +284,43 @@ export async function replayReference(record: CurriculumRecord, systemPrompt: st
       const turn = childTurns.get(opening) ?? 0;
       childTurns.set(opening, turn + 1);
       const scripted = answer?.calls?.[turn];
-      response = scripted ? { calls: [[scripted[0], scripted[1]]] } :
-        answer ? { calls: [answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { status: 'success', value: answer.value }]] } :
-        { calls: [['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]] };
+      calls = [scripted ? [scripted[0], scripted[1]] :
+        answer ? (answer.call ? [answer.call[0], answer.call[1]] : ['return_result', { status: 'success', value: answer.value }]) :
+        ['return_result', { status: 'failed', reason: `The reference has no answer for the child call ${name}.` }]];
     }
-    trajectory.push({ context, assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });
+    return { calls, reasoning: actionNote(calls) };
+  };
+}
+
+/** One line on what a scripted action does, from the action alone. */
+export function actionNote(calls: [string, Record<string, unknown>][]): string {
+  return calls.map(([tool, args]) => {
+    const code = String(args.code ?? '');
+    switch (tool) {
+      case 'eval':
+        if (/\biterateOn\s*\(/.test(code)) return 'I run the step with iterateOn until it is finished.';
+        if (/\bnl\s*(?:<[^`]*>)?`/.test(code)) return 'I hand the judgment for each item to nl and collect the results.';
+        if (/\.pages?\s*\(/.test(code)) return 'I read the pages of the data.';
+        if (/^\s*return\b/m.test(code)) return 'I compute the result in code and return it.';
+        return 'I run the next step in eval.';
+      case 'read_code': return `I read the code of ${String(args.name ?? 'the function')}.`;
+      case 'edit_code': return `I fix ${String(args.name ?? 'the function')}.`;
+      case 'read_page': return 'I read the next page of that output.';
+      case 'return_result': return args.status === 'success' ? 'I return the result.' :
+        `I finish the call with status ${String(args.status)}.`;
+      default: return `I use ${tool}.`;
+    }
+  }).join(' ');
+}
+
+/** Replay a case's reference solution through the collector's execution path, recording a trajectory. */
+export async function replayReference(record: CurriculumRecord, systemPrompt: string):
+    Promise<{ run: ProgramRun; trajectory: Turn[] }> {
+  const trajectory: Turn[] = [], reference = referenceDriver(record);
+  const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+    const response = await reference(request);
+    trajectory.push({ context: structuredClone(request.messages) as Message[],
+      assistant: { calls: (response.calls ?? []).map(([tool, args]) => ({ tool, arguments: args })) } });
     return response;
   };
   const run = await executeProgram(record, driver, { ...REFERENCE_OPTIONS, systemPrompt });

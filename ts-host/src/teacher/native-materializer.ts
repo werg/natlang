@@ -130,7 +130,7 @@ export function materializeNativeRows(input: unknown[]): {
     const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
     if (!row.outcome.accepted || rolledOver) { rejectedRows++; continue; }
     acceptedRows++;
-    const student = row.provenance.collection_role === 'student';
+    const role = String(row.provenance.collection_role ?? 'teacher');
     const ledger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger.map((event, index) =>
       record(event, `${row.id}.outcome.action_ledger[${index}]`)) : [];
     // Each call (the root and every nl child) has its own actions, in order; the trajectory interleaves the calls'
@@ -206,7 +206,9 @@ export function materializeNativeRows(input: unknown[]): {
       const detour = calls.length > 0 && calls.every(call => earlier.get(signature(call)) === resultOf(call));
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
       for (const call of calls) earlier.set(signature(call), resultOf(call));
-      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt;
+      // A step the row itself says not to train, such as a scripted conclusion its note does not reason towards.
+      const untrained = typeof assistant.untrained === 'string' ? assistant.untrained : undefined;
+      const decisionApproved = !fromStudentPrefix && ranCleanly && !detour && !refusedAttempt && !untrained;
       rowTurns.push({ version: NATIVE_TEACHER_TURN_VERSION,
         id: `${row.id}:decision:${String(index).padStart(4, '0')}`,
         source_ref: { trajectory_id: row.id, source_row_sha256: rowDigest,
@@ -214,28 +216,30 @@ export function materializeNativeRows(input: unknown[]): {
         provenance: row.provenance,
         task: row.task,
         program_id: programId,
-        family: student ? 'student_program' : 'teacher_program',
+        family: `${role}_program`,
         skill,
         provisional_gold: false,
         source_program_ids: programId === null ? [] : [programId],
         source_groups: programId === null ? [] : [programId],
-        source: student ? 'student-native' : 'teacher-native',
-        gold_sources: [student ? 'checked-student-trajectory' : 'checked-teacher-trajectory', 'exact-runtime-oracle'],
+        source: `${role}-native`,
+        gold_sources: [`checked-${role}-trajectory`, 'exact-runtime-oracle'],
         license: 'project-generated',
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
         target,
         teacher_reasoning: retainedReasoning,
+        // Reasoning written for the row rather than by a model (provenance.synthetic_reasoning) is context, not a target.
+        ...(row.provenance.synthetic_reasoning ? { teacher_reasoning_trained: false } : {}),
         teacher_execution_plan: executionPlan,
         teacher_trajectory_id: row.id,
         teacher_trajectory_digest: rowDigest,
         training_admission: { kind: 'exact-native-runtime-oracle', approved: decisionApproved,
-          ...(decisionApproved ? {} : { reason: fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
+          ...(decisionApproved ? {} : { reason: untrained ?? (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
               'the outcome of a call in this decision was not recorded' :
             !ranCleanly ? 'decision contains a failed or unexecuted proposal' :
             detour ? 'repeats an earlier call of this call with the same result' :
-              "the task's checker rejected this attempt" }) },
+              "the task's checker rejected this attempt") }) },
         trace_admission: { admitted: true, kind: 'exact-native-runtime-oracle',
           final_outcome_sha256: outcomeDigest },
         decision: { index,

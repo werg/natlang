@@ -10,8 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
-import { FAMILIES } from './families.mjs';
-import { hintFor, hinted } from './lib.mjs';
+import { FAMILIES, buildRecords } from './families.mjs';
 
 const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
   start: { type: 'string', default: '0' },
@@ -26,35 +25,7 @@ if (values.track && selected.some(name => (FAMILIES[name].track ?? 'interpreter'
   throw new Error(`--families contains a family outside track ${values.track}`);
 if (!selected.length) throw new Error('no families selected');
 
-const records = [];
-for (const name of selected) {
-  const family = FAMILIES[name];
-  const count = Math.max(1, Math.round(shapes * (family.weight ?? 1)));
-  for (let index = start; index < start + count; index++) for (const record of family.build(seed, index)) {
-    // Generated problems are distinct per seed; a source's problems are its own (story, world) groups across shards.
-    const tag = family.source ? `${family.source}` : `s${seed}`;
-    record.id = record.id.replace('inline-curriculum:', `inline-curriculum:${tag}:`);
-    record.source_ids = [record.id];
-    if (!family.source) {
-      record.split = values.split;
-      record.curriculum.split_group = `s${seed}:${record.curriculum.split_group}`;
-      record.source_groups = [record.curriculum.split_group];
-      if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;
-    }
-    // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.
-    // Generated families must never repeat an id.
-    if (records.some(other => other.id === record.id)) {
-      if (family.source) continue;
-      throw new Error(`duplicate case id ${record.id}`);
-    }
-    records.push(record);
-    // A case that requires iterateOn or per-item nl judgments also gets a twin whose instructions end with an
-    // explicit hint (and the family's sketch). Admission strips the hint from the twin's trajectory, so it trains
-    // the technique without being asked; with the unhinted run it makes a same-request preference pair (pairs.mjs).
-    const hint = hintFor(record.curriculum);
-    if (values.hints && hint && record.curriculum.track !== 'authoring') records.push(hinted(record, hint));
-  }
-}
+const records = buildRecords({ seed, shapes, start, families: selected, split: values.split, hints: values.hints });
 
 const verification = await verifyCases(records, TOOLS_PROMPT);
 const failures = verification.filter(item => !item.ok);

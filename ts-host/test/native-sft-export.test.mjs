@@ -37,3 +37,15 @@ test('reasoning in the history is trimmed as the target is, so a later turn exte
     target: { role: 'assistant', content: 'ok' } }, render, '<END>');
   assert.ok(second.prompt.startsWith(first.prompt + first.completion));
 });
+
+test('reasoning written for a row rather than by a model is masked through the end of reasoning', async () => {
+  const row = { id: 'turn-1', program_id: 'p', source_groups: ['p'], family: 'reference_program', skill: 'eval',
+    teacher_trajectory_id: 't', teacher_trajectory_digest: 'd', training_admission: { approved: true },
+    messages: [{ role: 'user', content: 'Compute.' }], tools: [], teacher_reasoning: 'I run the next step in eval.',
+    teacher_reasoning_trained: false,
+    target: { role: 'assistant', content: '', tool_calls: [{ id: 'old', type: 'function',
+      function: { name: 'eval', arguments: '{"code":"2+2"}' } }] } };
+  const rendered = await renderSftTurn(row, render, '<END>', '</think>');
+  assert.equal(rendered.completion.slice(rendered.completion_masked), 'eval:{"code":"2+2"}<END>');
+  await assert.rejects(renderSftTurn(row, render, '<END>'), /--reasoning-end/);
+});

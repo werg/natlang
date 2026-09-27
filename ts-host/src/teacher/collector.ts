@@ -43,7 +43,9 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   request?: Record<string, unknown>; cacheStableTools?: boolean;
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
   executionPlans?: boolean; executionPlanTokens?: number;
-  handoffs?: Map<string, HandoffRecord>; collectionRole?: 'student' | 'teacher' };
+  handoffs?: Map<string, HandoffRecord>;
+  /** Who answered: a model being taught (student), a teacher, or a case's scripted reference solution. */
+  collectionRole?: 'student' | 'teacher' | 'reference' };
 export type HandoffRecord = { version: 'natlang.hard_state/1'; id: string;
   program_ir_sha256: string; student_trajectory_id: string; student_trajectory_sha256: string;
   handoff_at: number; target_request_sha256: string;
@@ -333,7 +335,8 @@ function effectHarness(specs: Record<string, unknown>): {
   return { capabilities, observed, expected };
 }
 
-function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
+/** The trajectory record of one model turn: the request's context and the response, as training reads them. */
+export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): Record<string, unknown> {
   const raw = response.raw_response as Record<string, unknown> | undefined;
   const message = ((raw?.choices as Record<string, unknown>[] | undefined)?.[0]?.message ?? {}) as Record<string, unknown>;
   const planned = Object.hasOwn(response, 'execution_plan');
@@ -534,26 +537,37 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       trajectory.push(trajectoryTurn(request, response));
       return response;
     };
-    // Seeds derive from the run ID, so it names the program and seed root only: a teacher
-    // handed a student's failed state must reproduce the student's requests exactly.
-    const runId = sha256(canonical({ batch: TEACHER_BATCH_VERSION, index: item.index,
-      program_ir_sha256: expected.program_ir_sha256, seed_policy: expected.seed_policy })).slice(0, 32);
+    const runId = programRunId(item.index, expected);
     const run = await executeProgram(item.record, driver, { ...config, runId, signal });
-    const row: TeacherRow = { version: TEACHER_TRAJECTORY_VERSION,
-      id: `teacher-program:${sha256(canonical([item.record.id, config.modelId, runId])).slice(0, 20)}`,
-      task: { kind: 'whole_program', program_ir: item.record,
-        source_program_ids: [item.record.id] } as TeacherRow['task'], provenance: { ...expected,
-        trace_sha256: sha256(canonical(run.trace)) }, outcome: run.outcome, trajectory,
-      ...(handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
+    const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
+      handoff ? { handoff: { student_trajectory_id: handoff.student_trajectory_id,
         student_trajectory_sha256: handoff.student_trajectory_sha256,
-        handoff_at: handoff.handoff_at, failure: handoff.failure } } : {}),
-      capture_limits: [] };
+        handoff_at: handoff.handoff_at, failure: handoff.failure } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);
     return row;
     } finally { await session?.close(); }
   };
+}
+
+/**
+ * The ID a program's run derives its seeds from. It names the program and seed root only: a teacher handed a
+ * student's failed state must reproduce the student's requests exactly.
+ */
+export function programRunId(index: number, expected: Record<string, unknown>): string {
+  return sha256(canonical({ batch: TEACHER_BATCH_VERSION, index,
+    program_ir_sha256: expected.program_ir_sha256, seed_policy: expected.seed_policy })).slice(0, 32);
+}
+
+/** The result row of one run of a program, whoever answered its turns. */
+export function programRow(record: ProgramRecord, modelId: string, runId: string, expected: Record<string, unknown>,
+  run: ProgramRun, trajectory: Record<string, unknown>[], extra: Record<string, unknown> = {}): TeacherRow {
+  return { version: TEACHER_TRAJECTORY_VERSION,
+    id: `teacher-program:${sha256(canonical([record.id, modelId, runId])).slice(0, 20)}`,
+    task: { kind: 'whole_program', program_ir: record, source_program_ids: [record.id] } as TeacherRow['task'],
+    provenance: { ...expected, trace_sha256: sha256(canonical(run.trace)) }, outcome: run.outcome, trajectory,
+    ...extra, capture_limits: [] };
 }
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;

@@ -11,11 +11,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 MODEL="${1:?model: lfm, ling or spark}"; OUT="${2:?output directory}"; shift 2
 [ "$#" -gt 0 ] || { echo "no results files given"; exit 2; }
+# REASONING_END closes the template's reasoning: reasoning no model wrote (curriculum references) is masked through it.
+REASONING_END=()
 case "$MODEL" in
   lfm)  GGUF=candidates/lfm25-8b-a1b/LFM2.5-8B-A1B-Q4_K_M.gguf; TEMPLATE=LFM2.5-8B-A1B-stateless.jinja; END='<|im_end|>' ;;
-  ling) GGUF=candidates/ling3-tiny/Ling-3.0-tiny-Q4_K_M.gguf; TEMPLATE=Ling-3.0-tiny.jinja; END='<|role_end|>' ;;
+  ling) GGUF=candidates/ling3-tiny/Ling-3.0-tiny-Q4_K_M.gguf; TEMPLATE=Ling-3.0-tiny.jinja; END='<|role_end|>'
+    REASONING_END=(--reasoning-end '</think>') ;;
   spark) GGUF=candidates/sharp-spark-x25-4b/Sharp-Spark-X2.5-4B-Q4_K_XL.gguf; TEMPLATE=Sharp-Spark-X2.5-4B.jinja
-    END='<｜end▁of▁sentence｜>' ;;
+    END='<｜end▁of▁sentence｜>'; REASONING_END=(--reasoning-end '</think>') ;;
   *) echo "unknown model $MODEL"; exit 2 ;;
 esac
 IMAGE="$(grep -o 'ghcr.io/ggml-org/llama.cpp@sha256:[0-9a-f]*' "$ROOT/scripts/serve.sh")"
@@ -35,4 +38,4 @@ docker run -d --rm --name "$NAME" -v "$ROOT/models:/models:ro" -p "127.0.0.1:$PO
 trap 'docker stop "$NAME" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 90); do curl -fsS "127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 2; done
 node --max-old-space-size=4000 "$TS_HOST/scripts/export-native-sft.mjs" "$OUT/turns.jsonl" "$OUT/sft.jsonl" \
-  --server "http://127.0.0.1:$PORT" --workers 4 --end-token "$END"
+  --server "http://127.0.0.1:$PORT" --workers 4 --end-token "$END" "${REASONING_END[@]}"

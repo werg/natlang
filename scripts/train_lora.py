@@ -661,8 +661,9 @@ def main():
                 cached = ["segments", [[tok(text, add_special_tokens=False)["input_ids"], trained]
                                        for text, trained in p["segments"]], family]
             else:
-                cached = [tok(p["prompt"], add_special_tokens=False)["input_ids"],
-                          tok(p["completion"], add_special_tokens=False)["input_ids"], family]
+                masked = p.get("completion_masked", 0)   # reasoning no model wrote is context, not a target
+                cached = [tok(p["prompt"] + p["completion"][:masked], add_special_tokens=False)["input_ids"],
+                          tok(p["completion"][masked:], add_special_tokens=False)["input_ids"], family]
             if cache:
                 cache.put(offset, cached)
         counts = state.setdefault("overlength_encounters", {}).setdefault(phase, {})

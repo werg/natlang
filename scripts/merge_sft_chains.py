@@ -9,7 +9,8 @@ completion keeps its own. The loss targets are the same tokens; the sequences to
 A turn whose prompt extends none (a call's first, a child call, or a history compacted since) starts a new sequence.
 
 Rows keep id (the first turn's), program_id, source_groups and family, list their turns, and carry `segments`:
-[text, trained] pairs, alternating untrained context and trained completion. train_lora.py trains them.
+[text, trained] pairs, alternating untrained context and trained completion. A completion's first `completion_masked`
+characters (reasoning no model wrote, export-native-sft.mjs) are context too. train_lora.py trains them.
 """
 import argparse
 import json
@@ -26,11 +27,13 @@ def merge(rows):
         chains = []  # [text so far, row, segments, turn ids]
         for row in sorted(turns, key=lambda r: (len(r["prompt"]), r["id"])):
             prompt, completion = row["prompt"], row["completion"]
+            masked = row.get("completion_masked", 0)
+            spans = [[completion[:masked], False], [completion[masked:], True]]
             found = max((c for c in chains if prompt.startswith(c[0])), key=lambda c: len(c[0]), default=None)
             if found is None:
-                chains.append([prompt + completion, row, [[prompt, False], [completion, True]], [row["id"]]])
+                chains.append([prompt + completion, row, [[prompt, False], *spans], [row["id"]]])
                 continue
-            found[2] += [[prompt[len(found[0]):], False], [completion, True]]
+            found[2] += [[prompt[len(found[0]):], False], *spans]
             found[0] = prompt + completion
             found[3].append(row["id"])
         for text, first, segments, ids in chains:

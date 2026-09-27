@@ -13,6 +13,7 @@ import { authoringCapturedPolicy, authoringInlineReview, authoringIterate, autho
 import { anliBatch, commaqaNumeric, commaqaQuestion, entailmentPremises, proofwriterQuestion } from './sources-ai2.mjs';
 import { iterateSchedule, routeReplan } from './actor.mjs';
 import { dynamicSnapshot, multihopQualifier, policyCandidates } from './relational.mjs';
+import { hintFor, hinted } from './lib.mjs';
 
 export const FAMILIES = {
   logic_entailment_exception: { build: entailmentException, weight: 1.5 },
@@ -70,3 +71,41 @@ export const FAMILIES = {
   authoring_structured_extract: { build: authoringStructuredExtract, weight: 1, track: 'authoring' },
   authoring_captured_policy: { build: authoringCapturedPolicy, weight: 1, track: 'authoring' },
 };
+
+/**
+ * The cases a build makes: `shapes` shapes per family (scaled by its weight) from index `start`, with ids, split
+ * groups and pair groups tagged by seed for generated families and by source for sourced ones. `hints` adds each
+ * technique case's hinted twin.
+ */
+export function buildRecords({ seed, shapes, start = 0, families, split = 'train', hints = true }) {
+  const records = [];
+  for (const name of families) {
+    const family = FAMILIES[name];
+    const count = Math.max(1, Math.round(shapes * (family.weight ?? 1)));
+    for (let index = start; index < start + count; index++) for (const record of family.build(seed, index)) {
+      // Generated problems are distinct per seed; a source's problems are its own (story, world) groups across shards.
+      const tag = family.source ? `${family.source}` : `s${seed}`;
+      record.id = record.id.replace('inline-curriculum:', `inline-curriculum:${tag}:`);
+      record.source_ids = [record.id];
+      if (!family.source) {
+        record.split = split;
+        record.curriculum.split_group = `s${seed}:${record.curriculum.split_group}`;
+        record.source_groups = [record.curriculum.split_group];
+        if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;
+      }
+      // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.
+      // Generated families must never repeat an id.
+      if (records.some(other => other.id === record.id)) {
+        if (family.source) continue;
+        throw new Error(`duplicate case id ${record.id}`);
+      }
+      records.push(record);
+      // A case that requires iterateOn or per-item nl judgments also gets a twin whose instructions end with an
+      // explicit hint (and the family's sketch). Admission strips the hint from the twin's trajectory, so it trains
+      // the technique without being asked; with the unhinted run it makes a same-request preference pair (pairs.mjs).
+      const hint = hintFor(record.curriculum);
+      if (hints && hint && record.curriculum.track !== 'authoring') records.push(hinted(record, hint));
+    }
+  }
+  return records;
+}
