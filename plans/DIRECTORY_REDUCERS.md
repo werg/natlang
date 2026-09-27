@@ -349,8 +349,9 @@ references replay through the real runtime.
 | `folder_extract` | CUAD contracts | fill a CSV of clause answers | per-contract `nl` over the file handle |
 | `folder_mixed` | CSV plus text files | e.g. total the amounts of the invoices whose notes dispute the charge | code over the CSV, `nl` over the notes |
 
-Sizes are drawn so that about half the cases exceed what fits in context. As now, a child's judgment is a direct
-answer, trained only with `--direct-answers`.
+Sizes are drawn so that about half the cases exceed what fits in context. A per-file child reads its file (or sees a
+small one in its opening) before it answers, per 2A. A child's answer given right after that evidence, without
+reasoning towards it, is still a direct answer, trained only with `--direct-answers`.
 
 ## 7. Evaluation
 
