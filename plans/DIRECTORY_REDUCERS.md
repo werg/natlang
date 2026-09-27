@@ -61,17 +61,48 @@ B. **Document views.** Reading a `.pdf`, `.docx`, `.xlsx`, `.pptx` or `.html` gi
    a note saying so); writes go to text formats. Conversion happens in the host (for example MarkItDown or pdftotext).
    Realistic workspaces (Workspace-Bench has 74 file types) need this; synthetic ones do not.
 
-C. **A `run` tool: a sandboxed shell, with Python through it.** This is the one real expansion. It would:
-   - run one command in a checkout of the folder, with the changes read back as a change set
-   - offer coreutils, grep, sed, awk, jq, sqlite3 and python3 with the common data libraries
-   - have no network, a time limit and an output cap
-   - replay deterministically from its journaled output, as model turns already do
+C. **A `run` tool: bash with Python and SQLite, on [just-bash](https://github.com/vercel-labs/just-bash/tree/main/packages/just-bash).**
+   just-bash (Apache-2.0) is a bash interpreter written in TypeScript. It runs in-process against a pluggable virtual
+   filesystem (the `IFileSystem` interface, about 15 async methods) and has more than 80 commands built in: coreutils,
+   grep, rg, sed, awk, sort, uniq, jq, yq, xan (CSV), diff and tar, plus sqlite3 (sql.js) and python3 (CPython 3.13
+   built for WebAssembly, in a worker). Measured on 2026-09-27 (v3.4.2):
+   - text pipelines take 10–25 ms per command, sqlite3 about 70 ms and python3 about 200 ms;
+   - writes land in the virtual filesystem, and sqlite3 works on database files inside it;
+   - `while true` stops at the command-count limit (100k) in about 0.5 s, with a clear message;
+   - unknown binaries fail with "command not found";
+   - Python has the standard library only: no numpy or pandas, and its `sqlite3` module is missing.
 
-   It would unlock three things: the command-line text processing models are strongest at; data work in Python and
-   SQL, where models are far stronger than in TypeScript; and conversion of the large terminal and SWE trajectory sets
-   (section 5). The costs are sandboxing (bubblewrap, or a container per call), keeping the folder overlay and the
-   checkout consistent, and a second code path beside eval that the prompt must explain without muddying "code runs
-   in eval". This is a decision point for you (see the end).
+   **Plan.**
+   - Implement a `FolderFs` adapter from just-bash's `IFileSystem` to the reducer's `Folder` overlay, so `run` and
+     the file tools see the same files, and `diff_files`, transactions and `folder.apply` cover shell changes too.
+     Directories are implicit in our folders, so `mkdir` of an empty directory is a no-op.
+   - `run(command)` returns exit code, stdout and stderr (capped and paged like other output) and the changed paths.
+   - Pin the clock and file times so a replay reproduces a command's output.
+   - Depend on the package unmodified at first. Fork it once the surface settles, cutting network (`curl`),
+     `js-exec` (eval already runs TypeScript), compression and HTML conversion, and setting our limits.
+
+   **What it unlocks:**
+   - the command-line text processing models are strongest at, and Python and SQL for tables;
+   - direct conversion of terminal trajectories (Terminus-style command batches become `run` calls, re-executed for
+     their observations);
+   - the bash half of the OpenHands SWE trajectories.
+
+   **Costs and limits:**
+   - It runs in-process without VM isolation. just-bash has its own guards (limits, prototype-pollution defences, no
+     network by default); the commands are our teachers' and students', and the hosts are ours.
+   - In the browser, the core shell runs, but python3 and sqlite3 do not.
+   - Python without pandas or numpy. A fork could swap its python3 for [Pyodide](https://pyodide.org) (MPL-2.0; has
+     numpy and pandas; larger, Node and browser), if models' reach for pandas turns out to matter.
+   - The prompt has to divide the work plainly: eval is TypeScript with the call's scope (functions, `nl`, services);
+     `run` is shell and Python over the folder's files. A later step could expose program functions, even `nl`
+     judgments, as shell commands through just-bash's custom commands, so a pipeline can call them. Not at first.
+
+   **Alternatives checked.**
+   - [@cloudflare/shell](https://github.com/cloudflare/agents/tree/main/packages/shell) (MIT, experimental) runs
+     JavaScript in an isolated Worker over a state backend. It does not parse shell syntax, and eval already covers it.
+   - [cloudflare/computer](https://github.com/cloudflare/computer) (MIT, preview) is a durable workspace filesystem
+     with interchangeable execution backends. Its lightweight "isolate shell" backend is just-bash, which confirms the
+     pattern (just-bash over a workspace filesystem adapter) rather than offering a different engine.
 
 D. **Deliberately not added:** network access, git, package installation inside reducers, and a second editing
    model such as patch files. `edit_file` with exact spans stays the one way to change text.
@@ -161,14 +192,15 @@ answer, trained only with `--direct-answers`.
    first), CUAD, HotpotQA/MuSiQue and EnronQA, with the normalized and span oracle levels. Teacher collection (Bonsai
    and Luna) on the dataset-backed folders where scripted references are impossible.
 3. **Document views** (read-only text renderings) and the Workspace-Bench and MuDABench evals.
-4. **`run`,** if chosen: sandbox, change-set sync, replay, prompt text; then table and data-analysis tasks, and
-   conversion of the terminal and SWE trajectories.
+4. **`run` on just-bash:** the `FolderFs` adapter, the tool, pinned clock and replay, and the prompt text; then table
+   and data-analysis tasks, and conversion of the terminal and SWE trajectories. It can move earlier, since the
+   adapter is small.
 
 ## Decisions for you
 
-1. **`run` (a sandboxed shell with Python).** It is the only large expansion, and it gates section 5's trajectory
-   conversion and the table tasks. Should it be in scope, and is Python through `run` acceptable as the second
-   language, or should Python get its own eval?
+1. **`run` on just-bash.** Should bash's own loops (`while`, `until`) be allowed inside `run`, bounded by the command
+   limit, or should our fork refuse them as eval does? And is standard-library Python enough to start, or should a
+   fork use Pyodide for pandas and numpy from the outset?
 2. **Softer oracles in training.** May normalized and span-level rows train, or only exact ones, with the softer
    levels kept for evaluation?
 3. **Share of code-centric SWE trajectories.** They are the largest supply of file-editing data, but not semantic
