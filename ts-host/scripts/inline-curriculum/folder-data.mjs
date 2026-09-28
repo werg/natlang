@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SOURCES, cachePath } from './acquire.mjs';
+import { pendingSourceReview } from '../../dist/teacher/source-review.js';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 export const LABELED_FIELDS = {
@@ -39,6 +40,9 @@ export function labeledRows(dataset, split = 'train') {
       if (text.length < 15 || text.length > 2000 || !label || label === 'oos') continue;
       // Partition by model-visible text so duplicate inputs with conflicting labels cannot cross train/eval.
       const id = sourceRecordId(dataset, text, '');
+      if (pendingSourceReview(dataset, id)) {
+        quarantine(dataset, id, 'source_review_pending'); continue;
+      }
       if (conflicts.has(id)) continue;
       if (unique.has(id) && unique.get(id).label !== label) {
         unique.delete(id); conflicts.add(id); quarantine(dataset, id, 'conflicting_labels'); continue;

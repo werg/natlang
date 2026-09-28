@@ -383,3 +383,28 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Bonsai checkpoint: 52 finished attempts / 507 pending; last five observed repairs pass task checks. These remain
   raw-result counts; not deduplicated or universally certified training rows. No new Luna collector error files
   in v2.jobs at this checkpoint, and no model training or independent grader has started.
+
+## 2026-09-28 payment criterion and source-review holdouts
+
+- Payment0's 4708 versus 3161 is explained exactly by three omitted positives (629 + 644 + 274 = 1547).
+  The parent says "message is about" an issue; the child added "report" and "exclude general questions".
+  This wrongly excludes the strange £1 transaction question. New generic delegation guidance preserves the
+  parent's criterion/context and forbids stronger evidence requirements or added exclusions. It lives in the
+  delegation paragraph, which is removed from the third-layer prompt. Delegation remains available/optional.
+- Two cash examples do not establish an unrecognized withdrawal from the visible wording. The large payments7
+  case then completed: 142 judgments, one mismatch, 13386 versus 13888, in 1060.5 seconds with 162 saved replies.
+  Its remaining example asks how to dispute a debit transaction; the label assumes an unrecognized direct debit.
+  These are source-review questions, not verified wrong labels or evidence that the model must learn to guess.
+- Course change: a shared, explicit source-review registry holds these three source inputs pending adjudication.
+  Current text-based IDs and old text+label aliases both match. Future labeled-row generation excludes pending
+  sources; shared quarantine policy holds existing affected tasks out of admission, negative handoffs and pairs.
+  Original dataset labels/gold and raw results stay intact. Resolution requires recorded independent evidence;
+  no independent grader or model training has started. Do not change gold to a teacher's preferred answer.
+- Benchmark tolerance still accepts the large total, but strict training admission excludes partial agreement.
+  Current Luna checkpoint: five completed attempts, two admitted, two tolerance-only partials, one failed sum,
+  148 remaining; no v2 collector error files. Bonsai: 53 attempts finished, 506 remaining, 46 collector completions
+  and seven historical hard timeouts. Both supervisors keep running on frozen v9; main source-review policy is
+  available to export/admission now, while prompt/collection changes await a safe frozen-runtime migration.
+- Validation: Node/browser build and browser type checks pass; 38 focused source-policy, generator, oracle,
+  handoff/replay and collector regressions pass. Per-ID payment mismatch artifacts are saved under
+  runs/rejection-audit-20260928/payment-followup/; small-case duplicates are removed before summing.

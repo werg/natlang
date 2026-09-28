@@ -1,5 +1,15 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Latest payment review checkpoint (2026-09-28):** both supervisors remain on immutable runtime-v9.
+> Luna: 5 completed attempts / 148 remaining; 2 training-admitted, 2 partial-agreement holdouts, 1 wrong total.
+> The 142-message task finished in 1,060.5 seconds without a collector error; 13,386 versus 13,888 is one missed
+> judgment, not a complete repair. Bonsai: 53 finished attempts / 506 remaining (46 collector completions,
+> 7 historical hard timeouts). Three ambiguous BANKING77 inputs are now in the shared source-review registry;
+> main generation, admission and handoff/pair builders hold affected tasks pending adjudication. Raw labels/results
+> remain preserved. New parent-criterion preservation prompt is built and checked in the main checkout, **not yet
+> deployed to the running v9 workers**. Migrate at a safe boundary; do not interrupt a large progressing case.
+> Payment mismatch artifacts are in runs/rejection-audit-20260928/payment-followup/. Read the latest decision log.
+
 > **Latest user authorization (2026-09-28): restart exactly one Luna repair worker.**
 > This supersedes the earlier stop instruction. Use the current audited, deduplicated repair queue in
 > `runs/luna-repair-20260928/queue-v2.jsonl`, with frozen runtime-v9, one collection worker and one model request in flight.

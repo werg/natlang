@@ -122,3 +122,23 @@ no model training has started.
   (256–748 requests for this queue); deadlines range from 900–3,600 seconds with the same five-minute inactivity
   guard. One already admitted task is excluded, leaving 153 retries; three legacy source cases await reconstruction.
   Older partials/results remain preserved. Node/browser builds, browser type checks and 100 focused tests pass.
+
+### Payment source review and criterion preservation
+
+Payment0's three missed positives account for the full 1547 difference. One clear execution error is the child
+adding exclusions/stronger evidence to the parent criterion: a question about a strange £1 transaction is still
+about that transaction. The main tool prompt now asks delegating callers to preserve the criterion and context.
+This guidance is absent at the third ad hoc layer and has not yet been deployed to the frozen v9 collectors.
+
+Three BANKING77 annotations are pending review in `ts-host/src/teacher/source-review.ts`: cash shown but not
+received; an app-recorded ATM withdrawal without an explicit dispute; and a generic debit-dispute question
+annotated as an unrecognized direct debit. The registry preserves texts/labels and recognizes both current
+text IDs and legacy text+label IDs. Main generation excludes them; admission, handoffs and preference building
+hold tasks containing them. This defers ambiguity without relabeling from a teacher answer or counting it as
+a verified model negative. Independent adjudication is still outstanding.
+
+The 142-message payment case finished in 1060.5 seconds: 141 judgments match gold, with one missed 502 payment
+giving 13386 against 13888. Benchmark tolerance accepts it; training admission excludes partial agreement
+and pending-source tasks. The worker did finish useful work after the scheduling/budget changes. Both live
+supervisors remain on runtime-v9; frozen-runtime migration is pending. Node/browser build, browser type checks
+and 38 focused checks pass. No training has started.
