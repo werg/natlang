@@ -1,5 +1,15 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Latest check-in: v14 prepared (2026-09-28):** corrected CommaQA numeric
+> upstream sport inversion (all 64,000 nationality renderings affected), added
+> literal retrieval/schema guidance and completed-effect receipts. Numeric
+> contracts below v3 are held until migrated; raw source and gold preserved.
+> Added pending FOLIO 56/8 and αNLI Ciana reviews. Read the final section of
+> REJECTION_FOLLOWUP_20260928.md and runs/rejection-checkin-20260928-late/.
+> Bonsai queue-v11 / Luna queue-v7 use distinct v14 jobs with reviewed retries.
+> Boundary rollout actual state: runtime-v14.rollout.jsonl / rollout-state.json.
+> One Luna worker/request, Bonsai independent, no training.
+
 > **Rejection follow-up (2026-09-28 evening):** see
 > [REJECTION_FOLLOWUP_20260928.md](REJECTION_FOLLOWUP_20260928.md).
 > Fixed two false admission rejections, persistent-state error guidance, mail

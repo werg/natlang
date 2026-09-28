@@ -324,6 +324,8 @@ test('a failed eval reports the service calls it already made, whoever built the
   const { session } = open({ type: '() => number', instructions: 'Move the card.' }, { services: { board } });
   const failed = await session.applyAsync('eval', { code: 'await board.commit_move({ card: "fub", to: "done" }); await board.render(); 1' });
   assert.match(failed.text, /Already performed before the failure \(not undone\): board\.commit_move/);
+  assert.match(failed.text, /board\.commit_move completed:.*"revision":26/);
+  assert.match(failed.text, /without repeating an already completed write/);
   assert.equal(revision, 26);
 });
 

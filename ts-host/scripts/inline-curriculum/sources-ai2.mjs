@@ -212,12 +212,20 @@ function commaqaRows(variant = 'explicit') {
         // per_fact_context maps each knowledge-base fact to the sentence that renders it.
         const rendered = Object.entries(world.per_fact_context);
         const text = rendered.filter(([fact]) => fact.startsWith('text_')).map(([, sentence]) => sentence);
-        const tables = rendered.filter(([fact]) => fact.startsWith('table_')).map(([, sentence]) => sentence);
+        // The numeric source's table templates invert discus/javelin. Render from the original predicate instead.
+        const tables = rendered.filter(([fact]) => fact.startsWith('table_'))
+          .map(([fact, sentence]) => variant === 'numeric' ? numericNationalityFact(fact) : sentence);
         world.qa_pairs.forEach((qa, q) => rows.push({ id: `${name}:${w}:${q}`, world: `${name}:${w}`, split, qa, text, tables }));
       });
     }
     return rows;
   });
+}
+
+export function numericNationalityFact(fact) {
+  const match = /^table_nation([dj])\(([^,]+), (.+)\)$/.exec(fact);
+  if (!match) throw new Error(`unsupported CommaQA nationality fact: ${fact}`);
+  return `athlete: ${match[2]} ; country: ${match[3]} ; sport: ${match[1] === 'd' ? 'Discus' : 'Javelin'} Throw.`;
 }
 
 /**
@@ -292,12 +300,14 @@ export function commaqaQuestion(seed, index, variant = 'explicit', sourceId) {
   const numeric = typeof row.qa.answer === 'number';
   const answer = numeric ? Math.round(row.qa.answer * 10) / 10 : [...row.qa.answer].map(String).sort();
   lines.push(numeric ? `return Math.round(step${steps.length} * 10) / 10;` : `return [...new Set(step${steps.length} as string[])].sort();`);
-  const store = (facts, what) => factStore(rng.shuffle(facts).map((text, i) => ({ id: `${what[0].toUpperCase()}${i + 1}`, text })), `The ${what}.`);
+  const store = (facts, what) => factStore(rng.shuffle(facts).map((text, i) => ({ id: `${what[0].toUpperCase()}${i + 1}`, text })), `The ${what}.`, { search: true });
   const expertFile = (what, source) => nlFile({ args: { question: 'string' }, returns: 'string[]',
     description: `Answer a question from the ${what} alone.`,
-    instructions: `Answer question using only the ${what} in ${source}.page(n), for n = 1 through ${source}.pages(). Inspect every relevant page; a shortened display is not the complete store. Return all matching names or requested measurements as strings, preserving the numeric values. Do not require a fact that belongs to the other specialist's store; the caller combines the two stores. An empty list means the complete store contains no answer to this local question.` });
+    instructions: `Answer question using only the ${what}. Start with ${source}.search(query) for a named entity, country, year or sport; it returns all literal matches. Use ${source}.page(n), for n = 1 through ${source}.pages(), when a full scan is needed. A shortened display is not the complete store. Return only the matching names or requested measurements as strings, preserving numeric values; do not add commentary to the list. Do not require facts from the other specialist's store. An empty list means the complete local store contains no answer; after checking the relevant facts, return that result rather than repeating the same search.` });
   const family = variant === 'explicit' ? 'commaqa_question' : 'commaqa_numeric';
-  return [curriculumCase({ family, familyVersion: 2, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
+  const schema = variant === 'numeric' ? 'The tables hold athlete nationality and sport; the passages hold discus and javelin measurements. ' :
+    'The text passages hold people\'s birth years, nationalities, and movies they acted in, wrote or produced. The tables hold movie directors, release years, movie awards and personal awards. A country is not a movie; distinguish movie awards from a person\'s awards. ';
+  const record = curriculumCase({ family, familyVersion: 3, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
     split: row.split, slice: 'nested_scoped', domain: 'relational', mode: 'single_call', inline: 'avoid', named: 'required',
     worldSemantics: 'closed_world',
     evidence: { world: row.qa.facts_used ?? [], retrieved: [], background: [`source: CommaQA ${variant} ${SOURCES.commaqa.revision} ${row.id}`,
@@ -315,7 +325,13 @@ export function commaqaQuestion(seed, index, variant = 'explicit', sourceId) {
       'answer_question/text_expert.nl': expertFile('text passages', 'passages'),
       'answer_question/text_expert/passages.ts': store(row.text, 'text passages'),
     },
-    inputs: { question: row.qa.question }, expected: answer })];
+    inputs: { question: row.qa.question }, expected: answer });
+  record.semantics.files[record.semantics.root] += '\n' + schema;
+  record.generation.source_evidence_version = 3;
+  if (variant === 'numeric') record.generation.source_annotation_repair = {
+    kind: 'numeric_nationality_sport', authority: 'original KB predicates and pred_lang_config',
+    note: 'Original table sentences invert sports. Canonical table rows preserve athlete/country and map nationd to discus, nationj to javelin. Raw source cache is unchanged.' };
+  return [record];
 }
 
 /** CommaQA numeric: the same specialists, with arithmetic (min, max, differences, thresholds) left to the root. */

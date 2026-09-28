@@ -57,6 +57,9 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
     ['33635093f35a02a840c54dbd73818a740e8398ea276be48a1875e9643ceb4b16',
       'Todd hated making coffee in the morning.\nTodd happily enjoyed his life saving gift.\nTodd forgot to make coffee and was tired driving in to work.\nTodd made coffee anyway to that he would be alert driving in to work.', 'b',
       'The gift and its connection to either hypothesis are missing from the visible story.'],
+    ['3b1ce08a76ad9479c5855708987d0ae57667d728dc72d599a32d76e44bec026b',
+      "Ciana thought the other girls at the dorm were bullies.\nThe other girls don't bully her anymore.\nSo she kissed one of them on the lips.\nso she bullied them.", 'b',
+      'Neither intervening action reliably explains why the bullying stopped; the preference needs source adjudication.'],
   ].map(([id, text, annotatedLabel, reason]) => ({ dataset: 'anli', id: id!, aliases: [], text: text!,
     annotatedLabel: annotatedLabel!, reason: reason!, status: 'pending' as const })),
   {
@@ -70,6 +73,18 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
     text: 'Peter was invited to play piano at the concert hall.',
     annotatedLabel: 'Oliver piano=False; Oliver violin=Unknown; Peter good at piano=True', status: 'pending',
     reason: 'Source formalization turns an invitation into actual concert performance; the model-visible English does not establish that antecedent.',
+  },
+  {
+    dataset: 'folio', id: 'story:56', aliases: ['folio:story:56', 'story56'],
+    text: 'If a person is the leader of a country for life, that person is in a monarchy.',
+    annotatedLabel: 'Elizabeth king=False; monarchy=True; female in monarchy=True', status: 'pending',
+    reason: 'Source formalization drops the country and for-life conditions, making any leader a monarchy member; the English does not establish those conditions for Elizabeth.',
+  },
+  {
+    dataset: 'folio', id: 'story:8', aliases: ['folio:story:8', 'story8'],
+    text: 'Miroslav published a book in 1946.',
+    annotatedLabel: 'Czech person wrote a book in 1946=True', status: 'pending',
+    reason: 'Publication in 1946 does not establish that the person wrote the book in 1946; the conclusion requires source adjudication.',
   },
 ];
 

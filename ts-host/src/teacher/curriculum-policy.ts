@@ -18,7 +18,7 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
     return 'legacy_highlighter_oracle';
   const curriculum = record.curriculum as { family?: string; family_version?: number; variant?: string; answer_evidence?: string[];
     payment_scope_version?: number } | undefined;
-  if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 2)
+  if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 3)
     return 'legacy_numeric_reference_contract';
   if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
     return 'unverified_counterfactual';

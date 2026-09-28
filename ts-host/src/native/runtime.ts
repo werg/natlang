@@ -518,9 +518,12 @@ export class NativeSession {
     this.runtime.trace.emit('scope_failure', { failure_kind: kind, serial: this.failureSerial,
       message: message.slice(0, 1200), diagnostic_count: diagnostics.length });
     // Report what the model needs to repair the eval: its console output and any effect that already happened.
-    const effects = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
-      .filter(event => event.kind === 'effect' || event.kind === 'host')
+    const effectEvents = traceMark === undefined ? [] : this.runtime.trace.events.slice(traceMark)
+      .filter(event => event.kind === 'effect' || event.kind === 'host');
+    const effects = effectEvents
       .map(event => String(event.capability ?? event.operation ?? event.kind));
+    const receipts = effectEvents.filter(event => event.kind === 'effect' && event.phase === 'completed').slice(-8)
+      .map(event => `${String(event.capability ?? event.operation ?? 'service call')} completed: ${this.show(typeof event.result === 'string' ? event.result : JSON.stringify(event.result) ?? 'null')}`);
     this.evalDetail = { console: logs.join('\n') };
     // A model reaching for something the scope does not have (a name, a Node module, eval) is shown what it does have,
     // or it goes on probing the environment.
@@ -532,6 +535,7 @@ export class NativeSession {
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
     return toolNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
+      (receipts.length ? `\nCompleted service calls succeeded:\n${receipts.join('\n')}\nRepair subsequent work without repeating an already completed write.` : '') +
       '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
       'state changes made through live values, callable modules, files or external services are not undone. ' +
       'Inspect the current state before retrying a write.';

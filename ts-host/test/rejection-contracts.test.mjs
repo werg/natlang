@@ -7,10 +7,28 @@ import { executeProgram } from '../dist/teacher/collector.js';
 import { admitRow, replayReference } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { idempotentRetry } from '../scripts/inline-curriculum/followup.mjs';
-import { commaqaArithmetic, commaqaNumeric, commaqaQuestion } from '../scripts/inline-curriculum/sources-ai2.mjs';
+import { commaqaArithmetic, commaqaNumeric, commaqaQuestion, numericNationalityFact } from '../scripts/inline-curriculum/sources-ai2.mjs';
+import { factStore } from '../scripts/inline-curriculum/logic.mjs';
+import { externalModule } from '../dist/native/external.js';
+import { auditEvidence } from '../scripts/inline-curriculum/audit-commaqa-evidence.mjs';
 import { recursionRewrite } from '../scripts/inline-curriculum/failure.mjs';
 import { modernizeContracts } from '../scripts/inline-curriculum/modernize-contracts.mjs';
 import { eventRetry } from '../scripts/inline-curriculum/failure.mjs';
+
+test('numeric evidence audit detects source mismatches independently of arithmetic', () => {
+  const world = {
+    kb: { table_nationj: ['table_nationj(Ada, Vexa)'], text_jthrow: ['text_jthrow(Ada, 88.0)'] },
+    pred_lang_config: { table: ['d', 'j'].map(s => ({ predicate: `nation${s}_p($1, ?)`,
+      questions: [`Who are the ${s === 'd' ? 'discus' : 'javelin'} throwers?`], steps: [{ question: `table_nation${s}(?, $1)` }] })) },
+    per_fact_context: { 'table_nationj(Ada, Vexa)': 'Ada, Vexa, Discus',
+      'text_jthrow(Ada, 88.0)': 'Ada threw javelin 88.0 meters.' },
+    qa_pairs: [{ facts_used: ['table_nationj(Ada, Vexa)'] }],
+  };
+  assert.equal(auditEvidence([world], 'fixture').raw_inversions, 1);
+  assert.deepEqual(auditEvidence([world], 'fixture').failures, []);
+  world.per_fact_context['text_jthrow(Ada, 88.0)'] = 'Ada threw discus 88.0 meters.';
+  assert.equal(auditEvidence([world], 'fixture').failures[0].kind, 'throw_rendering');
+});
 
 test('failed eval distinguishes discarded bindings from mutations to callable module state', async () => {
   const { session, lam } = open({ type: '() => number', instructions: 'Count.', codebase: {
@@ -68,6 +86,21 @@ test('numeric reference computes its intermediates and unknown arithmetic fails 
   assert.throws(() => commaqaArithmetic({ op: 'unknown', q: 'Invent a value' }), /unsupported/);
 });
 
+test('numeric table evidence uses original sport predicates and rejects unknown facts', () => {
+  assert.equal(numericNationalityFact('table_nationd(Ada, Vexa)'), 'athlete: Ada ; country: Vexa ; sport: Discus Throw.');
+  assert.equal(numericNationalityFact('table_nationj(Bob, Vexa)'), 'athlete: Bob ; country: Vexa ; sport: Javelin Throw.');
+  assert.throws(() => numericNationalityFact('table_other(Ada, Vexa)'), /unsupported/);
+});
+
+test('fact-store search retrieves literal matches and leaves semantic decisions to the caller', () => {
+  const store = externalModule('facts', factStore([{ id: '1', text: 'Ada is from Vexa.' },
+    { id: '2', text: 'Ada threw 42.1.' }, { id: '3', text: 'Bob is from Vexa.' }], 'Facts.', { search: true }));
+  assert.deepEqual(store.exports.search(' ada ').map(row => row.id), ['1', '2']);
+  assert.deepEqual(store.exports.search('['), []);
+  assert.throws(() => store.exports.search('  '), /nonempty/);
+  assert.equal(store.exports.page(1).length, 3);
+});
+
 test('admission permits preventing a planted compile failure but does not waive runtime evidence', async () => {
   const [record] = recursionRewrite(7, 0);
   const { run, trajectory } = await replayReference(record, TOOLS_PROMPT);
@@ -106,7 +139,7 @@ for (const [variant, build] of [['numeric', commaqaNumeric], ['explicit', commaq
   const available = existsSync(new URL(`../../vendor/datasets/commaqa/v1/commaqa_${variant}`, import.meta.url));
   for (const index of [0, 1, 2, 3, 4, 5]) test(`CommaQA ${variant} ${index}: source reference uses real arithmetic and scoped specialists`, { skip: !available }, async () => {
     const [record] = build(7, index);
-    assert.equal(record.curriculum.family_version, 2);
+    assert.equal(record.curriculum.family_version, 3);
     assert.match(record.semantics.files['answer_question/text_expert.nl'], /measurements as strings/);
     const result = await replayReference(record, TOOLS_PROMPT);
     assert.equal(result.run.outcome.accepted, true, JSON.stringify(result.run.outcome));

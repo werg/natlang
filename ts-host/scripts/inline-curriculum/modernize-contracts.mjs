@@ -6,16 +6,20 @@ import { externalize } from './lib.mjs';
 export function modernizeContracts(original) {
   const record = structuredClone(original), changes = [], family = record.curriculum?.family;
   const semantics = record.semantics;
-  if (['commaqa_numeric', 'commaqa_question'].includes(family) && (record.curriculum.family_version ?? 1) < 2) {
+  if (['commaqa_numeric', 'commaqa_question'].includes(family) && (record.curriculum.family_version ?? 1) < 3) {
     const sourceId = record.curriculum.evidence.background.join('\n').match(/(?:train|dev|test):\d+:\d+/)?.[0];
     if (!sourceId) throw new Error(`${record.id}: missing CommaQA source identity`);
     const [fresh] = commaqaQuestion(7, 0, family === 'commaqa_numeric' ? 'numeric' : 'explicit', sourceId);
     if (JSON.stringify(fresh.semantics.expected) !== JSON.stringify(semantics.expected))
       throw new Error(`${record.id}: changed CommaQA gold`);
     for (const [path, text] of Object.entries(fresh.semantics.files)) semantics.files[path] = text;
+    semantics.services = { ...semantics.services, ...fresh.semantics.services };
+    semantics.service_scopes = { ...semantics.service_scopes, ...fresh.semantics.service_scopes };
     record.curriculum.reference = fresh.curriculum.reference;
-    record.curriculum.family_version = 2;
-    changes.push('scoped specialist contracts and computed arithmetic');
+    record.curriculum.family_version = 3;
+    record.generation = { ...record.generation, source_evidence_version: 3,
+      ...(fresh.generation.source_annotation_repair ? { source_annotation_repair: fresh.generation.source_annotation_repair } : {}) };
+    changes.push('correct source sports, literal retrieval and specialist schema');
   }
   if (family === 'idempotent_retry' && (record.curriculum.family_version ?? 1) < 2) {
     const [fresh] = idempotentRetry(7, 0);
@@ -37,9 +41,9 @@ export function modernizeContracts(original) {
     }
   }
   if (changes.length) {
-    record.id += ':contracts-v2';
-    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/2'])];
-    record.generation = { ...record.generation, contract_migration: { version: 2, original_id: original.id,
+    record.id += ':contracts-v3';
+    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/3'])];
+    record.generation = { ...record.generation, contract_migration: { version: 3, original_id: original.id,
       reset_handoff: !!record.handoff, changes } };
     // Replaying source edits or incorrect specialist questions under new contracts would seed incompatible state.
     delete record.handoff;

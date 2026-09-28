@@ -116,3 +116,53 @@ at score 100 (22 and 58 moves). Monitor 395950 waits for its current valid case'
 boundary, then starts v13 / queue-v6; actual completion is recorded in the rollout
 log/state. `repair-progress.json` preserves this checkpoint. These are early repair
 successes, not a measured success-rate claim.
+
+## Later check-in: numeric evidence corruption (runtime v14)
+
+Raw v13 snapshot (`runs/rejection-checkin-20260928-late/index.json`): Bonsai
+10 accepted / 14 rejected final results, plus one timeout; Luna one accepted /
+two rejected final results, plus four incomplete attempts and one timeout. These
+are attempt counts, not unique cases or a quality-adjusted success rate. Mail
+retries passed 4/4; board retries passed 3/4. Several rejected attempts concern
+the same disputed source input.
+
+**Course correction:** the earlier 25,098-step arithmetic audit was insufficient.
+CommaQA numeric's upstream nationality table templates swap discus and javelin,
+while KB predicates, language configuration, QA facts and throw passages agree.
+The new evidence audit checks all splits: 64,000 table facts, all 64,000 original
+renderings inverted; corrected table renderings and original throw evidence have
+zero audit failures. Raw upstream data and answer labels remain unchanged.
+Canonical table sentences now derive from `table_nationd` (discus) and
+`table_nationj` (javelin), with repair provenance. Numeric contract versions 1/2
+are held from training until migrated. CommaQA family version 3 includes the
+correct evidence, case-insensitive literal search and a root schema explaining
+which specialist holds each attribute. Contract migration version 3 replaces
+service stores as well as NL files and discards incompatible handoff prefixes.
+This is a breaking evidence-contract correction, not benchmark relabeling.
+
+Four numeric Luna retries exhausted their request budget; execution planning
+uses two provider requests per saved action reply, so 128 replies with a
+256-request cap was expected. Contradictory displayed evidence was a concrete
+cause to correct before increasing budgets further. Two movie queries confused
+country/movie entities and movie/personal awards; their original gold is retained
+and the new retrieval/schema contract is tried once. Completed service receipts
+now appear after failed evals, including the return value of a successful board
+write, so a rendering failure need not cause another mutation.
+
+New conservative pending source reviews: FOLIO story 56 drops “country for life”
+from the English condition in its formalization; story 8 treats publication in
+1946 as writing in 1946; αNLI's Ciana dorm story does not reliably distinguish
+its two proposed actions. Labels are preserved. Affected tasks are held through
+collection/admission/direct materialization; no partials or held-source outputs
+become training negatives. FOLIO story 24 remains a model reasoning failure,
+with unchanged gold, rather than being held merely for disagreement.
+
+Verification: Node/browser builds and browser types; 129 focused checks followed
+by the added evidence-audit regression (130 distinct focused checks total), two
+queue tests, the full evidence audit and migrated reference replays. New queues:
+Bonsai queue-v11 (423 entries, 15 held, one reviewed board retry) and Luna queue-v7
+(122 entries, two held, six reviewed CommaQA retries). Finished keys are skipped
+by the shared journals. New IR/jobs are immutable and preserve source identity;
+v14 rollout waits for completed case boundaries and refuses overlapping workers.
+See runtime-v14.rollout.jsonl / runtime-v14.rollout-state.json for actual state.
+One Luna worker/request; independent Bonsai generation. No training started.

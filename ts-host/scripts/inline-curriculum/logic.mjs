@@ -5,7 +5,7 @@ import { Random, capitalize, curriculumCase, evalCall, literal, nonceWords, retu
 const PAGE = 8;
 
 /** A paged fact store as a callable-folder TypeScript module. */
-export function factStore(facts, description) {
+export function factStore(facts, description, { search = false } = {}) {
   return `const FACTS: { id: string, text: string }[] = ${literal(facts)};
 /** ${description} Page n of the facts in store order, ${PAGE} per page; pages are numbered from 1 to pages(). */
 export function page(n: number): { id: string, text: string }[] {
@@ -14,6 +14,13 @@ export function page(n: number): { id: string, text: string }[] {
 }
 /** The number of pages of facts. */
 export function pages(): number { return ${Math.ceil(facts.length / PAGE)}; }
+${search ? `/** All facts containing query as a case-insensitive literal substring; useful for a name, country, year or sport. This is retrieval, not a semantic judgment. Empty query is rejected; use pages() and page(n) for a complete scan. */
+export function search(query: string): { id: string, text: string }[] {
+  if (!query.trim()) throw new RangeError('search requires a nonempty literal substring');
+  const needle = query.trim().toLowerCase();
+  return FACTS.filter(fact => fact.text.toLowerCase().includes(needle));
+}
+` : ''}
 `;
 }
 export const READ_ALL = `const all: { id: string, text: string }[] = [];
