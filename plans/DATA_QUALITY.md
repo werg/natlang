@@ -142,3 +142,16 @@ giving 13386 against 13888. Benchmark tolerance accepts it; training admission e
 and pending-source tasks. The worker did finish useful work after the scheduling/budget changes. Both live
 supervisors remain on runtime-v9; frozen-runtime migration is pending. Node/browser build, browser type checks
 and 38 focused checks pass. No training has started.
+
+### Runtime-v10 is active
+
+Both workers now use frozen runtime-v10 (source d69af3a; 455 hashes verified), so criterion-preservation and
+source-review quarantine apply during collection as well as main admission/export. Luna queue-v3 has 150
+eligible entries, Bonsai queue-v7 has 558; three/one affected tasks were held, respectively. Source labels and
+raw artifacts remain unchanged. Journals are reused; completed artifact paths remain accessible, pending
+jobs use .v10 paths to avoid silently reusing old prompt history. Luna remains one worker and one request.
+
+Both final v9 cases reached their existing hard deadlines: Luna CUAD extraction saved 106 replies with an
+output CSV under verification; Bonsai handoff 555 saved 18 fresh replies. These are incomplete checkpoints,
+not accepted training rows or verified model negatives. Their retries still need review. No independent
+annotation adjudication or model training has started.

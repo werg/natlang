@@ -408,3 +408,27 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Validation: Node/browser build and browser type checks pass; 38 focused source-policy, generator, oracle,
   handoff/replay and collector regressions pass. Per-ID payment mismatch artifacts are saved under
   runs/rejection-audit-20260928/payment-followup/; small-case duplicates are removed before summing.
+
+## 2026-09-28 runtime-v10 rollout
+
+- User authorized rollout. Froze source d69af3a as runtime-v10 and verified all 455 manifest hashes. The new
+  runtime contains parent-criterion guidance, pending-source quarantine and generator filtering. The final
+  ad hoc layer still removes delegation guidance; the three-layer runtime boundary remains unchanged.
+- Filtered source-review tasks from the queues: Luna v3 retains 150 entries (three held); Bonsai v7 retains
+  558 (one held). Held-entry audits retain source/index/IDs and reason; no source/gold rewriting. Existing
+  append-only journals retain completed-attempt skips. Completed and boundary entries retain their old artifact
+  paths; pending entries get .v10 paths because old prompt histories must not be reused silently under new prompts.
+- Waited for exact active cases to reach their existing bounded outcomes, then stopped old supervisors by exact
+  PID, waited for old child processes to exit, and started new supervisors. A successor briefly launched by an
+  old supervisor is stopped during handover; its raw artifacts stay preserved. No concurrent Luna collectors.
+- The boundaries were hard timeouts, not successful repairs: Luna extraction 0 saved 106 replies and had written
+  a 29-contract CSV with a reported 10 clauses, but was still checking/repairing verification at 900 seconds
+  (908 including shutdown). Bonsai handoff 555 saved 18 fresh replies and hit 600 seconds (603.1 with shutdown);
+  it was attempting lengthy amount-parsing code, including a forbidden while loop. Both checkpoints remain
+  unfinished, excluded from training and model-negative labels. Review retries/budgets rather than promote them.
+- New Luna supervisor PID 332686: queue-v3, v2 journal, one worker/request including plans/children; starts case 4.
+  New Bonsai supervisor PID 332210: queue-v7, existing journal, starts handoff 552; server health OK. At migration,
+  eligible queues have 146 and 504 remaining, respectively. Rollout audit, provenance and PID state persist in
+  runs/bonsai-recovery/runtime-v10.*. No model training or independent annotation grader has started.
+- Post-rollout progress verified: Luna's new case saved 17 replies and Bonsai's new handoff saved six fresh
+  replies. Both are using new .v10 checkpoints; these observations establish live requests, not task acceptance.

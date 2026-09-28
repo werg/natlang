@@ -1,5 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Active runtime-v10 rollout (2026-09-28):** both workers now run the frozen d69af3a runtime, including
+> criterion-preserving delegation guidance and pending-source collection/admission protections. All 455 frozen
+> file hashes verified. Luna supervisor PID 332686 uses queue-v3.jsonl, existing v2.journal.jsonl, new pending-job
+> paths ending .v10; 150 eligible entries / 146 remaining at migration. One worker / one request in flight.
+> Bonsai supervisor PID 332210 uses queue-v7.jsonl, existing journal.jsonl, pending paths ending .v10;
+> 558 eligible entries / 504 remaining at migration. Completed entries retain old evidence paths.
+> Removed three affected Luna entries and one affected Bonsai entry into v3.held.json / v7.held.json for source
+> review; these counts include previously attempted tasks. Original source shards, labels and raw evidence remain.
+> Migration waited for existing case boundaries. Luna extraction case 0 hit its 900-second deadline (106 replies,
+> 908 seconds including shutdown); Bonsai handoff 555 hit 600 seconds (18 fresh replies, 603.1 seconds including
+> shutdown). Both remain unfinished checkpoints, excluded from training/negatives, needing a reviewed retry.
+> Current cases started on v10: Luna 4, Bonsai handoff 552. Rollout audit/provenance/state files are under
+> runs/bonsai-recovery/runtime-v10.*. Older runtime/checkpoint banners below are historical.
+
 > **Latest payment review checkpoint (2026-09-28):** both supervisors remain on immutable runtime-v9.
 > Luna: 5 completed attempts / 148 remaining; 2 training-admitted, 2 partial-agreement holdouts, 1 wrong total.
 > The 142-message task finished in 1,060.5 seconds without a collector error; 13,386 versus 13,888 is one missed
