@@ -46,7 +46,7 @@ Code in eval can use the current Folder value named folder:
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args).
 - The fs helper provides exists(path), list(path?, { pattern? }), readText(path, { startLine?, endLine? }), readJson(path), writeText(path, content), writeJson(path, value), editText(path, { find, replaceWith, fuzzy? }), diff(path?), remove(path), and move(source, destination).
 
-${allowAdHoc ? `For many files, delegate one semantic judgment per file and do the exact bookkeeping in code:
+${allowAdHoc ? `For many files, make the judgments here or delegate them, and do the exact bookkeeping in code. Reuse completed judgments; investigate an individual disagreement without rerunning the whole batch. For example:
 const files = await folder.files('inbox/*.eml');
 const labels = await Promise.all(files.map(file => nl<'keep' | 'archive'>\`Classify the email in file.\`(file)));
 ` : 'For many files, read or search their contents, make their judgments here, and do exact bookkeeping in code.\n'}
