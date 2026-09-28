@@ -109,7 +109,8 @@ export function entailmentPremises(seed, index) {
   const removed = rng.pick(leaves);
   const certificate = `support-${digest(`${row.id}:${row.hypothesis}`)}`;
   const shape = row.id.replace(/[^A-Za-z0-9]+/g, '_');
-  return [['supported', null], ['premise_removed', removed]].map(([variant, removedId]) => {
+  // Removing one annotated premise does not prove that no alternative proof exists.
+  return [['supported', null]].map(([variant, removedId]) => {
     const kept = Object.entries(triples).filter(([id]) => id !== removedId);
     const facts = rng.shuffle(kept).map(([source, text], i) => ({ id: `F${i + 1}`, text, source }));
     const idOf = Object.fromEntries(facts.map(f => [f.source, f.id]));

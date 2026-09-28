@@ -1,5 +1,10 @@
 # Rejection review — 2026-09-28
 
+> Continued review and current policy: [DATA_QUALITY.md](DATA_QUALITY.md). It resolves the file/evidence/oracle
+> questions below, distinguishes timeout activity from semantic stalls, and records breaking admission changes.
+> Latest raw snapshot: 4,443 results, 909 task rejections, 1,464 admission rejections and 585 collection errors;
+> `runs/rejection-audit-20260928/data-quality-v2/`. Categories below retain the original investigation context.
+
 ## Coverage and evidence
 
 The first audit covers every raw saved result under `runs`: **4,434 results in 76 batches**, including historical

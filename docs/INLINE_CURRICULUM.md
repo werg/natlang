@@ -66,24 +66,25 @@ collector accepted its contract **and**:
 - every decisive marker was visible to the model (in a tool result, or in a child it delegated to) outside the
   root's opening, and, for follow-up cases, before the root's first result decision (a `return_result`,
   `return_result` with any status, or a staged eval `return`);
-- `inline: avoid` saw no inline child. For `inline: required`, a correct answer judged directly is admitted with the
-  note `judged_directly`; an eval that tests text against a keyword regular expression instead is rejected
-  (`regex_judgment`);
-- `edits: required` saw an `edit_code`, and `edits: forbidden` saw none;
-- `named: required` saw a named child call, and `iterate: required` an eval that runs `iterateOn`.
+- required function repairs were made and forbidden unwarranted function edits were avoided;
+- the task has a current, verified source/oracle contract, with no obsolete runtime outcomes or pending grading;
+- file/quotation evidence is grounded in the actual output and source, and partial benchmark agreement has been
+  reviewed before becoming per-decision training data.
 
-Rejection reasons: `wrong_return`, `fabricated_result` (a value where the honest outcome is a blocker),
-`incomplete_trajectory`, `missing_observation:<marker>`, `premature_choice:<marker>`, `inline_missing`,
-`gratuitous_inline`, `regex_judgment`, `defect_not_repaired`, `unwarranted_edit`, `named_helper_unused`, `iterate_missing`.
+Correct direct, delegated and mixed solutions are admitted. `judged_directly`, `delegated_optional`,
+`reference_evidence_differs`, `regex_used`, `transcript_dump`, `named_helper_unused` and `iterate_missing` are
+coverage/efficiency notes, not incorrect-result labels. Reference child markers describe the scripted example;
+they do not impose a hidden requirement to reproduce that example's delegation layout.
+
+Admission version 2 records `quality_pending`, legacy contract exclusions and partial-result review requirements.
+See [DATA_QUALITY.md](../plans/DATA_QUALITY.md) for source, file, evidence and oracle rules.
 An eval that failed (nothing kept) does not count as a result decision, even if it contained a `return`.
 
 ### Hinted twins and preference pairs
 
-Every `iterate: required` case is also built as a twin whose instructions end with an explicit requirement to use `iterateOn`
-(`build.mjs`, on by default). Admission strips the hint from an admitted twin's trajectory and program, so the row
-trains `iterateOn` unprompted. `pairs.mjs` pairs an admitted twin with the unhinted run of the same case when that
-run was rejected for `iterate_missing`: at their first root decision with an identical request, the twin's
-decision is chosen and the unhinted one rejected (the same-request rule of `build-preference-pairs.mjs`). The number of evals is never a criterion.
+Hinted twins still provide measured examples of `iterateOn`; hints are stripped before training. Technique-only
+preferences are retired: `pairs.mjs` writes no such pairs. `build-preference-pairs.mjs` requires an actual failure
+established by replay. Correct answers using different techniques are not negative examples.
 The collector itself now requires a blocked case to end with the model's own `return_result` with status `blocked` or `failed`;
 running out of turns also quiesces a call and was previously accepted.
 

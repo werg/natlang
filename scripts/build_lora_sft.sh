@@ -2,8 +2,7 @@
 # Build one model's LoRA training set from admitted teacher runs, rendered with that model's own chat template.
 # Usage: scripts/build_lora_sft.sh lfm|ling|spark OUT_DIR RESULTS.jsonl [MORE.jsonl ...]
 # NATLANG_HANDOFFS=RUNS.jsonl[,...] adds the preference pairs of handoff runs (build-handoffs.mjs) to preferences.jsonl.
-# Runs are admitted with --require-technique (a correct run that skipped a required technique teaches the wrong
-# thing), materialized into one training decision per model turn, and rendered by a CPU-only llama-server loaded
+# Correct direct and delegated runs are both admitted, materialized into one training decision per model turn, and rendered by a CPU-only llama-server loaded
 # with the model's GGUF and template, so prompts and completions are byte-for-byte what the model sees when served.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,7 +28,7 @@ KWARGS="$ROOT/models/templates/${TEMPLATE%.jinja}.kwargs.json"
 KWARG_ARGS=(); [ -f "$KWARGS" ] && KWARG_ARGS=(--chat-template-kwargs "$(cat "$KWARGS")")
 mkdir -p "$OUT"
 node "$TS_HOST/scripts/inline-curriculum/admit.mjs" "$@" --ledger "$OUT/admission.jsonl" \
-  --admitted "$OUT/admitted.jsonl" --require-technique | tail -2 | head -1
+  --admitted "$OUT/admitted.jsonl" | tail -2 | head -1
 # NATLANG_DIRECT_ANSWERS=1 trains answers given without reasoning towards them (a child's judgment, a scripted verdict),
 # for a small student that answers directly.
 DIRECT=(); [ "${NATLANG_DIRECT_ANSWERS:-}" = 1 ] && DIRECT=(--direct-answers)

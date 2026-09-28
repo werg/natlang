@@ -288,3 +288,29 @@ test('the native collector records the actions of child nl calls in the ledger, 
     assert.equal(await readFile(bounded.output, 'utf8'), '', 'budget exhaustion is never admitted as a result');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('a teacher cannot self-grade and the judge shares the whole-case request budget', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-judge-budget-'));
+  const base = { ...config(dir), workers: 1, endpoint: 'http://127.0.0.1:1',
+    judgeModel: { modelId: 'teacher', endpoint: 'http://127.0.0.1:1' } };
+  assert.throws(() => nativeJobRunner(base), /distinct model IDs/);
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '',
+      tool_calls: [{ id: 'c1', type: 'function', function: { name: 'return_result',
+        arguments: JSON.stringify({ status: 'success', value: 1 }) } }] } }],
+      usage: { prompt_tokens: 10, completion_tokens: 4 } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('judge-budget') };
+    item.record.semantics.oracle = { level: 'judged', rubric: 'Return one.' };
+    const options = { ...base, endpoint: `http://127.0.0.1:${server.address().port}`,
+      judgeModel: { modelId: 'independent-judge', endpoint: 'http://127.0.0.1:1' },
+      maxModelRequests: 1, maxTurns: 2, transportRetries: 1 };
+    const result = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(result.missing, [0]);
+    assert.match(await readFile(join(options.jobs, '000000.error.json'), 'utf8'), /whole-case model request budget/);
+    assert.equal(await readFile(options.output, 'utf8'), '');
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

@@ -4,16 +4,17 @@
  * A curriculum case is an ordinary `natlang.program/2` record with a `curriculum` block. The block is
  * oracle metadata: the collector gives the model only `semantics`, so nothing here reaches the teacher.
  * It names the case's family and counterfactual group, the decisive observations that the opening
- * does not show, whether an inline `nl` is required or gratuitous, and a reference solution that the
+ * does not show, which techniques a reference demonstrates, and a reference solution that the
  * builder replays through the collector's execution path before the case is admitted as a seed.
  */
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { executeProgram, recordDigest, sha256, type ProgramRun } from './collector.js';
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
-import { RETIRED_FAMILIES } from './curriculum-policy.js';
+import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
+import { RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
-export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/1';
+export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
 
 export const SLICES = ['inline_placement', 'observation_followup', 'nested_scoped', 'iterate', 'folder_failure'] as const;
 export const DOMAINS = ['logic', 'relational', 'actor', 'other'] as const;
@@ -43,7 +44,7 @@ export type Curriculum = {
   domain: Domain;
   /** `single_call`: one well-formed eval can be right. `followup`: a later choice depends on an observation. */
   mode: 'single_call' | 'followup';
-  /** Whether a correct trajectory creates an inline `nl`: needed, allowed, or a gratuitous child. */
+  /** Reference technique target for delegation; correct direct/delegated answers are admitted. */
   inline: 'required' | 'optional' | 'avoid';
   /** Whether a correct trajectory edits a callable function (edit_code): a real defect, or a correct helper. */
   edits?: 'required' | 'forbidden' | 'optional';
@@ -55,6 +56,8 @@ export type Curriculum = {
   evidence: { world: string[]; retrieved: string[]; background: string[] };
   assumptions: string[];
   decisive: Decisive[];
+  /** Any one annotated supporting sentence is sufficient when the answer oracle also passes. */
+  answer_evidence?: string[];
   /** For follow-up cases, the next actions that are plausible before the decisive observation. */
   plausible_actions: string[];
   minimum_sequence: string[];
@@ -63,7 +66,7 @@ export type Curriculum = {
   // several turns in order (for example an eval that acts, then return_result).
   /** failures: how many of the reference's actions meet the obstacle the case is about (a closed road, a locked card). */
   reference: { root: ReferenceCall[]; failures?: number; children?: { match: string | string[];
-    /** Evidence the child must see in its own opening or tool output before answering. */
+    /** Evidence shown by the scripted reference; task evidence contracts are checked separately. */
     evidence?: string[]; value?: unknown; call?: ReferenceCall; calls?: ReferenceCall[] }[] };
 };
 export type CurriculumRecord = ProgramRecord & { curriculum: Curriculum; family: string; split: string };
@@ -180,7 +183,7 @@ function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreeme
 /**
  * Admission for one collected row: the collector's contract verdict plus the causal checks. A follow-up
  * case is admitted only when every decisive observation was visible before the root's first result
- * decision; the inline mode requires or forbids an inline child. The number of evals is never a criterion.
+ * decision; technique differences are recorded as notes. The number of evals is never a criterion.
  */
 /**
  * Outcomes the runtime no longer produces. A row that met one worked around a limitation a served model will not
@@ -246,17 +249,40 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
-  const reasons: string[] = [];
+  const reasons: string[] = [], notes: string[] = [];
   if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
+  const quarantine = quarantineReason(record);
+  if (quarantine) reasons.push(quarantine);
   for (const name of obsoleteOutcomes((row.trajectory ?? []) as Turn[])) reasons.push(`obsolete_outcome:${name}`);
   const outcome = row.outcome ?? {};
   if (!['done', 'quiesced', 'failed'].includes(String(outcome.status))) reasons.push('incomplete_trajectory');
+  else if (!outcome.accepted && (outcome.quality_pending as unknown[] | undefined)?.length) reasons.push('quality_pending');
   else if (!outcome.accepted) reasons.push(record.semantics.operation === 'blocked' && outcome.status === 'done' ?
     'fabricated_result' : 'wrong_return');
   for (const item of c.decisive) {
     const at = facts.observedAt[item.marker]!;
     if (at === -1) reasons.push(`missing_observation:${item.marker}`);
     else if (c.mode === 'followup' && at > facts.firstDecision) reasons.push(`premature_choice:${item.marker}`);
+  }
+  const allObserved = ((row.trajectory ?? []) as Turn[]).flatMap(turn => (turn.context ?? [])
+    .filter(message => message.role === 'tool').map(message => text(message.content))).join('\n');
+  if (c.answer_evidence?.length && !c.answer_evidence.some(marker => shows(allObserved, marker)))
+    reasons.push('missing_answer_evidence');
+  const filesSpec = record.semantics.files_oracle;
+  const filesVerdict = outcome.files_check as { failed?: string[] } | undefined;
+  if (filesVerdict?.failed?.length && outcome.accepted) reasons.push('quality_pending_partial_files');
+  const answerVerdict = outcome.oracle as { level?: string; score?: number } | undefined;
+  if (answerVerdict?.level === 'agreement' && outcome.accepted && (answerVerdict.score ?? 1) < 1)
+    reasons.push('quality_pending_partial_agreement');
+  if (['rewrite', 'csv', 'counts'].includes(filesSpec?.compare ?? '') &&
+      (outcome.files_check as { quality_version?: number } | undefined)?.quality_version !== DATA_QUALITY_VERSION)
+    reasons.push('unreviewed_files_oracle');
+  if (filesSpec?.quote_sources) {
+    try {
+      const report = (outcome.files as Record<string, string> | undefined)?.[filesSpec.report ?? 'clauses.csv'];
+      for (const row of csvRows(report ?? '').slice(1)) if (row[1]?.trim() && !shows(allObserved, row[1]))
+        reasons.push(`unobserved_output_quote:${row[0]}`);
+    } catch { reasons.push('invalid_output_report'); }
   }
   for (const child of c.reference.children ?? []) {
     const matches = Array.isArray(child.match) ? child.match : [child.match];
@@ -269,29 +295,29 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
         !!child.evidence?.length && child.evidence.every(marker => shows(opening, marker));
     });
     // A run that delegates must delegate every item the reference does; one that judges directly is noted below.
-    if (!turns.length && child.evidence?.length && facts.inlineCalls + facts.namedChildCalls) reasons.push(`missing_child:${matches.join('|')}`);
+    // Reference children demonstrate one solution; mixed direct/delegated coverage is valid.
     const firstAnswer = turns.find(turn => (turn.assistant?.calls ?? []).some(call =>
       call.tool === 'return_result' || call.tool === 'eval' && stagesResult(String((call.arguments as Record<string, unknown>)?.code ?? ''))) ||
       Boolean(turn.assistant?.content?.trim()));
     if (firstAnswer) {
       const seen = childIdentity(firstAnswer.context ?? []) + '\n' + (firstAnswer.context ?? [])
         .filter(message => message.role === 'tool').map(message => text(message.content)).join('\n');
-      for (const marker of child.evidence ?? []) if (!shows(seen, marker))
-        reasons.push(`missing_child_observation:${marker}`);
+      for (const marker of child.evidence ?? []) if (!shows(seen, marker) && !shows(allObserved, marker))
+        if (!notes.includes('reference_evidence_differs')) notes.push('reference_evidence_differs');
     }
   }
   // A correct answer judged directly is a fine sample; a keyword or regex stand-in for a judgment is not.
-  const notes: string[] = [];
   if (c.inline === 'required' && !facts.inlineCalls) {
-    if (facts.regexJudgment) reasons.push('regex_judgment'); else notes.push('judged_directly');
+    notes.push('judged_directly');
   }
   if (c.inline === 'avoid' && facts.inlineCalls) notes.push('delegated_optional');
-  // The history is searched for something specific, not read through.
-  if (facts.transcriptDump) reasons.push('transcript_dump');
+  // Technique/efficiency differences describe coverage; they do not establish an incorrect result.
+  if (facts.transcriptDump) notes.push('transcript_dump');
+  if (facts.regexJudgment) notes.push('regex_used');
   if (c.edits === 'required' && !facts.functionEdits) reasons.push('defect_not_repaired');
   if (c.edits === 'forbidden' && facts.functionEdits) reasons.push('unwarranted_edit');
-  if (c.named === 'required' && !facts.namedChildCalls) reasons.push('named_helper_unused');
-  if (c.iterate === 'required' && !facts.usesIterateOn) reasons.push('iterate_missing');
+  if (c.named === 'required' && !facts.namedChildCalls) notes.push('named_helper_unused');
+  if (c.iterate === 'required' && !facts.usesIterateOn) notes.push('iterate_missing');
   return { id: String(row.id ?? record.id), program_id: record.id, admitted: !reasons.length, reasons, notes, facts,
     family: c.family, slice: c.slice, domain: c.domain, mode: c.mode, inline: c.inline, pair_group: c.pair_group,
     ...(oracleLevel(record.semantics.oracle) ? { oracle_level: oracleLevel(record.semantics.oracle) } : {}) };

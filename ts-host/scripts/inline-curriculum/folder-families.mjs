@@ -91,7 +91,8 @@ function caseFor(seed, index, split, kind, chosenDataset) {
         `Classify every file in inbox/ as one of ${labelsText}. Write INDEX.md with one "label: count" line per present label, sorted by label. Return the counts.` },
     folderFiles: files, expectedFiles, inputs: {}, expected, split });
   record.semantics.oracle = kind === 'folder_triage' ? 'exact' : { level: 'agreement', threshold: AGREEMENT };
-  record.semantics.files_oracle = { compare: kind === 'folder_triage' ? 'exact' : 'counts', threshold: AGREEMENT };
+  record.semantics.files_oracle = { compare: kind === 'folder_triage' ? 'moves' : 'counts', threshold: AGREEMENT,
+    ...(kind === 'folder_index' ? { return_count: 'counts', report: 'INDEX.md', total: rows.length } : {}) };
   record.license = SOURCES[dataset].license;
   record.gold_sources = [`${dataset}-labels`];
   record.dataset = dataset;
@@ -164,9 +165,8 @@ export function folderEdit(seed, index, split = 'train', chosenTask) {
   const rng = new Random(seed, `folder_edit:${index}`);
   const task = chosenTask ?? rng.pick(Object.keys(EDIT_TASKS));
   if (!EDIT_TASKS[task]) throw new Error(`unknown CoEdIT task ${task}`);
-  // Only drafts that need the edit: CoEdIT keeps many pairs whose target barely differs from the source, and a teacher
-  // rightly leaves such a draft as it is.
-  const pool = coeditRows(task, split).filter(row => spanF1(row.text, row.target) < 0.8);
+  // Token overlap cannot determine whether an edit is needed. Let a judge verify alternative or unchanged drafts.
+  const pool = coeditRows(task, split);
   const count = Math.min(pool.length, rng.next() < 0.5 ? rng.int(20, 45) : rng.int(140, 200));
   if (count < 20) throw new Error(`CoEdIT ${task}/${split} has only ${count} suitable edits; need at least 20`);
   const rows = rng.sample(pool, count).map(row => ({ ...row, fileId: row.id.slice(0, 16) }));
@@ -196,11 +196,16 @@ export function folderEdit(seed, index, split = 'train', chosenTask) {
         ['return_result', { status: 'success', value: row.target }]],
     })) },
     root: { name: 'edit_drafts', kind: 'directory-reducer', args: {}, returns: 'number',
-      instructions: `Every file in drafts/ needs this edit: ${EDIT_TASKS[task]}. Edit each one, preserving its front matter and filename. Return the number of drafts edited.` },
+      instructions: `Review every file in drafts/ and ${EDIT_TASKS[task]} where needed. Preserve meaning and facts. Edit drafts as needed, preserving each file's front matter and filename. Return the number of drafts edited.` },
     folderFiles: files, expectedFiles, inputs: {}, expected: count, split });
   record.semantics.oracle = 'exact';
   // CoEdIT's target is one good rewrite of many; each draft must be rewritten, its front matter kept.
-  record.semantics.files_oracle = { compare: 'rewrite', threshold: AGREEMENT };
+  record.semantics.files_oracle = { compare: 'rewrite', threshold: 1, return_count: 'changed',
+    rubric: `Review whether the revised draft meets this instruction: ${EDIT_TASKS[task]}. Preserve the original meaning, facts, names and numbers. Reject grammatical errors, unsupported additions, omissions or reversed claims. A reference is an example, not the only valid wording. An unchanged draft is valid only if it already satisfies the instruction.`,
+    alternates: Object.fromEntries(rows.map(row => [`drafts/${row.fileId}.md`, row.targets.map(target =>
+      files[`drafts/${row.fileId}.md`].slice(0, -row.text.length) + target)])) };
+  // A returned edit count describes actual changes, not the number of files whose source pair has a different target.
+  record.semantics.oracle = 'exact';
   record.license = SOURCES.coedit.license;
   record.gold_sources = ['coedit-targets'];
   record.dataset = 'coedit';
@@ -214,6 +219,9 @@ export function folderFind(seed, index, split = 'train') {
   const rng = new Random(seed, `folder_find:${index}`), pool = hotpotRows(split);
   if (pool.length < 3) throw new Error(`HotpotQA ${split} needs at least three records`);
   const question = rng.pick(pool);
+  const calendarDate = /^(?:(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2},? \d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4})$/i.test(question.answer);
+  const answerHint = calendarDate ? 'For this question, give the full calendar date, including month, day and year.' :
+    /^[+-]?\d+(?:\.\d+)?$/.test(question.answer) ? 'For this question, give the number alone.' : '';
   const additional = rng.sample(pool.filter(row => row.id !== question.id), rng.next() < 0.5 ? 2 : 16);
   const documents = new Map();
   for (const row of [question, ...additional]) for (const item of row.context)
@@ -229,19 +237,23 @@ export function folderFind(seed, index, split = 'train') {
   const record = curriculumCase({ family: 'folder_find', shape: `hotpot-${index}`, variant: 'v0',
     splitGroup: `folder_find:${question.id}`, slice: 'inline_placement', domain: 'other', mode: 'single_call',
     inline: 'optional', evidence: { world: [question.question], retrieved: support.map(item => item.title), background: [] },
-    // Both supporting articles must be read before answering.
-    decisive: support.map(item => ({ marker: item.body.slice(0, 40), source: 'read_file', note: `the article ${item.title}` })),
+    // Reference evidence is retained without imposing two hidden article-lead markers on other valid routes.
+    decisive: [],
     minimumSequence: ['search the wiki files', 'read the relevant articles', 'answer using both'],
     reference: { root: [['search_files', { path: 'wiki', query: support[0].title }], ['read_file', { path: paths[0] }],
       ['search_files', { path: 'wiki', query: support[1].title }], ['read_file', { path: paths[1] }],
       returnCall(question.answer)] },
     root: { name: 'answer_from_wiki', kind: 'directory-reducer', args: {}, returns: 'string',
-      instructions: `Answer this question from the articles in wiki/: ${question.question} Return only the answer, as a short phrase.` },
+      instructions: `Answer this question from the articles in wiki/: ${question.question} ${answerHint} Return only the answer, as a short phrase.` },
     folderFiles: files, expectedFiles: files, inputs: {}, expected: question.answer, split });
   // HotpotQA's measure: token F1 against the answer.
-  record.semantics.oracle = { level: 'span', threshold: 0.8 };
+  record.semantics.oracle = { level: 'span', threshold: 0.8, normalization: 'qa',
+    rubric: 'Answer the supplied question from the supplied supporting text. Accept equivalent counts with their correct unit and more precise locations when the text supports them. Reject wrong numbers, negations, unsupported qualifiers, and weekdays when a calendar date is requested. The reference is a valid short answer, not an exact wording requirement.',
+    context: { question: `${question.question} ${answerHint}`.trim(), supporting_text: support.map(item => item.body) } };
   record.license = SOURCES.hotpotqa.license;
   record.gold_sources = ['hotpotqa-answer'];
+  record.curriculum.answer_evidence = question.supportSentences.flat();
+  record.source_support = { titles: question.supports, sentences: question.supportSentences };
   record.dataset = 'hotpotqa';
   record.dataset_records = [question.id, ...additional.map(row => row.id)];
   record.generation.layout = { id: 'id', path: 'wiki/{id}.md', body: 'body', format: 'frontmatter' };
@@ -284,7 +296,7 @@ export function folderExtract(seed, index, split = 'train') {
     const spanView = match < 0 ? [] : [evalCall(
       `console.log((await folder.file(${JSON.stringify(`${row.fileId}.md`)}).readText())` +
       `.slice(${Math.max(0, match - 80)}, ${match + Math.min(row.answer.length + 80, 800)}));`)];
-    return { match: row.fileId, evidence: [row.answer ? row.answer.slice(0, 24) : row.title.slice(0, 24)],
+    return { match: row.fileId,
       calls: [['read_file', { path: `${row.fileId}.md`, start_line: Math.max(1, line - 1), end_line: line + 2 }],
         ...spanView,
         ['return_result', { status: 'success', value: row.answer }]],
@@ -306,7 +318,10 @@ export function folderExtract(seed, index, split = 'train') {
   // A quoted clause matches CUAD's span by token overlap (its annotations differ in extent); rows by id.
   // CUAD's annotations are uneven (a span can be a fragment next to the restriction), so 0.8 of rows suffice.
   record.semantics.oracle = { level: 'agreement', threshold: 0.8 };
-  record.semantics.files_oracle = { compare: 'csv', span: 0.5, threshold: 0.8 };
+  record.semantics.files_oracle = { compare: 'csv', span: 0.5, threshold: 0.8, return_count: 'csv_nonempty', report: 'clauses.csv',
+    rubric: 'The extracted text must be a complete sentence or sentences from this contract imposing a non-compete restriction: competing with the counterparty or operating in a geography, business or technology sector. Reject non-solicitation, exclusivity, unrelated prohibitions, incomplete fragments and whole sections containing unrelated provisions. Annotated clauses are examples and may differ in extent.',
+    quote_sources: Object.fromEntries(chosen.map(row => [row.fileId, `contracts/${row.fileId}.md`])),
+    quote_alternates: Object.fromEntries(chosen.map(row => [row.fileId, row.answers])) };
   record.license = SOURCES.cuad.license;
   record.gold_sources = ['cuad-non-compete-spans'];
   record.dataset = 'cuad';

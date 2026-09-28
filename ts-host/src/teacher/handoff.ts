@@ -10,7 +10,7 @@
  */
 import type { ModelTurn } from '../contracts.js';
 import { executeProgram, programRow, type ProgramRecord, type TeacherRow } from './collector.js';
-import { retiredFamily } from './curriculum-policy.js';
+import { quarantineReason, retiredFamily } from './curriculum-policy.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
 
@@ -38,7 +38,8 @@ const program = (row: TeacherRow) => {
 
 /** The sites of a run that was not accepted. */
 export function handoffSites(row: TeacherRow): Site[] {
-  if (retiredFamily(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if (retiredFamily(row.task.program_ir) || quarantineReason(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if ((row.outcome?.quality_pending as unknown[] | undefined)?.length) return [];
   if ((row.outcome?.checks as Dict | undefined)?.seeded_failure_requirement === false) return [];
   const result = materializeNativeRows([row], { failedRuns: true });
   if (result.unlinked.length) return [];
@@ -82,6 +83,8 @@ export function handoffRecord(row: TeacherRow, handoff: Handoff): ProgramRecord 
  */
 export async function failsInPlace(row: TeacherRow, index: number, response: ModelTurn, kind: SiteKind,
     options: ReplayOptions, runId: string): Promise<string | null> {
+  if ((row.outcome?.quality_pending as unknown[] | undefined)?.length) return 'the result needs independent quality review';
+  if (quarantineReason(program(row))) return `unverified task contract: ${quarantineReason(program(row))}`;
   if (retiredFamily(program(row))) return 'the exercise belongs to a retired curriculum family';
   const trajectory = row.trajectory as unknown as Turn[], calls = callNumbers(trajectory);
   const place = placeOf(calls, index);

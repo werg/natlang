@@ -19,6 +19,9 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 export function sourceRecordId(dataset, text, label) { return digest(`${dataset}\0${text}\0${label}`); }
 export function sourceRecordSplit(id) { return Number.parseInt(id.slice(0, 8), 16) % 10 === 0 ? 'test' : 'train'; }
 
+const quality = new Map();
+const quarantine = (dataset, id, reason) => { quality.set(`${dataset}:${id}:${reason}`, { dataset, id, reason }); };
+export const datasetQualityReport = () => [...quality.values()];
 const loaded = new Map();
 export function labeledRows(dataset, split = 'train') {
   if (!LABELED_FIELDS[dataset]) throw new Error(`unknown labeled dataset ${dataset}`);
@@ -28,7 +31,7 @@ export function labeledRows(dataset, split = 'train') {
     let lines;
     try { lines = readFileSync(`${cachePath(CACHE, dataset, source.revision, file.path)}.jsonl`, 'utf8'); }
     catch { throw new Error(`${dataset} is not cached; run node scripts/inline-curriculum/acquire.mjs --source ${dataset}`); }
-    const unique = new Map();
+    const unique = new Map(), conflicts = new Set();
     for (const line of lines.split(/\r?\n/)) {
       if (!line) continue;
       const row = JSON.parse(line), text = String(row[fields.text] ?? '').replace(/\\/g, ' ').replace(/\s+/g, ' ').trim();
@@ -36,6 +39,10 @@ export function labeledRows(dataset, split = 'train') {
       if (text.length < 15 || text.length > 2000 || !label || label === 'oos') continue;
       // Partition by model-visible text so duplicate inputs with conflicting labels cannot cross train/eval.
       const id = sourceRecordId(dataset, text, '');
+      if (conflicts.has(id)) continue;
+      if (unique.has(id) && unique.get(id).label !== label) {
+        unique.delete(id); conflicts.add(id); quarantine(dataset, id, 'conflicting_labels'); continue;
+      }
       unique.set(id, { id, text, label });
     }
     loaded.set(dataset, [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)));
@@ -62,8 +69,9 @@ export function coeditRows(task, split = 'train') {
       const target = String(row.tgt ?? '').trim();
       if (text.length < 20 || text.length > 1500 || !target || target.length > 1500 || text === target) continue;
       // Several edit targets may share a draft; keep that draft entirely in one pool.
-      const id = sourceRecordId('coedit', original, '');
-      unique.set(id, { id, task, text, target });
+      const id = sourceRecordId('coedit', text, '');
+      const targets = [...new Set([...(unique.get(id)?.targets ?? []), target])].sort();
+      unique.set(id, { id, task, text, target: targets[0], targets });
     }
     coeditCache.set(task, [...unique.values()].sort((a, b) => a.id.localeCompare(b.id)));
   }
@@ -89,11 +97,27 @@ export function hotpotRows(split = 'train') {
         const context = titles.map((title, index) => ({ title: String(title), text: (sentences[index] ?? []).join(' ').trim() }))
           .filter(item => item.text);
         if (context.length < 4) continue;
-        rows.push({ id: sourceRecordId('hotpotqa', row.id, row.answer), question: String(row.question),
-          answer: String(row.answer), supports, context });
+        const supportSentences = supports.map(title => {
+          const sourceIndex = titles.indexOf(title);
+          return (row.supporting_facts?.title ?? []).flatMap((name, index) => name === title ?
+            [sentences[sourceIndex]?.[row.supporting_facts?.sent_id?.[index]]].filter(Boolean) : []);
+        });
+        if (supportSentences.some(group => !group.length)) {
+          quarantine('hotpotqa', row.id, 'missing_support_sentence'); continue;
+        }
+        rows.push({ id: sourceRecordId('hotpotqa', String(row.question).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim(), ''), question: String(row.question),
+          answer: String(row.answer), supports, supportSentences, context });
       }
     }
-    hotpotCache = rows.sort((a, b) => a.id.localeCompare(b.id));
+    const unique = new Map(), conflicts = new Set();
+    for (const row of rows) {
+      if (conflicts.has(row.id)) continue;
+      if (unique.has(row.id) && unique.get(row.id).answer !== row.answer) {
+        unique.delete(row.id); conflicts.add(row.id); quarantine('hotpotqa', row.id, 'conflicting_answers'); continue;
+      }
+      if (!unique.has(row.id)) unique.set(row.id, row);
+    }
+    hotpotCache = [...unique.values()].sort((a, b) => a.id.localeCompare(b.id));
   }
   return hotpotCache.filter(row => sourceRecordSplit(row.id) === split);
 }
@@ -110,11 +134,20 @@ export function cuadContracts(split = 'train') {
       const title = String(item.title ?? ''), paragraphs = item.paragraphs ?? [];
       const content = [...new Set(paragraphs.map(part => String(part.context ?? '')).filter(Boolean))].join('\n\n');
       const qas = paragraphs.flatMap(part => part.qas ?? []);
-      const relevant = qas.find(qa => String(qa.id ?? '').endsWith('__Non-Compete'));
-      if (!title || !content || !relevant || content.length > 1_000_000) continue;
-      const answers = (relevant.answers ?? []).map(answer => String(answer.text ?? '').trim())
-        .filter(text => text && text.length <= 2000 && content.includes(text));
-      contracts.push({ id: sourceRecordId('cuad', title, content), title, content, answer: answers[0] ?? '' });
+      const relevant = qas.filter(qa => String(qa.id ?? '').endsWith('__Non-Compete'));
+      if (!title || !content || !relevant.length || content.length > 1_000_000) continue;
+      const id = sourceRecordId('cuad', title, content);
+      const annotated = relevant.flatMap(qa => qa.answers ?? []);
+      const answers = [...new Set(annotated.map(answer => String(answer.text ?? '').trim())
+        .filter(text => text && text.length <= 2000 && content.includes(text)))];
+      if (relevant.some(qa => qa.is_impossible === false) && !annotated.length) {
+        quarantine('cuad', id, 'missing_positive_annotation'); continue;
+      }
+      if (annotated.length && !answers.length) { quarantine('cuad', id, 'unusable_positive_spans'); continue; }
+      if (relevant.some(qa => qa.is_impossible === true) && annotated.length) {
+        quarantine('cuad', id, 'conflicting_positive_and_impossible'); continue;
+      }
+      contracts.push({ id, title, content, answer: answers[0] ?? '', answers });
     }
     cuadCache = contracts.sort((a, b) => a.id.localeCompare(b.id));
   }

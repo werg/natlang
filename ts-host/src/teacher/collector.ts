@@ -12,12 +12,12 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
-import { checkFiles, checkOracle } from './oracle.js';
+import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { FileToolSurface } from '../native/prompt.js';
 import type { Handoff } from './handoff.js';
-import { retiredFamily } from './curriculum-policy.js';
+import { quarantineReason, retiredFamily } from './curriculum-policy.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -125,7 +125,7 @@ export function jobKey({ index, record }: IndexedRecord): string {
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
-    runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2,
+    runtime: 'typescript-native', collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
@@ -139,6 +139,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(record.handoff && record.semantics.failure_seed ? { seeded_handoff_version: 2 } : {}),
     ...(options.fileTools && options.fileTools !== 'all' ? { file_tools: options.fileTools } : {}),
     ...(options.judgeModel ? { judge: { model: options.judgeModel.modelId,
+      ...(options.judgeModel.endpoint ? { endpoint_sha256: sha256(options.judgeModel.endpoint) } : {}),
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
       ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
         pi_options: options.judgeModel.piOptions ?? {} } : {}) } } : {}) };
@@ -225,7 +226,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'judge'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -496,6 +497,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.judgeModel && (!config.judgeModel.modelId ||
       Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
     throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
+  if (config.judgeModel?.modelId === config.modelId) throw new Error('teacher and judge must use distinct model IDs');
   for (const [name, value] of Object.entries({ modelConcurrency: config.modelConcurrency, maxModelRequests: config.maxModelRequests }))
     if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be positive`);
   const slots = config.modelConcurrency ? new KvBudget(config.modelConcurrency) : undefined;
@@ -503,6 +505,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   return async (item, expected, signal) => {
     const retired = retiredFamily(item.record);
     if (retired) throw new Error(`retired curriculum family: ${retired}`);
+    const quarantine = quarantineReason(item.record);
+    if (quarantine) throw new Error(`quarantined curriculum case: ${quarantine}`);
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
@@ -520,7 +524,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       request: config.request });
     try {
     let sent = 0, exhausted = false;
-    const admittedSend = async (request: ModelTurnRequest) => {
+    const admittedSend = async (request: ModelTurnRequest, sender = send) => {
       if (signal?.aborted) throw new Error('collection cancelled');
       if (config.maxModelRequests && sent >= config.maxModelRequests) {
         exhausted = true;
@@ -532,7 +536,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         if (signal?.aborted || exhausted) throw new Error('collection cancelled or budget exhausted');
         const need = requestTokens(request);
         if (kv) await kv.acquire(need);
-        try { return await send(request); } finally { if (kv) kv.release(need); }
+        try { return await sender(request); } finally { if (kv) kv.release(need); }
       } finally { if (slots) slots.release(1); }
     };
     const transport = config.executionPlans ? withExecutionPlans(admittedSend,
@@ -541,11 +545,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       await (judgeReady ??= judgeSession.prepare());
       return judgeSession.turn(request);
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
-    const judge = judgeTransport ? modelOracleJudge(async request => {
-      if (kv) await kv.acquire(requestTokens(request));
-      try { return await judgeTransport(request); }
-      finally { if (kv) kv.release(requestTokens(request)); }
-    }) : undefined;
+    const judge = judgeTransport ? modelOracleJudge(request => admittedSend(request, judgeTransport)) : undefined;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
     const saved = await loadPartial(partialPath, item, expected);
@@ -610,7 +610,7 @@ export function programRow(record: ProgramRecord, modelId: string, runId: string
 
 export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   maxTurns?: number; temperature?: number; rootSeed: number; runId: string; signal?: AbortSignal; fileTools?: FileToolSurface;
-  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string }> };
+  judge?: (input: { actual: unknown; expected: unknown; rubric: string }) => Promise<{ accepted: boolean; verdict: string; needs_review?: boolean }> };
 export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolean }; trace: Record<string, unknown>[] };
 
 /**
@@ -675,28 +675,33 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const authoring = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
     // A folder's result files: exactly as expected, or as its files oracle checks them (oracle.ts checkFiles).
     const filesCheck = folder && !authoring && record.semantics.files_oracle && actualFiles ?
-      checkFiles(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!, record.semantics.files_oracle) : undefined;
+      await checkFilesWithJudge(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!, record.semantics.files_oracle, options.judge) : undefined;
     const filesOk = !folder || (authoring ? authoring.ok : filesCheck ? filesCheck.accepted :
       same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.
     const honestStop = expectedKind !== 'quiesced' || /^(?:blocked|error): /.test(String(result.outcome.detail ?? ''));
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     const worldOk = !worldScore || worldScore.score >= 100;
-    const oracle = await checkOracle(actual, record.semantics.expected, record.semantics.oracle, options.judge);
+    const answerExpected = actualFiles && record.semantics.files_oracle?.return_count === 'changed' ?
+      fileReturnValue(actualFiles, folderFiles!, record.semantics.files_oracle) : record.semantics.expected;
+    const oracle = await checkOracle(actual, answerExpected, record.semantics.oracle, options.judge);
     const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
       honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
+      file_return_consistency: !actualFiles || !record.semantics.files_oracle ||
+        checkFileReturn(actual, actualFiles, folderFiles!, record.semantics.files_oracle),
       answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted };
     const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
     const accepted = rejectionReasons.length === 0;
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
-      ...(worldScore ? { world: worldScore } : {}), ...(filesCheck ? { files_check: filesCheck } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
+      ...(worldScore ? { world: worldScore } : {}), ...(!filesCheck && oracle.needs_review ? { quality_pending: ['answer_needs_review'] } : {}), ...(filesCheck ? { files_check: filesCheck, quality_pending: [...filesCheck.pending, ...(oracle.needs_review ? ['answer_needs_review'] : [])] } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]
         .filter(event => event.kind === 'action'),
+      ...(answerExpected !== record.semantics.expected ? { derived_expected: answerExpected } : {}),
       scope_failures: trace.filter(event => event.kind === 'scope_failure'),
       host_events: trace.filter(event => event.kind === 'host') } };
   } finally { environment.close(); world?.close(); }

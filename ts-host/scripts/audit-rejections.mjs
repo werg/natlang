@@ -3,7 +3,7 @@
 import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { admitRow, obsoleteOutcomes } from '../dist/teacher/curriculum.js';
-import { retiredFamily } from '../dist/teacher/curriculum-policy.js';
+import { quarantineReason, retiredFamily } from '../dist/teacher/curriculum-policy.js';
 
 const [output, ...roots] = process.argv.slice(2);
 if (!output || !roots.length) throw new Error('usage: audit-rejections.mjs OUTPUT_DIR JOBS_OR_RUNS_DIR...');
@@ -60,7 +60,8 @@ for (const root of roots) for await (const file of files(root)) {
   const reasons = [...new Set([...(admission?.reasons ?? []), ...(row.outcome.rejection_reasons ?? []),
     ...(taskRejected ? ['task_contract'] : [])])];
   // These are review routes, not inferred root causes. Older rows may not carry an answer oracle/check breakdown.
-  const reviewCategory = retiredFamily(program) ? 'retired_exercise' : obsolete.length ? 'obsolete_runtime_history' :
+  const reviewCategory = retiredFamily(program) ? 'retired_exercise' : quarantineReason(program) ?
+    'unverified_task_contract' : row.outcome.quality_pending?.length ? 'pending_independent_review' : obsolete.length ? 'obsolete_runtime_history' :
     row.outcome.files_check?.accepted === false ? 'file_contract_review' : row.outcome.oracle?.accepted === false ?
     'answer_review' : taskRejected ? 'execution_contract_review' : 'evidence_or_technique_review';
   bump(summary.review_categories, reviewCategory);

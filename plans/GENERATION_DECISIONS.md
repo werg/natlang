@@ -193,3 +193,57 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   runtime-v4 src/dist hashes match the reviewed main build. At the live checkpoint, 12 of queue-v3's 552 eligible
   entries have finished attempts (including earlier deferred timeouts); 540 remain. Probe 65 has advancing saved
   turns, and Bonsai health is OK. The machine audit's successful-run mix is reported in REJECTION_REVIEW.md.
+
+
+## 2026-09-28 — Slow-case evidence and data quality version 2
+
+- Investigated the saved timeout replies, separating fresh inference from replayed prefixes. Handoff 65 genuinely
+  churns through rejected premise combinations (13 fresh replies / 11,208 tokens). Its checker rejects every set
+  in the removed-premise variant, while its child assumes support exists. Removing one annotated EntailmentBank
+  premise does not prove no alternative science proof exists: quarantine these source variants, block their
+  handoffs/preferences and stop generating them. Preserve raw evidence.
+- FOLIO 142 and 217 each decode about 12,000 tokens with finite model checking and completed child judgments.
+  They make progress with considerable rework rather than sitting in a frozen request. Folder 84 is an execution/
+  context stall with only one per-file judgment. TextWorld 6 explores but its generated step returns stale
+  pre-action state. Full per-case evidence is in the slow-cases artifact; do not label all timeouts bad reasoning.
+- General fixes: strict CSV parsing/schema/unique ids, separate positive recall/precision, literal per-contract
+  quote provenance, independent semantic grading for alternate quote extents, strict count-line parsing, actual
+  report/return consistency, INDEX totals and per-original-file move scoring. Read-only corruption is a hard
+  failure. Word overlap no longer certifies rewrites. Alternate/unchanged CoEdIT drafts need an independent
+  rubric verdict; tasks say review/edit as needed and count actual edits.
+- Source fixes: quarantine conflicting labels instead of last-row overwrite; key CoEdIT splits by visible draft
+  across task/instruction wording and retain targets; retain Hotpot supporting sentences, group by visible
+  question and quarantine conflicting answers; retain CUAD alternate spans and quarantine unusable positives
+  rather than calling them negative. Generator reports now include source quarantine reasons/identities.
+- Breaking evidence/admission decisions: reference child layout/markers and technique/efficiency differences
+  become notes. Correct direct/delegated/mixed results can be admitted; genuine result/effect/file/repair contracts
+  and follow-up causal checks remain. Hotpot replaces two hidden article-lead markers with observed annotated
+  supporting-sentence evidence. QA article normalization/numeric checks and source-aware rubric fallback handle
+  equivalents; date-shaped gold leads to explicit calendar-date wording. No unchecked substring equivalence.
+- Breaking training decision: partial file items and below-perfect aggregate agreement can be useful evaluation
+  results but are held for review before training their constituent judgments. Missing/insufficient grading is
+  quality_pending, excluded from SFT and negative handoffs/preferences. Technique-only preference pairs are
+  retired. The standard SFT builder no longer defaults to excluding direct solutions. Legacy folder contracts
+  and already-prepared old SFT/pair artifacts require fresh admission/rebuilding before training.
+- Admission is version 2; data_quality_version 2 and judge identity/endpoint hash participate in reuse. Teacher
+  and judge must have distinct model IDs. Grading shares the whole-case request/concurrency/KV budget, uses
+  bounded contract context, and supports needs_review. No independent judge was started; ambiguous free
+  rewrites and alternate quoted extents remain excluded pending adjudication, not relabeled model mistakes.
+- Supervisor now journals activity every 30 seconds and distinguishes inactivity_timeout after five minutes
+  without a saved reply from the hard case deadline. Default remains 600 seconds / 128 requests; FOLIO/ANLI
+  batches get 1,200 seconds; all-file tasks get size-based budgets up to 3,600 seconds / 512 requests. Request
+  concurrency remains 2, collection workers 1 and turns per call 20. Repetition counters are diagnostic only.
+- Built seven reference-verified replacement cases across six folder families (six distinct tasks; one hinted
+  twin). queue-v4 contains 558 entries before skips, including two measured FOLIO retries; removes the unsupported
+  premise probe and legacy CUAD case. Migrated from supervisor PID 154289 by exact PID to frozen runtime-v5.
+  Handoff 591 was interrupted and remains pending in its original raw directory. Fresh v5 jobs use distinct paths.
+  Supervisor PID 181397 owns the new queue; first task is quality-v2:0. Luna remains stopped; no training started.
+- Both relational probes are task-accepted (171.5s / 205.9s); handoff 589 also finishes correctly in 427s.
+  New snapshot: 4,443 raw results, 909 task rejections, 1,464 admission rejections and 585 collector error files.
+  Admitted raw-run technique mix: 2,087 direct, 532 inline, 213 named-only (not deduplicated final training counts).
+  Queue checkpoint: 16 finished attempts and 542 pending. Preserve source grouping and held-out separation.
+- Validation: Node/browser build and browser type checks pass; 132 focused regressions pass, including CSV,
+  rewrite/quote grading, pending verdicts, shared judge budget, time-vs-inactivity bounds, source conflicts,
+  mixed delegation, admission, runtime/compiler/files/handoffs and raw-job audit. All seven replacement references
+  verify. Frozen runtime-v5's 332 src/dist file hashes match the reviewed build. New runtime/prompt retains the
+  user's three ad hoc layers per pre-existing .nl file root.

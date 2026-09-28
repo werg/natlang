@@ -4,7 +4,7 @@ import { NativeToolAgent } from '../dist/native/agent.js';
 import { directoryReducerPrompt, DIRECTORY_REDUCER_PROMPT } from '../dist/native/prompt.js';
 
 const names = surface => new NativeToolAgent(async () => ({ calls: [] }), surface ? { fileTools: surface } : {})
-  .tools({ lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
+  .tools({ runtime: { frame: { adHocDepth: 0 } }, lam: { codebase: {}, projectTransaction: {}, type: { kind: 'prim', name: 'unknown' } } })
   .map(item => item.function.name);
 
 test('a directory reducer offers the file tools of its surface, and its prompt names only those', () => {

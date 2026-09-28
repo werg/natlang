@@ -48,7 +48,38 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
   writeFileSync(join(bankingDirectory, 'train.csv.jsonl'), Array.from({ length: 600 }, (_, index) => JSON.stringify({
     text: `Request ${index} about ${intents[index % intents.length].replaceAll('_', ' ')}, please help.`,
     category: intents[index % intents.length] })).join('\n') + '\n');
+  const { appendFileSync } = await import('node:fs');
+  appendFileSync(join(directory, 'train-00000-of-00001.parquet.jsonl'),
+    [{ sms: 'Identical disputed message with two conflicting labels.', label: 'ham' },
+      { sms: 'Identical disputed message with two conflicting labels.', label: 'spam' }].map(JSON.stringify).join('\n') + '\n');
+  appendFileSync(join(coeditDirectory, 'train.jsonl'), [
+    { task: 'gec', src: 'Fix: Shared draft with a spelling eror in it.', tgt: 'Shared draft with a spelling error in it.' },
+    { task: 'gec', src: 'Correct: Shared draft with a spelling eror in it.', tgt: 'A shared draft has a spelling error in it.' },
+    { task: 'neutralize', src: 'Neutralize: Shared draft with a spelling eror in it.', tgt: 'This draft contains a spelling error.' },
+  ].map(JSON.stringify).join('\n') + '\n');
+  const { readFileSync } = await import('node:fs');
+  const cuadFile = join(cuadDirectory, 'CUAD_v1.json');
+  const cuad = JSON.parse(readFileSync(cuadFile, 'utf8'));
+  const longSpan = 'shall not compete '.repeat(150);
+  cuad.data.push({ title: 'Unusable positive', paragraphs: [{ context: longSpan,
+    qas: [{ id: 'long__Non-Compete', answers: [{ text: longSpan }] }] }] });
+  cuad.data.push({ title: 'Multiple spans', paragraphs: [{ context: 'Do not compete. Do not compete elsewhere.',
+    qas: [{ id: 'multiple__Non-Compete', answers: [{ text: 'Do not compete.' }, { text: 'Do not compete elsewhere.' }] }] }] });
+  writeFileSync(cuadFile, JSON.stringify(cuad));
   process.env.NATLANG_DATASETS = root;
+  const { labeledRows, coeditRows, cuadContracts, datasetQualityReport } = await import('../scripts/inline-curriculum/folder-data.mjs');
+  assert.equal([...labeledRows('sms_spam'), ...labeledRows('sms_spam', 'test')]
+    .some(row => row.text.startsWith('Identical disputed')), false);
+  const allEdits = [...coeditRows('gec'), ...coeditRows('gec', 'test')];
+  const shared = allEdits.find(row => row.text.startsWith('Shared draft'));
+  const neutral = [...coeditRows('neutralize'), ...coeditRows('neutralize', 'test')][0];
+  assert.equal(shared.targets.length, 2);
+  assert.equal(shared.id, neutral.id, 'split identity is the visible draft, across tasks/instruction wording');
+  const allContracts = [...cuadContracts(), ...cuadContracts('test')];
+  assert.equal(allContracts.some(row => row.title === 'Unusable positive'), false);
+  assert.equal(allContracts.find(row => row.title === 'Multiple spans').answers.length, 2);
+  assert.ok(datasetQualityReport().some(row => row.reason === 'conflicting_labels'));
+  assert.ok(datasetQualityReport().some(row => row.reason === 'unusable_positive_spans'));
   const { folderTriage, folderIndex, folderEdit, folderFind, folderExtract } = await import('../scripts/inline-curriculum/folder-families.mjs');
   const train = folderTriage(3, 0, 'train', 'sms_spam')[0];
   const heldOut = folderIndex(3, 0, 'test', 'sms_spam')[0];
@@ -59,6 +90,11 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
   const extract = folderExtract(3, 0, 'train')[0];
   const heldOutExtract = folderExtract(3, 0, 'test')[0];
   assert.ok(train.dataset_records.length >= 20);
+  assert.equal(train.semantics.files_oracle.compare, 'moves');
+  assert.equal(edits.semantics.files_oracle.return_count, 'changed');
+  assert.equal(extract.semantics.files_oracle.return_count, 'csv_nonempty');
+  assert.equal(find.curriculum.decisive.length, 0);
+  assert.ok(find.curriculum.answer_evidence.length >= 2);
   assert.ok(heldOut.dataset_records.length >= 20);
   assert.equal(train.dataset_records.some(id => heldOut.dataset_records.includes(id)), false);
   assert.equal(edits.dataset_records.some(id => heldOutEdits.dataset_records.includes(id)), false);

@@ -10,6 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { verifyCases } from '../../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { datasetQualityReport } from './folder-data.mjs';
 import { FAMILIES, buildRecords } from './families.mjs';
 
 const { values } = parseArgs({ options: { seed: { type: 'string', default: '1' }, shapes: { type: 'string', default: '2' },
@@ -35,7 +36,7 @@ await mkdir(dirname(out), { recursive: true });
 const byFamily = {};
 for (const record of records) byFamily[record.curriculum.family] = (byFamily[record.curriculum.family] ?? 0) + 1;
 const report = { seed, shapes, start, families: selected, cases: records.length, verified: records.length - failures.length,
-  by_family: byFamily, failures: failures.map(item => ({ id: item.id, problems: item.problems })) };
+  by_family: byFamily, source_quarantine: datasetQualityReport(), failures: failures.map(item => ({ id: item.id, problems: item.problems })) };
 await writeFile(`${out}.report.json`, JSON.stringify(report, null, 2) + '\n');
 if (failures.length && !values['allow-failures']) {
   console.error(`${failures.length} of ${records.length} cases failed verification; no shard written (report: ${out}.report.json)`);

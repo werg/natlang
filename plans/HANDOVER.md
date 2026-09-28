@@ -1,5 +1,14 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **2026-09-28 data quality and slow-case review:** Bonsai now uses `queue-v4.jsonl` and frozen
+> `runtime-v5`, with the existing append-only journal. New jobs have distinct paths; raw histories are preserved.
+> Read [DATA_QUALITY.md](DATA_QUALITY.md) and the latest decision log before restarting or building data.
+> The queue has 558 entries before journal skips: six distinct verified folder replacements, two measured FOLIO
+> retries, and the filtered recovery work. Unsupported premise-removal and legacy CUAD probes are excluded.
+> Inactivity (no saved reply for five minutes) is distinguished from hard deadlines; multi-item cases get larger
+> bounded budgets. Quality-pending and partial benchmark results are held out of training/negative pairs.
+> Correct direct/delegated/mixed results remain eligible. Luna stays stopped; no model training has started.
+
 > **2026-09-28 full rejection audit:** Bonsai now uses `runs/bonsai-recovery/queue-v3.jsonl`
 > and frozen `runs/bonsai-recovery/runtime-v4`, with the same append-only journal.
 > Six reviewed probes precede the 546-entry recovery queue; completed attempts are skipped. Luna remains stopped.
@@ -48,7 +57,7 @@ stopped. Nothing is lost by restarting any collector below with the same argumen
   Network is on by default in every tool. Browser parity is required; natlang runs in a worker in the browser.
 - No junk data: delete backups, moved-aside dirs and superseded builds once their replacement is verified.
 - Fix issues generally, not narrowly. Tool shapes are chosen by what our models do best (measured), nothing else.
-- **Luna (GPT-6 Luna via Codex) runs with at most 2 workers in total**; Codex requests were being refused earlier.
+- **Luna generation remains stopped at the user's request.** Bonsai owns the bounded recovery queue.
 - Student: Sharp-Spark-X2.5-4B, trained at max-len 8192 (QLoRA, see `scripts/train_lora.py`, 8 GB GPU, 14 GB RAM).
   The user chose to keep generating before training.
 - Another agent works in this checkout at times (it built the directory-reducer runtime). Check `git status` before
@@ -184,8 +193,8 @@ Collectors write `*.results.jsonl` only when they finish; before building from a
 
 - Per result: `outcome.accepted`, `outcome.oracle`, `outcome.files_check` (score, failed items), `outcome.detail`.
 - Admission: `node ts-host/scripts/inline-curriculum/admit.mjs RESULTS.jsonl --ledger L.jsonl` prints rejection
-  counts; each ledger line has `reasons` and `notes` (`judged_directly` is admitted but left out of SFT by
-  `--require-technique`).
+  counts; each ledger line has `reasons` and `notes`. The standard SFT builder includes correct direct and
+  delegated runs; use technique notes for coverage rather than treating direct answers as incorrect.
 - Pattern that worked today: pilot a handful of cases per family, read the root's calls and what came back, and ask
   whether the task, its oracle or the runtime is at fault before blaming the model. Rebuild shards after family
   changes (`build.mjs` verifies every reference by replay and writes no shard if one fails).

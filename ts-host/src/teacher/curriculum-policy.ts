@@ -7,3 +7,20 @@ export function retiredFamily(record: ProgramRecord): string | undefined {
   const curriculum = record.curriculum as { family?: string } | undefined;
   return curriculum?.family && RETIRED_FAMILIES.has(curriculum.family) ? curriculum.family : undefined;
 }
+
+/** Source counterfactuals whose labels cannot be established by deleting an annotated proof leaf. */
+export function quarantineReason(record: ProgramRecord): string | undefined {
+  const curriculum = record.curriculum as { family?: string; variant?: string; answer_evidence?: string[] } | undefined;
+  if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
+    return 'unverified_counterfactual';
+  if (curriculum?.family === 'folder_extract' && (!record.semantics.files_oracle?.quote_sources ||
+      !record.semantics.files_oracle.return_count)) return 'legacy_extraction_contract';
+  if (curriculum?.family === 'folder_edit' && (!record.semantics.files_oracle?.rubric ||
+      !record.semantics.files_oracle.return_count)) return 'legacy_rewrite_contract';
+  if (curriculum?.family === 'folder_index' && (!record.semantics.files_oracle?.return_count ||
+      record.semantics.files_oracle.total === undefined)) return 'legacy_counts_contract';
+  if (curriculum?.family === 'folder_triage' && record.semantics.files_oracle?.compare !== 'moves')
+    return 'legacy_move_contract';
+  if (curriculum?.family === 'folder_find' && !curriculum.answer_evidence?.length)
+    return 'legacy_article_evidence_policy';
+}

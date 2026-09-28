@@ -60,7 +60,7 @@ test('admission preserves the declared evidence level of a case oracle', async (
   assert.equal(admitRow({ task: { program_ir: described }, outcome: run.outcome, trajectory }).oracle_level, 'span');
 });
 
-test('admission requires each child to observe its specified file evidence', async () => {
+test('reference evidence markers do not impose a hidden contract on correct children', async () => {
   const [, record] = FAMILIES.inline_review_each.build(7, 0);
   record.curriculum.reference.root = [['eval',
     { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
@@ -72,8 +72,9 @@ test('admission requires each child to observe its specified file evidence', asy
   observed.curriculum.reference.children[0].evidence = [observed.curriculum.reference.children[0].match];
   assert.equal(admitRow({ task: { program_ir: observed }, outcome: run.outcome, trajectory }).admitted, true);
   observed.curriculum.reference.children[0].evidence = ['marker-never-shown'];
-  assert.match(admitRow({ task: { program_ir: observed }, outcome: run.outcome, trajectory }).reasons.join(' '),
-    /missing_child_observation:marker-never-shown/);
+  const different = admitRow({ task: { program_ir: observed }, outcome: run.outcome, trajectory });
+  assert.equal(different.admitted, true);
+  assert.ok(different.notes.includes('reference_evidence_differs'));
 });
 
 test('a row showing an outcome the runtime no longer produces is not admitted', async () => {
@@ -94,7 +95,7 @@ test('a row showing an outcome the runtime no longer produces is not admitted', 
     ['obsolete_outcome:duplicate_injected_binding']);
 });
 
-test('successful direct and delegated judgments are admitted; invalid substitutes and edits are rejected', async () => {
+test('successful direct and delegated judgments are admitted; unwarranted edits are rejected', async () => {
   const [semantic, crisp] = FAMILIES.inline_review_each.build(7, 0);
   // Answering a per-item semantic filter directly, without inline children.
   const direct = structuredClone(semantic);
@@ -102,12 +103,13 @@ test('successful direct and delegated judgments are admitted; invalid substitute
   const plain = await replayReference(direct, TOOLS_PROMPT);
   const directVerdict = admitRow({ task: { program_ir: direct }, outcome: plain.run.outcome, trajectory: plain.trajectory });
   assert.deepEqual([directVerdict.reasons, directVerdict.notes], [[], ['judged_directly']]);
-  // A keyword regex standing in for the judgment is rejected even when its answer happens to be right.
+  // A successful keyword-assisted route is recorded without declaring it an incorrect answer.
   const keywords = structuredClone(semantic);
   keywords.curriculum.reference.root = [['eval', { code: 'inbox().filter(t => /down|failing|broken/i.test(t.text)).map(t => t.id)' }],
     keywords.curriculum.reference.root.at(-1)];
   const regex = await replayReference(keywords, TOOLS_PROMPT);
-  assert.deepEqual(admitRow({ task: { program_ir: keywords }, outcome: regex.run.outcome, trajectory: regex.trajectory }).reasons, ['regex_judgment']);
+  assert.deepEqual(admitRow({ task: { program_ir: keywords }, outcome: regex.run.outcome, trajectory: regex.trajectory }).reasons, []);
+  assert.ok(admitRow({ task: { program_ir: keywords }, outcome: regex.run.outcome, trajectory: regex.trajectory }).notes.includes('regex_used'));
   // Delegating a field test is valid even when the seed suggests a direct answer.
   const eager = structuredClone(crisp);
   eager.curriculum.reference.root = [['eval', { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
@@ -171,7 +173,21 @@ test('child evidence is attributed by arguments, not another item in captured co
   const b = child('item-b.txt: evidence for item B', 'item-a.txt: evidence for item A');
   const verdict = trajectory => admitRow({ task: { program_ir: record }, outcome: { status: 'done', accepted: true }, trajectory });
   assert.deepEqual(verdict([a, b]).reasons, []);
-  assert.ok(verdict([a]).reasons.some(reason => reason.startsWith('missing_child:')));
+  assert.deepEqual(verdict([a]).reasons, [], 'not every item needs its own delegated child');
   b.context[3].content = 'item-b.txt: unread';
-  assert.ok(verdict([a, b]).reasons.includes('missing_child_observation:evidence for item B'));
+  assert.equal(verdict([a, b]).admitted, true);
+  assert.ok(verdict([a, b]).notes.includes('reference_evidence_differs'));
+});
+
+
+test('partial benchmark agreement is held for review rather than teaching incorrect per-item decisions', () => {
+  const [record] = FAMILIES.inline_review_each.build(7, 0);
+  record.curriculum.decisive = [];
+  record.curriculum.reference.children = [];
+  const row = { task: { program_ir: record }, outcome: { status: 'done', accepted: true,
+    oracle: { level: 'agreement', accepted: true, score: 0.95 } }, trajectory: [] };
+  assert.ok(admitRow(row).reasons.includes('quality_pending_partial_agreement'));
+  row.outcome.oracle = { level: 'exact', accepted: true };
+  row.outcome.files_check = { failed: ['r.csv:item'] };
+  assert.ok(admitRow(row).reasons.includes('quality_pending_partial_files'));
 });
