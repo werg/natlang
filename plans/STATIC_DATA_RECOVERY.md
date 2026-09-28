@@ -1,5 +1,9 @@
 # Static data recovery audit — 2026-09-28
 
+Modern recovery is now implemented; see [MODERN_STATIC_ADAPTERS.md](MODERN_STATIC_ADAPTERS.md)
+for actual admission, holds and audits. The inventory below is the earlier recovery
+checkpoint. It does not override the newer conservative source policy.
+
 ## Finding and scope
 
 Valuable source data survived on disk, but several adapters did not survive the

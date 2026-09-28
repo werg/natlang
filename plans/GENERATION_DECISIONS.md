@@ -511,3 +511,33 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   and removed superseded pilot exports after verifying the final artifact. MuSiQue acquisition now stages
   downloads atomically and retries incomplete archives. Static builders require newly built main/new training
   freeze; the old generation freeze does not contain the source-conversion helper. Do not mutate live v10.
+
+
+## 2026-09-28 — modern static adapters and conservative admission
+
+User requested modern recovery, only high quality training data, and audit of already
+integrated static sources. Implemented seven source adapter families, full raw
+SCONE/SGD/CLEVR joins, separate holdout/held libraries, and a 72-case native pilot
+connected to both builders. A replay cannot override held source quality. FinQA units,
+sales/Typed labels, semantic synthetic programs and 620 modern leaf joins stay held.
+FinQA dataset license corrected to CC-BY-4.0; no FinQA case is trained.
+
+Initial documentation-route discrepancy was my adapter's `docs`/`documentation`
+mismatch, not bad source gold. Corrected it, verified rubric values, regression tested.
+Added fold-step definition recovery rather than guessing leaf signatures.
+
+Rebuilt 51 directory cases with identical IR and replayed all 2,192 static references.
+Sharp token audit found 661 excess reference pairs. Breaking final-data change:
+`audit_training_corpus.py` now removes rendered duplicate pairs, keeps attribution and
+the most restrictive reasoning mask, and holds train/holdout-connected components.
+Old ready audit artifacts must be rebuilt. Scripted/source replay evidence is reported
+separately from generated teacher evidence. See MODERN_STATIC_ADAPTERS.md for commands,
+counts, artifacts, test limitations and remaining review work. Live Bonsai and single
+Luna workers were not migrated or restarted; no model training was launched.
+
+
+Final combined Sharp audit: 5,656 rendered static candidates -> 4,995 unique ready
+decisions, removing 661 duplicates; zero train/holdout-connected rows in this mix;
+max 6,356/8,192 tokens. Explicit test verifies recovered original holdouts cannot be
+promoted by an ordinary teacher result even if its current split is relabeled train.
+Canonical bundle is data/teacher/recovered; superseded intermediate builds were removed.

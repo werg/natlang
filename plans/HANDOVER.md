@@ -1,5 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Modern adapters / strict static quality audit (2026-09-28):** read
+> [MODERN_STATIC_ADAPTERS.md](MODERN_STATIC_ADAPTERS.md). Modern decision, state, scene,
+> numeric, synthetic/fold and leaf adapters are implemented. Only the verified 72-case
+> pilot / 325 decisions is automatically connected, alongside the existing 51-case
+> directory pilot. FinQA, sales/Typed labels, semantic synthetic programs and all 620
+> joined leaf references remain held. Raw annotations/splits/licenses are preserved.
+> Rebuilt directory IR matches exactly; all 2,192 old static references replayed.
+> Sharp audit discovered 661 duplicate reference pairs: final audit now removes them
+> and holds train/holdout-connected rows (4,513 unique reference decisions; combined
+> static audit: 4,995 unique decisions, max 6,356 tokens). Ready
+> artifacts and rejection ledgers are under runs/modern-adapters-20260928/ and
+> runs/integrated-quality-audit-20260928/. No training/model calls started by this work;
+> existing Bonsai and single Luna supervisors remain on frozen v10.
+
 > **Static data recovery audit (2026-09-28):** see `plans/STATIC_DATA_RECOVERY.md`.
 > Reconnected 2,192 static reference trajectories to the staged recipe; 5,174 decisions
 > currently pass native admission, before dedup/split/token gates. Held six obsolete

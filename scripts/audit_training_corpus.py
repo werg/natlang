@@ -25,6 +25,11 @@ def evidence(row):
     explicit = row.get('behavioral_evidence') or row.get('evidence')
     if explicit:
         return explicit.get('kind', 'declared') if isinstance(explicit, dict) else str(explicit)
+    conversion = row.get('source_conversion') or row.get('provenance', {}).get('source_conversion')
+    if conversion:
+        return 'source_operation_native_replay' if conversion.get('conversion_scope') != 'source_task_reference' else 'source_program_native_replay'
+    if row.get('source') == 'reference-native' or row.get('provenance', {}).get('collection_role') == 'reference':
+        return 'scripted_native_reference'
     if row.get('execution_verified'):
         return 'execution_verified_unspecified_oracle'
     if row.get('teacher_trajectory_id'):
@@ -75,6 +80,54 @@ def assess(row, tokenizer, end_token, max_len):
     summary['pair_sha256'] = _sha(_jsonl_bytes([{'prompt': prompt, 'completion': target}]))
     return {'summary': summary, 'record': None if reason else {**row, 'token_counts': {
         key: summary[key] for key in ('prompt_tokens', 'supervised_tokens', 'total_tokens')}}}
+
+
+def filter_duplicate_and_holdout_links(assessed):
+    """Deduplicate actual rendered supervision and hold train/holdout connected groups."""
+    import copy
+    selected = copy.deepcopy(assessed)
+    parent = {}
+    def find(key):
+        parent.setdefault(key, key)
+        root = key
+        for _ in range(len(parent) + 1):
+            if parent[root] == root: break
+            root = parent[root]
+        parent[key] = root
+        return root
+    def union(a, b):
+        a, b = find(a), find(b)
+        parent[max(a, b)] = min(a, b)
+    pairs = {}
+    for index, item in enumerate(selected):
+        record = item['record']
+        if record is None: continue
+        pair = 'pair:' + item['summary']['pair_sha256']
+        keys = [pair, *['group:' + str(value) for value in record.get('source_groups', [])]]
+        if record.get('program_id'): keys.append('program:' + str(record['program_id']))
+        for key in keys: union(pair, key)
+        pairs.setdefault(pair, []).append(index)
+    held = {find('pair:' + item['summary']['pair_sha256']) for item in selected
+            if item['record'] is not None and item['summary']['split'] != 'train'}
+    overlap = duplicates = 0
+    for item in selected:
+        if item['record'] is not None and item['summary']['split'] == 'train' and find('pair:' + item['summary']['pair_sha256']) in held:
+            item['record'] = None;item['summary']['reason'] = 'source_or_pair_overlaps_holdout';overlap += 1
+    for indices in pairs.values():
+        eligible = [i for i in indices if selected[i]['record'] is not None]
+        if len(eligible) < 2: continue
+        # Equal visible pairs with different reasoning masks retain the most restrictive mask.
+        keep = max(eligible, key=lambda i: selected[i]['record'].get('completion_masked', 0))
+        record = selected[keep]['record']
+        record['source_groups'] = sorted(set(str(g) for i in eligible for g in selected[i]['record'].get('source_groups', [])))
+        record['duplicate_source_rows'] = [{'id': selected[i]['record'].get('id'),
+                                           'source_ids': selected[i]['record'].get('source_ids', []),
+                                           'license': selected[i]['record'].get('license'),
+                                           'gold_sources': selected[i]['record'].get('gold_sources', [])} for i in eligible]
+        for index in eligible:
+            if index == keep: continue
+            selected[index]['record'] = None;selected[index]['summary']['reason'] = 'duplicate_rendered_pair';duplicates += 1
+    return selected, {'duplicate_rendered_pairs_removed': duplicates, 'train_rows_overlapping_holdout': overlap}
 
 
 def report_for(assessed, max_len):
@@ -211,7 +264,9 @@ def audit_corpus(source, output, *, model, revision=None, max_len=8192, chunk_ro
                 return 75
         if _file_sha(source) != identity['source_sha256'] or _file_sha(source_manifest_path) != identity['manifest_sha256']:
             raise ValueError('source changed during audit')
+        assessed, deduplication = filter_duplicate_and_holdout_links(assessed)
         report = report_for(assessed, max_len)
+        report['deduplication'] = deduplication
         missing_tracks = [name for name in required_tracks
                           if report['distributions']['training_track'].get(name, {}).get('train_rows', 0) < 1]
         report['missing_required_tracks'] = missing_tracks

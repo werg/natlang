@@ -156,3 +156,47 @@ def test_upstream_rejections_are_reported_separately_and_pinned(tmp_path):
     ledger.write_text('')
     with pytest.raises(ValueError, match='identity changed'):
         audit_corpus(source, out, model='mock', tokenizer=Tokenizer(), rejection_ledgers=[ledger])
+
+
+
+def test_static_replay_is_not_reported_as_generated_teacher_evidence():
+    from scripts.audit_training_corpus import evidence
+    assert evidence({'teacher_trajectory_id': 'static', 'source': 'reference-native'}) == 'scripted_native_reference'
+    assert evidence({'teacher_trajectory_id': 'converted', 'source_conversion':
+                     {'conversion_scope': 'source_task_reference'}}) == 'source_program_native_replay'
+    assert evidence({'source_conversion': {'conversion_scope': 'independent_file_creation'}}) == 'source_operation_native_replay'
+    assert evidence({'teacher_trajectory_id': 'teacher'}) == 'accepted_teacher_trajectory'
+
+
+
+def test_final_audit_deduplicates_rendered_pairs_and_preserves_attribution(tmp_path):
+    source = source_file(tmp_path, [row('one', source_groups=['a'], license='MIT'),
+                                    row('two', source_groups=['b'], license='CC0')])
+    out = tmp_path / 'ready.jsonl'
+    assert audit_corpus(source, out, model='mock', tokenizer=Tokenizer(), max_len=100) == 0
+    result = json.loads(out.read_text())
+    assert result['source_groups'] == ['a', 'b']
+    assert {r['license'] for r in result['duplicate_source_rows']} == {'MIT', 'CC0'}
+    report = json.loads(out.with_name(out.name + '.audit.json').read_text())
+    assert report['rejections']['duplicate_rendered_pair'] == 1
+
+
+def test_pair_overlap_holds_linked_training_component(tmp_path):
+    source = source_file(tmp_path, [row('train', source_groups=['group']), row('held', split='test'),
+                                    row('linked', source_groups=['group'], completion='other!')])
+    out = tmp_path / 'ready.jsonl'
+    assert audit_corpus(source, out, model='mock', tokenizer=Tokenizer(), max_len=100) == 2
+    results = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [r['id'] for r in results] == ['held']
+    report = json.loads(out.with_name(out.name + '.audit.json').read_text())
+    assert report['deduplication']['train_rows_overlapping_holdout'] == 2
+
+
+def test_duplicate_pairs_keep_the_more_restrictive_reasoning_mask(tmp_path):
+    source = source_file(tmp_path, [row('unmasked', completion='note</think>ok!'),
+                                    row('masked', completion='note</think>ok!', completion_masked=12)])
+    out = tmp_path / 'ready.jsonl'
+    assert audit_corpus(source, out, model='mock', tokenizer=Tokenizer(), max_len=100) == 0
+    result = json.loads(out.read_text())
+    assert result['id'] == 'masked'
+    assert result['completion_masked'] == 12

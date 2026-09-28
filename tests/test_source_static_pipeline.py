@@ -76,3 +76,26 @@ def test_token_audit_counts_masked_notes_as_context_not_supervision():
     assert result['summary']['reason'] is None
     assert result['summary']['prompt_tokens'] == 13
     assert result['summary']['supervised_tokens'] == 7
+
+
+def test_recipe_includes_both_default_static_bundles(tmp_path, monkeypatch):
+    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda *a, **k:
+                        json.dumps([{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
+    for name in ('source-backed', 'recovered'):
+        folder = tmp_path / 'data/teacher' / name
+        folder.mkdir(parents=True)
+        manifest = {'version': 'natlang.source_static_bundle/1', 'cases': 1}
+        for field in ('ir', 'results'):
+            raw = b'{}\n'
+            (folder / f'{field}.jsonl').write_bytes(raw)
+            manifest[field] = {'path': f'{field}.jsonl', 'sha256': hashlib.sha256(raw).hexdigest(), 'rows': 1}
+        (folder / 'static.manifest.json').write_text(json.dumps(manifest))
+    config = recipe(tmp_path, verified_turns_override=[])
+    stages = {s['id']: s for s in config['stages']}
+    assert 'validate-static-sources' in stages and 'validate-static-sources-1' in stages
+    assert len(config['static_source_bundles']) == 2
+    assert '${run}/static-source-1.turns.jsonl' in stages['prepare']['command']
+    path = tmp_path / 'data/teacher/recovered/static.manifest.json'
+    assert len(recipe(tmp_path, static_bundle=[path], verified_turns_override=[])['static_source_bundles']) == 1
+    with pytest.raises(ValueError, match='duplicate static bundle'):
+        recipe(tmp_path, static_bundle=[path, path])

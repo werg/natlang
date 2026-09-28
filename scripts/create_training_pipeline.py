@@ -142,10 +142,16 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     for path in verified_turns:
         if Path(path).is_file() and not current_program_turns(path):
             raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
-    static_manifest = (Path(static_bundle).resolve() if static_bundle not in (None, False) else
-                       repo / 'data/teacher/source-backed/static.manifest.json')
-    included_static = None
-    if static_bundle is not False and (static_bundle is not None or static_manifest.exists()):
+    default_static = [repo / 'data/teacher/source-backed/static.manifest.json',
+                      repo / 'data/teacher/recovered/static.manifest.json']
+    static_manifests = ([] if static_bundle is False else
+                        [path for path in default_static if path.exists()] if static_bundle is None else
+                        [Path(path).resolve() for path in (static_bundle if isinstance(static_bundle, (list, tuple)) else [static_bundle])])
+    if len(set(static_manifests)) != len(static_manifests):
+        raise ValueError('duplicate static bundle manifests')
+    included_statics = []
+    for index, static_manifest in enumerate(static_manifests):
+        suffix = '' if index == 0 else f'-{index}'
         manifest = json.loads(static_manifest.read_text())
         if manifest.get('version') != 'natlang.source_static_bundle/1' or not manifest.get('cases'):
             raise ValueError('invalid static source bundle')
@@ -156,14 +162,15 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             if not path.is_relative_to(static_manifest.parent.resolve()) or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
                 raise ValueError('static source bundle checksum/path mismatch')
             static_inputs.append(str(path))
-        static_turns = f'{r}/static-source.turns.jsonl'
-        add('validate-static-sources', ['node', f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
+        static_turns = f'{r}/static-source{suffix}.turns.jsonl'
+        add(f'validate-static-sources{suffix}', ['node', f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
                                       str(static_manifest), '--turns-out', static_turns],
             [str(static_manifest), *static_inputs, f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
              f'{p}/ts-host/dist/teacher/source-conversion.js', f'{p}/ts-host/dist/teacher/native-materializer.js'],
             [static_turns, f'{static_turns}.manifest.json'])
         verified_turns.append(static_turns)
-        included_static = {'manifest': str(static_manifest), 'cases': manifest['cases'], 'model_calls': 0}
+        included_statics.append({'manifest': str(static_manifest), 'cases': manifest['cases'], 'model_calls': 0})
+    included_static = included_statics[0] if included_statics else None
     add("observe-source", ["node", f"{p}/ts-host/scripts/code-corpus/source-cases.mjs", "--output", f"{r}/source-observations.jsonl", "--execute", "--limit", "5000",
                            *[arg for path in observation_inputs for arg in ("--input", path)],
                            *[arg for path in captures for arg in ('--captures', path)]],
@@ -342,6 +349,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
             "training_tracks": tracks,
             'static_source_bundle': included_static,
+            'static_source_bundles': included_statics,
             'existing_teacher_results': teacher_results,
             'excluded_legacy_turns': excluded_turns,
             "unit_test_corpus": {"included": [str(path) for path in new_unit_turns if str(path) in compatible_turns],
@@ -374,7 +382,7 @@ def main():
     parser.add_argument('--captures', action='append', type=Path, help='captured upstream-test calls (repeatable); defaults to existing repository capture snapshots')
     parser.add_argument('--verified-turns', action='append', type=Path, help='execution-verified native turns from unit-test replay (repeatable); defaults to existing repository pilot snapshots')
     parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
-    parser.add_argument('--static-bundle', type=Path, help='validated static source manifest; defaults to data/teacher/source-backed when present')
+    parser.add_argument('--static-bundle', type=Path, action='append', help='validated static source manifest; repeatable; defaults to source-backed and recovered manifests when present')
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
     parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')

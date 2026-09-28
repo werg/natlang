@@ -6,18 +6,25 @@
  *   node scripts/migrate-program-ir.mjs FILE.jsonl [...]
  */
 import { readFile, rename, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PROGRAM_VERSION, definitionProject, lambdaSignature, programDefinition } from '../dist/teacher/program.js';
 
 /** Legacy type spellings, in the current TypeScript-style syntax. */
-function modernType(text) {
-  let type = String(text).replace(/\bBool\b/g, 'boolean').replace(/\bNum\b/g, 'number').replace(/\bText\b/g, 'string')
-    .replace(/\bDict<([^<>]+)>/g, 'Record<string, $1>');
+export function modernType(text) {
+  let type = String(text).replace(/\bBool\b/g, 'boolean').replace(/\bNum\b/g, 'number').replace(/\bText\b/g, 'string');
+  for(let index=type.lastIndexOf('Dict<');index>=0;index=type.lastIndexOf('Dict<')) {
+    let depth=1, end=index+5;
+    for(;end<type.length && depth;end++){if(type[end]==='<')depth++;if(type[end]==='>')depth--;}
+    if(depth)throw new Error('unclosed legacy dictionary type');
+    type=type.slice(0,index)+'Record<string, '+type.slice(index+5,end-1)+'>'+type.slice(end);
+  }
   const lambda = /^Lambda<\s*\{([\s\S]*)\}\s*,\s*([\s\S]+)>$/.exec(type.trim());
   if (lambda) type = `(${lambda[1].trim()}) => ${lambda[2].trim()}`;
   return type;
 }
 const modernTypes = types => types && Object.fromEntries(Object.entries(types).map(([name, text]) => [name, modernType(text)]));
-function modernSpec(spec) {
+export function modernSpec(spec) {
   const out = { ...spec, returns: modernType(spec.returns),
     args: Object.fromEntries(Object.entries(spec.args ?? {}).map(([name, type]) => [name, modernType(type)])) };
   if (spec.code !== undefined) out.code = spec.code.replace(/\bargs\.(\w+)/g, '$1');
@@ -42,7 +49,7 @@ export function upgradeRecord(record) {
   return upgraded;
 }
 
-for (const path of process.argv.slice(2)) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) for (const path of process.argv.slice(2)) {
   const lines = (await readFile(path, 'utf8')).split('\n').filter(line => line.trim());
   const rows = lines.map(line => JSON.stringify(upgradeRecord(JSON.parse(line))));
   await writeFile(`${path}.upgrading`, rows.join('\n') + '\n');
