@@ -1,6 +1,8 @@
 import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
 import { sourceConversionProblems } from './source-conversion.js';
+import { quarantineReason, retiredFamily } from './curriculum-policy.js';
+import type { ProgramRecord } from './program.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -137,12 +139,15 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
   for (const candidate of input) {
     const row = validateRow(candidate);
     if (sourceConversionProblems(row).length) { rejectedRows++; continue; }
+    const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
+    const program = taskIr as unknown as ProgramRecord;
+    // Direct exports and failed-run pair discovery must honor the same source holds as collection/admission.
+    if (quarantineReason(program) || retiredFamily(program)) { rejectedRows++; continue; }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
     const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
     if ((!row.outcome.accepted && !options.failedRuns) || rolledOver) { rejectedRows++; continue; }
     acceptedRows++;
     const role = String(row.provenance.collection_role ?? 'teacher');
-    const taskIr = record(row.task.program_ir, `${row.id}.task.program_ir`);
     const semantics = taskIr.semantics && typeof taskIr.semantics === 'object' && !Array.isArray(taskIr.semantics) ?
       taskIr.semantics as Dict : {};
     const evidenceOracle = oracleLevel(semantics.oracle);

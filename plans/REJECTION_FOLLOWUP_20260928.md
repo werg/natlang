@@ -83,3 +83,28 @@ queue-v5 prune affected stories from the reviewed v11 queues and use distinct v1
 job paths. The v12 rollout monitor waits for progressing cases to finish and records
 new supervisor PIDs in `runs/bonsai-recovery/runtime-v12.rollout-state.json`.
 Latest verification: 110 focused Node tests, Node/browser builds and browser types.
+
+## Export protection and highlighter oracle review
+
+Direct native materialization now applies source holds and retired-contract policy,
+including failed-run exports. This closes a bypass around the admission CLI.
+Validation: 127 focused Node checks, browser builds/types. Static reference reaudit
+replayed all 2,192 integrated references: all still admitted, 5,174 approved / 5,054
+held decisions before final dedup. These references contain none of the newly held
+source inputs; their earlier audit counts did not shrink.
+
+The v11 highlighter retry fixed iterator execution but exposed a stale oracle:
+the seed labels map/for-each function calls as `call` despite the role definitions,
+labels literal `{}` assignment as prose, and expects CSS whitespace different from
+its supplied renderer. No repaired teacher result was admitted. Hold all legacy
+`cb_highlighter` oracles until independently rebuilt (`highlighter_quality_version: 2`).
+The current-source freezer v3 now excludes held cases and writes a rejection ledger:
+36 eligible cases in nine codebases, four highlighter seeds held. It cannot silently
+carry old gold into a new source snapshot.
+
+Generation rollout v13 includes these gates; latest queues are Bonsai queue-v10 and
+Luna queue-v6. Source shapes/groups and previous jobs remain immutable. The already
+quarantined, repetitively failing Bonsai handoff 23 is stopped with a source-review
+event rather than a training-negative verdict; this exception avoids spending its
+remaining budget on data we cannot use. Valid progressing cases retain boundary
+migration. First expanded ALFWorld retry succeeded: score 100, 22 moves.

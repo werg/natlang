@@ -26,6 +26,32 @@ const nativeRow = (id, accepted = true) => ({ version: 'natlang.teacher_trajecto
       raw_response_sha256: 'raw-2' },
   ], capture_limits: [] });
 
+test('direct and failed-run exports cannot bypass source-review or retired-contract holds', () => {
+  for (const curriculum of [
+    { family: 'folio_batch', shape: 'story337' },
+    { family: 'commaqa_numeric', family_version: 1 },
+    { family: 'inline_type_repair' },
+  ]) {
+    const row = nativeRow('held');
+    row.task.program_ir.curriculum = curriculum;
+    row.task.program_ir.semantics = {};
+    for (const options of [{}, { failedRuns: true }, { directAnswers: true }]) {
+      const result = materializeNativeRows([row], options);
+      assert.equal(result.rejectedRows, 1);
+      assert.deepEqual(result.turns, []);
+    }
+  }
+});
+
+test('legacy highlighter gold is held even when the old outcome accepted it', () => {
+  const row = nativeRow('legacy-highlighter');
+  row.task.program_ir.family = 'cb_highlighter';
+  row.task.program_ir.semantics = {};
+  assert.equal(materializeNativeRows([row]).rejectedRows, 1);
+  row.task.program_ir.generation = { highlighter_quality_version: 2 };
+  assert.equal(materializeNativeRows([row]).acceptedRows, 1);
+});
+
 test('accepted native rows become linked template neutral decisions with their exact contexts', () => {
   const accepted = nativeRow('teacher-1'), rejected = nativeRow('teacher-rejected', false);
   accepted.task.program_ir.source_groups = ['original-program'];

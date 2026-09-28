@@ -13,6 +13,9 @@ export function retiredFamily(record: ProgramRecord): string | undefined {
 export function quarantineReason(record: ProgramRecord): string | undefined {
   const sourceReview = sourceReviewReason(record);
   if (sourceReview) return sourceReview;
+  if (record.family === 'cb_highlighter' &&
+    (record.generation as { highlighter_quality_version?: number } | undefined)?.highlighter_quality_version !== 2)
+    return 'legacy_highlighter_oracle';
   const curriculum = record.curriculum as { family?: string; family_version?: number; variant?: string; answer_evidence?: string[];
     payment_scope_version?: number } | undefined;
   if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 2)

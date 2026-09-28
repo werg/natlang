@@ -566,3 +566,14 @@ both stories across single/batch adapters, retaining original annotations. Luna
 started its highlighter retry on v11 after its boundary. Freeze v12 for the new
 holds and prune queue-v9 / queue-v5; finish progressing cases before migration.
 Final focused validation: 110 Node tests, two queue tests, browser build/types.
+
+Final follow-up: native materialization now honors holds even for direct/failed-run
+exports. The highlighter retry exposed stale gold roles and renderer whitespace;
+hold legacy highlighter oracles until independent v2 verification. Source freezer
+v3 filters four held seeds (36 eligible cases / nine codebases) with a ledger.
+All 2,192 integrated static references still admit; 5,174 approved and 5,054 held
+decisions before dedup. Export/gate validation passes 127 focused Node checks.
+Freeze v13 and queues v10/v6 for final rollout. Stop only the already source-held,
+repetitively failing Bonsai handoff 23 with a quality-hold event, not a negative.
+Other valid progressing cases finish before migration. First ALFWorld retry reaches
+score 100 in 22 moves. No training, source relabeling, or additional Luna workers.

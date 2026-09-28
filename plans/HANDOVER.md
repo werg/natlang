@@ -15,6 +15,14 @@
 > queue-v9 / Luna queue-v5; actual boundaries/PIDs are in runtime-v12.rollout.jsonl
 > and runtime-v12.rollout-state.json. Luna's initial v11 highlighter retry is allowed
 > to finish. Verification now includes 110 focused Node tests.
+> Final export/oracle follow-up: native materialization honors source holds directly;
+> legacy highlighter gold is held (four seeds excluded by source freezer v3).
+> All 2,192 static references still replay/admit; 127 focused Node checks pass.
+> Latest rollout: **runtime-v13**, Bonsai queue-v10 / Luna queue-v6; read
+> runtime-v13.rollout.jsonl and runtime-v13.rollout-state.json for actual PIDs.
+> Stop the already source-held, repetitive handoff 23 without classifying it as a
+> training negative. Other progressing cases migrate at boundaries. First world
+> retry succeeds with score 100 / 22 moves. No training started.
 
 > **Modern adapters / strict static quality audit (2026-09-28):** read
 > [MODERN_STATIC_ADAPTERS.md](MODERN_STATIC_ADAPTERS.md). Modern decision, state, scene,

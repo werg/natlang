@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROGRAM_VERSION, programDefinition } from '../dist/teacher/program.js';
+import { quarantineReason } from '../dist/teacher/curriculum-policy.js';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
@@ -44,7 +45,7 @@ returns: ${JSON.stringify(state)}
 Start from initial. For each event in events, in order, the state becomes
 ${stepName}(state, event). Return the final state.
 `;
-const rows = [];
+const rows = [], held = [];
 for (const seed of cases) {
   const source = sources[seed.family];
   if (!source) throw new Error(`no current source registered for ${seed.family}`);
@@ -72,20 +73,26 @@ for (const seed of cases) {
     family: seed.family, source: 'natlang-current-source', split: seed.split,
     source_ids: [relative], source_groups: [seed.family], source_revisions: [revision],
     license: 'project-generated', gold_sources: ['frozen-reference-case'],
-    generation: { generator: 'natlang.source_case_freezer/2' }, semantics };
+    generation: { generator: 'natlang.source_case_freezer/3' }, semantics };
   programDefinition(row);
+  const reason = quarantineReason(row);
+  if (reason) { held.push({ reason, record: row }); continue; }
   rows.push(row);
 }
 const counts = Object.fromEntries(Object.keys(sources).map(family =>
   [family, rows.filter(row => row.family === family).length]));
-if (Object.values(counts).some(count => count < 4))
+if (Object.entries(counts).some(([family, count]) => count < 4 &&
+  !(count === 0 && held.some(item => item.record.family === family))))
   throw new Error(`source families need four cases: ${JSON.stringify(counts)}`);
 await mkdir(dirname(output), { recursive: true });
 const staged = `${output}.building`;
 await writeFile(staged, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
 await rename(staged, output);
+await writeFile(`${output}.held.jsonl`, held.map(item => JSON.stringify(item)).join('\n') + (held.length ? '\n' : ''));
 await writeFile(`${output}.manifest.json`, JSON.stringify({
   schema: 'natlang.source_teacher_cases/1', cases: rows.length, counts,
+  held: held.length, held_reasons: Object.fromEntries([...new Set(held.map(item => item.reason))]
+    .map(reason => [reason, held.filter(item => item.reason === reason).length])),
   seeds_sha256: hash(seedText), output_sha256: hash(await readFile(output)),
 }, null, 2) + '\n');
-console.log(`${rows.length} current-source cases across ${Object.keys(counts).length} codebases -> ${output}`);
+console.log(`${rows.length} current-source cases across ${Object.values(counts).filter(count => count > 0).length} eligible codebases (${held.length} held) -> ${output}`);
