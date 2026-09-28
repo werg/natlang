@@ -253,3 +253,10 @@ Luna final results). The longest case made five ad hoc child calls; two
 short cases used named specialists only. Saved per-job result files were gathered
 for this audit: the CLI summary file represents only the latest one-case invocation
 and may be empty after an incomplete attempt. Original job files are intact.
+
+Bonsai reached its boundary and now runs v15 (supervisor 495695 / queue-v12).
+The root-reset board retry succeeds in 32.6 seconds / three fresh replies: one
+commit, failed first render, successful render retry, exact revision 20. This
+confirms the receipt guidance can be used when the teacher gets a repairable
+state. Luna's v15 boundary rollout remains pending on its current progressing
+case. The next hourly wait starts after this check.
