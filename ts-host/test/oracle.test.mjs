@@ -19,6 +19,16 @@ test('span oracle scores overlap and enforces its threshold', async () => {
   await assert.rejects(checkOracle('x', 'x', { level: 'span', threshold: 2 }), /threshold/);
 });
 
+test('source-aware answer equivalence with no token overlap still needs review', async () => {
+  const spec = { level: 'span', rubric: 'Check the answer against the supplied source.', context: 'The vehicle is an automobile.' };
+  const verdict = await checkOracle('car', 'automobile', spec);
+  assert.equal(verdict.score, 0);
+  assert.equal(verdict.accepted, false);
+  assert.equal(verdict.needs_review, true);
+  const judged = await checkOracle('car', 'automobile', spec, async () => ({ accepted: true, verdict: 'Equivalent names.' }));
+  assert.equal(judged.accepted, true);
+});
+
 test('judged cases need an external verdict and record it', async () => {
   assert.deepEqual(await checkOracle('summary', 'gold', 'judged'),
     { accepted: false, level: 'judged', verdict: 'no judge supplied', needs_review: true });

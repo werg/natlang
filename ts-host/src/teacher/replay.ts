@@ -8,7 +8,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { trajectoryTurn } from './collector.js';
 import { openingLength, openingText, text, type Message } from './opening.js';
 
-export type Turn = { context: Message[]; assistant: { reasoning?: string | null; execution_plan?: string | null;
+export type Turn = { context: Message[]; model_response?: { prompt_tokens?: number; completion_tokens?: number }; assistant: { reasoning?: string | null; execution_plan?: string | null;
   content?: string; calls?: { tool: string; arguments: Record<string, unknown> }[] } };
 
 /** A turn's place: its call's number and its number among that call's turns. */
@@ -18,6 +18,9 @@ export type Place = { call: number; nth: number };
 export function recorded(turn: Turn): ModelTurn {
   const assistant = turn.assistant;
   return { calls: (assistant.calls ?? []).map(call => [call.tool, call.arguments] as [string, Record<string, unknown>]),
+    // Usage calibrates the agent's context estimate and determines forced compaction. Preserve it in replay.
+    ...(turn.model_response?.prompt_tokens === undefined ? {} : { prompt_tokens: turn.model_response.prompt_tokens }),
+    ...(turn.model_response?.completion_tokens === undefined ? {} : { completion_tokens: turn.model_response.completion_tokens }),
     text: assistant.content ?? '', reasoning: assistant.reasoning ?? undefined,
     ...(Object.hasOwn(assistant, 'execution_plan') ? { execution_plan: assistant.execution_plan ?? null } : {}) };
 }

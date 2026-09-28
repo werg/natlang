@@ -120,3 +120,14 @@ test('replacing the planted failing action is a valid handoff without reinjectin
   } finally { await Promise.all([new Promise(resolve => student.server.close(resolve)),
     new Promise(resolve => teacher.server.close(resolve))]); }
 });
+
+test('recorded turns retain usage that calibrates replay compaction and token budgets', async () => {
+  const { recorded } = await import('../dist/teacher/replay.js');
+  const response = recorded({ context: [], model_response: { prompt_tokens: 12000, completion_tokens: 900 },
+    assistant: { content: '', reasoning: 'Check the current batch.', calls: [
+      { tool: 'eval', arguments: { code: 'batch' } },
+    ] } });
+  assert.equal(response.prompt_tokens, 12000);
+  assert.equal(response.completion_tokens, 900);
+  assert.deepEqual(response.calls, [['eval', { code: 'batch' }]]);
+});

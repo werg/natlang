@@ -298,7 +298,7 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     const threshold = 'threshold' in spec ? spec.threshold ?? 0.5 : 0.5;
     if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new RangeError('span threshold must be between 0 and 1');
     const score = Math.max(...candidates.map(candidate => spanF1(actual, candidate, 'normalization' in spec && spec.normalization === 'qa')));
-    if (score < threshold && score > 0 && !judge && 'rubric' in spec && spec.rubric)
+    if (score < threshold && !judge && 'rubric' in spec && spec.rubric)
       return { accepted: false, level, score, needs_review: true, verdict: 'answer equivalence needs independent review' };
     if (score < threshold && judge && 'rubric' in spec && spec.rubric) {
       const verdict = await judge({ actual, expected: { answer: expected, context: spec.context }, rubric: spec.rubric });

@@ -247,3 +247,15 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   mixed delegation, admission, runtime/compiler/files/handoffs and raw-job audit. All seven replacement references
   verify. Frozen runtime-v5's 332 src/dist file hashes match the reviewed build. New runtime/prompt retains the
   user's three ad hoc layers per pre-existing .nl file root.
+- First fresh replacement checkpoint: the 39-message move task completes in 369.3 seconds (11 fresh replies /
+  5,732 tokens, two repeated action sets). It moves all 39 files and returns the correct count, but eight go to the wrong label folders;
+  the file-placement contract rejects it. This is incorrect classification, not a stalled server or
+  false oracle rejection. The queue has advanced to the 22-message INDEX task. No partial result was admitted.
+- Correction to the first live diagnosis: failed move-item names are original source identities, not paths where
+  files remain. Actual output has an empty inbox; eight destination labels disagree with gold. The count is 39,
+  not 31. Corrected the log after inspecting actual paths; the source files and classifier rejection were preserved.
+- Repair generation exposed a real replay defect: recorded() dropped prompt/completion token counts. That changed
+  context calibration and the timing of forced compaction, so a valid source failure was refused because replay
+  observations differed. Preserve usage in recorded turns/handoff prefixes. The complete saved SMS run now replays
+  with identical observations and the same classification rejection; its repair handoff verifies. No relaxed replay
+  comparison. Range exports are still selected-range views: use a raw-jobs snapshot when building repair shards.
