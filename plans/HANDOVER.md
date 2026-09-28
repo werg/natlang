@@ -1,5 +1,13 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Bonsai RAM reduction queued (2026-09-28):** six server slots exceed the
+> current two-request collector. Launcher now defaults to two slots / 1.5 GiB
+> host prompt cache / 6 GiB memory ceiling, retaining 53k shared GPU KV.
+> Safe server restart monitor and actual status: runs/bonsai-memory-20260928/
+> state.json and restart.jsonl. It resumes the same v14 queue and journals;
+> do not treat the historical v14 rollout PID as current after this restart.
+> Steady-state savings still need measurement after cache warmup.
+
 > **Latest check-in: v14 prepared (2026-09-28):** corrected CommaQA numeric
 > upstream sport inversion (all 64,000 nationality renderings affected), added
 > literal retrieval/schema guidance and completed-effect receipts. Numeric

@@ -7,18 +7,24 @@
 # Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL] [SLOTS]  (collectors: --workers to match SLOTS)  stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# Defaults: 6 slots sharing a 52k-token KV buffer, the measured fit for the 8 GB RTX 4060 (each slot holds about
-# 145 MB of SSM state; 8 slots do not fit). About 1.6x one slot's decode throughput, more per collected case.
-PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-6}}"
+# The current collector permits two requests, including nested calls. Extra server slots are idle capacity.
+# Keep the 52k-token shared KV buffer for long calls; six slots remain available explicitly for bulk collection.
+PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-2}}"
 # A long Bonsai context occupies roughly 0.6-0.9 GiB in the host prompt cache.
 # Agent programs alternate between root and nested invocations, so one entry
 # per slot thrashes even with only two workers.  Keep about two contexts per
 # slot; BONSAI_CACHE_RAM remains available for memory-constrained machines.
-# The server process itself holds about 3 GiB of host memory besides this cache, and the container is killed at
-# BONSAI_MEM, so the cache stays at least 5 GiB below the cap (measured with 6 slots: a 4 GiB cache under 7g was killed).
-if [ "$SLOTS" -gt 1 ]; then DEFAULT_CACHE_RAM=$((SLOTS * 1536)); DEFAULT_MEM=8; else DEFAULT_CACHE_RAM=1536; DEFAULT_MEM=5; fi
+# Cache snapshots are real host RAM, separate from GPU KV. Retain a smaller cache for two-request collection.
+# Larger profiles need more transient headroom (six slots with 4 GiB cache under a 7g cap were killed).
+if [ "$SLOTS" -gt 2 ]; then
+  DEFAULT_CACHE_RAM=$((SLOTS * 1536)); DEFAULT_MEM=8; CACHE_HEADROOM=5
+elif [ "$SLOTS" -eq 2 ]; then
+  DEFAULT_CACHE_RAM=1536; DEFAULT_MEM=6; CACHE_HEADROOM=4
+else
+  DEFAULT_CACHE_RAM=1024; DEFAULT_MEM=5; CACHE_HEADROOM=4
+fi
 MEM="${BONSAI_MEM:-${DEFAULT_MEM}g}"
-MAX_CACHE_RAM=$(( (${MEM%g} - 5) * 1024 )); [ "$MAX_CACHE_RAM" -lt 1024 ] && MAX_CACHE_RAM=1024
+MAX_CACHE_RAM=$(( (${MEM%g} - CACHE_HEADROOM) * 1024 )); [ "$MAX_CACHE_RAM" -lt 1024 ] && MAX_CACHE_RAM=1024
 [ "$DEFAULT_CACHE_RAM" -gt "$MAX_CACHE_RAM" ] && DEFAULT_CACHE_RAM=$MAX_CACHE_RAM
 CACHE_RAM="${BONSAI_CACHE_RAM:-$DEFAULT_CACHE_RAM}"
 # Several slots share one KV buffer, so a long call can use more than an even share of the context.

@@ -166,3 +166,32 @@ by the shared journals. New IR/jobs are immutable and preserve source identity;
 v14 rollout waits for completed case boundaries and refuses overlapping workers.
 See runtime-v14.rollout.jsonl / runtime-v14.rollout-state.json for actual state.
 One Luna worker/request; independent Bonsai generation. No training started.
+
+## Bonsai container memory review
+
+The live server still had six slots from the earlier bulk-generation setup, while
+current collection allows only two simultaneous model requests. Inspection found
+one model process, not six weight copies. Four slots were idle. GPU occupancy was
+7,755 / 8,188 MiB; host process RSS varied around 4–5 GiB, with a 7.3 GiB recorded
+high-water mark and no container swap. Docker's 8 GiB memory limit is a ceiling,
+not an allocation. The host prompt cache allowed 3,072 MiB; its snapshots are
+separate from GPU KV and are being reused, so shrinking it trades some recomputation
+for lower RAM. The existing no-mmap loading already avoids retaining a mapped
+host copy of fully offloaded weights.
+
+Changed launcher defaults to two slots, 1,536 MiB prompt cache and a 6 GiB container
+ceiling. Keep the shared 53,248-token KV buffer, q4 KV precision, checkpoint settings,
+sampling, model and collector concurrency unchanged. Six-slot bulk serving remains
+explicitly available. This is a resource-profile change, not a data-contract change.
+Expected savings must be measured after warmup; do not describe a cold restart's
+RSS drop as steady-state improvement. Reducing the Docker ceiling alone would not
+release occupied memory and might kill the server under load.
+
+`runs/bonsai-memory-20260928/before.json` preserves the old configuration and memory
+metrics. The one-off restart-at-boundary.py monitor (initial PID 448361) waits for
+Bonsai supervisor 428680's current case boundary, preserves partial evidence,
+restarts only the exact observed container and resumes the same frozen v14 queue.
+It restores the original six-slot profile if the smaller server fails startup.
+Actual action/status is in restart.jsonl and state.json; after.json records the
+replacement server and supervisor. Luna continues independently. Launcher syntax
+and monitor compilation checked. No new generation worker or training started.
