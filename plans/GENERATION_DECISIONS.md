@@ -363,3 +363,23 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Validation: Node/browser build and browser type checks pass; 100 focused tests pass (collector scheduling,
   durable progress/resume, judge budget, interpreter/captures/depth, handoffs, oracles, folder references, supervisor
   time/inactivity behavior, single-Luna provider configuration, audit). No model training or independent grader started.
+
+## 2026-09-28 runtime-v9 live checkpoint
+
+- Both supervisors remain live (Luna PID 286423, Bonsai PID 287222); Bonsai server health OK. Luna v2: 4 completed
+  attempts / 149 pending including the active large payment case. Three task-tolerance passes, but only two pass
+  current training admission. Keep task acceptance and data admission separate.
+- Grants17 now returns exactly the expected independent budget judgments and passes admission in 673.3 seconds;
+  the previous Luna run corrupted shared budget and failed. SMS move now places all 39 files correctly and passes
+  admission in 297.2 seconds, repairing the eight earlier destination mismatches.
+- SMS INDEX completes in 227.7 seconds, returns/reports ham=16 and spam=6 against gold ham=18/spam=4. Benchmark
+  agreement tolerance accepts it; current admission excludes it as quality_pending_partial_agreement. Do not claim
+  this is a complete repair or include it in SFT. Remaining label errors need review.
+- Payment0 completes in 333.1 seconds with 3161 against 4708; excluded. It now parses source CSV and joins included
+  IDs rather than retyping amounts. Remaining semantic classifications still need investigation/adjudication.
+- Large payments7 is active with 72 saved model replies after 480 seconds, versus only two saved replies when the
+  previous 256-request run exhausted its cap. Current cap 608 / deadline 3600 seconds. Repeated yes/no child actions
+  are sibling judgments, not evidence that the parent is repeating the whole task; do not auto-classify as stuck.
+- Bonsai checkpoint: 52 finished attempts / 507 pending; last five observed repairs pass task checks. These remain
+  raw-result counts; not deduplicated or universally certified training rows. No new Luna collector error files
+  in v2.jobs at this checkpoint, and no model training or independent grader has started.
