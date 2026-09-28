@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { replayIsolated, project, materializeCorpus } from '../scripts/code-corpus/replay.mjs';
 import { readJsonl, writeJsonl, digest } from '../scripts/code-corpus/common.mjs';
 import { extractFunctions } from '../scripts/code-corpus/extract.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 const task = () => ({version:'natlang.code_task/1',id:'fixture:double',group_id:'fixture:double',kind:'function',instruction:'Return twice the input.',source:{name:'fixture',license:'MIT'},function:{name:'f',parameters:[{name:'x'}],body:'{ return x * 2; }'},cases:[{args:[3],expected:6,outcome:'return'},{args:[4],expected:8,outcome:'return'}]});
 test('replay produces a real eval turn and a done turn with source-level split groups', async () => {
   const a = task();
@@ -26,6 +29,27 @@ test('wrong outputs are not admitted, mutation and nonportable shapes are reject
   a.cases[0].input_after=[99]; assert.throws(()=>project(a),/mutating/);
   const b=task(); b.cases[0].args=[{}]; assert.throws(()=>project(b),/portable replay/);
   const c=task(); c.cases[1].args=[3]; assert.throws(()=>project(c),/conflicting outputs/);
+});
+test('source arguments belongs to the captured invocation rather than the eval wrapper', async () => {
+  const record = task();
+  record.function.body = '{ return arguments.length + x; }';
+  record.cases = [{args:[3], expected:4, outcome:'return'}];
+  const row = await replayIsolated(record, 0);
+  assert.equal(row.outcome.accepted, true, JSON.stringify(row.outcome));
+  assert.equal(row.provenance.projection, 'captured-bound-arguments/function-scope-v3');
+});
+test('CLI rejection ledger includes a replayed wrong result', async t => {
+  const folder = await mkdtemp(join(tmpdir(), 'replay-rejections-'));
+  t.after(() => rm(folder, {recursive:true, force:true}));
+  const record = task(); record.cases[0].expected = 7;
+  const input = join(folder, 'tasks.jsonl'), output = join(folder, 'rows.jsonl');
+  await writeJsonl(input, [record]);
+  await promisify(execFile)(process.execPath, [fileURLToPath(new URL('../scripts/code-corpus/replay.mjs', import.meta.url)),
+    '--execute', '--input', input, '--output', output]);
+  const rejected = await readJsonl(`${output}.rejected.jsonl`);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].expected, 7);
+  assert.equal(rejected[0].actual, 6);
 });
 test('runaway code is stopped by its eval time limit and fails closed', async () => {
   const a=task(); a.function.body='{ for (let i = 0; i < 1e15; i++) {} return x; }';

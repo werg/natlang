@@ -11,11 +11,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json
 
 
+def file_project_has_subfunctions(ir):
+    """Require the projected helper files, rather than the retired boxed lambda."""
+    semantics = ir.get('semantics', {})
+    layout = ir.get('source_layout', {})
+    root = semantics.get('root')
+    files = semantics.get('files', {})
+    helpers = layout.get('subfunctions', {})
+    return (ir.get('version') == 'natlang.program/2' and isinstance(root, str)
+            and root == layout.get('root') and root in files and bool(helpers)
+            and all(isinstance(path, str) and path in files for path in helpers.values()))
+
+
+def current_program_turns(path):
+    with Path(path).open() as stream:
+        return all(json.loads(line).get('task', {}).get('program_ir', {}).get('version')
+                   == 'natlang.program/2' for line in stream if line.strip())
+
+
 def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python="python", sources=None,
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
            teacher_execution_plans=False, teacher_execution_plan_tokens=512,
-           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None):
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -101,14 +119,29 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         if needs_codebase:
             trajectories = [json.loads(line) for line in trajectories_path.read_text().splitlines() if line.strip()]
             converted = trajectories and all(not row.get('outcome', {}).get('accepted') or (
-                row.get('task', {}).get('program_ir', {}).get('semantics', {}).get('root', {}).get('$lambda', {}).get('codebase')
-                and row.get('task', {}).get('program_ir', {}).get('source_layout')) for row in trajectories)
+                file_project_has_subfunctions(row.get('task', {}).get('program_ir', {}))) for row in trajectories)
             if not converted:
                 excluded_unit_captures.append({'path': str(manifest_path.parent), 'reason': 'local subfunctions were inlined or imported'})
                 continue
         new_unit_turns.append(turns)
-    verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else
-                      [str(path) for path in (*proven_pilots, *new_unit_turns) if path.exists()])
+    compatible_turns, excluded_turns, saved_replays = [], [], []
+    for path in (*proven_pilots, *new_unit_turns):
+        if not path.exists():
+            continue
+        if current_program_turns(path):
+            compatible_turns.append(str(path))
+        else:
+            excluded_turns.append({'path': str(path), 'reason': 'retired program/prompt snapshot; replay source on current runtime'})
+            tasks_path, captures_path = path.parent / 'tasks.jsonl', path.parent / 'captures.jsonl'
+            if path in new_unit_turns and tasks_path.is_file() and captures_path.is_file():
+                tasks = [json.loads(line) for line in tasks_path.read_text().splitlines() if line.strip()]
+                if tasks and all(not task.get('function', {}).get(key) for task in tasks
+                                 for key in ('helpers', 'imports', 'recursive')):
+                    saved_replays.append((tasks_path, captures_path, len(tasks)))
+    verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else compatible_turns)
+    for path in verified_turns:
+        if Path(path).is_file() and not current_program_turns(path):
+            raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
     static_manifest = (Path(static_bundle).resolve() if static_bundle not in (None, False) else
                        repo / 'data/teacher/source-backed/static.manifest.json')
     included_static = None
@@ -140,6 +173,17 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         [f"{p}/ts-host/scripts/code-corpus/curriculum.mjs", f"{p}/ts-host/scripts/code-corpus/replay.mjs", f"{p}/ts-host/dist/native/runtime.js", f"{r}/source-observations.jsonl"],
         [f"{r}/synthetic/manifest.json", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/synthetic/code-proposals.jsonl",
          f'{r}/synthetic/projection-rejected.jsonl', f'{r}/synthetic/replay-errors.jsonl'])
+    if verified_turns_override is None:
+        for index, (tasks_path, captures_path, task_count) in enumerate(saved_replays):
+            rows = f'{r}/saved-source-{index:04d}.jsonl'
+            # Regenerate the tool decisions from captured inputs; never translate
+            # obsolete prompt text or reinterpret captures as independent tests.
+            add(f'replay-saved-source-{index:04d}', ['node', f'{p}/ts-host/scripts/code-corpus/replay.mjs',
+                '--execute', '--input', str(tasks_path), '--captures', str(captures_path),
+                '--limit', str(task_count), '--cases', '20', '--output', rows],
+                [str(tasks_path), str(captures_path), f'{p}/ts-host/scripts/code-corpus/replay.mjs'],
+                [rows, f'{rows}.turns.jsonl', f'{rows}.rejected.jsonl'])
+            verified_turns.append(f'{rows}.turns.jsonl')
     for index, case_file in enumerate(workspace_cases):
         case_path = Path(case_file).resolve()
         case = json.loads(case_path.read_text())
@@ -256,6 +300,25 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         add(f'materialize-{name}', ['node', f'{p}/ts-host/scripts/materialize-native-teacher.mjs', admitted, turns, '--replace'],
             [admitted, f'{p}/ts-host/dist/teacher/native-materializer.js', f'{r}/runtime-host/frozen-runtime.json'], [turns])
         teacher_tracks.append((name, turns))
+    # Existing static references were part of the shell recipe but fell out of
+    # the staged recipe. Re-admit and materialize them on the frozen build.
+    default_results = [repo / 'runs/inline-curriculum' / name for name in
+                       ('ref-v1.results.jsonl', 'ref-composed-v1.results.jsonl')]
+    teacher_results = ([str(Path(path).resolve()) for path in teacher_results_override]
+                       if teacher_results_override is not None else
+                       [str(path) for path in default_results if path.is_file()])
+    if len(set(teacher_results)) != len(teacher_results):
+        raise ValueError('duplicate existing teacher results input')
+    if teacher_results:
+        existing = f'{r}/existing-curriculum'
+        admitted, turns = f'{existing}.admitted.jsonl', f'{existing}.turns.jsonl'
+        add('admit-existing-curriculum', ['node', f'{p}/ts-host/scripts/inline-curriculum/admit.mjs',
+            *teacher_results, '--ledger', f'{existing}.admission.jsonl', '--admitted', admitted],
+            [*teacher_results, f'{p}/ts-host/scripts/inline-curriculum/admit.mjs'],
+            [admitted, f'{existing}.admission.jsonl', f'{existing}.admission.coverage.json'])
+        add('materialize-existing-curriculum', ['node', f'{p}/ts-host/scripts/materialize-native-teacher.mjs',
+            admitted, turns, '--replace'], [admitted, f'{p}/ts-host/dist/teacher/native-materializer.js'], [turns])
+        teacher_tracks.append(('existing-curriculum', turns))
     turn_paths = [path for _, path in teacher_tracks]
     add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json"]),
         [f"{p}/scripts/prepare_training_stages.py", *turn_paths, f"{r}/prepared/splits.json"],
@@ -272,14 +335,19 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     # All source observation/replay/teacher work uses one frozen interpreter build.
     frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources'}
     for stage in stages:
-        if stage["id"] in frozen_stages or stage['id'].startswith(('capture-unit-test-', 'build-', 'collect-', 'admit-', 'materialize-')):
+        if stage["id"] in frozen_stages or stage['id'].startswith(('capture-unit-test-', 'replay-saved-source-', 'build-', 'collect-', 'admit-', 'materialize-')):
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
     return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
             "training_tracks": tracks,
             'static_source_bundle': included_static,
-            "unit_test_corpus": {"included": [str(path) for path in new_unit_turns], "excluded": excluded_unit_captures}}
+            'existing_teacher_results': teacher_results,
+            'excluded_legacy_turns': excluded_turns,
+            "unit_test_corpus": {"included": [str(path) for path in new_unit_turns if str(path) in compatible_turns],
+                                 "excluded": excluded_unit_captures,
+                                 'replayed_sources': [str(tasks) for tasks, _, _ in saved_replays]
+                                     if verified_turns_override is None else []}}
 
 
 def main():
@@ -308,6 +376,8 @@ def main():
     parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
     parser.add_argument('--static-bundle', type=Path, help='validated static source manifest; defaults to data/teacher/source-backed when present')
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
+    parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
+    parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')
     parser.add_argument("--min-free-vram-mib", type=int, default=2048, help="GPU 0 availability gate; raise this for larger models")
     parser.add_argument("--train-arg", action="append", default=[], help="repeat as --train-arg=--load-in-4bit or --train-arg=VALUE to pass trainer options")
     args = parser.parse_args()
@@ -319,7 +389,8 @@ def main():
                     inline_shapes=args.inline_shapes, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
-                    workspace_cases=args.workspace_case, static_bundle=False if args.no_static_bundle else args.static_bundle)
+                    workspace_cases=args.workspace_case, static_bundle=False if args.no_static_bundle else args.static_bundle,
+                    teacher_results_override=[] if args.no_existing_teacher_results else args.teacher_results)
     if args.output.exists():
         if json.loads(args.output.read_text()) != config:
             raise ValueError("refusing to replace a different recipe")

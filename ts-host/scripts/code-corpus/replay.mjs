@@ -114,7 +114,10 @@ export async function replayCase(record, index = 0, options = {}) {
   // The captured body is one function invocation, not a persistent eval session: its locals
   // (including nonportable imported package objects) stay in an inner function, and the
   // outer top-level return stages that function's value as the call's result.
-  code = 'return await (async () => {\n'+code+'\n})();';
+  const parameters = record.function.parameters.map(parameter => parameter.name).join(', ');
+  // A real invocation preserves `arguments` and parameter bindings. An arrow
+  // captured the eval wrapper's arguments and could silently change the result.
+  code = `return await (async function (${parameters}) {\n${code}\n})(${parameters});`;
   if (projection.packageImports.length) code=projection.packageImports.join('\n')+'\n'+code;
   const root = programNode(program);
   const trajectory = [];
@@ -142,7 +145,7 @@ export async function replayCase(record, index = 0, options = {}) {
     const actual = dump(result.value);
     return { version: 'natlang.teacher_trajectory.native/1', id: program.id,
       task: {kind:'whole_program', program_ir:program, source_program_ids:[record.id]},
-      provenance: { source:record.source, code_task_sha256:digest(record), runtime:'typescript-native', tool_schema:'scope-eval-v1', projection:'captured-bound-arguments/function-scope-v2',
+      provenance: { source:record.source, code_task_sha256:digest(record), runtime:'typescript-native', tool_schema:'scope-eval-v2', projection:'captured-bound-arguments/function-scope-v3',
         workspace_before: workspaceBefore, workspace_after: await workspaceSnapshot(options.workspace),
         capabilities: environment.scopeCapabilities, verification: 'observed-output-equality' },
       outcome: { status:result.outcome.kind, detail:result.outcome.detail, value:actual,
@@ -176,7 +179,12 @@ else if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.ar
     if (!cases.length) rejected.push({id:task.id,error:'no portable successful return cases'});
     for (let index=0; index<cases.length && seen.size<cap; index++) {
       const key=digest(cases[index].args); if (seen.has(key)) continue; seen.add(key);
-      try { rows.push(await replayIsolated(task,index,10000,{workspace:args.includes('--workspace')?resolve(get('--workspace')):undefined})); } catch (error) { rejected.push({id:task.id,index,error:String(error)}); }
+      try {
+        const row = await replayIsolated(task,index,10000,{workspace:args.includes('--workspace')?resolve(get('--workspace')):undefined});
+        rows.push(row);
+        if (!row.outcome.accepted) rejected.push({id:task.id,index,error:row.outcome.detail || 'observed output does not match capture',
+          status:row.outcome.status, expected:cases[index].expected, actual:row.outcome.value});
+      } catch (error) { rejected.push({id:task.id,index,error:String(error)}); }
     }
   }
   await writeJsonl(get('--output'), rows);

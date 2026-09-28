@@ -1,5 +1,28 @@
 # Generation decisions — 2026-09-27 continuation
 
+## 2026-09-28 static corpus recovery audit
+
+- Reconnected the two saved reference sets to staged training through frozen-runtime
+  admission/materialization and an explicit joint track. 2,192 admitted trajectories,
+  10,228 evidence turns, 5,174 currently approved decisions before final data gates.
+- Breaking inclusion decision: six default code snapshots (120 turns) carry retired
+  IR/prompts/tools and are now held. Explicit existing verified-turns inputs cannot
+  bypass the IR /2 check. Preserve raw source and historical evidence; replay eligible
+  saved self-contained captures instead. Descending/reverse recover 18 current turns;
+  range's 20 attempts remain held for parameter writes / forbidden while.
+- Corrected helper discovery to validate current file-backed projects. Fixed replay
+  wrapper arguments fidelity; versioned projection function-scope-v3. Runtime rejection
+  outcomes now enter replay ledgers, preventing false zero-rejection summaries.
+- Inventoried 20 saved sources. Older decision/state/scene adapters remain missing;
+  recorded source counts, holdouts, overlapping snapshots, sales top-up duplication
+  and recovery order in plans/STATIC_DATA_RECOVERY.md. No automatic promotion of
+  historical gold, synthetic reasoning, benchmark data, or archived old tool calls.
+- No training or new model requests. Bonsai and single Luna repair worker remain on
+  runtime-v10. Audit evidence and updated recipe: runs/legacy-data-audit-20260928/.
+- Verification passed: Node build, browser bundle/types, 38 focused Node tests and
+  26 Python recipe/preparation/runner tests, reference admission/materialization,
+  real saved-capture replays and final 20-source inventory / recipe generation.
+
 ## Requested scope
 
 Resume Bonsai and five Luna workers; investigate failures independently, improve agent usability, preserve data quality.

@@ -1,5 +1,13 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Static data recovery audit (2026-09-28):** see `plans/STATIC_DATA_RECOVERY.md`.
+> Reconnected 2,192 static reference trajectories to the staged recipe; 5,174 decisions
+> currently pass native admission, before dedup/split/token gates. Held six obsolete
+> default code turn snapshots (120 rows), added fresh saved-source replay, recovered
+> 18 current turns, and fixed source `arguments` fidelity / missing failure ledgers.
+> Large decision/state/scene corpora and the 620-entry leaf bank survive but need
+> modern adapters. Evidence: `runs/legacy-data-audit-20260928/`.
+
 > **Static source pilot implemented (2026-09-28):** 51 admitted directory cases: WorkBench 8, CommitPackFT 12,
 > TAT-QA 11, MuSiQue 12, SWE-smith 8 independent file-creation tasks. Zero generation model calls. The final
 > Sharp audit admits all 157 rendered decisions at max-len 8192 (largest 6356); 32 direct scripted decisions
