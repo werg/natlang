@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
@@ -105,13 +107,14 @@ async function main(): Promise<void> {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
   const result = await collectBatch(records, config, nativeJobRunner(config), controller.signal);
   const source = await readFile(ir);
-  const merged = await readFile(output);
+  const outputHash = createHash('sha256');
+  for await (const chunk of createReadStream(output)) outputHash.update(chunk);
   await writeAtomic(`${output}.manifest.json`, JSON.stringify({
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
     root_seed: config.rootSeed, tool_schema: 'scope-eval-v1', context_tokens: config.contextTokens,
     workers: config.workers, completed: result.completed,
-    missing: result.missing, output_sha256: sha256(merged) }) + '\n');
+    missing: result.missing, output_sha256: outputHash.digest('hex') }) + '\n');
   process.stdout.write(`final: ${result.completed}/${records.length} complete -> ${output}\n`);
   if (result.missing.length) process.exitCode = 2;
 }

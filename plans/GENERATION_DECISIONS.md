@@ -65,3 +65,23 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   collectors have live partial journals, and no `*.error.json` files in those four job directories.
 - v5 assembly remains after train4/redo completes; include the new admission and materialization code in main.
   Probe and generation are asynchronous and are not claimed complete by these counts.
+
+## 2026-09-28 morning: overnight audit and recovery
+
+- User reduced Luna to **three total workers**, superseding five. Restart allocation: folder 1, handoffs 1, redo 1.
+- Overnight: Bonsai train4 75/75 selected complete (141 saved over all historical ranges, 135 task-accepted).
+  Folder 102/106 saved (70 task-accepted); updated admission is **67/102**. Handoffs 282/833 saved (116 task-accepted).
+  Redo 12/13 saved; the last case exhausted rate-limit retries. Counts are task results, not all training admissions.
+- Fixed a real export size limit: joining all folder trajectories into one JavaScript string failed above roughly
+  512 MiB, stopped collection, and left obsolete per-job error reports even for saved results. Atomic result merge
+  and snapshots now stream rows; manifest hashing streams bytes; admission reads and optionally writes one row at
+  a time. Actual folder snapshot/export is 718,937,647 bytes and now succeeds; admission of all 102 rows succeeds.
+- Dedicated updated runner: `/home/werg/natlang-generation-runner/ts-host`. Dependency links include both root and
+  ts-host node_modules (initial missing root dependency link was detected and repaired before resuming requests).
+- Handoff PID 8817 did not exit after several minutes following SIGTERM; stopped that exact PID and resumed its
+  journals with one worker. Completed results were preserved. Graceful cancellation responsiveness needs follow-up.
+- Bonsai probe's first surface saved 6/12, with six shared-context-limit failures. Resumed it with one worker to
+  reduce concurrent KV pressure. A collector exit 2 (incomplete cases) now permits auditing and the next surface,
+  instead of silently ending the entire comparison. Do not choose a default from this incomplete probe.
+- Validation: Node/browser build passes; 27 collector, admission and streaming tests pass. Streaming producer
+  failure preserves the prior output and removes its temporary file. Large real-data admission is checked above.

@@ -156,24 +156,33 @@ async function readMatching(path: string, record: ProgramRecord,
   } catch { return; }
 }
 
-export async function writeAtomic(path: string, data: string): Promise<void> {
+export async function writeAtomic(path: string, data: string | AsyncIterable<string>): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   const handle = await open(temporary, 'wx');
-  try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
-  await rename(temporary, path);
+  try {
+    try {
+      if (typeof data === 'string') await handle.writeFile(data);
+      else for await (const chunk of data) await handle.writeFile(chunk);
+      await handle.sync();
+    } finally { await handle.close(); }
+    await rename(temporary, path);
+  } catch (error) { await unlink(temporary).catch(() => {}); throw error; }
 }
 
 async function mergeCompleted(records: IndexedRecord[], config: CollectorConfig): Promise<{ completed: number; missing: number[] }> {
-  const lines: string[] = [], missing: number[] = [];
-  for (const item of records) {
-    const expected = expectedProvenance(item.record, config);
-    const path = join(config.jobs, `${jobKey(item)}.result.json`);
-    const row = await readMatching(path, item.record, expected);
-    if (row) lines.push(JSON.stringify(row) + '\n'); else missing.push(item.index);
+  const missing: number[] = [];
+  let completed = 0;
+  async function* lines() {
+    for (const item of records) {
+      const expected = expectedProvenance(item.record, config);
+      const path = join(config.jobs, `${jobKey(item)}.result.json`);
+      const row = await readMatching(path, item.record, expected);
+      if (row) { completed++; yield JSON.stringify(row) + '\n'; } else missing.push(item.index);
+    }
   }
-  await writeAtomic(config.output, lines.join(''));
-  return { completed: lines.length, missing };
+  await writeAtomic(config.output, lines());
+  return { completed, missing };
 }
 
 const errorText = (error: unknown) => String(error instanceof Error ? `${error.name}: ${error.message}` : error).toLowerCase();

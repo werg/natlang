@@ -1,5 +1,10 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **2026-09-28 morning:** user reduced Luna to **3 total workers** (folder 1, handoffs 1, redo 1).
+> Active runner is now `/home/werg/natlang-generation-runner/ts-host`, with the streaming export fix.
+> Bonsai train4 is complete; folder 102/106 saved, handoffs 282/833 saved, redo 12/13 saved at restart.
+> Bonsai surface probe resumed at one worker after shared-context failures. See the latest decision log entry.
+
 > Continuation 2026-09-27 night: see [GENERATION_DECISIONS.md](GENERATION_DECISIONS.md).
 > Bonsai generation and **five total Luna workers** resumed (2 folder, 2 handoffs, 1 redo).
 > This supersedes the two-worker limit below. Isolated runner refreshed; train4 restart now needs explicit reuse
