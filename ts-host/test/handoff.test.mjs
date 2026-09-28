@@ -82,3 +82,41 @@ test('a teacher takes over a failed run at its failure, and its decision is pref
       new Promise(resolve => teacher.server.close(resolve))]);
   }
 });
+
+test('replacing the planted failing action is a valid handoff without reinjecting the failure', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'seeded-handoff-'));
+  const seeded = { ...record, semantics: { ...record.semantics,
+    failure_seed: { kind: 'compile', code: 'while (true) {}' } } };
+  const student = modelServer([[['return_result', { status: 'failed', reason: 'stuck' }]]]);
+  const teacher = modelServer([[['return_result', { status: 'success', value: 1 }]]]);
+  await Promise.all([new Promise(resolve => student.server.listen(0, '127.0.0.1', resolve)),
+    new Promise(resolve => teacher.server.listen(0, '127.0.0.1', resolve))]);
+  try {
+    const surface = await defaultToolSurfaceHash();
+    const s = config(dir, `http://127.0.0.1:${student.server.address().port}`, 'student', surface);
+    await collectBatch([{ index: 0, record: seeded }], s, nativeJobRunner(s));
+    const failed = JSON.parse((await readFile(s.output, 'utf8')).trim());
+    assert.equal(failed.outcome.seeded_failure.observed, true);
+    const site = handoffSites(failed).find(site => site.index === 0 && site.kind === 'failed_action');
+    assert.ok(site);
+    const task = handoffRecord(failed, handoffAt(failed, site));
+    const t = config(dir, `http://127.0.0.1:${teacher.server.address().port}`, 'teacher', surface);
+    await collectBatch([{ index: 0, record: task }], t, nativeJobRunner(t));
+    const repaired = JSON.parse((await readFile(t.output, 'utf8')).trim());
+    assert.equal(repaired.outcome.accepted, true);
+    assert.deepEqual(repaired.outcome.seeded_failure, { observed: false, replaced_by_handoff: true });
+    assert.equal(teacher.count(), 1);
+    assert.equal(repaired.trajectory[0].assistant.calls[0].tool, 'return_result');
+    assert.equal(await failsInPlace(repaired, 0, task.handoff.rejected, 'failed_action', options, 'seed-check'), null);
+    const invalid = structuredClone(failed);
+    invalid.outcome.checks.seeded_failure_requirement = false;
+    assert.deepEqual(handoffSites(invalid), [], 'an unmet exercise prerequisite is not a wrong model result');
+    const stale = structuredClone(failed);
+    stale.task.program_ir.curriculum = { family: 'inline_type_repair' };
+    assert.deepEqual(handoffSites(stale), []);
+    await assert.rejects(nativeJobRunner(t)({ index: 0, record: stale.task.program_ir }, {}), /retired curriculum family/);
+    assert.equal(await failsInPlace(stale, 0, task.handoff.rejected, 'failed_action', options, 'stale'),
+      'the exercise belongs to a retired curriculum family');
+  } finally { await Promise.all([new Promise(resolve => student.server.close(resolve)),
+    new Promise(resolve => teacher.server.close(resolve))]); }
+});

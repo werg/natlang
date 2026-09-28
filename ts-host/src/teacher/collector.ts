@@ -17,6 +17,7 @@ import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { FileToolSurface } from '../native/prompt.js';
 import type { Handoff } from './handoff.js';
+import { retiredFamily } from './curriculum-policy.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -135,6 +136,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.executionPlans ? { execution_plans: { version: EXECUTION_PLAN_VERSION,
       max_tokens: options.executionPlanTokens ?? 512 } } : {}),
     collection_role: options.collectionRole ?? 'teacher',
+    ...(record.handoff && record.semantics.failure_seed ? { seeded_handoff_version: 2 } : {}),
     ...(options.fileTools && options.fileTools !== 'all' ? { file_tools: options.fileTools } : {}),
     ...(options.judgeModel ? { judge: { model: options.judgeModel.modelId,
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
@@ -223,7 +225,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -499,6 +501,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   const slots = config.modelConcurrency ? new KvBudget(config.modelConcurrency) : undefined;
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
+    const retired = retiredFamily(item.record);
+    if (retired) throw new Error(`retired curriculum family: ${retired}`);
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
@@ -561,7 +565,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         response = structuredClone(recorded.response);
       } else {
         response = replayed ? structuredClone(replayed) :
-          trajectory.length === 0 && item.record.semantics.failure_seed ?
+          trajectory.length === 0 && !handoff && item.record.semantics.failure_seed ?
           { calls: [['eval', { code: item.record.semantics.failure_seed.code }]], completion_tokens: 1 } :
           await transport(request);
         partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
@@ -657,8 +661,14 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
       [file.path, await folder.readText(file.path)] as const))) : undefined;
     const expectedKind = record.semantics.operation === 'blocked' ? 'quiesced' : 'done';
     const seededFailure = record.semantics.failure_seed;
-    const failureSeen = !seededFailure || runtime.trace.events.some(event => event.kind === 'scope_failure' &&
-      (!seededFailure.kind || event.failure_kind === seededFailure.kind));
+    const seededFailureObserved = runtime.trace.events.some(event => event.kind === 'scope_failure' &&
+      (!seededFailure?.kind || event.failure_kind === seededFailure.kind));
+    const handoff = record.handoff as Handoff | undefined;
+    // A teacher replacing the planted failing action must be allowed to prevent that failure entirely.
+    const replacesSeed = !!seededFailure && handoff?.kind === 'failed_action' && handoff.call === 0 &&
+      !(handoff.prefix[0]?.length) && !!handoff.rejected.calls?.some(([tool, args]) => tool === 'eval' &&
+        (args as { code?: string })?.code === seededFailure.code);
+    const failureSeen = !seededFailure || seededFailureObserved || replacesSeed;
     const effectsOk = same(effects.observed, effects.expected);
     // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.
     const authoringSpec = (record.semantics as { authoring?: AuthoringSpec }).authoring;
@@ -673,12 +683,16 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const worldScore = world ? await world.request('score') as { score: number; done: boolean } : undefined;
     const worldOk = !worldScore || worldScore.score >= 100;
     const oracle = await checkOracle(actual, record.semantics.expected, record.semantics.oracle, options.judge);
-    const accepted = failureSeen && result.outcome.kind === expectedKind && honestStop && effectsOk && filesOk && worldOk &&
-      (expectedKind !== 'done' || !!authoring || !!world || oracle.accepted);
+    const checks = { seeded_failure_requirement: failureSeen, expected_status: result.outcome.kind === expectedKind,
+      honest_stop: honestStop, effects: effectsOk, files: filesOk, world: worldOk,
+      answer: expectedKind !== 'done' || !!authoring || !!world || oracle.accepted };
+    const rejectionReasons = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
+    const accepted = rejectionReasons.length === 0;
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
-      ...(worldScore ? { world: worldScore } : {}), ...(filesCheck ? { files_check: filesCheck } : {}), oracle, accepted,
+      ...(worldScore ? { world: worldScore } : {}), ...(filesCheck ? { files_check: filesCheck } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
+      ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
       action_ledger: [...trace, ...(runtime.frame?.task.traces ?? []).flatMap(child => child.events)]

@@ -111,3 +111,32 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   fixture tests crashed under the restricted environment). Added root/child shared-budget regression, verifying no
   result is exported at exhaustion. Python watchdog regression passes: a noncooperative child is killed, the next
   case runs, and restart skips finished attempts. Live retry journal is advancing on Bonsai.
+
+## 2026-09-28 afternoon: retired exercises and seeded handoff repair
+
+- Replayed all seven suspicious Bonsai handoff rejections with recorded responses, without fresh model requests.
+  Each reproduced the same correct answer and passed the answer oracle. The sole failing contract was the required
+  seeded failure: `inline_type_repair` expects an untyped `nl` call to be refused, but that call now runs with an
+  open result. These exercises were already retired for curriculum admission, but still entered handoff generation.
+  Evidence: `runs/handoff-investigation/report.json`. Preserve these raw results excluded; do not relabel them as
+  accepted SFT or use their correct responses as rejected preference examples.
+- Centralized the retired-family policy. Admission, handoff site selection, handoff building, replay verification,
+  and collection now apply it. Collection rejects a stale retired exercise before requesting model inference.
+  New outcomes include named contract checks and rejection reasons so answer success and overall acceptance can
+  be distinguished directly. An unmet seeded prerequisite no longer creates a wrong-result handoff.
+- Fixed a separate active-exercise bug: the collector reinjected a planted failing action when the teacher was
+  supposed to replace it. Handoffs now replay their opening and request the teacher replacement normally. A tightly
+  scoped exemption satisfies the seeded prerequisite only when the root first-action handoff replaces the exact
+  planted eval. Replaying the original rejected action must still fail before it can become a preference pair.
+- Compatibility decision: seeded handoff provenance now carries `seeded_handoff_version: 2`; reuse checks reject
+  older incompatible rows and partial journals. Other handoffs keep their existing reuse compatibility.
+- Filtered ten retired entries from the original 553-entry recovery queue, producing
+  `runs/bonsai-recovery/queue-v2.jsonl` with 543 eligible entries before completed-attempt skips. Removed entries are
+  recorded at `runs/handoff-investigation/retired-queue-entries.json`; original shards, queue and results remain
+  intact. Existing timeout attempts stay deferred; they are not silently marked as model reasoning failures.
+- Restarted the single Bonsai supervisor on frozen `runs/bonsai-recovery/runtime-v3`, with the filtered queue and
+  existing journal. Interrupted cases resume; completed attempts are skipped. Bounds remain 600 seconds/case,
+  2 concurrent model requests and 128 new requests/case. Luna remains stopped; no GPU training was started.
+- Validation: Node/browser build passes; all 27 handoff, collector and curriculum regressions pass. The subsequent
+  handoff-only rerun also passes after adding the pre-inference retirement assertion. The seeded regression checks
+  exactly one teacher request, no reinjected failure, accepted prevention, and rejected-side replay failure.

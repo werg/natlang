@@ -10,6 +10,7 @@
  */
 import type { ModelTurn } from '../contracts.js';
 import { executeProgram, programRow, type ProgramRecord, type TeacherRow } from './collector.js';
+import { retiredFamily } from './curriculum-policy.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
 
@@ -37,7 +38,8 @@ const program = (row: TeacherRow) => {
 
 /** The sites of a run that was not accepted. */
 export function handoffSites(row: TeacherRow): Site[] {
-  if ((row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if (retiredFamily(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if ((row.outcome?.checks as Dict | undefined)?.seeded_failure_requirement === false) return [];
   const result = materializeNativeRows([row], { failedRuns: true });
   if (result.unlinked.length) return [];
   const trajectory = row.trajectory as unknown as Turn[], calls = callNumbers(trajectory);
@@ -80,6 +82,7 @@ export function handoffRecord(row: TeacherRow, handoff: Handoff): ProgramRecord 
  */
 export async function failsInPlace(row: TeacherRow, index: number, response: ModelTurn, kind: SiteKind,
     options: ReplayOptions, runId: string): Promise<string | null> {
+  if (retiredFamily(program(row))) return 'the exercise belongs to a retired curriculum family';
   const trajectory = row.trajectory as unknown as Turn[], calls = callNumbers(trajectory);
   const place = placeOf(calls, index);
   const script = scriptOf(trajectory, new Set(trajectory.map((_, at) => at).filter(at => at >= index)));
@@ -95,6 +98,8 @@ export async function failsInPlace(row: TeacherRow, index: number, response: Mod
         JSON.stringify(observed(turns[replayed]!.context)) !== JSON.stringify(observed(trajectory[source]!.context)))
       return 'the replay saw other results than the run did';
   }
+  if ((run.outcome.checks as Dict | undefined)?.seeded_failure_requirement === false)
+    return 'the exercise did not exhibit its required seeded failure';
   if (kind === 'wrong_result') return run.outcome.accepted ? 'the result is accepted now' : null;
   const replay = programRow(record, 'replay', runId, row.provenance, run, turns as unknown as Dict[]);
   const decision = materializeNativeRows([replay], { failedRuns: true }).turns

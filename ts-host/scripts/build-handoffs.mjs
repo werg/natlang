@@ -12,6 +12,7 @@ import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
+import { retiredFamily } from '../dist/teacher/curriculum-policy.js';
 import { programRunId } from '../dist/teacher/collector.js';
 import { failsInPlace, handoffAt, handoffRecord, handoffSites } from '../dist/teacher/handoff.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
@@ -44,13 +45,14 @@ async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { workers: { type: 'string', default: '6' } } });
   const [output, ...inputs] = positionals;
   if (!inputs.length) throw new Error('usage: build-handoffs.mjs OUT.ir.jsonl RESULTS.jsonl [MORE.jsonl ...] [--workers N]');
-  const jobs = [];
+  const jobs = [], skipped = {};
   for await (const row of rowsOf(inputs)) {
     if (row.outcome?.accepted !== false) continue;
+    if (retiredFamily(row.task.program_ir)) { skipped.retired_family = (skipped.retired_family ?? 0) + 1; continue; }
     try { for (const site of handoffSites(row)) jobs.push({ row, site }); }
     catch { jobs.push({ row, site: null }); }
   }
-  const records = [], skipped = {}, byModel = {};
+  const records = [], byModel = {};
   const skip = reason => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
   await pool(jobs, Number(values.workers), async ({ row, site }) => {
     if (!site) return skip('the run cannot be materialized');

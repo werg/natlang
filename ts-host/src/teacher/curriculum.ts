@@ -186,7 +186,7 @@ function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreeme
  * inline_type_repair seeded an nl result with no known type, which the compiler used to refuse (nl-unknown-return);
  * such a call now runs with an open result.
  */
-const RETIRED_FAMILIES = new Set(['inline_type_repair']);
+import { RETIRED_FAMILIES } from './curriculum-policy.js';
 
 /**
  * Outcomes the runtime no longer produces. A row that met one worked around a limitation a served model will not
