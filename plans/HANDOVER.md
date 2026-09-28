@@ -1,5 +1,12 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Latest 2026-09-28 checkpoint:** use `runs/bonsai-recovery/queue-v5.jsonl` and frozen `runtime-v7`.
+> It prioritizes the verified SMS repair handoff; 559 entries / 20 completed attempts / 539 pending at migration.
+> Read DATA_QUALITY.md's fresh checkpoint. Token usage is now preserved in replay, fixing false handoff rejection
+> from changed compaction timing. Folder guidance permits direct/delegated judgments and reuse of completed work.
+> New output paths preserve interrupted extraction partials. Rewrite/answer-equivalence cases await independent
+> review and are held out. Luna stays stopped; no training has started.
+
 > **2026-09-28 data quality and slow-case review:** Bonsai now uses `queue-v4.jsonl` and frozen
 > `runtime-v5`, with the existing append-only journal. New jobs have distinct paths; raw histories are preserved.
 > Read [DATA_QUALITY.md](DATA_QUALITY.md) and the latest decision log before restarting or building data.

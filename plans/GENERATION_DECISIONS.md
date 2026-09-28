@@ -259,3 +259,19 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   observations differed. Preserve usage in recorded turns/handoff prefixes. The complete saved SMS run now replays
   with identical observations and the same classification rejection; its repair handoff verifies. No relaxed replay
   comparison. Range exports are still selected-range views: use a raw-jobs snapshot when building repair shards.
+- Final live checkpoint: INDEX had 50 saved replies / 11,705 completion tokens before its 670-second deadline.
+  Exact-request offline replay shows a completed 22-label batch followed by a full repeat; many identical answers
+  were legitimate sibling classifications. Folder guidance now offers direct or delegated judgment, reuse of
+  completed results and focused disagreement checks. This remains guidance, not a required technique.
+- Rewrite completes in 575.5 seconds: 13 files actually changed and returned count 13. Twelve outputs need semantic
+  adjudication; held out rather than negative labels. Article QA completes in 48.6 seconds with Dulce River vs Dulce,
+  held for source-aware equivalence. Rubric-backed answers with zero lexical overlap also require review.
+- Verified one SMS repair handoff against the updated build. Migrated by exact supervisor PID 181397 to queue-v5
+  and frozen runtime-v7 (source dee31c3; all 452 manifest hashes verify). Runtime-v6 is an unused intermediate
+  snapshot; frozen snapshots are immutable. Interrupted extraction raw partials preserved; fresh jobs use new paths.
+  New supervisor PID 213073 prioritizes quality-repair:0, then resumes pending generation. At migration: 559 entries,
+  20 completed attempts, 539 pending. Luna remains stopped. No independent grader or model training started.
+- Validation after replay/oracle fixes: Node/browser build and browser type checks pass; 45 focused tests pass.
+  After folder-guidance change, builds/type checks and 17 folder/handoff/oracle tests pass. Reviewed all eight SMS
+  mismatches against actual source text: clear personal vs prize/premium-service distinctions; no contradictory gold
+  found in those items. Raw histories and exclusions remain the authoritative audit trail.

@@ -72,8 +72,28 @@ Seven replacement cases spanning six folder families pass reference replay. The 
 replacement tasks and two measured FOLIO retries. It removes the unsupported premise probe and the legacy CUAD
 case; the complete exclusions ledger is `runs/bonsai-recovery/queue-v4.exclusions.jsonl`.
 
-Bonsai uses frozen `runtime-v5`, `queue-v4.jsonl` and the existing append-only journal. Fresh jobs use distinct paths
+Bonsai uses frozen `runtime-v7`, `queue-v5.jsonl` and the existing append-only journal. Fresh jobs use distinct paths
 so old rows and partials are preserved. Default limits remain one case at a time, two model requests in flight,
 128 requests and 600 seconds. Multi-item FOLIO/ANLI gets 1,200 seconds; all-file tasks get a size-based deadline up
 to 3,600 seconds and up to 512 requests. All retain the inactivity guard and 20 turns per call. The user's three
 ad hoc layers per existing file root remain unchanged. Luna stays stopped; no model training has started.
+
+### Fresh run checkpoint and repairs
+
+- SMS move: all 39 files moved in 369 seconds; eight destination labels disagree with gold. Returned 39 is correct.
+  Failed move-item identifiers name original sources, not current locations. No partial benchmark row is admitted.
+- SMS INDEX: deadline after 670 seconds, 50 fresh replies. Offline replay of the exact-request journal shows that
+  the first 22-item batch completed, and the parent repeated it despite having its labels/counts. This is redundant
+  work, not a frozen server. Folder guidance now makes delegation optional and asks models to reuse completed
+  judgments and investigate individual disagreements. Identical sibling answers are not themselves stagnation.
+- Rewrite: completes in 575 seconds, returned 13 matches actual changed files. Twelve outputs require semantic
+  review. They remain quality-pending, not negatives or accepted training rows.
+- Article QA: completes in 49 seconds with “Dulce River” against “Dulce”. Source-aware equivalence remains pending
+  independent adjudication. Zero token overlap with a rubric also defers (for example car/automobile).
+- Repair replay previously dropped recorded token usage, changing context calibration and forced-compaction timing.
+  Preserving usage restores identical observations; the genuine SMS classification failure produces one verified
+  repair handoff. Queue-v5 prioritizes it before continuing the remaining work.
+- Runtime-v7 and fresh output paths preserve old partials. The legacy extraction attempt was interrupted during
+  migration and remains pending. Queue-v5 has 559 entries, 20 completed attempts and 539 pending at migration.
+  Node/browser build and browser type checks pass, with 45 replay/oracle/collector regressions and 17 follow-up
+  folder/handoff/oracle regressions passing. Earlier 132 focused regressions also passed.
