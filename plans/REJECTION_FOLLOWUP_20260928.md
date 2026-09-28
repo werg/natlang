@@ -249,7 +249,7 @@ browser types, 134 focused Node tests, explicit evidence audit and changed
 reference replays. Course changes are committed before freezing the runtime.
 
 Current admission confirms all four numeric retries are training-admitted (4/14
-Luna final results); five used ad hoc children in the longest case while two
+Luna final results). The longest case made five ad hoc child calls; two
 short cases used named specialists only. Saved per-job result files were gathered
 for this audit: the CLI summary file represents only the latest one-case invocation
 and may be empty after an incomplete attempt. Original job files are intact.
