@@ -20,6 +20,13 @@ def tree_identity(root):
 
 def freeze(source, output):
     source, output = Path(source).resolve(), Path(output).resolve()
+    # World bridges resolve vendor beside ts-host. Preserve that layout for frozen copies.
+    source_vendor, frozen_vendor = source.parent / 'vendor', output.parent / 'vendor'
+    if source_vendor.exists() and not frozen_vendor.exists():
+        frozen_vendor.parent.mkdir(parents=True, exist_ok=True)
+        frozen_vendor.symlink_to(source_vendor, target_is_directory=True)
+    if source_vendor.exists() and frozen_vendor.resolve() != source_vendor.resolve():
+        raise ValueError('frozen runtime vendor path points at a different dependency tree')
     before = tree_identity(source)
     if not before or not (source / "dist/native/runtime.js").exists():
         raise ValueError("build the Node runtime before freezing it")

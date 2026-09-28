@@ -24,7 +24,12 @@ export class WorldBridge {
       this.pending.delete(reply.id);
       if (reply.error !== undefined) waiter.reject(new Error(reply.error)); else waiter.resolve(reply.result);
     });
-    process.on('exit', () => { for (const waiter of this.pending.values()) waiter.reject(new Error('the world process exited')); });
+    const fail = (error: Error) => {
+      for (const waiter of this.pending.values()) waiter.reject(error);
+      this.pending.clear();
+    };
+    process.on('error', fail);
+    process.on('exit', () => fail(new Error('the world process exited')));
   }
 
   /**
