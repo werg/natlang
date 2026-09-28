@@ -88,9 +88,13 @@ test('a row showing an outcome the runtime no longer produces is not admitted', 
     ['obsolete_outcome:eval_declared_type']);
   // A type nothing declared is still unknown, and the row stands.
   assert.deepEqual(reasons(withTool('unknown type name State')), []);
+  assert.deepEqual(reasons(withTool('This call is itself a judgment handed over with nl, so make it here instead of handing it on')),
+    ['obsolete_outcome:inline_delegation_ban']);
+  assert.deepEqual(reasons(withTool('1:1 invalid-binding: Injected binding "facts" is duplicated.')),
+    ['obsolete_outcome:duplicate_injected_binding']);
 });
 
-test('inline and edit expectations are enforced by admission', async () => {
+test('successful direct and delegated judgments are admitted; invalid substitutes and edits are rejected', async () => {
   const [semantic, crisp] = FAMILIES.inline_review_each.build(7, 0);
   // Answering a per-item semantic filter directly, without inline children.
   const direct = structuredClone(semantic);
@@ -104,13 +108,14 @@ test('inline and edit expectations are enforced by admission', async () => {
     keywords.curriculum.reference.root.at(-1)];
   const regex = await replayReference(keywords, TOOLS_PROMPT);
   assert.deepEqual(admitRow({ task: { program_ir: keywords }, outcome: regex.run.outcome, trajectory: regex.trajectory }).reasons, ['regex_judgment']);
-  // A gratuitous inline child for a field test.
+  // Delegating a field test is valid even when the seed suggests a direct answer.
   const eager = structuredClone(crisp);
   eager.curriculum.reference.root = [['eval', { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
     eager.curriculum.reference.root.at(-1)];
   eager.curriculum.reference.children = inboxAnswers(eager);
   const extra = await replayReference(eager, TOOLS_PROMPT);
-  assert.deepEqual(admitRow({ task: { program_ir: eager }, outcome: extra.run.outcome, trajectory: extra.trajectory }).reasons, ['gratuitous_inline']);
+  const delegatedVerdict = admitRow({ task: { program_ir: eager }, outcome: extra.run.outcome, trajectory: extra.trajectory });
+  assert.deepEqual([delegatedVerdict.reasons, delegatedVerdict.notes], [[], ['delegated_optional']]);
   // Editing a helper that already meets its contract.
   const [, sound] = FAMILIES.contract_diagnosis.build(7, 0);
   const meddling = structuredClone(sound);
@@ -135,7 +140,7 @@ test('the function listing shows TypeScript and natlang doc comments, and an ext
   assert.match(opening, /\/\*\* Judge whether evidence settles a refund claim, and which way\. \*\/\\ndeclare function assess\(/);
 });
 
-test('a judgment handed over with nl says so in its opening instead of offering nl', async () => {
+test('inline children below the depth limit have delegation available in their opening', async () => {
   const [, record] = FAMILIES.inline_review_each.build(7, 0);
   record.curriculum.reference.root = [['eval',
     { code: 'const kept = await review_each(inbox(), nl`Is priority of ticket at least 3?`);\nkept' }],
@@ -144,8 +149,8 @@ test('a judgment handed over with nl says so in its opening instead of offering 
   const { trajectory } = await replayReference(record, TOOLS_PROMPT);
   const openings = trajectory.map(turn => String(turn.context[1].content));
   const child = openings.find(text => text.includes('Is priority of ticket at least 3?'));
-  assert.match(child, /This call is a judgment handed over with nl: make it here/);
-  assert.doesNotMatch(child, /built-ins nl,/);
+  assert.match(child, /built-ins nl, iterateOn and transcript/);
+  assert.doesNotMatch(child, /nl is not available/);
   assert.match(openings[0], /Eval also has the built-ins nl, iterateOn and transcript/);
 });
 

@@ -28,15 +28,17 @@ export function fileToolNames(surface: FileToolSurface = 'all'): string[] {
     surface === 'files' ? [...files, 'python', 'delegate'] : [...files, 'bash', 'python', 'delegate', 'editor'];
 }
 
-export function directoryReducerPrompt(surface: FileToolSurface = 'all'): string {
+export function directoryReducerPrompt(surface: FileToolSurface = 'all', allowAdHoc = true): string {
   const order = ['bash', 'python', 'delegate', 'editor', 'list_files', 'search_files', 'read_file', 'write_file', 'edit_file', 'diff_files'];
   const names = new Set(fileToolNames(surface));
+  if (!allowAdHoc) names.delete('delegate');
   return `
 This call is a directory reducer: folder is a private copy of its input folder, and the changes you have made to it when you reply done are kept.
 Paths are relative POSIX paths such as "notes/todo.md".
 
 File tools:
-${order.filter(name => names.has(name)).map(name => FILE_TOOL_LINES[name]).join('\n')}
+${order.filter(name => names.has(name)).map(name => !allowAdHoc && name === 'python' ?
+  '- python(code) runs a Python cell over this folder. It can use pathlib, pandas and sqlite3.' : FILE_TOOL_LINES[name]).join('\n')}
 
 Code in eval can use the current Folder value named folder:
 - folder.file(path) and folder.dir(path) return file and subfolder handles.
@@ -44,15 +46,33 @@ Code in eval can use the current Folder value named folder:
 - A folder handle has exists(), stat(), entries(pattern?), files(pattern?), folders(pattern?), diff(), remove(), moveTo(destination), and apply(reducer, ...args).
 - The fs helper provides exists(path), list(path?, { pattern? }), readText(path, { startLine?, endLine? }), readJson(path), writeText(path, content), writeJson(path, value), editText(path, { find, replaceWith, fuzzy? }), diff(path?), remove(path), and move(source, destination).
 
-For many files, delegate one semantic judgment per file and do the exact bookkeeping in code:
+${allowAdHoc ? `For many files, delegate one semantic judgment per file and do the exact bookkeeping in code:
 const files = await folder.files('inbox/*.eml');
 const labels = await Promise.all(files.map(file => nl<'keep' | 'archive'>\`Classify the email in file.\`(file)));
+` : 'For many files, read or search their contents, make their judgments here, and do exact bookkeeping in code.\n'}
 For subfolders, use a reducer: await Promise.all((await folder.folders('teams/*')).map(dir => dir.apply(summarizeTeam)));
 Each child sees only its selected root. A small file's contents appear in the child's opening; otherwise the child must read or search before answering.
 `;
 }
 
 export const DIRECTORY_REDUCER_PROMPT = directoryReducerPrompt();
+
+/** The final ad hoc layer keeps computation and named helpers, but offers no new ad hoc calls. */
+export const NL_DEPTH_LIMIT_NOTICE = 'This call is at the third and final layer of ad hoc natural-language calls. ' +
+  'Make the remaining judgments here using the data and tools available. Existing named functions can still be called. ' +
+  'Creating another ad hoc natural-language child is unavailable at this depth.';
+export const TOOLS_PROMPT_AT_NL_DEPTH_LIMIT = TOOLS_PROMPT.split('\n\n').map(paragraph =>
+  paragraph.startsWith('Eval code can also hand a judgement') ? NL_DEPTH_LIMIT_NOTICE :
+  paragraph.startsWith('To repeat a step') ?
+    'To repeat a step an open-ended number of times (since there is no while), use a code function: ' +
+    'const finalState = await iterateOn(step, initialState, ...otherArgs).until(state => isFinished(state)). ' +
+    'The step takes the current state and returns the next one; the stopping check receives that state.' : paragraph).join('\n\n');
+
+/** Preserve additional application instructions while replacing the standard tool guidance at the limit. */
+export function promptAtNlDepthLimit(prompt: string): string {
+  return prompt.includes(TOOLS_PROMPT) ? prompt.replace(TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT) :
+    prompt + '\n\n' + NL_DEPTH_LIMIT_NOTICE;
+}
 
 
 /**

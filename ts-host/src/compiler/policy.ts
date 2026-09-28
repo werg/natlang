@@ -105,7 +105,8 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
   if (boundRoot && assigned.has(boundRoot)) return 'do not reassign the loop bound inside the loop body';
   if (boundRoot && grownReceivers(node.statement).has(boundRoot))
     return 'do not grow the collection that bounds the loop inside its body';
-  if (ts.isCallExpression(bound)) return 'compute a call-valued bound before the loop';
+  if (ts.isCallExpression(bound)) return 'compute the bound once before the loop, for example ' +
+    '`const pages = store.pages(); for (let p = 1; p <= pages; p++) { ... }`';
   return;
 }
 

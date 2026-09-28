@@ -7,6 +7,10 @@
  */
 import type { NatlangTask } from './runtime.js';
 
+/** Root/named calls start at zero; three nested ad hoc calls may be active below them. */
+export const MAX_AD_HOC_NL_DEPTH = 3;
+export const canGenerateNl = (frame?: Frame): boolean => (frame?.adHocDepth ?? 0) < MAX_AD_HOC_NL_DEPTH;
+
 export type Frame = Readonly<{
   task: NatlangTask;
   /** Definition IDs of the natlang or authored callables that are currently active above this point. */
@@ -15,6 +19,8 @@ export type Frame = Readonly<{
   parentCallId?: string;
   /** Whether that invocation is an inline `nl` function: a judgment eval code handed over. */
   inline?: boolean;
+  /** Active ad hoc nl/delegate layers since the most recent file-backed .nl root. */
+  adHocDepth?: number;
 }>;
 
 export interface ContextStore {

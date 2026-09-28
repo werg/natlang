@@ -171,8 +171,14 @@ An unannotated inline `nl` gets its parameter types from its arguments and its
 result type from how the eval uses the result (a condition makes it `boolean`,
 a typed variable gives that type); when no use says it, the result is open:
 the fields the eval reads, or any value, as the call chooses.
-A call made by an inline `nl` makes its judgment itself: calling another inline
-`nl` from inside it is an error (named functions of the program stay callable).
+Ad hoc natural-language calls may delegate through three active layers below a
+root. An existing instruction function loaded from a `.nl` file starts a fresh
+root budget, even when called by an ad hoc child. At the third layer the system
+prompt and built-in help omit further ad hoc delegation; a fourth layer is
+refused by the invocation kernel. Inline `nl`, Python `nl`, and the `delegate`
+tool share this count. Sibling calls have independent budgets. The usual
+recursion checks for reentering an existing function and task resource limits
+still apply.
 In eval, awaiting an inline `nl` without calling it (`await nl`...``) calls it
 with no arguments: it judges the names its instructions mention and its
 interpolated values.

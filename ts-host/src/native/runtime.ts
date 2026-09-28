@@ -19,7 +19,7 @@ import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js
 import { livePreview, renderValue } from './agent.js';
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { currentFrame, runInFrame, type Frame } from '../runtime/context.js';
+import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
@@ -720,9 +720,10 @@ export class NativeSession {
   }
   private async folderCommandCallable(name: string, folder: Folder): Promise<unknown> {
     if (name.endsWith('.nl')) {
-      const { defineNatlang } = await import('../runtime/callable.js');
+      const { namedCallable } = await import('../runtime/callable.js');
       const source = await folder.readText(name);
-      return defineNatlang(source, { name: name.split('/').at(-1)!.slice(0, -3),
+      const record = parseNatlang(name, source, this.lam.typesSrc, PATH_ONLY);
+      return namedCallable(name.split('/').at(-1)!.slice(0, -3), { ...record,
         codebase: this.lam.codebase as Record<string, ItemRecord> });
     }
     return name.split('.').reduce<unknown>((part, key) =>
@@ -736,7 +737,7 @@ export class NativeSession {
       nl: (instructions, returns) => (...inputs) => invokeDefinition(this.runtime.frame!, {
         id: `python:${instructions}`, name: 'nl@python', body: instructions, params: [], openParameters: true,
         returns, types: this.lam.typesSrc, codebase: this.lam.codebase, subtype: 'function',
-      }, inputs),
+      }, inputs, { manifest: { inline: true, python: true } }),
       iterateOn: (step, initial, ...fixed) => iterateOn(step as never, initial, ...fixed).inFrame(this.runtime.frame),
     };
   }
@@ -846,7 +847,7 @@ export class NativeSession {
     const inputs = this.lam.type.kind === 'lambda' ? this.lam.type.params.fields.map(field => field.name) : [];
     const locals = Object.keys(this.lam.let).filter(name => !isPending(this.lam.let[name]!));
     const names = [...new Set([...inputs, ...locals, ...Object.keys(this.lam.codebase), ...Object.keys(this.availableServices())])];
-    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins nl, iterateOn ` +
+    return `This call's eval scope has ${names.length ? names.join(', ') : 'no names of its own'}, the built-ins ${canGenerateNl(this.runtime.frame) ? 'nl, ' : ''}iterateOn ` +
       'and transcript (read_code shows how to use them), and standard JavaScript; nothing else (no Node modules, no require).';
   }
 
@@ -878,7 +879,11 @@ export class NativeSession {
     if (!found && Object.hasOwn(BUILT_IN_DOCS, requested)) {
       if (name === 'edit_code') throw new Reject([{ path: requested, code: 'built-in', expected:
         `a function of this program's codebase; ${requested} is built into eval and cannot be changed` }]);
-      return { kind: 'ok', text: BUILT_IN_DOCS[requested]!, value: BUILT_IN_DOCS[requested]! };
+      const docs = canGenerateNl(this.runtime.frame) ? BUILT_IN_DOCS[requested]! : requested === 'nl' ?
+        'Ad hoc nl calls are unavailable at this third layer. Make the judgment here or call an existing named function from a file.' :
+        requested === 'iterateOn' ? BUILT_IN_DOCS.iterateOn!.split('step(state, ...otherArgs)')[0] +
+          'step(state, ...otherArgs) returns the next state and may be async; the stopping check receives that state.' : BUILT_IN_DOCS[requested]!;
+      return { kind: 'ok', text: docs, value: docs };
     }
     // An importable package is read by its type declarations; it is not part of this program either.
     const packaged = found ? undefined : this.runtime.environment.declarationOf?.(requested);

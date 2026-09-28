@@ -141,3 +141,55 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Validation: Node/browser build passes; all 27 handoff, collector and curriculum regressions pass. The subsequent
   handoff-only rerun also passes after adding the pre-inference retirement assertion. The seeded regression checks
   exactly one teacher request, no reinjected failure, accepted prevention, and rejected-side replay failure.
+
+## 2026-09-28: broad rejection review and user-directed delegation policy
+
+- Inventoried every raw `*.result.json` under runs (76 batches, 4,434 results at the first snapshot), avoiding
+  duplicated/range-limited exports. Recorded a compact evidence entry for every task or admission rejection and
+  every outstanding collector error. Reusable script: `ts-host/scripts/audit-rejections.mjs`; reports in
+  `runs/rejection-audit-20260928/`. New saved Bonsai results can increase subsequent snapshot counts.
+- First snapshot: 907 task rejections and 1,346 admission rejections (overlapping populations), plus 585 error files
+  without a saved result for their index. 553 errors were the already diagnosed runner dependency-link failure;
+  the remaining categories were 17 context limits, 9 rate limits, 5 transport timeouts and 1 malformed response.
+  These are collection failures, not evidence of incorrect model reasoning.
+- The former runtime blanket ban on delegation inside an inline child contradicted its system prompt and caused
+  thousands of failed eval actions. The user explicitly rejected that restriction. Final policy, incorporating both
+  subsequent clarifications: allow **three active layers of ad hoc generated nl calls below a root**; every
+  pre-existing instruction function from a `.nl` file qualifies as a fresh root. This supersedes the temporary
+  proposal to carry the depth through named file calls. Existing actual-function recursion checks remain in place.
+- The invocation kernel enforces the boundary; the third layer receives a distinct system prompt with ad hoc
+  examples removed, an opening naming only available built-ins, and matching read_code/help guidance. Inline nl,
+  Python nl and delegate share the count. At the boundary delegate is not offered. File-based shell/apply calls
+  retain their source identity so their `.nl` definitions qualify as roots too. Siblings have independent counts.
+- Fixed two additional confirmed runtime bugs: inherited callable namespaces were also captured, causing duplicate
+  injected bindings (reproduced from handoff 65); generated functions at identical source offsets could collide in
+  identity, causing false recursion. Namespace captures now use the inherited callable context once. Eval identities
+  include invocation identity and source content, retaining true reentry checks for existing callable instances.
+- Admission no longer rejects a successful supported answer simply because it delegated an optional field test;
+  that choice becomes the `delegated_optional` note. Direct correct answers remain valid (`judged_directly` note).
+  Preference building now allows an admitted direct chosen answer, subject to its rejected-side replay proof.
+  Correctness, actual effects/files, honest stopping and causal evidence checks remain required. Sampling can still
+  select delegation examples using facts/notes or the explicit --require-technique option.
+- Histories showing the removed blanket ban or internal duplicate-binding fault are now marked obsolete for
+  admission, even when the eventual answer was correct: training them would teach an unavailable runtime rule.
+  Raw records are preserved; do not relabel or promote them blindly. Current-policy re-audit identifies these rows.
+- Improved a common loop diagnostic with a concrete finite pagination form that computes the page bound once.
+  While/recursion policy is unchanged. Other remaining failures include genuine FOLIO/ANLI judgments, invalid
+  generated code, partial file edits/CSV extraction, source-oracle edge cases and large-case budgets; see review.
+- Compatibility decision: `execution_policy_version: 2` is part of provenance and reuse checks. Incompatible old
+  partials/results are not silently reused under the new delegation/capture/identity behavior. Saved raw results stay
+  in their original jobs directories. The retired-family and seeded handoff version 2 policies still apply.
+- Froze the built code as `runs/bonsai-recovery/runtime-v4`. Stopped supervisor PID 138523 by exact PID to migrate;
+  interrupted handoff 589 remains unfinished and will resume/recollect under the new provenance. New queue-v3 has
+  six reviewed probes in separate `system-fix.jobs` before the existing filtered recovery entries (552 total before
+  journal skips). Probes cover ANLI, captured facts, FOLIO child calls and relational pagination; model is Bonsai,
+  including probes sourced from old Luna failures. Luna was not restarted. First ANLI probe finished in 71 seconds
+  with a real answer rejection, which remains excluded; the next case is advancing. No model training started.
+- Validation: Node/browser build passes; 123 focused interpreter, compiler, runtime, collector, handoff and admission
+  tests pass, plus 14 compiler/folder/migration tests. The 60-test interpreter rerun also passes with identical source
+  text in successive ad hoc layers. Tests cover all three layers, fourth-layer rejection, prompt/help consistency,
+  fresh file-root budgets, inherited namespace calls and correct direct/delegated admission.
+  Browser type checks and the raw-job audit regression also pass (138 distinct focused tests in total). Frozen
+  runtime-v4 src/dist hashes match the reviewed main build. At the live checkpoint, 12 of queue-v3's 552 eligible
+  entries have finished attempts (including earlier deferred timeouts); 540 remain. Probe 65 has advancing saved
+  turns, and Bonsai health is OK. The machine audit's successful-run mix is reported in REJECTION_REVIEW.md.

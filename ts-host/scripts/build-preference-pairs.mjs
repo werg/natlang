@@ -46,7 +46,7 @@ const skip = reason => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
 await pool(jobs, Number(values.workers), async ({ row, index, rejected, kind, runId, evidence }) => {
   if (row.task.program_ir.curriculum) {
     const admission = admitRow(row);
-    if (!admission.admitted || admission.notes.includes('judged_directly')) return skip('the chosen run is not admitted');
+    if (!admission.admitted) return skip('the chosen run is not admitted');
   }
   try {
     const pair = await preferencePair(row, index, rejected, kind, evidence, replayOptions(row.provenance), runId);

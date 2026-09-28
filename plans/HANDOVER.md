@@ -1,5 +1,14 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **2026-09-28 full rejection audit:** Bonsai now uses `runs/bonsai-recovery/queue-v3.jsonl`
+> and frozen `runs/bonsai-recovery/runtime-v4`, with the same append-only journal.
+> Six reviewed probes precede the 546-entry recovery queue; completed attempts are skipped. Luna remains stopped.
+> User's delegation policy: **three active ad hoc layers per root; every pre-existing file-backed `.nl`
+> function starts a fresh root budget**. The third layer has a separate prompt/help variant and cannot create
+> a fourth. Inline nl, Python nl and delegate share the limit. Correct direct and delegated answers can both
+> be admitted. Execution policy provenance version 2 prevents silent reuse under the changed behavior.
+> Full audit: `runs/rejection-audit-20260928/`; read `plans/REJECTION_REVIEW.md` and the latest decision log entry.
+
 > **2026-09-28 rejection investigation:** Luna remains stopped. Current Bonsai queue is
 > `runs/bonsai-recovery/queue-v2.jsonl` (546 eligible entries before journal skips), using
 > `runs/bonsai-recovery/runtime-v3` and the existing `runs/bonsai-recovery/journal.jsonl`.

@@ -8,7 +8,7 @@ import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
 import { TypeEnv } from '../native/types.js';
 import { MISSING, buildPending, coerce, isLive, type CaptureCell, type LambdaNode, type Value } from '../native/values.js';
-import { NatlangRecursionError, runInFrame, type Frame } from './context.js';
+import { MAX_AD_HOC_NL_DEPTH, NatlangRecursionError, runInFrame, type Frame } from './context.js';
 import { recordingServices } from './runtime.js';
 import { kernelHooks } from './hooks.js';
 
@@ -94,13 +94,13 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   options: InvokeOptions): Promise<unknown> {
   const task = frame.task;
   task.checkOpen();
+  const adHoc = !!(options.manifest?.inline || options.manifest?.delegate);
+  const fileRoot = !adHoc && definition.source?.endsWith('.nl');
+  const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
+  if (adHocDepth > MAX_AD_HOC_NL_DEPTH)
+    throw new NatlangCallError(definition.name, 'quiesced',
+      `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
   if (frame.chain.includes(definition.id)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
-  // A judgment handed over with an inline nl is made by the call it was handed to. Handed on again it only reaches
-  // another call asked the same thing, and models that do it keep doing it, call after call.
-  if (options.manifest?.inline && frame.inline)
-    throw new Error('This call is itself a judgment handed over with nl, so make it here instead of handing it on: ' +
-      'read what you need in eval, decide, and return the answer. An nl function made inside it would only be asked ' +
-      'the same question. Functions of the program can still be called.');
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
     throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', []);
@@ -173,7 +173,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   if (extraTransactions.length) node.extraTransactions = extraTransactions;
 
   const callId = task.nextCallId();
-  const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId,
+  const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId, adHocDepth,
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model();
   const environment = task.environment();

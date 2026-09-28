@@ -10,6 +10,7 @@
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { executeProgram, recordDigest, sha256, type ProgramRun } from './collector.js';
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
+import { RETIRED_FAMILIES } from './curriculum-policy.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/1';
@@ -182,17 +183,12 @@ function oracleLevel(value: unknown): 'exact' | 'normalized' | 'span' | 'agreeme
  * decision; the inline mode requires or forbids an inline child. The number of evals is never a criterion.
  */
 /**
- * Families whose premise the runtime no longer has; their collected rows teach behaviour it no longer calls for.
- * inline_type_repair seeded an nl result with no known type, which the compiler used to refuse (nl-unknown-return);
- * such a call now runs with an open result.
- */
-import { RETIRED_FAMILIES } from './curriculum-policy.js';
-
-/**
  * Outcomes the runtime no longer produces. A row that met one worked around a limitation a served model will not
  * meet, and its history shows the model something untrue about the runtime.
  */
 const OBSOLETE_OUTCOMES: [string, RegExp][] = [
+  ['inline_delegation_ban', /This call is itself a judgment handed over with nl, so make it here instead of handing it on/],
+  ['duplicate_injected_binding', /invalid-binding: Injected binding .* is duplicated/],
   // nl results nothing typed run open now.
   ['nl_unknown_return', /nothing that uses it says what it should be/],
   // Parts of an nl parameter or result that nothing types are open.
@@ -289,7 +285,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.inline === 'required' && !facts.inlineCalls) {
     if (facts.regexJudgment) reasons.push('regex_judgment'); else notes.push('judged_directly');
   }
-  if (c.inline === 'avoid' && facts.inlineCalls) reasons.push('gratuitous_inline');
+  if (c.inline === 'avoid' && facts.inlineCalls) notes.push('delegated_optional');
   // The history is searched for something specific, not read through.
   if (facts.transcriptDump) reasons.push('transcript_dump');
   if (c.edits === 'required' && !facts.functionEdits) reasons.push('defect_not_repaired');

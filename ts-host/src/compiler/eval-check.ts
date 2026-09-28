@@ -5,12 +5,15 @@
 import ts from 'typescript';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from './host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
+import { hexDigest } from '../native/hash.js';
 
 export type EvalImport = { name: string; params: { name: string; type: string; optional?: boolean }[];
   returns: string; async: boolean; kind: 'natural language' | 'TypeScript' | 'directory reducer' | 'module';
   children: EvalImport[] };
 
 export type EvalScopeDeclarations = {
+  /** Invocation identity: independently generated eval functions are distinct even at identical source offsets. */
+  invocationId?: string;
   types: Record<string, string>;
   inputs: { name: string; type: string }[];
   locals: { name: string; type: string; mutable: boolean }[];
@@ -77,6 +80,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));
   const { plans, diagnostics } = analyzeInlineLambdas(program, [snippet], {
+    sourceRevision: hexDigest(`${scope.invocationId ?? ''}\0${source}`),
     scopeFiles: [scopeFile], displayPath: () => 'eval',
     classify: declaration => declaration.getSourceFile() === scopeFile ?
       (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && inputs.has(declaration.name.text) ? 'input' : 'local') :

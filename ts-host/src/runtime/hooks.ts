@@ -10,7 +10,10 @@ import type { ItemRecord } from './loader.js';
 
 export const kernelHooks: NativeRuntimeHooks = {
   callables: (codebase, session) => callableTree(codebase as Record<string, ItemRecord>, session.runtime.frame),
-  inline: (session, plan, values, accessors) => inline(plan, values, accessors as CaptureAccessors, session.lam.codebase,
+  // Inherited callable namespaces are already in the child's codebase. Capturing them again creates duplicate
+  // injected bindings and competes with their declarations in the opening. Ordinary lexical captures stay live.
+  inline: (session, plan, values, accessors) => inline(plan, values,
+    Object.fromEntries(Object.entries(accessors).filter(([name]) => !Object.hasOwn(session.lam.codebase, name))) as CaptureAccessors, session.lam.codebase,
     undefined, session.runtime.frame),
   iterateOn: (session, step, initial, ...args) => iterateOn(step as never, initial, ...args).inFrame(session.runtime.frame),
   finite: (source, label) => finite(source as Iterable<unknown>, label),
@@ -50,7 +53,7 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     }
   };
   collect(codebase);
-  return { types,
+  return { types, invocationId: session.runtime.options.runId,
     inputs: lam.type.kind === 'lambda' ? lam.type.params.fields.map(field => ({ name: field.name, type: formatType(field.type) })) : [],
     locals: Object.entries(lam.letTypes).filter(([name]) => Object.hasOwn(lam.let, name))
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),

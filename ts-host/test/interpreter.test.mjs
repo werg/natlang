@@ -662,16 +662,93 @@ test('a call made from eval is shown the services by their declarations too', as
   assert.match(world, /look\(\): Promise<string>;/); assert.match(world, /actions\(\): Promise<\{ commands: string\[\] \}>/);
 });
 
-test('a judgment handed over with nl is made by the call it went to, not handed on again', async () => {
+test('inline children can delegate a subproblem to another inline child', async () => {
   const texts = [];
+  let children = 0;
   const { session } = open({ type: '() => boolean', instructions: 'Judge.' }, { agent: async child => {
-    const handed = await child.applyAsync('eval', { code: 'const again = await nl<boolean>`Is the sky blue?`(); again' });
-    texts.push(handed.text); child.lam.return = true;
+    children++;
+    if (children === 1) {
+      const handed = await child.applyAsync('eval', { code: 'const again = await nl<boolean>`Check whether the sky is blue.`(); return again' });
+      texts.push(handed.text);
+    } else child.lam.return = true;
   } });
   const judged = await session.applyAsync('eval', { code: 'const v = await nl<boolean>`Is the sky blue?`(); v' });
   assert.equal(judged.kind, 'ok', judged.text); assert.equal(judged.value, true);
-  assert.equal(texts.length, 1, 'only the first handover reached a call');
-  assert.match(texts[0], /This call is itself a judgment handed over with nl, so make it here/);
+  assert.equal(children, 2);
+  assert.match(texts[0], /Staged true/);
+});
+
+test('inline children inherit callable namespaces without capturing a duplicate binding', async () => {
+  const results = [];
+  const { session } = open({ type: '() => number', instructions: 'Count the pages.',
+    codebase: { facts: ts('facts', 'export function pages(): number { return 3; }') } }, {
+    agent: async child => {
+      assert.equal(child.lam.captures?.facts, undefined);
+      const read = await child.applyAsync('eval', { code: 'return facts.pages()' });
+      results.push(read);
+    } });
+  const called = await session.applyAsync('eval', { code: 'const n = await nl<number>`Count the pages of facts.`(); n' });
+  assert.equal(called.kind, 'ok', called.text);
+  assert.equal(called.value, 3);
+  assert.equal(results[0].kind, 'ok', results[0].text);
+});
+
+test('three ad hoc layers are allowed, and the fourth is refused with matching prompt and help', async () => {
+  const depths = [], prompts = [];
+  const { session } = open({ type: '() => number', instructions: 'Delegate.' }, { agent: async child => {
+    const depth = child.runtime.frame.adHocDepth;
+    depths.push(depth);
+    if (depth < 3) {
+      const next = await child.applyAsync('eval', { code: 'return await nl<number>`Continue this subproblem.`()' });
+      assert.equal(next.kind, 'ok', next.text);
+    } else {
+      const refused = await child.applyAsync('eval', { code: 'return await nl<number>`Fourth layer.`()' });
+      assert.equal(refused.kind, 'error');
+      assert.match(refused.text, /limited to 3 nested layers/);
+      const docs = child.apply('read_code', { name: 'nl' });
+      assert.match(docs.text, /unavailable at this third layer/);
+      assert.doesNotMatch(child.apply('read_code', { name: 'iterateOn' }).text, /nl`/);
+      const guide = await child.applyAsync('eval', { code: 'missingThing' });
+      assert.doesNotMatch(guide.text, /built-ins nl/);
+      const agent = new NativeToolAgent(request => {
+        prompts.push(request);
+        return { calls: [['return_result', { status: 'success', value: 7 }]] };
+      });
+      await agent.run(child);
+    }
+  } });
+  const called = await session.applyAsync('eval', { code: 'return await nl<number>`Continue this subproblem.`()' });
+  assert.equal(called.kind, 'ok', called.text);
+  assert.equal(called.value, 7);
+  assert.deepEqual(depths, [1, 2, 3]);
+  assert.match(prompts[0].messages[0].content, /third and final layer/);
+  assert.doesNotMatch(prompts[0].messages[0].content, /nl`|nl<|creates one inline/);
+  assert.doesNotMatch(prompts[0].messages[1].content, /built-ins nl/);
+  assert.doesNotMatch(JSON.stringify(prompts[0].tools), /\(nl, iterateOn/);
+});
+
+test('a named function from a file starts a fresh three-layer ad hoc budget', async () => {
+  const depths = [];
+  let enteredHelper = false;
+  const { session } = open({ type: '() => number', instructions: 'Delegate.',
+    codebase: { helper: nl('helper', { returns: 'number', instructions: 'Delegate another part.' }) } }, { agent: async child => {
+    const depth = child.runtime.frame.adHocDepth;
+    depths.push(depth);
+    let code;
+    if (child.lam.functionName === 'helper') {
+      enteredHelper = true;
+      assert.equal(depth, 0);
+      code = 'return await nl<number>`New root layer 1.`()';
+    } else if (depth < 3) code = `return await nl<number>\`${enteredHelper ? 'New root' : 'Original root'} layer ${depth + 1}.\`()`;
+    else if (!enteredHelper) code = 'return await helper()';
+    else code = 'return 9';
+    const result = await child.applyAsync('eval', { code });
+    assert.equal(result.kind, 'ok', result.text);
+  } });
+  const called = await session.applyAsync('eval', { code: 'return await nl<number>`Original root layer 1.`()' });
+  assert.equal(called.kind, 'ok', called.text);
+  assert.equal(called.value, 9);
+  assert.deepEqual(depths, [1, 2, 3, 0, 1, 2, 3]);
 });
 
 test('types an eval declares annotate its locals, then and in later evals', async () => {

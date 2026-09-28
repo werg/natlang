@@ -5,7 +5,8 @@ import type { Value } from './values.js';
 import { COMPACTION_NOTE_CHARS, type NativeResult, type NativeSession } from './runtime.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { deriveSeed } from './trace.js';
-import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, type FileToolSurface } from './prompt.js';
+import { directoryReducerPrompt, fileToolNames, FUNCTION_TOOLS_PROMPT, TOOLS_PROMPT, promptAtNlDepthLimit, type FileToolSurface } from './prompt.js';
+import { canGenerateNl } from '../runtime/context.js';
 import { FileHandle, FolderHandle, fileListingText, type Folder } from './scoped-fs.js';
 import { SHOWN_CHARS, note as cutNote } from './cutoff.js';
 
@@ -37,13 +38,10 @@ export const RETURN_RESULT_DESCRIPTION_BEFORE = 'Finish the call. With status "s
 
 /** Named in every opening, so a model that looks for them knows they exist and where their documentation is. */
 export const BUILT_INS_LINE = 'Eval also has the built-ins nl, iterateOn and transcript; read_code shows how to use each.';
-/**
- * A judgment handed over with an inline nl is made by the call it was handed to (runtime/kernel.ts refuses to hand it
- * on); its opening says so instead of offering nl, which models otherwise reach for first.
- */
-export const INLINE_BUILT_INS_LINE = 'This call is a judgment handed over with nl: make it here (read what you need in eval, ' +
-  'decide, and return the answer); nl is not available in it. Eval also has the built-ins iterateOn and transcript; ' +
-  'read_code shows how to use each.';
+/** Inline children have the same delegation tools as named calls. */
+export const INLINE_BUILT_INS_LINE = BUILT_INS_LINE;
+export const NL_DEPTH_LIMIT_BUILT_INS_LINE = 'Eval has iterateOn and transcript; read_code shows how to use each. ' +
+  'This is the third ad hoc layer: make further judgments here or call an existing named function from a file.';
 export const OPENING_THOUGHT = "I'll start by reading this call's arguments into the eval scope.";
 export const FOLDER_THOUGHT = "Next I'll list the files in this call's folder.";
 export const DIFF_CODE_DESCRIPTION = 'Show the changes made to functions of the program\'s codebase in this call.';
@@ -336,7 +334,8 @@ export class NativeToolAgent {
     ];
     const ownCode = Object.keys(session.lam.codebase).length > 0;
     // Built-in documentation is always there to read, so read_code is always offered; editing needs code of the program's own.
-    const readCode = tool('read_code', READ_CODE_DESCRIPTION, { name: { type: 'string' } }, ['name']);
+    const readCode = tool('read_code', canGenerateNl(session.runtime.frame) ? READ_CODE_DESCRIPTION :
+      READ_CODE_DESCRIPTION.replace('(nl, iterateOn, transcript)', '(iterateOn, transcript)'), { name: { type: 'string' } }, ['name']);
     if (!ownCode) tools.splice(2, 0, readCode);
     if (ownCode) tools.splice(2, 0,
       readCode,
@@ -371,7 +370,7 @@ export class NativeToolAgent {
           start_line: { type: 'integer' }, end_line: { type: 'integer' }, file_text: { type: 'string' },
           old_str: { type: 'string' }, new_str: { type: 'string' }, insert_line: { type: 'integer' } },
         ['command', 'path'])];
-      const offered = fileToolNames(this.options.fileTools);
+      const offered = fileToolNames(this.options.fileTools).filter(name => name !== 'delegate' || canGenerateNl(session.runtime.frame));
       tools.splice(2, 0, ...fileTools.filter(item => offered.includes(item.function.name))
         .sort((a, b) => offered.indexOf(a.function.name) - offered.indexOf(b.function.name)));
     }
@@ -400,7 +399,7 @@ export class NativeToolAgent {
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
       ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
-      '', session.runtime.frame?.inline ? INLINE_BUILT_INS_LINE : BUILT_INS_LINE,
+      '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');
   }
 
@@ -525,10 +524,13 @@ export class NativeToolAgent {
 
   async run(session: NativeSession): Promise<string | void> {
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
-    const systemPrompt = () => (typeof this.options.systemPrompt === 'function'
-      ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT) +
+    const systemPrompt = () => {
+      const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
+      const allowAdHoc = canGenerateNl(session.runtime.frame);
+      return (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools) : '');
+      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '');
+    };
     const openingMessages = (): Record<string, unknown>[] => {
       const reading = this.scopeReading(session);
       return [{ role: 'system', content: systemPrompt() },
