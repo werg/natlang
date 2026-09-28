@@ -38,6 +38,7 @@ async function main(): Promise<void> {
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
+      '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
@@ -67,6 +68,8 @@ async function main(): Promise<void> {
     contextTokens: integer(flags, '--context-tokens', 16384),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
     ...(flags.has('--temperature') ? { temperature: Number(flags.get('--temperature')) } : {}),
+    ...(flags.has('--model-concurrency') ? { modelConcurrency: integer(flags, '--model-concurrency', 2) } : {}),
+    ...(flags.has('--max-model-requests') ? { maxModelRequests: integer(flags, '--max-model-requests', 128) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,

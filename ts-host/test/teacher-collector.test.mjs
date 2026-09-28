@@ -280,5 +280,11 @@ test('the native collector records the actions of child nl calls in the ledger, 
     const calls = new Set(ledger.map(event => event.call_id));
     assert.equal(calls.size, 2, 'the root call and its child each have actions');
     assert.ok(ledger.some(event => event.name === 'return_result' && event.arguments.value === true), 'the child finish is logged');
+    const bounded = { ...options, jobs: join(dir, 'bounded-jobs'), output: join(dir, 'bounded.jsonl'),
+      maxTurns: 2, modelConcurrency: 1, maxModelRequests: 1 };
+    const stopped = await collectBatch([item], bounded, nativeJobRunner(bounded));
+    assert.deepEqual(stopped.missing, [0], 'the root and child share one model request budget');
+    assert.match(await readFile(join(bounded.jobs, '000000.error.json'), 'utf8'), /whole-case model request budget/);
+    assert.equal(await readFile(bounded.output, 'utf8'), '', 'budget exhaustion is never admitted as a result');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

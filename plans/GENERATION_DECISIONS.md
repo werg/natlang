@@ -85,3 +85,29 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   instead of silently ending the entire comparison. Do not choose a default from this incomplete probe.
 - Validation: Node/browser build passes; 27 collector, admission and streaming tests pass. Streaming producer
   failure preserves the prior output and removes its temporary file. Large real-data admission is checked above.
+
+## 2026-09-28 midday: bounded Bonsai recovery; Luna stopped
+
+- User stopped Luna entirely. Do not restart Luna or assume the earlier three-worker authorization still applies.
+- Stopped probe launcher 27922 and collector 27924 (SIGTERM, then exact collector PID SIGKILL when it did not exit).
+  The single-worker CUAD case had consumed hours and hundreds of child turns. Saved results/journals remain intact.
+- Added collector flags `--model-concurrency` (shared across all ordinary root/child requests in a collector) and
+  `--max-model-requests` (per-job new transport requests, including optional planning). Budget exhaustion leaves
+  an explicit error and journal rather than an accepted training row. These flags currently do not govern a
+  separately configured oracle judge; the recovery queue does not configure one.
+- Added `scripts/run_bonsai_queue.py`: each case gets its own collector subprocess with a hard 600-second wall budget,
+  SIGTERM then SIGKILL after 10 seconds if needed. Timed-out and failed cases are journaled and the queue advances.
+  Restart skips finished attempts; reviewed retries need a new journal. Interruptions preserve partial journals.
+  This is an operational collection limit; large cases are deferred, not mislabeled as model reasoning failures.
+- Built `runs/bonsai-recovery/queue.jsonl` from cases with no saved result in their Luna jobs directories: 1 retry,
+  1 folder case, 551 handoffs. Interleaves lanes and orders each by input size. Existing rejected results are not
+  silently retried or admitted. Bonsai uses separate recovery job directories; model provenance stays accurate.
+- Recovery runs on a frozen local runtime at `runs/bonsai-recovery/runtime`, independent of main rebuilds. Request
+  concurrency 2, shared KV estimate 40000, request budget 128, per-call turn limit 20, transport retries 1.
+  Entry exports contain only that case; gather full lane jobs with snapshot_teacher_jobs.mjs when auditing/building.
+- The surface probe is deferred while useful unfinished cases progress. Its incomplete comparison cannot justify
+  changing the default file tools. The large-case trace/paging behavior still needs further diagnosis.
+- Validation: Node and browser build succeeded; all 15 collector tests passed outside the sandbox (its local HTTP
+  fixture tests crashed under the restricted environment). Added root/child shared-budget regression, verifying no
+  result is exported at exhaustion. Python watchdog regression passes: a noncooperative child is killed, the next
+  case runs, and restart skips finished attempts. Live retry journal is advancing on Bonsai.

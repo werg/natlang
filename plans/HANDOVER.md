@@ -1,5 +1,12 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **2026-09-28 midday:** Luna is stopped at the user's request. Bonsai now runs the bounded recovery queue:
+> `runs/bonsai-recovery/queue.jsonl` (553 unfinished cases), journal `runs/bonsai-recovery/journal.jsonl`.
+> Runtime frozen at `runs/bonsai-recovery/runtime`; supervisor `scripts/run_bonsai_queue.py`.
+> Limits: 600 seconds/case plus 10-second shutdown grace, 2 in-flight model requests, 128 new model requests/case.
+> The old CUAD probe collector and launcher were stopped. Probe comparison remains incomplete and deferred;
+> no file-tool default was changed. Read the latest decision log entry before restarting anything.
+
 > **2026-09-28 morning:** user reduced Luna to **3 total workers** (folder 1, handoffs 1, redo 1).
 > Active runner is now `/home/werg/natlang-generation-runner/ts-host`, with the streaming export fix.
 > Bonsai train4 is complete; folder 102/106 saved, handoffs 282/833 saved, redo 12/13 saved at restart.

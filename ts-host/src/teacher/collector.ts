@@ -60,6 +60,7 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
+  modelConcurrency?: number; maxModelRequests?: number;
   /** Worker n starts its first job n times this later, so a rate-limited provider does not see them all at once. */
   workerStaggerMs?: number;
   /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusedRow). */
@@ -493,6 +494,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.judgeModel && (!config.judgeModel.modelId ||
       Number(!!config.judgeModel.endpoint) + Number(!!config.judgeModel.provider) !== 1))
     throw new Error('judge model needs an ID and exactly one endpoint or Pi provider');
+  for (const [name, value] of Object.entries({ modelConcurrency: config.modelConcurrency, maxModelRequests: config.maxModelRequests }))
+    if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be positive`);
+  const slots = config.modelConcurrency ? new KvBudget(config.modelConcurrency) : undefined;
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
@@ -511,11 +515,22 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     try {
-    const admittedSend = kv ? async (request: ModelTurnRequest) => {
-      const need = requestTokens(request);
-      await kv.acquire(need);
-      try { return await send(request); } finally { kv.release(need); }
-    } : send;
+    let sent = 0, exhausted = false;
+    const admittedSend = async (request: ModelTurnRequest) => {
+      if (signal?.aborted) throw new Error('collection cancelled');
+      if (config.maxModelRequests && sent >= config.maxModelRequests) {
+        exhausted = true;
+        throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
+      }
+      sent++;
+      if (slots) await slots.acquire(1);
+      try {
+        if (signal?.aborted || exhausted) throw new Error('collection cancelled or budget exhausted');
+        const need = requestTokens(request);
+        if (kv) await kv.acquire(need);
+        try { return await send(request); } finally { if (kv) kv.release(need); }
+      } finally { if (slots) slots.release(1); }
+    };
     const transport = config.executionPlans ? withExecutionPlans(admittedSend,
       { maxTokens: config.executionPlanTokens }) : admittedSend;
     const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest) => {
@@ -559,6 +574,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     };
     const runId = programRunId(item.index, expected);
     const run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) });
+    if (exhausted) throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
     await writeAtomic(join(config.jobs, `${jobKey(item)}.trace.jsonl`),
