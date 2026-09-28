@@ -72,11 +72,12 @@ Seven replacement cases spanning six folder families pass reference replay. The 
 replacement tasks and two measured FOLIO retries. It removes the unsupported premise probe and the legacy CUAD
 case; the complete exclusions ledger is `runs/bonsai-recovery/queue-v4.exclusions.jsonl`.
 
-Bonsai uses frozen `runtime-v7`, `queue-v5.jsonl` and the existing append-only journal. Fresh jobs use distinct paths
+Bonsai uses frozen `runtime-v9`, `queue-v6.jsonl` and the existing append-only journal. Fresh jobs use distinct paths
 so old rows and partials are preserved. Default limits remain one case at a time, two model requests in flight,
 128 requests and 600 seconds. Multi-item FOLIO/ANLI gets 1,200 seconds; all-file tasks get a size-based deadline up
 to 3,600 seconds and up to 512 requests. All retain the inactivity guard and 20 turns per call. The user's three
-ad hoc layers per existing file root remain unchanged. Luna stays stopped; no model training has started.
+ad hoc layers per existing file root remain unchanged. The user's later authorization starts one Luna repair worker;
+no model training has started.
 
 ### Fresh run checkpoint and repairs
 
@@ -97,3 +98,27 @@ ad hoc layers per existing file root remain unchanged. Luna stays stopped; no mo
   migration and remains pending. Queue-v5 has 559 entries, 20 completed attempts and 539 pending at migration.
   Node/browser build and browser type checks pass, with 45 replay/oracle/collector regressions and 17 follow-up
   folder/handoff/oracle regressions passing. Earlier 132 focused regressions also passed.
+
+### Follow-up: scheduling, shared state and payment scope
+
+- A 142-message task with separate planning needs at least 284 requests for one judgment per item, plus root work.
+  The old Luna cap of 256 could not finish that strategy. Moreover, concurrent siblings queued their planning
+  requests first, consuming the budget before paired actions completed. Teacher turns now retain a concurrency
+  slot across their plan/action pair. Requests count only after capacity admission; reaching the cap does not
+  cancel already admitted work. A capped regression saves completed children and resumes to a correct result.
+- Concurrent atomic checkpoint renames could finish out of order. Writes are serialized so an older snapshot
+  cannot replace newer progress. This is a preventative fix; the audit did not establish a specific lost reply.
+- The grants predicate decremented or reset a mutable captured budget, corrupting sibling judgments. Openings
+  now explain that captured writes affect the caller/siblings, and that judgment calls should calculate with
+  fresh locals unless instructed to update shared state. Mutable state remains available when the task needs it.
+- Payment gold includes unrecognised card payments, direct debits and cash withdrawals. The earlier word “charge”
+  did not make all those categories clear. Generator/reference prompts now state the scope explicitly, with
+  `payment_scope_version: 2`; legacy BANKING77 mixed tasks are quarantined. Fourteen existing repair tasks migrate
+  under new IDs/provenance, retaining their source groups and annotated gold. All fourteen references verify.
+- Folder guidance asks agents to parse source tables and join judgments by ID, avoiding transcribed amount maps.
+  It also recommends passing a large file handle and searching relevant portions rather than embedding the whole
+  file in an NL instruction. Direct judgment and three ad hoc layers remain available.
+- One Luna worker now uses the bounded supervisor, queue-v2 and fresh v2 jobs. Caps are sized to item counts
+  (256–748 requests for this queue); deadlines range from 900–3,600 seconds with the same five-minute inactivity
+  guard. One already admitted task is excluded, leaving 153 retries; three legacy source cases await reconstruction.
+  Older partials/results remain preserved. Node/browser builds, browser type checks and 100 focused tests pass.

@@ -328,3 +328,38 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Bonsai remains live on runtime-v7 / queue-v5, server health OK. Checkpoint: 42 finished attempts / 517 pending.
   Seventeen recent repair results pass task contracts (including FOLIO 142); this does not certify all as final
   training rows. Handoff 802 fails; hard deadlines and quality-review exclusions remain distinct from model negatives.
+
+## 2026-09-28 improving new failure patterns (runtime-v9)
+
+- Investigated Luna budget failures: payments7 has 142 messages. A planning/action pair per child needs at least
+  284 sends before root work, so the old 256 cap was insufficient. FIFO request admission also queued all sibling
+  plans before actions, and counted waiting requests; cap exhaustion cancelled previously admitted work. Teacher
+  transport now holds one concurrency slot across its plan/action pair, charges requests after capacity gates,
+  and rejects later requests without cancelling earlier admitted work. Regression saves two child actions at a
+  six-request cap, then resumes to acceptance. Request counting still includes plans and independent judging.
+- Serialized partial checkpoint writes: concurrent atomic renames were not ordered and could overwrite a newer
+  snapshot. No claim that a particular observed failure lost its responses; the unsafe ordering is removed.
+- Grants failure is unintended shared mutation: predicate calls decremented/reset captured budget. Openings now
+  explain sibling/caller write effects and instruct judgment calls to use fresh calculation locals unless the
+  task requests updates. Mutable captures remain functional; delegation remains optional with the same three
+  layers per pre-existing file root. Live retry currently uses fresh locals and has not repeated those writes.
+- Payment contract change: BANKING77 positive labels include unrecognized direct debits and ATM cash withdrawals,
+  while the old prompt said only charge. Explicit scope now includes card/direct-debit/cash withdrawals, duplicate
+  charges and extra charges. payment_scope_version=2 required for BANKING77 folder_mixed; old ambiguous contracts
+  are held out. Fourteen Luna repair records migrate under :scope-v2 IDs and recorded generation provenance;
+  unchanged source grouping/gold, no label leakage. All 14 updated reference replays verify.
+- General folder guidance pairs semantic judgments with original IDs and parses the amount table instead of
+  retyping it. Large files should be passed by handle and searched/read in the child, with short NL instructions.
+  The prior contract probe embedded a 221 KB file in instructions; guidance now addresses that pattern.
+- Reused the bounded queue supervisor for providers: one Luna collection worker / one request in flight,
+  execution plans, 20 turns/call, base 256 sends with 4 sends/item + 40 root allowance (ceiling 1024; actual caps
+  256–748). Case budgets 900–3600 seconds; FOLIO/ANLI 1200. Existing five-minute saved-reply inactivity guard retained.
+  No deadline or incomplete result becomes a negative label. Earlier raw jobs/partials remain preserved.
+- Frozen runtime-v9 (source ce70dee; all 452 manifest hashes verified). Luna migrated by exact PID 278800 to
+  supervisor PID 286423, queue-v2.jsonl / v2.jobs, 153 selected (already admitted case 116 excluded), three legacy
+  reconstructions deferred. First retry is grants case 106 to measure the shared-budget fix. Bonsai migrated by
+  exact supervisor PID 213073 to PID 287222, queue-v6 and fresh .v9 job paths, same append-only journal; 559 entries,
+  46 finished attempts / 513 pending checkpoint. No pending Bonsai payment task needed scope migration.
+- Validation: Node/browser build and browser type checks pass; 100 focused tests pass (collector scheduling,
+  durable progress/resume, judge budget, interpreter/captures/depth, handoffs, oracles, folder references, supervisor
+  time/inactivity behavior, single-Luna provider configuration, audit). No model training or independent grader started.

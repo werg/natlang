@@ -2,14 +2,16 @@
 
 > **Latest user authorization (2026-09-28): restart exactly one Luna repair worker.**
 > This supersedes the earlier stop instruction. Use the current audited, deduplicated repair queue in
-> `runs/luna-repair-20260928/`, with frozen runtime-v8, one collection worker and one model request in flight.
+> `runs/luna-repair-20260928/queue-v2.jsonl`, with frozen runtime-v9, one collection worker and one model request in flight.
 > Bonsai continues independently. Quality-pending, retired and unverified-contract cases stay excluded.
-> Current worker PID 278800: 154 runnable repairs (149 task failures, 5 infrastructure-only), plus 3 legacy
+> Current Luna supervisor PID 286423: 153 queued retries, with the already admitted repair excluded, plus 3 legacy
 > source cases needing reconstruction in deferred.jsonl. Nine other legacy tasks migrated successfully.
 > Source shard is immutable while the collector runs; collector.log, jobs/ and summary.json record progress.
-> Latest checkpoint: Luna 3 finished / 1 admitted / 2 task failures, 2 request-budget errors and 151 pending.
-> Fixed frozen-world vendor paths and unhandled world-process spawn errors; Luna resumed from saved jobs.
-> Bonsai remains on runtime-v7, queue-v5 (42 finished attempts / 517 pending); shared vendor mapping repaired.
+> Earlier Luna checkpoint: 3 finished / 1 admitted / 2 task failures, 2 request-budget errors. Raw jobs preserved.
+> Both collectors now use runtime-v9: paired planning/action scheduling, ordered checkpoints and shared-variable
+> guidance. Luna has sized request budgets and bounded case/inactivity deadlines. Fourteen payment tasks migrated
+> to explicit card/direct-debit/cash-withdrawal scope; old wording is quarantined. Read the latest decision log.
+> Bonsai supervisor PID 287222 uses queue-v6 (46 finished attempts / 513 pending at migration checkpoint).
 
 > **Latest 2026-09-28 checkpoint:** use `runs/bonsai-recovery/queue-v5.jsonl` and frozen `runtime-v7`.
 > It prioritizes the verified SMS repair handoff; 559 entries / 20 completed attempts / 539 pending at migration.
