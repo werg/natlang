@@ -127,7 +127,7 @@ export function idempotentRetry(seed, index) {
   const reminders = people.map((name, i) => ({ id: `R${i + 1}`, to: `${name.toLowerCase()}@clinic.example`, text: `Hello ${name}, your appointment is tomorrow at ${9 + i}:00.` }));
   const failKey = reminders[rng.int(0, reminders.length - 1)].id;
   const commands = reminders.map(r => ({ key: r.id, to: r.to, text: r.text }));
-  return [curriculumCase({ family: 'idempotent_retry', shape: `reminders${index}`, variant: failKey, slice: 'folder_failure', domain: 'other', mode: 'followup',
+  return [curriculumCase({ family: 'idempotent_retry', familyVersion: 2, shape: `reminders${index}`, variant: failKey, slice: 'folder_failure', domain: 'other', mode: 'followup',
     evidence: { world: ['mail delivers a key at most once'], retrieved: ['delivery succeeded but its acknowledgement was lost'], background: [] },
     decisive: [{ marker: 'acknowledgement was lost', source: 'error', note: 'the failed acknowledgement' }],
     plausibleActions: ['report the reminder as failed', 'retry the same command', 'send a changed command'],
@@ -139,7 +139,7 @@ for (const r of reminders) {
 failures`), evalCall(`for (const r of reminders.filter(r => r.id === ${JSON.stringify(failKey)})) mail.send({ key: r.id, to: r.to, text: r.text });
 'retried'`), returnCall(reminders.map(r => r.id))] },
     root: { name: 'send_reminders', args: { reminders: 'Reminder[]' }, returns: 'string[]',
-      instructions: 'Send every reminder with mail.send({ key, to, text }), using the reminder id as the key. mail delivers each key at most once, so sending the same command again is always safe. Return the ids of the reminders whose delivery is confirmed, in input order.' },
+      instructions: 'Send every reminder with mail.send({ key, to, text }), using the reminder id as the key. mail is an external service: read_code("mail") shows its declaration. A normal return, including null, confirms delivery. mail delivers each key at most once, so retry the identical command after a lost acknowledgement. Never change the contents under an existing key. Return the ids of the reminders whose delivery is confirmed, in input order.' },
     files: { 'types.ts': 'export type Reminder = { id: string, to: string, text: string };\n' },
     inputs: { reminders }, expected: reminders.map(r => r.id),
   }), ].map(record => ({ ...record, semantics: { ...record.semantics,

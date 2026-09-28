@@ -17,6 +17,7 @@ import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { FileToolSurface } from '../native/prompt.js';
 import type { Handoff } from './handoff.js';
+import { replacesPlantedFailure } from './seeded-failure.js';
 import { quarantineReason, retiredFamily } from './curriculum-policy.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
@@ -329,9 +330,10 @@ function same(a: unknown, b: unknown): boolean { return canonical(a) === canonic
 
 function effectHarness(specs: Record<string, unknown>): {
   capabilities: Record<string, (args: unknown[]) => unknown>; observed: Record<string, unknown[]>;
-  expected: Record<string, unknown[]>;
+  expected: Record<string, unknown[]>; declarations: Record<string, string>;
 } {
   const observed: Record<string, unknown[]> = {}, expected: Record<string, unknown[]> = {}, capabilities: Record<string, (args: unknown[]) => unknown> = {};
+  const declarations: Record<string, string> = {};
   for (const [name, raw] of Object.entries(specs)) {
     observed[name] = [];
     if (Array.isArray(raw)) {
@@ -347,10 +349,20 @@ function effectHarness(specs: Record<string, unknown>): {
     }
     if (spec.kind === 'deliver_once_ack_loss') {
       expected[name] = spec.expected_delivered as unknown[];
-      const delivered = new Set<string>(), failed = new Set<string>(), failKey = String(spec.fail_key);
+      const delivered = new Map<string, unknown>(), failed = new Set<string>(), failKey = String(spec.fail_key);
+      const [service, method] = name.split('.');
+      declarations[service!] = (declarations[service!] ?? '') +
+        `/** Delivers each key at most once. A normal return (null) confirms delivery. If an acknowledgement is lost, retry the identical command with the same key. Reusing a key with different contents is rejected. */\n` +
+        `export function ${method}(command: { key: string, to: string, text: string }): null;\n`;
       capabilities[name] = args => {
-        const command = args[0] as Record<string, unknown>, key = String(command.key);
-        if (!delivered.has(key)) { delivered.add(key); observed[name]!.push(structuredClone(command)); }
+        const command = args[0] as Record<string, unknown> | undefined;
+        if (!command || typeof command.key !== 'string' || !command.key ||
+          typeof command.to !== 'string' || typeof command.text !== 'string')
+          throw new Error('delivery requires a nonempty string key and string to and text');
+        const key = command.key;
+        if (delivered.has(key) && !same(delivered.get(key), command))
+          throw new Error('delivery key already belongs to a different command; retry the original command unchanged');
+        if (!delivered.has(key)) { delivered.set(key, structuredClone(command)); observed[name]!.push(structuredClone(command)); }
         if (key === failKey && !failed.has(key)) {
           failed.add(key); throw new Error('delivery succeeded but its acknowledgement was lost');
         }
@@ -360,7 +372,7 @@ function effectHarness(specs: Record<string, unknown>): {
     }
     throw new Error(`unsupported effect contract for ${name}`);
   }
-  return { capabilities, observed, expected };
+  return { capabilities, observed, expected, declarations };
 }
 
 /** The trajectory record of one model turn: the request's context and the response, as training reads them. */
@@ -656,7 +668,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   // An interactive world in its own process becomes the service `world`; the task is done when its score reaches 100.
   // External modules (semantics.services: name -> TypeScript source) run in the host as services; the model sees
   // their declarations only (native/external.ts).
-  const declarations: Record<string, string> = {};
+  const declarations: Record<string, string> = { ...effects.declarations };
   for (const [name, source] of Object.entries((record.semantics as { services?: Record<string, string> }).services ?? {})) {
     const external = externalModule(name, source);
     services[name] = external.exports as Record<string, (...args: unknown[]) => unknown>;
@@ -677,11 +689,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const seededFailure = record.semantics.failure_seed;
     const seededFailureObserved = runtime.trace.events.some(event => event.kind === 'scope_failure' &&
       (!seededFailure?.kind || event.failure_kind === seededFailure.kind));
-    const handoff = record.handoff as Handoff | undefined;
     // A teacher replacing the planted failing action must be allowed to prevent that failure entirely.
-    const replacesSeed = !!seededFailure && handoff?.kind === 'failed_action' && handoff.call === 0 &&
-      !(handoff.prefix[0]?.length) && !!handoff.rejected.calls?.some(([tool, args]) => tool === 'eval' &&
-        (args as { code?: string })?.code === seededFailure.code);
+    const replacesSeed = replacesPlantedFailure(record);
     const failureSeen = !seededFailure || seededFailureObserved || replacesSeed;
     const effectsOk = same(effects.observed, effects.expected);
     // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.

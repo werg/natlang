@@ -71,10 +71,13 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     for entry in entries:
         if entry['key'] in attempted:
             continue
+        max_turns = entry.get('max_turns', 20)
+        if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
+            raise ValueError('entry max_turns must be a positive integer')
         command = ['node', '--max-old-space-size=3000', str(runtime / 'dist/teacher/cli.js'),
                    entry['source'], entry['jobs'], entry['output'], '--start', str(entry['index']), '--limit', '1',
                    '--model-id', model_id,
-                   '--root-seed', str(entry['seed']), '--workers', '1', '--max-turns', '20',
+                   '--root-seed', str(entry['seed']), '--workers', '1', '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', '1', '--file-tools', entry.get('surface', 'all')]
         command += ['--provider', provider, '--context-tokens', '16384', '--reasoning-effort', reasoning_effort] if provider else [
@@ -86,7 +89,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             raise ValueError('entry case_seconds must be a positive integer')
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry)
-        record({'event': 'start', 'key': entry['key'], 'time': time.time(), 'budget_seconds': case_seconds})
+        record({'event': 'start', 'key': entry['key'], 'time': time.time(), 'budget_seconds': case_seconds,
+                'max_turns': max_turns})
         with Path(entry['log']).open('a') as log:
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             try:

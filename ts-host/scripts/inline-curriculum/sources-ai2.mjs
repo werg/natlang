@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Random, curriculumCase, evalCall, literal, nlFile, returnCall } from './lib.mjs';
 import { READ_ALL, factStore } from './logic.mjs';
 import { SOURCES, cachePath } from './acquire.mjs';
+import { anliReviewText } from '../../dist/teacher/source-review.js';
 
 const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../vendor/datasets', import.meta.url));
 const loaded = new Map();
@@ -178,9 +179,12 @@ export function anliBatch(seed, index) {
   const stories = [];
   for (let i = start; stories.length < 5 && i < start + 50; i++) if (rows[i % rows.length].split === split) stories.push(rows[i % rows.length]);
   const items = stories.map((row, i) => ({ id: `N${i + 1}`, beginning: row.obs1, ending: row.obs2, a: row.hyp1, b: row.hyp2 }));
-  const expected = Object.fromEntries(stories.map((row, i) => [`N${i + 1}`, row.label === '1' ? 'a' : 'b']));
+  const expected = Object.fromEntries(stories.map((row, i) => {
+    if (!['1', '2'].includes(row.label)) throw new Error(`invalid αNLI label: ${row.story_id}`);
+    return [`N${i + 1}`, row.label === '1' ? 'a' : 'b'];
+  }));
   void rng;
-  return [curriculumCase({ family: 'anli_batch', shape: `stories${index}`, variant: 'a', splitGroup: `anli:${stories[0].story}`, split,
+  return [curriculumCase({ family: 'anli_batch', familyVersion: 2, shape: `stories${index}`, variant: 'a', splitGroup: `anli:${stories[0].story}`, split,
     slice: 'inline_placement', domain: 'logic', mode: 'single_call', inline: 'required', worldSemantics: 'defeasible',
     evidence: { world: stories.map(row => `${row.story}: ${row.label}`), retrieved: [], background: [`source: αNLI ${SOURCES.anli.revision}`] },
     assumptions: ['Everyday knowledge decides which explanation is more plausible; neither is certain.'],
@@ -191,7 +195,9 @@ return Object.fromEntries(stories.map((story, i) => [story.id, choices[i]]));`),
     root: { name: 'explain_stories', args: { stories: 'Story[]' }, returns: 'Record<string, "a" | "b">',
       instructions: 'For each of stories, decide which hypothesis, a or b, better explains how its beginning led to its ending. Judge each story separately. Return a record from story id to "a" or "b".' },
     files: { 'types.ts': 'export type Story = { id: string, beginning: string, ending: string, a: string, b: string };\n' },
-    inputs: { stories: items }, expected })];
+    inputs: { stories: items }, expected })].map(record => ({ ...record, dataset: 'anli',
+      dataset_records: items.map(item => createHash('sha256').update(anliReviewText(item)).digest('hex')),
+      source_groups: [...new Set(stories.map(row => `anli:${row.story}`))] }));
 }
 
 // CommaQA --------------------------------------------------------------------------------------------------
@@ -219,46 +225,79 @@ function commaqaRows(variant = 'explicit') {
  * tables, the other the text passages. The decomposition's per-step answers are the specialists' reference
  * answers; the model never sees the decomposition.
  */
-export function commaqaQuestion(seed, index, variant = 'explicit') {
+/** Compile the source's finite numeric operators; unknown operators fail closed. No gold intermediates in eval. */
+export function commaqaArithmetic(step) {
+  const refs = [...step.q.matchAll(/#(\d+)/g)].map(match => `step${match[1]}`);
+  const extreme = /largest/.test(step.q) ? 'max' : /smallest/.test(step.q) ? 'min' : null;
+  if (step.op === 'select') {
+    if (extreme && refs.length === 1) return `Math.${extreme}(...${refs[0]}.map(value => Number(value)))`;
+    if (/difference/.test(step.q) && refs.length === 2) return `Math.abs(${refs[0]} - ${refs[1]})`;
+    if (/length|How many items/.test(step.q) && refs.length === 1) return `${refs[0]}.length`;
+  }
+  if (step.op === 'projectValues' && extreme && refs.length === 1)
+    return `${refs[0]}.map(([name, values]) => [name, Math.${extreme}(...values.map(value => Number(value)))] as [string, number])`;
+  const threshold = /(?:smaller than|less in value than|higher in value than|greater than) (-?\d+(?:\.\d+)?)\?$/.exec(step.q);
+  if (threshold && refs.length === 1) {
+    const compare = /smaller|less in value/.test(step.q) ? '<' : '>';
+    if (step.op === 'filterValues_keys')
+      return `${refs[0]}.filter(([name, value]) => value ${compare} ${threshold[1]}).map(([name]) => name)`;
+    if (/^filter\(#\d+\)$/.test(step.op))
+      return `${refs[0]}.filter(value => Number(value) ${compare} ${threshold[1]})`;
+  }
+  throw new Error(`unsupported CommaQA arithmetic: ${step.op}: ${step.q}`);
+}
+
+export function commaqaQuestion(seed, index, variant = 'explicit', sourceId) {
   const rows = commaqaRows(variant);
-  const row = rows[(index * 7919) % rows.length];
+  const row = sourceId ? rows.find(row => row.id === sourceId) : rows[(index * 7919) % rows.length];
+  if (!row) throw new Error(`CommaQA source row not found: ${sourceId}`);
   const rng = new Random(seed, `commaqa:${variant}:${row.id}`);
   const steps = row.qa.decomposition;
   const results = [];
   const lines = [], children = [];
-  const show = value => Array.isArray(value) ? value.map(item => Array.isArray(item) ? item[0] : item).join(' and ') : String(value);
+  const questionExpression = question => {
+    let expression = JSON.stringify(question);
+    for (const ref of new Set([...question.matchAll(/#(\d+)/g)].map(match => Number(match[1])))) {
+      const value = results[ref - 1];
+      const shown = Array.isArray(value) ? (Array.isArray(value[0]) ? `step${ref}.map(item => item[0]).join(" and ")` : `step${ref}.join(" and ")`) : `String(step${ref})`;
+      expression += `.replaceAll(${JSON.stringify('#' + ref)}, ${shown})`;
+    }
+    return expression;
+  };
   steps.forEach((step, i) => {
     const expert = step.m === 'table' ? 'table_expert' : step.m === 'text' ? 'text_expert' : null;
     if (!expert) {
       // Arithmetic (min, max, difference, threshold filters) is the root's own work; its result feeds later steps.
-      lines.push(`// ${step.q.replace(/#(\d+)/g, (_, k) => `step${k}`)}\nconst step${i + 1} = ${JSON.stringify(step.a)};`);
+      lines.push(`// ${step.q.replace(/#(\d+)/g, (_, k) => `step${k}`)}\nconst step${i + 1} = ${commaqaArithmetic(step)};`);
     } else if (step.op === 'project') {
       // The same question for each item of an earlier step; the answer pairs each item with its values.
       const ref = Number(/#(\d+)/.exec(step.q)[1]);
       lines.push(`const step${i + 1}: [string, string[]][] = [];`);
+      lines.push(`for (const item of step${ref}) step${i + 1}.push([item, await ${expert}(${JSON.stringify(step.q)}.replace(/#\\d+/, item))]);`);
       for (const [item, values] of step.a) {
         const question = step.q.replace(/#\d+/, item);
-        lines.push(`step${i + 1}.push([${JSON.stringify(item)}, await ${expert}(${JSON.stringify(question)})]);`);
         children.push({ match: [`You are inside this call: ${expert}`, JSON.stringify(question)], value: values });
       }
-      void ref;
     } else {
       // `#k` refers to an earlier step's answers.
-      const question = step.q.replace(/#(\d+)/g, (_, k) => show(results[Number(k) - 1]));
-      lines.push(`const step${i + 1} = await ${expert}(${JSON.stringify(question)});`);
+      const question = step.q.replace(/#(\d+)/g, (_, k) => {
+        const value = results[Number(k) - 1];
+        return Array.isArray(value) ? value.map(item => Array.isArray(item) ? item[0] : item).join(' and ') : String(value);
+      });
+      lines.push(`const step${i + 1} = await ${expert}(${questionExpression(step.q)});`);
       children.push({ match: [`You are inside this call: ${expert}`, JSON.stringify(question)], value: step.a });
     }
     results.push(step.a);
   });
   const numeric = typeof row.qa.answer === 'number';
   const answer = numeric ? Math.round(row.qa.answer * 10) / 10 : [...row.qa.answer].map(String).sort();
-  lines.push(numeric ? `return ${answer};` : `return [...new Set(step${steps.length} as string[])].sort();`);
+  lines.push(numeric ? `return Math.round(step${steps.length} * 10) / 10;` : `return [...new Set(step${steps.length} as string[])].sort();`);
   const store = (facts, what) => factStore(rng.shuffle(facts).map((text, i) => ({ id: `${what[0].toUpperCase()}${i + 1}`, text })), `The ${what}.`);
   const expertFile = (what, source) => nlFile({ args: { question: 'string' }, returns: 'string[]',
     description: `Answer a question from the ${what} alone.`,
-    instructions: `Answer question using only the ${what} in ${source}.page(n). Return every name that answers it (an empty list when none does).` });
+    instructions: `Answer question using only the ${what} in ${source}.page(n), for n = 1 through ${source}.pages(). Inspect every relevant page; a shortened display is not the complete store. Return all matching names or requested measurements as strings, preserving the numeric values. Do not require a fact that belongs to the other specialist's store; the caller combines the two stores. An empty list means the complete store contains no answer to this local question.` });
   const family = variant === 'explicit' ? 'commaqa_question' : 'commaqa_numeric';
-  return [curriculumCase({ family, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
+  return [curriculumCase({ family, familyVersion: 2, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
     split: row.split, slice: 'nested_scoped', domain: 'relational', mode: 'single_call', inline: 'avoid', named: 'required',
     worldSemantics: 'closed_world',
     evidence: { world: row.qa.facts_used ?? [], retrieved: [], background: [`source: CommaQA ${variant} ${SOURCES.commaqa.revision} ${row.id}`,
@@ -267,9 +306,9 @@ export function commaqaQuestion(seed, index, variant = 'explicit') {
     reference: { root: [evalCall(lines.join('\n')), returnCall(answer)], children },
     root: numeric ?
       { name: 'answer_question', args: { question: 'string' }, returns: 'number',
-        instructions: 'Answer question about the athletics world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other\'s evidence, and neither does arithmetic. Ask them the steps the question needs, feeding each answer into the next, and do the arithmetic yourself. Return the number, rounded to one decimal.' } :
+        instructions: 'Answer question about the athletics world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other\'s evidence, and neither does arithmetic. Split cross-store conditions into local questions: obtain the matching names from one specialist, then give those names to the other specialist to obtain the requested measurements. An empty answer to a cross-store question does not establish that the combined evidence is missing. Do the arithmetic yourself using the measurement strings as numbers. Return the number, rounded to one decimal.' } :
       { name: 'answer_question', args: { question: 'string' }, returns: 'string[]',
-        instructions: `Answer question about the ${variant === 'explicit' ? 'movie' : 'athletics'} world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other's evidence${variant === 'explicit' ? '' : ', and neither does arithmetic'}. Ask them the steps the question needs, feeding each answer into the next${variant === 'explicit' ? '' : ', and do any arithmetic yourself'}. Return the answer names, sorted alphabetically, without duplicates.` },
+        instructions: `Answer question about the ${variant === 'explicit' ? 'movie' : 'athletics'} world. The evidence is split between two specialists: table_expert answers questions from the tables and text_expert from the text passages; neither sees the other's evidence${variant === 'explicit' ? '' : ', and neither does arithmetic'}. Ask local questions, then pass the returned names into the next specialist's question to combine conditions from different stores. Do not ask either specialist to establish conditions whose evidence is in the other store. An empty answer to such a combined question is not evidence that the combined answer is missing${variant === 'explicit' ? '' : '; do any arithmetic yourself'}. Return the answer names, sorted alphabetically, without duplicates.` },
     files: {
       'answer_question/table_expert.nl': expertFile('tables', 'tables'),
       'answer_question/table_expert/tables.ts': store(row.tables, 'table rows'),

@@ -152,7 +152,7 @@ try { view = board.render(); } catch (error) { view = String(error); }
       [evalCall(applyCode), failedCall(`The move was rejected: card ${card} is locked by an open audit.`)] :
       [evalCall(applyCode), evalCall(`const view2 = board.render();
 return { revision: view2.revision, column: view2.cards.find(item => item.id === ${JSON.stringify(card)})!.column };`), returnCall(spec.expected)];
-    return curriculumCase({ family: 'event_retry', shape, variant, pairGroup: `event:${shape}`,
+    return curriculumCase({ family: 'event_retry', familyVersion: 2, shape, variant, pairGroup: `event:${shape}`,
       slice: 'folder_failure', domain: 'actor', mode: 'followup', inline: 'avoid',
       evidence: { world: [spec.reject ? 'the event is rejected' : 'the first render times out'], retrieved: [], background: [] },
       decisive: [{ marker: spec.reject ? 'locked by an open audit' : 'view renderer timed out', source: 'error', note: spec.reject ? 'the event is rejected' : 'only the view failed' }],

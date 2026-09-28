@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SOURCE_REVIEWS, pendingSourceReview, sourceReviewReason } from '../dist/teacher/source-review.js';
+import { SOURCE_REVIEWS, anliReviewText, pendingSourceReview, sourceReviewReason } from '../dist/teacher/source-review.js';
 import { quarantineReason } from '../dist/teacher/curriculum-policy.js';
 import { TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT } from '../dist/native/prompt.js';
 
@@ -14,6 +14,18 @@ test('pending source reviews match current and legacy identities within their da
   }
   assert.equal(sourceReviewReason({ dataset: 'banking77', dataset_records: ['unaffected'] }), undefined);
   assert.equal(sourceReviewReason({ dataset_records: [SOURCE_REVIEWS[0].id] }), undefined);
+});
+
+test('legacy αNLI batches without source IDs are held by complete visible identity', () => {
+  const review = SOURCE_REVIEWS.find(item => item.dataset === 'anli');
+  const [beginning, ending, a, b] = review.text.split('\n');
+  const story = { id: 'N1', beginning, ending, a, b };
+  const record = { curriculum: { family: 'anli_batch' }, semantics: { inputs: { stories: [story] } } };
+  assert.equal(anliReviewText(story), review.text);
+  assert.equal(sourceReviewReason(record), 'source_review_pending');
+  assert.equal(quarantineReason(record), 'source_review_pending');
+  record.semantics.inputs.stories[0].b = 'A different, supported hypothesis.';
+  assert.equal(sourceReviewReason(record), undefined);
 });
 
 test('criterion preservation guidance does not suggest new delegation at the depth limit', () => {

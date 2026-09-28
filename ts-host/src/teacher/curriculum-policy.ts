@@ -13,8 +13,10 @@ export function retiredFamily(record: ProgramRecord): string | undefined {
 export function quarantineReason(record: ProgramRecord): string | undefined {
   const sourceReview = sourceReviewReason(record);
   if (sourceReview) return sourceReview;
-  const curriculum = record.curriculum as { family?: string; variant?: string; answer_evidence?: string[];
+  const curriculum = record.curriculum as { family?: string; family_version?: number; variant?: string; answer_evidence?: string[];
     payment_scope_version?: number } | undefined;
+  if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 2)
+    return 'legacy_numeric_reference_contract';
   if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
     return 'unverified_counterfactual';
   if (curriculum?.family === 'folder_extract' && (!record.semantics.files_oracle?.quote_sources ||

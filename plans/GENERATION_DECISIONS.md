@@ -541,3 +541,21 @@ decisions, removing 661 duplicates; zero train/holdout-connected rows in this mi
 max 6,356/8,192 tokens. Explicit test verifies recovered original holdouts cannot be
 promoted by an ordinary teacher result even if its current split is relabeled train.
 Canonical bundle is data/teacher/recovered; superseded intermediate builds were removed.
+
+
+## 2026-09-28 evening — rejection contracts and conservative source holds
+
+See REJECTION_FOLLOWUP_20260928.md and runs/rejection-followup-20260928-evening/.
+Audited 78 final v10 results and seven unfinished attempts. Fixed false observation
+requirements for prevented planted compile failures, misleading eval rollback text,
+mail declaration/changed-key retries, highlighter iterators, cross-store CommaQA
+contracts, real reference arithmetic and ALFWorld turn budgeting. Full numeric
+audit verified 25,098 source steps after correcting our initial signed difference
+to the source's absolute-gap semantics. No gold labels changed.
+
+Breaking decisions: hold six ambiguous αNLI inputs and legacy numeric contracts;
+rebuild affected ready artifacts. Changed snapshots preserve source identity but
+restart incompatible handoff prefixes, with explicit migration records. Mail
+rejects changed contents under a delivered key. Priority queues add eight Bonsai
+and eleven Luna reviewed retries, with one Luna worker/request. V10 stays immutable;
+v11 rollout records completed case boundaries and actual new PIDs. No training.

@@ -532,7 +532,9 @@ export class NativeSession {
       `\n${tool} is one of your tools: call it as a tool, not from eval code.` : '';
     return toolNote + (reaching ? `\n${this.scopeGuide()}` : '') + (logs.length ? `\nconsole:\n${this.show(logs.join('\n'))}` : '') +
       (effects.length ? `\nAlready performed before the failure (not undone): ${[...new Set(effects)].join(', ')}.` : '') +
-      '\nNothing else from this eval was kept.';
+      '\nNothing else from this eval was kept. This refers to new eval bindings and the staged result; ' +
+      'state changes made through live values, callable modules, files or external services are not undone. ' +
+      'Inspect the current state before retrying a write.';
   }
 
   /**

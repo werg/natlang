@@ -1,5 +1,16 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Rejection follow-up (2026-09-28 evening):** see
+> [REJECTION_FOLLOWUP_20260928.md](REJECTION_FOLLOWUP_20260928.md).
+> Fixed two false admission rejections, persistent-state error guidance, mail
+> declaration/idempotency validation, supplied highlighter iterators, CommaQA
+> specialist contracts and computed references, and per-case world turn budgets.
+> Six αNLI source inputs are held for adjudication; old numeric contracts are held
+> until migrated. Earlier ready artifacts must be rebuilt under these new gates.
+> Prepared Bonsai queue-v8 / Luna queue-v4 and v11 runtime rollout at completed
+> case boundaries. Actual PIDs/status: runs/bonsai-recovery/runtime-v11.rollout-state.json
+> and runtime-v11.rollout.jsonl. Raw v10 jobs remain immutable; one Luna worker only.
+
 > **Modern adapters / strict static quality audit (2026-09-28):** read
 > [MODERN_STATIC_ADAPTERS.md](MODERN_STATIC_ADAPTERS.md). Modern decision, state, scene,
 > numeric, synthetic/fold and leaf adapters are implemented. Only the verified 72-case

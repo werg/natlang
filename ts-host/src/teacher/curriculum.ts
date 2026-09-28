@@ -98,6 +98,7 @@ export function validateCurriculum(record: CurriculumRecord): void {
 // ---- Trajectory reading ----------------------------------------------------------------------
 
 import { openingLength, openingText, text, type Message } from './opening.js';
+import { replacesPlantedFailure } from './seeded-failure.js';
 type Turn = { context: Message[]; assistant?: { calls?: { tool: string; arguments: unknown }[]; content?: string } };
 
 /** The name of the call a request belongs to, from its opening line. */
@@ -261,6 +262,13 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   else if (!outcome.accepted) reasons.push(record.semantics.operation === 'blocked' && outcome.status === 'done' ?
     'fabricated_result' : 'wrong_return');
   for (const item of c.decisive) {
+    // A compile failure prevented by replacing its planted first action is not an observation prerequisite.
+    // Runtime failures may expose state/effects, so their observation requirements remain intact.
+    if (item.source === 'error' && record.semantics.failure_seed?.kind === 'compile' &&
+      replacesPlantedFailure(record) && (outcome.seeded_failure as { replaced_by_handoff?: boolean } | undefined)?.replaced_by_handoff) {
+      if (!notes.includes('planted_compile_failure_prevented')) notes.push('planted_compile_failure_prevented');
+      continue;
+    }
     const at = facts.observedAt[item.marker]!;
     if (at === -1) reasons.push(`missing_observation:${item.marker}`);
     else if (c.mode === 'followup' && at > facts.firstDecision) reasons.push(`premature_choice:${item.marker}`);

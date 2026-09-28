@@ -1,5 +1,6 @@
 import json
 import subprocess
+import pytest
 from scripts.run_bonsai_queue import run_queue
 
 
@@ -30,3 +31,25 @@ def test_timeout_kills_stuck_child_advances_and_resume_skips_finished(tmp_path, 
     assert [row['status'] for row in finished] == ['timeout', 'complete']
     run_queue(queue, journal, tmp_path, seconds=1)
     assert len(processes) == 2
+
+
+def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    entry = dict(key='world', source='input', jobs=str(tmp_path / 'jobs'), output='output', index=0,
+                 seed=1, log=str(tmp_path / 'case.log'), max_turns=48)
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = []
+    class Child:
+        def __init__(self, command, **kwargs):
+            commands.append(command)
+        def wait(self, timeout=None):
+            return 0
+    monkeypatch.setattr(subprocess, 'Popen', Child)
+    run_queue(queue, journal, tmp_path, seconds=1)
+    assert commands[0][commands[0].index('--max-turns') + 1] == '48'
+    assert json.loads(journal.read_text().splitlines()[0])['max_turns'] == 48
+    for value in [True, 0, -1, '48']:
+        entry['max_turns'] = value
+        queue.write_text(json.dumps(entry) + '\n')
+        with pytest.raises(ValueError, match='max_turns'):
+            run_queue(queue, tmp_path / 'fresh.jsonl', tmp_path, seconds=1)
