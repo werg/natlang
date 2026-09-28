@@ -98,6 +98,12 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
     annotatedLabel: 'Jeremy busy=Unknown; busy or enjoys meat=True; conditional=False', status: 'pending',
     reason: 'The source formalization interprets vegetation as vegetarian, joining it to another premise; the visible literal term does not establish that relation.',
   },
+  {
+    dataset: 'folio', id: 'story:416', aliases: ['folio:story:416', 'story416'],
+    text: 'James is either good at planning or good at math.',
+    annotatedLabel: 'planning=Unknown; planning or math=False; chemistry or math=False; conditional=True', status: 'pending',
+    reason: 'Math(james) is unconstrained: with chemistry, award, experiment and planning false, either value of Math satisfies the premises (a different student witnesses the existential). Both disputed conclusions therefore admit true and false models rather than being contradicted.',
+  },
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */

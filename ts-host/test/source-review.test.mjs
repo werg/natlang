@@ -36,6 +36,7 @@ test('FOLIO story holds cover single conclusions and legacy batches by source gr
     assert.equal(sourceReviewReason({ curriculum: { family }, source_groups: ['folio:story:8'] }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story348' } }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family }, source_groups: ['folio:story:377'] }), 'source_review_pending');
+    assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story416' } }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story999' } }), undefined);
   }
 });

@@ -260,3 +260,43 @@ commit, failed first render, successful render retry, exact revision 20. This
 confirms the receipt guidance can be used when the teacher gets a repairable
 state. Luna's v15 boundary rollout remains pending on its current progressing
 case. The next hourly wait starts after this check.
+
+## Hourly monitoring: 2026-09-29 01:25 Europe/Berlin
+
+Both collectors reached v15 boundaries. Bonsai supervisor 495695, Luna supervisor
+497979; one Luna worker/request. Bonsai server remains healthy at approximately
+2.6 GiB warm Docker RAM. The canonical movie-awards retry now returns all three
+correct awards and is training-admitted. The board recovery also admits. The
+country query still exhausts 128 saved replies / 256 requests by repeatedly treating
+Rattlider as a movie. An offline opening audit confirms the exact original question,
+including “directors from Rattlider,” is visible without truncation. No missing-input
+bug found. Keep this attempt incomplete/excluded; no further retries or case-specific
+answer hints added during this check.
+
+FOLIO story 416 is now held after independent countermodel review. Its existential
+math/chemistry student need not be James. James's math ability can be either true
+or false while his chemistry and award predicates are false; these satisfy every
+premise with another student as existential witness. Both disputed math disjunctions
+vary in truth under inclusive AND exclusive interpretations of “or.” Thus original
+False labels are not established. The first Luna result (unknown, unknown, unknown,
+entailed) was logically valid; it is a source dispute, not a teacher negative.
+Six satisfying James valuations are saved in folio416-countermodels.json. Existing
+static recovered/source-backed bundles contain no such story; raw curriculum shards
+retain it but shared source gates prevent export until adjudicated.
+
+**Scheduling change:** the pending queues were mostly contiguous FOLIO variants;
+Bonsai spent the hour on three more 20-minute variants with little yield. Added
+scripts/interleave_teacher_queue.py to rotate pending work across curriculum families
+and original source groups. It preserves every eligible key, IR index, budget and
+evidence path; completed attempts remain journal-skipped. New immutable IR/job paths
+were prepared separately. Only held source inputs are removed (nine Bonsai entries,
+two Luna entries). No dataset mix changes or target cases silently dropped. New
+queues: Bonsai queue-v13, Luna queue-v9; order ledgers record every old/new position.
+Folder workloads retain their expanded 672–748 request / 3,600-second budgets.
+
+Runtime v16 adds the source hold; boundary rollout state records actual deployment
+and PIDs. Verification: Node/browser builds/types, 134 focused Node checks and five
+Python queue checks, including no-loss/order/budget-preservation checks. Admission
+snapshot: one of three Luna v15 finals admitted (two source-held FOLIO finals), one
+of one early Bonsai finals admitted. Later arriving finals are checked next hour.
+Artifacts: runs/hourly-check-20260929-0125/. The hourly sleep/check loop continues.

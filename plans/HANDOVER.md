@@ -1,5 +1,14 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 01:25, 2026-09-29:** v15 movie-awards retry and board retry
+> are training-admitted; country query remains an incomplete model interpretation
+> failure (actual input verified visible). Hold FOLIO 416 after countermodel review.
+> New queue rotation spreads valid cases across families and source groups without
+> dropping cases or changing budgets. V16 boundary rollout uses Bonsai queue-v13 /
+> Luna queue-v9. Actual state/PIDs: runs/bonsai-recovery/runtime-v16.rollout-state.json.
+> Audits/order ledgers: runs/hourly-check-20260929-0125/. One Luna worker, no training;
+> continue the hourly sleep/check loop until the user stops it.
+
 > **Hourly monitoring, 2026-09-29:** both workers active on v14; smaller Bonsai
 > server runs two slots, warm RAM about 2.5 GiB and GPU memory 598 MiB lower.
 > All four numeric CommaQA retries accepted. V15 prepared: movie specialist
