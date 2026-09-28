@@ -108,3 +108,11 @@ quarantined, repetitively failing Bonsai handoff 23 is stopped with a source-rev
 event rather than a training-negative verdict; this exception avoids spending its
 remaining budget on data we cannot use. Valid progressing cases retain boundary
 migration. First expanded ALFWorld retry succeeded: score 100, 22 moves.
+
+Live checkpoint: Bonsai supervisor 395860 runs v13 / queue-v10. Its first repaired
+locked-board case is accepted as an honest blocked outcome. Luna supervisor 393617
+runs v12 / queue-v5 with one worker/request: first two world retries are accepted
+at score 100 (22 and 58 moves). Monitor 395950 waits for its current valid case's
+boundary, then starts v13 / queue-v6; actual completion is recorded in the rollout
+log/state. `repair-progress.json` preserves this checkpoint. These are early repair
+successes, not a measured success-rate claim.
