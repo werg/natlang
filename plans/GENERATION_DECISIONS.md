@@ -432,3 +432,22 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   runs/bonsai-recovery/runtime-v10.*. No model training or independent annotation grader has started.
 - Post-rollout progress verified: Luna's new case saved 17 replies and Bonsai's new handoff saved six fresh
   replies. Both are using new .v10 checkpoints; these observations establish live requests, not task acceptance.
+
+## 2026-09-28 source research and offline trajectory route
+
+- User requested new task sources and existing trajectories convertible to our IR without teacher generation.
+  Primary-source shortlist and sample findings are in DIRECTORY_TASK_SOURCES.md; research samples/summary
+  live under runs/source-research-20260928/, outside admitted training data.
+- Added an offline route to the roadmap: start with successful structured Nebius OpenHands / SWE-smith traces,
+  then NVIDIA for diversity. Conversion must restore initial state, preserve action semantics and evidence,
+  replay deterministically and retain separate source-success versus native-validation provenance. Candidate
+  counts are not admitted volume. Unsupported mid-trace tools and unknown success cannot be hidden by rewriting.
+- New directory task priorities: WorkBench state changes, CommitPackFT edits, TAT-QA table/document reasoning,
+  then MuSiQue evidence chains. FinQA unit consistency and QMSum judging remain review work. Commit snapshots
+  are not full trajectories; source demonstrations must not fabricate reasoning or delegation.
+- No external cases imported, new source generation started, benchmark boundary changed or runtime modified.
+  Workspace-Bench/MuDABench remain evaluation-only. Research caught mock AgentSynth positives and stale
+  trajectory counts; explicit success and source terms need checking before admission.
+- Existing runtime-v10 supervisors remain live: Bonsai PID 332210 progressed to handoff 790; single Luna
+  PID 332686 finished case 10 (175.6 seconds, 20 replies) and started case 11. Collector completion is not
+  training admission. This documentation-only checkpoint requires no implementation build/test run.

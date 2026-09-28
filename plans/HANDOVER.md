@@ -1,5 +1,12 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Source research (2026-09-28):** [DIRECTORY_TASK_SOURCES.md](DIRECTORY_TASK_SOURCES.md) records
+> new directory-task sources and existing trajectories for offline IR conversion. Start with a successful-trace
+> portability audit for Nebius OpenHands / SWE-smith; WorkBench, CommitPackFT and TAT-QA lead task expansion.
+> Research samples under runs/source-research-20260928/ are not training data. No import/adapter has run.
+> Workspace-Bench and MuDABench remain evaluation-only; preserve source success separately from native replay
+> validation. Latest live check: Bonsai handoff 790, Luna case 11, same v10 supervisors and single Luna worker.
+
 > **Active runtime-v10 rollout (2026-09-28):** both workers now run the frozen d69af3a runtime, including
 > criterion-preserving delegation guidance and pending-source collection/admission protections. All 455 frozen
 > file hashes verified. Luna supervisor PID 332686 uses queue-v3.jsonl, existing v2.journal.jsonl, new pending-job

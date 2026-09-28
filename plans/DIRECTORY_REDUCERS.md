@@ -384,6 +384,9 @@ turn, so a training build can choose which levels to include.
 
 ## 4. Data sources
 
+Updated source/sample audit: [DIRECTORY_TASK_SOURCES.md](DIRECTORY_TASK_SOURCES.md). It records current
+counts, dataset versus repository terms, and the separate offline conversion route requested on 2026-09-28.
+
 Priorities: **A** first wave, **B** second wave, **E** evaluation only.
 
 | Source | License | Size | As a folder | Tasks | Oracle | Priority |
@@ -396,7 +399,7 @@ Priorities: **A** first wave, **B** second wave, **E** evaluation only.
 | [EnronQA](https://huggingface.co/datasets/MichaelR207/enron_qa_0922) | CC (variant to confirm) | 103k emails, 528k QA pairs, 150 inboxes | a maildir per user (the corpus is one) | QA over an inbox; the original Enron mailbox folders give real "file these emails" labels | normalized (gold plus alternates); exact for folder moves | A |
 | WikiTableQuestions (CC-BY-SA-4.0), BIRD (CC-BY-SA-4.0), [InfiAgent-DABench](https://arxiv.org/pdf/2401.05507) | as noted (DABench to confirm) | ~22k, ~12k, 257 questions | CSV or SQLite files in a folder | questions mixing code over tables with judgment over text columns | normalized | B (with `bash` and `python`) |
 | [QMSum](https://github.com/Yale-LILY/QMSum) | MIT | 232 meetings, 1.8k queries | `meetings/*.md` transcripts | query-focused summaries, decision logs | judged | B |
-| [Workspace-Bench](https://github.com/OpenDataBox/Workspace-Bench) | Apache-2.0 | 20k files, 5 roles, 388 tasks (Lite: 100) | real workspaces, 74 file types | under-specified workplace tasks across many files | rubric | E, plus workspaces to write tasks over |
+| [Workspace-Bench](https://github.com/OpenDataBox/Workspace-Bench) | repo MIT; dataset terms to confirm | 20k files, 5 roles, 388 tasks (Lite: 100) | real workspaces, 74 file types | under-specified workplace tasks across many files | rubric | E; training reuse needs separate review |
 | [MuDABench](https://github.com/Zhanli-Li/MuDABench) | Apache-2.0 | 80k pages, 332 questions | documents per entity | analytical QA across many documents | normalized | E |
 
 ## 5. Existing agentic SFT, bent to our surface
@@ -404,7 +407,7 @@ Priorities: **A** first wave, **B** second wave, **E** evaluation only.
 The trajectories are worth more than their tasks only where their actions translate.
 
 - **OpenHands and SWE-agent SWE trajectories** ([SWE-rebench-openhands](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories),
-  CC-BY-4.0; [SWE-smith-trajectories](https://huggingface.co/datasets/SWE-bench/SWE-smith-trajectories), 5k;
+  CC-BY-4.0; [SWE-smith-trajectories](https://huggingface.co/datasets/SWE-bench/SWE-smith-trajectories), 24,100 current `tool` rows;
   SWE-Zero, 318k).
   - **Translation:** `str_replace_editor` calls map almost exactly onto our tools (view → `read_file`,
     create → `write_file`, str_replace → `edit_file`), and `grep` or `find` calls in bash map onto
@@ -419,7 +422,8 @@ The trajectories are worth more than their tasks only where their actions transl
       teacher from that state in our runtime, with the final-patch oracle (the collector's hand-off does this now for a
       student's failed state).
     - Failing that, the trajectory is dropped.
-  - **Oracle:** the final files equal the trajectory's verified patch, so no tests need to run.
+  - **Oracle:** final-file equality checks conversion fidelity. Original task-success evidence must also be
+    retained; matching the model patch alone does not independently establish correctness.
   - **Scope:** keep trajectories whose actions all translate. This is code, not semantic processing, but it is the
     largest supply of in-distribution file editing, and a first filter could keep only prose-heavy repos.
 - **Terminal trajectories** ([OpenThoughts-Agent-SFT-100K](https://huggingface.co/datasets/open-thoughts/OpenThoughts-Agent-SFT-100K),
@@ -433,6 +437,10 @@ The trajectories are worth more than their tasks only where their actions transl
   calling, search and customer service; no files) and similar general tool-calling sets.
 
 ### Long trajectories broken into delegated sub-tasks
+
+**2026-09-28 scope correction:** the offline import route preserves actual source actions; it cannot invent
+delegation calls, child instructions or reasoning. The redesign ideas below require separate generation and
+validation. An offline slice is eligible only with its actual pre-step state and sufficient source context.
 
 A long trajectory is better training data for a small model as a short parent that delegates plus short children.
 
