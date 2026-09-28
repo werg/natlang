@@ -28,6 +28,14 @@ test('legacy αNLI batches without source IDs are held by complete visible ident
   assert.equal(sourceReviewReason(record), undefined);
 });
 
+test('FOLIO story holds cover single conclusions and legacy batches by source group or shape', () => {
+  for (const family of ['folio_entailment', 'folio_batch']) {
+    assert.equal(sourceReviewReason({ curriculum: { family }, source_groups: ['folio:story:337'] }), 'source_review_pending');
+    assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story162' } }), 'source_review_pending');
+    assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story999' } }), undefined);
+  }
+});
+
 test('criterion preservation guidance does not suggest new delegation at the depth limit', () => {
   assert.match(TOOLS_PROMPT, /preserve the parent's criterion and relevant context/);
   assert.match(TOOLS_PROMPT, /a question can express the same intent as a statement/);

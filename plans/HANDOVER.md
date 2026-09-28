@@ -10,6 +10,11 @@
 > Prepared Bonsai queue-v8 / Luna queue-v4 and v11 runtime rollout at completed
 > case boundaries. Actual PIDs/status: runs/bonsai-recovery/runtime-v11.rollout-state.json
 > and runtime-v11.rollout.jsonl. Raw v10 jobs remain immutable; one Luna worker only.
+> Later arrivals exposed English/formalization mismatches in FOLIO stories 337 and
+> 162: both are now held, without changing gold. Latest rollout is **v12**, Bonsai
+> queue-v9 / Luna queue-v5; actual boundaries/PIDs are in runtime-v12.rollout.jsonl
+> and runtime-v12.rollout-state.json. Luna's initial v11 highlighter retry is allowed
+> to finish. Verification now includes 110 focused Node tests.
 
 > **Modern adapters / strict static quality audit (2026-09-28):** read
 > [MODERN_STATIC_ADAPTERS.md](MODERN_STATIC_ADAPTERS.md). Modern decision, state, scene,

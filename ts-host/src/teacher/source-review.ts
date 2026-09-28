@@ -59,6 +59,18 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
       'The gift and its connection to either hypothesis are missing from the visible story.'],
   ].map(([id, text, annotatedLabel, reason]) => ({ dataset: 'anli', id: id!, aliases: [], text: text!,
     annotatedLabel: annotatedLabel!, reason: reason!, status: 'pending' as const })),
+  {
+    dataset: 'folio', id: 'story:337', aliases: ['folio:story:337', 'story337'],
+    text: 'Jim is either not a professional basketball player or not a slow runner.',
+    annotatedLabel: 'Knicks=False; not Knicks=True; athlete=Unknown', status: 'pending',
+    reason: 'The English disjunction permits Jim to be a fast professional/Knicks player. Source formalization instead uses negated XOR of positive predicates, which forces different conclusions.',
+  },
+  {
+    dataset: 'folio', id: 'story:162', aliases: ['folio:story:162', 'story162'],
+    text: 'Peter was invited to play piano at the concert hall.',
+    annotatedLabel: 'Oliver piano=False; Oliver violin=Unknown; Peter good at piano=True', status: 'pending',
+    reason: 'Source formalization turns an invitation into actual concert performance; the model-visible English does not establish that antecedent.',
+  },
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */
@@ -75,8 +87,10 @@ export function pendingSourceReview(dataset: string, id: string): SourceReview |
 /** A whole task is held when any of its original source records needs review. */
 export function sourceReviewReason(record: Record<string, unknown>):
     string | undefined {
-  const curriculum = record.curriculum as { family?: string } | undefined;
-  const dataset = record.dataset ?? (curriculum?.family === 'anli_batch' ? 'anli' : undefined);
+  const curriculum = record.curriculum as { family?: string; shape?: string } | undefined;
+  const inferred = curriculum?.family === 'anli_batch' ? 'anli' :
+    ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
+  const dataset = record.dataset ?? inferred;
   if (typeof dataset !== 'string') return undefined;
   if (dataset === 'anli') {
     const semantics = record.semantics as { inputs?: { stories?: unknown[] } } | undefined;
@@ -85,7 +99,9 @@ export function sourceReviewReason(record: Record<string, unknown>):
     if (SOURCE_REVIEWS.some(review => review.dataset === dataset && review.status === 'pending' && texts.includes(review.text)))
       return 'source_review_pending';
   }
-  const ids = [record.dataset_records, record.source_ids].flatMap(value => Array.isArray(value) ? value : []);
+  const ids = [record.dataset_records, record.source_ids, dataset === 'folio' ? record.source_groups : []]
+    .flatMap(value => Array.isArray(value) ? value : []);
+  if (dataset === 'folio' && curriculum?.shape) ids.push(curriculum.shape);
   return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id)) ?
     'source_review_pending' : undefined;
 }

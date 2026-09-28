@@ -559,3 +559,10 @@ restart incompatible handoff prefixes, with explicit migration records. Mail
 rejects changed contents under a delivered key. Priority queues add eight Bonsai
 and eleven Luna reviewed retries, with one Luna worker/request. V10 stays immutable;
 v11 rollout records completed case boundaries and actual new PIDs. No training.
+
+Later results exposed FOLIO English/formalization mismatches in stories 337
+and 162 (negated-XOR mistranslation; invitation turned into performance). Hold
+both stories across single/batch adapters, retaining original annotations. Luna
+started its highlighter retry on v11 after its boundary. Freeze v12 for the new
+holds and prune queue-v9 / queue-v5; finish progressing cases before migration.
+Final focused validation: 110 Node tests, two queue tests, browser build/types.

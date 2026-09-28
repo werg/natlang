@@ -66,3 +66,20 @@ Verification: Node/browser builds, browser types, 109 focused Node tests, two qu
 tests, full 25,098-step numeric source audit and changed-reference replays.
 Correct direct/delegated/mixed outcomes remain eligible. The three ad hoc NL-layer
 limit is unchanged. Remaining folder criteria errors retain their original gold.
+
+## Later results: FOLIO source-language mismatches
+
+`later-results.json` records results arriving during this audit. FOLIO story 337
+uses an English disjunction permitting Jim to be a fast professional basketball
+player; its source formalization instead uses negated XOR of positive predicates.
+That changes the conclusions. Story 162 formalizes an invitation as actual concert
+performance. Both stories are now held across single-conclusion and batch adapters,
+using source groups or legacy shapes. Raw English, formalizations and labels remain.
+This is a source hold, not a model error or relabeling.
+
+Luna reached its v10 boundary and began its highlighter retry on v11. Added holds
+require a new immutable v12 freeze; do not mutate v11. Bonsai queue-v9 and Luna
+queue-v5 prune affected stories from the reviewed v11 queues and use distinct v12
+job paths. The v12 rollout monitor waits for progressing cases to finish and records
+new supervisor PIDs in `runs/bonsai-recovery/runtime-v12.rollout-state.json`.
+Latest verification: 110 focused Node tests, Node/browser builds and browser types.
