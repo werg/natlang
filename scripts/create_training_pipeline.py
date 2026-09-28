@@ -15,7 +15,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
            teacher_execution_plans=False, teacher_execution_plan_tokens=512,
-           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=()):
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -109,6 +109,28 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         new_unit_turns.append(turns)
     verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else
                       [str(path) for path in (*proven_pilots, *new_unit_turns) if path.exists()])
+    static_manifest = (Path(static_bundle).resolve() if static_bundle not in (None, False) else
+                       repo / 'data/teacher/source-backed/static.manifest.json')
+    included_static = None
+    if static_bundle is not False and (static_bundle is not None or static_manifest.exists()):
+        manifest = json.loads(static_manifest.read_text())
+        if manifest.get('version') != 'natlang.source_static_bundle/1' or not manifest.get('cases'):
+            raise ValueError('invalid static source bundle')
+        static_inputs = []
+        for field in ('ir', 'results'):
+            entry = manifest[field]
+            path = (static_manifest.parent / entry['path']).resolve()
+            if not path.is_relative_to(static_manifest.parent.resolve()) or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+                raise ValueError('static source bundle checksum/path mismatch')
+            static_inputs.append(str(path))
+        static_turns = f'{r}/static-source.turns.jsonl'
+        add('validate-static-sources', ['node', f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
+                                      str(static_manifest), '--turns-out', static_turns],
+            [str(static_manifest), *static_inputs, f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
+             f'{p}/ts-host/dist/teacher/source-conversion.js', f'{p}/ts-host/dist/teacher/native-materializer.js'],
+            [static_turns, f'{static_turns}.manifest.json'])
+        verified_turns.append(static_turns)
+        included_static = {'manifest': str(static_manifest), 'cases': manifest['cases'], 'model_calls': 0}
     add("observe-source", ["node", f"{p}/ts-host/scripts/code-corpus/source-cases.mjs", "--output", f"{r}/source-observations.jsonl", "--execute", "--limit", "5000",
                            *[arg for path in observation_inputs for arg in ("--input", path)],
                            *[arg for path in captures for arg in ('--captures', path)]],
@@ -248,7 +270,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     render('joint', f'{r}/joint.jsonl')
     train('joint', 'coding', '0.00002')
     # All source observation/replay/teacher work uses one frozen interpreter build.
-    frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher"}
+    frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources'}
     for stage in stages:
         if stage["id"] in frozen_stages or stage['id'].startswith(('capture-unit-test-', 'build-', 'collect-', 'admit-', 'materialize-')):
             for key in ("command", "inputs"):
@@ -256,6 +278,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
     return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
             "training_tracks": tracks,
+            'static_source_bundle': included_static,
             "unit_test_corpus": {"included": [str(path) for path in new_unit_turns], "excluded": excluded_unit_captures}}
 
 
@@ -283,6 +306,8 @@ def main():
     parser.add_argument('--captures', action='append', type=Path, help='captured upstream-test calls (repeatable); defaults to existing repository capture snapshots')
     parser.add_argument('--verified-turns', action='append', type=Path, help='execution-verified native turns from unit-test replay (repeatable); defaults to existing repository pilot snapshots')
     parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
+    parser.add_argument('--static-bundle', type=Path, help='validated static source manifest; defaults to data/teacher/source-backed when present')
+    parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument("--min-free-vram-mib", type=int, default=2048, help="GPU 0 availability gate; raise this for larger models")
     parser.add_argument("--train-arg", action="append", default=[], help="repeat as --train-arg=--load-in-4bit or --train-arg=VALUE to pass trainer options")
     args = parser.parse_args()
@@ -294,7 +319,7 @@ def main():
                     inline_shapes=args.inline_shapes, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
-                    workspace_cases=args.workspace_case)
+                    workspace_cases=args.workspace_case, static_bundle=False if args.no_static_bundle else args.static_bundle)
     if args.output.exists():
         if json.loads(args.output.read_text()) != config:
             raise ValueError("refusing to replace a different recipe")

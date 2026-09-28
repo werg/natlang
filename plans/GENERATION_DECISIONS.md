@@ -451,3 +451,40 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
 - Existing runtime-v10 supervisors remain live: Bonsai PID 332210 progressed to handoff 790; single Luna
   PID 332686 finished case 10 (175.6 seconds, 20 replies) and started case 11. Collector completion is not
   training admission. This documentation-only checkpoint requires no implementation build/test run.
+
+## 2026-09-28 source-backed static pilot and training wiring
+
+- Built a bounded pilot from actual pinned/source-hashed data: WorkBench 8, CommitPackFT 12, TAT-QA 11,
+  MuSiQue 12 and SWE-smith 8: 51 native directory cases, 157 approved decisions, 32 held direct-result
+  decisions. Source acquisition and reference replay use zero model calls. The exact Sharp tokenizer/template
+  audit admits all 157 at 8192 tokens, largest 6356; 8442 supervised tokens after synthetic-note masking.
+  Results/IR/manifests and concrete rejection ledgers are in data/teacher/source-backed/. Final render/audit
+  artifacts live under runs/source-backed-20260928/verified/. See DIRECTORY_TASK_SOURCES.md.
+- Course decision: CommitPack's vague commit descriptions are not unique gold specifications. Scoped tasks
+  expose an explicit change request derived from before/after content. WorkBench retains every matching
+  sender record, projects irrelevant email bodies, checks latest-date gold and preserves untouched files.
+  TAT-QA rejects inconsistent/unsupported derivations and reads evidence before choosing its calculation.
+  MuSiQue uses original train data, excludes 2768 dev seed IDs and groups shared seeds/paragraphs.
+- Trajectory decision: 120 captured rows include 48 parsable known-success runs. Complete SWE traces are
+  still incompatible (shell/install/test/environment dependencies). Import eight successful file-creation
+  operations as separately specified, self-contained tasks; retain unchanged payloads/source observations,
+  pinned repository license evidence, original IDs and row hashes. Mark native wrapper steps and scope;
+  do not claim whole-issue replay or fabricate model reasoning/delegation. Nebius needs base-commit joins;
+  NVIDIA's sampled rows have unknown outcomes. Raw failed/unknown evidence remains excluded.
+- Pipeline fixes: preserve source licenses, IDs, revisions and gold attribution in native turns and both
+  renderers. The staged renderer now masks scripted notes; token auditing counts masked notes as context,
+  matching trainer behavior. Converted-source admission/materialization checks task/outcome/trajectory
+  bindings and source scope, with explicit rejection on tampering. Ordinary existing rows retain their path.
+- Connected the static bundle to both entry points: automatic checked-manifest inclusion in build_lora_sft.sh,
+  and a frozen validate-static-sources stage feeding the staged pipeline's coding lane. Explicit disable/select
+  options are available. Generated runs/source-backed-20260928/recipe.json without launching it. The pilot
+  ready artifact is bound to a tokenizer-only Sharp template profile; production re-renders for its selected
+  model. No model weights loaded, no training or new teacher queue started. MuSiQue's default static SFT
+  contributes retrieval rather than invented reasoning; real reasoning/answer trajectories need collection.
+- Validation: Node/browser build and browser type checks pass; 41 focused Node checks, 30 Python checks,
+  shell syntax and actual acquisition/replay/render/token audit pass. Live Bonsai PID 332210 and the single
+  Luna PID 332686 continue frozen-v10 work; latest check showed progressing handoff 625 / Luna case 25.
+- CPU-container export artifacts initially had root ownership; normalized ownership to the workspace user
+  and removed superseded pilot exports after verifying the final artifact. MuSiQue acquisition now stages
+  downloads atomically and retries incomplete archives. Static builders require newly built main/new training
+  freeze; the old generation freeze does not contain the source-conversion helper. Do not mutate live v10.

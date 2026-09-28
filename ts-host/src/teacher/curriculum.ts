@@ -12,6 +12,7 @@ import { executeProgram, recordDigest, sha256, type ProgramRun } from './collect
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
 import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
 import { RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
+import { sourceConversionProblems } from './source-conversion.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
 export const CURRICULUM_ADMISSION_VERSION = 'natlang.inline_curriculum_admission/2';
@@ -245,11 +246,11 @@ function childIdentity(context: Message[]): string {
     (message.tool_calls ?? []).map(call => call.function?.arguments ?? '').join('\n')).join('\n');
 }
 
-export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; outcome?: Record<string, unknown>;
+export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }; provenance?: Record<string, unknown>; outcome?: Record<string, unknown>;
   trajectory?: unknown[] }): Admission {
   const record = row.task.program_ir as CurriculumRecord, c = record.curriculum;
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
-  const reasons: string[] = [], notes: string[] = [];
+  const reasons: string[] = sourceConversionProblems(row), notes: string[] = [];
   if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
   const quarantine = quarantineReason(record);
   if (quarantine) reasons.push(quarantine);

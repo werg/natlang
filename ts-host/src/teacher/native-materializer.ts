@@ -1,5 +1,6 @@
 import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
+import { sourceConversionProblems } from './source-conversion.js';
 
 export const NATIVE_TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const NATIVE_TEACHER_TURN_VERSION = 'natlang.teacher_training_turn.native/1';
@@ -135,6 +136,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
   let acceptedRows = 0, rejectedRows = 0;
   for (const candidate of input) {
     const row = validateRow(candidate);
+    if (sourceConversionProblems(row).length) { rejectedRows++; continue; }
     // Rows from before conversation rollover was retired contain checkpoint notes and cut contexts.
     const rolledOver = row.trajectory.some(turn => (turn as Dict | undefined)?.phase === 'checkpoint');
     if ((!row.outcome.accepted && !options.failedRuns) || rolledOver) { rejectedRows++; continue; }
@@ -240,6 +242,9 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         task: row.task,
         program_id: programId,
         family: `${role}_program`,
+        ...(taskIr.split ? { split: taskIr.split } : {}),
+        ...(taskIr.source_ids ? { source_ids: taskIr.source_ids } : {}),
+        ...(taskIr.source_revisions ? { source_revisions: taskIr.source_revisions } : {}),
         ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
         skill,
         provisional_gold: false,
@@ -247,8 +252,8 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         source_groups: [...new Set([...(programId === null ? [] : [programId]),
           ...(Array.isArray(taskIr.source_groups) ? taskIr.source_groups.filter((group): group is string => typeof group === 'string') : [])])],
         source: `${role}-native`,
-        gold_sources: [`checked-${role}-trajectory`, 'exact-runtime-oracle'],
-        license: 'project-generated',
+        gold_sources: [...(Array.isArray(taskIr.gold_sources) ? taskIr.gold_sources : []), `checked-${role}-trajectory`, 'exact-runtime-oracle'],
+        license: taskIr.license ?? 'project-generated',
         messages: publicValue(contextSource),
         tools: publicValue(source.tools_offered ?? []),
         target,

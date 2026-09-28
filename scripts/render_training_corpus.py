@@ -163,9 +163,17 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
         "training_admission", "source", "license", "source_ids", "source_revisions",
         "teacher_trajectory_id", "teacher_trajectory_digest", "execution_verified",
         "implementation_sha256", "behavioral_evidence", "evidence", "generation", "verification",
-        "curriculum_lane", "training_track", "difficulty", "syntax_checked") if key in turn}
+        "curriculum_lane", "training_track", "difficulty", "syntax_checked", "gold_sources") if key in turn}
+    if turn.get('provenance', {}).get('source_conversion'):
+        result['source_conversion'] = turn['provenance']['source_conversion']
     result.update(renderer="transformers-chat-template", context_items=len(messages),
                   prompt=prompt, completion=suffix[:end + len(end_token)])
+    if turn.get('teacher_reasoning') and turn.get('teacher_reasoning_trained') is False:
+        reasoning_start = result['completion'].find(turn['teacher_reasoning'])
+        boundary = result['completion'].find('</think>', reasoning_start + len(turn['teacher_reasoning']))
+        if boundary < 0:
+            raise ValueError('untrained reasoning needs an explicit template reasoning boundary')
+        result['completion_masked'] = boundary + len('</think>')
     return result
 
 

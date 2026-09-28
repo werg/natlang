@@ -2,6 +2,8 @@
 # Build one model's LoRA training set from admitted teacher runs, rendered with that model's own chat template.
 # Usage: scripts/build_lora_sft.sh lfm|ling|spark OUT_DIR RESULTS.jsonl [MORE.jsonl ...]
 # NATLANG_HANDOFFS=RUNS.jsonl[,...] adds the preference pairs of handoff runs (build-handoffs.mjs) to preferences.jsonl.
+# A ready data/teacher/source-backed/static.manifest.json is included automatically.
+# NATLANG_STATIC_BUNDLE=MANIFEST selects another ready bundle; =off disables it.
 # Correct direct and delegated runs are both admitted, materialized into one training decision per model turn, and rendered by a CPU-only llama-server loaded
 # with the model's GGUF and template, so prompts and completions are byte-for-byte what the model sees when served.
 set -euo pipefail
@@ -10,7 +12,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # while a collector uses this checkout's dist.
 TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 MODEL="${1:?model: lfm, ling or spark}"; OUT="${2:?output directory}"; shift 2
-[ "$#" -gt 0 ] || { echo "no results files given"; exit 2; }
+STATIC_MANIFEST="${NATLANG_STATIC_BUNDLE:-$ROOT/data/teacher/source-backed/static.manifest.json}"
+if [ "$STATIC_MANIFEST" != off ]; then
+  STATIC_OPTIONAL=(); [ -z "${NATLANG_STATIC_BUNDLE:-}" ] && STATIC_OPTIONAL=(--optional)
+  STATIC_RESULT="$(node "$TS_HOST/scripts/inline-curriculum/static-bundle-input.mjs" "$STATIC_MANIFEST" "${STATIC_OPTIONAL[@]}")"
+  if [ -n "$STATIC_RESULT" ]; then
+    STATIC_ALREADY_PRESENT=0
+    for INPUT_RESULT in "$@"; do
+      [ "$(realpath "$INPUT_RESULT")" = "$STATIC_RESULT" ] && STATIC_ALREADY_PRESENT=1
+    done
+    if [ "$STATIC_ALREADY_PRESENT" = 0 ]; then set -- "$@" "$STATIC_RESULT"; fi
+    echo "Including validated static source results: $STATIC_RESULT"
+  fi
+fi
+[ "$#" -gt 0 ] || { echo "no results files or ready static bundle given"; exit 2; }
 # REASONING_END closes the template's reasoning: reasoning no model wrote (curriculum references) is masked through it.
 REASONING_END=()
 case "$MODEL" in

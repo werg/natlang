@@ -57,10 +57,13 @@ def assess(row, tokenizer, end_token, max_len):
         reason = 'empty_assistant_target'
     elif summary['split'] not in ('train', 'test', 'validation', 'valid', 'dev'):
         reason = 'missing_or_invalid_split'
+    masked = row.get('completion_masked', 0)
+    if not reason and (type(masked) is not int or masked < 0 or masked >= len(target)):
+        reason = 'invalid_completion_mask'
     if not reason:
         # Match train_lora.encode exactly, including no implicit BOS/EOS insertion.
-        x = tokenizer(prompt, add_special_tokens=False)['input_ids']
-        y = tokenizer(target, add_special_tokens=False)['input_ids']
+        x = tokenizer(prompt + target[:masked], add_special_tokens=False)['input_ids']
+        y = tokenizer(target[masked:], add_special_tokens=False)['input_ids']
         summary.update(prompt_tokens=len(x), supervised_tokens=len(y), total_tokens=len(x) + len(y))
         if not x or not y:
             reason = 'empty_tokenized_pair'

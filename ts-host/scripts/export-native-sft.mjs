@@ -47,6 +47,13 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>', reaso
     masked = end + reasoningEnd.length;
   }
   return { id: turn.id, program_id: turn.program_id, source_groups: turn.source_groups ?? [],
+    ...(turn.split ? { split: turn.split } : {}),
+    ...(turn.source_ids ? { source_ids: turn.source_ids } : {}),
+    ...(turn.source_revisions ? { source_revisions: turn.source_revisions } : {}),
+    ...(turn.source ? { source: turn.source } : {}),
+    ...(turn.license ? { license: turn.license } : {}),
+    ...(turn.gold_sources ? { gold_sources: turn.gold_sources } : {}),
+    ...(turn.provenance?.source_conversion ? { source_conversion: turn.provenance.source_conversion } : {}),
     family: turn.family, skill: turn.skill, renderer: 'server-chat-template',
     context_items: messages.length, teacher_trajectory_id: turn.teacher_trajectory_id,
     teacher_trajectory_digest: turn.teacher_trajectory_digest,

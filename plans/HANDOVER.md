@@ -1,9 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Static source pilot implemented (2026-09-28):** 51 admitted directory cases: WorkBench 8, CommitPackFT 12,
+> TAT-QA 11, MuSiQue 12, SWE-smith 8 independent file-creation tasks. Zero generation model calls. The final
+> Sharp audit admits all 157 rendered decisions at max-len 8192 (largest 6356); 32 direct scripted decisions
+> stay held in native evidence. Bundle: data/teacher/source-backed/static.manifest.json; audited artifact:
+> runs/source-backed-20260928/verified/sharp.ready.jsonl. Both build_lora_sft.sh and the staged recipe now
+> discover/validate this bundle. No training or new teacher queue launched. Whole SWE traces imported: zero;
+> eight imported source operations are explicit scoped tasks. Read DIRECTORY_TASK_SOURCES.md for commands,
+> provenance, source holds, tokenizer binding and the remaining reasoning-trajectory work. Current collectors
+> remain on frozen v10; changes here are in builders/admission/materialization, not a live-worker migration.
+
 > **Source research (2026-09-28):** [DIRECTORY_TASK_SOURCES.md](DIRECTORY_TASK_SOURCES.md) records
 > new directory-task sources and existing trajectories for offline IR conversion. Start with a successful-trace
 > portability audit for Nebius OpenHands / SWE-smith; WorkBench, CommitPackFT and TAT-QA lead task expansion.
-> Research samples under runs/source-research-20260928/ are not training data. No import/adapter has run.
+> Research samples under runs/source-research-20260928/ are not training data. The implemented pilot above supersedes this research checkpoint.
 > Workspace-Bench and MuDABench remain evaluation-only; preserve source success separately from native replay
 > validation. Latest live check: Bonsai handoff 790, Luna case 11, same v10 supervisors and single Luna worker.
 

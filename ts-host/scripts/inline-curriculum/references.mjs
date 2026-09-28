@@ -19,6 +19,8 @@
  */
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { admitRow, referenceDriver } from '../../dist/teacher/curriculum.js';
 import { defaultToolSurfaceHash, executeProgram, expectedProvenance, programRow, programRunId, trajectoryTurn }
   from '../../dist/teacher/collector.js';
@@ -40,7 +42,7 @@ function shown(value, context) {
   return squash(content.split('\n')[0]) === wanted || (staged !== undefined && squash(staged) === wanted);
 }
 
-async function referenceRow(record, index, options) {
+export async function referenceRow(record, index, options) {
   const expected = { ...expectedProvenance(record, options), synthetic_reasoning: SYNTHETIC_REASONING };
   const reference = referenceDriver(record), trajectory = [];
   const driver = async request => {
@@ -63,6 +65,7 @@ function technique(name) {
     /\biterateOn\s*\(|\bnl\s*(?:<[^`]*>)?`/.test(String(args.code ?? '')));
 }
 
+async function main() {
 const { values } = parseArgs({ options: { seeds: { type: 'string' }, shapes: { type: 'string', default: '1' },
   families: { type: 'string' }, out: { type: 'string' }, workers: { type: 'string', default: '8' },
   'technique-weight': { type: 'string', default: '1' } } });
@@ -99,3 +102,6 @@ const turns = rows.flatMap(row => row.trajectory), direct = turns.filter(turn =>
 console.log(`${rows.length} reference rows from ${families.length} families (${boosted.length} weighted ${weight}x), ` +
   `seeds ${seeds.join(',')}: ` +
   `${turns.length} turns, ${direct} direct answers -> ${values.out}`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

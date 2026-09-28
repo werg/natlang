@@ -1,9 +1,68 @@
 # Task sources and offline trajectory conversion
 
-Research checkpoint: 2026-09-28. Primary repositories/cards and actual sample rows inspected.
-This is a shortlist and conversion design, not an import or an estimate of admitted training volume.
+Research and implementation checkpoint: 2026-09-28. Primary repositories/cards and actual sample rows inspected.
+The first implemented pilot is below; remaining source recommendations are research rather than imported volume.
 Downloaded examples under `runs/source-research-20260928/trajectory-samples/` are research artifacts only;
 `trajectory-sample-summary.json` records schemas, outcomes, tool counts and dataset-server row counts.
+
+## Implemented pilot and pipeline connection
+
+| Source | Native cases | Approved decisions after final 8,192-token audit |
+|---|---:|---:|
+| WorkBench | 8 | 16 |
+| CommitPackFT | 12 | 36 |
+| TAT-QA | 11 | 77 |
+| MuSiQue | 12 | 12 |
+| SWE-smith independent file creation | 8 | 16 |
+| **Total** | **51** | **157** |
+
+Artifacts: `data/teacher/source-backed/{train.ir.jsonl,static.results.jsonl,static.turns.jsonl,static.manifest.json}`.
+The final rendered/audited pilot is `runs/source-backed-20260928/verified/sharp.ready.jsonl`, with sibling
+manifest, audit and rejection ledger. All 157 rendered decisions pass; maximum length 6,356 tokens,
+8,442 supervised tokens. Synthetic action notes are masked as context. Thirty-two scripted direct result
+decisions are retained as evidence but excluded from default reasoning SFT. In particular MuSiQue currently
+contributes retrieval decisions; model collection is needed for reasoning-and-answer demonstrations.
+
+Source acquisition and native replay made **zero model calls**. Rendering/auditing used a CPU-only container
+and a tokenizer-only Spark profile configured with the serving Sharp template and `terse=false`; no weights
+were loaded. This pilot's ready artifact is bound to that tokenizer profile. Production stages render and
+audit again with their selected student tokenizer; no training stage was launched.
+
+Both training entry points discover the ready static manifest:
+
+Use freshly built main `ts-host` or a new training freeze for these builders. Existing generation workers
+continue using v10; that older snapshot does not contain the new static-bundle helper/admission gate.
+
+- `scripts/build_lora_sft.sh` validates it and appends its results to normal admission/materialization.
+  `NATLANG_STATIC_BUNDLE=MANIFEST` selects a bundle; `=off` disables discovery.
+- `scripts/create_training_pipeline.py` adds a frozen-runtime `validate-static-sources` stage feeding the
+  native coding lane before preparation, rendering and token audit. `--static-bundle` selects another bundle;
+  `--no-static-bundle` omits it. A generated, unlaunched recipe is `runs/source-backed-20260928/recipe.json`.
+
+Rebuild from the repository root:
+
+```bash
+python3 scripts/acquire_directory_sources.py --limit 12 --trajectory-rows 40
+npm --prefix ts-host run build
+node ts-host/scripts/inline-curriculum/build-source-backed.mjs \
+  --cache vendor/directory-sources --out data/teacher/source-backed
+```
+
+The trajectory pilot captured 120 rows, including 48 parsable known-success runs. It imports eight bounded
+SWE-smith **file-creation operations as independently specified tasks**, with original payloads and source
+success observations. Native request reads and typed terminal returns are explicitly marked as wrapper steps.
+Full SWE issues converted: **zero**. Shell/install/test dependencies remain unsupported, and Nebius needs a
+pinned task/base-commit join. NVIDIA's first 40 rows have unknown success. No source reasoning or delegation
+was invented. Repository license text was checked at SWE-smith's source commit against its classified blob.
+
+Quality controls: original train partitions; all matching WorkBench sender records retained; explicit change
+requests for underspecified commits; TAT-QA evidence reads precede calculations and inconsistent/unsupported
+derivations are rejected; MuSiQue excludes 2,768 development seed IDs and groups related paragraphs/seeds.
+Converted replay evidence binds task, outcome and trajectory digests. Attribution survives both renderers.
+Rejection/audit JSONL files accompany the bundle. No pending annotation gold was rewritten.
+
+Validation: Node/browser build, browser type checks, 41 focused Node tests and 30 focused Python tests pass;
+actual source acquisition, replay, materialization, Sharp rendering and token-exact audit completed.
 
 ## First choices
 
@@ -14,7 +73,7 @@ Downloaded examples under `runs/source-research-20260928/trajectory-samples/` ar
 3. **Later:** QMSum needs a reviewed summary oracle; FinQA needs a unit/answer consistency audit.
 
 Existing published Workspace-Bench and MuDABench cases stay evaluation-only, following
-[DIRECTORY_REDUCERS.md](DIRECTORY_REDUCERS.md). No new source has entered collection or training.
+[DIRECTORY_REDUCERS.md](DIRECTORY_REDUCERS.md). The new pilot is in the static data path, not the live teacher queue.
 
 ## Existing trajectories: potential to avoid teacher generation
 
@@ -102,7 +161,7 @@ their schema supports the adaptations above, but this is not a full corpus quali
 
 ## Next concrete work
 
-Build a read-only portable-coverage scanner for successful Nebius/SWE-smith tool traces, retaining explicit
-rejection reasons. Then implement and validate the smallest faithful adapter for the compatible subset.
-In parallel curriculum planning, design an initial WorkBench/TAT-QA/CommitPackFT pilot with gold/state
-validation and grouped splits before scheduling model generation. No source counts above are target quotas.
+Broaden the bounded trajectory scan for genuine multi-step portable edits; add pinned Nebius task/environment
+joins before importing those traces. Collect reasoning trajectories on the new QA/workflow cases using the
+existing teacher generation machinery. Expand source task coverage after reviewing pilot rejection ledgers;
+do not infer full-trajectory compatibility from independently reconstructed file operations.
