@@ -110,7 +110,13 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
 
 test('mixed CSV and customer messages case replays a checked aggregate', async () => {
   const { folderMixed } = await import('../scripts/inline-curriculum/folder-families.mjs');
+  const { quarantineReason } = await import('../dist/teacher/curriculum-policy.js');
   const [record] = folderMixed(3, 0);
+  assert.equal(record.curriculum.payment_scope_version, 2);
+  assert.match(record.semantics.files[record.semantics.root], /direct debits and cash withdrawals/);
+  assert.equal(quarantineReason(record), undefined);
+  const legacy = structuredClone(record); delete legacy.curriculum.payment_scope_version;
+  assert.equal(quarantineReason(legacy), 'legacy_payment_scope');
   assert.ok(record.semantics.folder_files['payments.csv']);
   const messages = Object.entries(record.semantics.folder_files).filter(([path]) => path.startsWith('messages/'));
   assert.ok(messages.length >= 20);

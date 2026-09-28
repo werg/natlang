@@ -52,6 +52,8 @@ const labels = await Promise.all(files.map(file => nl<'keep' | 'archive'>\`Class
 ` : 'For many files, read or search their contents, make their judgments here, and do exact bookkeeping in code.\n'}
 For subfolders, use a reducer: await Promise.all((await folder.folders('teams/*')).map(dir => dir.apply(summarizeTeam)));
 Each child sees only its selected root. A small file's contents appear in the child's opening; otherwise the child must read or search before answering.
+For a large file, pass its handle to the child and let it search/read relevant portions. Keep the child's instructions short rather than interpolating the entire file into them.
+For a table joined to message files, parse the original table in code and join by the identifier. Keep each judgment paired with that identifier; use the original amounts rather than retyping a second amount table.
 `;
 }
 

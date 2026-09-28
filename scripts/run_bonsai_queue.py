@@ -54,7 +54,8 @@ def partial_metrics(entry):
     return metrics
 
 
-def run_queue(queue, journal, runtime, seconds=600):
+def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
+              provider=None, model_concurrency=2, execution_plans=False, reasoning_effort='low'):
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
     attempted = set()
@@ -72,10 +73,14 @@ def run_queue(queue, journal, runtime, seconds=600):
             continue
         command = ['node', '--max-old-space-size=3000', str(runtime / 'dist/teacher/cli.js'),
                    entry['source'], entry['jobs'], entry['output'], '--start', str(entry['index']), '--limit', '1',
-                   '--model-id', 'Ternary-Bonsai-2-27B', '--server', 'http://127.0.0.1:8081',
+                   '--model-id', model_id,
                    '--root-seed', str(entry['seed']), '--workers', '1', '--max-turns', '20',
-                   '--model-concurrency', '2', '--max-model-requests', str(entry.get('max_model_requests', 128)), '--kv-tokens', '40000',
+                   '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', '1', '--file-tools', entry.get('surface', 'all')]
+        command += ['--provider', provider, '--context-tokens', '16384', '--reasoning-effort', reasoning_effort] if provider else [
+            '--server', 'http://127.0.0.1:8081', '--kv-tokens', '40000']
+        if execution_plans:
+            command.append('--execution-plans')
         case_seconds = entry.get('case_seconds', seconds)
         if not isinstance(case_seconds, int) or case_seconds < 1:
             raise ValueError('entry case_seconds must be a positive integer')
@@ -129,10 +134,18 @@ if __name__ == '__main__':
     parser.add_argument('journal')
     parser.add_argument('--runtime', required=True)
     parser.add_argument('--case-seconds', type=int, default=600)
+    parser.add_argument('--model-id', default='Ternary-Bonsai-2-27B')
+    parser.add_argument('--provider')
+    parser.add_argument('--model-concurrency', type=int, default=2)
+    parser.add_argument('--execution-plans', action='store_true')
+    parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
     if args.case_seconds < 1:
         parser.error('--case-seconds must be positive')
+    if args.model_concurrency < 1:
+        parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
-    run_queue(args.queue, args.journal, args.runtime, args.case_seconds)
+    run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
+              args.model_concurrency, args.execution_plans, args.reasoning_effort)

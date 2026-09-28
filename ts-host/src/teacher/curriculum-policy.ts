@@ -10,7 +10,8 @@ export function retiredFamily(record: ProgramRecord): string | undefined {
 
 /** Source counterfactuals whose labels cannot be established by deleting an annotated proof leaf. */
 export function quarantineReason(record: ProgramRecord): string | undefined {
-  const curriculum = record.curriculum as { family?: string; variant?: string; answer_evidence?: string[] } | undefined;
+  const curriculum = record.curriculum as { family?: string; variant?: string; answer_evidence?: string[];
+    payment_scope_version?: number } | undefined;
   if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
     return 'unverified_counterfactual';
   if (curriculum?.family === 'folder_extract' && (!record.semantics.files_oracle?.quote_sources ||
@@ -23,4 +24,6 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
     return 'legacy_move_contract';
   if (curriculum?.family === 'folder_find' && !curriculum.answer_evidence?.length)
     return 'legacy_article_evidence_policy';
+  if (curriculum?.family === 'folder_mixed' && record.dataset === 'banking77' && curriculum.payment_scope_version !== 2)
+    return 'legacy_payment_scope';
 }

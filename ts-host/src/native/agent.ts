@@ -397,7 +397,9 @@ export class NativeToolAgent {
     const names = [...lam.type.params.fields.map(field => field.name), ...Object.keys(lam.captures ?? {}),
       ...Object.keys(lam.codebase), ...Object.keys(session.availableServices())];
     return [`You are inside this call: ${signature}`, ...scopeTypes, '', 'Instructions:', program,
-      ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller.`] : []),
+      ...(writable.length ? ['', `Assignments to ${writable.join(', ')} are written back to the caller and can change what sibling calls see. ` +
+        'For a judgment, read these values without changing them; use new local variables for calculations. ' +
+        'Write them only when the instructions require an update.'] : []),
       ...(names.length ? ['', `In eval you can use ${[...new Set(names)].join(', ')}; the first eval below declares them.`] : []),
       '', canGenerateNl(session.runtime.frame) ? BUILT_INS_LINE : NL_DEPTH_LIMIT_BUILT_INS_LINE,
     ].join('\n');

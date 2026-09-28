@@ -524,23 +524,34 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       request: config.request });
     try {
     let sent = 0, exhausted = false;
-    const admittedSend = async (request: ModelTurnRequest, sender = send) => {
+    const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false) => {
       if (signal?.aborted) throw new Error('collection cancelled');
-      if (config.maxModelRequests && sent >= config.maxModelRequests) {
-        exhausted = true;
-        throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
-      }
-      sent++;
-      if (slots) await slots.acquire(1);
+      if (slots && !ownsSlot) await slots.acquire(1);
       try {
-        if (signal?.aborted || exhausted) throw new Error('collection cancelled or budget exhausted');
+        if (signal?.aborted) throw new Error('collection cancelled');
         const need = requestTokens(request);
         if (kv) await kv.acquire(need);
-        try { return await sender(request); } finally { if (kv) kv.release(need); }
-      } finally { if (slots) slots.release(1); }
+        try {
+          if (signal?.aborted) throw new Error('collection cancelled');
+          // Waiting work has not sent a request. Count only after both capacity gates admit it.
+          if (config.maxModelRequests && sent >= config.maxModelRequests) {
+            exhausted = true;
+            throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
+          }
+          sent++;
+          return await sender(request);
+        } finally { if (kv) kv.release(need); }
+      } finally { if (slots && !ownsSlot) slots.release(1); }
     };
-    const transport = config.executionPlans ? withExecutionPlans(admittedSend,
-      { maxTokens: config.executionPlanTokens }) : admittedSend;
+    const teacherSend = (request: ModelTurnRequest) => admittedSend(request, send, true);
+    const teacherTurn = config.executionPlans ? withExecutionPlans(teacherSend,
+      { maxTokens: config.executionPlanTokens }) : teacherSend;
+    const transport = async (request: ModelTurnRequest) => {
+      // Finish a plan/action pair before admitting another sibling's turn. Otherwise a large
+      // Promise.all can spend the entire budget on plans without saving any completed actions.
+      if (slots) await slots.acquire(1);
+      try { return await teacherTurn(request); } finally { if (slots) slots.release(1); }
+    };
     const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest) => {
       await (judgeReady ??= judgeSession.prepare());
       return judgeSession.turn(request);
@@ -555,6 +566,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // concurrently, so their requests can reach the model in a different order after a restart. A request with no
     // unused journal entry is decoded live.
     const unused = new Map<string, PartialJob['turns']>();
+    let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
       const requestSha256 = sha256(canonical(request));
@@ -571,7 +583,9 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
         // The response is durable before its actions execute. A restart can
         // replay it into the deterministic frozen harness without another decode.
-        await writeAtomic(partialPath, JSON.stringify(partial) + '\n');
+        // Atomic rename alone does not order concurrent snapshots: an older write can finish last.
+        journalWrites = journalWrites.then(() => writeAtomic(partialPath, JSON.stringify(partial) + '\n'));
+        await journalWrites;
       }
       trajectory.push(trajectoryTurn(request, response));
       return response;

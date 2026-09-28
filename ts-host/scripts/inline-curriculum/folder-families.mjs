@@ -125,7 +125,7 @@ export function folderMixed(seed, index, split = 'train') {
   const files = Object.fromEntries(folder.listFiles().map(file =>
     [file.path, new TextDecoder().decode(folder.readBytesSync(file.path))]));
   const total = rows.filter(row => row.disputed).reduce((sum, row) => sum + row.amount, 0);
-  const question = 'Is this customer message about a charge they do not recognise, a duplicate charge, or an extra charge?';
+  const question = 'Is this customer message about an unrecognised card payment, direct debit, or cash withdrawal, a duplicate charge, or an extra charge?';
   const code = `const lines = (await folder.file('payments.csv').readText()).trim().split(/\\r?\\n/).slice(1);\n` +
     `const verdicts = await Promise.all(lines.map(async line => {\n` +
     `  const [id, amount] = line.split(',');\n` +
@@ -142,13 +142,15 @@ export function folderMixed(seed, index, split = 'train') {
     })) },
     root: { name: 'sum_disputed_payments', kind: 'directory-reducer', args: {}, returns: 'number',
       instructions: 'payments.csv lists payments; messages/<id>.md is the customer\'s message about payment <id>. ' +
-        'Return the total amount of the payments whose message is about a charge the customer does not recognise, a charge ' +
-        'made twice, or an extra charge; not the payments whose message is about something else.' },
+        'Payments here include card payments, direct debits and cash withdrawals. Return the total amount of payments whose ' +
+        'message is about an unrecognised card payment, direct debit or cash withdrawal, a charge made twice, or an extra charge; ' +
+        'not the payments whose message is about something else.' },
     folderFiles: files, expectedFiles: files, inputs: {}, expected: total, split });
   record.semantics.oracle = { level: 'agreement', threshold: AGREEMENT };
   record.license = SOURCES.banking77.license;
   record.gold_sources = ['banking77-labels'];
   record.dataset = 'banking77';
+  record.curriculum.payment_scope_version = 2;
   record.dataset_records = rows.map(row => row.message.id);
   record.generation.layout = { id: 'id', table: 'payments.csv', writable: 'table' };
   return [record];

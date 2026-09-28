@@ -46,3 +46,28 @@ print(json.dumps(statuses))
 `], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
   assert.deepEqual(JSON.parse(output.trim().split('\n').at(-1)), ['timeout', 'inactivity_timeout']);
 });
+
+test('the same bounded supervisor configures one Luna request including planning without the local server', () => {
+  const output = execFileSync('python3', ['-c', `
+import importlib.util,json,tempfile,pathlib
+from unittest.mock import patch,MagicMock
+spec=importlib.util.spec_from_file_location('queue','../scripts/run_bonsai_queue.py')
+queue=importlib.util.module_from_spec(spec);spec.loader.exec_module(queue)
+with tempfile.TemporaryDirectory() as d:
+    p=pathlib.Path(d);child=MagicMock();child.wait.return_value=0
+    entry=dict(key='luna',index=0,jobs=d,source='source',output='out',seed=1,log=str(p/'log'),max_model_requests=568)
+    (p/'queue').write_text(json.dumps(entry)+'\\n')
+    with patch.object(queue.subprocess,'Popen',return_value=child) as start:
+        queue.run_queue(p/'queue',p/'journal',p,1200,model_id='gpt-6-luna',provider='openai-codex',model_concurrency=1,execution_plans=True)
+    print(json.dumps(start.call_args.args[0]))
+`], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
+  const command = JSON.parse(output.trim().split('\n').at(-1));
+  const value = flag => command[command.indexOf(flag) + 1];
+  assert.equal(value('--workers'), '1');
+  assert.equal(value('--model-concurrency'), '1');
+  assert.equal(value('--model-id'), 'gpt-6-luna');
+  assert.equal(value('--provider'), 'openai-codex');
+  assert.equal(value('--max-model-requests'), '568');
+  assert.ok(command.includes('--execution-plans'));
+  assert.ok(!command.includes('--server'));
+});

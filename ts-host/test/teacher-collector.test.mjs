@@ -314,3 +314,45 @@ test('a teacher cannot self-grade and the judge shares the whole-case request bu
     assert.equal(await readFile(options.output, 'utf8'), '');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('parallel judgments complete plan/action pairs and retain durable progress at the request cap', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-paired-plans-'));
+  const kinds = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const payload = JSON.parse(body), planning = payload.tools[0].function.name === 'execution_plan';
+      kinds.push(planning ? 'plan' : 'action');
+      const child = String(payload.messages[1].content).includes('nl@');
+      const started = payload.messages.some(m => m.role === 'tool' && String(m.content).includes('Staged'));
+      const call = planning ? ['execution_plan', { plan: 'Read the argument and return one; aggregate in the root.' }] :
+        child ? ['return_result', { status: 'success', value: 1 }] : started ? ['return_result', { status: 'success', value: 3 }] :
+        ['eval', { code: 'const values = await Promise.all([1,2,3].map(item => nl<number>`Return one.`(item))); return values.reduce((sum, value) => sum + value, 0);' }];
+      const message = { role: 'assistant', content: '', tool_calls: [{ id: 'paired', type: 'function',
+        function: { name: call[0], arguments: JSON.stringify(call[1]) } }] };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 4 } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const item = { index: 0, record: record('paired-plans') };
+    item.record.semantics.expected = 3;
+    const options = { ...config(dir), workers: 1, endpoint: `http://127.0.0.1:${server.address().port}`,
+      systemPrompt: defaultSystemPrompt, modelConcurrency: 1, executionPlans: true, maxModelRequests: 6,
+      transportRetries: 0, toolSurfaceSha256: await defaultToolSurfaceHash() };
+    const stopped = await collectBatch([item], options, nativeJobRunner(options));
+    assert.deepEqual(stopped.missing, [0]);
+    assert.deepEqual(kinds, ['plan','action','plan','action','plan','action']);
+    const partial = JSON.parse(await readFile(join(options.jobs, `${jobKey(item)}.partial.json`), 'utf8'));
+    assert.equal(partial.turns.length, 3, 'root plus two finished child actions survive exhaustion');
+    assert.equal(partial.turns.filter(t => t.response.calls[0][0] === 'return_result').length, 2);
+    kinds.length = 0;
+    const resumed = await collectBatch([item], options, nativeJobRunner(options));
+    assert.equal(resumed.completed, 1, 'saved child decisions resume without spending the budget again');
+    assert.deepEqual(kinds, ['plan','action','plan','action']);
+    const row = JSON.parse((await readFile(options.output, 'utf8')).trim());
+    assert.equal(row.outcome.accepted, true);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
