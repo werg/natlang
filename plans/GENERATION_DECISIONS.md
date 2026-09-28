@@ -130,8 +130,9 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   planted eval. Replaying the original rejected action must still fail before it can become a preference pair.
 - Compatibility decision: seeded handoff provenance now carries `seeded_handoff_version: 2`; reuse checks reject
   older incompatible rows and partial journals. Other handoffs keep their existing reuse compatibility.
-- Filtered ten retired entries from the original 553-entry recovery queue, producing
-  `runs/bonsai-recovery/queue-v2.jsonl` with 543 eligible entries before completed-attempt skips. Removed entries are
+- The complete 833-entry handoff shard contains ten retired exercises; seven were in the unfinished recovery queue.
+  Filtered those seven from the original 553-entry recovery queue, producing
+  `runs/bonsai-recovery/queue-v2.jsonl` with 546 eligible entries before completed-attempt skips. Removed entries are
   recorded at `runs/handoff-investigation/retired-queue-entries.json`; original shards, queue and results remain
   intact. Existing timeout attempts stay deferred; they are not silently marked as model reasoning failures.
 - Restarted the single Bonsai supervisor on frozen `runs/bonsai-recovery/runtime-v3`, with the filtered queue and

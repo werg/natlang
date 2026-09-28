@@ -1,10 +1,10 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
 > **2026-09-28 rejection investigation:** Luna remains stopped. Current Bonsai queue is
-> `runs/bonsai-recovery/queue-v2.jsonl` (543 eligible entries before journal skips), using
+> `runs/bonsai-recovery/queue-v2.jsonl` (546 eligible entries before journal skips), using
 > `runs/bonsai-recovery/runtime-v3` and the existing `runs/bonsai-recovery/journal.jsonl`.
 > Seven suspicious rejections replayed with correct answers: all belonged to retired `inline_type_repair`.
-> Ten retired entries were removed from the queue; raw evidence remains excluded from training.
+> Seven retired entries were removed from the queue; raw evidence remains excluded from training.
 > Seeded handoffs now let a teacher replace the planted failure without reinjecting it. Seeded handoff
 > provenance version 2 prevents reuse of incompatible old rows/partials. See the latest decision log entry.
 
