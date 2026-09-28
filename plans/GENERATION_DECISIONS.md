@@ -310,3 +310,21 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   all 154 records load and the collector is live. Provider prepare confirms credentials and exact Luna model
   selection. Source/selection/deferred files and summary are in runs/luna-repair-20260928/; the audit is in
   runs/rejection-audit-20260928/luna-repair-current/. Do not regenerate the shard while this collector is active.
+
+## 2026-09-28 repair-worker recovery and yield checkpoint
+
+- Luna completed 3 tasks: 1 accepted relational multihop repair (also passes current training admission), 2 wrong
+  answers (late-bound grants and payment sum). Two other cases reached the 256-request whole-case budget and remain
+  errors/partials, not negatives. Then a ScienceWorld spawn ENOENT killed the collector: frozen runtime-v7 resolved
+  vendor beside the frozen directory, where no dependency mapping existed, and WorldBridge lacked an error listener.
+- Freeze setup now maps the repository's vendor dependency tree beside frozen runtimes and refuses a conflicting
+  mapping. Shared vendor symlink repairs existing Bonsai/Luna runtime-v7 paths without changing frozen source files.
+  WorldBridge now rejects and clears pending requests on process error/exit instead of an unhandled process crash.
+  Main Node/browser build and browser type checks pass; existing world-service declaration regression passes.
+  A missing-interpreter check now rejects the case with ENOENT while the collector process stays alive.
+- Luna briefly resumed on repaired v7, then migrated by exact PID 278166 to frozen runtime-v8 (source c024b10;
+  manifest hashes verified). One worker / one request in flight remains enforced. Current PID 278800 skips its
+  three completed jobs and resumes the remaining 151, with saved partial replies preserved.
+- Bonsai remains live on runtime-v7 / queue-v5, server health OK. Checkpoint: 42 finished attempts / 517 pending.
+  Seventeen recent repair results pass task contracts (including FOLIO 142); this does not certify all as final
+  training rows. Handoff 802 fails; hard deadlines and quality-review exclusions remain distinct from model negatives.
