@@ -275,3 +275,19 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   After folder-guidance change, builds/type checks and 17 folder/handoff/oracle tests pass. Reviewed all eight SMS
   mismatches against actual source text: clear personal vs prize/premium-service distinctions; no contradictory gold
   found in those items. Raw histories and exclusions remain the authoritative audit trail.
+
+## 2026-09-28 Bonsai status checkpoint after queue-v5 migration
+
+- Supervisor PID 213073 remains live on frozen runtime-v7; server health is OK. Queue-v5 has 23 finished attempts
+  (18 collector completions, 5 deadlines), 536 pending including the current FOLIO repair 142. Completion does not
+  imply task correctness or training admission. Luna remains stopped; no training started.
+- SMS repair finished in 147 seconds but preserved all eight wrong destinations. It checked counts rather than
+  re-evaluating contents; replay repair correctness is fixed, but this handoff did not improve the task result.
+- CUAD extraction hit its 880-second deadline after 53 fresh replies / 13,759 completion tokens. The last saved
+  steps show clause extraction/verification and preparation for the full batch, not frozen transport. Raw partial
+  remains available; no timeout negative or partial output is admitted.
+- Mixed payment task finished in 354 seconds with 4,064 against 4,708 and is excluded. Its trace shows handwritten
+  amount transcription and repeated aggregate code, plus uncertain category choices. Investigate source-linked
+  bookkeeping separately from category semantics; do not describe this as a server stall.
+- Pending independent rewrite/answer-equivalence judgments remain held out. These latest fresh probes have not
+  produced an accepted training row; infrastructure is progressing, task quality still needs work.
