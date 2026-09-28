@@ -291,3 +291,22 @@ Re-audit: `runs/folder/gen1.admission.log`. No model training started.
   bookkeeping separately from category semantics; do not describe this as a server stall.
 - Pending independent rewrite/answer-equivalence judgments remain held out. These latest fresh probes have not
   produced an accepted training row; infrastructure is progressing, task quality still needs work.
+
+## 2026-09-28 single Luna repair worker authorized and started
+
+- Latest user request explicitly restarts one Luna worker, superseding the earlier stop instruction. Started
+  gpt-6-luna on openai-codex from frozen runtime-v7, PID 237444, one collection worker / model concurrency 1,
+  including children. 16,384 context tokens, 20 turns per call, 256 whole-case requests, low reasoning and
+  execution plans. Bonsai supervisor PID 213073 continues. No model training or independent grader started.
+- Current raw audit: 4,448 results, 914 task rejections, 1,469 admission rejections, 585 collector errors.
+  These are historical attempts, not unique unresolved tasks. Deduplicated by original program ID, removed
+  already admitted/solved cases, retired/unverified contracts and quality-pending rows. Repeated handoffs collapse
+  into root cases. Luna reruns complete tasks, so earlier wrong file placements can be reconsidered.
+- 157 potential unresolved cases: 152 task-failure candidates and 5 collector/deadline-only candidates. Launch
+  preflight found 12 legacy IR records; the existing migration upgraded 9 and validated their root definitions.
+  Three source-case records have no convertible lambda root and are preserved in deferred.jsonl for reconstruction
+  (order_saga:3, shopkeeper:0, webserver:0). The runnable queue is 154: 149 task failures and 5 infrastructure cases.
+- First launch stopped before inference because the whole shard contained legacy IR. After migration/filtering,
+  all 154 records load and the collector is live. Provider prepare confirms credentials and exact Luna model
+  selection. Source/selection/deferred files and summary are in runs/luna-repair-20260928/; the audit is in
+  runs/rejection-audit-20260928/luna-repair-current/. Do not regenerate the shard while this collector is active.

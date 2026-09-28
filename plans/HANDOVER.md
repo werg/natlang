@@ -1,5 +1,13 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Latest user authorization (2026-09-28): restart exactly one Luna repair worker.**
+> This supersedes the earlier stop instruction. Use the current audited, deduplicated repair queue in
+> `runs/luna-repair-20260928/`, with frozen runtime-v7, one collection worker and one model request in flight.
+> Bonsai continues independently. Quality-pending, retired and unverified-contract cases stay excluded.
+> Current worker PID 237444: 154 runnable repairs (149 task failures, 5 infrastructure-only), plus 3 legacy
+> source cases needing reconstruction in deferred.jsonl. Nine other legacy tasks migrated successfully.
+> Source shard is immutable while the collector runs; collector.log, jobs/ and summary.json record progress.
+
 > **Latest 2026-09-28 checkpoint:** use `runs/bonsai-recovery/queue-v5.jsonl` and frozen `runtime-v7`.
 > It prioritizes the verified SMS repair handoff; 559 entries / 20 completed attempts / 539 pending at migration.
 > Read DATA_QUALITY.md's fresh checkpoint. Token usage is now preserved in replay, fixing false handoff rejection
@@ -64,7 +72,8 @@ stopped. Nothing is lost by restarting any collector below with the same argumen
   Network is on by default in every tool. Browser parity is required; natlang runs in a worker in the browser.
 - No junk data: delete backups, moved-aside dirs and superseded builds once their replacement is verified.
 - Fix issues generally, not narrowly. Tool shapes are chosen by what our models do best (measured), nothing else.
-- **Luna generation remains stopped at the user's request.** Bonsai owns the bounded recovery queue.
+- **One Luna repair worker is authorized by the latest user request.** Keep Luna at one collection worker and
+  one model request in flight, including children. Bonsai continues the bounded recovery queue.
 - Student: Sharp-Spark-X2.5-4B, trained at max-len 8192 (QLoRA, see `scripts/train_lora.py`, 8 GB GPU, 14 GB RAM).
   The user chose to keep generating before training.
 - Another agent works in this checkout at times (it built the directory-reducer runtime). Check `git status` before
