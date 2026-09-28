@@ -7,13 +7,41 @@ import { executeProgram } from '../dist/teacher/collector.js';
 import { admitRow, replayReference } from '../dist/teacher/curriculum.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { idempotentRetry } from '../scripts/inline-curriculum/followup.mjs';
-import { commaqaArithmetic, commaqaNumeric, commaqaQuestion, numericNationalityFact } from '../scripts/inline-curriculum/sources-ai2.mjs';
+import { commaqaArithmetic, commaqaNumeric, commaqaQuestion, numericNationalityFact, explicitRelationFact, explicitStoreSchema } from '../scripts/inline-curriculum/sources-ai2.mjs';
 import { factStore } from '../scripts/inline-curriculum/logic.mjs';
 import { externalModule } from '../dist/native/external.js';
 import { auditEvidence } from '../scripts/inline-curriculum/audit-commaqa-evidence.mjs';
 import { recursionRewrite } from '../scripts/inline-curriculum/failure.mjs';
 import { modernizeContracts } from '../scripts/inline-curriculum/modernize-contracts.mjs';
 import { eventRetry } from '../scripts/inline-curriculum/failure.mjs';
+
+test('movie facts expose every source relation with consistent labels and entity order', () => {
+  const labels = { table_directed: ['movie', 'director'], table_maward: ['movie', 'movie award'],
+    table_writer: ['movie', 'writer'], text_writer: ['movie', 'writer'], table_year: ['movie', 'release year'], text_actor: ['movie', 'actor'],
+    text_dob: ['person', 'birth year'], text_nation: ['person', 'country'],
+    text_paward: ['person', 'personal award'], table_paward: ['person', 'personal award'], text_produced: ['movie', 'producer'] };
+  for (const [predicate, [left, right]] of Object.entries(labels))
+    assert.equal(explicitRelationFact(`${predicate}(One, Two)`), `${left}: One ; ${right}: Two.`);
+  assert.throws(() => explicitRelationFact('unknown(One, Two)'), /unsupported/);
+});
+
+test('movie schema derives specialist ownership from the actual world', () => {
+  assert.equal(explicitStoreSchema(['table_writer', 'text_paward']),
+    'table_expert holds movie/writer credits. text_expert holds personal awards.');
+  assert.equal(explicitStoreSchema(['text_writer', 'table_paward']),
+    'table_expert holds personal awards. text_expert holds movie/writer credits.');
+});
+
+test('board migration restarts exactly-once retries with irreversible repeated-write prefixes', () => {
+  const original = { id: 'board', source_revisions: [], curriculum: { family: 'event_retry', family_version: 2 },
+    semantics: { files: {}, services: { board: 'const REJECT = false;' } },
+    handoff: { prefix: [[{ calls: [['eval', { code: 'await board.commit_move({});' }]] },
+      { calls: [['eval', { code: 'await board.commit_move({});' }]] }]] } };
+  const { record, changes } = modernizeContracts(original);
+  assert.equal(record.handoff, undefined);
+  assert.match(changes[0], /irreversible repeated writes/);
+  assert.ok(original.handoff, 'historical input remains intact');
+});
 
 test('numeric evidence audit detects source mismatches independently of arithmetic', () => {
   const world = {
@@ -139,7 +167,7 @@ for (const [variant, build] of [['numeric', commaqaNumeric], ['explicit', commaq
   const available = existsSync(new URL(`../../vendor/datasets/commaqa/v1/commaqa_${variant}`, import.meta.url));
   for (const index of [0, 1, 2, 3, 4, 5]) test(`CommaQA ${variant} ${index}: source reference uses real arithmetic and scoped specialists`, { skip: !available }, async () => {
     const [record] = build(7, index);
-    assert.equal(record.curriculum.family_version, 3);
+    assert.equal(record.curriculum.family_version, variant === 'numeric' ? 3 : 4);
     assert.match(record.semantics.files['answer_question/text_expert.nl'], /measurements as strings/);
     const result = await replayReference(record, TOOLS_PROMPT);
     assert.equal(result.run.outcome.accepted, true, JSON.stringify(result.run.outcome));

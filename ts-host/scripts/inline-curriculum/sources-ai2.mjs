@@ -211,11 +211,13 @@ function commaqaRows(variant = 'explicit') {
       JSON.parse(readFileSync(join(dir, `${name}.json`), 'utf8')).forEach((world, w) => {
         // per_fact_context maps each knowledge-base fact to the sentence that renders it.
         const rendered = Object.entries(world.per_fact_context);
-        const text = rendered.filter(([fact]) => fact.startsWith('text_')).map(([, sentence]) => sentence);
+        const text = rendered.filter(([fact]) => fact.startsWith('text_'))
+          .map(([fact, sentence]) => variant === 'explicit' ? explicitRelationFact(fact) : sentence);
         // The numeric source's table templates invert discus/javelin. Render from the original predicate instead.
         const tables = rendered.filter(([fact]) => fact.startsWith('table_'))
-          .map(([fact, sentence]) => variant === 'numeric' ? numericNationalityFact(fact) : sentence);
-        world.qa_pairs.forEach((qa, q) => rows.push({ id: `${name}:${w}:${q}`, world: `${name}:${w}`, split, qa, text, tables }));
+          .map(([fact]) => variant === 'numeric' ? numericNationalityFact(fact) : explicitRelationFact(fact));
+        const schema = variant === 'explicit' ? explicitStoreSchema(Object.keys(world.kb)) : undefined;
+        world.qa_pairs.forEach((qa, q) => rows.push({ id: `${name}:${w}:${q}`, world: `${name}:${w}`, split, qa, text, tables, schema }));
       });
     }
     return rows;
@@ -226,6 +228,35 @@ export function numericNationalityFact(fact) {
   const match = /^table_nation([dj])\(([^,]+), (.+)\)$/.exec(fact);
   if (!match) throw new Error(`unsupported CommaQA nationality fact: ${fact}`);
   return `athlete: ${match[2]} ; country: ${match[3]} ; sport: ${match[1] === 'd' ? 'Discus' : 'Javelin'} Throw.`;
+}
+
+/** Canonical source triples retain complete relation identity without relying on surface synonyms. */
+export function explicitRelationFact(fact) {
+  const match = /^(table_directed|table_maward|table_writer|text_writer|table_paward|table_year|text_actor|text_dob|text_nation|text_paward|text_produced)\(([^,]+), (.+)\)$/.exec(fact);
+  if (!match) throw new Error(`unsupported CommaQA movie fact: ${fact}`);
+  const labels = {
+    table_directed: ['movie', 'director'], table_maward: ['movie', 'movie award'],
+    table_writer: ['movie', 'writer'], text_writer: ['movie', 'writer'], table_year: ['movie', 'release year'],
+    text_actor: ['movie', 'actor'], text_dob: ['person', 'birth year'],
+    text_nation: ['person', 'country'], text_paward: ['person', 'personal award'], table_paward: ['person', 'personal award'],
+    text_produced: ['movie', 'producer'],
+  }[match[1]];
+  return `${labels[0]}: ${match[2]} ; ${labels[1]}: ${match[3]}.`;
+}
+
+/** Writer and personal-award relations move between stores across source worlds. */
+export function explicitStoreSchema(predicates) {
+  const names = { directed: 'movie/director credits', maward: 'movie awards', writer: 'movie/writer credits',
+    year: 'movie release years', actor: 'movie/actor credits', dob: 'person birth years',
+    nation: 'person countries', paward: 'personal awards', produced: 'movie/producer credits' };
+  return ['table', 'text'].map(store => {
+    const relations = predicates.filter(p => p.startsWith(`${store}_`)).map(p => {
+      const name = names[p.slice(store.length + 1)];
+      if (!name) throw new Error(`unsupported CommaQA relation: ${p}`);
+      return name;
+    });
+    return `${store}_expert holds ${relations.join(', ')}.`;
+  }).join(' ');
 }
 
 /**
@@ -306,8 +337,9 @@ export function commaqaQuestion(seed, index, variant = 'explicit', sourceId) {
     instructions: `Answer question using only the ${what}. Start with ${source}.search(query) for a named entity, country, year or sport; it returns all literal matches. Use ${source}.page(n), for n = 1 through ${source}.pages(), when a full scan is needed. A shortened display is not the complete store. Return only the matching names or requested measurements as strings, preserving numeric values; do not add commentary to the list. Do not require facts from the other specialist's store. An empty list means the complete local store contains no answer; after checking the relevant facts, return that result rather than repeating the same search.` });
   const family = variant === 'explicit' ? 'commaqa_question' : 'commaqa_numeric';
   const schema = variant === 'numeric' ? 'The tables hold athlete nationality and sport; the passages hold discus and javelin measurements. ' :
-    'The text passages hold people\'s birth years, nationalities, and movies they acted in, wrote or produced. The tables hold movie directors, release years, movie awards and personal awards. A country is not a movie; distinguish movie awards from a person\'s awards. ';
-  const record = curriculumCase({ family, familyVersion: 3, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
+    `${row.schema} Facts use consistent field names. Identify each noun's role in the original question before choosing a local query: people from a country means nationality, not a movie title. Ask for one relation at a time: obtain names first, then their movies, then any requested movie awards. Request and return plain values, not combined person/movie descriptions. Inspect every matching fact for an entity; surface wording variants such as "produced" and "one of the producers" express the same credit. `;
+  const familyVersion = variant === 'numeric' ? 3 : 4;
+  const record = curriculumCase({ family, familyVersion, shape: row.id.replace(/:/g, '_'), variant: 'q', splitGroup: `commaqa:${variant}:${row.world}`,
     split: row.split, slice: 'nested_scoped', domain: 'relational', mode: 'single_call', inline: 'avoid', named: 'required',
     worldSemantics: 'closed_world',
     evidence: { world: row.qa.facts_used ?? [], retrieved: [], background: [`source: CommaQA ${variant} ${SOURCES.commaqa.revision} ${row.id}`,
@@ -327,7 +359,7 @@ export function commaqaQuestion(seed, index, variant = 'explicit', sourceId) {
     },
     inputs: { question: row.qa.question }, expected: answer });
   record.semantics.files[record.semantics.root] += '\n' + schema;
-  record.generation.source_evidence_version = 3;
+  record.generation.source_evidence_version = familyVersion;
   if (variant === 'numeric') record.generation.source_annotation_repair = {
     kind: 'numeric_nationality_sport', authority: 'original KB predicates and pred_lang_config',
     note: 'Original table sentences invert sports. Canonical table rows preserve athlete/country and map nationd to discus, nationj to javelin. Raw source cache is unchanged.' };

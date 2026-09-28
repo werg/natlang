@@ -1,5 +1,14 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly monitoring, 2026-09-29:** both workers active on v14; smaller Bonsai
+> server runs two slots, warm RAM about 2.5 GiB and GPU memory 598 MiB lower.
+> All four numeric CommaQA retries accepted. V15 prepared: movie specialist
+> ownership now derives from each world's stores; canonical relation facts,
+> v3 movie-schema hold, FOLIO 348/377 holds, and reset irreversible repeated-write
+> board prefixes. New queues Bonsai v12 / Luna v8. Actual rollout state/PIDs:
+> runs/bonsai-recovery/runtime-v15.rollout-state.json. Checkpoint and audits:
+> runs/hourly-check-20260929-0013/. Hourly check/sleep loop continues; no training.
+
 > **Bonsai RAM reduction queued (2026-09-28):** six server slots exceed the
 > current two-request collector. Launcher now defaults to two slots / 1.5 GiB
 > host prompt cache / 6 GiB memory ceiling, retaining 53k shared GPU KV.

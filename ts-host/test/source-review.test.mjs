@@ -34,6 +34,8 @@ test('FOLIO story holds cover single conclusions and legacy batches by source gr
     assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story162' } }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story56' } }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family }, source_groups: ['folio:story:8'] }), 'source_review_pending');
+    assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story348' } }), 'source_review_pending');
+    assert.equal(sourceReviewReason({ curriculum: { family }, source_groups: ['folio:story:377'] }), 'source_review_pending');
     assert.equal(sourceReviewReason({ curriculum: { family, shape: 'story999' } }), undefined);
   }
 });
@@ -42,4 +44,11 @@ test('criterion preservation guidance does not suggest new delegation at the dep
   assert.match(TOOLS_PROMPT, /preserve the parent's criterion and relevant context/);
   assert.match(TOOLS_PROMPT, /a question can express the same intent as a statement/);
   assert.doesNotMatch(TOOLS_PROMPT_AT_NL_DEPTH_LIMIT, /When delegating/);
+});
+
+test('movie schema version 3 is held until migrated to world-derived ownership', () => {
+  const record = { curriculum: { family: 'commaqa_question', family_version: 3 }, semantics: {} };
+  assert.equal(quarantineReason(record), 'unverified_movie_schema_contract');
+  record.curriculum.family_version = 4;
+  assert.equal(quarantineReason(record), undefined);
 });

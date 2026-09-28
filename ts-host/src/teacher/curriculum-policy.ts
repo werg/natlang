@@ -20,6 +20,8 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
     payment_scope_version?: number } | undefined;
   if (curriculum?.family === 'commaqa_numeric' && (curriculum.family_version ?? 1) < 3)
     return 'legacy_numeric_reference_contract';
+  if (curriculum?.family === 'commaqa_question' && curriculum.family_version === 3)
+    return 'unverified_movie_schema_contract';
   if (curriculum?.family === 'entailment_premises' && curriculum.variant === 'premise_removed')
     return 'unverified_counterfactual';
   if (curriculum?.family === 'folder_extract' && (!record.semantics.files_oracle?.quote_sources ||

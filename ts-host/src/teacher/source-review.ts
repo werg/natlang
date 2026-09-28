@@ -86,6 +86,18 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
     annotatedLabel: 'Czech person wrote a book in 1946=True', status: 'pending',
     reason: 'Publication in 1946 does not establish that the person wrote the book in 1946; the conclusion requires source adjudication.',
   },
+  {
+    dataset: 'folio', id: 'story:348', aliases: ['folio:story:348', 'story348'],
+    text: 'Someone is either a Yale student or a Harvard student.',
+    annotatedLabel: 'Susan college=Unknown; diet and diligent=True; no diet and diligent=False', status: 'pending',
+    reason: 'The source formalization universally quantifies an English existential. Someone being a student does not establish that Susan is a student.',
+  },
+  {
+    dataset: 'folio', id: 'story:377', aliases: ['folio:story:377', 'story377'],
+    text: 'People eat meat regularly or are vegetation.',
+    annotatedLabel: 'Jeremy busy=Unknown; busy or enjoys meat=True; conditional=False', status: 'pending',
+    reason: 'The source formalization interprets vegetation as vegetarian, joining it to another premise; the visible literal term does not establish that relation.',
+  },
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */

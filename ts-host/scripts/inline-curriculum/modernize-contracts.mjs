@@ -6,7 +6,8 @@ import { externalize } from './lib.mjs';
 export function modernizeContracts(original) {
   const record = structuredClone(original), changes = [], family = record.curriculum?.family;
   const semantics = record.semantics;
-  if (['commaqa_numeric', 'commaqa_question'].includes(family) && (record.curriculum.family_version ?? 1) < 3) {
+  const targetVersion = family === 'commaqa_question' ? 4 : 3;
+  if (['commaqa_numeric', 'commaqa_question'].includes(family) && (record.curriculum.family_version ?? 1) < targetVersion) {
     const sourceId = record.curriculum.evidence.background.join('\n').match(/(?:train|dev|test):\d+:\d+/)?.[0];
     if (!sourceId) throw new Error(`${record.id}: missing CommaQA source identity`);
     const [fresh] = commaqaQuestion(7, 0, family === 'commaqa_numeric' ? 'numeric' : 'explicit', sourceId);
@@ -16,10 +17,11 @@ export function modernizeContracts(original) {
     semantics.services = { ...semantics.services, ...fresh.semantics.services };
     semantics.service_scopes = { ...semantics.service_scopes, ...fresh.semantics.service_scopes };
     record.curriculum.reference = fresh.curriculum.reference;
-    record.curriculum.family_version = 3;
-    record.generation = { ...record.generation, source_evidence_version: 3,
+    record.curriculum.family_version = targetVersion;
+    record.generation = { ...record.generation, source_evidence_version: targetVersion,
       ...(fresh.generation.source_annotation_repair ? { source_annotation_repair: fresh.generation.source_annotation_repair } : {}) };
-    changes.push('correct source sports, literal retrieval and specialist schema');
+    changes.push(family === 'commaqa_numeric' ? 'correct source sports, literal retrieval and specialist schema' :
+      'canonical movie relations and corrected specialist schema');
   }
   if (family === 'idempotent_retry' && (record.curriculum.family_version ?? 1) < 2) {
     const [fresh] = idempotentRetry(7, 0);
@@ -33,6 +35,14 @@ export function modernizeContracts(original) {
     record.curriculum.family_version = 2;
     changes.push('board is an external service');
   }
+  if (family === 'event_retry' && semantics.services?.board?.includes('const REJECT = false;') && record.handoff) {
+    // This exact curriculum service has no undo and every commit increments its revision.
+    // A final-result handoff after repeated writes cannot satisfy its exactly-once contract.
+    const writes = record.handoff.prefix.flat().flatMap(turn => turn.calls ?? [])
+      .filter(([tool, args]) => tool === 'eval' && typeof args?.code === 'string')
+      .reduce((count, [, args]) => count + (args.code.match(/\bboard\.commit_move\s*\(/g)?.length ?? 0), 0);
+    if (writes > 1) changes.push('restart board handoff before irreversible repeated writes');
+  }
   if (record.family === 'cb_highlighter') {
     for (const [path, source] of Object.entries(semantics.files)) {
       if (!path.endsWith('/split_source.ts')) continue;
@@ -41,9 +51,9 @@ export function modernizeContracts(original) {
     }
   }
   if (changes.length) {
-    record.id += ':contracts-v3';
-    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/3'])];
-    record.generation = { ...record.generation, contract_migration: { version: 3, original_id: original.id,
+    record.id += ':contracts-v4';
+    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/4'])];
+    record.generation = { ...record.generation, contract_migration: { version: 4, original_id: original.id,
       reset_handoff: !!record.handoff, changes } };
     // Replaying source edits or incorrect specialist questions under new contracts would seed incompatible state.
     delete record.handoff;

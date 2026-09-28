@@ -195,3 +195,61 @@ It restores the original six-slot profile if the smaller server fails startup.
 Actual action/status is in restart.jsonl and state.json; after.json records the
 replacement server and supervisor. Luna continues independently. Launcher syntax
 and monitor compilation checked. No new generation worker or training started.
+
+## Hourly monitoring: 2026-09-29 00:13 Europe/Berlin
+
+The requested hourly monitor is active: wait roughly one hour, inspect both workers,
+review new failures independently, repair concrete problems, and repeat. No extra
+workers and no training. Checkpoint artifacts: runs/hourly-check-20260929-0013/.
+
+The smaller server restarted safely after handoff 118 finished. Bonsai supervisor
+465928 resumes the same v14 queue; Luna supervisor 425858 remains independent.
+After approximately 50 minutes of generation, host RSS is about 2.6 GiB and Docker
+usage 2.5 GiB, versus about 4–5 GiB before. New high-water mark about 3.4 GiB, no
+swap. GPU occupancy 7,157 versus 7,755 MiB (598 MiB less). This is an observed
+warm-process comparison, not a controlled throughput benchmark. before.json,
+after.json, restart.jsonl and warm-50min.json preserve the evidence.
+
+All four corrected numeric CommaQA retries now finish with accepted answers
+(16.4, 24.4, 19.8 and 22.2; 112, 12, 18 and 47 saved replies). The first still
+uses substantial redundant work; no claim that all inefficiency is solved.
+The movie-awards retry missed two titles because it matched “produced” but not
+“one of the producers.” The country query still misread nationality as a movie.
+
+**Further correction to our own schema:** writer and personal-award relations
+move between the table/text specialists across worlds. A fixed ownership list in
+v3 was wrong for some worlds. V4 derives ownership from the actual world KB and
+uses canonical relation labels, preserving entity order, all facts, source gold,
+splits and raw source caches. Audited 339,208 facts / 10,000 questions across all
+splits: zero missing entities/source facts. V3 movie schemas are conservatively
+held from exports until migration. Numeric v3 stays unchanged. Original surface
+sentences survive in the source cache; this intentionally changes model-visible
+movie evidence to make joins and complete retrieval easier.
+
+The board retry replayed three old writes before its sole fresh teacher decision.
+Its exact-once revision was already unrecoverable, so it did not test the new error
+receipts. Reviewed contract migration now restarts this exact curriculum's board
+handoffs from the root when their prefix contains repeated commit_move calls.
+The original handoff is preserved; these restarted attempts are root retries,
+not preference pairs on the old irreversible state. The exactly-once oracle is
+unchanged. No global delegation restriction was added.
+
+FOLIO 348 is now held: “Someone” becomes universal in the source formalization.
+FOLIO 377 is held: “vegetation” becomes “vegetarian,” enabling a missing relation.
+Other reviewed formal reasoning cases (346, 367, 395, 406) keep their labels;
+poor model reasoning alone is not a reason to relabel or quarantine. Ambiguous
+negation in story 378 remains under observation rather than declaring its gold
+wrong. Partial/request-exhausted attempts remain checkpoints, not negatives.
+
+Runtime v15 / contract migration v4 is prepared for case-boundary rollout. New
+queues: Bonsai queue-v12 (one reviewed board retry), Luna queue-v8 (two reviewed
+movie retries). Current progressing cases continue; rollout-state.json and
+rollout.jsonl record actual PIDs/deployment. Verification: Node/browser builds,
+browser types, 134 focused Node tests, explicit evidence audit and changed
+reference replays. Course changes are committed before freezing the runtime.
+
+Current admission confirms all four numeric retries are training-admitted (4/14
+Luna final results); five used ad hoc children in the longest case while two
+short cases used named specialists only. Saved per-job result files were gathered
+for this audit: the CLI summary file represents only the latest one-case invocation
+and may be empty after an incomplete attempt. Original job files are intact.
