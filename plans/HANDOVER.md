@@ -9,7 +9,8 @@
 > with jitter, persisted in supervisor journal; clean completion resets it, including
 > ordinary model rejection. One Luna worker/request remains. Frozen v33 derives from
 > immutable v31 plus collector/retry files only, excluding concurrent adaptation work.
-> Boundary rollout: runs/directory-expansion-20260929/v33.rollout-state.json.
+> Boundary rollout complete: Luna PID731206 on v33/queue-v22 (verify before action);
+> runs/directory-expansion-20260929/v33.rollout-state.json. First v33 case completed.
 > 21 frozen Node /13 Python checks and build pass. No training.
 
 

@@ -49,3 +49,5 @@ Future candidates: SMCalFlow revise/refer graph edits, SParC SQL AST revisions, 
 - No concurrency change: one Luna/request, four Bonsai. Boundary rollouts v32 then v33; v33 finishes long minimum-delay persistence. Check actual state in v33.rollout-state.json. Runtime built from immutable v31 with only collector/retry source+compiled overlay, to exclude unrelated concurrent adaptation edits.
 - Build succeeds;21 Node checks against frozen v33,13 Python checks pass. Covered doubling/caps/jitter/headers, malformed delays, cancellation with no result, cooldown/reset/restart and durable exhausted-retry deadline.
 - No source gold or rejection criteria changed by retry policy. No training started.
+
+- v33 boundary migration complete: Luna PID731206, unchanged queue-v22/cap1. First v33 case completed in34.7s, then advanced normally. Bonsai PID701072 continues immutable v31/cap4. Latest expansion audit156 results/91 admitted/391 decisions/9 held/0 unlinked. Commit2aea07a implements policy.
