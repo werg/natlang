@@ -159,7 +159,7 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
     if turn.get("teacher_reasoning") and turn["teacher_reasoning"] not in suffix[:end]:
         raise ValueError(f"{turn.get('id', '<unknown>')}: template dropped teacher reasoning")
     result = {key: turn[key] for key in (
-        "id", "program_id", "source_groups", "split", "family", "skill", "quality",
+        "id", "program_id", "source_groups", "split", "family", "task_family", "task_kind", "task_modality", "skill", "quality",
         "training_admission", "source", "license", "source_ids", "source_revisions",
         "teacher_trajectory_id", "teacher_trajectory_digest", "execution_verified",
         "implementation_sha256", "behavioral_evidence", "evidence", "generation", "verification",

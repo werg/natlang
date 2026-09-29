@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Build task IR and native static results without calling a model. */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, open } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -13,19 +14,45 @@ import { materializeNativeRows } from '../../dist/teacher/native-materializer.js
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { sourceConversionDigest } from '../../dist/teacher/source-conversion.js';
 
-export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, licenseResolver = pinnedRepositoryLicense }) {
+export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, excludeManifests = [], licenseResolver = pinnedRepositoryLicense }) {
   const { manifest: acquisition, sources } = await loadSourceCache(cache);
   const tasks = buildTaskSources(sources, limit);
   const trajectories = await buildTrajectorySources(sources, trajectoryLimit, licenseResolver);
-  const candidates = [...tasks.records, ...trajectories.records], rows = [], records = [];
+  const candidates = [...tasks.records, ...trajectories.records];
+  await mkdir(out, { recursive: true });
+  // Completed replays contain repeated contexts; retaining the whole corpus before serialization
+  // grows memory with output size. Write verified cases incrementally; publish the manifest last.
+  const streams = {};
+  for (const name of ['train.ir.jsonl', 'static.results.jsonl', 'static.turns.jsonl']) {
+    streams[name] = { handle: await open(join(out, name), 'w'), hash: createHash('sha256'), rows: 0 };
+  }
+  const append = async (name, value) => {
+    const raw = JSON.stringify(value) + '\n';
+    await streams[name].handle.writeFile(raw);
+    streams[name].hash.update(raw); streams[name].rows++;
+  };
+  let cases = 0, trainingDecisions = 0, heldDecisions = 0, convertedCases = 0;
+  const bySource = {};
   const rejected = [...tasks.rejected, ...trajectories.rejected];
   const seen = new Set();
+  const excluded = new Set();
+  for (const path of excludeManifests) {
+    const manifest = JSON.parse(await readFile(path, 'utf8'));
+    const raw = await readFile(resolve(path, '..', manifest.ir.path), 'utf8');
+    if (digest(raw) !== manifest.ir.sha256) throw new Error('excluded_bundle_checksum_mismatch');
+    for (const line of raw.trim().split('\n').filter(Boolean)) {
+      const record = JSON.parse(line);
+      excluded.add(digest([record.source, record.source_ids]));
+    }
+  }
   const options = { modelId: 'source-static-reference', rootSeed: 928, systemPrompt: TOOLS_PROMPT,
     contextTokens: 16384, maxTurns: 60, toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
-  for (const candidate of candidates) {
+  try { for (const candidate of candidates) {
     // Bind hashes to the durable JSON representation, including omission of optional undefined fields.
     const record = JSON.parse(JSON.stringify(candidate));
+    let writing = false;
     try {
+      if (excluded.has(digest([record.source, record.source_ids]))) throw new Error('already_integrated_source_case');
       validateCurriculum(record);
       const opening = await renderOpening(record, TOOLS_PROMPT);
       if (record.curriculum.decisive.some(item => opening.includes(item.marker))) throw new Error('source_evidence_in_opening');
@@ -34,7 +61,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
       const identity = digest([record.source, record.source_ids, record.semantics.folder_files]);
       if (seen.has(identity)) throw new Error('duplicate_source_case');
       seen.add(identity);
-      const row = JSON.parse(JSON.stringify(await referenceRow(record, rows.length, options)));
+      const row = JSON.parse(JSON.stringify(await referenceRow(record, cases, options)));
       const admission = admitRow(row);
       if (!admission.admitted) throw new Error(`native_admission:${admission.reasons.join(',')}`);
       const failures = row.outcome.action_ledger?.filter(event => ['error', 'refused', 'rejected'].includes(event.outcome)) ?? [];
@@ -56,31 +83,40 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
       const materialized = materializeNativeRows([row]);
       if (materialized.unlinked.length || !materialized.turns.some(turn => turn.training_admission.approved))
         throw new Error('no_linked_training_decisions');
-      rows.push(row); records.push(record);
-    } catch (error) { rejected.push({ source: record.source, id: record.id, reason: error.message }); }
-  }
-  await mkdir(out, { recursive: true });
+      // I/O failures are fatal, not source rejections: never silently publish a partial case.
+      writing = true;
+      await append('train.ir.jsonl', record);
+      await append('static.results.jsonl', row);
+      for (const turn of materialized.turns) await append('static.turns.jsonl', turn);
+      cases++;
+      bySource[record.source] = (bySource[record.source] ?? 0) + 1;
+      if (record.external_source.trajectory) convertedCases++;
+      trainingDecisions += materialized.turns.filter(t => t.training_admission.approved).length;
+      heldDecisions += materialized.turns.filter(t => !t.training_admission.approved).length;
+    } catch (error) {
+      if (writing) throw error;
+      rejected.push({ source: record.source, id: record.id, reason: error.message });
+    }
+  } } finally { for (const stream of Object.values(streams)) await stream.handle.close(); }
   const writeJsonl = async (name, values) => {
     const raw = values.map(v => JSON.stringify(v)).join('\n') + (values.length ? '\n' : '');
     await writeFile(join(out, name), raw);
     return { path: name, sha256: digest(raw), rows: values.length };
   };
-  const ir = await writeJsonl('train.ir.jsonl', records);
-  const results = await writeJsonl('static.results.jsonl', rows);
-  const turns = materializeNativeRows(rows);
-  await writeJsonl('static.turns.jsonl', turns.turns);
+  const fileInfo = name => ({ path: name, sha256: streams[name].hash.digest('hex'), rows: streams[name].rows });
+  const ir = fileInfo('train.ir.jsonl');
+  const results = fileInfo('static.results.jsonl');
   await writeJsonl('rejections.jsonl', rejected);
   await writeJsonl('trajectory-audit.jsonl', trajectories.audits);
-  const bySource = {};
-  for (const record of records) bySource[record.source] = (bySource[record.source] ?? 0) + 1;
   const rejectionCounts = {};
   for (const row of rejected) rejectionCounts[row.reason] = (rejectionCounts[row.reason] ?? 0) + 1;
   const report = { version: 'natlang.source_static_bundle/1', model_calls: 0, acquisition_sha256: digest(acquisition),
-    cases: records.length, by_source: bySource, results, ir,
-    training_decisions: turns.turns.filter(t => t.training_admission.approved).length,
-    held_decisions: turns.turns.filter(t => !t.training_admission.approved).length,
+    excluded_manifests: excludeManifests,
+    cases, by_source: bySource, results, ir, turns: fileInfo('static.turns.jsonl'),
+    training_decisions: trainingDecisions,
+    held_decisions: heldDecisions,
     trajectory_rows_acquired: ['swesmith', 'nebius', 'nvidia'].reduce((n, key) => n + (sources[key]?.rows.length ?? 0), 0),
-    converted_trajectory_cases: records.filter(r => r.external_source.trajectory).length,
+    converted_trajectory_cases: convertedCases,
     full_swe_trajectories_converted: 0,
     trajectory_rows_audited: trajectories.audits.length, rejection_counts: rejectionCounts,
     acquisition_failures: acquisition.failures ?? {} };
@@ -91,10 +127,11 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
 async function main() {
   const { values } = parseArgs({ options: { cache: { type: 'string', default: '../vendor/directory-sources' },
     out: { type: 'string', default: '../data/teacher/source-backed' }, limit: { type: 'string', default: '12' },
-    'trajectory-limit': { type: 'string', default: '8' } } });
+    'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true } } });
   const limit = Number(values.limit), trajectoryLimit = Number(values['trajectory-limit']);
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(trajectoryLimit) || trajectoryLimit < 0) throw new Error('invalid_limits');
-  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit });
+  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit,
+    excludeManifests: (values['exclude-manifest'] ?? []).map(path => resolve(path)) });
   console.log(JSON.stringify(report, null, 2));
   if (!report.cases) throw new Error('no_source_cases_admitted');
 }

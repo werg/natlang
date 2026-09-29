@@ -7,18 +7,18 @@
 # Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL] [SLOTS]  (collectors: --workers to match SLOTS)  stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# The current collector permits two requests, including nested calls. Extra server slots are idle capacity.
-# Keep the 52k-token shared KV buffer for long calls; six slots remain available explicitly for bulk collection.
-PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-2}}"
+# Four concurrent requests share the collector semaphore, including nested calls.
+# Retain the 52k-token shared KV buffer and a bounded host cache.
+PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-4}}"
 # A long Bonsai context occupies roughly 0.6-0.9 GiB in the host prompt cache.
 # Agent programs alternate between root and nested invocations, so one entry
 # per slot thrashes even with only two workers.  Keep about two contexts per
 # slot; BONSAI_CACHE_RAM remains available for memory-constrained machines.
-# Cache snapshots are real host RAM, separate from GPU KV. Retain a smaller cache for two-request collection.
+# Cache snapshots are real host RAM, separate from GPU KV. Keep the smaller cache for two to five requests.
 # Larger profiles need more transient headroom (six slots with 4 GiB cache under a 7g cap were killed).
-if [ "$SLOTS" -gt 2 ]; then
+if [ "$SLOTS" -gt 5 ]; then
   DEFAULT_CACHE_RAM=$((SLOTS * 1536)); DEFAULT_MEM=8; CACHE_HEADROOM=5
-elif [ "$SLOTS" -eq 2 ]; then
+elif [ "$SLOTS" -ge 2 ]; then
   DEFAULT_CACHE_RAM=1536; DEFAULT_MEM=6; CACHE_HEADROOM=4
 else
   DEFAULT_CACHE_RAM=1024; DEFAULT_MEM=5; CACHE_HEADROOM=4

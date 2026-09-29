@@ -70,3 +70,59 @@ def test_repeated_action_shapes_do_not_imply_repeated_requests(tmp_path):
     turns.append(turns[0])
     path.write_text(json.dumps(dict(turns=turns)))
     assert partial_metrics(entry)['repeated_request_hashes'] == 1
+
+
+def test_local_pair_shares_one_collector_and_one_global_two_request_cap(tmp_path, monkeypatch):
+    from scripts.run_bonsai_queue import partial_metrics
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    entry = dict(key='pair', source='input', jobs=str(tmp_path), output='output', index=0, count=2,
+                 members=[{'key': 'one'}, {'key': 'two'}], seed=1, log=str(tmp_path / 'case.log'))
+    queue.write_text(json.dumps(entry) + '\n')
+    commands = []
+    class Child:
+        def __init__(self, command, **kwargs): commands.append(command)
+        def wait(self, timeout=None): return 0
+    monkeypatch.setattr(subprocess, 'Popen', Child)
+    run_queue(queue, journal, tmp_path, seconds=1, model_concurrency=2)
+    command = commands[0]
+    assert command[command.index('--workers') + 1] == '2'
+    assert command[command.index('--limit') + 1] == '2'
+    assert command[command.index('--model-concurrency') + 1] == '2'
+    assert [json.loads(line)['key'] for line in journal.read_text().splitlines()
+            if json.loads(line)['event'] == 'finish'] == ['pair', 'one', 'two']
+    for i in range(2):
+        (tmp_path / f'{i:06d}-fixture.partial.json').write_text(json.dumps({'turns': [
+            {'request_sha256': str(i), 'response': {'raw_response': {'fixture': True}, 'calls': [], 'completion_tokens': 3}}]}))
+    assert partial_metrics(entry)['fresh_model_replies'] == 2
+    with pytest.raises(ValueError, match='single-case'):
+        run_queue(queue, tmp_path / 'provider.jsonl', tmp_path, provider='openai-codex', model_id='gpt-6-luna', model_concurrency=1)
+
+
+@pytest.mark.parametrize('count', [4, 5])
+def test_larger_batches_use_one_global_cap(tmp_path, monkeypatch, count):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(dict(key='batch', source='input', jobs=str(tmp_path), output='output',
+        index=0, count=count, seed=1, log=str(tmp_path / 'case.log'))) + '\n')
+    commands = []
+    class Child:
+        def __init__(self, command, **kwargs): commands.append(command)
+        def wait(self, timeout=None): return 0
+    monkeypatch.setattr(subprocess, 'Popen', Child)
+    run_queue(queue, journal, tmp_path, seconds=1, model_concurrency=4)
+    assert len(commands) == 1
+    command = commands[0]
+    assert command[command.index('--workers') + 1] == str(count)
+    assert command[command.index('--model-concurrency') + 1] == '4'
+    with pytest.raises(ValueError, match='single-case'):
+        run_queue(queue, tmp_path / 'provider.jsonl', tmp_path, provider='openai-codex', model_concurrency=1)
+
+
+def test_batch_metrics_include_completed_and_running_roots(tmp_path):
+    from scripts.run_bonsai_queue import partial_metrics
+    (tmp_path / '000000-fixture.result.json').write_text(json.dumps({'trajectory': [
+        {'request_sha256': 'done', 'raw_response_sha256': 'hash', 'model_response': {'calls': [], 'completion_tokens': 7}}]}))
+    (tmp_path / '000001-fixture.partial.json').write_text(json.dumps({'turns': [
+        {'request_sha256': 'running', 'response': {'raw_response': {'fixture': True}, 'calls': [], 'completion_tokens': 3}}]}))
+    metrics = partial_metrics(dict(index=0, count=2, jobs=str(tmp_path)))
+    assert metrics['fresh_model_replies'] == 2
+    assert metrics['completion_tokens'] == 10

@@ -2,7 +2,7 @@
 # Build one model's LoRA training set from admitted teacher runs, rendered with that model's own chat template.
 # Usage: scripts/build_lora_sft.sh lfm|ling|spark OUT_DIR RESULTS.jsonl [MORE.jsonl ...]
 # NATLANG_HANDOFFS=RUNS.jsonl[,...] adds the preference pairs of handoff runs (build-handoffs.mjs) to preferences.jsonl.
-# Ready source-backed and recovered static manifests are included automatically.
+# Ready source-backed, recovered and directory-expansion static manifests are included automatically.
 # sft.jsonl is rendered evidence; use the staged recipe for final token, dedup and holdout auditing.
 # NATLANG_STATIC_BUNDLE=MANIFEST[,MANIFEST...] selects ready bundles; =off disables it.
 # Correct direct and delegated runs are both admitted, materialized into one training decision per model turn, and rendered by a CPU-only llama-server loaded
@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # while a collector uses this checkout's dist.
 TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 MODEL="${1:?model: lfm, ling or spark}"; OUT="${2:?output directory}"; shift 2
-STATIC_MANIFESTS=("$ROOT/data/teacher/source-backed/static.manifest.json" "$ROOT/data/teacher/recovered/static.manifest.json")
+STATIC_MANIFESTS=("$ROOT/data/teacher/source-backed/static.manifest.json" "$ROOT/data/teacher/recovered/static.manifest.json" "$ROOT/data/teacher/directory-expansion/static.manifest.json")
 if [ -n "${NATLANG_STATIC_BUNDLE:-}" ]; then
   IFS=',' read -r -a STATIC_MANIFESTS <<< "$NATLANG_STATIC_BUNDLE"
 fi

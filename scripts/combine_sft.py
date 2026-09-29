@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 
-RENDERER_FIELDS = ("template_sha256", "end_token", "terminal_tool_policy",
+RENDERER_FIELDS = ("model", "revision", "template_sha256", "end_token", "terminal_tool_policy",
                    "tokenizer_fingerprint_sha256", "local_tokenizer_artifacts_sha256",
                    "teacher_reasoning_policy", "cache_stable_tools",
                    "native_roundtrip", "native_target_policy", "invalid_action_policy")
@@ -24,6 +24,7 @@ def combine(destination: Path, sources: list[Path]) -> dict:
     stage = destination.with_suffix(destination.suffix + f".building.{os.getpid()}")
     identities = set()
     renderer = None
+    full_renderer = None
     inputs = []
     pairs = reasoning_pairs = 0
     output_hash = hashlib.sha256()
@@ -38,6 +39,7 @@ def combine(destination: Path, sources: list[Path]) -> dict:
                     if renderer is not None and identity != renderer:
                         raise ValueError(f"incompatible SFT renderer: {path}")
                     renderer = identity
+                    full_renderer = manifest['renderer']
                 source_hash = hashlib.sha256()
                 count = 0
                 with path.open("rb") as stream:
@@ -55,12 +57,17 @@ def combine(destination: Path, sources: list[Path]) -> dict:
                         reasoning_pairs += "<think>" in row["completion"]
                 inputs.append({"path": str(path), "sha256": source_hash.hexdigest(),
                                "pairs": count, "manifest": str(manifest_path) if manifest else None})
+                if manifest and manifest.get('sha256') and manifest['sha256'] != source_hash.hexdigest():
+                    raise ValueError(f'SFT source checksum mismatch: {path}')
+                if manifest and manifest.get('version') == 'natlang.sft.native/1' and not manifest.get('sha256'):
+                    raise ValueError(f'unbound native SFT source: {path}')
                 pairs += count
         stage.replace(destination)
     finally:
         stage.unlink(missing_ok=True)
-    result = {"schema": "natlang.sft_bundle/1", "sources": inputs,
-              "renderer": renderer, "pairs": pairs, "reasoning_pairs": reasoning_pairs,
+    result = {"schema": "natlang.sft_bundle/1", "version": "natlang.sft.native/1", "sources": inputs,
+              "source": [item['path'] for item in inputs], "source_sha256": [item['sha256'] for item in inputs],
+              "renderer": full_renderer, "rows": pairs, "pairs": pairs, "reasoning_pairs": reasoning_pairs,
               "sha256": output_hash.hexdigest()}
     destination.with_suffix(destination.suffix + ".manifest.json").write_text(
         json.dumps(result, indent=2) + "\n")

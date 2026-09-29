@@ -42,8 +42,17 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
 /** Old infrastructure failures must not teach models that correct actions are bad decisions. */
 export function runtimeFailureReason(row: { task: Record<string, unknown>; provenance?: Record<string, unknown>;
   outcome?: Record<string, unknown>; trajectory?: unknown[] }): string | undefined {
-  if (row.outcome?.accepted !== false || Number(row.provenance?.runtime_contract_version ?? 0) >= 17) return;
+  if (row.outcome?.accepted !== false) return;
   const record = row.task.program_ir as ProgramRecord;
+  if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
+      record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
+  if (record.source === 'tatqa' && (typeof record.semantics.oracle !== 'object' ||
+      record.semantics.oracle.normalization !== 'json-string-record')) return 'obsolete_json_format_oracle';
+  // Extractive annotations do not enumerate every semantically equivalent span boundary.
+  // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
+  if (record.source === 'qasper' && (row.outcome?.rejection_reasons as string[] | undefined)?.includes('answer'))
+    return 'unreviewed_extractive_answer_equivalence';
+  if (Number(row.provenance?.runtime_contract_version ?? 0) >= 17) return;
   const family = (record.curriculum as { family?: string } | undefined)?.family ?? record.family;
   if (family === 'inline_late_binding' || (record.family === 'cb_reconciliation' &&
       JSON.stringify(record.semantics.expected).includes('__proto__')) ||

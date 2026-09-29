@@ -141,3 +141,18 @@ test('MuSiQue training cases sharing a development seed are held out', () => {
   assert.equal(result.records.length, 0);
   assert.equal(result.rejected[0].reason, 'held_out_musique_seed');
 });
+
+test('streaming materializer reports aggregate counters for an empty corpus without leaving staged files', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { readdir } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'natlang-stream-empty-'));
+  try {
+    const input = join(root, 'input.jsonl'), output = join(root, 'output.jsonl');
+    await writeFile(input, '');
+    const run = spawnSync(process.execPath, [new URL('../scripts/materialize-native-teacher.mjs', import.meta.url).pathname, input, output], {encoding: 'utf8'});
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(JSON.parse(run.stdout), {output, accepted_rows: 0, rejected_rows: 0, training_decisions: 0});
+    assert.equal(await readFile(output, 'utf8'), '');
+    assert.deepEqual((await readdir(root)).sort(), ['input.jsonl', 'output.jsonl']);
+  } finally { await rm(root, {recursive: true, force: true}); }
+});

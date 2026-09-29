@@ -143,7 +143,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         if Path(path).is_file() and not current_program_turns(path):
             raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
     default_static = [repo / 'data/teacher/source-backed/static.manifest.json',
-                      repo / 'data/teacher/recovered/static.manifest.json']
+                      repo / 'data/teacher/recovered/static.manifest.json',
+                      repo / 'data/teacher/directory-expansion/static.manifest.json']
     static_manifests = ([] if static_bundle is False else
                         [path for path in default_static if path.exists()] if static_bundle is None else
                         [Path(path).resolve() for path in (static_bundle if isinstance(static_bundle, (list, tuple)) else [static_bundle])])
@@ -166,6 +167,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         add(f'validate-static-sources{suffix}', ['node', f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
                                       str(static_manifest), '--turns-out', static_turns],
             [str(static_manifest), *static_inputs, f'{p}/ts-host/scripts/inline-curriculum/static-bundle-input.mjs',
+             f'{p}/ts-host/scripts/jsonl-stream.mjs',
              f'{p}/ts-host/dist/teacher/source-conversion.js', f'{p}/ts-host/dist/teacher/native-materializer.js'],
             [static_turns, f'{static_turns}.manifest.json'])
         verified_turns.append(static_turns)
@@ -338,11 +340,16 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
          f'{r}/prepared-teacher/teacher.jsonl', *turn_paths],
         [f'{r}/joint.jsonl', f'{r}/joint.jsonl.manifest.json'])
     render('joint', f'{r}/joint.jsonl')
+    add('audit-joint-mix', py([f'{p}/scripts/audit_training_mix.py', '--input', f'{r}/joint.ready.jsonl',
+                              '--output', f'{r}/joint.mix.json', '--reducer-share', '0.25', '--require-target']),
+        [f'{p}/scripts/audit_training_mix.py', f'{r}/joint.ready.jsonl', f'{r}/joint.ready.jsonl.manifest.json'],
+        [f'{r}/joint.mix.json'])
     train('joint', 'coding', '0.00002')
+    stages[-1]['inputs'].append(f'{r}/joint.mix.json')
     # All source observation/replay/teacher work uses one frozen interpreter build.
     frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources'}
     for stage in stages:
-        if stage["id"] in frozen_stages or stage['id'].startswith(('capture-unit-test-', 'replay-saved-source-', 'build-', 'collect-', 'admit-', 'materialize-')):
+        if stage["id"] in frozen_stages or stage['id'].startswith(('validate-static-sources-', 'capture-unit-test-', 'replay-saved-source-', 'build-', 'collect-', 'admit-', 'materialize-')):
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
@@ -382,7 +389,7 @@ def main():
     parser.add_argument('--captures', action='append', type=Path, help='captured upstream-test calls (repeatable); defaults to existing repository capture snapshots')
     parser.add_argument('--verified-turns', action='append', type=Path, help='execution-verified native turns from unit-test replay (repeatable); defaults to existing repository pilot snapshots')
     parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
-    parser.add_argument('--static-bundle', type=Path, action='append', help='validated static source manifest; repeatable; defaults to source-backed and recovered manifests when present')
+    parser.add_argument('--static-bundle', type=Path, action='append', help='validated static source manifest; repeatable; defaults to source-backed, recovered and directory-expansion manifests when present')
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
     parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')

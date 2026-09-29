@@ -278,7 +278,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.answer_evidence?.length && !c.answer_evidence.some(marker => shows(allObserved, marker)))
     reasons.push('missing_answer_evidence');
   const filesSpec = record.semantics.files_oracle;
-  if (['rewrite', 'csv', 'counts'].includes(filesSpec?.compare ?? '') &&
+  if (['rewrite', 'csv', 'counts', 'json-string-record'].includes(filesSpec?.compare ?? '') &&
       (outcome.files_check as { quality_version?: number } | undefined)?.quality_version !== DATA_QUALITY_VERSION)
     reasons.push('unreviewed_files_oracle');
   if (filesSpec?.quote_sources) {
@@ -360,6 +360,9 @@ export function referenceDriver(record: CurriculumRecord): (request: ModelTurnRe
       calls = [['eval', { code: record.semantics.failure_seed!.code }]];
     } else if (name === rootName) {
       const call = record.curriculum.reference.root[step++];
+      // Reference-only directive: finish a computed, staged value through the ordinary reply path.
+      // This is not a runtime tool and must never be emitted as a tool call.
+      if (call?.[0] === 'reply') return { text: String(call[1].text ?? ''), reasoning: 'Finish the staged result.' };
       calls = [call ? [call[0], call[1]] :
         ['return_result', { status: 'failed', reason: 'The reference solution ended without finishing the call.' }]];
     } else {

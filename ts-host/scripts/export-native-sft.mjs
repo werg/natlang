@@ -47,6 +47,9 @@ export async function renderSftTurn(turn, render, endToken = '<|im_end|>', reaso
     masked = end + reasoningEnd.length;
   }
   return { id: turn.id, program_id: turn.program_id, source_groups: turn.source_groups ?? [],
+    ...(turn.task_family ? { task_family: turn.task_family } : {}),
+    ...(turn.task_kind ? { task_kind: turn.task_kind } : {}),
+    ...(turn.task_modality ? { task_modality: turn.task_modality } : {}),
     ...(turn.split ? { split: turn.split } : {}),
     ...(turn.source_ids ? { source_ids: turn.source_ids } : {}),
     ...(turn.source_revisions ? { source_revisions: turn.source_revisions } : {}),

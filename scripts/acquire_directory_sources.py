@@ -15,10 +15,14 @@ from pathlib import Path
 import urllib.parse
 import urllib.request
 import zipfile
+import tarfile
 
 WORKBENCH = '49c7dfd00c03d384ec59ea57374f50b766aa5613'
 TATQA = '870accc41953dcde885aabeb963d94aabdc0fbc3'
 COMMITPACK = 'fc56fe33c030c6daa414c2b112c932b8eed085e6'
+TREEDST = '7816c25a9613a8877924e5cdc4f6ce565774fdd9'
+SCIFACT = '68b98a56d93e0f9da0d2aab4e6c3294699a0f72e'
+QASPER = 'fdc9d8214fbab5dd782958601db4d678e6934a54'
 PERMISSIVE = {'mit', 'apache-2.0', 'bsd-2-clause', 'bsd-3-clause', 'isc', '0bsd'}
 
 
@@ -42,6 +46,48 @@ def acquire(cache, sources, limit, trajectory_rows):
         return key, {'path': path, 'sha256': digest, 'rows': len(rows), 'license': license, **evidence}
 
     def task_source(key):
+        if key in {'qasper', 'scifact', 'treedst'}:
+            url, revision, terms = {
+                'qasper': ('https://qasper-dataset.s3.us-west-2.amazonaws.com/qasper-train-dev-v0.3.tgz', QASPER, 'CC-BY-4.0'),
+                'scifact': ('https://scifact.s3-us-west-2.amazonaws.com/release/latest/data.tar.gz', SCIFACT, 'CC-BY-4.0 annotations; ODC-By-1.0 abstracts'),
+                'treedst': (f'https://raw.githubusercontent.com/apple/ml-tree-dst/{TREEDST}/dataset/treedst.zip', TREEDST, 'CC-BY-SA-3.0'),
+            }[key]
+            # Never extract or execute archives. Preserve the original bytes, including held-out partitions.
+            raw = fetch(url)
+            archive_digest = hashlib.sha256(raw).hexdigest()
+            (cache / f'{key}-{archive_digest}.archive').write_bytes(raw)
+            if key == 'treedst':
+                with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                    members = {p: archive.read(p) for p in archive.namelist() if not p.endswith('/')}
+            else:
+                with tarfile.open(fileobj=io.BytesIO(raw), mode='r:gz') as archive:
+                    members = {p.name: archive.extractfile(p).read() for p in archive.getmembers() if p.isfile()}
+            def member(suffix):
+                return next(value for name, value in members.items() if name.endswith(suffix))
+            held = []
+            if key == 'qasper':
+                train = json.loads(member('qasper-train-v0.3.json'))
+                held = list(json.loads(member('qasper-dev-v0.3.json')))
+                rows = [{'id': k, **v} for k, v in train.items()][:limit * 3]
+            elif key == 'scifact':
+                parse = lambda suffix: [json.loads(line) for line in member(suffix).splitlines() if line.strip()]
+                corpus = parse('corpus.jsonl')
+                dev = parse('claims_dev.jsonl')
+                held = sorted({str(doc) for row in dev for doc in row.get('cited_doc_ids', [])} |
+                              {str(doc) for row in dev for doc in row.get('evidence', {})})
+                rows = [{'claims': parse('claims_train.jsonl')[:limit * 3], 'corpus': corpus}]
+            else:
+                # Source formats are inspected by the strict adapter; retain schema alongside original train rows.
+                train_names = [p for p in members if 'train' in p.lower() and p.endswith(('.json', '.jsonl'))]
+                if len(train_names) != 1:
+                    raise ValueError(f'ambiguous_treedst_train_members:{train_names}')
+                blob = members[train_names[0]].decode()
+                # The author's *_dst.json files contain one JSON object per line.
+                parsed = [json.loads(line) for line in blob.splitlines() if line.strip()]
+                rows = parsed[:limit * 3] if isinstance(parsed, list) else [{'id': k, **v} for k, v in parsed.items()][:limit * 3]
+            return save(key, rows, {'revision': revision, 'original_split': 'train', 'held_out_ids': held,
+                'capture': 'content-addressed-author-release',
+                'files': [{'url': url, 'sha256': archive_digest, 'members': sorted(members)}]}, terms)
         if key == 'workbench':
             base = f'https://raw.githubusercontent.com/olly-styles/WorkBench/{WORKBENCH}/'
             paths = ['data/processed/emails.csv', 'data/processed/tasks_and_outcomes/email_tasks_and_outcomes.csv']

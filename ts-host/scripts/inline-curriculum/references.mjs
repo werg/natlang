@@ -47,7 +47,7 @@ export async function referenceRow(record, index, options) {
   const reference = referenceDriver(record), trajectory = [];
   const driver = async request => {
     const response = await reference(request), turn = trajectoryTurn(request, response);
-    const [tool, args] = response.calls[0];
+    const [tool, args] = response.calls?.[0] ?? [];
     if (tool === 'return_result' && args.status === 'success' && !shown(args.value, request.messages))
       turn.assistant.direct_answer = true;
     trajectory.push(turn);

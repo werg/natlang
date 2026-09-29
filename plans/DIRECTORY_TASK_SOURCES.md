@@ -1,7 +1,7 @@
 # Task sources and offline trajectory conversion
 
 Research and implementation checkpoint: 2026-09-28. Primary repositories/cards and actual sample rows inspected.
-The first implemented pilot is below; remaining source recommendations are research rather than imported volume.
+The first implemented pilot is below. The 2026-09-29 expansion adds QASPER, SciFact and non-file TreeDST edits; see [expansion log](DIRECTORY_EXPANSION_20260929.md) for current counts, holds, audit evidence and pipeline changes. Further recommendations remain research rather than imported volume.
 Downloaded examples under `runs/source-research-20260928/trajectory-samples/` are research artifacts only;
 `trajectory-sample-summary.json` records schemas, outcomes, tool counts and dataset-server row counts.
 
@@ -165,3 +165,20 @@ Broaden the bounded trajectory scan for genuine multi-step portable edits; add p
 joins before importing those traces. Collect reasoning trajectories on the new QA/workflow cases using the
 existing teacher generation machinery. Expand source task coverage after reviewing pilot rejection ledgers;
 do not infer full-trajectory compatibility from independently reconstructed file operations.
+
+
+## Published expansion (2026-09-29)
+
+`data/teacher/directory-expansion/static.manifest.json` now contains1,605 new cases
+(CommitPack287, TAT-QA256, MuSiQue288, QASPER300, SciFact174, TreeDST300), after
+excluding the51 pilot cases. Native replay approves4,119 decisions;1,049 remain held.
+Final tokenizer audit admits all4,119. Combined with the earlier integrated static
+preview:9,114 unique decisions, zero rendered duplicates or holdout overlap,3,676
+directory reducer decisions (40.33%) and600 non-file tree-edit decisions. These are
+static-preview counts, not the eventual complete generation/training mix.
+
+Both default builders include this expansion beside source-backed and recovered
+bundles. The generated joint training pipeline enforces the user's25% directory/file
+reducer target after final token/dedup/holdout audit. See the expansion log for source
+terms, preservation, scientific span holds, named-tree/JSON scoring corrections,
+streaming memory fixes and additional unimported tree-edit candidates.

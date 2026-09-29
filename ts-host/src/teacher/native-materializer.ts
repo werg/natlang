@@ -249,6 +249,11 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         task: row.task,
         program_id: programId,
         family: `${role}_program`,
+        task_family: taskIr.family ?? null,
+        task_kind: taskIr.kind ?? null,
+        task_modality: taskIr.task_modality ?? (typeof semantics.root === 'string' && semantics.files &&
+          typeof semantics.files === 'object' && /(?:^|\n)kind: directory-reducer(?:\n|$)/.test(
+            String((semantics.files as Dict)[semantics.root] ?? '')) ? 'directory-reducer' : 'function'),
         ...(taskIr.split ? { split: taskIr.split } : {}),
         ...(taskIr.source_ids ? { source_ids: taskIr.source_ids } : {}),
         ...(taskIr.source_revisions ? { source_revisions: taskIr.source_revisions } : {}),

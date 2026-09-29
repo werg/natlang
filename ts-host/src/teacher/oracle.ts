@@ -2,14 +2,51 @@
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged'];
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa'; rubric?: string; context?: unknown; [key: string]: unknown };
+  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record'; rubric?: string; context?: unknown; [key: string]: unknown };
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
+
+/** TreeDST's author implementation keys children by name; sibling order is not semantic.
+ * Reject duplicate names, extra fields and malformed nodes instead of silently dropping them.
+ */
+export function namedTreeCanonical(value: unknown): string | null {
+  let remaining = 10000;
+  const visit = (input: unknown, depth: number): unknown => {
+    if (--remaining < 0 || depth > 128 || !input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid_named_tree');
+    const node = input as Record<string, unknown>;
+    if (typeof node.name !== 'string' || !Array.isArray(node.children) ||
+        Object.keys(node).length !== 2 || !Object.hasOwn(node, 'name') || !Object.hasOwn(node, 'children')) throw new Error('invalid_named_tree');
+    const names = new Set<string>();
+    const children = node.children.map(child => {
+      const parsed = visit(child, depth + 1) as [string, unknown[]];
+      if (names.has(parsed[0])) throw new Error('duplicate_named_child');
+      names.add(parsed[0]); return parsed;
+    }).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    return [node.name, children];
+  };
+  try { return JSON.stringify(visit(value, 0)); } catch { return null; }
+}
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.entries(value as Record<string, unknown>)
     .sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`).join(',')}}`;
   return JSON.stringify(value);
+}
+/** Formatting is irrelevant for JSON string records; duplicate keys and other shapes are invalid. */
+export function jsonStringRecordCanonical(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const string = String.raw`"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[\da-fA-F]{4}))*"`;
+  const pair = `${string}\\s*:\\s*${string}`;
+  if (!new RegExp(`^\\s*\\{\\s*(?:${pair}(?:\\s*,\\s*${pair})*)?\\s*\\}\\s*$`).test(value)) return null;
+  try {
+    const names = new Set<string>();
+    for (const match of value.matchAll(new RegExp(`(${string})\\s*:\\s*${string}`, 'g'))) {
+      const key = JSON.parse(match[1]!) as string;
+      if (names.has(key)) return null;
+      names.add(key);
+    }
+    return canonical(JSON.parse(value));
+  } catch { return null; }
 }
 function normalizeText(value: unknown): string {
   const text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
@@ -78,7 +115,7 @@ export function agreement(actual: unknown, expected: unknown): number {
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 2;
-export type FilesOracle = { compare?: 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts'; threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Reports may only quote the corresponding original source. */
   quote_sources?: Record<string, string>;
@@ -168,6 +205,11 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     if (got === undefined || want === undefined) { item(path, got === want); continue; }
     // Existing source files are checked exactly, even in a CSV/rewrite task.
     if (want === input[path]) { item(path, got === want); continue; }
+    if (compare === 'json-string-record') {
+      const parsed = jsonStringRecordCanonical(got);
+      item(path, parsed !== null && parsed === jsonStringRecordCanonical(want));
+      continue;
+    }
     if (compare === 'csv') {
       try {
         const [head, ...rows] = csvRows(want), [gotHead, ...gotRows] = csvRows(got);
@@ -288,6 +330,14 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (!ORACLE_LEVELS.includes(level)) throw new RangeError(`unknown oracle level: ${level}`);
   const candidates = [expected, ...('alternates' in spec ? spec.alternates ?? [] : [])];
   if (level === 'exact') return { accepted: candidates.some(candidate => canonical(actual) === canonical(candidate)), level };
+  if (level === 'normalized' && spec.normalization === 'named-tree') {
+    const answer = namedTreeCanonical(actual);
+    return { accepted: answer !== null && candidates.some(candidate => namedTreeCanonical(candidate) === answer), level };
+  }
+  if (level === 'normalized' && spec.normalization === 'json-string-record') {
+    const answer = jsonStringRecordCanonical(actual);
+    return { accepted: answer !== null && candidates.some(candidate => jsonStringRecordCanonical(candidate) === answer), level };
+  }
   if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };
   if (level === 'agreement') {
     const threshold = probability('threshold' in spec ? spec.threshold ?? 0.9 : 0.9, 'agreement');

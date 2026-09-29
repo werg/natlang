@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
+import { buildBroaderSources } from './broader-sources.mjs';
 
 export const SOURCE_ADAPTER_VERSION = 'natlang.directory_source_adapter/1';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -26,14 +27,17 @@ export async function loadSourceCache(cache) {
 }
 
 export function sourceCase({ source, info, sourceId, group, task, files, expectedFiles = files,
-  expected, actions, oracle = 'exact', adaptation, license = info.license }) {
+  expected, actions, oracle = 'exact', adaptation, license = info.license, treeInputs }) {
   const family = `source_${source}`, shape = digest([source, sourceId, SOURCE_ADAPTER_VERSION]).slice(0, 20);
   const record = curriculumCase({ family, shape, variant: 'v1', splitGroup: group,
     slice: 'folder_failure', domain: 'other', mode: 'single_call', inline: 'optional',
-    root: { name: 'process_workspace', kind: 'directory-reducer', args: {}, returns: 'string', instructions: task },
-    folderFiles: files, expectedFiles, expected, split: 'train',
+    root: treeInputs ? { name: 'update_tree', args: { state: 'Tree', utterance: 'string', history: 'unknown[]', system_acts: 'unknown[]' }, returns: 'Tree', instructions: task } :
+      { name: 'process_workspace', kind: 'directory-reducer', args: {}, returns: 'string', instructions: task },
+    ...(treeInputs ? { inputs: treeInputs, files: { 'types.ts': 'export type Tree = { name: string; children: Tree[] };' } } : { folderFiles: files, expectedFiles }),
+    expected, split: 'train',
     reference: { root: actions }, evidence: { retrieved: Object.keys(files), world: [], background: [] } });
   record.source = source;
+  record.task_modality = treeInputs ? 'tree-edit' : 'directory-reducer';
   record.source_ids = [sourceId];
   record.source_groups = [group];
   record.source_revisions = [info.revision ?? `snapshot:${info.sha256}`];
@@ -164,9 +168,11 @@ return result;`;
         const record = sourceCase({ source: 'tatqa', info, sourceId: question.uid, group: `tatqa:context:${context.table.uid}`,
           task: `${question.question}\nUse table.json and notes/. Write answer.json and return the same JSON string with exactly answer (a string; multiple spans separated by "; ") and scale ("", "percent", "thousand", "million" or "billion"). Preserve source files.`,
           files, expectedFiles: { ...files, 'answer.json': expected + '\n' }, expected,
+          oracle: { level: 'normalized', normalization: 'json-string-record' },
           actions: [['read_file', { path: 'table.json' }], ...Object.keys(files).filter(path => path.startsWith('notes/'))
             .map(path => ['read_file', { path }]), evalCall(code), returnCall(expected)],
           adaptation: `read-evidence-before-calculation; original-${question.answer_type}-gold; explicit-display-format` });
+        record.semantics.files_oracle = { compare: 'json-string-record', threshold: 1 };
         const marker = context.table.table.flat().find(cell => typeof cell === 'string' && cell.length > 12 && !question.question.includes(cell));
         if (marker) {
           record.curriculum.mode = 'followup';
@@ -202,5 +208,6 @@ return result;`;
       });
     }
   }
-  return { records, rejected };
+  const broader = buildBroaderSources(sources, limit, sourceCase);
+  return { records: [...records, ...broader.records], rejected: [...rejected, ...broader.rejected] };
 }

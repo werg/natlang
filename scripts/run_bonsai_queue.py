@@ -24,34 +24,23 @@ def partial_metrics(entry):
             if digest in requests:
                 metrics["repeated_request_hashes"] += 1
             requests.add(digest)
-    for path in Path(entry['jobs']).glob(f"{entry['index']:06d}-*.partial.json"):
-        try:
-            turns = json.loads(path.read_text())['turns']
-        except (OSError, ValueError, KeyError):
-            continue
-        metrics['saved_turns'] += len(turns)
-        for turn in turns:
-            response = turn.get('response', {})
-            if not response.get('raw_response'):
-                continue
-            note_request(turn)
-            metrics['fresh_model_replies'] += 1
-            metrics['completion_tokens'] += response.get('completion_tokens', 0) or 0
-            action = json.dumps(response.get('calls', []), sort_keys=True)
-            if action in seen:
-                metrics['repeated_action_sets'] += 1
-            seen.add(action)
-    if not metrics['saved_turns']:
-        for path in Path(entry['jobs']).glob(f"{entry['index']:06d}-*.result.json"):
+    indices = range(entry['index'], entry['index'] + entry.get('count', 1))
+    # Resolve each root independently: a finished root has a result while its siblings
+    # may still have partial checkpoints. Count each root once, preferring the result.
+    for index in indices:
+        results = list(Path(entry['jobs']).glob(f"{index:06d}-*.result.json"))
+        paths = results or list(Path(entry['jobs']).glob(f"{index:06d}-*.partial.json"))
+        for path in paths:
+            completed = path.name.endswith('.result.json')
             try:
-                turns = json.loads(path.read_text())['trajectory']
+                turns = json.loads(path.read_text())['trajectory' if completed else 'turns']
             except (OSError, ValueError, KeyError):
                 continue
             metrics['saved_turns'] += len(turns)
             for turn in turns:
-                if not turn.get('raw_response_sha256'):
+                response = turn.get('model_response' if completed else 'response', {})
+                if not (turn.get('raw_response_sha256') if completed else response.get('raw_response')):
                     continue
-                response = turn.get('model_response', {})
                 note_request(turn)
                 metrics['fresh_model_replies'] += 1
                 metrics['completion_tokens'] += response.get('completion_tokens', 0) or 0
@@ -66,7 +55,9 @@ def partial_metrics(entry):
 
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
-              provider=None, model_concurrency=2, execution_plans=False, reasoning_effort='low'):
+              provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low'):
+    if model_concurrency is None:
+        model_concurrency = 1 if provider else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
     attempted = set()
@@ -83,12 +74,17 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         if entry['key'] in attempted:
             continue
         max_turns = entry.get('max_turns', 20)
+        count = entry.get('count', 1)
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 5:
+            raise ValueError('entry count must be between one and five')
+        if count > 1 and provider:
+            raise ValueError('provider queues remain single-case; batching is only enabled for local Bonsai')
         if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
             raise ValueError('entry max_turns must be a positive integer')
         command = ['node', '--max-old-space-size=3000', str(runtime / 'dist/teacher/cli.js'),
-                   entry['source'], entry['jobs'], entry['output'], '--start', str(entry['index']), '--limit', '1',
+                   entry['source'], entry['jobs'], entry['output'], '--start', str(entry['index']), '--limit', str(count),
                    '--model-id', model_id,
-                   '--root-seed', str(entry['seed']), '--workers', '1', '--max-turns', str(max_turns),
+                   '--root-seed', str(entry['seed']), '--workers', str(count), '--max-turns', str(max_turns),
                    '--model-concurrency', str(model_concurrency), '--max-model-requests', str(entry.get('max_model_requests', 128)),
                    '--transport-retries', '1', '--file-tools', entry.get('surface', 'all')]
         command += ['--provider', provider, '--context-tokens', '16384', '--reasoning-effort', reasoning_effort] if provider else [
@@ -141,6 +137,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 raise
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(), **partial_metrics(entry)})
+        # Preserve original attempt keys when roots share one collector batch.
+        # A terminal batch event covers both attempts, even when only one produced a result.
+        for member in entry.get('members', []):
+            record({'event': 'finish', 'key': member['key'], 'status': status, 'exit_code': code,
+                    'batch_key': entry['key'], 'time': time.time()})
 
 
 if __name__ == '__main__':
@@ -151,13 +152,13 @@ if __name__ == '__main__':
     parser.add_argument('--case-seconds', type=int, default=600)
     parser.add_argument('--model-id', default='Ternary-Bonsai-2-27B')
     parser.add_argument('--provider')
-    parser.add_argument('--model-concurrency', type=int, default=2)
+    parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
     if args.case_seconds < 1:
         parser.error('--case-seconds must be positive')
-    if args.model_concurrency < 1:
+    if args.model_concurrency is not None and args.model_concurrency < 1:
         parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
         raise KeyboardInterrupt('queue stopped')

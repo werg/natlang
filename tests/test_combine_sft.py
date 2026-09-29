@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 import pytest
 
@@ -26,3 +27,19 @@ def test_bundle_checks_renderer_and_unique_ids(tmp_path):
     write(second, "two", "different")
     with pytest.raises(ValueError, match="incompatible SFT renderer"):
         combine(tmp_path / "different.jsonl", [first, second])
+
+
+def test_bundle_retains_tokenizer_binding_and_rejects_tampering(tmp_path):
+    source = tmp_path / 'source.jsonl'
+    source.write_text(json.dumps({'id': 'one', 'completion': 'done'}) + '\n')
+    renderer = {'model': 'tokenizer', 'revision': 'pinned', 'template_sha256': 'a',
+                'tokenizer_fingerprint_sha256': 'b', 'local_tokenizer_artifacts_sha256': 'c', 'end_token': '</s>'}
+    manifest = {'version': 'natlang.sft.native/1', 'renderer': renderer,
+                'sha256': hashlib.sha256(source.read_bytes()).hexdigest()}
+    source.with_suffix('.jsonl.manifest.json').write_text(json.dumps(manifest))
+    result = combine(tmp_path / 'combined.jsonl', [source])
+    assert result['renderer'] == renderer
+    assert result['version'] == 'natlang.sft.native/1' and result['rows'] == 1
+    source.write_text(json.dumps({'id': 'changed', 'completion': 'done'}) + '\n')
+    with pytest.raises(ValueError, match='checksum mismatch'):
+        combine(tmp_path / 'tampered.jsonl', [source])

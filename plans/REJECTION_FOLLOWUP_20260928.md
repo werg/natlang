@@ -476,3 +476,16 @@ Latest rollout: immutable runtime-v21 (496 hashes), Bonsai queue-v17 / Luna queu
   Expanded161 Node checks, Node/browser builds and browser types pass. No training.
   Evidence in runs/rejection-steering-20260929-0918/ (directory's hour is misnamed;
   actual UTC check06:20). Original scheduled next hourly check remains06:43 UTC.
+
+
+## 2026-09-29 expansion scoring and concurrency
+
+See `DIRECTORY_EXPANSION_20260929.md` for the full course log. TreeDST children are keyed
+by name: strict normalized scoring fixes spurious sibling-order rejections, with old
+failed exact-array cases held from negatives. TAT-QA rejected a numerically correct
+JSON answer solely for spaces; strict JSON string-record scoring now ignores formatting
+and key order but rejects duplicate keys, altered values/schema and source corruption.
+Old formatting-oracle failures are held. QASPER span-boundary equivalence needs review;
+wrong-answer traces are preserved without admitting them as training negatives.
+Bonsai now has4slots/global requests and four independent roots per collector; one
+Luna remains. All migrations use completed journaled boundaries and preserve raw data.

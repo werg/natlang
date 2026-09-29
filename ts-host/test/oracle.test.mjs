@@ -173,3 +173,16 @@ test('insufficient judging evidence remains pending and cannot become an accepta
   assert.equal((await checkOracle('x', 'y', 'judged',
     async () => ({ accepted: true, needs_review: true, verdict: 'Insufficient evidence.' }))).accepted, false);
 });
+
+test('JSON answer and output file tolerate formatting but reject duplicates and wrong schema or values', async () => {
+  const oracle = {level: 'normalized', normalization: 'json-string-record'};
+  const gold = '{"answer":"-8.1","scale":"million"}';
+  const equivalent = '{ "scale": "million", "answer": "-8.1" }\n';
+  assert.equal((await checkOracle(equivalent, gold, oracle)).accepted, true);
+  assert.equal(checkFiles({'answer.json': equivalent}, {'answer.json': gold}, {}, {compare: 'json-string-record', threshold: 1}).accepted, true);
+  for (const bad of ['{"answer":"-8.1","scale":"million","scale":"million"}', '{"answer":-8.1,"scale":"million"}', '{"answer":"8.1","scale":"million"}', '{"answer":"-8.1","scale":"million","extra":"x"}', 'bad']) {
+    assert.equal((await checkOracle(bad, gold, oracle)).accepted, false);
+    assert.equal(checkFiles({'answer.json': bad}, {'answer.json': gold}, {}, {compare: 'json-string-record', threshold: 1}).accepted, false);
+  }
+  assert.equal(checkFiles({'answer.json': equivalent, 'source.txt': 'changed'}, {'answer.json': gold, 'source.txt': 'original'}, {'source.txt': 'original'}, {compare: 'json-string-record', threshold: 1}).accepted, false);
+});
