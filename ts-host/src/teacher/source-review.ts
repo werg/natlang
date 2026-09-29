@@ -11,6 +11,18 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'scifact', id: 'claim:466', aliases: [],
+    text: "Genomic sequences involved in alternative splicing responsible for Hutchinson-Gilford progeria syndrome (HGPS) are abundant in the ''progerinonly'' allele of Lmna knock-in models.",
+    annotatedLabel: 'CONTRADICT', status: 'pending',
+    reason: 'The supplied abstract22544171 describes splicing correction in human fibroblasts, not progerinonly alleles or Lmna knock-in models. Its annotated sentences do not establish the claim or its negation. Hold the original label until sufficient source evidence is independently established.' },
+  { dataset: 'scifact', id: 'claim:576', aliases: [],
+    text: 'In melanoma, anti-CTLA-4 treatment reinvigorates exhausted PD-1+Eomes+CD8 T cells.',
+    annotatedLabel: 'SUPPORT', status: 'pending',
+    reason: 'The supplied abstract4468861 attributes reversal of exhaustion to addition of PD-L1 blockade, while anti-CTLA4 predominantly inhibits Treg cells. The annotated sentence about resistance due to PD-L1 does not establish the claimed anti-CTLA4 effect or the specified phenotype. Hold without relabeling.' },
+  { dataset: 'folio', id: 'story:24', aliases: ['folio:story:24', 'story24'],
+    text: 'All Leetcode problems that are recommended to novices are easy. 2Sum is recommended to novices.',
+    annotatedLabel: '2Sum easy Leetcode=True; 4Sum novice Leetcode=False; 2Sum AC above20=False', status: 'pending',
+    reason: 'English rules require Leetcode-problem membership, but no premise establishes that membership for 2Sum or4Sum. Non-Leetcode named objects with the stated recommendation/star predicates satisfy the guarded rules while falsifying the asserted entailment. Source labels also require exclusive easy/hard and an AC-rate interpretation. Preserve labels and hold the whole story.' },
   {
     dataset: 'tatqa', id: 'f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1', aliases: [],
     text: 'What is the average Selling, general and administrative expenses for the period December 31, 2019 and September 29, 2019?',

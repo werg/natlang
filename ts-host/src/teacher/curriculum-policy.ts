@@ -1,3 +1,4 @@
+import { hasExistingTreeValueContract } from './tree-contract.js';
 /** Shared collection/admission policy for exercises whose premise no longer exists in the runtime. */
 import type { ProgramRecord } from './program.js';
 import { sourceReviewReason } from './source-review.js';
@@ -11,6 +12,8 @@ export function retiredFamily(record: ProgramRecord): string | undefined {
 
 /** Source counterfactuals whose labels cannot be established by deleting an annotated proof leaf. */
 export function quarantineReason(record: ProgramRecord): string | undefined {
+  if (record.source === 'treedst' && !hasExistingTreeValueContract(record.semantics?.inputs?.state, record.semantics?.expected))
+    return 'unverified_tree_transition_contract';
   const sourceReview = sourceReviewReason(record);
   if (sourceReview) return sourceReview;
   if (record.family === 'cb_highlighter' &&

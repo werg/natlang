@@ -1,6 +1,7 @@
 /** Author-annotated scientific evidence and non-file tree transitions. No model calls. */
 import { createHash } from 'node:crypto';
 import { evalCall, returnCall } from './lib.mjs';
+import { hasExistingTreeValueContract } from '../../dist/teacher/tree-contract.js';
 import { namedTreeCanonical } from '../../dist/teacher/oracle.js';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -134,6 +135,8 @@ export function buildBroaderSources(sources, limit, sourceCase) {
           if (!turn.input_dialog_state || !turn.target_dialog_state) throw new Error('not_an_existing_tree_edit');
           if (namedTreeCanonical(turn.input_dialog_state) === null || namedTreeCanonical(turn.target_dialog_state) === null)
             throw new Error('invalid_or_duplicate_named_children');
+          if (!hasExistingTreeValueContract(turn.input_dialog_state, turn.target_dialog_state))
+            throw new Error('unverified_tree_transition_contract');
           const edits = treeEdits(turn.input_dialog_state, turn.target_dialog_state);
           if (!edits.length || edits.length > 3) throw new Error('unbounded_or_no_tree_change');
           // Only changes with explicit new leaf values in the current utterance qualify for this pilot.
@@ -143,7 +146,7 @@ export function buildBroaderSources(sources, limit, sourceCase) {
           if (JSON.stringify(inputs).length > 16000) throw new Error('oversize_tree_context');
           count++;
           const record = sourceCase({ source: 'treedst', info, sourceId: turn.turn_id, group: `treedst:conversation:${conversation.session_id}`,
-            task: 'Update the existing dialogue goal tree to reflect the current utterance in its conversation context and the preceding system acts. Keep the name/children schema, preserve unaffected branches, and return the updated Tree. Children are keyed by name: sibling order does not change meaning, and duplicate child names are invalid. Work on a mutable copy of the input tree. This is a tree edit, not a request to perform the real-world booking or action.',
+            task: 'Update the existing dialogue goal tree to reflect the current utterance in its conversation context and the preceding system acts. Keep the name/children schema, preserve unaffected branches, and return the updated Tree. Children are keyed by name: sibling order does not change meaning, and duplicate child names are invalid. Keep every existing structural branch and comparator; change only the explicitly requested literal values in existing slots. Work on a mutable copy of the input tree. This is a tree edit, not a request to perform the real-world booking or action.',
             files: {}, treeInputs: inputs, expected: turn.target_dialog_state,
             oracle: { level: 'normalized', normalization: 'named-tree' },
             actions: [evalCall('const updated = JSON.parse(JSON.stringify(state));\n' +

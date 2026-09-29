@@ -1,5 +1,24 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Rejection audit / quality tightening, 2026-09-29:** both workers progressing;
+> 53 Luna completions with no operational failures since v33, two Bonsai batches
+> completed plus one active-decode hard timeout. Hold SciFact claims466/576 and
+> FOLIO story24 without relabeling. TreeDST currently lacks an independent branch
+> ontology: retain existing literal-slot replacements; hold additions/deletions and
+> unspecified structural transitions, including historical positives/static cases.
+> This deliberately retains21/300 TreeDST static cases. V7 published and verified:
+> 1,323 expansion cases/3,553 approved decisions; combined8,548 unique static decisions,
+> 42.91% directory reducers,42 tree-edit decisions; zero duplicates/holdout overlap.
+> V6 preserved in runs/generation-check-20260929-0926/published-v6-preserved/.
+> Exact structured-text prompt guidance fixes one fresh CommitPack repair (accepted,
+> four actions), original failure preserved.52 frozen Node/25 Python checks pass.
+> Luna v34/queue-v24 PID1100034; Bonsai v31 PID701072 awaits v34/queue-v27 at
+> its progressing batch boundary. Verify actual state before action:
+> runs/generation-check-20260929-0926/{v34,payload-repair}.rollout-state.json.
+> Latest teacher audit240 results/128 admitted/575 approved decisions/zero unlinked.
+> Further detail: plans/DIRECTORY_EXPANSION_20260929.md. No training.
+
+
 > **Luna exponential backoff, 2026-09-29:** request transport retries now use 15s base,
 > 30s cap; rate-limit retries use 45s base,120s cap. Both double with jitter clamped
 > after jitter. Supplied Retry-After/date or SDK error delay is a minimum, even above

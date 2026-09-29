@@ -9,8 +9,8 @@ import { defaultToolSurfaceHash } from '../dist/teacher/collector.js';
 import { checkOracle, namedTreeCanonical } from '../dist/teacher/oracle.js';
 const node = (name, children = []) => ({ name, children });
 const info = { license: 'CC-BY-SA-3.0', original_split: 'train', revision: 'fixture', sha256: 'a'.repeat(64), files: [] };
-const before = node('Root', [node('user', [node('flight', [node('book', [node('object', [node('equals', [node('destination', [node('Paris')])])])])])])]);
-const after = structuredClone(before); after.children[0].children[0].children[0].children[0].children[0].children[0].children[0].name = 'Berlin';
+const before = node('Root', [node('user', [node('flight', [node('book', [node('object', [node('equals', [node('destination', [node('equals', [node('Paris')])])])])])])])]);
+const after = structuredClone(before); after.children[0].children[0].children[0].children[0].children[0].children[0].children[0].children[0].name = 'Berlin';
 
 test('named-child tree comparison accepts sibling permutations and rejects value loss or duplicates', async () => {
   const expected = node('Root', [node('one'), node('two')]);
@@ -80,4 +80,22 @@ test('obsolete formatting/tree failures and unreviewed scientific span equivalen
   assert.equal(runtimeFailureReason(row('tatqa', {level: 'normalized', normalization: 'json-string-record'})), undefined);
   assert.equal(runtimeFailureReason(row('treedst', 'exact')), 'obsolete_named_tree_oracle');
   assert.equal(runtimeFailureReason(row('treedst', {level: 'normalized', normalization: 'named-tree'})), undefined);
+});
+
+
+test('existing value contracts reject invented branches, deletions, and comparator changes', async () => {
+  const { hasExistingTreeValueContract } = await import('../dist/teacher/tree-contract.js');
+  const { quarantineReason } = await import('../dist/teacher/curriculum-policy.js');
+  assert.equal(hasExistingTreeValueContract(before, after), true);
+  const extra = structuredClone(after); extra.children.push(node('calendarEvent'));
+  assert.equal(hasExistingTreeValueContract(before, extra), false);
+  assert.equal(hasExistingTreeValueContract(extra, before), false);
+  assert.equal(hasExistingTreeValueContract(node('root', [node('old')]), node('root', [node('new')])), false);
+  assert.equal(hasExistingTreeValueContract(node('equals', [node('a'), node('a')]), node('equals', [node('b')])), false);
+  const bad = { source: 'treedst', semantics: { inputs: { state: before }, expected: extra } };
+  assert.equal(quarantineReason(bad), 'unverified_tree_transition_contract');
+  assert.equal(quarantineReason({ ...bad, semantics: { inputs: { state: before }, expected: after } }), undefined);
+  const built = buildBroaderSources({ treedst: { info, rows: [{ session_id: 's', turns: [{ turn_id: 'new-branch', utterance: 'calendarEvent Berlin', input_dialog_state: before, target_dialog_state: extra }] }] } }, 12, sourceCase);
+  assert.equal(built.records.length, 0);
+  assert.equal(built.rejected[0].reason, 'unverified_tree_transition_contract');
 });
