@@ -113,3 +113,52 @@ Bonsai to v37/queue-v29 after that batch, preserving journal/member identities a
 Actual rollout state/metadata/logs: `/home/werg/natlang/runs/restart-20260929-165057`; pointer:`runs/RESTART_LATEST`.
 Shutdown history remains preserved. Prior quality holds, QASPER generation pause and staticV9
 remain unchanged. One Luna worker/cap1, no extra repair workers, no student training.
+
+## Post-reboot progress, failures and course changes — 2026-09-29T19:10:50.692329+00:00
+
+- Bonsai migrated exactly at its recovered batch boundary to v37/queue-v29,PID5386;
+  one supervisor, cap4, GPU100%/7,457MiB. At the check,356 queue entries remained.
+  Since reboot six supervisor batches completed and two reached hard timeouts.
+  Last timeout `handoff:686` had171 saved turns/130 fresh replies at the wall,
+  and GPU decode was increasing, so it was genuinely slow rather than a stuck
+  provider. Its completed member results remain; unfinished FOLIO425 has63 saved
+  turns, but a separate FOLIO425 result is already accepted. Avoid blind reruns.
+- Luna v37 queue-v26 finished98/98 remaining attempts, all supervisor status
+  `complete`, no provider failure. It then exited normally. Latest teacher audit
+  546 total results/361 admitted/1,629 approved decisions/164 held/zero unlinked.
+  Delta from prior audit:125 results/115 admitted/559 approved/zero unlinked.
+- Reviewed10 fresh model rejections: five MuSiQue, four native inline, one
+  CommitPack. The CommitPack oracle accepted while an intermediate scope error
+  was recorded; admission still held it. MuSiQue `3hop1__437119_23998_21435`
+  answered with the correct long gold phrase plus subject “Yale” and was
+  rejected by exact normalized wording. The other MuSiQue answers missed the
+  target or a document link; `4hop3__672860_75897_8509_19700` does have a
+  supplied German-migration/Brazil five-million evidence chain. No source gold
+  changed and no invalid negative was admitted.
+- **Compiler bug:** final `typeof v, v` was emitted as `__natlang_finish(typeof v, v)`.
+  The second argument is bindings; a string value became numbered locals `0`–`4`
+  via Object.entries, after which every eval failed with invalid injected binding.
+  Parenthesize final expressions and explicit returns when lowering so comma
+  expressions remain one argument. Frozen v38 contains this fix. Also added a
+  fail-closed runtime guard rejecting invalid eval binding names before state
+  commit; frozen v39 contains both changes. Builds passed; frozen identities
+  verified. No unit tests were added or run during this status check.
+- The first v38 boundary monitor rejected an absolute old-queue spelling that
+  did not match the live process command; it stopped without touching workers.
+  A corrected v38 monitor waited safely, then was intentionally superseded by
+  v39 monitorPID8804 while still waiting; no worker was interrupted. v39 uses
+  queue-v31, a copy of already filtered v30 with one fresh, separately logged
+  repair of the poisoned inline case prepended. Current v37 Bonsai case
+  `handoff:658` is decoding and checkpoints are increasing; v39 deploys only
+  at its journaled completion. Actual monitor state:`runs/check-20260929-190056/v39.rollout-state.json`.
+- One Luna workerPID8658 restarted on frozen v38/queue-v27 with five reviewed
+  MuSiQue retry attempts (four previous Luna misses, one previous Bonsai miss),
+  preserving original results and gold. One worker/cap1; stop after queue ends.
+- Future MuSiQue source conversion now uses QA span-F1 threshold0.9. This admits
+  a close long answer with one named subject but still rejects wrong short
+  dates, numbers, and directions. This is a forward adapter contract change;
+  existing prebuilt IR/static V9 remain unchanged. Rebuild/validate new source
+  slices before attributing any gains to this new oracle.
+- Quality priorities: inspect the poisoned-case fresh repair under v39; evaluate
+  retry outcomes before more attempts; continue held-source/QASPER filters;
+  monitor reducer share. No student training or weights changed.

@@ -1,5 +1,24 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **GENERATION CHECK — 2026-09-29 about19:00 UTC.** BonsaiPID5386 on
+> frozen v37/queue-v29 continues with cap4; GPU100%/7,457MiB. One long case
+> is progressing; two post-reboot hard timeouts reached their wall budgets with
+> increasing decode/checkpoints, not silent stalls. Luna's resumed v37 queue-v26
+> finished all98 entries cleanly and stopped. Since the previous audit,125 new
+> teacher results:115 admitted,559 approved decisions,zero unlinked.
+> A real scope-compiler bug let final comma expressions pass their second value
+> as the eval bindings argument, poisoning later evals with numeric names. The
+> parenthesization fix is frozen in v38; a defensive invalid-name guard is frozen
+> in v39. Exactly one new boundary monitorPID8804 waits for Bonsai's current case,
+> then switches to v39/queue-v31; actual state:`runs/check-20260929-190056/v39.rollout-state.json`.
+> Queue-v31 starts with one reviewed fresh retry of the poisoned case; original
+> failure remains. One Luna workerPID8658 on v38/queue-v27 is trying5 reviewed
+> MuSiQue misses, separate artifacts, cap1. For future source builds, MuSiQue uses
+> a strict0.9 QA token-overlap check so a correct long answer with a named subject
+> is not rejected for formatting alone. Existing result labels and static V9 remain.
+> See `runs/check-20260929-190056/` and course log for details. No training.
+
+
 > **GENERATION RESUMED — 2026-09-29 16:51 UTC /18:51 Berlin.**
 > User requested restart after reboot; this supersedes the stopped state below.
 > Bonsai server healthy:4 slots,6GiB container cap,1,536MiB host cache, GPU100%/7,455MiB.

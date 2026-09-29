@@ -522,10 +522,10 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     const available = [
       ...localOptions.map(binding => binding.name),
       ...bindings.filter(binding => !binding.transient && binding.end < location.start).map(binding => binding.name)];
-    return { ...location, text: `return __natlang_finish(${expression}, { ${available.join(', ')} }, true);` };
+    return { ...location, text: `return __natlang_finish((${expression}), { ${available.join(', ')} }, true);` };
   });
   if (finalExpression) containers.push({ start: finalExpression.start, end: finalExpression.end,
-    text: `return __natlang_finish(${lowerSpan(finalExpression.start, finalExpression.end)});` });
+    text: `return __natlang_finish((${lowerSpan(finalExpression.start, finalExpression.end)}));` });
   for (const repair of redundantAliases) containers.push({ start: repair.start, end: repair.end, text: '' });
   const edits = [...containers, ...primitive.filter(edit => !containers.some(container =>
     edit.start >= container.start && edit.end <= container.end && container.text !== ''))];

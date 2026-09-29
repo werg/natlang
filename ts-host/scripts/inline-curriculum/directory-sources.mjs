@@ -201,7 +201,10 @@ return result;`;
           group: `musique:train-v1.0-pilot`,
           task: `${row.question}\nRead the articles to answer. Return only the answer text. Preserve the workspace.`,
           files, expected: row.answer, actions: [evalCall(`const files = await folder.files('articles/*.md');\nfor (const file of files) await file.readText();`), returnCall(row.answer)],
-          oracle: { level: 'normalized', alternates: row.answer_aliases ?? [] }, adaptation: 'original-train-question; all supplied paragraphs; no generated evidence' });
+          // Long extractive answers can include the named subject without changing their meaning.
+          // Keep a high token-overlap bar; short dates, numbers, and directions still need exact tokens.
+          oracle: { level: 'span', threshold: 0.9, normalization: 'qa', alternates: row.answer_aliases ?? [] },
+          adaptation: 'original-train-question; all supplied paragraphs; no generated evidence' });
         record.source_groups.push(...(row.question_decomposition ?? []).map(q => `musique:seed:${q.id}`));
         record.source_groups.push(...row.paragraphs.map(p => `document:${digest([p.title, p.paragraph_text])}`));
         return record;

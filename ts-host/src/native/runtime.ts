@@ -1148,6 +1148,11 @@ export class NativeSession {
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
       if (!raw || typeof raw !== 'object' || !raw.bindings || typeof raw.bindings !== 'object')
         throw new Reject([{ path: 'code', code: 'bad-action', expected: 'an atomic scope transaction result' }]);
+      // A malformed compiled result must not poison every later eval with numeric locals.
+      // This can happen when a comma expression is passed as two function arguments.
+      if (Object.keys(raw.bindings).some(name => !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)))
+        throw new Reject([{ path: 'code', code: 'bad-action',
+          expected: 'named eval bindings; wrap a final comma expression in parentheses' }]);
       // Plain data is rebuilt in this realm; captured values keep their identity for write-back.
       const output = { ...hostCopy({ result: raw.result, bindings: raw.bindings }) as
         { result?: unknown; bindings: Record<string, unknown> }, captures: raw.captures };
