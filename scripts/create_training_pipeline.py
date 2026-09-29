@@ -336,6 +336,17 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         add('materialize-existing-curriculum', ['node', f'{p}/ts-host/scripts/materialize-native-teacher.mjs',
             admitted, turns, '--replace'], [admitted, f'{p}/ts-host/dist/teacher/native-materializer.js'], [turns])
         teacher_tracks.append(('existing-curriculum', turns))
+        variants = f'{existing}.corrected.jsonl'
+        add('correct-existing-curriculum', ['node', f'{p}/ts-host/scripts/inline-curriculum/corrections.mjs',
+            admitted, turns, variants, '--workers', '2'],
+            [admitted, turns, f'{p}/ts-host/scripts/inline-curriculum/corrections.mjs'],
+            [variants, f'{variants}.manifest.json', f'{variants}.audit.jsonl'])
+        preference_pairs = f'{existing}.preference-pairs.jsonl'
+        add('build-existing-preferences', ['node', f'{p}/ts-host/scripts/build-preference-pairs.mjs',
+            preference_pairs, '--handoffs', ','.join(teacher_results),
+            '--variants', variants, '--parents', admitted, '--workers', '2'],
+            [*teacher_results, variants, admitted, f'{p}/ts-host/scripts/build-preference-pairs.mjs'],
+            [preference_pairs, f'{preference_pairs}.manifest.json', f'{preference_pairs}.audit.jsonl'])
     turn_paths = [path for _, path in teacher_tracks]
     add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json"]),
         [f"{p}/scripts/prepare_training_stages.py", *turn_paths, f"{r}/prepared/splits.json"],
@@ -355,7 +366,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     train('joint', 'coding', '0.00002')
     stages[-1]['inputs'].append(f'{r}/joint.mix.json')
     # All source observation/replay/teacher work uses one frozen interpreter build.
-    frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources'}
+    frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources', 'correct-existing-curriculum'}
     for stage in stages:
         if stage["id"] in frozen_stages or stage['id'].startswith(('validate-static-sources-', 'capture-unit-test-', 'replay-saved-source-', 'build-', 'collect-', 'admit-', 'materialize-')):
             for key in ("command", "inputs"):
@@ -366,6 +377,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             'static_source_bundle': included_static,
             'static_source_bundles': included_statics,
             'existing_teacher_results': teacher_results,
+            'dpo_pair_build': {'stage': 'build-existing-preferences', 'training_started': False,
+                              'policy': 'Current-runtime causal pairs only; source/migration holds are not negative labels. Student rendering/split/token audits required before DPO.'} if teacher_results else None,
             'excluded_legacy_turns': excluded_turns,
             "unit_test_corpus": {"included": [str(path) for path in new_unit_turns if str(path) in compatible_turns],
                                  "excluded": excluded_unit_captures,

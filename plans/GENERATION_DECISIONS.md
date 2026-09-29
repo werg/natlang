@@ -689,3 +689,48 @@ Raw JSON/source archives expanded the persistent catalog to6,170 artifact paths;
 630 are transformation-pending and125 rerender-review under recorded source policies.
 These are files (including duplicates/derivatives), not training-example counts.
 Readable overview: data/teacher/data-inventory/overview.md.
+
+
+## 2026-09-30 — complete workflow evidence, admission dispositions and causal DPO
+
+Breaking publication: workflow v2 references must show all source inputs and retain
+read/page outputs in the final answer context. Recomputed hash-bound proofs apply
+to synthetic references only; actual teachers may select their own evidence. Full
+model-free4805-case replay and independent source/oracle/visibility/default-export
+comparison passed.28,975 approved native decisions; originals retained, old paths
+explicitly replaced in source policy and unsupported old references fail closed.
+32k reference replay context replaces16k after37 compaction-induced evidence holds;
+student limits remain enforced later. New read turns change denominator: four newer
+bundles32,993 decisions/7,910 reducers~23.97%, so earlier63.43% report is obsolete.
+Target remains25% unique admitted final train decisions; expand legitimate supply.
+
+Raw exclusion reasons now carry migration/replay versus source/oracle review versus
+candidate failure dispositions. Held-out data remain evaluation-only; no automatic
+DPO-negative label from an exclusion. Snapshot policy/runtime identities recorded.
+Offline correction/preference recipe stages write lineage and candidate audits.
+43 causal /2 preference pairs recovered conservatively (35 failed_action,8 wrong_result),
+source groups retained. Five old /1 pairs remain backlog. Student rendering/split/
+token/dedup review still pending; no training started.
+
+MiniCPM GPU pilot returned durable11 completed cases,4 accepted/24 planned. Collector
+aggregate export had been overwritten per case, causing erroneous zero-collected
+report. New recovery utility reassembles saved student/test jobs, checks exact IR via
+native scorer and records source hashes; original report retained. Local evaluator
+now exports per-case then aggregates. Remaining13 cases missing/timeouts/not reached;
+application probes not reached before30-minute limit. Bonsai restored cap4/runtime-v39
+PID35895 with fresh replies. No new GPU reservation launched for this accounting fix.
+
+Prior Luna pilot finished; authorized two-worker generation continues on fresh32-case
+all-directory Workflow batch, source families interleaved/shorter inputs first,
+no duplicate prior completed IDs. PIDs36471/36472, frozen visible runtime-v4,
+cap2/noGPU, backoff/cooldown/diskfloor retained, unique per-case output paths.
+
+Offline migration pilot:10 short accepted native teacher traces held only for obsolete
+outcomes. Initial draft produced2 same-answer review candidates but recorded changed
+observations; parent tightened the migrator to reject any changed observation.
+Strict-v3 yields0 candidates:2 changed observations,8 unmatched/ambiguous original
+call ownership. No training promotion. Added admission-level hold for any history
+migration or migration_candidate row, so even explicit builder inputs cannot bypass
+review. Pilot artifacts and originals retained; catalog tracks review-candidates as
+transformation-pending. Future changed-context migration needs a separately reviewed
+provenance/evidence contract; no automatic relabeling of these holds as model failures.

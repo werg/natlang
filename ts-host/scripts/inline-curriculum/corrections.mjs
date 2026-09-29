@@ -11,10 +11,13 @@
  */
 import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { correctedVariant } from '../../dist/teacher/corrections.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
+import { classifyAdmissionReason } from '../admission-dispositions.mjs';
+import { fileDigest } from '../jsonl-stream.mjs';
 
 const FAILED = 'decision contains a failed or unexecuted proposal';
 
@@ -49,24 +52,41 @@ async function sitesOf(turnsPath) {
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { workers: { type: 'string', default: '4' } } });
 const [admittedPath, turnsPath, outPath] = positionals;
 if (!outPath) throw new Error('usage: corrections.mjs ADMITTED.jsonl TURNS.jsonl OUT.jsonl [--workers N]');
+const workers=Number(values.workers);
+if(!Number.isInteger(workers)||workers<1)throw new Error('workers must be a positive integer');
 const sites = await sitesOf(turnsPath);
 const jobs = [];
 for await (const row of lines(admittedPath)) for (const site of sites.get(row.id) ?? []) jobs.push({ row, site });
-const variants = [], rejected = {};
+const variants = [], rejected = {}, audit = [];
 let next = 0;
-await Promise.all(Array.from({ length: Number(values.workers) }, async () => {
+await Promise.all(Array.from({ length: workers }, async () => {
   while (next < jobs.length) {
     const { row, site } = jobs[next++];
     const provenance = row.provenance;
     try {
       const result = await correctedVariant(row, site, { systemPrompt: TOOLS_PROMPT, contextTokens: provenance.context_tokens ?? 16384,
         maxTurns: provenance.max_turns, rootSeed: provenance.seed_policy?.root ?? 909 });
-      if ('row' in result) variants.push(result.row); else rejected[result.rejected] = (rejected[result.rejected] ?? 0) + 1;
+      if ('row' in result) {
+        variants.push(result.row);
+        audit.push({parent:row.id,site,result:'replay_verified',variant:result.row.id});
+      } else {
+        rejected[result.rejected] = (rejected[result.rejected] ?? 0) + 1;
+        audit.push({parent:row.id,site,result:'held',disposition:classifyAdmissionReason(result.rejected)});
+      }
     } catch (error) {
       const reason = `replay failed: ${error instanceof Error ? error.message.split('\n')[0].slice(0, 80) : error}`;
       rejected[reason] = (rejected[reason] ?? 0) + 1;
+      audit.push({parent:row.id,site,result:'replay_error',disposition:classifyAdmissionReason(reason)});
     }
   }
 }));
-await writeFile(outPath, variants.map(row => JSON.stringify(row)).join('\n') + (variants.length ? '\n' : ''));
+variants.sort((a,b)=>a.id.localeCompare(b.id));
+audit.sort((a,b)=>a.parent.localeCompare(b.parent)||a.site.fixed-b.site.fixed);
+const bytes=variants.map(row => JSON.stringify(row)).join('\n') + (variants.length ? '\n' : '');
+await writeFile(outPath, bytes);
+await writeFile(`${outPath}.audit.jsonl`,audit.map(row=>JSON.stringify(row)+'\n').join(''));
+await writeFile(`${outPath}.manifest.json`,JSON.stringify({version:'natlang.correction_variants/1',
+  inputs:[{path:admittedPath,sha256:await fileDigest(admittedPath)},{path:turnsPath,sha256:await fileDigest(turnsPath)}],
+  output:outPath,sha256:createHash('sha256').update(bytes).digest('hex'),
+  sites:jobs.length,variants:variants.length,rejected,final_training_audited:false},null,2)+'\n');
 console.log(`${variants.length} corrected variants from ${jobs.length} sites -> ${outPath}; not made: ${JSON.stringify(rejected)}`);

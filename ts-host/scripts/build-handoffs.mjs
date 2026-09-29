@@ -13,10 +13,13 @@ import { writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { retiredFamily } from '../dist/teacher/curriculum-policy.js';
+import { quarantineReason, runtimeFailureReason, trainingQualityReason } from '../dist/teacher/curriculum-policy.js';
+import { sourceConversionProblems } from '../dist/teacher/source-conversion.js';
 import { programRunId } from '../dist/teacher/collector.js';
 import { failsInPlace, handoffAt, handoffRecord, handoffSites } from '../dist/teacher/handoff.js';
 import { TOOLS_PROMPT } from '../dist/native/prompt.js';
 import { stripHint } from './inline-curriculum/admit.mjs';
+import { dpoHoldReasons } from './admission-dispositions.mjs';
 
 export const replayOptions = provenance => ({ systemPrompt: TOOLS_PROMPT, contextTokens: provenance.context_tokens ?? 16384,
   maxTurns: provenance.max_turns, rootSeed: provenance.seed_policy?.root ?? 909 });
@@ -48,7 +51,15 @@ async function main() {
   const jobs = [], skipped = {};
   for await (const row of rowsOf(inputs)) {
     if (row.outcome?.accepted !== false) continue;
-    if (retiredFamily(row.task.program_ir)) { skipped.retired_family = (skipped.retired_family ?? 0) + 1; continue; }
+    const record = row.task?.program_ir;
+    if (!record) { skipped.missing_program_ir = (skipped.missing_program_ir ?? 0) + 1; continue; }
+    const reasons = [...sourceConversionProblems(row), quarantineReason(record), trainingQualityReason(row),
+      runtimeFailureReason(row), retiredFamily(record)].filter(Boolean);
+    const holds = dpoHoldReasons(reasons);
+    if (holds.length) {
+      for (const hold of holds) skipped[`hold:${hold.reason}`] = (skipped[`hold:${hold.reason}`] ?? 0) + 1;
+      continue;
+    }
     try { for (const site of handoffSites(row)) jobs.push({ row, site }); }
     catch { jobs.push({ row, site: null }); }
   }

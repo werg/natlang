@@ -62,7 +62,7 @@ function decorate(record, source, info, selected, acquisition) {
   record.source_groups = [...new Set(selected.flatMap(x=>x.groups))];
   record.source_revisions = [info.revision]; record.license = info.license;
   record.gold_sources = ['workflowevals:two-model-high-confidence-agreement','native-reference-replay'];
-  record.generation = {generator:VERSION};
+  record.generation = {generator:VERSION,adapter_revision:'visible-inputs-v2'};
   record.external_source = {repository:info.repository, revision:info.revision, original_split:'test',
     license:info.license, license_basis:info.license_basis, snapshot_sha256:info.tables.questions.sha256,
     cases_snapshot_sha256:info.tables.cases.sha256,
@@ -111,7 +111,8 @@ export async function loadWorkflowSources(cache, limit=Number.MAX_SAFE_INTEGER) 
     for(const item of selected) {
       const record=curriculumCase({family:`workflow_${source}`,shape:item.row.question_instance_id,variant:'question-v1',splitGroup:item.groups[0],
         slice:'inline_placement',domain:'other',mode:'single_call',root:{name:'judge',args:{state:'unknown'},returns:item.returns,instructions:instructions(item.question)},
-        inputs:{state:item.state},expected:item.answer,reference:{root:[returnCall(item.answer)]}});
+        inputs:{state:item.state},expected:item.answer,reference:{root:[
+          ['eval',{code:'console.log(JSON.stringify(state));'}], returnCall(item.answer)]}});
       record.task_modality='primitive';records.push(decorate(record,source,info,[item],manifest));
     }
     // Batch related questions from the same source scenario. Never concatenate unrelated contexts just to inflate reducers.

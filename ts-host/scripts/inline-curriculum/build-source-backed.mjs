@@ -13,9 +13,9 @@ import { defaultToolSurfaceHash, recordDigest } from '../../dist/teacher/collect
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { loadWorkflowSources } from './workflow-sources.mjs';
-import { sourceConversionDigest, retiredWorkflowEvaluationReleased } from '../../dist/teacher/source-conversion.js';
+import { sourceConversionDigest, retiredWorkflowEvaluationReleased, workflowReferenceVisibility } from '../../dist/teacher/source-conversion.js';
 
-export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, excludeManifests = [], licenseResolver = pinnedRepositoryLicense, workflowCache = null }) {
+export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, excludeManifests = [], licenseResolver = pinnedRepositoryLicense, workflowCache = null, progressEvery = 0 }) {
   if (workflowCache) {
     // Published source snapshots are immutable; use a fresh output for later revisions.
     const exists = await access(join(out, 'static.manifest.json')).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
@@ -53,7 +53,10 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
     }
   }
   const options = { modelId: 'source-static-reference', rootSeed: 928, systemPrompt: TOOLS_PROMPT,
-    contextTokens: 16384, maxTurns: 60, followCutoffPages: !!workflow, toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
+    // Model-free replay retains full evidence; student-specific token gates still
+    // decide whether a rendered sample fits its actual training window.
+    contextTokens: workflow ? 32768 : 16384, maxTurns: 60, followCutoffPages: !!workflow, followEvalCutoffPages: !!workflow,
+    toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
   try { for (const candidate of candidates) {
     // Bind hashes to the durable JSON representation, including omission of optional undefined fields.
     const record = JSON.parse(JSON.stringify(candidate));
@@ -69,21 +72,8 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
       if (seen.has(identity)) throw new Error('duplicate_source_case');
       seen.add(identity);
       const row = JSON.parse(JSON.stringify(await referenceRow(record, cases, options)));
-      if (workflow && record.task_modality === 'directory-reducer') {
-        const visible = new Map(); let path = null;
-        for (let index = 0; index + 1 < row.trajectory.length; index++) {
-          const call = row.trajectory[index].assistant.calls[0];
-          const output = String(row.trajectory[index+1].context.at(-1)?.content ?? '');
-          if (call.tool === 'read_file') {
-            path = call.arguments.path;
-            visible.set(path, output.split('\n<<cut off:')[0]);
-          } else if (call.tool === 'read_page' && path) {
-            visible.set(path, visible.get(path) + output.replace(/\n<<page \d+ of \d+(?: shown;[^\n]*|, the last)>>[\s\S]*$/, ''));
-          }
-        }
-        for (const [path, text] of Object.entries(record.semantics.folder_files))
-          if (!visible.get(path)?.includes(text.trim())) throw new Error('reference_source_evidence_not_visible');
-      }
+      const visibility = workflow ? workflowReferenceVisibility(row) : null;
+      if (workflow && !visibility) throw new Error('reference_source_evidence_not_visible');
       const admission = admitRow(row);
       if (!admission.admitted) throw new Error(`native_admission:${admission.reasons.join(',')}`);
       const failures = row.outcome.action_ledger?.filter(event => ['error', 'refused', 'rejected'].includes(event.outcome)) ?? [];
@@ -98,6 +88,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
         source_success: record.external_source.trajectory?.source_success ?? null,
         whole_issue_replayed: false, original_trajectory_id: record.external_source.trajectory?.id ?? null,
         original_row_sha256: record.external_source.trajectory?.original_row_sha256 ?? null,
+        ...(visibility ? {visible_source_inputs:visibility} : {}),
       };
       if (record.external_source.trajectory) row.provenance.collection_role = 'external_replay';
       const sourceAdmission = admitRow(row);
@@ -111,6 +102,8 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
       await append('static.results.jsonl', row);
       for (const turn of materialized.turns) await append('static.turns.jsonl', turn);
       cases++;
+      if (progressEvery && cases % progressEvery === 0)
+        console.error(JSON.stringify({event:'static_replay_progress',cases,candidates:candidates.length}));
       bySource[record.source] = (bySource[record.source] ?? 0) + 1;
       if (record.external_source.trajectory) convertedCases++;
       trainingDecisions += materialized.turns.filter(t => t.training_admission.approved).length;
@@ -134,6 +127,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
   for (const row of rejected) rejectionCounts[row.reason] = (rejectionCounts[row.reason] ?? 0) + 1;
   const report = { version: 'natlang.source_static_bundle/1', model_calls: 0, acquisition_sha256: digest(acquisition),
     excluded_manifests: excludeManifests, source_answer_policy: workflow ? 'verified_typed_labels_with_masked_synthetic_reasoning' : 'default',
+    ...(workflow ? {source_input_visibility:'natlang.visible_source_inputs/1',adapter_revision:'visible-inputs-v2'} : {}),
     cases, by_source: bySource, results, ir, turns: fileInfo('static.turns.jsonl'),
     training_decisions: trainingDecisions,
     held_decisions: heldDecisions,
@@ -149,10 +143,13 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
 async function main() {
   const { values } = parseArgs({ options: { cache: { type: 'string', default: '../vendor/directory-sources' },
     out: { type: 'string', default: '../data/teacher/source-backed' }, limit: { type: 'string', default: '12' },
-    'workflow-cache': { type: 'string' }, 'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true } } });
+    'workflow-cache': { type: 'string' }, 'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true },
+    'progress-every': { type: 'string', default:'0' } } });
   const limit = Number(values.limit), trajectoryLimit = Number(values['trajectory-limit']);
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(trajectoryLimit) || trajectoryLimit < 0) throw new Error('invalid_limits');
-  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit, workflowCache: values['workflow-cache'] ? resolve(values['workflow-cache']) : null,
+  const progressEvery = Number(values['progress-every']);
+  if (!Number.isInteger(progressEvery) || progressEvery < 0) throw new Error('invalid_progress_interval');
+  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit, progressEvery, workflowCache: values['workflow-cache'] ? resolve(values['workflow-cache']) : null,
     excludeManifests: (values['exclude-manifest'] ?? []).map(path => resolve(path)) });
   console.log(JSON.stringify(report, null, 2));
   if (!report.cases) throw new Error('no_source_cases_admitted');

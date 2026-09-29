@@ -34,7 +34,8 @@ def catalog(repo, config=None):
     # Saved exports may be the only surviving copy of older runs. Inventory them
     # even when the automatic native-job snapshot cannot yet import them.
     paths += [p for p in (repo / 'runs').rglob('*')
-              if p.name.endswith(('.ir.jsonl', '.results.jsonl', '.results.jsonl.gz'))]
+              if p.name.endswith(('.ir.jsonl', '.results.jsonl', '.results.jsonl.gz', '.pairs.jsonl', '.preference-pairs.jsonl', '.corrected.jsonl'))
+              or p.name in {'preference-pairs.jsonl','preferences.jsonl','pairs.jsonl','corrected.jsonl','review-candidates.jsonl'}]
     for path in sorted(paths):
         if not path.is_file() or any(part in {'data-inventory', 'generated-snapshots', 'node_modules'} for part in path.parts):
             continue
@@ -72,6 +73,26 @@ def catalog(repo, config=None):
         if entry.get('observed_version') == 'natlang.program/1' or entry.get('observed_program_version') == 'natlang.program/1':
             entry['required_program_version'] = 'natlang.program/2'
             entry['version_migration_pending'] = True
+        if 'preference_pair' in str(entry.get('observed_version', '')) or path.name in {'preference-pairs.jsonl','preferences.jsonl','pairs.jsonl'}:
+            entry['training_lane'] = 'DPO'
+            entry['status'] = 'preference_review_pending'
+            entry['next_action'] = 'Require current-runtime causal failure proof, approved chosen action, shared prompt and original source groups; render/audit with the student template.'
+            if entry.get('observed_version') != 'natlang.preference_pair/2':
+                entry['required_preference_version'] = 'natlang.preference_pair/2'
+                entry['version_migration_pending'] = True
+            else:
+                manifest_path = Path(str(path) + '.manifest.json')
+                if manifest_path.is_file():
+                    pair_manifest = json.loads(manifest_path.read_text())
+                    if pair_manifest.get('version') == 'natlang.preference_pair_build/1':
+                        if hashlib.sha256(path.read_bytes()).hexdigest() != pair_manifest.get('pair_sha256'):
+                            entry['status'] = 'preference_digest_mismatch'
+                        else:
+                            entry['status'] = 'preference_causally_verified_pending_render'
+                            entry['verified_pairs'] = pair_manifest.get('causally_verified_pairs', 0)
+                            entry['preference_sha256'] = pair_manifest['pair_sha256']
+                            entry['audit_ledger'] = pair_manifest.get('audit')
+                            entry['final_training_audited'] = False
         artifacts[name] = entry
     # Missing files remain in the catalog, rather than disappearing on the next scan.
     for name, old in known.items():
@@ -80,10 +101,15 @@ def catalog(repo, config=None):
     snapshots = []
     snapshot_dir = repo / 'data/teacher/generated-snapshots'
     if snapshot_dir.exists():
+        grouped_snapshots = {}
         for path in snapshot_dir.glob('*.manifest.json'):
             value = json.loads(path.read_text())
             if not config or value['results']['path'] in inputs:
-                snapshots.append(dict(value, manifest=str(path)))
+                digest = value['results']['sha256']
+                grouped_snapshots.setdefault(digest, []).append(dict(value, manifest=str(path)))
+        for values in grouped_snapshots.values():
+            latest = max(values, key=lambda e: e['time'])
+            snapshots.append(dict(latest, equivalent_manifest_records=[e['manifest'] for e in values]))
     missing_inputs = []
     not_carried = []
     if config:
@@ -117,6 +143,16 @@ def catalog(repo, config=None):
                                 for stage in (config or {}).get('stages', [])]
     report['included_quality_blockers'] = [e['path'] for e in artifacts.values()
         if e.get('direct_recipe_input') and e['status'] == 'integrated_quality_fix_pending']
+    dpo_artifacts = [e for e in artifacts.values() if e.get('training_lane') == 'DPO']
+    verified_pair_sets = {}
+    for entry in dpo_artifacts:
+        if entry.get('preference_sha256'):
+            verified_pair_sets[entry['preference_sha256']] = entry['verified_pairs']
+    report['dpo_inventory'] = {'artifacts': len(dpo_artifacts),
+        'verified_native_pair_sets_by_content_hash': verified_pair_sets,
+        'verified_pairs_across_distinct_content_sets': sum(verified_pair_sets.values()),
+        'count_caveat': 'Different content revisions can still share pair IDs; final DPO preparation must dedup IDs/rendered pairs and isolate source groups.',
+        'final_training_audited': False}
     path = directory / (str(uuid.uuid4()) + '.json')
     atomic_json(path, report)
     atomic_json(current, report)
@@ -128,6 +164,11 @@ def catalog(repo, config=None):
     for snapshot in snapshots:
         s = snapshot['summary']
         overview.append(f"- {s['selected_trajectories']:,} selected trajectories / {s['unique_programs']:,} unique programs from {s['completed_files']:,} completed files. Final training audit pending. Manifest: `{snapshot['manifest']}`.")
+        if s.get('exclusion_categories'):
+            overview.append('- Held-file disposition counts (can overlap): ' + ', '.join(f'{k}: {v:,}' for k,v in s['exclusion_categories'].items()))
+    overview += ['', '## DPO pairs', '',
+                 f"{report['dpo_inventory']['artifacts']} recorded pair artifacts; {report['dpo_inventory']['verified_pairs_across_distinct_content_sets']} native causally verified pairs after collapsing byte-identical sets. Final rendering/split/token/dedup audit pending.",
+                 report['dpo_inventory']['count_caveat']]
     overview += ['', '## Transformation and review work', '', '| Source pattern | Status | Next action |', '|---|---|---|']
     overview += [f"| `{d['glob']}` | {d['status']} | {d.get('next_action', d.get('reason', ''))} |" for d in policy['decisions']]
     overview += ['', '## Carry-forward and training blockers', '',

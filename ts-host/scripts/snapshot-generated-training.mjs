@@ -6,10 +6,15 @@ import {join, resolve} from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {parseArgs} from 'node:util';
 import {admitRow} from '../dist/teacher/curriculum.js';
+import {classifyAdmissionReasons} from './admission-dispositions.mjs';
 const {values} = parseArgs({options:{repo:{type:'string'},out:{type:'string'}}});
 const repo = resolve(values.repo ?? process.cwd());
 const out = resolve(values.out ?? join(repo,'data/teacher/generated-snapshots'));
 await mkdir(out,{recursive:true});
+const policyIdentity=async()=>Object.fromEntries(await Promise.all(['../dist/teacher/curriculum.js',
+  '../dist/teacher/curriculum-policy.js','../dist/teacher/source-conversion.js','../dist/teacher/source-review.js',
+  './admission-dispositions.mjs'].map(async name=>[name,createHash('sha256').update(await readFile(new URL(name,import.meta.url))).digest('hex')])));
+const admissionPolicy=await policyIdentity();
 async function* files(dir) {
   for (const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))) {
     if (e.isDirectory() && !/^(runtime|node_modules|\.git|generated-snapshots)/.test(e.name)) yield* files(join(dir,e.name));
@@ -49,6 +54,14 @@ for(const item of ledger)if(item.reasons.includes('superseded_eligible_trajector
   item.replacement={file:kept.file,sha256:kept.sha256};
   item.duplicate_bytes=item.sha256===kept.sha256;
 }
+summary.exclusion_categories={};
+for(const item of ledger){
+  item.dispositions=classifyAdmissionReasons(item.reasons);
+  for(const category of new Set(item.dispositions.map(d=>d.category)))bump(summary.exclusion_categories,category);
+  item.dpo_negative_eligible=false;
+  if(item.dispositions.some(d=>d.category==='candidate_failure'))
+    item.dpo_next_action='Requires an approved replacement at the same prompt and current-runtime in-place failure proof; this hold is not itself a negative label.';
+}
 try{
   for(const [id,c] of [...selected].sort(([a],[b])=>a.localeCompare(b))){
     const bytes=await readFile(c.item.file);
@@ -59,12 +72,13 @@ try{
   await stream.sync();
 }finally{await stream.close();}
 const digest=hash.digest('hex'), path=join(out,digest+'.results.jsonl');
+if(JSON.stringify(admissionPolicy)!==JSON.stringify(await policyIdentity()))throw Error('Admission policy changed during inventory; rerun snapshot.');
 // Same digest means same immutable bytes. A repeated inventory can safely reuse them.
 await rename(tmp,path);
 summary.selected_trajectories=selected.size;summary.unique_programs=programs.size;
 const ledgerPath=join(out,nonce+'.ledger.jsonl');
 summary.repeated_eligible_trajectory_ids=summary.eligible_files-selected.size;
-const manifest={version:'natlang.generated_training_snapshot/1',time:new Date().toISOString(),selection:'Explicit teacher role, train split, current IR and admission; latest eligible artifact per trajectory ID',final_training_audited:false,results:{path,sha256:digest},ledger:ledgerPath,summary};
+const manifest={version:'natlang.generated_training_snapshot/1',time:new Date().toISOString(),selection:'Explicit teacher role, train split, current IR and admission; latest eligible artifact per trajectory ID',admission_policy_identity:admissionPolicy,final_training_audited:false,results:{path,sha256:digest},ledger:ledgerPath,summary};
 await writeFile(ledgerPath,ledger.map(x=>JSON.stringify(x)+'\n').join(''),{flag:'wx'});
 await writeFile(join(out,nonce+'.manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
 console.log(path);

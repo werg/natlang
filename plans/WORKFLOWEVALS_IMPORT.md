@@ -23,8 +23,8 @@ source IDs/groups with the new bundle.
 | Total | 4,194 | 611 | 4,805 |
 
 All 4,805 reference replays admit. Published native bundle:
-`data/teacher/workflowevals/{train.ir,static.results,static.turns}.jsonl` and
-`static.manifest.json`: 8,453 approved decisions, zero held/unlinked decisions.
+`data/teacher/workflowevals/v2.{train.ir,static.results,static.turns}.jsonl` and
+`static.manifest.json`: 28,975 approved decisions, zero held/unlinked decisions.
 Directory references show actual input files, including all cut-off pages; the
 builder reconstructs visible text and checks every source input was exposed.
 
@@ -119,3 +119,18 @@ Published workflow bundles refuse overwrite; select a new output for revisions.
 Superseded hidden-evidence drafts live only under `runs/workflowevals-20260929/`,
 losslessly gzipped after verifying decompressed hashes; never training inputs.
 Audit/replay logs and recipe discovery are in the same run directory.
+
+## Visible-input repair — 2026-09-30
+
+All primitive references now expose full `state` via console.log(JSON.stringify(state))
+and follow native cut-off pages before their typed answer. Directory references
+likewise retain each read/page output. Admission independently reconstructs exact
+source payloads and verifies that every output and root instruction remains in
+final-answer context. Proof is hash-bound to source conversion; old references
+without proof fail closed. All4,805 cases pass; default rematerialization exactly
+matches publication, with synthetic reasoning masked and original input/oracle/
+source grouping unchanged. Runtime-v4 uses32k model-free replay context:16k replay
+lost early evidence through compaction in37 cases, which correctly stayed held.
+Final student token and dedup checks still apply. Original files and v1 manifest
+remain retained with explicit replacement policy. Audit/publication records are
+under `runs/workflowevals-visible-20260930/`.

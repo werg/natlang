@@ -14,6 +14,7 @@ import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredF
 import { openingText } from './opening.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
+import { sourceConversionDigest } from './source-conversion.js';
 
 export const HANDOFF_VERSION = 'natlang.handoff/2';
 export const PREFERENCE_VERSION = 'natlang.preference_pair/2';
@@ -154,12 +155,19 @@ export async function preferencePair(row: TeacherRow, index: number, rejected: M
   const reasoning = reasoningOf(rejected);
   // A handoff task is its source program's: it must fall on the same side of a train/held-out split.
   const programId = (row.task.program_ir.handoff as Handoff | undefined)?.source.program_id ?? chosen.program_id;
+  const sourceGroups = [...new Set([programId,
+    ...(Array.isArray(chosen.source_groups) ? chosen.source_groups.filter((group): group is string =>
+      typeof group === 'string' && group !== chosen.program_id) : [])])];
+  const integrity = { source_row_sha256: sourceConversionDigest({ id: row.id, task: row.task,
+    provenance: row.provenance, outcome: row.outcome, trajectory: row.trajectory }),
+    chosen_decision_sha256: sourceConversionDigest(chosen.decision),
+    trajectory_id: row.id, decision_index: index };
   return { version: PREFERENCE_VERSION, id: `${row.id}:preference:${index}`, kind,
-    program_id: programId, source_groups: [programId], messages: chosen.messages, tools: chosen.tools,
+    program_id: programId, source_groups: sourceGroups, messages: chosen.messages, tools: chosen.tools,
     chosen: { target: chosen.target, reasoning: chosen.teacher_reasoning,
       ...(chosen.teacher_reasoning_trained === false ? { reasoning_trained: false } : {}) },
     rejected: { target: responseTarget(rejected, index), reasoning,
       // The same reasoning as the chosen side is context shared by both, not what the pair is about.
       ...(reasoning === chosen.teacher_reasoning && chosen.teacher_reasoning_trained === false ? { reasoning_trained: false } : {}) },
-    evidence };
+    evidence: { ...evidence, integrity } };
 }

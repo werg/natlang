@@ -1,5 +1,53 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **CURRENT — 2026-09-30, supersedes historical checks below.** Workflow visible-input
+> fix is published as v2 via `data/teacher/workflowevals/static.manifest.json`.
+> All4,805 cases independently prove complete source inputs remain visible at the
+> final scripted answer;28,975 native approved decisions, zero held/unlinked.
+> Source IR/gold/groups unchanged; synthetic reasoning masked. Old unsupported
+> references now fail closed. Old files retained and replacements recorded.
+> Frozen replay runtime `runs/workflowevals-visible-20260930/runtime-v4`;32k replay
+> window avoids automatic compaction dropping early evidence. Final student token,
+> split and rendered-pair dedup audits remain required. Inventory inclusion guard
+> is clear in recipe-v3; this is not final training readiness. Four newer bundles
+> now32,993 decisions/7,910 reducers (~23.97% before other layers/dedup); previous
+> 63.43% claim is obsolete. Keep expanding real reducers toward25% unique decisions.
+>
+> DPO:43 causal native /2 pairs (35 failed_action,8 wrong_result) from116 selected
+> candidates; `runs/dpo-audit-20260930/inline-handoffs-final.preference-pairs.jsonl`
+> plus hash-checked manifest/audit. Source groups preserved. Labels not final until
+> student rendering/token/split/dedup checks. Existing five /1 pairs remain migration
+> backlog. Migration/source review/real candidate failure are separate dispositions;
+> exclusion alone is never automatically a DPO negative. Recipe now includes offline
+> correction and preference stages with audit manifests. No training started.
+>
+> MiniCPM evaluation completed its30-minute reservation; Bonsai restored PID35895,
+> runtime-v39/queue-v31/cap4, fresh replies. Evaluation aggregate was overwritten by
+> single-case exports: repaired accounting from11 durable completed jobs with exact
+> IR checks,4 accepted/24 planned;13 missing include timeouts/not reached. Application
+> probes not reached. Correct report `runs/minicpm-eval-20260929/report.recovered.json`;
+> original erroneous zero-collected report retained. Recovery utility
+> `scripts/recover_native_evaluation.py`; local evaluator now uses per-case exports.
+> Do not describe missing/timeout cases as observed wrong answers.
+>
+> Original Luna pilot finished. New32-case all-directory batch with two provider
+> workers PID36471/36472, cap2/noGPU, frozen visible runtime-v4. State/queues/logs:
+> `runs/luna-directory-20260930/state.json`; disjoint fresh source cases, shortest
+> first with three source families interleaved; per-case exports preserve records.
+> Existing backoff/cooldown and1GiB disk floor retained. Confirm actual process and
+> journal freshness before claiming continued activity.
+>
+> A Luna subagent is investigating a conservative10-case offline migration pilot
+> for accepted current-IR teachers held only by obsolete runtime history. Originals
+> preserved; candidate replay output is not automatically approved teacher data.
+> Initial pilot had2 same-answer traces with changed observations and8 ambiguous
+> replay ownership failures. Strict-v3 rejected all10:0 safe replay candidates.
+> All history_migration rows are held by current admission, even direct inputs.
+> Inspect `runs/native-history-migration-20260930` and strict-v3 follow-up.
+> Latest recipe-v3 snapshot:2,758 trajectories/2,427 programs from5,520 completed
+> files; zero missing carry-forward inputs/included quality blockers. No training.
+
+
 > **DATA CARRY-FORWARD — 2026-09-30.** Both builders now automatically snapshot
 > completed native teacher jobs, alongside older2,192 static reference trajectories
 > and the four source bundles. New persistent artifact catalog and committed source
