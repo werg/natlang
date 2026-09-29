@@ -99,3 +99,17 @@ alone under v34 before v37/queue-v29; Luna resumes v37/queue-v26 directly, exist
 Do not reuse historical PIDs or old rollout config. Full exact server/worker commands and
 quality priorities are in HANDOVER.md. Computer shutdown is handled by user; no auto restart,
 no training. Unrelated working-tree changes preserved.
+
+## Generation resumed after reboot — 2026-09-29 16:51 UTC
+
+Verified frozen v34/v37 runtime identities, installed dependencies, all5 saved partial/result
+SHA256 hashes and V9 published payload checksums. No previous generation/server process was
+running. Restarted natlang-bonsai detached with same4 slots/globalcap4,6GiB memory cap,
+1,536MiB host cache; health endpoint OK, model loaded, observed GPU100%/7,455MiB/59.72W.
+LunaPID5040 resumes v37/queue-v26 and existing v2 journal; interrupted537 completed accepted
+in20.3s(4 turns), next540 started. BonsaiPID5100 resumes only interrupted v34 batch;collector
+reported2 already-complete roots and2 pending. New exact-PID boundary monitor5101 moves
+Bonsai to v37/queue-v29 after that batch, preserving journal/member identities and no overlap.
+Actual rollout state/metadata/logs: `/home/werg/natlang/runs/restart-20260929-165057`; pointer:`runs/RESTART_LATEST`.
+Shutdown history remains preserved. Prior quality holds, QASPER generation pause and staticV9
+remain unchanged. One Luna worker/cap1, no extra repair workers, no student training.

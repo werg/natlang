@@ -1,5 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **GENERATION RESUMED — 2026-09-29 16:51 UTC /18:51 Berlin.**
+> User requested restart after reboot; this supersedes the stopped state below.
+> Bonsai server healthy:4 slots,6GiB container cap,1,536MiB host cache, GPU100%/7,455MiB.
+> Saved runtime/checkpoint/V9 payload checksums verified. Bonsai recoveryPID5100 uses
+> v34 and the one-entry interrupted-batch queue; existing indices53/54 are retained,
+> only52/55 remain pending. New boundary monitorPID5101 switches to v37/queue-v29
+> after recovery; actual new PID/state: `/home/werg/natlang/runs/restart-20260929-165057/v37.rollout-state.json`.
+> LunaPID5040 on v37/queue-v26/cap1 resumed537 and completed it accepted in20.3s;
+> next case540 started. Exactly one supervisor per teacher; existing journals retained.
+> Restart metadata/logs: `/home/werg/natlang/runs/restart-20260929-165057/restart.json`; pointer:`runs/RESTART_LATEST`.
+> Old shutdown/rollout PIDs remain historical. Keep QASPER generation pause/source
+> holds; continue quality monitoring and25% reducer target. No training.
+
+
 > **USER-REQUESTED SHUTDOWN — 2026-09-29 11:28 UTC /13:28 Berlin.**
 > Generation workers, boundary monitor and `natlang-bonsai` container are STOPPED.
 > Nothing should automatically restart. The old PIDs below are historical; never signal
