@@ -276,3 +276,9 @@ A long invocation may continue in a fresh model conversation. The runtime
 carries the scope, staged result, child state, and folder overlay; earlier
 conversation text is not copied. A short working note may carry unresolved
 reasoning.
+# Instruction adaptation
+
+See [ADAPTATION.md](../docs/ADAPTATION.md) for the current TypeScript adaptation
+APIs, portable artifacts, evaluation workflow, and implementation status. The
+full acceptance contract and remaining gates are tracked in
+[ADAPTATION_SYSTEM_IMPLEMENTATION.md](../plans/ADAPTATION_SYSTEM_IMPLEMENTATION.md).

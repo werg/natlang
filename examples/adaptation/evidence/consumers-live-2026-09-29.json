@@ -1,0 +1,159 @@
+{
+  "schema": "natlang.live-artifact-consumers/v1",
+  "started": "2026-09-29T10:04:18.129Z",
+  "artifact": "f5d197624f78d7bbbadf7511ba654a2f231aa3f01cf389fd1c4f94f3dcc427f6",
+  "programHash": "dba956a187275d60d771e7fdf00e1e6c04ff189d50ffb5e3c868db0bb29b6571",
+  "executor": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "limitations": [
+    "The selected stateful artifact retains baseline instructions; this verifies deployment, not improvement.",
+    "Chromium uses a Node bridge to the same local deployment model; optimization is not bundled into browser code."
+  ],
+  "consumers": [
+    {
+      "kind": "installed-node",
+      "outcome": {
+        "kind": "failed",
+        "detail": "NatlangCallError: record: quiesced: episode token or wall-clock budget exhausted"
+      },
+      "observation": {
+        "log": "start\n",
+        "untouched": "keep"
+      },
+      "quality": 0,
+      "gates": {
+        "completed": false,
+        "preservesOtherFiles": true
+      },
+      "provenance": [
+        {
+          "program": "stateful",
+          "component": "stateful::record.nl::instructions",
+          "buildHash": "dba956a187275d60d771e7fdf00e1e6c04ff189d50ffb5e3c868db0bb29b6571",
+          "artifact": "f5d197624f78d7bbbadf7511ba654a2f231aa3f01cf389fd1c4f94f3dcc427f6",
+          "instructionHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+          "guidanceHash": "0514b517c7318e1dfc5114106582608125e7afd8e18877d1fdb818259fc16e04",
+          "runtimeRevision": 0,
+          "executor": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "originalSourceHash": "a9f92806918d7d4ea63cad44fd3e9918d8a0cd7c670dd9757950acd530575807",
+          "effectiveSourceHash": "a9f92806918d7d4ea63cad44fd3e9918d8a0cd7c670dd9757950acd530575807",
+          "patchedSourceHash": null,
+          "effectiveInstructionHash": "43ffc244d5f6859928660f87f9f9cca39c4722326c50a9120c26eeb2a0a915f9",
+          "originalInstructionHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+          "guidanceComponent": "stateful::program.guidance",
+          "guidanceApplied": true,
+          "evaluation": null
+        }
+      ],
+      "ledger": {
+        "rollouts": 0,
+        "proposals": 0,
+        "usage": {
+          "modelCalls": 1,
+          "inputTokens": 4822,
+          "outputTokens": 9,
+          "cost": null
+        },
+        "elapsedMs": 85815,
+        "unknownRequests": 0,
+        "overrun": [],
+        "roles": {
+          "executor": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 9,
+            "cost": null
+          }
+        },
+        "reserved": {
+          "modelCalls": 0,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cost": 0
+        }
+      }
+    },
+    {
+      "kind": "installed-browser-chromium",
+      "outcome": {
+        "kind": "returned",
+        "value": "log.txt  \nUntouched.txt"
+      },
+      "observation": {
+        "log": "start\n",
+        "untouched": "keep"
+      },
+      "quality": 0,
+      "gates": {
+        "completed": true,
+        "preservesOtherFiles": true
+      },
+      "provenance": [
+        {
+          "program": "stateful",
+          "component": "stateful::record.nl::instructions",
+          "buildHash": "dba956a187275d60d771e7fdf00e1e6c04ff189d50ffb5e3c868db0bb29b6571",
+          "artifact": "f5d197624f78d7bbbadf7511ba654a2f231aa3f01cf389fd1c4f94f3dcc427f6",
+          "instructionHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+          "guidanceHash": "0514b517c7318e1dfc5114106582608125e7afd8e18877d1fdb818259fc16e04",
+          "runtimeRevision": 0,
+          "executor": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "originalSourceHash": "a9f92806918d7d4ea63cad44fd3e9918d8a0cd7c670dd9757950acd530575807",
+          "effectiveSourceHash": "a9f92806918d7d4ea63cad44fd3e9918d8a0cd7c670dd9757950acd530575807",
+          "patchedSourceHash": null,
+          "effectiveInstructionHash": "43ffc244d5f6859928660f87f9f9cca39c4722326c50a9120c26eeb2a0a915f9",
+          "originalInstructionHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+          "guidanceComponent": "stateful::program.guidance",
+          "guidanceApplied": true,
+          "evaluation": null
+        }
+      ],
+      "ledger": {
+        "rollouts": 0,
+        "proposals": 0,
+        "usage": {
+          "modelCalls": 1,
+          "inputTokens": 4822,
+          "outputTokens": 9,
+          "cost": null
+        },
+        "elapsedMs": 7666,
+        "unknownRequests": 0,
+        "overrun": [],
+        "roles": {
+          "executor": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 9,
+            "cost": null
+          }
+        },
+        "reserved": {
+          "modelCalls": 0,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cost": 0
+        }
+      }
+    }
+  ],
+  "status": "completed",
+  "finished": "2026-09-29T10:05:54.333Z"
+}

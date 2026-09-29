@@ -1,0 +1,3114 @@
+{
+  "schema": "natlang.live-acceptance/v1",
+  "executor": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "reflection": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "allowance": {
+    "maxRollouts": 20,
+    "maxProposals": 1,
+    "maxModelCalls": 80,
+    "maxElapsedMs": 180000
+  },
+  "replicates": 2,
+  "priorSearch": "search-live-2026-09-29.json",
+  "limitations": [
+    "Small hand-authored fixtures and one proposal per strategy; this measures lifecycle and instability, not benchmark accuracy.",
+    "Executor and reflection are the same explicitly configured local base model.",
+    "Unavailable usage/pricing remains unknown."
+  ],
+  "records": [
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: immutable run manifest differs"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for fragment: fixture observation must be finite JSON; supply observe() to project live handles and captures"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for fragment: fixture observation must be finite JSON; supply observe() to project live handles and captures"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 0,
+      "completeReplicates": 0,
+      "mean": null,
+      "standardDeviation": null,
+      "standardError": null
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: immutable run manifest differs"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for fragment: fixture observation must be finite JSON; supply observe() to project live handles and captures"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for fragment: fixture observation must be finite JSON; supply observe() to project live handles and captures"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 0,
+      "completeReplicates": 0,
+      "mean": null,
+      "standardDeviation": null,
+      "standardError": null
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "a547695f485a17945fde7d355bc3d5fbc9e0f2d60a66dc01d5ce1413eb4973ac",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3510,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3681.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3510,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "ledger": {
+          "elapsedMs": 42734,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 37964,
+              "modelCalls": 12,
+              "outputTokens": 402
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 762,
+              "modelCalls": 1,
+              "outputTokens": 512
+            }
+          },
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38726,
+            "modelCalls": 13,
+            "outputTokens": 914
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2874.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "74be74b325ec07c7d8cc0b825feb543368af152dcb3b7343f3ff8964b0a8b65b",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2992.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "d33c9be93e6fb2585f11e80826c81339d7f8b7398069c66db80bf9fb13b75631",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2935.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "69b6356445c4c2637caae75e80dbd2f61372ffceed0e863289a47e4c73e0c15f",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2987,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "7eb89a3d61488b7fb9805baf37c9bd45bcf448dcd019750f2531c84b003b5219",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "f5fa3b7fc296040af574cadfa0aae33e44ded8577abe051627424c7a9df6379a",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2888.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 4149.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2888.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "ledger": {
+          "elapsedMs": 28591,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 37970,
+              "modelCalls": 12,
+              "outputTokens": 408
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 758,
+              "modelCalls": 1,
+              "outputTokens": 512
+            }
+          },
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38728,
+            "modelCalls": 13,
+            "outputTokens": 920
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3080,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "9b61da3db612a65e043bee3cc60f7d6981db54a96e807524fc56126f511fe410",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3003,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "17e3d57faa9eca9851cb37e0884ef7f55a9b2a69971ac45fd043237545d38e76",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2936.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "3890585f3570cd674cf80aef17cbf76d76442554f67f7c73522d3dbae665b30a",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3115.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "971f926dfacb8475e2a39cae65d55fa56636852754dd6c51e74d7e03f3b9d5bf",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "32336aaf8332ad28e5eb5b2e9f910018fac855c434e1d526e26419fe231182aa",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2847.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 4053,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2847.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [],
+        "ledger": {
+          "elapsedMs": 27924,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 37970,
+              "modelCalls": 12,
+              "outputTokens": 408
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 505,
+              "modelCalls": 1,
+              "outputTokens": 512
+            }
+          },
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38475,
+            "modelCalls": 13,
+            "outputTokens": 920
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3343,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "bfdcc94326c71dd23c2ed6021972c5a6b8b2976b69ead19e35e4cb69aa6394a1",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3394,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "afca449e7da004866a11b59a378619c8b588ac3993130a1cab77c5341ef745a0",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3518,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "4a2b413797ab68283b38d8ee2f3220137278412157db324aec694fd969fdb06f",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 4387.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "8485b91057c8623ce449d2df45eb9096a68dc7e36cd9ad2d220e4718a5f0fb41",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "001e0c7059103c4b6886c5696e9d078f0afd3e0ffc4c0a079a7907812f5995ec",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3737,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 4605.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3737,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [],
+        "ledger": {
+          "elapsedMs": 32367,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 37970,
+              "modelCalls": 12,
+              "outputTokens": 408
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 505,
+              "modelCalls": 1,
+              "outputTokens": 431
+            }
+          },
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38475,
+            "modelCalls": 13,
+            "outputTokens": 839
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3307.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "0a77044b2c97d8b96bcf89468f2482ed3d31f31b06a8c3e80f895cca1aaec6de",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3416.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "7c88d134bd187b48d6ac79b4aafceedda02d374e6f66e712543e6e3d13dd37a8",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3209,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "e01c4452b51376d554f07a9b8837a155451b5adbe21dbf11c844e1b73ff03031",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3884,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "db065ef1391538115163eba9ef39a95d4b2525f6a1512fe83412d68daa7c2312",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "9ee4f583f898cf68feb6fa2edb418e708b380b5d2f1e752087ca23752cfa4ea8",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3253.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3573.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3253.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "ledger": {
+          "elapsedMs": 39345,
+          "overrun": [],
+          "proposals": 1,
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38728,
+            "modelCalls": 13,
+            "outputTokens": 914
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 5364.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "fb9e755e60e6ff079b95046d9f611b8b42ca5c38a0ff9cb5c030b8021538ea90",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 4101.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "a53154e17ec2bf8689f88dc4208270bafd3fd9758534f4054a4b8ac6a91a3d49",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3942.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "648286edd547cd90da33b940e588f39b7f12c4a9f97fd9dd8d81d9032a356a46",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 4407,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "12ceaf4cdeec58f73e38f71f1637153da9a6ede6549e1ba87885090d736be245",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "dd19d973182a55daebfdc1ab888b5a848171315a088dce4b509b04bd8a2bffd7",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3105.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3887,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 0.5,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 2,
+            "coverage": [
+              "moderation::moderate.nl::instructions",
+              "moderation::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 2
+              },
+              "consistent": {
+                "failed": 0,
+                "passed": 2
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 3105.5,
+            "modelCalls": 4,
+            "outcomes": {
+              "returned": 2
+            },
+            "quality": 1,
+            "slices": {}
+          }
+        },
+        "uncovered": [
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "ledger": {
+          "elapsedMs": 28821,
+          "overrun": [],
+          "proposals": 1,
+          "rollouts": 6,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 38731,
+            "modelCalls": 13,
+            "outputTokens": 920
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3711,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "284e8766ff056749495c69a2bee57d6b3bf2830f764a8bee0c7d8f4a9d3dc9d8",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3611,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "ba987bd8d0a0014dcf30b178c2c5a884eb0603cc3e7a9af6f5bb15617a9bf9dd",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.75,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 1,
+            "failed": 1
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 4007,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "f4ea519def2fce88311e2628f2e83ba0eab8dadfe6fb122ae0aa83ba8e274573",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": true,
+            "consistent": false
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6309,
+            "outputTokens": 47,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 1,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 3711,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "0774c00dd884792f132248c18e1b6d827a7755c330a45f78129f6794a0c97765",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 49,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.875,
+      "standardDeviation": 0.1767766952966369,
+      "standardError": 0.125
+    }
+  ]
+}

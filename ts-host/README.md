@@ -6,6 +6,8 @@ lowering), the runtime (tasks, the invocation kernel, callables, `iterateOn`),
 the interpreter (the model's eval session), and the application utilities
 (`EventLoop`, terminal shell, DOM renderer, playground projects). See
 [native packages](../NATIVE_PACKAGES.md) and [development setup](../DEV_SETUP.md).
+Instruction adaptation APIs, compatibility rules, and recorded validation are
+described in [ADAPTATION.md](../docs/ADAPTATION.md).
 
 ## Build and test
 

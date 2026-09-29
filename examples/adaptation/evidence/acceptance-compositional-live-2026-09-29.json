@@ -1,0 +1,2066 @@
+{
+  "schema": "natlang.live-acceptance/v1",
+  "executor": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "reflection": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "allowance": {
+    "maxRollouts": 20,
+    "maxProposals": 1,
+    "maxModelCalls": 80,
+    "maxElapsedMs": 180000
+  },
+  "replicates": 2,
+  "priorSearch": "search-live-2026-09-29.json",
+  "priorAcceptance": "acceptance-live-2026-09-29.json",
+  "limitations": [
+    "Small hand-authored fixtures and one proposal per strategy; this measures lifecycle and instability, not benchmark accuracy.",
+    "Executor and reflection are the same explicitly configured local base model.",
+    "Unavailable usage/pricing remains unknown.",
+    "This process started before per-replicate ledger capture was added. Scored attempts retain per-case usage; usage for failed replicate attempts is unavailable. Search ledgers were recovered from durable runs."
+  ],
+  "records": [
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for threat: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed"
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "Error: evaluation infrastructure failure for threat: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 109796,
+          "overrun": [],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": null,
+              "modelCalls": 20,
+              "outputTokens": null
+            }
+          },
+          "rollouts": 2,
+          "unknownRequests": 2,
+          "usage": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 20,
+            "outputTokens": null
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 109790,
+        "overrun": [],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 20,
+            "outputTokens": null
+          }
+        },
+        "rollouts": 2,
+        "unknownRequests": 2,
+        "usage": {
+          "cost": null,
+          "inputTokens": null,
+          "modelCalls": 20,
+          "outputTokens": null
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "reflection"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "310024f046958fccfc60b902c768811cb00b20784d71bedd3fd0cccab7107dfc"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for discussion: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed",
+      "ledger": null,
+      "usageStatus": "not-captured-for-this-attempt"
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 85007.5,
+        "modelCalls": 17,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "2a1ad26a4b9c551501f06fcad8c33ce7f08328eb2f3247e8cd7a0076af414396",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26313,
+            "outputTokens": 553,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 8,
+            "inputTokens": 23186,
+            "outputTokens": 646,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 17,
+        "inputTokens": 49499,
+        "outputTokens": 1199,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 1,
+      "completeReplicates": 1,
+      "mean": 0.5,
+      "standardDeviation": null,
+      "standardError": null
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for criticism: evaluation worker timed out"
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "Error: evaluation infrastructure failure for criticism: evaluation worker timed out",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 120057,
+          "overrun": [],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": null,
+              "modelCalls": 5,
+              "outputTokens": null
+            }
+          },
+          "rollouts": 1,
+          "unknownRequests": 1,
+          "usage": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 5,
+            "outputTokens": null
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 120042,
+        "overrun": [],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 5,
+            "outputTokens": null
+          }
+        },
+        "rollouts": 1,
+        "unknownRequests": 1,
+        "usage": {
+          "cost": null,
+          "inputTokens": null,
+          "modelCalls": 5,
+          "outputTokens": null
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "gepa"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "310024f046958fccfc60b902c768811cb00b20784d71bedd3fd0cccab7107dfc"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 84290,
+        "modelCalls": 10,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "9fa568979f469611f88f3a8ae907e836b96494bc53be0331a01adfc8a636db96",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 6,
+            "inputTokens": 17756,
+            "outputTokens": 179,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 12184,
+            "outputTokens": 108,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 10,
+        "inputTokens": 29940,
+        "outputTokens": 287,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 70594,
+        "modelCalls": 16,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "ebc5be662540243e312956e802d024f5c8cd86c7882ce4c5ec588fd828bac7fd",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 7,
+            "inputTokens": 20971,
+            "outputTokens": 151,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26426,
+            "outputTokens": 660,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 16,
+        "inputTokens": 47397,
+        "outputTokens": 811,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.5,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "search",
+      "status": "failed",
+      "error": "BudgetExhausted: adaptation budget exhausted: elapsedMs"
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "BudgetExhausted: adaptation budget exhausted: elapsedMs",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 190548,
+          "overrun": [
+            "elapsedMs"
+          ],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 88263,
+              "modelCalls": 30,
+              "outputTokens": 1810
+            }
+          },
+          "rollouts": 4,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 88263,
+            "modelCalls": 30,
+            "outputTokens": 1810
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 190373,
+        "overrun": [
+          "elapsedMs"
+        ],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 88263,
+            "modelCalls": 30,
+            "outputTokens": 1810
+          }
+        },
+        "rollouts": 4,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 88263,
+          "modelCalls": 30,
+          "outputTokens": 1810
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::program.guidance"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "reflection"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "ebccd540bb6978830f86693f9d739f71f176206b0f1b147683f6e96177bf455b"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 87737.5,
+        "modelCalls": 21,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "ab304d4f6ade5d56f502b94c904e12fb5f8291fb1c5cc293e871f2c99850b671",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 12,
+            "inputTokens": 35692,
+            "outputTokens": 1017,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26467,
+            "outputTokens": 618,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 21,
+        "inputTokens": 62159,
+        "outputTokens": 1635,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 69942.5,
+        "modelCalls": 18,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "8c1b341b401b30cfef9a62c01565b2bf49f29419d80eb7204c86fec388b86137",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26426,
+            "outputTokens": 660,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26313,
+            "outputTokens": 553,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 18,
+        "inputTokens": 52739,
+        "outputTokens": 1213,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.5,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for criticism: evaluation worker timed out"
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "Error: evaluation infrastructure failure for criticism: evaluation worker timed out",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 120032,
+          "overrun": [],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": null,
+              "modelCalls": 5,
+              "outputTokens": null
+            }
+          },
+          "rollouts": 1,
+          "unknownRequests": 1,
+          "usage": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 5,
+            "outputTokens": null
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 120018,
+        "overrun": [],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 5,
+            "outputTokens": null
+          }
+        },
+        "rollouts": 1,
+        "unknownRequests": 1,
+        "usage": {
+          "cost": null,
+          "inputTokens": null,
+          "modelCalls": 5,
+          "outputTokens": null
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::program.guidance"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "gepa"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "ebccd540bb6978830f86693f9d739f71f176206b0f1b147683f6e96177bf455b"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for discussion: evaluation worker timed out",
+      "ledger": null,
+      "usageStatus": "not-captured-for-this-attempt"
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for discussion: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed",
+      "ledger": null,
+      "usageStatus": "not-captured-for-this-attempt"
+    },
+    {
+      "suite": "moderation",
+      "mode": "guidance-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 0,
+      "completeReplicates": 0,
+      "mean": null,
+      "standardDeviation": null,
+      "standardError": null
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for criticism: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed"
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "Error: evaluation infrastructure failure for criticism: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 54718,
+          "overrun": [],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": null,
+              "modelCalls": 8,
+              "outputTokens": null
+            }
+          },
+          "rollouts": 1,
+          "unknownRequests": 1,
+          "usage": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 8,
+            "outputTokens": null
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 54689,
+        "overrun": [],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": null,
+            "modelCalls": 8,
+            "outputTokens": null
+          }
+        },
+        "rollouts": 1,
+        "unknownRequests": 1,
+        "usage": {
+          "cost": null,
+          "inputTokens": null,
+          "modelCalls": 8,
+          "outputTokens": null
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "reflection"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "0d57ccbdc59b891ddb1b3182208ba115ea8dd235b2a2468805d05a0cdf16d809"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for secrets: model request to http://127.0.0.1:37163/v1/chat/completions failed: SocketError: other side closed",
+      "ledger": null,
+      "usageStatus": "not-captured-for-this-attempt"
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 54990,
+        "modelCalls": 14,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "a003f62409aa2f4159231ecb3b0c72f2a2e25aeb13da12e081390c6ed1a47a3c",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode turn, token, or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26426,
+            "outputTokens": 660,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 5,
+            "inputTokens": 15389,
+            "outputTokens": 116,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 14,
+        "inputTokens": 41815,
+        "outputTokens": 776,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 1,
+      "completeReplicates": 1,
+      "mean": 0.5,
+      "standardDeviation": null,
+      "standardError": null
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "search",
+      "status": "failed",
+      "error": "BudgetExhausted: adaptation budget exhausted: elapsedMs"
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null,
+      "failure": {
+        "committedIteration": null,
+        "error": "BudgetExhausted: adaptation budget exhausted: elapsedMs",
+        "incumbent": null,
+        "ledger": {
+          "elapsedMs": 184083,
+          "overrun": [
+            "elapsedMs"
+          ],
+          "proposals": 0,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 96162,
+              "modelCalls": 33,
+              "outputTokens": 2272
+            }
+          },
+          "rollouts": 4,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 96162,
+            "modelCalls": 33,
+            "outputTokens": 2272
+          }
+        },
+        "status": "infrastructure-or-input-error"
+      },
+      "ledger": {
+        "elapsedMs": 183942,
+        "overrun": [
+          "elapsedMs"
+        ],
+        "proposals": 0,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 96162,
+            "modelCalls": 33,
+            "outputTokens": 2272
+          }
+        },
+        "rollouts": 4,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 96162,
+          "modelCalls": 33,
+          "outputTokens": 2272
+        }
+      },
+      "manifest": {
+        "components": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ],
+        "engine": "natlang.ax-gepa/v1",
+        "executor": {
+          "configuration": {
+            "kind": "managed-local",
+            "model": "lfm2.5-350m-base-q8"
+          },
+          "id": "managed-local:lfm2.5-350m-base-q8"
+        },
+        "programHash": "0f04b765d9ec63f1d3c326ebc4461311a0d23c9910bbaf91529cf17a7c02da78",
+        "schema": "natlang.adaptation-run/v1",
+        "settings": {
+          "dependencies": {},
+          "finalTest": true,
+          "holdoutReservation": {},
+          "judgeIdentity": null,
+          "limits": {
+            "maxElapsedMs": 180000,
+            "maxModelCalls": 80,
+            "maxProposals": 1,
+            "maxRollouts": 20
+          },
+          "maxPopulation": 16,
+          "maxRepairs": 0,
+          "minibatchSize": 4,
+          "reflectionIdentity": {
+            "configuration": {
+              "kind": "managed-local",
+              "model": "lfm2.5-350m-base-q8"
+            },
+            "id": "managed-local:lfm2.5-350m-base-q8"
+          },
+          "seed": 929,
+          "selection": null,
+          "strategy": "gepa"
+        },
+        "splits": {
+          "test": [
+            "holdout-harm",
+            "holdout-opinion"
+          ],
+          "train": [
+            "criticism",
+            "threat"
+          ],
+          "validation": [
+            "discussion",
+            "secrets"
+          ]
+        },
+        "suiteHash": "0d57ccbdc59b891ddb1b3182208ba115ea8dd235b2a2468805d05a0cdf16d809"
+      },
+      "evidenceRecovery": "Search provenance and usage recovered from the durable run after completion."
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 94816.5,
+        "modelCalls": 20,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "93420a532af2ad959cebe1987793bb2db329323daafc52e3fc646f081a557e1b",
+      "cases": [
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 12,
+            "inputTokens": 35692,
+            "outputTokens": 1017,
+            "cost": null
+          }
+        },
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted",
+              "NatlangCallError: nl@decision.ts:3: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": null,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 8,
+            "inputTokens": 23252,
+            "outputTokens": 604,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 20,
+        "inputTokens": 58944,
+        "outputTokens": 1621,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": false,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 2
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 53630.5,
+        "modelCalls": 18,
+        "coverage": [
+          "moderation::moderate.nl::instructions",
+          "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+          "moderation::moderate/risk.nl::instructions",
+          "moderation::program.guidance"
+        ]
+      },
+      "digest": "490aaeb55f3eded182ab34fa7af2b4268351b5b72bd686251541d6cacfa1595e",
+      "cases": [
+        {
+          "id": "secrets",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode turn, token, or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": false,
+              "risk": "unsafe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26426,
+            "outputTokens": 660,
+            "cost": null
+          }
+        },
+        {
+          "id": "discussion",
+          "quality": 0.5,
+          "gates": {
+            "completed": false,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "metrics": {
+            "localRisk": 0,
+            "localDecision": 0,
+            "finalRisk": 1,
+            "finalDecision": 1
+          },
+          "observation": {
+            "failures": [
+              "NatlangCallError: risk: quiesced: episode token or wall-clock budget exhausted"
+            ],
+            "localDecision": true,
+            "localRisk": null,
+            "result": {
+              "publish": true,
+              "risk": "safe"
+            }
+          },
+          "coverage": [
+            "moderation::moderate.nl::instructions",
+            "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+            "moderation::moderate/risk.nl::instructions",
+            "moderation::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 9,
+            "inputTokens": 26313,
+            "outputTokens": 553,
+            "cost": null
+          }
+        }
+      ],
+      "ledger": null,
+      "usageStatus": "per-case-usage-only",
+      "usageSummary": {
+        "modelCalls": 18,
+        "inputTokens": 52739,
+        "outputTokens": 1213,
+        "cost": null
+      }
+    },
+    {
+      "suite": "moderation",
+      "mode": "joint",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0.5,
+      "standardDeviation": 0,
+      "standardError": 0
+    }
+  ],
+  "status": "completed-with-failures",
+  "summary": {
+    "searches": 6,
+    "promotableArtifacts": 0,
+    "searchModelCalls": 101,
+    "replicatesAttempted": 12,
+    "replicatesScored": 8,
+    "replicatesFailed": 4,
+    "improvementDemonstrated": false
+  }
+}

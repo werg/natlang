@@ -48,6 +48,7 @@ for profiles, overrides, and provider options; see
 | [Skills](skills/README.md) | Authoring and integration guidance for coding agents |
 | [Native packages](NATIVE_PACKAGES.md) | `@natlang/node`, `@natlang/browser`, the CLI, and distribution packages |
 | [TypeScript runtime](ts-host/README.md) | Building and using the runtime and compiler |
+| [Adaptation](docs/ADAPTATION.md) | Evaluation suites, native GEPA/reflection, resumable runs, artifact deployment and rollback |
 | [Applications](applications/) | Wiki, notebook, evidence, logs, terminal, publisher, games, and more |
 | [Training](TRAINING.md), [teacher setup](TEACHER_SETUP.md), [program IR](PROGRAM_IR_PIPELINE.md) | Teacher data, student training, and evaluation |
 

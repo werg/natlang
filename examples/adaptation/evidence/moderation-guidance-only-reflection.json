@@ -1,0 +1,88 @@
+{
+  "components": [
+    {
+      "baselineHash": "aa0e5ee048cbff266111bb3a6fc3cb1113ef8d4731b10a34afc87e00515781f7",
+      "contractHash": "25ccbfbf7b06516b9b258484a884bec8d0c7ea4e3430e4b128239cfff80dc769",
+      "key": "moderation::program.guidance",
+      "value": {
+        "kind": "program.guidance",
+        "text": ""
+      }
+    }
+  ],
+  "digest": "32336aaf8332ad28e5eb5b2e9f910018fac855c434e1d526e26419fe231182aa",
+  "executor": {
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    },
+    "id": "managed-local:lfm2.5-350m-base-q8"
+  },
+  "policy": {
+    "codeEdits": "deny",
+    "settings": {
+      "contextTokens": 8192,
+      "maxSeconds": 30,
+      "maxTurns": 5,
+      "turnTokens": 384
+    }
+  },
+  "program": {
+    "buildHash": "9e22f9dc5b89e487af70249e3881e3be907867b33dc082b2548f0b67749182b5",
+    "guidanceScope": {
+      "importedPrograms": []
+    },
+    "id": "moderation",
+    "protocol": 2
+  },
+  "provenance": {
+    "engine": "natlang.ax-gepa/v1",
+    "evidence": {
+      "baselineQuality": 1,
+      "gatesPassed": true,
+      "ledger": {
+        "elapsedMs": 27924,
+        "overrun": [],
+        "proposals": 1,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 37970,
+            "modelCalls": 12,
+            "outputTokens": 408
+          },
+          "reflection": {
+            "cost": null,
+            "inputTokens": 505,
+            "modelCalls": 1,
+            "outputTokens": 512
+          }
+        },
+        "rollouts": 6,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 38475,
+          "modelCalls": 13,
+          "outputTokens": 920
+        }
+      },
+      "lockedTestDigest": "a953ff972c8e7a37101bd847824b608534063e4de02f59d388b81a6e80c201aa",
+      "selectedQuality": 1,
+      "stopReason": "completed",
+      "validationDigest": "e138184f4519f5b094244cce55e70e36f3b01fab847655e248aaac128e1fa706"
+    },
+    "promotion": "selected",
+    "runId": "reflection",
+    "seed": 929,
+    "strategy": "reflection",
+    "suiteHash": "efabef421daa0d70a35401108a4f1e3dbbb35eb39e27c0171805888b45e41197"
+  },
+  "schema": "natlang.adaptation/v1"
+}

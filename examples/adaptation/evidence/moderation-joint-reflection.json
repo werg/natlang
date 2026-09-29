@@ -1,0 +1,110 @@
+{
+  "components": [
+    {
+      "baselineHash": "77d9d77214b559690e232b3b2731acae15425f55215532f4964ab3eeae7052d0",
+      "contractHash": "bf7fcc1d0f1b848955cb7cdf37281aaab3ab9e26aa8649d6a7d8c1436ce70a93",
+      "key": "moderation::moderate.nl::instructions",
+      "value": {
+        "kind": "lambda.instructions",
+        "template": {
+          "segments": [
+            "Use risk to classify message, then decision to decide whether it can be published. Return both the risk and publish decision.\n"
+          ],
+          "slotIds": []
+        }
+      }
+    },
+    {
+      "baselineHash": "1db2efb932fe7d5198ea466e5055265a5a9cd43fedf1e2394173b58faa29d05c",
+      "contractHash": "48752bd575e1494bed80537495d2c4601eb1450fbb5d211d442d8f4f72e75045",
+      "key": "moderation::moderate/decision.ts::site%3Apublishing%3Ainstructions",
+      "value": {
+        "kind": "lambda.instructions",
+        "template": {
+          "segments": [
+            "Return true only when risk is safe."
+          ],
+          "slotIds": []
+        }
+      }
+    },
+    {
+      "baselineHash": "fc004a7b05bb7078c18e8812e6eda3dc5f227854b9c5d498243a1841c8e2c0bd",
+      "contractHash": "23f72cc782f08e51ba5e8fb39c8964f1ccb682e3d9beb8abd3cded32288e60ec",
+      "key": "moderation::moderate/risk.nl::instructions",
+      "value": {
+        "kind": "lambda.instructions",
+        "template": {
+          "segments": [
+            "Threats of violence and requests to steal secrets are unsafe. Ordinary criticism and polite discussion are safe. Return the risk of message.\n"
+          ],
+          "slotIds": []
+        }
+      }
+    },
+    {
+      "baselineHash": "aa0e5ee048cbff266111bb3a6fc3cb1113ef8d4731b10a34afc87e00515781f7",
+      "contractHash": "25ccbfbf7b06516b9b258484a884bec8d0c7ea4e3430e4b128239cfff80dc769",
+      "key": "moderation::program.guidance",
+      "value": {
+        "kind": "program.guidance",
+        "text": ""
+      }
+    }
+  ],
+  "digest": "9ee4f583f898cf68feb6fa2edb418e708b380b5d2f1e752087ca23752cfa4ea8",
+  "executor": {
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    },
+    "id": "managed-local:lfm2.5-350m-base-q8"
+  },
+  "policy": {
+    "codeEdits": "deny",
+    "settings": {
+      "contextTokens": 8192,
+      "maxSeconds": 30,
+      "maxTurns": 5,
+      "turnTokens": 384
+    }
+  },
+  "program": {
+    "buildHash": "9e22f9dc5b89e487af70249e3881e3be907867b33dc082b2548f0b67749182b5",
+    "guidanceScope": {
+      "importedPrograms": []
+    },
+    "id": "moderation",
+    "protocol": 2
+  },
+  "provenance": {
+    "engine": "natlang.ax-gepa/v1",
+    "evidence": {
+      "baselineQuality": 1,
+      "gatesPassed": true,
+      "ledger": {
+        "elapsedMs": 39345,
+        "overrun": [],
+        "proposals": 1,
+        "rollouts": 6,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 38728,
+          "modelCalls": 13,
+          "outputTokens": 914
+        }
+      },
+      "lockedTestDigest": "06b1b4e372fb9970bc0d8efd794b02919e7d7c94b214a49bf1aa50978c2065a3",
+      "selectedQuality": 1,
+      "stopReason": "completed",
+      "validationDigest": "ac35a7b8404220702c56f2790e6eb4952be5ca2aa665726b8c6a80e2d4e512b4"
+    },
+    "promotion": "selected",
+    "runId": "reflection",
+    "seed": 929,
+    "strategy": "reflection",
+    "suiteHash": "82b11fb91d9151ff3c769f6ad33352f75b645bdbb3f758b1696a326dfe4c07b6"
+  },
+  "schema": "natlang.adaptation/v1"
+}

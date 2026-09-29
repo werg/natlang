@@ -1,0 +1,88 @@
+{
+  "components": [
+    {
+      "baselineHash": "aa0e5ee048cbff266111bb3a6fc3cb1113ef8d4731b10a34afc87e00515781f7",
+      "contractHash": "25ccbfbf7b06516b9b258484a884bec8d0c7ea4e3430e4b128239cfff80dc769",
+      "key": "moderation::program.guidance",
+      "value": {
+        "kind": "program.guidance",
+        "text": ""
+      }
+    }
+  ],
+  "digest": "001e0c7059103c4b6886c5696e9d078f0afd3e0ffc4c0a079a7907812f5995ec",
+  "executor": {
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    },
+    "id": "managed-local:lfm2.5-350m-base-q8"
+  },
+  "policy": {
+    "codeEdits": "deny",
+    "settings": {
+      "contextTokens": 8192,
+      "maxSeconds": 30,
+      "maxTurns": 5,
+      "turnTokens": 384
+    }
+  },
+  "program": {
+    "buildHash": "9e22f9dc5b89e487af70249e3881e3be907867b33dc082b2548f0b67749182b5",
+    "guidanceScope": {
+      "importedPrograms": []
+    },
+    "id": "moderation",
+    "protocol": 2
+  },
+  "provenance": {
+    "engine": "natlang.ax-gepa/v1",
+    "evidence": {
+      "baselineQuality": 1,
+      "gatesPassed": true,
+      "ledger": {
+        "elapsedMs": 32367,
+        "overrun": [],
+        "proposals": 1,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 37970,
+            "modelCalls": 12,
+            "outputTokens": 408
+          },
+          "reflection": {
+            "cost": null,
+            "inputTokens": 505,
+            "modelCalls": 1,
+            "outputTokens": 431
+          }
+        },
+        "rollouts": 6,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 38475,
+          "modelCalls": 13,
+          "outputTokens": 839
+        }
+      },
+      "lockedTestDigest": "ce4b33d2a3780f5790e6f8d1123089a96f658991e16c86baf9a2c746ef446877",
+      "selectedQuality": 1,
+      "stopReason": "completed",
+      "validationDigest": "c0348806a7dd8e5e1c57b7fc885439dd51f94b0439bdf2231c3a90884df94762"
+    },
+    "promotion": "selected",
+    "runId": "gepa",
+    "seed": 929,
+    "strategy": "gepa",
+    "suiteHash": "efabef421daa0d70a35401108a4f1e3dbbb35eb39e27c0171805888b45e41197"
+  },
+  "schema": "natlang.adaptation/v1"
+}

@@ -4,6 +4,9 @@ The natlang command line: build, check, and run natlang TypeScript applications,
 call natural-language functions, and manage optional `.nlpkg` distribution
 packages and model backends.
 
+For current instruction adaptation APIs and implementation status, see the
+[adaptation guide](../../docs/ADAPTATION.md).
+
 ```sh
 npm install --global @natlang/cli
 natlang setup                           # prepare the managed local model runtime
@@ -32,3 +35,7 @@ model, an OpenAI-compatible endpoint, or a Pi provider. `natlang models` lists
 providers and model IDs; `natlang auth login|status|logout` manages supported
 OAuth credentials. See [model configuration](https://github.com/werg/natlang/blob/main/NATIVE_PACKAGES.md#authority-and-the-model-runtime)
 for profile fields, precedence, provider options, and runtime controls.
+# Adaptation status
+
+The current adaptation APIs and remaining release gates are described in the
+[adaptation guide](../../docs/ADAPTATION.md).

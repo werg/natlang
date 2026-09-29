@@ -1,5 +1,11 @@
 # Packages and network access in natlang code
 
+For evaluated instruction artifacts, use the [adaptation integration guide](ADAPTATION.md).
+Node exposes separate `/adaptation`, `/evaluation`, and `/optimize` SDK entry points;
+the browser root exposes portable artifact binding without optimizer code.
+A package target may declare an included `adaptation` JSON path; `--adaptation`
+selects an explicit replacement, and `--no-adaptation` rolls back for new tasks.
+
 Natlang code imports packages the way any module in its workspace would. The
 workspace is the application directory: `createNatlangRuntime({ workspace })`,
 `natlang run --workspace DIR`, or by default the nearest `package.json` above

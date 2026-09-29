@@ -4,6 +4,9 @@ For ordinary work in this repository, start with [DEV_SETUP.md](DEV_SETUP.md);
 `natlang run` builds and runs source directories directly. This document covers
 the npm distribution and the optional `.nlpkg` archive workflow.
 
+For instruction adaptation APIs and their current implementation status, see
+[ADAPTATION.md](docs/ADAPTATION.md).
+
 ## npm packages
 
 | Package | Contents |
@@ -133,6 +136,15 @@ config directory select a backend. For an externally owned service:
   }
 }
 ```
+
+Adaptation uses `executorIdentityForChoice(choice)` from `@natlang/node/model`
+to record the resolved executor configuration without authentication material.
+Bindings reject a different identity or evaluated inference policy. Reflection
+and judge identities are recorded separately. Custom model drivers declare
+their own identity and may accept an optional second `AbortSignal` argument.
+These identities are compatibility metadata; they do not certify that a remote
+provider keeps its weights unchanged. See [adaptation](docs/ADAPTATION.md) for
+evaluation, revalidation, activation, and rollback.
 
 The same profile resolution is used by `run`, `call`, `ask`, `setup`, and
 `doctor`. Choose a profile with `--profile`, then `NATLANG_PROFILE`, then

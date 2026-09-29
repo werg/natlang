@@ -1,0 +1,9 @@
+{"id": "incident", "group": "incident-family", "split": "train", "input": "The database is down now.", "expected": "urgent"}
+{"id": "planning", "group": "planning-family", "split": "train", "input": "Schedule a meeting next week.", "expected": "routine"}
+{"id": "empty", "group": "empty-family", "split": "train", "input": "", "expected": "unknown"}
+{"id": "leak", "group": "leak-family", "split": "validation", "input": "An attacker stole our production credentials.", "expected": "urgent"}
+{"id": "info", "group": "info-family", "split": "validation", "input": "Send the monthly summary when convenient.", "expected": "routine"}
+{"id": "fragment", "group": "fragment-family", "split": "validation", "input": "Please do it.", "expected": "unknown"}
+{"id": "hold-out-outage", "group": "hold-out-outage-family", "split": "test", "input": "All customer logins fail right now.", "expected": "urgent"}
+{"id": "hold-out-calendar", "group": "hold-out-calendar-family", "split": "test", "input": "Could we meet on Friday afternoon?", "expected": "routine"}
+{"id": "hold-out-ambiguous", "group": "hold-out-ambiguous-family", "split": "test", "input": "Urgent? Maybe.", "expected": "unknown"}

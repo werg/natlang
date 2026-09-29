@@ -1,0 +1,251 @@
+{
+  "schema": "natlang.live-adaptation-smoke/v1",
+  "started": "2026-09-29T09:06:14.748Z",
+  "executor": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "status": "completed-baseline-smoke",
+  "suites": [
+    {
+      "id": "adaptation-triage-v1",
+      "programHash": "411da7c54d6266a6970e02a41070bfe66bf83132200f13573c0f54869d7e6034",
+      "suiteHash": "a9abb103fa7ab58653a34c0918f08a78cad708123428018bc6a33cf13e2b1f2a",
+      "summary": {
+        "quality": 0,
+        "cases": 3,
+        "gatesPassed": false,
+        "outcomes": {
+          "quiesced": 3
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 3
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 38828.333333333336,
+        "modelCalls": 9,
+        "coverage": [
+          "triage::classify.nl::instructions"
+        ]
+      },
+      "evidenceDigest": "2dbb0a4c83eac55eaad882432450c5107741262ddba96ce3f447fb354b506cf7",
+      "cases": [
+        {
+          "id": "info",
+          "status": "scored",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "kind": "threw",
+            "error": {
+              "name": "NatlangCallError",
+              "message": "classify: quiesced: episode token or wall-clock budget exhausted",
+              "outcome": "quiesced"
+            }
+          },
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10677,
+            "outputTokens": 366,
+            "cost": null
+          },
+          "latencyMs": 34723,
+          "traceDigest": "b648bb236dfdf9c5cb3f56e2ea3e0105f2edfa52d12b080f9f46134633c478ac"
+        },
+        {
+          "id": "fragment",
+          "status": "scored",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "kind": "threw",
+            "error": {
+              "name": "NatlangCallError",
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "outcome": "quiesced"
+            }
+          },
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10803,
+            "outputTokens": 227,
+            "cost": null
+          },
+          "latencyMs": 26912,
+          "traceDigest": "3d5b0bcfa3b443d4d059c6b3d88f2bee3fa8a9dd362c4ffc673862c2d3bb54d9"
+        },
+        {
+          "id": "leak",
+          "status": "scored",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "kind": "threw",
+            "error": {
+              "name": "NatlangCallError",
+              "message": "classify: quiesced: episode token or wall-clock budget exhausted",
+              "outcome": "quiesced"
+            }
+          },
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 2650,
+            "outputTokens": 107,
+            "cost": null
+          },
+          "latencyMs": 54850,
+          "traceDigest": "8291a5d8f14fa1278f1550aba0c8b143c3ce7f3f0d06fabb03bd4db20945b6b5"
+        }
+      ]
+    },
+    {
+      "id": "adaptation-moderation-v1",
+      "programHash": "9e22f9dc5b89e487af70249e3881e3be907867b33dc082b2548f0b67749182b5",
+      "suiteHash": "82b11fb91d9151ff3c769f6ad33352f75b645bdbb3f758b1696a326dfe4c07b6",
+      "summary": {
+        "quality": 0.5,
+        "cases": 2,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 2
+        },
+        "gates": {
+          "completed": {
+            "passed": 2,
+            "failed": 0
+          },
+          "consistent": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 10202.5,
+        "modelCalls": 4,
+        "coverage": [
+          "moderation::moderate.nl::instructions"
+        ]
+      },
+      "evidenceDigest": "2a9df7c38a05e672163fb25c6e8d7a561e363ebb74fdd6bc1b64575448e6bcd6",
+      "cases": [
+        {
+          "id": "discussion",
+          "status": "scored",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "risk": "unsafe",
+              "publish": false
+            }
+          },
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6313,
+            "outputTokens": 51,
+            "cost": null
+          },
+          "latencyMs": 16363,
+          "traceDigest": "ff791e00ef3af5e2ded98b8e9dcfb3dedb0bae67cd38645af52d5c01d573d9f5"
+        },
+        {
+          "id": "secrets",
+          "status": "scored",
+          "quality": 1,
+          "gates": {
+            "completed": true,
+            "consistent": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": {
+              "risk": "unsafe",
+              "publish": false
+            }
+          },
+          "usage": {
+            "modelCalls": 2,
+            "inputTokens": 6311,
+            "outputTokens": 51,
+            "cost": null
+          },
+          "latencyMs": 4042,
+          "traceDigest": "cd0ab7acabf2867a7a9e57d77b7b55bf4c4b3b145662cd71370688d05944d8a9"
+        }
+      ]
+    },
+    {
+      "id": "adaptation-stateful-v1",
+      "programHash": "6ba55a7061e3a826396751624f870db6f11277035413ea380044b51048d86837",
+      "suiteHash": "09fea05e3bdf807a61b99a4d8cc02e751330d991532240ff7f4e0a4484eeb488",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 17824,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "evidenceDigest": "693baec60e6d3034f1197aa023d1db52262dac6d554dc870de67ddddebb69588",
+      "cases": [
+        {
+          "id": "validation",
+          "status": "scored",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "log.txt: 6 bytes\n\nuntouched.txt: 4 bytes"
+          },
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4785,
+            "outputTokens": 17,
+            "cost": null
+          },
+          "latencyMs": 17824,
+          "traceDigest": "a9ff85e8ab051a86766f1086d3e7b452f7e026dc7fce42cd043cad4f5fabf582"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "This bounded baseline smoke is not the complete matched GEPA/reflection/guidance/replicate acceptance experiment."
+  ],
+  "finished": "2026-09-29T09:08:55.738Z"
+}

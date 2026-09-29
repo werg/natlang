@@ -1,0 +1,1394 @@
+{
+  "schema": "natlang.live-acceptance/v1",
+  "executor": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "reflection": {
+    "id": "managed-local:lfm2.5-350m-base-q8",
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    }
+  },
+  "allowance": {
+    "maxRollouts": 20,
+    "maxProposals": 1,
+    "maxModelCalls": 80,
+    "maxElapsedMs": 180000
+  },
+  "replicates": 2,
+  "priorSearch": "search-live-2026-09-29.json",
+  "priorAcceptance": "acceptance-live-2026-09-29.json",
+  "limitations": [
+    "Small hand-authored fixtures and one proposal per strategy; this measures lifecycle and instability, not benchmark accuracy.",
+    "Executor and reflection are the same explicitly configured local base model.",
+    "Unavailable usage/pricing remains unknown."
+  ],
+  "records": [
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation infrastructure failure for fragment: model request to http://127.0.0.1:37287/v1/chat/completions failed: SocketError: other side closed"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": null
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 3,
+        "gatesPassed": false,
+        "outcomes": {
+          "quiesced": 3
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 3
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 26475.666666666668,
+        "modelCalls": 12,
+        "coverage": [
+          "triage::classify.nl::instructions",
+          "triage::program.guidance"
+        ]
+      },
+      "digest": "b3a3e6044f8c426b08f23392f291772428b64f6d46be33d2d99b144e2d6de790",
+      "cases": [
+        {
+          "id": "leak",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10711,
+            "outputTokens": 95,
+            "cost": null
+          }
+        },
+        {
+          "id": "info",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10800,
+            "outputTokens": 112,
+            "cost": null
+          }
+        },
+        {
+          "id": "fragment",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10710,
+            "outputTokens": 307,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 3,
+        "gatesPassed": false,
+        "outcomes": {
+          "quiesced": 3
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 3
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 28554.333333333332,
+        "modelCalls": 11,
+        "coverage": [
+          "triage::classify.nl::instructions",
+          "triage::program.guidance"
+        ]
+      },
+      "digest": "2c1474bf4265ae00fc9064184d0db39bb8bf9a85339172d36566061e1a98eb7d",
+      "cases": [
+        {
+          "id": "info",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10655,
+            "outputTokens": 71,
+            "cost": null
+          }
+        },
+        {
+          "id": "fragment",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10649,
+            "outputTokens": 81,
+            "cost": null
+          }
+        },
+        {
+          "id": "leak",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode token or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 3,
+            "inputTokens": 8426,
+            "outputTokens": 164,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search",
+      "status": "failed",
+      "error": "Error: evaluation regression: no candidate passes required validation gates and selection constraints"
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "no-promotable-artifact",
+      "artifact": null,
+      "report": {
+        "stopReason": "coverage-gap",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 3,
+            "coverage": [
+              "triage::classify.nl::instructions",
+              "triage::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 3,
+                "passed": 0
+              }
+            },
+            "gatesPassed": false,
+            "meanLatencyMs": 23345.666666666668,
+            "modelCalls": 12,
+            "outcomes": {
+              "quiesced": 3
+            },
+            "quality": 0,
+            "slices": {}
+          },
+          "lockedTest": null,
+          "validation": {
+            "cases": 3,
+            "coverage": [
+              "triage::classify.nl::instructions",
+              "triage::program.guidance"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 3,
+                "passed": 0
+              }
+            },
+            "gatesPassed": false,
+            "meanLatencyMs": 23345.666666666668,
+            "modelCalls": 12,
+            "outcomes": {
+              "quiesced": 3
+            },
+            "quality": 0,
+            "slices": {}
+          }
+        },
+        "uncovered": [
+          "triage::main.ts::site%3Anormalize%3Ainstructions"
+        ],
+        "ledger": {
+          "elapsedMs": 184386,
+          "overrun": [
+            "elapsedMs"
+          ],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 84648,
+              "modelCalls": 31,
+              "outputTokens": 2038
+            }
+          },
+          "rollouts": 8,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 84648,
+            "modelCalls": 31,
+            "outputTokens": 2038
+          }
+        },
+        "history": [
+          {
+            "error": "Error: adaptation data must contain only finite JSON values",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          },
+          {
+            "reason": "BudgetExhausted: adaptation budget exhausted: elapsedMs",
+            "type": "holdout-incomplete"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 3,
+        "gatesPassed": false,
+        "outcomes": {
+          "quiesced": 3
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 3
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 20215.666666666668,
+        "modelCalls": 12,
+        "coverage": [
+          "triage::classify.nl::instructions",
+          "triage::program.guidance"
+        ]
+      },
+      "digest": "7c5c923b86143589832f8c14fbfd64590599dbe70f7212e0a7ab8f3356a77431",
+      "cases": [
+        {
+          "id": "leak",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10711,
+            "outputTokens": 95,
+            "cost": null
+          }
+        },
+        {
+          "id": "info",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10800,
+            "outputTokens": 112,
+            "cost": null
+          }
+        },
+        {
+          "id": "fragment",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10710,
+            "outputTokens": 307,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 3,
+        "gatesPassed": false,
+        "outcomes": {
+          "quiesced": 3
+        },
+        "gates": {
+          "completed": {
+            "passed": 0,
+            "failed": 3
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 17172.333333333332,
+        "modelCalls": 12,
+        "coverage": [
+          "triage::classify.nl::instructions",
+          "triage::program.guidance"
+        ]
+      },
+      "digest": "a5401ba290594595c7371da6b1ec23bbeb183268a029cee437c59e9d35e524d9",
+      "cases": [
+        {
+          "id": "info",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10655,
+            "outputTokens": 71,
+            "cost": null
+          }
+        },
+        {
+          "id": "fragment",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10649,
+            "outputTokens": 81,
+            "cost": null
+          }
+        },
+        {
+          "id": "leak",
+          "quality": 0,
+          "gates": {
+            "completed": false
+          },
+          "outcome": {
+            "error": {
+              "message": "classify: quiesced: episode turn, token, or wall-clock budget exhausted",
+              "name": "NatlangCallError",
+              "outcome": "quiesced"
+            },
+            "kind": "threw"
+          },
+          "coverage": [
+            "triage::classify.nl::instructions",
+            "triage::program.guidance"
+          ],
+          "usage": {
+            "modelCalls": 4,
+            "inputTokens": 10899,
+            "outputTokens": 181,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "triage",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "90a1be772cf2f0bdd719559ea37a1653b77885e386beda425f4c930899aeb9d0",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2219,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2426,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2219,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          }
+        },
+        "uncovered": [],
+        "ledger": {
+          "elapsedMs": 27485,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 14466,
+              "modelCalls": 3,
+              "outputTokens": 56
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 598,
+              "modelCalls": 1,
+              "outputTokens": 512
+            }
+          },
+          "rollouts": 3,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 15064,
+            "modelCalls": 4,
+            "outputTokens": 568
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2771,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "44396405bb44546b9e108a9af17adac0dbdf246286c4f42889cdc5f48a4a46ee",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The call executed successfully and returned \"ok\". The log.txt file contains 6 bytes of data. There is no file that was modified, and no output is shown."
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 35,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 1453,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "45cb5719e8a10883e1ba12cdd22a12fae239bfd4c99ad1e3ca4ab9e2a4a7ec5e",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The evaluation of the call's arguments (\"log.txt\", \"untouched.txt\", \"two\") results in the following:\n\n- `log.txt`: 6 bytes\n- `untouched.txt`: 4 bytes\n- `two`: 8 bytes\n\nThe output (`log.txt`) is cut off, so the final status is:\n\n**ok**"
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 79,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 691,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "0fecfccd5694102b62ce37289c30580704b0648c462a1bac023690b098fb003c",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The call executed successfully and returned \"ok\". The log.txt file contains 6 bytes of data. There is no file that was modified, and no output is shown."
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 35,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 1438,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "dd322283f292d48201278009478a7a087a8675317d81ca3f0dc9f2b1868242d3",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The evaluation of the call's arguments (\"log.txt\", \"untouched.txt\", \"two\") results in the following:\n\n- `log.txt`: 6 bytes\n- `untouched.txt`: 4 bytes\n- `two`: 8 bytes\n\nThe output (`log.txt`) is cut off, so the final status is:\n\n**ok**"
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 79,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "reflection",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "search-report",
+      "status": "selected",
+      "artifact": "f5d197624f78d7bbbadf7511ba654a2f231aa3f01cf389fd1c4f94f3dcc427f6",
+      "report": {
+        "stopReason": "completed",
+        "improvement": 0,
+        "summaries": {
+          "baseline": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 10100,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          },
+          "lockedTest": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 2859,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          },
+          "validation": {
+            "cases": 1,
+            "coverage": [
+              "stateful::program.guidance",
+              "stateful::record.nl::instructions"
+            ],
+            "gates": {
+              "completed": {
+                "failed": 0,
+                "passed": 1
+              },
+              "preservesOtherFiles": {
+                "failed": 0,
+                "passed": 1
+              }
+            },
+            "gatesPassed": true,
+            "meanLatencyMs": 10100,
+            "modelCalls": 1,
+            "outcomes": {
+              "returned": 1
+            },
+            "quality": 0,
+            "slices": {}
+          }
+        },
+        "uncovered": [],
+        "ledger": {
+          "elapsedMs": 48240,
+          "overrun": [],
+          "proposals": 1,
+          "reserved": {
+            "cost": 0,
+            "inputTokens": 0,
+            "modelCalls": 0,
+            "outputTokens": 0
+          },
+          "roles": {
+            "executor": {
+              "cost": null,
+              "inputTokens": 14466,
+              "modelCalls": 3,
+              "outputTokens": 56
+            },
+            "reflection": {
+              "cost": null,
+              "inputTokens": 596,
+              "modelCalls": 1,
+              "outputTokens": 512
+            }
+          },
+          "rollouts": 3,
+          "unknownRequests": 0,
+          "usage": {
+            "cost": null,
+            "inputTokens": 15062,
+            "modelCalls": 4,
+            "outputTokens": 568
+          }
+        },
+        "history": [
+          {
+            "error": "Error: invalid proposal: invalid JSON value at 0",
+            "iteration": 0,
+            "type": "invalid-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 2839,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "1bb692ab1d6eed2b7e2f37432ca7bfc553328a6b7cdfff48501f61b7e75c6d33",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The call executed successfully and returned \"ok\". The log.txt file contains 6 bytes of data. There is no file that was modified, and no output is shown."
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 35,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "baseline",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 1430,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "a9d4647e97597aa42b7c1a633d84f34229db0ba66faf44cf42a7a353da6acacc",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The evaluation of the call's arguments (\"log.txt\", \"untouched.txt\", \"two\") results in the following:\n\n- `log.txt`: 6 bytes\n- `untouched.txt`: 4 bytes\n- `two`: 8 bytes\n\nThe output (`log.txt`) is cut off, so the final status is:\n\n**ok**"
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 79,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "baseline",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 0,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 611,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "1fb30eddd56dee65b6650a240ab0291791a561f585168fd0bf2d16978d977a1c",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The call executed successfully and returned \"ok\". The log.txt file contains 6 bytes of data. There is no file that was modified, and no output is shown."
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 35,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "replicate",
+      "selection": "selected",
+      "replicate": 1,
+      "status": "scored",
+      "summary": {
+        "quality": 0,
+        "cases": 1,
+        "gatesPassed": true,
+        "outcomes": {
+          "returned": 1
+        },
+        "gates": {
+          "completed": {
+            "passed": 1,
+            "failed": 0
+          },
+          "preservesOtherFiles": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        "slices": {},
+        "meanLatencyMs": 1377,
+        "modelCalls": 1,
+        "coverage": [
+          "stateful::program.guidance",
+          "stateful::record.nl::instructions"
+        ]
+      },
+      "digest": "53e55028a65b6cacc04c373c9c73ad3c698007d645dd6410a756dc9aa71227be",
+      "cases": [
+        {
+          "id": "validation",
+          "quality": 0,
+          "gates": {
+            "completed": true,
+            "preservesOtherFiles": true
+          },
+          "outcome": {
+            "kind": "returned",
+            "value": "The evaluation of the call's arguments (\"log.txt\", \"untouched.txt\", \"two\") results in the following:\n\n- `log.txt`: 6 bytes\n- `untouched.txt`: 4 bytes\n- `two`: 8 bytes\n\nThe output (`log.txt`) is cut off, so the final status is:\n\n**ok**"
+          },
+          "coverage": [
+            "stateful::program.guidance",
+            "stateful::record.nl::instructions"
+          ],
+          "usage": {
+            "modelCalls": 1,
+            "inputTokens": 4822,
+            "outputTokens": 79,
+            "cost": null
+          }
+        }
+      ]
+    },
+    {
+      "suite": "stateful",
+      "mode": "lambda-only",
+      "strategy": "gepa",
+      "phase": "uncertainty",
+      "selection": "selected",
+      "replicates": 2,
+      "completeReplicates": 2,
+      "mean": 0,
+      "standardDeviation": 0,
+      "standardError": 0
+    }
+  ]
+}

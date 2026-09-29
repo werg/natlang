@@ -1,0 +1,93 @@
+{
+  "components": [
+    {
+      "baselineHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+      "contractHash": "5f528c3189e923549d10d83a25ae1341ca9f27eb30ff0f35c2500bf70d5e84f3",
+      "key": "stateful::record.nl::instructions",
+      "value": {
+        "kind": "lambda.instructions",
+        "template": {
+          "segments": [
+            "Append note and a newline to log.txt. Preserve all existing text and all other files. Return \"ok\".\n"
+          ],
+          "slotIds": []
+        }
+      }
+    }
+  ],
+  "digest": "90a1be772cf2f0bdd719559ea37a1653b77885e386beda425f4c930899aeb9d0",
+  "executor": {
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    },
+    "id": "managed-local:lfm2.5-350m-base-q8"
+  },
+  "policy": {
+    "codeEdits": "deny",
+    "settings": {
+      "contextTokens": 8192,
+      "maxSeconds": 30,
+      "maxTurns": 5,
+      "turnTokens": 384
+    }
+  },
+  "program": {
+    "buildHash": "dba956a187275d60d771e7fdf00e1e6c04ff189d50ffb5e3c868db0bb29b6571",
+    "guidanceScope": {
+      "importedPrograms": []
+    },
+    "id": "stateful",
+    "protocol": 2
+  },
+  "provenance": {
+    "engine": "natlang.ax-gepa/v1",
+    "evidence": {
+      "baselineQuality": 0,
+      "gatesPassed": true,
+      "ledger": {
+        "elapsedMs": 27485,
+        "overrun": [],
+        "proposals": 1,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 14466,
+            "modelCalls": 3,
+            "outputTokens": 56
+          },
+          "reflection": {
+            "cost": null,
+            "inputTokens": 598,
+            "modelCalls": 1,
+            "outputTokens": 512
+          }
+        },
+        "rollouts": 3,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 15064,
+          "modelCalls": 4,
+          "outputTokens": 568
+        }
+      },
+      "lockedTestDigest": "395d6b7fa9f4e6fe49160067c7adb50968d5acfc728bf18cc486b56117a106b3",
+      "selectedQuality": 0,
+      "stopReason": "completed",
+      "validationDigest": "aa78227a1167a40c425f91808798e73bf69bcc96c81869243c6fa90347e31e11"
+    },
+    "promotion": "selected",
+    "runId": "reflection",
+    "seed": 929,
+    "strategy": "reflection",
+    "suiteHash": "1db587eaffab63b0570086498d84b97957cd6bf67b6acf147f4255272668d18c"
+  },
+  "schema": "natlang.adaptation/v1"
+}

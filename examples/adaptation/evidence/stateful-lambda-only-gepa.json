@@ -1,0 +1,93 @@
+{
+  "components": [
+    {
+      "baselineHash": "350bdefbe3edb6d2045bca843896fa38d7cdb8de9e73357fc24c31b0de3222a6",
+      "contractHash": "5f528c3189e923549d10d83a25ae1341ca9f27eb30ff0f35c2500bf70d5e84f3",
+      "key": "stateful::record.nl::instructions",
+      "value": {
+        "kind": "lambda.instructions",
+        "template": {
+          "segments": [
+            "Append note and a newline to log.txt. Preserve all existing text and all other files. Return \"ok\".\n"
+          ],
+          "slotIds": []
+        }
+      }
+    }
+  ],
+  "digest": "f5d197624f78d7bbbadf7511ba654a2f231aa3f01cf389fd1c4f94f3dcc427f6",
+  "executor": {
+    "configuration": {
+      "kind": "managed-local",
+      "model": "lfm2.5-350m-base-q8"
+    },
+    "id": "managed-local:lfm2.5-350m-base-q8"
+  },
+  "policy": {
+    "codeEdits": "deny",
+    "settings": {
+      "contextTokens": 8192,
+      "maxSeconds": 30,
+      "maxTurns": 5,
+      "turnTokens": 384
+    }
+  },
+  "program": {
+    "buildHash": "dba956a187275d60d771e7fdf00e1e6c04ff189d50ffb5e3c868db0bb29b6571",
+    "guidanceScope": {
+      "importedPrograms": []
+    },
+    "id": "stateful",
+    "protocol": 2
+  },
+  "provenance": {
+    "engine": "natlang.ax-gepa/v1",
+    "evidence": {
+      "baselineQuality": 0,
+      "gatesPassed": true,
+      "ledger": {
+        "elapsedMs": 48240,
+        "overrun": [],
+        "proposals": 1,
+        "reserved": {
+          "cost": 0,
+          "inputTokens": 0,
+          "modelCalls": 0,
+          "outputTokens": 0
+        },
+        "roles": {
+          "executor": {
+            "cost": null,
+            "inputTokens": 14466,
+            "modelCalls": 3,
+            "outputTokens": 56
+          },
+          "reflection": {
+            "cost": null,
+            "inputTokens": 596,
+            "modelCalls": 1,
+            "outputTokens": 512
+          }
+        },
+        "rollouts": 3,
+        "unknownRequests": 0,
+        "usage": {
+          "cost": null,
+          "inputTokens": 15062,
+          "modelCalls": 4,
+          "outputTokens": 568
+        }
+      },
+      "lockedTestDigest": "1bcdb0fa5c1d8722f5c05e315bf61c590484b3b48c48abd969f389d97433c560",
+      "selectedQuality": 0,
+      "stopReason": "completed",
+      "validationDigest": "d6259b1a83f06c80fe8a905bb3d5c9f4499f603719a6e142dc9de7427b0350d7"
+    },
+    "promotion": "selected",
+    "runId": "gepa",
+    "seed": 929,
+    "strategy": "gepa",
+    "suiteHash": "1db587eaffab63b0570086498d84b97957cd6bf67b6acf147f4255272668d18c"
+  },
+  "schema": "natlang.adaptation/v1"
+}

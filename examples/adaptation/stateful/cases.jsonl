@@ -1,0 +1,3 @@
+{"id": "training", "group": "training-family", "split": "train", "input": "one", "expected": "start\none\n"}
+{"id": "validation", "group": "validation-family", "split": "validation", "input": "two", "expected": "start\ntwo\n"}
+{"id": "holdout", "group": "holdout-family", "split": "test", "input": "three", "expected": "start\nthree\n"}
