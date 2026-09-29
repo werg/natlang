@@ -1,6 +1,6 @@
 ---
 name: natlang-authoring
-description: Author, refactor, review, and validate natlang code — inline `nl` calls in TypeScript, named `.nl` functions with their callable folders, and `natlang.d/` application context. Use when implementing semantic algorithms, reducers, generated programs, or application logic with natlang, including long-running work intended for small interpreter models.
+description: Author, refactor, review, evaluate, and adapt natlang code — inline `nl` calls in TypeScript, named `.nl` functions with their callable folders, and `natlang.d/` application context. Use for semantic algorithms, reducers, application logic, or measured instruction and program-guidance optimization, including programs intended for small interpreter models.
 ---
 
 # Author natlang code
@@ -15,6 +15,8 @@ Locate the natlang checkout or installed `@natlang/node` / `@natlang/browser` ve
 
 Read [language and source contracts](references/language.md) before creating or restructuring code, [algorithm patterns](references/patterns.md) for loops, reducers, reconciliation, and generated methods, and [verification and diagnosis](references/verification.md) when testing or debugging. The [review example](assets/review/review.nl) shows a named function whose callable folder holds a semantic helper and an exact aggregation; copy the whole `assets/review/` directory.
 
+For evaluation suites, instruction optimization, or trainable program guidance, read [adaptation and evaluation](references/adaptation.md). It covers component selection, independent scoring, fresh fixtures, bounded search, report review, and artifact activation. Ordinary authoring does not require an optimization run.
+
 ## Build a real program
 
 1. State the behavior as typed inputs, results, and observable scenarios, including ambiguity, empty inputs, and partial failure. Types check structure, not meaning.
@@ -23,6 +25,12 @@ Read [language and source contracts](references/language.md) before creating or 
 4. Write each instruction so a small interpreter can take the next step: name the data and how to reach it, state the step a loop repeats, and keep the words for finishing statuses ("missing", "cannot") for real blockers. See [patterns](references/patterns.md).
 5. Keep exact work exact: helpers in callable folders are ordinary TypeScript under a finite-iteration policy; application code outside them is unrestricted.
 6. Run `natlang check` (types, `nl` signatures, callable-folder policy), then exercise the real source through the runtime. Distinguish checks, scripted wiring, live-model runs, and semantic evaluation.
+
+## Improve instructions with measured adaptation
+
+Use adaptation when the callable contracts and decomposition are sound and the task is to improve instructions or program guidance against explicit scenarios. Fix missing capabilities, types, capture names, or helper structure in source first; adaptation changes static instruction text, not those contracts. Label authored inline sites when stable selection matters, keep expected answers outside model-visible code, and use fresh fixtures with independent scoring. Review held-out gates, helper coverage, actual usage and uncertainty before adopting an artifact. A retained baseline is a valid result.
+
+Keep search overlays separate from authored source. Load a compatible artifact explicitly, use `adaptation: null` for a baseline task, and revalidate after source or model changes. Read the [adaptation reference](references/adaptation.md) for SDK and CLI examples; use `natlang-integration` when wiring an application host or browser deployment.
 
 ## Preserve the execution model
 

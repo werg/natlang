@@ -28,6 +28,11 @@ Tie scenarios to desired behavior: ambiguity, conflicting evidence, missing info
 
 In a checkout: `npm --prefix ts-host run build`, then the relevant `ts-host/test/*.test.mjs`, `npm --prefix ts-host run test:conformance`, and `natlang check` on the project you changed.
 
+For repeatable semantic evaluation or instruction/guidance search, use the suite and
+fixture workflow in [adaptation and evaluation](adaptation.md). Keep related source
+families in one split, score independent observations, and preserve infrastructure
+failures separately from incorrect or blocked execution outcomes.
+
 ## Diagnose before changing policy
 
 - `nl-unknown-return` or `nl-ambiguous-signature`: add the missing annotation or `nl<T>`; do not widen to `any` to silence it.

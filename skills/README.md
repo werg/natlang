@@ -4,7 +4,7 @@ This repository includes two standalone skills for coding agents:
 
 | Skill | Use |
 |---|---|
-| [natlang-authoring](natlang-authoring/SKILL.md) | Write inline `nl` calls, named `.nl` functions, and callable folders |
+| [natlang-authoring](natlang-authoring/SKILL.md) | Write natlang programs, define evaluation suites, and adapt instructions or program guidance |
 | [natlang-integration](natlang-integration/SKILL.md) | Build Node and browser applications on the natlang runtime |
 
 ## Install
@@ -25,6 +25,12 @@ the complete updated folder.
 The skills describe the TypeScript runtime and compiler. `@natlang/node` and
 `@natlang/browser` are built from this repository; see [native packages and
 executables](../NATIVE_PACKAGES.md) for package entry points and build steps.
+
+The authoring skill bundles an [adaptation reference](natlang-authoring/references/adaptation.md)
+for labeled authored sites, capture-preserving instruction changes, fresh evaluation
+fixtures, SDK/CLI search, and artifact review. The [repository adaptation guide](../docs/ADAPTATION.md)
+provides further runtime and deployment details; copying the skill does not require
+copying the repository docs.
 
 ## Use
 
