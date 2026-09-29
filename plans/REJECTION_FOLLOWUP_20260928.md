@@ -384,3 +384,39 @@ Latest rollout: immutable runtime-v21 (496 hashes), Bonsai queue-v17 / Luna queu
   tests pass; diff whitespace clean. Raw data/checkpoints retained; no training started.
   Evidence: runs/hourly-check-20260929-0506/partial-quality-audit.json,
   partial-quality-export-check.json, integrated-policy-check.json and review ledgers.
+
+
+## Hourly check06:30 Berlin, 2026-09-29 (runtimev25)
+
+- Bonsai healthy PID591197/runtimev24 at snapshot,284 pending; Luna PID596968/v24,
+  six pending. Bonsai container1.974GiB/6GiB, CPU/GPU generation active. Snapshot:
+  nine accepted runs/seven Bonsai/two Luna →168 linked decisions, zero unlinked;
+  three rejected results and four incomplete/timeouts. Later Luna supplier672 exhausted
+  its128-action/256-request budget and rolled to v25 at the journaled boundary.
+- FOLIO409: English P1 is (!Benefit && !Apple) →(Fruit && Red). Source FOL instead
+  uses !(Benefit && Apple) →RedFruit, a different antecedent, and drops fruit guards
+  in other rules. Enumerated12 models of the English singleton rules; three countermodels
+  to C2's asserted entailment and four to C3. Hold this source story; do not change gold.
+- EntailmentBank LEAP__7_10338: source proof infers instinctive behavior from being
+  inherited, and adaptation from positive survival impact. Both reverse implications;
+  the store does not establish the missing directions. Hold source across shape/group
+  aliases, generation/admission/negative exports. Do not punish a model's justified refusal.
+- Two large payment reducers exhausted672-request budgets at336 saved replies.
+  One set200000ms on a158-message child batch, causing a timeout while child work
+  could continue; another used untyped children and incorrect argument names, then
+  repeated classification. A short eval timeout includes queue/model wait and does not
+  cancel started work. Tool schema now explains this and advises omission for large
+  batches. No default wall timeout reduced, no blind budget increase/retry of bad sources.
+- Two further pending-dollar texts have no evidence of additional/unrecognized charges;
+  exact canonical IDs/legacy aliases added to pending source review. Filtered73 Bonsai
+  queue entries and7 Luna entries (counts include completed entries). Preserve raw cases.
+- Twelve unfinished source groups without an accepted Luna result and without a pending
+  Luna attempt added as fresh roots. Some are deliberate retries of earlier model failures,
+  not new unique source tasks. IDs/groups/splits preserved, max12 transfers this check;
+  one worker. New queuesv19/v15, runtimev25 frozen with500 file hashes. Monitor
+  runs/bonsai-recovery/runtime-v25.rollout-state.json determines actual processes.
+- Verification: Node/browser builds and browser types;161 focused Node checks pass.
+  Integrated policy audit still holds zero of2192 references/51 directory/72 modern/51
+  source-backed cases (overlapping counts). No training. Evidence in
+  runs/hourly-check-20260929-0630/ includes snapshots, countermodels/raw source proof,
+  source holds, queue orders and migration ledgers. Continue hourly loop.

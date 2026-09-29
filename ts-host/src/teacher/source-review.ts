@@ -122,6 +122,10 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
   {"dataset": "folio", "id": "story:454", "aliases": ["folio:story:454", "story454"], "text": "Either an animal can swim or it can walk. Liam is either an animal that can walk and enjoys water, or is neither an animal that can walk nor enjoys water.", "annotatedLabel": "Liam enjoys sun and splashing=True; neither=False", "status": "pending", "reason": "Source FOL drops animal restrictions, quantifying swim-or-walk and the animal rules over every individual. English permits the negative Liam branch without establishing he is an animal; a non-animal Liam with no walking, water, sun or splashing is a countermodel to the required positive conclusion."},
   {"dataset": "banking77", "id": "1d278f3fadf8451f95722831557bdd02cf17eaf9f1ebecd72624fd3b8e401757", "aliases": ["e8a776f03ae287cc587f56138444a2107d927ea93a4cff8d1980eeac0e975db8", "e0a860955d9ac37728a6cf4343616d91199bb6926fb7ef284c68bb2048578f0e"], "text": "I have been charged a pound for something that appears on my statement", "annotatedLabel": "extra_charge_on_statement", "status": "pending", "reason": "Being charged a pound for something on a statement does not establish that the charge is additional, duplicated or unrecognized; the extra-charge label needs review."},
   {"dataset": "folio", "id": "story:423", "aliases": ["folio:story:423", "story423"], "text": "Students either go to the park or go to the movies. James does not have class during the weekend.", "annotatedLabel": "James summer camp=Unknown; park or summer camp=True", "status": "pending", "reason": "The English rules apply to students, but nothing establishes that James is a student. The source FOL removes the student guards and applies those rules to everyone. A non-student James with no class, no park and no camp satisfies the English premises but falsifies the disputed conclusion."},
+  {"dataset": "banking77", "id": "e24a8c9b2816e9d5f78e1fc1f91478a3c818fb35ffc7289f744612dd3438fea3", "aliases": ["20b9c148712b7077905a8c43f53462db3e5f511cebee81bf01f43b9983ad30b0", "7bdc372ff6191fca4fbba8e42affdfe74589846c69819375568ae4462e0653cd"], "text": "What is the dollar that I have pending on my statement there?", "annotatedLabel": "extra_charge_on_statement", "status": "pending", "reason": "Pending status and a dollar amount do not establish an additional or unrecognized charge."},
+  {"dataset": "banking77", "id": "73a31e629a8e9b26628b1ceba0bbd7098dcf1b4bc97ede7894020a7545ef0432", "aliases": ["2adfb75cf940d7bdbf374ea4049c77badf63227a821b5b7dfacbd7d28da3e206", "2d3886d492d6e86573c2db0c370f6d84d65da188536467de3735ec67ecb3203d"], "text": "Why is it showing that my account has been charged a dollar that is showing as pending?", "annotatedLabel": "extra_charge_on_statement", "status": "pending", "reason": "Pending status and a dollar amount do not establish an additional or unrecognized charge."},
+  {"dataset": "folio", "id": "story:409", "aliases": ["folio:story:409", "story409"], "text": "No fruits that are beneficial to people are on a warning list. All fruits with the color red contain a large amount of vitamin C.", "annotatedLabel": "K vitamin C or warning=True; warning or red=True", "status": "pending", "reason": "English fruit guards cannot be dropped: non-fruit K that is beneficial but not apple, red, vitamin-rich or warned satisfies every premise and falsifies both asserted disjunctions."},
+  {"dataset": "entailmentbank", "id": "LEAP__7_10338", "aliases": ["entailmentbank:LEAP__7_10338", "LEAP_7_10338"], "text": "an example of a behavioral adaptation is a bird building a nest in the warm ash from a volcano", "annotatedLabel": "supported", "status": "pending", "reason": "The stored proof reverses subtype implications: inherited behavior does not establish instinctive behavior, and positive survival impact does not establish behavioral adaptation. The English source facts do not supply either missing direction."},
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */
@@ -139,7 +143,7 @@ export function pendingSourceReview(dataset: string, id: string): SourceReview |
 export function sourceReviewReason(record: Record<string, unknown>):
     string | undefined {
   const curriculum = record.curriculum as { family?: string; shape?: string } | undefined;
-  const inferred = curriculum?.family === 'kqapro_question' ? 'kqapro' : curriculum?.family === 'anli_batch' ? 'anli' :
+  const inferred = curriculum?.family === 'entailment_premises' ? 'entailmentbank' : curriculum?.family === 'kqapro_question' ? 'kqapro' : curriculum?.family === 'anli_batch' ? 'anli' :
     ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
   const dataset = record.dataset ?? inferred;
   if (typeof dataset !== 'string') return undefined;
@@ -150,9 +154,9 @@ export function sourceReviewReason(record: Record<string, unknown>):
     if (SOURCE_REVIEWS.some(review => review.dataset === dataset && review.status === 'pending' && texts.includes(review.text)))
       return 'source_review_pending';
   }
-  const ids = [record.dataset_records, record.source_ids, dataset === 'folio' ? record.source_groups : []]
+  const ids = [record.dataset_records, record.source_ids, ['folio', 'entailmentbank'].includes(dataset) ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);
-  if (['folio', 'kqapro'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
+  if (['folio', 'kqapro', 'entailmentbank'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
   return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id)) ?
     'source_review_pending' : undefined;
 }

@@ -317,7 +317,7 @@ export class NativeToolAgent {
     const tools = [
       tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A top-level return value of the declared type is staged as the call\'s result; the final expression is only shown.',
         { code: { type: 'string' }, timeout_ms: { type: 'integer', minimum: 1,
-          description: 'Optional: fail this eval if it has not finished after this many milliseconds.' } }, ['code']),
+          description: 'Optional wall-clock limit, including time waiting for natural-language children. Omit it for large child batches. A timeout does not cancel work already started.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
       tool('compact_history', 'Shorten this conversation. Older tool outputs and eval code are replaced by references; the full ' +

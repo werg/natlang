@@ -1,5 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 06:30, 2026-09-29:** both workers progressing, Bonsai warm RAM1.97GiB.
+> Nine accepted results this hour yield168 linked decisions; three rejected results and
+> four incomplete/timeouts audited. Hold FOLIO409 after English countermodels and source
+> negation mismatch; hold EntailmentBank LEAP__7_10338 for reversed implication proof;
+> hold two more ambiguous pending-dollar BANKING77 messages. Source holds filter73 Bonsai
+> and7 Luna queue entries (including completed entries); preserve originals and gold.
+> Eval timeout guidance now states queued child time counts and started work is not cancelled.
+> Large reducers spent budgets on repeated/poorly specified judgments, not a frozen provider.
+> Twelve eligible unfinished groups added as fresh Luna roots, without extra workers.
+> V25 boundary rollout: Bonsai queue-v19 / Luna queue-v15, state/PIDs at
+> runs/bonsai-recovery/runtime-v25.rollout-state.json. Audits: runs/hourly-check-20260929-0630/.
+> Builds/browser types and161 Node checks pass; current static bundles have zero new holds.
+> No training. Continue hourly checks until stopped.
+
 > **Hourly check 05:06, 2026-09-29:** navigation retry reached its goal, but its
 > intermediate wrong-object action is held at episode level; valid source remains eligible.
 > Fresh supplier retry exports cleanly; 24 accepted runs retained 488 decisions with zero

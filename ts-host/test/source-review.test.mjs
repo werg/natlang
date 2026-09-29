@@ -68,3 +68,10 @@ test('runtime failures are excluded from negatives until recollected under fixed
   assert.equal(runtimeFailureReason({ ...row, outcome: { accepted: true } }), undefined);
   assert.equal(runtimeFailureReason({ task: { program_ir: { curriculum: { family: 'inline_late_binding' } } }, outcome: { accepted: false } }), 'obsolete_runtime_contract');
 });
+
+test('EntailmentBank proof direction and fruit-guard holds preserve source identities', () => {
+  assert.equal(sourceReviewReason({ curriculum: { family: 'entailment_premises', shape: 'LEAP_7_10338' } }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'entailment_premises' }, source_groups: ['entailmentbank:LEAP__7_10338'] }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'entailment_premises', shape: 'LEAP_7_10339' } }), undefined);
+  assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story409' } }), 'source_review_pending');
+});
