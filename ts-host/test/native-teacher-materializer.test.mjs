@@ -271,3 +271,38 @@ test('invocation identity links interleaved calls with identical openings and ac
   row.trajectory[2].invocation_id = 'wrong';
   assert.equal(materializeNativeRows([row]).acceptedRows, 0, 'bad explicit identities must never fall back to another call');
 });
+
+
+test('correct final outcomes do not bypass reviewed intermediate-decision holds', () => {
+  const row = nativeRow('reviewed-recovery');
+  row.provenance.trace_sha256 = '63975b4cef1a6e5cf1d1d1ee02928875cd136617c97670857f2a231bbb125b75';
+  for (const options of [{}, { failedRuns: true }, { directAnswers: true }]) {
+    const result = materializeNativeRows([row], options);
+    assert.equal(result.rejectedRows, 1);
+    assert.deepEqual(result.turns, []);
+  }
+  row.provenance.reused_from = { provenance: { trace_sha256: row.provenance.trace_sha256 } };
+  delete row.provenance.trace_sha256;
+  assert.equal(materializeNativeRows([row]).acceptedRows, 0, 'reuse preserves the original review hold');
+  delete row.provenance.reused_from;
+  row.provenance.trace_sha256 = 'a-new-attempt-on-the-same-source';
+  assert.equal(materializeNativeRows([row]).acceptedRows, 1);
+});
+
+
+test('tolerance-based acceptance and pending file quality cannot become positive training data', () => {
+  for (const evidence of [
+    { oracle: { level: 'agreement', accepted: true, score: 0.946 } },
+    { oracle: { level: 'span', accepted: true, score: 0.95 } },
+    { files_check: { failed: ['one-message'], score: 0.95 } },
+    { quality_pending: ['independent review needed'] },
+  ]) {
+    const row = nativeRow('partial-correctness');
+    Object.assign(row.outcome, evidence);
+    assert.equal(materializeNativeRows([row]).acceptedRows, 0);
+    assert.equal(materializeNativeRows([row], { directAnswers: true }).turns.length, 0);
+  }
+  const exact = nativeRow('full-agreement');
+  exact.outcome.oracle = { level: 'agreement', accepted: true, score: 1 };
+  assert.equal(materializeNativeRows([exact]).acceptedRows, 1);
+});

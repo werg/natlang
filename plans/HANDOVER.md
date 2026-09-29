@@ -1,5 +1,19 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 05:06, 2026-09-29:** navigation retry reached its goal, but its
+> intermediate wrong-object action is held at episode level; valid source remains eligible.
+> Fresh supplier retry exports cleanly; 24 accepted runs retained 488 decisions with zero
+> unlinked actions. Found/fixed native-export bypass of strict partial-correctness policy:
+> 61 historical accepted result files with partial answers/files/review flags now export
+> zero decisions in all modes. Integrated static bundles have no new policy holds.
+> Added source holds for FOLIO423's missing student guards and ambiguous BANKING77 pound charge.
+> Repeated action shapes across child calls do not imply a stall; queue logs now also count
+> full request hashes. Twelve fresh source groups extend the single Luna queue.
+> V24 boundary rollout: Bonsai queue-v18 / Luna queue-v14, state/PIDs at
+> runs/bonsai-recovery/runtime-v24.rollout-state.json; audit runs/hourly-check-20260929-0506/.
+> Builds/browser types,160 Node and6 Python checks pass. Rebuild earlier generated training
+> artifacts through current gates before use; no training. Continue hourly checks until stopped.
+
 > **Hourly check 03:50, 2026-09-29:** both workers healthy; proof chain19 repair
 > admitted. Hold FOLIO454 and three newly ambiguous BANKING77 messages after source audit.
 > TextWorld v2 shows available exits and asks for exploration notes; world cases use

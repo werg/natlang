@@ -50,3 +50,31 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
       (family === 'logic_proof_verifier' && JSON.stringify(row.trajectory).includes('bad character at')))
     return 'obsolete_runtime_contract';
 }
+
+
+/** Reviewed episode holds are narrower than source holds: the task can still produce good trajectories. */
+export function trajectoryReviewReason(row: { provenance?: Record<string, unknown> }): string | undefined {
+  // Game33 recovered from placing the wrong object on the target mantle. Keep the original trace,
+  // but do not approve its intermediate decisions until independently curated.
+  const original = row.provenance?.reused_from as { provenance?: Record<string, unknown> } | undefined;
+  if ([row.provenance?.trace_sha256, original?.provenance?.trace_sha256]
+    .includes('63975b4cef1a6e5cf1d1d1ee02928875cd136617c97670857f2a231bbb125b75'))
+    return 'trajectory_review_pending';
+}
+
+
+/** Evaluation tolerances are useful for scoring; partial correctness is not a positive training target. */
+export function trainingQualityReason(row: { provenance?: Record<string, unknown>; outcome?: Record<string, unknown> }): string | undefined {
+  const reviewed = trajectoryReviewReason(row);
+  if (reviewed) return reviewed;
+  const outcome = row.outcome ?? {};
+  if (Array.isArray(outcome.quality_pending) && outcome.quality_pending.length) return 'quality_pending';
+  const oracle = outcome.oracle as { level?: string; score?: number; needs_review?: boolean } | undefined;
+  const files = outcome.files_check as { failed?: unknown[]; pending?: unknown[]; errors?: unknown[]; score?: number } | undefined;
+  if (oracle?.needs_review || files?.pending?.length || files?.errors?.length) return 'quality_pending';
+  if (outcome.accepted === true) {
+    if (['agreement', 'span'].includes(oracle?.level ?? '') && (oracle?.score ?? 1) < 1)
+      return 'quality_pending_partial_agreement';
+    if (files?.failed?.length || (files?.score ?? 1) < 1) return 'quality_pending_partial_files';
+  }
+}

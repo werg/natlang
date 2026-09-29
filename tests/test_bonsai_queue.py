@@ -53,3 +53,20 @@ def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
         queue.write_text(json.dumps(entry) + '\n')
         with pytest.raises(ValueError, match='max_turns'):
             run_queue(queue, tmp_path / 'fresh.jsonl', tmp_path, seconds=1)
+
+
+def test_repeated_action_shapes_do_not_imply_repeated_requests(tmp_path):
+    from scripts.run_bonsai_queue import partial_metrics
+    turns = [dict(request_sha256=digest, response=dict(raw_response={"provider": "fixture"},
+             calls=[["return_result", {"status": "success", "value": False}]], completion_tokens=2))
+             for digest in ["input-a", "input-b"]]
+    path = tmp_path / '000000-fixture.partial.json'
+    path.write_text(json.dumps(dict(turns=turns)))
+    entry = dict(index=0, jobs=str(tmp_path))
+    metrics = partial_metrics(entry)
+    assert metrics['repeated_action_sets'] == 1
+    assert metrics['repeated_request_hashes'] == 0
+    assert metrics['unique_request_hashes'] == 2
+    turns.append(turns[0])
+    path.write_text(json.dumps(dict(turns=turns)))
+    assert partial_metrics(entry)['repeated_request_hashes'] == 1

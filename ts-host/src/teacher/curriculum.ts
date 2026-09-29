@@ -11,7 +11,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { executeProgram, recordDigest, sha256, type ProgramRun } from './collector.js';
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
 import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
-import { runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
+import { trainingQualityReason, runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
 import { sourceConversionProblems } from './source-conversion.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
@@ -253,7 +253,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
   const reasons: string[] = sourceConversionProblems(row), notes: string[] = [];
   if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
-  const quarantine = quarantineReason(record) ?? runtimeFailureReason(row);
+  const quarantine = quarantineReason(record) ?? trainingQualityReason(row) ?? runtimeFailureReason(row);
   if (quarantine) reasons.push(quarantine);
   for (const name of obsoleteOutcomes((row.trajectory ?? []) as Turn[])) reasons.push(`obsolete_outcome:${name}`);
   const outcome = row.outcome ?? {};
@@ -278,11 +278,6 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   if (c.answer_evidence?.length && !c.answer_evidence.some(marker => shows(allObserved, marker)))
     reasons.push('missing_answer_evidence');
   const filesSpec = record.semantics.files_oracle;
-  const filesVerdict = outcome.files_check as { failed?: string[] } | undefined;
-  if (filesVerdict?.failed?.length && outcome.accepted) reasons.push('quality_pending_partial_files');
-  const answerVerdict = outcome.oracle as { level?: string; score?: number } | undefined;
-  if (answerVerdict?.level === 'agreement' && outcome.accepted && (answerVerdict.score ?? 1) < 1)
-    reasons.push('quality_pending_partial_agreement');
   if (['rewrite', 'csv', 'counts'].includes(filesSpec?.compare ?? '') &&
       (outcome.files_check as { quality_version?: number } | undefined)?.quality_version !== DATA_QUALITY_VERSION)
     reasons.push('unreviewed_files_oracle');

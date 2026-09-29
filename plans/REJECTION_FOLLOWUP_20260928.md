@@ -348,3 +348,39 @@ Breaking decision: direct native exports now join action outcomes by explicit in
 Validation: Node/browser builds and browser type check pass; expanded158 Node tests pass,5 Python queue tests pass. Native export audit: seven Bonsai rows ->61 decisions; eight Luna rows ->88 decisions. One otherwise accepted Luna row was excluded for ambiguous linking and is the reviewed retry above. Curriculum admission:7/12 Bonsai and8/13 Luna (noncurriculum reconciliation uses native export).
 
 Latest rollout: immutable runtime-v21 (496 hashes), Bonsai queue-v17 / Luna queue-v13; actual supervisor PIDs/phases at runs/bonsai-recovery/runtime-v21.rollout-state.json. Boundary monitor initially565693. V20 navigation rollout completed before v21 follow-up; no progressing cases interrupted. Audits/order ledgers/checkpoint: runs/hourly-check-20260929-0350/. No training.
+
+
+## Hourly check 05:06 Berlin, 2026-09-29 (runtime v24)
+
+- Navigation v2 retry completed game33 in 994.6 seconds/191 replies; not stuck.
+  It initially placed a candybar rather than the required mat. Hold this exact trace
+  (and its reused provenance) pending intermediate-decision curation. Keep the source
+  task eligible; do not relabel or promote an entire episode because its goal succeeded.
+- Fresh supplier retry accepted in nine turns and exports with exact invocation joins.
+  This hourly snapshot's 24 accepted runs retained 488 decisions, zero unlinked actions.
+- Luna's 177-message reducer finished in 1537.4 seconds/349 replies, returning 14600
+  versus expected 15438. Evaluation's 0.9 agreement tolerance correctly describes an
+  approximate result, but native export bypassed curriculum admission and approved it.
+  **Breaking quality decision:** a shared training-quality gate now holds accepted
+  partial agreement/span scores, partial file scores/failures, and pending reviews.
+  Evaluation scores and raw results remain unchanged. Genuine wrong-answer negatives
+  remain eligible subject to other gates. Audit of 4785 result files found 3726 accepted,
+  61 held; all61 produce zero ordinary/direct/failed-run export decisions. Files may
+  include repeated attempts/copies, so these are result-file counts, not unique cases.
+- Current integrated static policy audit: 2192 audited references,51 rebuilt directory
+  cases,72 modern recovered cases and51 source-backed cases have zero new holds.
+  These counts overlap by design; do not add them as unique tasks. Historical ready
+  generated exports must be rebuilt under current gates before training.
+- FOLIO423 English student implications admit non-student James countermodels; source
+  formalization drops guards. Hold rather than change the label. BANKING77 pound charge
+  does not establish an extra/unrecognized charge; hold this specific source message.
+- Repeated Boolean action shapes are expected across child reducers. Add full-request
+  hash repetition alongside shape repetition and label the latter's scope explicitly.
+  Neither count alone is evidence of a semantic stall. No blanket short timeout added.
+- Twelve eligible unfinished Bonsai source groups transferred as fresh Luna roots;
+  source IDs/splits/budgets preserved, no extra worker. Reviewed queues v18/v14 and
+  immutable runtime-v24 (496 hashed files) roll at journaled case boundaries.
+- Verification: Node build, browser build/types;160 focused Node tests and6 Python queue
+  tests pass; diff whitespace clean. Raw data/checkpoints retained; no training started.
+  Evidence: runs/hourly-check-20260929-0506/partial-quality-audit.json,
+  partial-quality-export-check.json, integrated-policy-check.json and review ledgers.

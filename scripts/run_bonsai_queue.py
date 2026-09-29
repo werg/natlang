@@ -14,9 +14,16 @@ from pathlib import Path
 
 
 def partial_metrics(entry):
-    """Saved replies are activity evidence, not a claim that the task made semantic progress."""
-    metrics = dict(saved_turns=0, fresh_model_replies=0, completion_tokens=0, repeated_action_sets=0)
+    """Saved replies show activity. Repeated action shapes across distinct child inputs do not imply a loop."""
+    metrics = dict(saved_turns=0, fresh_model_replies=0, completion_tokens=0, repeated_action_sets=0, repeated_request_hashes=0)
     seen = set()
+    requests = set()
+    def note_request(turn):
+        digest = turn.get("request_sha256")
+        if digest:
+            if digest in requests:
+                metrics["repeated_request_hashes"] += 1
+            requests.add(digest)
     for path in Path(entry['jobs']).glob(f"{entry['index']:06d}-*.partial.json"):
         try:
             turns = json.loads(path.read_text())['turns']
@@ -27,6 +34,7 @@ def partial_metrics(entry):
             response = turn.get('response', {})
             if not response.get('raw_response'):
                 continue
+            note_request(turn)
             metrics['fresh_model_replies'] += 1
             metrics['completion_tokens'] += response.get('completion_tokens', 0) or 0
             action = json.dumps(response.get('calls', []), sort_keys=True)
@@ -44,6 +52,7 @@ def partial_metrics(entry):
                 if not turn.get('raw_response_sha256'):
                     continue
                 response = turn.get('model_response', {})
+                note_request(turn)
                 metrics['fresh_model_replies'] += 1
                 metrics['completion_tokens'] += response.get('completion_tokens', 0) or 0
                 action = json.dumps(response.get('calls', []), sort_keys=True)
@@ -51,6 +60,8 @@ def partial_metrics(entry):
                     metrics['repeated_action_sets'] += 1
                 seen.add(action)
     metrics['unique_action_sets'] = len(seen)
+    metrics['unique_request_hashes'] = len(requests)
+    metrics['repetition_scope'] = 'action shapes across all child calls; not a semantic stall detector'
     return metrics
 
 

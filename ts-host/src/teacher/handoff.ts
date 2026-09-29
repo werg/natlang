@@ -10,7 +10,7 @@
  */
 import type { ModelTurn } from '../contracts.js';
 import { executeProgram, programRow, type ProgramRecord, type TeacherRow } from './collector.js';
-import { runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
+import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
 import { openingText } from './opening.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
@@ -50,7 +50,7 @@ function ambiguousInvocationOpenings(row: TeacherRow): boolean {
 
 /** The sites of a run that was not accepted. */
 export function handoffSites(row: TeacherRow): Site[] {
-  if (ambiguousInvocationOpenings(row) || runtimeFailureReason(row) || retiredFamily(row.task.program_ir) || quarantineReason(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if (trainingQualityReason(row) || ambiguousInvocationOpenings(row) || runtimeFailureReason(row) || retiredFamily(row.task.program_ir) || quarantineReason(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
   if ((row.outcome?.quality_pending as unknown[] | undefined)?.length) return [];
   if ((row.outcome?.checks as Dict | undefined)?.seeded_failure_requirement === false) return [];
   const result = materializeNativeRows([row], { failedRuns: true });
@@ -95,6 +95,8 @@ export function handoffRecord(row: TeacherRow, handoff: Handoff): ProgramRecord 
  */
 export async function failsInPlace(row: TeacherRow, index: number, response: ModelTurn, kind: SiteKind,
     options: ReplayOptions, runId: string): Promise<string | null> {
+  const qualityHold = trainingQualityReason(row);
+  if (qualityHold) return `the trajectory needs independent quality review: ${qualityHold}`;
   if (ambiguousInvocationOpenings(row)) return 'concurrent calls share an indistinguishable replay opening';
   const runtimeFault = runtimeFailureReason(row);
   if (runtimeFault) return runtimeFault;
