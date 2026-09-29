@@ -103,3 +103,39 @@ The actual HF tokenizer loaded locally and rendered our patched Jinja, producing
 one BOS and assistant terminator ID130073; teacher reasoning and XML tool-call
 arguments passed rendering. Its nominal EOS remains `</s>` and must not be used
 as the assistant turn delimiter in the SFT renderer.
+
+
+## User-requested evaluation queued (about20:30 UTC)
+
+The durable `runs/minicpm-eval-20260929/evaluate.py` worker PID14970 waits for
+verified acquisition and CPU compatibility. It checks exact Bonsai supervisor
+identity/start time; any change blocks the automatic swap. At a journaled case
+boundary it preserves pending checkpoints, pauses the exact supervisor, waits
+for children to exit, stops Bonsai's server, and uses the GPU for at most30
+minutes. It restores the identical v39/queue-v31/journal, four requests, four
+server slots/6GiB RAM/1,536MiB cache, recording the replacement supervisor PID.
+Inspect `state.json` and `worker.log` before operating generation; avoid duplicate
+manual launches. `report.json` will contain scores and missing-case denominators.
+
+-24 held-out cases from shard-test across12 families: sufficiency, exact filters,
+ multi-input judgment, structured extraction, paginated argmax/snapshots,
+ directory criteria and reducer application, proof checking, union targets,
+ stateful dates, parallel labels.
+- All24 reference replays pass after reviewed contract modernization/externalization;
+ original gold and source IDs preserved. Selection/reference evidence saved.
+- Actor-routing pair excluded: one reference tried a flooded bridge and the
+ pair-group checker complained about identical expected results. No model
+ failure inferred from this broken reference; source/reference repair remains separate.
+-13 application probes cover classification, ambiguous/missing evidence, urgency,
+ contact extraction, arithmetic, child calls/sarcasm, slots, directory archive,
+ malformed JSON handling. Blocker probes require relevant explicit model status,
+ not an arbitrary runtime/transport exception.
+- Frozen v39 runtime; greedy temperature0, root seed42, one global request,
+ 16K context,20 held-out turns,128 requests,120-second per-case wall cap.
+ Application task limits and outer150-second cap prevent unbounded loops.
+- Student collection role and separate evaluation artifacts; no admission into
+ training. Single-seed pilot, not a matched Spark comparison or a training run.
+
+Stopping the evaluator during a swap triggers server cleanup and Bonsai restore;
+for whole-machine shutdown stop it first and then stop the restored supervisor.
+Stop the acquisition completion worker too, so it cannot start its CPU smoke.

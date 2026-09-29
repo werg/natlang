@@ -1,5 +1,23 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **STUDENT EVALUATION QUEUED — 2026-09-29 about20:30 UTC.** User explicitly
+> requested evaluation. Download remains incomplete; no model performance score
+> yet. Durable evaluator PID14970 waits on acquisition/CPU smoke, then verifies
+> SHA again, pauses exact BonsaiPID8981 only at a journaled case boundary,
+> switches GPU to isolated MiniCPM on8082, and restores Bonsai server/supervisor
+> with SAME v39/queue-v31/journal afterward. Thirty-minute GPU reservation;
+> failures/timeouts/missing cases remain visible. Check state BEFORE touching any
+> worker: `runs/minicpm-eval-20260929/state.json`, worker.log, eventual report.json.
+> Pilot24 held-out cases across12 families, plus13 application probes. Same
+> frozen v39 runtime, root seed42/temperature0; original gold preserved and24
+> reference replays pass. Actor route pair was excluded for faulty reference.
+> Honest-blocker probes now require an explicit relevant model blocker, not any
+> exception. This is a greedy single-seed pilot, no Spark comparison yet.
+> Acquisition completion workerPID12763 remains active; no student training.
+> Shutdown: stop the acquisition completion worker and evaluator first, wait for
+> evaluator cleanup/restoration, then stop the newly recorded Bonsai supervisor
+> and servers. Never reuse historical8981 after evaluation restoration.
+
 > **NEW STUDENT CANDIDATE — 2026-09-29 about20:15 UTC.** User requested
 > peculiar-ragdoll's small Sharp MiniCPM and4-bit download/format/deployment checks.
 > Matching release is Sharp-MiniCPM5-2B-GGUF (2.5B dense Llama, not sparse).
