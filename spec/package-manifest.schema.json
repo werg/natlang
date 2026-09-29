@@ -71,6 +71,9 @@
           "entry": {
             "$ref": "#/$defs/path"
           },
+          "adaptation": {
+            "$ref": "#/$defs/path"
+          },
           "export": {
             "type": "string",
             "minLength": 1

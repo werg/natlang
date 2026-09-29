@@ -5,6 +5,8 @@ export const PACKAGE_SCHEMA = 'natlang.package/v2' as const;
 /** A launchable application target: a TypeScript entry module and the function it exports. */
 export type NatlangTarget = {
   entry: string;
+  /** Relative path to a portable adaptation artifact included in this package. */
+  adaptation?: string;
   /** Exported function receiving the target context; default `main`. */
   export?: string;
   description?: string;
@@ -63,11 +65,12 @@ export function parsePackageManifest(value: unknown): NatlangPackageManifest {
       if (!/^[a-z0-9][a-z0-9._-]*$/.test(name) || !item || typeof item !== 'object' || Array.isArray(item))
         throw new TypeError(`invalid target ${name}`);
       const target = item as Record<string, unknown>;
-      const targetKnown = new Set(['entry', 'export', 'description', 'authority', 'commands']);
+      const targetKnown = new Set(['entry', 'adaptation', 'export', 'description', 'authority', 'commands']);
       for (const key of Object.keys(target)) if (!targetKnown.has(key)) throw new TypeError(`unknown field in target ${name}: ${key}`);
       const authority = target.authority === undefined ? undefined : requireStrings(target.authority, `target ${name} authority`);
       const commands = target.commands === undefined ? undefined : requireStrings(target.commands, `target ${name} commands`);
       targets[name] = { entry: packagePath(target.entry, `target ${name} entry`),
+        ...(target.adaptation === undefined ? {} : { adaptation: packagePath(target.adaptation, `target ${name} adaptation`) }),
         ...(target.export === undefined ? {} : { export: requireString(target.export, `target ${name} export`) }),
         ...(target.description === undefined ? {} : { description: requireString(target.description, `target ${name} description`) }),
         ...(authority ? { authority } : {}), ...(commands ? { commands } : {}) };

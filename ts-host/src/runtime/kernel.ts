@@ -3,6 +3,7 @@
  * `iterateOn` step or judge) comes through `invokeDefinition`: it builds one lambda node, runs it
  * with the interpreter in the caller's task, and returns the checked value or throws `NatlangCallError`.
  */
+import { hexDigest } from '../native/hash.js';
 import { NativeToolAgent } from '../native/agent.js';
 import { NativeRuntime, inferValueType } from '../native/runtime.js';
 import { Folder, FolderHandle, FileHandle, type FolderTransaction } from '../native/scoped-fs.js';
@@ -16,6 +17,7 @@ export type { CaptureCell };
 
 /** A natlang function definition as the kernel runs it. */
 export type CallableDefinition = {
+  programId?: string;
   id: string;
   name: string;
   body: string;
@@ -87,20 +89,49 @@ export function invokeDefinition(frame: Frame, definition: CallableDefinition, p
   options: InvokeOptions = {}): Promise<unknown> {
   const call = runDefinition(frame, definition, positional, options);
   call.catch(() => {});
-  return call;
+  return frame.task.track(call);
 }
 
 async function runDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
   options: InvokeOptions): Promise<unknown> {
   const task = frame.task;
   task.checkOpen();
+  const view = task.programView;
+  const replacement = view.value(definition.id, definition.programId);
+  const descriptor = (!definition.programId || definition.programId === view.program?.id) ? view.component(definition.id) : undefined;
+  if (view.binding && descriptor?.origin === 'named' && descriptor.source && !view.patched(descriptor.source.path)) {
+    const original = view.program!.sources[descriptor.source.path]!;
+    if (definition.revision !== hexDigest(original).slice(0, 16)) throw new Error('callable revision differs from adaptation build: ' + definition.name);
+  }
+  const patched = (!definition.programId || definition.programId === view.program?.id) && definition.source?.endsWith('.nl') && view.patched(definition.source);
+  if (patched) {
+    // Existing callable references resolve the committed task revision at invocation.
+    const record = view.record({ kind: 'natlang', id: definition.id, source: definition.source!, name: definition.name,
+      instructions: definition.body, text: '', revision: definition.revision ?? '', args: {}, returns: definition.returns,
+      types: definition.types, subtype: definition.subtype, description: '', codebase: {} } as import('./loader.js').NatlangRecord);
+    definition = { ...definition, body: record.instructions, revision: record.revision,
+      params: Object.entries(record.args).map(([name, type]) => ({ name: name.replace(/\?$/, ''), type, optional: name.endsWith('?') })),
+      returns: record.returns, types: record.types, codebase: record.codebase };
+  } else if (replacement?.kind === 'lambda.instructions' && options.instructions === undefined)
+    definition = { ...definition, body: replacement.template.segments[0]! };
+  // Capture this call's source revision; later edits affect future calls only.
+  definition = { ...definition, codebase: view.tree(definition.codebase as Record<string, import('./loader.js').ItemRecord>) };
+  const owner = definition.programId ?? (descriptor ? view.program?.id : frame.programOwner);
+  const eligibleGuidance = !!owner && (owner === view.program?.id || !!view.program?.guidanceScope.importedPrograms.includes(owner));
+  const adaptationProvenance = view.program ? { ...view.provenance(definition.id, owner),
+    effectiveInstructionHash: hexDigest(options.instructions ?? definition.body), originalInstructionHash: descriptor?.baselineHash ?? null,
+    guidanceComponent: eligibleGuidance ? view.program.components.find(component => component.kind === 'program.guidance')?.key ?? null : null,
+    guidanceApplied: eligibleGuidance, evaluation: task.runtime.options.evaluation ?? null } : undefined;
   const adHoc = !!(options.manifest?.inline || options.manifest?.delegate);
   const fileRoot = !adHoc && definition.source?.endsWith('.nl');
   const adHocDepth = fileRoot ? 0 : (frame.adHocDepth ?? 0) + (adHoc ? 1 : 0);
   if (adHocDepth > MAX_AD_HOC_NL_DEPTH)
     throw new NatlangCallError(definition.name, 'quiesced',
       `ad hoc nl calls are limited to ${MAX_AD_HOC_NL_DEPTH} nested layers; solve this part here or call an existing named function`, '', []);
-  if (frame.chain.includes(definition.id)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
+  // Definitions from separate programs may share the same relative source ID.
+  // Ownership scopes recursion without changing persisted component identities.
+  const callIdentity = definition.programId ? JSON.stringify([definition.programId, definition.id]) : definition.id;
+  if (frame.chain.includes(callIdentity)) throw new NatlangRecursionError(definition.id, frame.chain, definition.name);
   const limits = task.runtime.options.limits ?? {};
   if (limits.maxDepth !== undefined && frame.chain.length >= limits.maxDepth)
     throw new NatlangCallError(definition.name, 'quiesced', `natlang calls nested deeper than ${limits.maxDepth}`, '', []);
@@ -173,7 +204,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   if (extraTransactions.length) node.extraTransactions = extraTransactions;
 
   const callId = task.nextCallId();
-  const childFrame: Frame = { task, chain: [...frame.chain, definition.id], parentCallId: callId, adHocDepth,
+  const childFrame: Frame = { task, chain: [...frame.chain, callIdentity], parentCallId: callId, adHocDepth, programOwner: owner,
     ...(options.manifest?.inline ? { inline: true } : {}) };
   const model = task.model();
   const environment = task.environment();
@@ -181,6 +212,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   const services = recordingServices(task.services, event =>
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
   const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
+    programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
     maxFailureRepairs: model.maxFailureRepairs, review: model.review }) : undefined;
@@ -188,6 +220,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget, seedPolicy: task.runtime.options.seed, runId: callId,
+    seedId: task.runtime.options.evaluation ? task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id) : undefined,
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,
@@ -205,7 +238,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
     throw error;
   } finally {
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
-      name: definition.name, outcome, detail, events: runtime.trace.events as Record<string, unknown>[] });
+      name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();
   }
 }

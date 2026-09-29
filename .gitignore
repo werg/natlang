@@ -16,3 +16,12 @@ data/
 *.tgz
 .natlang/
 *.d.nl.ts
+
+# The adaptation engine's bounded, licensed upstream snapshot and native ports are source.
+!/vendor/
+/vendor/*
+!/vendor/ax-gepa/
+!ts-host/src/optimization/vendor/
+!ts-host/src/optimization/vendor/ax-gepa/
+# Generated npm example staging.
+npm-packages/node/examples/

@@ -52,3 +52,5 @@ export async function runFolderPython(...args: Parameters<typeof import('../nati
 }
 export { TypeEnv, parseType, formatType, fitsType } from '../native/types.js';
 export type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+
+export * from '../adaptation/index.js';

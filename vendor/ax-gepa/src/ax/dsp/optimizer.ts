@@ -1,0 +1,2811 @@
+import type { Counter, Gauge, Histogram, Meter } from '@opentelemetry/api';
+import { mergeCustomLabels } from '../ai/metrics.js';
+import type {
+  AxAIService,
+  AxAIServiceOptions,
+  AxLoggerFunction,
+} from '../ai/types.js';
+
+// FIXME: Circular dependency - import { ax } from '../index.js';
+
+import type {
+  AxCheckpointLoadFn,
+  AxCheckpointSaveFn,
+  AxCompileOptions,
+  AxCostTracker,
+  AxCostTrackerOptions,
+  AxExample,
+  AxMetricFn,
+  AxMultiMetricFn,
+  AxOptimizationCheckpoint,
+  AxOptimizationProgress,
+  AxOptimizationStats,
+  AxOptimizerArgs,
+  AxTypedExample,
+} from './common_types.js';
+import { AxGen } from './generate.js';
+import { axGlobals } from './globals.js';
+import { axDefaultOptimizerLogger } from './optimizerLogging.js';
+import type { AxGEPAComponentBanditState } from './optimizers/gepaSelection.js';
+import type { AxOptimizerLoggerFunction } from './optimizerTypes.js';
+import type { AxGenOut, AxProgramDemos } from './types.js';
+
+// Shared optimizer-related types are exported exclusively from `common_types.ts`
+// to avoid duplicate type exports when generating the package index.
+
+// Logger utilities are now exported from ./loggers.js
+
+// Multi-objective metric function for Pareto optimization
+
+// Common types moved to ./common_types.ts
+
+// Progress tracking interface for real-time updates
+// AxOptimizationProgress moved to ./common_types.ts
+
+// Cost tracking interface for monitoring resource usage
+// AxCostTracker moved to ./common_types.ts
+
+// Checkpoint interface for saving/loading optimization state
+// AxOptimizationCheckpoint moved to ./common_types.ts
+
+// Simple checkpoint functions moved to ./common_types.ts
+
+// Cost tracker configuration options now provided by ./types
+
+// AxOptimizerArgs moved to ./common_types.ts
+
+// AxOptimizationStats moved to ./common_types.ts
+
+// Optimizer metrics configuration interface
+export interface AxOptimizerMetricsConfig {
+  enabled: boolean;
+  enabledCategories: (
+    | 'optimization'
+    | 'convergence'
+    | 'resource_usage'
+    | 'teacher_student'
+    | 'checkpointing'
+    | 'pareto'
+  )[];
+  maxLabelLength: number;
+  samplingRate: number;
+}
+
+// Default optimizer metrics configuration
+export const axDefaultOptimizerMetricsConfig: AxOptimizerMetricsConfig = {
+  enabled: true,
+  enabledCategories: [
+    'optimization',
+    'convergence',
+    'resource_usage',
+    'teacher_student',
+    'checkpointing',
+    'pareto',
+  ],
+  maxLabelLength: 100,
+  samplingRate: 1.0,
+};
+
+// Optimizer metrics instruments interface
+export interface AxOptimizerMetricsInstruments {
+  // Optimization flow metrics
+  optimizationLatencyHistogram?: Histogram;
+  optimizationRequestsCounter?: Counter;
+  optimizationErrorsCounter?: Counter;
+
+  // Convergence metrics
+  convergenceRoundsHistogram?: Histogram;
+  convergenceScoreGauge?: Gauge;
+  convergenceImprovementGauge?: Gauge;
+  stagnationRoundsGauge?: Gauge;
+  earlyStoppingCounter?: Counter;
+
+  // Resource usage metrics
+  tokenUsageCounter?: Counter;
+  costUsageCounter?: Counter;
+  memoryUsageGauge?: Gauge;
+  optimizationDurationHistogram?: Histogram;
+
+  // Teacher-student metrics
+  teacherStudentUsageCounter?: Counter;
+  teacherStudentLatencyHistogram?: Histogram;
+  teacherStudentScoreImprovementGauge?: Gauge;
+
+  // Checkpointing metrics
+  checkpointSaveCounter?: Counter;
+  checkpointLoadCounter?: Counter;
+  checkpointSaveLatencyHistogram?: Histogram;
+  checkpointLoadLatencyHistogram?: Histogram;
+
+  // Pareto optimization metrics
+  paretoOptimizationsCounter?: Counter;
+  paretoFrontSizeHistogram?: Histogram;
+  paretoHypervolumeGauge?: Gauge;
+  paretoSolutionsGeneratedHistogram?: Histogram;
+
+  // Program complexity metrics
+  programInputFieldsGauge?: Gauge;
+  programOutputFieldsGauge?: Gauge;
+  examplesCountGauge?: Gauge;
+  validationSetSizeGauge?: Gauge;
+
+  // Performance metrics
+  evaluationLatencyHistogram?: Histogram;
+  demoGenerationLatencyHistogram?: Histogram;
+  metricComputationLatencyHistogram?: Histogram;
+
+  // Configuration metrics
+  optimizerTypeGauge?: Gauge;
+  targetScoreGauge?: Gauge;
+  maxRoundsGauge?: Gauge;
+}
+
+// Singleton instance for optimizer metrics instruments
+let globalOptimizerMetricsInstruments:
+  | AxOptimizerMetricsInstruments
+  | undefined;
+let globalOptimizerMetricsMeter: Meter | undefined;
+
+// Function to get or create optimizer metrics instruments (singleton pattern)
+export const getOrCreateOptimizerMetricsInstruments = (
+  meter?: Meter
+): AxOptimizerMetricsInstruments | undefined => {
+  if (!meter) {
+    return globalOptimizerMetricsInstruments;
+  }
+
+  if (
+    !globalOptimizerMetricsInstruments ||
+    globalOptimizerMetricsMeter !== meter
+  ) {
+    globalOptimizerMetricsInstruments =
+      createOptimizerMetricsInstruments(meter);
+    globalOptimizerMetricsMeter = meter;
+  }
+
+  return globalOptimizerMetricsInstruments;
+};
+
+// Function to reset the optimizer metrics singleton (useful for testing)
+export const resetOptimizerMetricsInstruments = (): void => {
+  globalOptimizerMetricsInstruments = undefined;
+  globalOptimizerMetricsMeter = undefined;
+};
+
+// Global optimizer metrics configuration
+let currentOptimizerMetricsConfig: AxOptimizerMetricsConfig =
+  axDefaultOptimizerMetricsConfig;
+
+// Function to update optimizer metrics configuration
+export const axUpdateOptimizerMetricsConfig = (
+  config: Readonly<Partial<AxOptimizerMetricsConfig>>
+): void => {
+  currentOptimizerMetricsConfig = {
+    ...currentOptimizerMetricsConfig,
+    ...config,
+  };
+};
+
+// Function to get current optimizer metrics configuration
+export const axGetOptimizerMetricsConfig = (): AxOptimizerMetricsConfig => {
+  return { ...currentOptimizerMetricsConfig };
+};
+
+export const createOptimizerMetricsInstruments = (
+  meter: Meter
+): AxOptimizerMetricsInstruments => {
+  return {
+    // Optimization flow metrics
+    optimizationLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_optimization_duration_ms',
+      {
+        description: 'End-to-end duration of optimization runs',
+        unit: 'ms',
+      }
+    ),
+
+    optimizationRequestsCounter: meter.createCounter(
+      'ax_optimizer_optimization_requests_total',
+      {
+        description: 'Total number of optimization requests',
+      }
+    ),
+
+    optimizationErrorsCounter: meter.createCounter(
+      'ax_optimizer_optimization_errors_total',
+      {
+        description: 'Total number of failed optimizations',
+      }
+    ),
+
+    // Convergence metrics
+    convergenceRoundsHistogram: meter.createHistogram(
+      'ax_optimizer_convergence_rounds',
+      {
+        description: 'Number of rounds until convergence',
+      }
+    ),
+
+    convergenceScoreGauge: meter.createGauge('ax_optimizer_convergence_score', {
+      description: 'Current best score during optimization',
+    }),
+
+    convergenceImprovementGauge: meter.createGauge(
+      'ax_optimizer_convergence_improvement',
+      {
+        description: 'Improvement in score from baseline',
+      }
+    ),
+
+    stagnationRoundsGauge: meter.createGauge('ax_optimizer_stagnation_rounds', {
+      description: 'Number of rounds without improvement',
+    }),
+
+    earlyStoppingCounter: meter.createCounter(
+      'ax_optimizer_early_stopping_total',
+      {
+        description: 'Total number of early stopping events',
+      }
+    ),
+
+    // Resource usage metrics
+    tokenUsageCounter: meter.createCounter('ax_optimizer_token_usage_total', {
+      description: 'Total tokens used during optimization',
+    }),
+
+    costUsageCounter: meter.createCounter('ax_optimizer_cost_usage_total', {
+      description: 'Total cost incurred during optimization',
+      unit: '$',
+    }),
+
+    memoryUsageGauge: meter.createGauge('ax_optimizer_memory_usage_bytes', {
+      description: 'Peak memory usage during optimization',
+      unit: 'By',
+    }),
+
+    optimizationDurationHistogram: meter.createHistogram(
+      'ax_optimizer_duration_ms',
+      {
+        description: 'Duration of optimization runs',
+        unit: 'ms',
+      }
+    ),
+
+    // Teacher-student metrics
+    teacherStudentUsageCounter: meter.createCounter(
+      'ax_optimizer_teacher_student_usage_total',
+      {
+        description: 'Total number of teacher-student interactions',
+      }
+    ),
+
+    teacherStudentLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_teacher_student_latency_ms',
+      {
+        description: 'Latency of teacher-student interactions',
+        unit: 'ms',
+      }
+    ),
+
+    teacherStudentScoreImprovementGauge: meter.createGauge(
+      'ax_optimizer_teacher_student_score_improvement',
+      {
+        description: 'Score improvement from teacher-student interactions',
+      }
+    ),
+
+    // Checkpointing metrics
+    checkpointSaveCounter: meter.createCounter(
+      'ax_optimizer_checkpoint_save_total',
+      {
+        description: 'Total number of checkpoint saves',
+      }
+    ),
+
+    checkpointLoadCounter: meter.createCounter(
+      'ax_optimizer_checkpoint_load_total',
+      {
+        description: 'Total number of checkpoint loads',
+      }
+    ),
+
+    checkpointSaveLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_checkpoint_save_latency_ms',
+      {
+        description: 'Latency of checkpoint save operations',
+        unit: 'ms',
+      }
+    ),
+
+    checkpointLoadLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_checkpoint_load_latency_ms',
+      {
+        description: 'Latency of checkpoint load operations',
+        unit: 'ms',
+      }
+    ),
+
+    // Pareto optimization metrics
+    paretoOptimizationsCounter: meter.createCounter(
+      'ax_optimizer_pareto_optimizations_total',
+      {
+        description: 'Total number of Pareto optimizations',
+      }
+    ),
+
+    paretoFrontSizeHistogram: meter.createHistogram(
+      'ax_optimizer_pareto_front_size',
+      {
+        description: 'Size of Pareto frontier',
+      }
+    ),
+
+    paretoHypervolumeGauge: meter.createGauge(
+      'ax_optimizer_pareto_hypervolume',
+      {
+        description: 'Hypervolume of Pareto frontier',
+      }
+    ),
+
+    paretoSolutionsGeneratedHistogram: meter.createHistogram(
+      'ax_optimizer_pareto_solutions_generated',
+      {
+        description: 'Number of solutions generated for Pareto optimization',
+      }
+    ),
+
+    // Program complexity metrics
+    programInputFieldsGauge: meter.createGauge(
+      'ax_optimizer_program_input_fields',
+      {
+        description: 'Number of input fields in optimized program',
+      }
+    ),
+
+    programOutputFieldsGauge: meter.createGauge(
+      'ax_optimizer_program_output_fields',
+      {
+        description: 'Number of output fields in optimized program',
+      }
+    ),
+
+    examplesCountGauge: meter.createGauge('ax_optimizer_examples_count', {
+      description: 'Number of training examples used',
+    }),
+
+    validationSetSizeGauge: meter.createGauge(
+      'ax_optimizer_validation_set_size',
+      {
+        description: 'Size of validation set used',
+      }
+    ),
+
+    // Performance metrics
+    evaluationLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_evaluation_latency_ms',
+      {
+        description: 'Latency of program evaluations',
+        unit: 'ms',
+      }
+    ),
+
+    demoGenerationLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_demo_generation_latency_ms',
+      {
+        description: 'Latency of demo generation',
+        unit: 'ms',
+      }
+    ),
+
+    metricComputationLatencyHistogram: meter.createHistogram(
+      'ax_optimizer_metric_computation_latency_ms',
+      {
+        description: 'Latency of metric computation',
+        unit: 'ms',
+      }
+    ),
+
+    // Configuration metrics
+    optimizerTypeGauge: meter.createGauge('ax_optimizer_type', {
+      description: 'Type of optimizer being used',
+    }),
+
+    targetScoreGauge: meter.createGauge('ax_optimizer_target_score', {
+      description: 'Target score for optimization',
+    }),
+
+    maxRoundsGauge: meter.createGauge('ax_optimizer_max_rounds', {
+      description: 'Maximum rounds for optimization',
+    }),
+  };
+};
+
+// Utility function to sanitize optimizer metric labels
+const sanitizeOptimizerLabels = (
+  labels: Record<string, unknown>
+): Record<string, string> => {
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(labels)) {
+    if (value !== undefined && value !== null) {
+      const stringValue = String(value);
+      // Limit label length based on configuration
+      const maxLength = currentOptimizerMetricsConfig.maxLabelLength;
+      sanitized[key] =
+        stringValue.length > maxLength
+          ? stringValue.substring(0, maxLength)
+          : stringValue;
+    }
+  }
+  return sanitized;
+};
+
+// Recording functions for optimization flow metrics
+export const recordOptimizationMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  duration: number,
+  success: boolean,
+  optimizerType: string,
+  programSignature?: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      success: success.toString(),
+      optimizer_type: optimizerType,
+      ...(programSignature ? { program_signature: programSignature } : {}),
+      ...customLabels,
+    });
+
+    if (instruments.optimizationLatencyHistogram) {
+      instruments.optimizationLatencyHistogram.record(duration, labels);
+    }
+
+    if (instruments.optimizationRequestsCounter) {
+      instruments.optimizationRequestsCounter.add(1, labels);
+    }
+
+    if (!success && instruments.optimizationErrorsCounter) {
+      instruments.optimizationErrorsCounter.add(1, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record optimization metric:', error);
+  }
+};
+
+// Recording functions for convergence metrics
+export const recordConvergenceMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  rounds: number,
+  currentScore: number,
+  improvement: number,
+  stagnationRounds: number,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.convergenceRoundsHistogram) {
+      instruments.convergenceRoundsHistogram.record(rounds, labels);
+    }
+
+    if (instruments.convergenceScoreGauge) {
+      instruments.convergenceScoreGauge.record(currentScore, labels);
+    }
+
+    if (instruments.convergenceImprovementGauge) {
+      instruments.convergenceImprovementGauge.record(improvement, labels);
+    }
+
+    if (instruments.stagnationRoundsGauge) {
+      instruments.stagnationRoundsGauge.record(stagnationRounds, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record convergence metric:', error);
+  }
+};
+
+export const recordEarlyStoppingMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  reason: string,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      reason,
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.earlyStoppingCounter) {
+      instruments.earlyStoppingCounter.add(1, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record early stopping metric:', error);
+  }
+};
+
+// Recording functions for resource usage metrics
+export const recordResourceUsageMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  tokensUsed: number,
+  costIncurred: number,
+  optimizerType: string,
+  memoryUsage?: number,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.tokenUsageCounter) {
+      instruments.tokenUsageCounter.add(tokensUsed, labels);
+    }
+
+    if (instruments.costUsageCounter) {
+      instruments.costUsageCounter.add(costIncurred, labels);
+    }
+
+    if (memoryUsage !== undefined && instruments.memoryUsageGauge) {
+      instruments.memoryUsageGauge.record(memoryUsage, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record resource usage metric:', error);
+  }
+};
+
+export const recordOptimizationDurationMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  duration: number,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.optimizationDurationHistogram) {
+      instruments.optimizationDurationHistogram.record(duration, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record optimization duration metric:', error);
+  }
+};
+
+// Recording functions for teacher-student metrics
+export const recordTeacherStudentMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  latency: number,
+  scoreImprovement: number,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.teacherStudentUsageCounter) {
+      instruments.teacherStudentUsageCounter.add(1, labels);
+    }
+
+    if (instruments.teacherStudentLatencyHistogram) {
+      instruments.teacherStudentLatencyHistogram.record(latency, labels);
+    }
+
+    if (instruments.teacherStudentScoreImprovementGauge) {
+      instruments.teacherStudentScoreImprovementGauge.record(
+        scoreImprovement,
+        labels
+      );
+    }
+  } catch (error) {
+    console.warn('Failed to record teacher-student metric:', error);
+  }
+};
+
+// Recording functions for checkpointing metrics
+export const recordCheckpointMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  operation: 'save' | 'load',
+  latency: number,
+  success: boolean,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      operation,
+      success: success.toString(),
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (operation === 'save') {
+      if (instruments.checkpointSaveCounter) {
+        instruments.checkpointSaveCounter.add(1, labels);
+      }
+      if (instruments.checkpointSaveLatencyHistogram) {
+        instruments.checkpointSaveLatencyHistogram.record(latency, labels);
+      }
+    } else {
+      if (instruments.checkpointLoadCounter) {
+        instruments.checkpointLoadCounter.add(1, labels);
+      }
+      if (instruments.checkpointLoadLatencyHistogram) {
+        instruments.checkpointLoadLatencyHistogram.record(latency, labels);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to record checkpoint metric:', error);
+  }
+};
+
+// Recording functions for Pareto optimization metrics
+export const recordParetoMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  frontSize: number,
+  solutionsGenerated: number,
+  optimizerType: string,
+  hypervolume?: number,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.paretoOptimizationsCounter) {
+      instruments.paretoOptimizationsCounter.add(1, labels);
+    }
+
+    if (instruments.paretoFrontSizeHistogram) {
+      instruments.paretoFrontSizeHistogram.record(frontSize, labels);
+    }
+
+    if (hypervolume !== undefined && instruments.paretoHypervolumeGauge) {
+      instruments.paretoHypervolumeGauge.record(hypervolume, labels);
+    }
+
+    if (instruments.paretoSolutionsGeneratedHistogram) {
+      instruments.paretoSolutionsGeneratedHistogram.record(
+        solutionsGenerated,
+        labels
+      );
+    }
+  } catch (error) {
+    console.warn('Failed to record Pareto metric:', error);
+  }
+};
+
+// Recording functions for program complexity metrics
+export const recordProgramComplexityMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  inputFields: number,
+  outputFields: number,
+  examplesCount: number,
+  validationSetSize: number,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.programInputFieldsGauge) {
+      instruments.programInputFieldsGauge.record(inputFields, labels);
+    }
+
+    if (instruments.programOutputFieldsGauge) {
+      instruments.programOutputFieldsGauge.record(outputFields, labels);
+    }
+
+    if (instruments.examplesCountGauge) {
+      instruments.examplesCountGauge.record(examplesCount, labels);
+    }
+
+    if (instruments.validationSetSizeGauge) {
+      instruments.validationSetSizeGauge.record(validationSetSize, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record program complexity metric:', error);
+  }
+};
+
+// Recording functions for performance metrics
+export const recordOptimizerPerformanceMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  metricType: 'evaluation' | 'demo_generation' | 'metric_computation',
+  duration: number,
+  optimizerType: string,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      metric_type: metricType,
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    switch (metricType) {
+      case 'evaluation':
+        if (instruments.evaluationLatencyHistogram) {
+          instruments.evaluationLatencyHistogram.record(duration, labels);
+        }
+        break;
+      case 'demo_generation':
+        if (instruments.demoGenerationLatencyHistogram) {
+          instruments.demoGenerationLatencyHistogram.record(duration, labels);
+        }
+        break;
+      case 'metric_computation':
+        if (instruments.metricComputationLatencyHistogram) {
+          instruments.metricComputationLatencyHistogram.record(
+            duration,
+            labels
+          );
+        }
+        break;
+    }
+  } catch (error) {
+    console.warn('Failed to record optimizer performance metric:', error);
+  }
+};
+
+// Recording functions for configuration metrics
+export const recordOptimizerConfigurationMetric = (
+  instruments: Readonly<AxOptimizerMetricsInstruments>,
+  optimizerType: string,
+  targetScore?: number,
+  maxRounds?: number,
+  customLabels?: Record<string, string>
+): void => {
+  try {
+    const labels = sanitizeOptimizerLabels({
+      optimizer_type: optimizerType,
+      ...customLabels,
+    });
+
+    if (instruments.optimizerTypeGauge) {
+      instruments.optimizerTypeGauge.record(1, labels);
+    }
+
+    if (targetScore !== undefined && instruments.targetScoreGauge) {
+      instruments.targetScoreGauge.record(targetScore, labels);
+    }
+
+    if (maxRounds !== undefined && instruments.maxRoundsGauge) {
+      instruments.maxRoundsGauge.record(maxRounds, labels);
+    }
+  } catch (error) {
+    console.warn('Failed to record optimizer configuration metric:', error);
+  }
+};
+
+// Simplified result - no program since it's passed to compile
+// Legacy interface - kept for backward compatibility
+export interface AxOptimizerResult<OUT> {
+  demos?: AxProgramDemos<any, OUT>[];
+  stats: AxOptimizationStats;
+  bestScore: number;
+  finalConfiguration?: Record<string, unknown>;
+
+  // Optimization history for analysis
+  scoreHistory?: number[];
+  configurationHistory?: Record<string, unknown>[];
+
+  // Unified optimization result (v14.0.24+)
+  optimizedProgram?: AxOptimizedProgram<OUT>;
+}
+
+// Unified optimization result that consolidates all optimization outputs
+export interface AxOptimizedProgram<OUT = any> {
+  // Core optimization results
+  bestScore: number;
+  stats: AxOptimizationStats;
+
+  // Program configuration
+  /**
+   * Generic component map produced by reflective optimizers (e.g. GEPA).
+   * Keys follow the `${programId}::${kind}[:${subKey}]` grammar from
+   * `AxOptimizableComponent`. Applied via `program.applyOptimizedComponents`.
+   */
+  componentMap?: Record<string, string>;
+  selectorState?: Record<string, AxGEPAComponentBanditState>;
+  demos?: AxProgramDemos<any, OUT>[];
+
+  // Model configuration
+  modelConfig?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    stop?: string | string[];
+    [key: string]: unknown;
+  };
+
+  // Optimization metadata
+  optimizerType: string;
+  optimizationTime: number;
+  totalRounds: number;
+  converged: boolean;
+
+  // Historical data for analysis
+  scoreHistory?: number[];
+  configurationHistory?: Record<string, unknown>[];
+  artifactFormatVersion?: number;
+  instructionSchema?: string;
+
+  // Apply this optimization to a program
+  applyTo<IN, T extends AxGenOut>(program: AxGen<IN, T>): void;
+}
+
+export type AxSerializedOptimizedProgram<OUT = any> = Omit<
+  AxOptimizedProgram<OUT>,
+  'applyTo'
+>;
+
+// Concrete implementation of AxOptimizedProgram
+export class AxOptimizedProgramImpl<OUT = any>
+  implements AxOptimizedProgram<OUT>
+{
+  public readonly bestScore: number;
+  public readonly stats: AxOptimizationStats;
+  public readonly componentMap?: Record<string, string>;
+  public readonly selectorState?: Record<string, AxGEPAComponentBanditState>;
+  public readonly demos?: AxProgramDemos<any, OUT>[];
+  public readonly examples?: AxExample[];
+  public readonly modelConfig?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    stop?: string | string[];
+    [key: string]: unknown;
+  };
+  public readonly optimizerType: string;
+  public readonly optimizationTime: number;
+  public readonly totalRounds: number;
+  public readonly converged: boolean;
+  public readonly scoreHistory?: number[];
+  public readonly configurationHistory?: Record<string, unknown>[];
+  public readonly artifactFormatVersion?: number;
+  public readonly instructionSchema?: string;
+
+  constructor(config: {
+    bestScore: number;
+    stats: AxOptimizationStats;
+    componentMap?: Record<string, string>;
+    selectorState?: Record<string, AxGEPAComponentBanditState>;
+    demos?: AxProgramDemos<any, OUT>[];
+    examples?: AxExample[];
+    modelConfig?: AxOptimizedProgram<OUT>['modelConfig'];
+    optimizerType: string;
+    optimizationTime: number;
+    totalRounds: number;
+    converged: boolean;
+    scoreHistory?: number[];
+    configurationHistory?: Record<string, unknown>[];
+    artifactFormatVersion?: number;
+    instructionSchema?: string;
+  }) {
+    this.bestScore = config.bestScore;
+    this.stats = config.stats;
+    this.componentMap = config.componentMap;
+    this.selectorState = config.selectorState;
+    this.demos = config.demos;
+    this.examples = config.examples;
+    this.modelConfig = config.modelConfig;
+    this.optimizerType = config.optimizerType;
+    this.optimizationTime = config.optimizationTime;
+    this.totalRounds = config.totalRounds;
+    this.converged = config.converged;
+    this.scoreHistory = config.scoreHistory;
+    this.configurationHistory = config.configurationHistory;
+    this.artifactFormatVersion = config.artifactFormatVersion;
+    this.instructionSchema = config.instructionSchema;
+  }
+
+  public applyTo<IN, T extends AxGenOut>(program: AxGen<IN, T>): void {
+    (program as any).applyOptimization?.(this);
+  }
+}
+
+export function axSerializeOptimizedProgram<OUT = any>(
+  optimizedProgram: Readonly<AxOptimizedProgram<OUT>>
+): AxSerializedOptimizedProgram<OUT> {
+  return JSON.parse(
+    JSON.stringify(optimizedProgram)
+  ) as AxSerializedOptimizedProgram<OUT>;
+}
+
+export function axDeserializeOptimizedProgram<OUT = any>(
+  serialized: Readonly<AxSerializedOptimizedProgram<OUT>>
+): AxOptimizedProgramImpl<OUT> {
+  return new AxOptimizedProgramImpl<OUT>(
+    axSerializeOptimizedProgram(serialized as AxOptimizedProgram<OUT>)
+  );
+}
+
+// Pareto optimization result for multi-objective optimization
+export interface AxParetoResult<OUT = any> extends AxOptimizerResult<OUT> {
+  paretoFront: ReadonlyArray<{
+    demos: readonly AxProgramDemos<any, OUT>[];
+    scores: Readonly<Record<string, number>>;
+    configuration: Readonly<Record<string, unknown>>;
+    dominatedSolutions: number;
+  }>;
+
+  // Multi-objective specific stats
+  hypervolume?: number;
+  paretoFrontSize: number;
+  convergenceMetrics?: Record<string, number>;
+}
+
+// AxCompileOptions moved to ./common_types.ts
+
+/**
+ * Interface for optimizing AI programs through automated prompt tuning.
+ *
+ * Optimizers improve program performance by finding optimal demonstrations (few-shot examples)
+ * that guide the AI toward better outputs. The optimization process:
+ *
+ * 1. Runs the program on training examples
+ * 2. Evaluates outputs using the metric function
+ * 3. Selects high-scoring input/output pairs as demonstrations
+ * 4. Iterates to find the best demonstration set
+ *
+ * @example Basic optimization
+ * ```typescript
+ * const optimizer = new AxBootstrapFewShot({ maxDemos: 4 });
+ *
+ * const result = await optimizer.compile(
+ *   program,
+ *   trainingExamples,
+ *   ({ prediction, example }) => prediction.answer === example.expectedAnswer ? 1 : 0
+ * );
+ *
+ * // Apply optimized demos to program
+ * program.setDemos(result.demos);
+ * ```
+ */
+export interface AxOptimizer {
+  /**
+   * Optimize a program using the provided training examples and metric function.
+   *
+   * The optimizer runs the program on examples, scores the outputs, and builds
+   * a set of demonstrations that improve program performance. The process is
+   * automatic - you provide the data and metric, the optimizer does the rest.
+   *
+   * **Metric Function:**
+   * The metric function evaluates how well the program's output matches expectations.
+   * It receives the prediction and original example, and should return a score
+   * between 0 (worst) and 1 (best).
+   *
+   * @param program - The AxGen program to optimize. The optimizer will call
+   *   `.forward()` on this program during training.
+   *
+   * @param examples - Training examples with input values. Examples are automatically
+   *   split into training and validation sets. Each example should have the input
+   *   fields required by the program's signature.
+   *
+   * @param metricFn - Function that scores program outputs. Called with:
+   *   - `prediction`: The program's output for this example
+   *   - `example`: The original input example (useful if it contains expected outputs)
+   *   - Returns: Number between 0 (bad) and 1 (perfect)
+   *
+   * @param options - Optional configuration:
+   *   - `ai`: AI service to use (required if not set on program)
+   *   - `valSet`: Custom validation set (otherwise auto-split from examples)
+   *   - `trainSplit`: Fraction of examples for training (default: 0.8)
+   *
+   * @returns Promise resolving to optimization results including:
+   *   - `demos`: Optimized demonstrations to use with the program
+   *   - `stats`: Training/validation scores and iteration counts
+   *
+   * @example Exact match metric
+   * ```typescript
+   * const result = await optimizer.compile(
+   *   qa,
+   *   examples,
+   *   ({ prediction, example }) => {
+   *     return prediction.answer.toLowerCase() === example.expectedAnswer.toLowerCase() ? 1 : 0;
+   *   }
+   * );
+   * ```
+   *
+   * @example Semantic similarity metric
+   * ```typescript
+   * const result = await optimizer.compile(
+   *   summarizer,
+   *   examples,
+   *   async ({ prediction, example }) => {
+   *     const similarity = await computeCosineSimilarity(
+   *       await embed(prediction.summary),
+   *       await embed(example.referenceSummary)
+   *     );
+   *     return similarity; // 0-1 based on embedding similarity
+   *   }
+   * );
+   * ```
+   *
+   * @example Partial credit metric
+   * ```typescript
+   * const result = await optimizer.compile(
+   *   extractor,
+   *   examples,
+   *   ({ prediction, example }) => {
+   *     const expectedKeywords = example.keywords;
+   *     const foundKeywords = prediction.keywords;
+   *     const matches = expectedKeywords.filter(k => foundKeywords.includes(k));
+   *     return matches.length / expectedKeywords.length; // Fraction found
+   *   }
+   * );
+   * ```
+   */
+  compile<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMetricFn,
+    options?: AxCompileOptions
+  ): Promise<AxOptimizerResult<OUT>>;
+
+  /**
+   * Optimize a program with real-time streaming updates
+   * @param program The program to optimize
+   * @param examples Training examples
+   * @param metricFn Evaluation metric function
+   * @param options Optional configuration options
+   * @returns Async iterator yielding optimization progress
+   */
+  compileStream?<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMetricFn,
+    options?: AxCompileOptions
+  ): AsyncIterableIterator<AxOptimizationProgress>;
+
+  /**
+   * Multi-objective optimization using Pareto frontier
+   * @param program The program to optimize
+   * @param examples Training examples
+   * @param metricFn Multi-objective metric function
+   * @param options Optional configuration options
+   * @returns Pareto optimization result
+   */
+  compilePareto?<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMultiMetricFn,
+    options?: AxCompileOptions
+  ): Promise<AxParetoResult<OUT>>;
+
+  /**
+   * Get current optimization statistics
+   * @returns Current optimization statistics
+   */
+  getStats(): AxOptimizationStats;
+
+  /**
+   * Cancel ongoing optimization gracefully
+   * @returns Promise that resolves when cancellation is complete
+   */
+  cancel?(): Promise<void>;
+
+  /**
+   * Reset optimizer state for reuse with different programs
+   */
+  reset?(): void;
+
+  /**
+   * Get optimizer-specific configuration
+   * @returns Current optimizer configuration
+   */
+  getConfiguration?(): Record<string, unknown>;
+
+  /**
+   * Update optimizer configuration
+   * @param config New configuration to merge with existing
+   */
+  updateConfiguration?(config: Readonly<Record<string, unknown>>): void;
+
+  /**
+   * Validate that the optimizer can handle the given program
+   * @param program Program to validate
+   * @returns Validation result with any issues found
+   */
+  validateProgram?<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>
+  ): {
+    isValid: boolean;
+    issues: string[];
+    suggestions: string[];
+  };
+}
+
+// Specific optimizer options interfaces
+
+export interface AxBootstrapOptimizerOptions {
+  maxRounds?: number;
+  maxExamples?: number;
+  maxDemos?: number;
+  batchSize?: number;
+  earlyStoppingPatience?: number;
+  teacherAI?: AxAIService;
+  costMonitoring?: boolean;
+  maxTokensPerGeneration?: number;
+  verboseMode?: boolean;
+  debugMode?: boolean;
+
+  // Enhanced options
+  adaptiveBatching?: boolean;
+  dynamicTemperature?: boolean;
+  qualityThreshold?: number;
+  diversityWeight?: number;
+}
+
+// Default cost tracker implementation
+export class AxDefaultCostTracker implements AxCostTracker {
+  private tokenUsage: Record<string, number> = {};
+  private totalTokens = 0;
+
+  // Configuration options
+  private readonly costPerModel: Record<string, number>;
+  private readonly maxCost?: number;
+  private readonly maxTokens?: number;
+
+  constructor(options?: AxCostTrackerOptions) {
+    this.costPerModel = options?.costPerModel ?? {};
+    this.maxCost = options?.maxCost;
+    this.maxTokens = options?.maxTokens;
+  }
+
+  trackTokens(count: number, model: string): void {
+    this.tokenUsage[model] = (this.tokenUsage[model] || 0) + count;
+    this.totalTokens += count;
+  }
+
+  getCurrentCost(): number {
+    // Calculate cost on-demand
+    let totalCost = 0;
+    for (const [model, tokens] of Object.entries(this.tokenUsage)) {
+      const costPer1K = this.costPerModel[model] || 0.001; // Default fallback
+      totalCost += (tokens / 1000) * costPer1K;
+    }
+    return totalCost;
+  }
+
+  getTokenUsage(): Record<string, number> {
+    return { ...this.tokenUsage };
+  }
+
+  getTotalTokens(): number {
+    return this.totalTokens;
+  }
+
+  isLimitReached(): boolean {
+    // Check token limit if configured
+    if (this.maxTokens !== undefined && this.totalTokens >= this.maxTokens) {
+      return true;
+    }
+
+    // Check cost limit if configured (calculate cost on-demand)
+    if (this.maxCost !== undefined) {
+      const currentCost = this.getCurrentCost();
+      if (currentCost >= this.maxCost) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  reset(): void {
+    this.tokenUsage = {};
+    this.totalTokens = 0;
+  }
+}
+
+/**
+ * Abstract base class for optimizers that provides common functionality
+ * and standardized handling of AxOptimizerArgs
+ */
+export abstract class AxBaseOptimizer implements AxOptimizer {
+  // Common AxOptimizerArgs fields
+  protected readonly studentAI: AxAIService;
+  protected readonly teacherAI?: AxAIService;
+  protected readonly teacherOptions?: AxAIServiceOptions;
+  protected readonly targetScore?: number;
+  protected readonly minSuccessRate?: number;
+  protected readonly onProgress?: (
+    progress: Readonly<AxOptimizationProgress>
+  ) => void;
+  protected readonly onEarlyStop?: (
+    reason: string,
+    stats: Readonly<AxOptimizationStats>
+  ) => void;
+  protected readonly costTracker?: AxCostTracker;
+  protected readonly seed?: number;
+
+  // Checkpointing fields
+  protected readonly checkpointSave?: AxCheckpointSaveFn;
+  protected readonly checkpointLoad?: AxCheckpointLoadFn;
+  protected readonly checkpointInterval?: number;
+  protected readonly resumeFromCheckpoint?: string;
+
+  // Logging fields
+  protected readonly logger?: AxLoggerFunction;
+  protected readonly verbose?: boolean;
+
+  // Optimizer logging
+  protected readonly debugOptimizer: boolean;
+  protected readonly optimizerLogger?: AxOptimizerLoggerFunction;
+
+  // Checkpoint state
+  protected currentRound = 0;
+  private scoreHistory: number[] = [];
+  private configurationHistory: Record<string, unknown>[] = [];
+
+  // Common optimization statistics
+  protected stats: AxOptimizationStats;
+
+  // Result explanation generator
+  // FIXME: Disabled due to circular dependency - private resultExplainer?: ReturnType<typeof ax>;
+  private resultExplainer?: any;
+
+  constructor(args: Readonly<AxOptimizerArgs>) {
+    // Set common fields from AxOptimizerArgs
+    this.studentAI = args.studentAI;
+    this.teacherAI = args.teacherAI;
+    this.teacherOptions = args.teacherOptions;
+    this.targetScore = args.targetScore;
+    this.minSuccessRate = args.minSuccessRate;
+    this.onProgress = args.onProgress;
+    this.onEarlyStop = args.onEarlyStop;
+    this.seed = args.seed;
+
+    // Set up checkpointing
+    this.checkpointSave = args.checkpointSave;
+    this.checkpointLoad = args.checkpointLoad;
+    this.checkpointInterval = args.checkpointInterval ?? 10; // Default: checkpoint every 10 rounds
+    this.resumeFromCheckpoint = args.resumeFromCheckpoint;
+
+    // Set up logging
+    this.logger = args.logger;
+    this.verbose = args.verbose;
+
+    // Set up cost tracker with default if not provided
+    const costTracker = new AxDefaultCostTracker({
+      maxTokens: 1000000,
+    });
+    this.costTracker = args.costTracker ?? costTracker;
+
+    // Initialize common stats structure
+    this.stats = this.initializeStats();
+
+    // Set up optimizer logging
+    this.debugOptimizer = args.debugOptimizer ?? false;
+    this.optimizerLogger =
+      args.optimizerLogger ??
+      (this.verbose ? axDefaultOptimizerLogger : undefined);
+
+    // Initialize result explanation generator
+    this.initializeResultExplainer();
+  }
+
+  /**
+   * Get merged custom labels from globals, AI services, and compile options.
+   * Labels are merged with later sources overriding earlier ones.
+   */
+  protected getMergedCustomLabels(
+    options?: AxCompileOptions
+  ): Record<string, string> {
+    return mergeCustomLabels(
+      axGlobals.customLabels,
+      this.studentAI?.getOptions?.()?.customLabels,
+      this.teacherAI?.getOptions?.()?.customLabels,
+      options?.customLabels
+    );
+  }
+
+  protected getMetricsInstruments(): AxOptimizerMetricsInstruments | undefined {
+    return getOrCreateOptimizerMetricsInstruments(
+      this.studentAI?.getOptions?.()?.meter ??
+        this.teacherAI?.getOptions?.()?.meter ??
+        axGlobals.meter
+    );
+  }
+
+  /**
+   * Initialize the result explanation generator
+   * FIXME: Disabled due to circular dependency with ax() function
+   */
+  private initializeResultExplainer(): void {
+    // FIXME: Circular dependency - cannot import ax() from index.js
+    this.resultExplainer = undefined;
+    /*
+    try {
+      this.resultExplainer = ax(`
+        optimizationScore:number "Final optimization score (0.0 to 1.0)",
+        bestConfiguration:json "Best configuration found during optimization",
+        totalRounds:number "Number of optimization rounds completed",
+        converged:boolean "Whether optimization converged to a stable solution",
+        earlyStoppedReason?:string "Reason for early stopping if applicable",
+        resourcesUsed:json "Tokens, time, and cost consumed during optimization" ->
+        humanExplanation:string "Clear, jargon-free explanation of optimization results for humans",
+        recommendations:string[] "Actionable recommendations based on the results",
+        performanceAssessment:string "Assessment of how well the optimization performed"
+      `);
+    } catch (error) {
+      // If ax generator initialization fails, continue without it
+      this.resultExplainer = undefined;
+      if (this.verbose) {
+        console.warn(
+          '[AxBaseOptimizer] Failed to initialize result explainer:',
+          error
+        );
+      }
+    }
+    */
+  }
+
+  /**
+   * Initialize the optimization statistics structure
+   */
+  protected initializeStats(): AxOptimizationStats {
+    return {
+      totalCalls: 0,
+      successfulDemos: 0,
+      estimatedTokenUsage: 0,
+      earlyStopped: false,
+      resourceUsage: {
+        totalTokens: 0,
+        totalTime: 0,
+        avgLatencyPerEval: 0,
+        costByModel: {},
+      },
+      convergenceInfo: {
+        converged: false,
+        finalImprovement: 0,
+        stagnationRounds: 0,
+        convergenceThreshold: 0.01,
+      },
+      bestScore: 0,
+      bestConfiguration: {},
+    };
+  }
+
+  /**
+   * Set up reproducible random seed if provided
+   */
+  protected setupRandomSeed(): void {
+    if (this.seed !== undefined) {
+      // Note: For full reproducibility, we'd need a proper PRNG
+      Math.random = (() => {
+        let seed = this.seed!;
+        return () => {
+          seed = (seed * 9301 + 49297) % 233280;
+          return seed / 233280;
+        };
+      })();
+    }
+  }
+
+  /**
+   * Check if optimization should stop early due to cost limits
+   */
+  protected checkCostLimits(): boolean {
+    return this.costTracker?.isLimitReached() ?? false;
+  }
+
+  /**
+   * Check if target score has been reached
+   */
+  protected checkTargetScore(currentScore: number): boolean {
+    return this.targetScore !== undefined && currentScore >= this.targetScore;
+  }
+
+  /**
+   * Update resource usage statistics
+   */
+  protected updateResourceUsage(startTime: number, tokensUsed = 0): void {
+    this.stats.resourceUsage.totalTime = Date.now() - startTime;
+    this.stats.resourceUsage.totalTokens += tokensUsed;
+
+    if (this.stats.totalCalls > 0) {
+      this.stats.resourceUsage.avgLatencyPerEval =
+        this.stats.resourceUsage.totalTime / this.stats.totalCalls;
+    }
+  }
+
+  /**
+   * Trigger early stopping with appropriate callbacks
+   */
+  protected triggerEarlyStopping(
+    reason: string,
+    bestScoreRound: number,
+    options?: AxCompileOptions
+  ): void {
+    this.stats.earlyStopped = true;
+    this.stats.earlyStopping = {
+      bestScoreRound,
+      patienceExhausted: reason.includes('improvement'),
+      reason,
+    };
+
+    // Record early stopping metrics (use a default optimizer type)
+    this.recordEarlyStoppingMetrics(reason, 'unknown', options);
+
+    if (this.onEarlyStop) {
+      this.onEarlyStop(reason, this.stats);
+    }
+    const optLogger = this.getOptimizerLogger();
+    optLogger?.({
+      name: 'EarlyStopping',
+      value: {
+        reason,
+        finalScore: this.stats.bestScore ?? 0,
+        round: bestScoreRound,
+      },
+    });
+  }
+
+  /**
+   * Validate that examples meet minimum requirements for optimization
+   * @param examples Examples to validate
+   * @param requireSplit Whether this optimizer requires train/validation split (default: true)
+   * @throws Error if examples don't meet minimum requirements
+   */
+  protected validateExamples<IN>(
+    examples: readonly AxTypedExample<IN>[],
+    requireSplit = true
+  ): void {
+    if (!examples || examples.length === 0) {
+      throw new Error('At least 1 example is required for optimization');
+    }
+
+    if (requireSplit) {
+      // For auto-splitting optimizers, we need at least 2 examples
+      // (1 for training, 1 for validation)
+      if (examples.length < 2) {
+        throw new Error(
+          'At least 2 examples are required for optimization with auto-splitting. ' +
+            'Provide more examples to enable proper train/validation split.'
+        );
+      }
+    }
+
+    // Warn if very few examples
+    const recommendedMin = requireSplit ? 10 : 5;
+    if (examples.length < recommendedMin && this.verbose) {
+      console.warn(
+        `[Ax Optimizer] Warning: Only ${examples.length} examples provided. Consider providing more examples (${recommendedMin}+ recommended) for better optimization results.`
+      );
+    }
+  }
+
+  /**
+   * Get the AI service to use for a specific task, preferring teacher when available
+   * @param preferTeacher Whether to prefer teacher AI over student AI
+   * @param options Optional compile options that may override teacher AI
+   * @returns The appropriate AI service to use
+   */
+  protected getAIService(
+    preferTeacher = false,
+    options?: AxCompileOptions
+  ): AxAIService {
+    // Check for override teacher AI first
+    if (preferTeacher && options?.overrideTeacherAI) {
+      return options.overrideTeacherAI;
+    }
+
+    // Then check for configured teacher AI
+    if (preferTeacher && this.teacherAI) {
+      return this.teacherAI;
+    }
+
+    return this.studentAI;
+  }
+
+  /**
+   * Check if teacher AI is available (including overrides)
+   * @param options Optional compile options that may override teacher AI
+   * @returns True if teacher AI is configured or overridden
+   */
+  protected hasTeacherAI(options?: AxCompileOptions): boolean {
+    return (
+      options?.overrideTeacherAI !== undefined || this.teacherAI !== undefined
+    );
+  }
+
+  /**
+   * Get teacher AI if available, otherwise return student AI
+   * @param options Optional compile options that may override teacher AI
+   * @returns Teacher AI if available, otherwise student AI
+   */
+  protected getTeacherOrStudentAI(options?: AxCompileOptions): AxAIService {
+    return options?.overrideTeacherAI || this.teacherAI || this.studentAI;
+  }
+
+  /**
+   * Execute a task with teacher AI if available, otherwise use student AI
+   * @param task Function that takes an AI service and returns a promise
+   * @param preferTeacher Whether to prefer teacher AI (default: true)
+   * @param options Optional compile options that may override teacher AI
+   * @returns Result of the task execution
+   */
+  protected async executeWithTeacher<T>(
+    task: (ai: AxAIService) => Promise<T>,
+    preferTeacher = true,
+    options?: AxCompileOptions
+  ): Promise<T> {
+    const ai = this.getAIService(preferTeacher, options);
+    return await task(ai);
+  }
+
+  /**
+   * Abstract method that must be implemented by concrete optimizers
+   */
+  public abstract compile<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMetricFn,
+    options?: AxCompileOptions
+  ): Promise<AxOptimizerResult<OUT>>;
+
+  /**
+   * Optimize a program with real-time streaming updates
+   * @param program The program to optimize
+   * @param examples Training examples
+   * @param metricFn Evaluation metric function
+   * @param options Optional configuration options
+   * @returns Async iterator yielding optimization progress
+   */
+  public async *compileStream<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMetricFn,
+    options?: AxCompileOptions
+  ): AsyncIterableIterator<AxOptimizationProgress> {
+    const startTime = Date.now();
+    const optimizerType = this.constructor.name;
+    const programSignature = program.getSignature().toString();
+
+    this.recordOptimizationStart(optimizerType, programSignature, options);
+
+    let earlyStopReason: string | undefined;
+
+    const updateProgress = (
+      round: number,
+      score: number,
+      configuration: Record<string, unknown>,
+      optimizerType: string,
+      optimizerConfig: Record<string, unknown>,
+      bestScore: number,
+      bestConfiguration: Record<string, unknown> | undefined,
+      optimizerState: Record<string, unknown> = {},
+      options?: AxCompileOptions
+    ) => {
+      const optLogger = this.getOptimizerLogger(options);
+      optLogger?.({
+        name: 'RoundProgress',
+        value: {
+          round,
+          totalRounds: options?.maxIterations ?? 0,
+          currentScore: score,
+          bestScore,
+          configuration,
+        },
+      });
+      this.updateOptimizationProgress(
+        round,
+        score,
+        configuration,
+        optimizerType,
+        optimizerConfig,
+        bestScore,
+        bestConfiguration,
+        optimizerState,
+        options
+      );
+    };
+
+    const onEarlyStop = (
+      reason: string,
+      _stats: Readonly<AxOptimizationStats>
+    ) => {
+      earlyStopReason = reason;
+      this.triggerEarlyStopping(reason, this.currentRound, options);
+    };
+
+    const onProgress = (progress: Readonly<AxOptimizationProgress>) => {
+      this.onProgress?.(progress);
+      updateProgress(
+        progress.round,
+        progress.currentScore,
+        progress.currentConfiguration || {},
+        optimizerType,
+        {}, // No optimizerConfig here, it's part of the progress object
+        progress.bestScore,
+        progress.bestConfiguration,
+        progress.convergenceInfo,
+        options
+      );
+    };
+
+    const compileResult = await this.compile(program, examples, metricFn, {
+      ...options,
+      overrideOnProgress: onProgress,
+      overrideOnEarlyStop: onEarlyStop,
+    });
+
+    const duration = Date.now() - startTime;
+    this.recordOptimizationComplete(
+      duration,
+      true,
+      optimizerType,
+      programSignature,
+      options
+    );
+
+    if (earlyStopReason) {
+      this.getLogger(options)?.({
+        name: 'Notification',
+        id: 'optimization_early_stop',
+        value: `Optimization stopped early due to ${earlyStopReason}`,
+      });
+    }
+
+    return {
+      demos: compileResult.demos,
+      stats: compileResult.stats,
+      bestScore: compileResult.bestScore,
+      finalConfiguration: compileResult.finalConfiguration,
+      scoreHistory: compileResult.scoreHistory,
+      configurationHistory: compileResult.configurationHistory,
+    };
+  }
+
+  /**
+   * Multi-objective optimization using Pareto frontier
+   * Default implementation that leverages the single-objective compile method
+   * @param program The program to optimize
+   * @param examples Training examples
+   * @param metricFn Multi-objective metric function that returns multiple scores
+   * @param options Optional configuration options
+   * @returns Pareto optimization result with frontier of non-dominated solutions
+   */
+  public async compilePareto<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMultiMetricFn,
+    options?: AxCompileOptions
+  ): Promise<AxParetoResult<OUT>> {
+    const _optimizerType = this.constructor.name;
+    const startTime = Date.now();
+
+    // Strategy 1: Generate different weighted combinations of objectives
+    const solutions = await this.generateWeightedSolutions(
+      program,
+      examples,
+      metricFn,
+      options
+    );
+
+    // Strategy 2: Generate constraint-based solutions (optimize one objective while constraining others)
+    const constraintSolutions = await this.generateConstraintSolutions(
+      program,
+      examples,
+      metricFn,
+      options
+    );
+
+    // Combine all solutions
+    const allSolutions = [...solutions, ...constraintSolutions];
+
+    // if (options?.verbose) {
+    //   this.getLogger(options)?.(
+    //     `Generated ${allSolutions.length} candidate solutions`,
+    //     { tags: ['discovery'] }
+    //   );
+    // }
+
+    // Find Pareto frontier
+    const paretoFront = this.findParetoFrontier(allSolutions);
+
+    // Calculate hypervolume if possible
+    const hypervolume = this.calculateHypervolume(paretoFront);
+
+    // if (options?.verbose) {
+    //   this.getLogger(options)?.(
+    //     `Found ${paretoFront.length} non-dominated solutions`,
+    //     { tags: ['discovery'] }
+    //   );
+    //   this.getLogger(options)?.(
+    //     `Hypervolume: ${hypervolume?.toFixed(4) || 'N/A'}`,
+    //     { tags: ['discovery'] }
+    //   );
+    // }
+
+    // Update stats
+    this.updateResourceUsage(startTime);
+    this.stats.convergenceInfo.converged = true;
+
+    // Record Pareto optimization metrics
+    this.recordParetoMetrics(
+      paretoFront.length,
+      allSolutions.length,
+      'base_optimizer',
+      hypervolume,
+      options
+    );
+
+    // Calculate best score as the maximum across all objectives and solutions
+    const bestScore =
+      paretoFront.length > 0
+        ? Math.max(
+            ...paretoFront.map((sol) => Math.max(...Object.values(sol.scores)))
+          )
+        : 0;
+
+    return {
+      demos: paretoFront.length > 0 ? [...paretoFront[0]!.demos] : undefined,
+      stats: this.stats,
+      bestScore,
+      paretoFront,
+      hypervolume,
+      paretoFrontSize: paretoFront.length,
+      finalConfiguration: {
+        paretoFrontSize: paretoFront.length,
+        hypervolume,
+        strategy: 'weighted_combinations_and_constraints',
+        numSolutions: allSolutions.length,
+      },
+    };
+  }
+
+  /**
+   * Generate solutions using different weighted combinations of objectives
+   */
+  private async generateWeightedSolutions<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMultiMetricFn,
+    options?: AxCompileOptions
+  ): Promise<
+    Array<{
+      scores: Record<string, number>;
+      demos?: AxProgramDemos<any, OUT>[];
+      configuration: Record<string, unknown>;
+    }>
+  > {
+    const solutions: Array<{
+      scores: Record<string, number>;
+      demos?: AxProgramDemos<any, OUT>[];
+      configuration: Record<string, unknown>;
+    }> = [];
+
+    // First, determine the objectives by running the metric on a sample
+    if (!examples || examples.length === 0) {
+      throw new Error('No examples provided for Pareto optimization');
+    }
+    const sampleExample = examples[0]!;
+    const samplePrediction = await program.forward(
+      this.getAIService(false, options),
+      sampleExample as any
+    );
+    const sampleScores = await metricFn({
+      prediction: samplePrediction,
+      example: sampleExample,
+    });
+    const objectives = Object.keys(sampleScores);
+
+    // if (options?.verbose) {
+    //   this.getLogger(options)?.(
+    //     `Detected objectives: ${objectives.join(', ')}`,
+    //     { tags: ['discovery'] }
+    //   );
+    // }
+
+    // Generate different weight combinations
+    const weightCombinations = this.generateWeightCombinations(objectives);
+
+    for (let i = 0; i < weightCombinations.length; i++) {
+      const weights = weightCombinations[i]!;
+
+      // if (options?.verbose) {
+      //   this.getLogger(options)?.(
+      //     `Optimizing with weights: ${JSON.stringify(weights)}`,
+      //     { tags: ['discovery'] }
+      //   );
+      // }
+
+      // Create a weighted single-objective metric
+      const weightedMetric: AxMetricFn = async ({ prediction, example }) => {
+        const scores = await metricFn({ prediction, example });
+        let weightedScore = 0;
+        for (const [objective, score] of Object.entries(scores)) {
+          weightedScore += score * (weights[objective] || 0);
+        }
+        return weightedScore;
+      };
+
+      try {
+        // Use the concrete optimizer's compile method
+        const result = await this.compile(program, examples, weightedMetric, {
+          ...options,
+          verbose: false, // Suppress inner optimization logs
+        });
+
+        // Evaluate the result with the multi-objective metric
+        const scores = await this.evaluateWithMultiObjective(
+          program,
+          result,
+          metricFn,
+          examples
+        );
+
+        solutions.push({
+          scores,
+          demos: result.demos,
+          configuration: {
+            ...result.finalConfiguration,
+            weights,
+            strategy: 'weighted_combination',
+          },
+        });
+      } catch (_error) {
+        // if (options?.verbose) {
+        //   this.getLogger(options)?.(
+        //     `Failed optimization with weights ${JSON.stringify(weights)}: ${error}`,
+        //     { tags: ['warning'] }
+        //   );
+        // }
+      }
+    }
+
+    return solutions;
+  }
+
+  /**
+   * Generate solutions using constraint-based optimization
+   */
+  private async generateConstraintSolutions<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    examples: readonly AxTypedExample<IN>[],
+    metricFn: AxMultiMetricFn,
+    options?: AxCompileOptions
+  ): Promise<
+    Array<{
+      scores: Record<string, number>;
+      demos?: AxProgramDemos<any, OUT>[];
+      configuration: Record<string, unknown>;
+    }>
+  > {
+    const solutions: Array<{
+      scores: Record<string, number>;
+      demos?: AxProgramDemos<any, OUT>[];
+      configuration: Record<string, unknown>;
+    }> = [];
+
+    // Get objectives from a sample evaluation
+    if (!examples || examples.length === 0) {
+      throw new Error('No examples provided for multi-objective optimization');
+    }
+    const sampleExample = examples[0]!;
+    const samplePrediction = await program.forward(
+      this.getAIService(false, options),
+      sampleExample as any
+    );
+    const sampleScores = await metricFn({
+      prediction: samplePrediction,
+      example: sampleExample,
+    });
+    const objectives = Object.keys(sampleScores);
+
+    // For each objective, optimize it while constraining others
+    for (const primaryObjective of objectives) {
+      // if (options?.verbose) {
+      //   this.getLogger(options)?.(
+      //     `Optimizing ${primaryObjective} with constraints on other objectives`,
+      //     { tags: ['discovery'] }
+      //   );
+      // }
+
+      // Create a constraint-based metric
+      const constraintMetric: AxMetricFn = async ({ prediction, example }) => {
+        const scores = await metricFn({ prediction, example });
+
+        // Primary objective score
+        const primaryScore = scores[primaryObjective] || 0;
+
+        // Penalty for violating constraints on other objectives
+        let penalty = 0;
+        for (const [objective, score] of Object.entries(scores)) {
+          if (objective !== primaryObjective) {
+            // Simple constraint: other objectives should be at least 0.3
+            // This is a heuristic - in practice you'd set domain-specific thresholds
+            if (score < 0.3) {
+              penalty += (0.3 - score) * 2; // Penalty factor
+            }
+          }
+        }
+
+        return primaryScore - penalty;
+      };
+
+      try {
+        const result = await this.compile(program, examples, constraintMetric, {
+          ...options,
+          verbose: false,
+        });
+
+        const scores = await this.evaluateWithMultiObjective(
+          program,
+          result,
+          metricFn,
+          examples
+        );
+
+        solutions.push({
+          scores,
+          demos: result.demos,
+          configuration: {
+            ...result.finalConfiguration,
+            primaryObjective,
+            strategy: 'constraint_based',
+          },
+        });
+      } catch (_error) {
+        // if (options?.verbose) {
+        //   this.getLogger(options)?.(
+        //     `Failed constraint optimization for ${primaryObjective}: ${error}`,
+        //     { tags: ['warning'] }
+        //   );
+        // }
+      }
+    }
+
+    return solutions;
+  }
+
+  /**
+   * Generate different weight combinations for objectives
+   */
+  private generateWeightCombinations(
+    objectives: string[]
+  ): Record<string, number>[] {
+    const combinations: Record<string, number>[] = [];
+
+    // Single-objective focus (one objective gets weight 1, others get 0)
+    for (const objective of objectives) {
+      const weights: Record<string, number> = {};
+      for (const obj of objectives) {
+        weights[obj] = obj === objective ? 1 : 0;
+      }
+      combinations.push(weights);
+    }
+
+    // Equal weights
+    const equalWeights: Record<string, number> = {};
+    for (const objective of objectives) {
+      equalWeights[objective] = 1 / objectives.length;
+    }
+    combinations.push(equalWeights);
+
+    // If we have 2 objectives, generate more granular combinations
+    if (objectives.length === 2) {
+      const [obj1, obj2] = objectives;
+      for (let w1 = 0.1; w1 <= 0.9; w1 += 0.2) {
+        const w2 = 1 - w1;
+        combinations.push({ [obj1!]: w1, [obj2!]: w2 });
+      }
+    }
+
+    // If we have 3 objectives, generate some key combinations
+    if (objectives.length === 3) {
+      const [obj1, obj2, obj3] = objectives;
+      combinations.push(
+        { [obj1!]: 0.5, [obj2!]: 0.3, [obj3!]: 0.2 },
+        { [obj1!]: 0.3, [obj2!]: 0.5, [obj3!]: 0.2 },
+        { [obj1!]: 0.2, [obj2!]: 0.3, [obj3!]: 0.5 }
+      );
+    }
+
+    return combinations;
+  }
+
+  /**
+   * Evaluate a single-objective result with multi-objective metrics
+   */
+  private async evaluateWithMultiObjective<IN, OUT extends AxGenOut>(
+    program: Readonly<AxGen<IN, OUT>>,
+    result: Readonly<AxOptimizerResult<OUT>>,
+    metricFn: AxMultiMetricFn,
+    examples: readonly AxTypedExample<IN>[]
+  ): Promise<Record<string, number>> {
+    const testProgram = new AxGen(program.getSignature());
+    if (result.demos) {
+      testProgram.setDemos(result.demos);
+    }
+
+    // NOTE: This evaluation method needs examples to be passed as parameter
+    // For now, returning empty predictions array
+    const _predictions: { prediction: OUT; example: any }[] = [];
+    // for (const ex of examples) {
+    //   const prediction = await testProgram.forward(this.studentAI, ex as IN);
+    //   predictions.push({ prediction, example: ex });
+    // }
+
+    // Create validation split from examples (use last 20% or max 5 examples)
+    const valSplitSize = Math.max(
+      1,
+      Math.min(5, Math.floor(examples.length * 0.2))
+    );
+    const valSet = examples.slice(-valSplitSize);
+    const allScores: Record<string, number[]> = {};
+
+    // Evaluate on validation set
+    const evalSet = valSet;
+
+    for (const example of evalSet) {
+      try {
+        const prediction = await testProgram.forward(
+          this.studentAI,
+          example as IN
+        );
+        const scores = await metricFn({ prediction, example });
+
+        // Collect scores for each objective
+        for (const [objective, score] of Object.entries(scores)) {
+          if (!allScores[objective]) {
+            allScores[objective] = [];
+          }
+          allScores[objective]!.push(score);
+        }
+      } catch {}
+    }
+
+    // Calculate average scores for each objective
+    const avgScores: Record<string, number> = {};
+    for (const [objective, scores] of Object.entries(allScores)) {
+      avgScores[objective] =
+        scores.length > 0
+          ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+          : 0;
+    }
+
+    return avgScores;
+  }
+
+  /**
+   * Find the Pareto frontier from a set of solutions
+   */
+  private findParetoFrontier<OUT extends AxGenOut>(
+    solutions: Array<{
+      scores: Record<string, number>;
+      demos?: AxProgramDemos<any, OUT>[];
+      configuration: Record<string, unknown>;
+    }>
+  ): Array<{
+    demos: readonly AxProgramDemos<any, OUT>[];
+    scores: Readonly<Record<string, number>>;
+    configuration: Readonly<Record<string, unknown>>;
+    dominatedSolutions: number;
+  }> {
+    const paretoFront: Array<{
+      demos: readonly AxProgramDemos<any, OUT>[];
+      scores: Readonly<Record<string, number>>;
+      configuration: Readonly<Record<string, unknown>>;
+      dominatedSolutions: number;
+    }> = [];
+
+    // For each solution, check if it's dominated by any other solution
+    for (let i = 0; i < solutions.length; i++) {
+      const solutionA = solutions[i]!;
+      let isDominated = false;
+      let dominatedCount = 0;
+
+      for (let j = 0; j < solutions.length; j++) {
+        if (i === j) continue;
+
+        const solutionB = solutions[j]!;
+
+        // Check if B dominates A
+        if (this.dominates(solutionB.scores, solutionA.scores)) {
+          isDominated = true;
+          break;
+        }
+
+        // Count how many solutions A dominates
+        if (this.dominates(solutionA.scores, solutionB.scores)) {
+          dominatedCount++;
+        }
+      }
+
+      // If A is not dominated by any solution, it's on the Pareto frontier
+      if (!isDominated) {
+        paretoFront.push({
+          demos: solutionA.demos || [],
+          scores: solutionA.scores,
+          configuration: solutionA.configuration,
+          dominatedSolutions: dominatedCount,
+        });
+      }
+    }
+
+    return paretoFront;
+  }
+
+  /**
+   * Check if solution A dominates solution B
+   * A dominates B if A is better or equal in all objectives and strictly better in at least one
+   */
+  private dominates(
+    scoresA: Record<string, number>,
+    scoresB: Record<string, number>
+  ): boolean {
+    const objectives = Object.keys(scoresA);
+
+    // Check if A is at least as good as B in all objectives
+    let atLeastAsGood = true;
+    let strictlyBetter = false;
+
+    for (const objective of objectives) {
+      const scoreA = scoresA[objective] || 0;
+      const scoreB = scoresB[objective] || 0;
+
+      if (scoreA < scoreB) {
+        atLeastAsGood = false;
+        break;
+      }
+
+      if (scoreA > scoreB) {
+        strictlyBetter = true;
+      }
+    }
+
+    return atLeastAsGood && strictlyBetter;
+  }
+
+  /**
+   * Calculate hypervolume of the Pareto frontier
+   * Simplified implementation using reference point at origin
+   */
+  private calculateHypervolume(
+    paretoFront: Array<{
+      scores: Readonly<Record<string, number>>;
+    }>
+  ): number | undefined {
+    if (paretoFront.length === 0) return undefined;
+
+    // For simplicity, calculate 2D hypervolume if we have exactly 2 objectives
+    const firstSolution = paretoFront[0]!;
+    const objectives = Object.keys(firstSolution.scores);
+
+    if (objectives.length === 2) {
+      const [obj1, obj2] = objectives;
+      let hypervolume = 0;
+
+      // Sort solutions by first objective (descending)
+      const sortedSolutions = [...paretoFront].sort(
+        (a, b) => (b.scores[obj1!] || 0) - (a.scores[obj1!] || 0)
+      );
+
+      let prevScore2 = 0;
+      for (const solution of sortedSolutions) {
+        const score1 = solution.scores[obj1!] || 0;
+        const score2 = solution.scores[obj2!] || 0;
+
+        // Calculate area contribution
+        hypervolume += score1 * (score2 - prevScore2);
+        prevScore2 = Math.max(prevScore2, score2);
+      }
+
+      return hypervolume;
+    }
+
+    // For higher dimensions, return undefined (would need more complex algorithm)
+    return undefined;
+  }
+
+  /**
+   * Save current optimization state to checkpoint
+   */
+  protected async saveCheckpoint(
+    optimizerType: string,
+    optimizerConfig: Record<string, unknown>,
+    bestScore: number,
+    bestConfiguration?: Record<string, unknown>,
+    optimizerState: Record<string, unknown> = {},
+    options?: AxCompileOptions
+  ): Promise<string | undefined> {
+    const saveFn = options?.overrideCheckpointSave || this.checkpointSave;
+    if (!saveFn) return undefined;
+
+    const startTime = Date.now();
+    let success = false;
+    let checkpointId: string | undefined;
+
+    try {
+      const checkpoint: AxOptimizationCheckpoint = {
+        version: '1.0.0',
+        timestamp: Date.now(),
+        optimizerType,
+        optimizerConfig,
+        currentRound: this.currentRound,
+        totalRounds:
+          this.stats.resourceUsage.totalTime > 0 ? this.currentRound : 0,
+        bestScore,
+        bestConfiguration,
+        scoreHistory: [...this.scoreHistory],
+        configurationHistory: [...this.configurationHistory],
+        stats: { ...this.stats },
+        optimizerState,
+        examples: [], // examples now passed to compile
+      };
+
+      checkpointId = await saveFn(checkpoint);
+      success = true;
+    } catch (error) {
+      success = false;
+      throw error;
+    } finally {
+      const latency = Date.now() - startTime;
+      this.recordCheckpointMetrics(
+        'save',
+        latency,
+        success,
+        optimizerType,
+        options
+      );
+    }
+
+    return checkpointId;
+  }
+
+  /**
+   * Load optimization state from checkpoint
+   */
+  protected async loadCheckpoint(
+    checkpointId: string,
+    options?: AxCompileOptions
+  ): Promise<AxOptimizationCheckpoint | null> {
+    const loadFn = options?.overrideCheckpointLoad || this.checkpointLoad;
+    if (!loadFn) return null;
+
+    const startTime = Date.now();
+    let success = false;
+    let checkpoint: AxOptimizationCheckpoint | null = null;
+
+    try {
+      checkpoint = await loadFn(checkpointId);
+      success = checkpoint !== null;
+    } catch (error) {
+      success = false;
+      throw error;
+    } finally {
+      const latency = Date.now() - startTime;
+      // Use a default optimizer type since we don't know it at load time
+      this.recordCheckpointMetrics(
+        'load',
+        latency,
+        success,
+        'unknown',
+        options
+      );
+    }
+
+    return checkpoint;
+  }
+
+  /**
+   * Restore optimizer state from checkpoint
+   */
+  protected restoreFromCheckpoint(
+    checkpoint: Readonly<AxOptimizationCheckpoint>
+  ): void {
+    this.currentRound = checkpoint.currentRound;
+    this.scoreHistory = [...checkpoint.scoreHistory];
+    this.configurationHistory = [...checkpoint.configurationHistory];
+    this.stats = { ...checkpoint.stats };
+  }
+
+  /**
+   * Check if checkpoint should be saved
+   */
+  protected shouldSaveCheckpoint(
+    round: number,
+    options?: AxCompileOptions
+  ): boolean {
+    const interval =
+      options?.overrideCheckpointInterval || this.checkpointInterval;
+    return interval !== undefined && round % interval === 0;
+  }
+
+  /**
+   * Update optimization progress and handle checkpointing
+   */
+  protected async updateOptimizationProgress(
+    round: number,
+    score: number,
+    configuration: Record<string, unknown>,
+    optimizerType: string,
+    optimizerConfig: Record<string, unknown>,
+    bestScore: number,
+    bestConfiguration?: Record<string, unknown>,
+    optimizerState: Record<string, unknown> = {},
+    options?: AxCompileOptions
+  ): Promise<void> {
+    this.currentRound = round;
+    this.scoreHistory.push(score);
+    this.configurationHistory.push(configuration);
+
+    // Save checkpoint if needed
+    if (this.shouldSaveCheckpoint(round, options)) {
+      await this.saveCheckpoint(
+        optimizerType,
+        optimizerConfig,
+        bestScore,
+        bestConfiguration,
+        optimizerState,
+        options
+      );
+    }
+    const optLogger = this.getOptimizerLogger(options);
+    optLogger?.({
+      name: 'RoundProgress',
+      value: {
+        round,
+        totalRounds: options?.maxIterations ?? 0,
+        currentScore: score,
+        bestScore,
+        configuration,
+      },
+    });
+  }
+
+  /**
+   * Save final checkpoint on completion
+   */
+  protected async saveFinalCheckpoint(
+    optimizerType: string,
+    optimizerConfig: Record<string, unknown>,
+    bestScore: number,
+    bestConfiguration?: Record<string, unknown>,
+    optimizerState: Record<string, unknown> = {},
+    options?: AxCompileOptions
+  ): Promise<void> {
+    if (options?.saveCheckpointOnComplete !== false) {
+      await this.saveCheckpoint(
+        optimizerType,
+        optimizerConfig,
+        bestScore,
+        bestConfiguration,
+        { ...optimizerState, final: true },
+        options
+      );
+    }
+  }
+
+  /**
+   * Get the logger function with fallback hierarchy:
+   * 1. Explicit logger passed to optimizer
+   * 2. Logger from student AI service
+   * 3. undefined if verbose is false
+   */
+  protected getLogger(
+    options?: AxCompileOptions
+  ): AxLoggerFunction | undefined {
+    // Check if logging should be disabled
+    const isVerbose = this.isLoggingEnabled(options);
+    if (!isVerbose) {
+      return undefined;
+    }
+
+    // Use explicit logger if provided
+    if (this.logger) {
+      return this.logger;
+    }
+
+    return (
+      this.studentAI.getOptions?.()?.logger ??
+      axGlobals.logger ??
+      this.studentAI.getLogger?.()
+    );
+  }
+
+  /**
+   * Check if logging is enabled based on verbose settings
+   */
+  protected isLoggingEnabled(options?: AxCompileOptions): boolean {
+    // Explicit verbose setting in options takes precedence
+    if (options?.verbose !== undefined) {
+      return options.verbose;
+    }
+
+    // Use optimizer's verbose setting
+    return this.verbose ?? true; // Default to true if not specified
+  }
+
+  /**
+   * Record optimization start metrics
+   */
+  protected recordOptimizationStart(
+    optimizerType: string,
+    programSignature?: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    // Record program complexity metrics
+    if (programSignature) {
+      // Extract field counts from signature (simplified)
+      const inputFields = (programSignature.match(/input:/g) || []).length;
+      const outputFields = (programSignature.match(/output:/g) || []).length;
+
+      recordProgramComplexityMetric(
+        metricsInstruments,
+        inputFields,
+        outputFields,
+        0, // this.examples.length - now in options
+        0, // this.getValidationSet().length - now in options
+        optimizerType,
+        customLabels
+      );
+    }
+
+    // Record configuration metrics
+    recordOptimizerConfigurationMetric(
+      metricsInstruments,
+      optimizerType,
+      this.targetScore,
+      undefined, // maxRounds would be set by concrete optimizers
+      customLabels
+    );
+  }
+
+  /**
+   * Record optimization completion metrics
+   */
+  protected recordOptimizationComplete(
+    duration: number,
+    success: boolean,
+    optimizerType: string,
+    programSignature?: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordOptimizationMetric(
+      metricsInstruments,
+      duration,
+      success,
+      optimizerType,
+      programSignature,
+      customLabels
+    );
+
+    recordOptimizationDurationMetric(
+      metricsInstruments,
+      duration,
+      optimizerType,
+      customLabels
+    );
+
+    // Record resource usage
+    const currentCost = this.costTracker?.getCurrentCost() ?? 0;
+    const totalTokens = this.costTracker?.getTotalTokens() ?? 0;
+    recordResourceUsageMetric(
+      metricsInstruments,
+      totalTokens,
+      currentCost,
+      optimizerType,
+      undefined,
+      customLabels
+    );
+  }
+
+  /**
+   * Record convergence metrics
+   */
+  protected recordConvergenceMetrics(
+    rounds: number,
+    currentScore: number,
+    improvement: number,
+    stagnationRounds: number,
+    optimizerType: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordConvergenceMetric(
+      metricsInstruments,
+      rounds,
+      currentScore,
+      improvement,
+      stagnationRounds,
+      optimizerType,
+      customLabels
+    );
+  }
+
+  /**
+   * Record early stopping metrics
+   */
+  protected recordEarlyStoppingMetrics(
+    reason: string,
+    optimizerType: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordEarlyStoppingMetric(
+      metricsInstruments,
+      reason,
+      optimizerType,
+      customLabels
+    );
+  }
+
+  /**
+   * Record teacher-student interaction metrics
+   */
+  protected recordTeacherStudentMetrics(
+    latency: number,
+    scoreImprovement: number,
+    optimizerType: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordTeacherStudentMetric(
+      metricsInstruments,
+      latency,
+      scoreImprovement,
+      optimizerType,
+      customLabels
+    );
+  }
+
+  /**
+   * Record checkpoint metrics
+   */
+  protected recordCheckpointMetrics(
+    operation: 'save' | 'load',
+    latency: number,
+    success: boolean,
+    optimizerType: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordCheckpointMetric(
+      metricsInstruments,
+      operation,
+      latency,
+      success,
+      optimizerType,
+      customLabels
+    );
+  }
+
+  /**
+   * Record Pareto optimization metrics
+   */
+  protected recordParetoMetrics(
+    frontSize: number,
+    solutionsGenerated: number,
+    optimizerType: string,
+    hypervolume?: number,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordParetoMetric(
+      metricsInstruments,
+      frontSize,
+      solutionsGenerated,
+      optimizerType,
+      hypervolume,
+      customLabels
+    );
+  }
+
+  /**
+   * Record performance metrics
+   */
+  protected recordPerformanceMetrics(
+    metricType: 'evaluation' | 'demo_generation' | 'metric_computation',
+    duration: number,
+    optimizerType: string,
+    options?: AxCompileOptions
+  ): void {
+    const metricsInstruments = this.getMetricsInstruments();
+    if (!metricsInstruments) return;
+
+    const customLabels = this.getMergedCustomLabels(options);
+
+    recordOptimizerPerformanceMetric(
+      metricsInstruments,
+      metricType,
+      duration,
+      optimizerType,
+      customLabels
+    );
+  }
+
+  // Optimizer logging methods
+  protected isOptimizerLoggingEnabled(options?: AxCompileOptions): boolean {
+    return this.debugOptimizer || (options?.verbose ?? this.verbose ?? false);
+  }
+
+  protected getOptimizerLogger(
+    options?: AxCompileOptions
+  ): AxOptimizerLoggerFunction | undefined {
+    if (!this.isOptimizerLoggingEnabled(options)) return undefined;
+    return (
+      this.optimizerLogger ??
+      axGlobals.optimizerLogger ??
+      axDefaultOptimizerLogger
+    );
+  }
+
+  public getStats(): AxOptimizationStats {
+    return { ...this.stats };
+  }
+
+  protected async explainOptimizationResults(
+    bestScore: number,
+    bestConfiguration?: Record<string, unknown>,
+    _options?: AxCompileOptions
+  ): Promise<
+    | {
+        humanExplanation: string;
+        recommendations: string[];
+        performanceAssessment: string;
+      }
+    | undefined
+  > {
+    const converged = this.stats.convergenceInfo.converged;
+    const totalCalls = this.stats.totalCalls;
+    const successRate =
+      totalCalls > 0 ? (this.stats.successfulDemos / totalCalls) * 100 : 0;
+
+    const humanExplanation = `Optimization finished with best score ${bestScore.toFixed(3)}${
+      bestConfiguration
+        ? ` using configuration ${JSON.stringify(bestConfiguration)}`
+        : ''
+    }. Convergence: ${converged ? 'yes' : 'no'}. Success rate: ${successRate.toFixed(1)}%.`;
+
+    const recommendations: string[] = [];
+    if (!converged) {
+      recommendations.push(
+        'Increase numTrials or relax earlyStoppingTrials to allow further improvement.'
+      );
+    }
+    if (typeof this.targetScore === 'number' && bestScore < this.targetScore) {
+      recommendations.push(
+        'Tighten the metric or supply more/better-labeled examples to reach targetScore.'
+      );
+    }
+    if (
+      bestConfiguration &&
+      'bootstrappedDemos' in (bestConfiguration as any)
+    ) {
+      const demos = (bestConfiguration as any).bootstrappedDemos as number;
+      if (typeof demos === 'number' && demos === 0) {
+        recommendations.push(
+          'Consider allowing a small number of bootstrapped demos to boost performance.'
+        );
+      }
+    }
+    if (recommendations.length === 0) {
+      recommendations.push(
+        'Re-run with more trials or different acquisition settings to explore more of the space.'
+      );
+    }
+
+    const performanceAssessment = `Tokens used: ${this.stats.resourceUsage.totalTokens}, rounds: ${this.currentRound}, stagnationRounds: ${this.stats.convergenceInfo.stagnationRounds}.`;
+
+    return { humanExplanation, recommendations, performanceAssessment };
+  }
+  /**
+   * Log human-readable optimization completion message
+   */
+  protected async logOptimizationComplete(
+    optimizerType: string,
+    bestScore: number,
+    bestConfiguration?: Record<string, unknown>,
+    options?: AxCompileOptions,
+    explanation?: {
+      humanExplanation: string;
+      recommendations: string[];
+      performanceAssessment: string;
+    }
+  ): Promise<void> {
+    const optLogger = this.getOptimizerLogger(options);
+    if (!optLogger) return;
+
+    if (explanation) {
+      optLogger({
+        name: 'OptimizationComplete',
+        value: {
+          optimizerType,
+          bestScore,
+          bestConfiguration: bestConfiguration || {},
+          totalCalls: this.stats.totalCalls,
+          successRate:
+            this.stats.totalCalls > 0
+              ? `${((this.stats.successfulDemos / this.stats.totalCalls) * 100).toFixed(1)}%`
+              : 'N/A',
+          explanation: explanation.humanExplanation,
+          recommendations: explanation.recommendations,
+          performanceAssessment: explanation.performanceAssessment,
+          stats: this.stats,
+        },
+      });
+    } else {
+      // Fallback to basic completion logging
+      optLogger({
+        name: 'OptimizationComplete',
+        value: {
+          optimizerType,
+          bestScore,
+          bestConfiguration: bestConfiguration || {},
+          totalCalls: this.stats.totalCalls,
+          successRate:
+            this.stats.totalCalls > 0
+              ? `${((this.stats.successfulDemos / this.stats.totalCalls) * 100).toFixed(1)}%`
+              : 'N/A',
+          stats: this.stats,
+        },
+      });
+    }
+  }
+
+  public reset(): void {
+    this.stats = this.initializeStats();
+    this.costTracker?.reset();
+    this.currentRound = 0;
+    this.scoreHistory = [];
+    this.configurationHistory = [];
+  }
+}

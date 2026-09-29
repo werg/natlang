@@ -51,7 +51,7 @@ test('Node\'s own modules cannot be imported in eval; they are not packages', as
   const { results } = await script([['eval', { code: "import * as fs from 'fs';\nfs.readdirSync('/')" }],
     ['eval', { code: "const cp = await import('child_process');\ncp" }]]);
   for (const text of results) assert.match(text, /is part of Node, not a package: eval code works with this call's scope/);
-  assert.ok(results.every(text => !text.includes('bin')), 'no directory listing came back');
+  assert.ok(results.every(text => !/\bbin\b/.test(text)), 'no /bin entry came back');
 });
 
 test('a local declared again takes its new type, and a local that held null takes what is assigned', async () => {

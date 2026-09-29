@@ -14,7 +14,7 @@ rmSync(destination, { recursive: true, force: true }); mkdirSync(destination, { 
 function copyTree(from, to, keep, skip = []) {
   for (const name of readdirSync(from)) {
     const path = join(from, name), target = join(to, name);
-    if (skip.includes(path)) continue;
+    if (skip.includes(path) || name === '.natlang') continue;
     if (statSync(path).isDirectory()) { mkdirSync(target, { recursive: true }); copyTree(path, target, keep, skip); }
     else if (keep(path)) cpSync(path, target);
   }
@@ -24,6 +24,9 @@ if (kind === 'node') {
   const { DEFAULT_MODEL_RELEASE } = await import(new URL('../ts-host/dist/model-default.js', import.meta.url));
   if (!DEFAULT_MODEL_RELEASE.downloadUrl || new URL(DEFAULT_MODEL_RELEASE.downloadUrl).protocol !== 'https:')
     throw new Error('the published default model needs an HTTPS downloadUrl before @natlang/node can be packed');
+  const adaptationExamples = join(root, 'npm-packages', 'node', 'examples', 'adaptation');
+  mkdirSync(adaptationExamples, { recursive: true });
+  copyTree(join(root, 'examples', 'adaptation'), adaptationExamples, () => true);
   // The whole Node build, without the browser bundle and the repository's teacher tooling.
   copyTree(source, destination, () => true, [join(source, 'browser'), join(source, 'teacher')]);
   const pythonAssets = join(root, 'npm-packages', 'node', 'vendor', 'pyodide');
@@ -31,6 +34,11 @@ if (kind === 'node') {
   for (const name of readdirSync(join(root, 'ts-host', 'vendor', 'pyodide')))
     cpSync(join(root, 'ts-host', 'vendor', 'pyodide', name), join(pythonAssets, name));
   cpSync(join(root, 'ts-host', 'prelude.js'), join(root, 'npm-packages', 'node', 'prelude.js'));
+  const axVendorSource = join(root, 'vendor', 'ax-gepa');
+  const axVendorTarget = join(root, 'npm-packages', 'node', 'vendor', 'ax-gepa');
+  mkdirSync(axVendorTarget, { recursive: true });
+  for (const name of ['LICENSE', 'CHANGES.md', 'UPSTREAM.json'])
+    cpSync(join(axVendorSource, name), join(axVendorTarget, name));
   const modelAssets = join(root, 'npm-packages', 'node', 'model-assets');
   rmSync(modelAssets, { recursive: true, force: true }); mkdirSync(modelAssets, { recursive: true });
   cpSync(join(root, 'models', 'templates', DEFAULT_MODEL_RELEASE.template), join(modelAssets, 'default.jinja'));
@@ -41,5 +49,6 @@ if (kind === 'node') {
   cpSync(join(source, 'browser', 'pyodide'), join(destination, 'pyodide'), { recursive: true });
   cpSync(join(source, 'browser', 'chunks'), join(destination, 'chunks'), { recursive: true });
   const types = join(destination, 'types'); mkdirSync(types, { recursive: true });
-  copyTree(source, types, path => path.endsWith('.d.ts'), [join(source, 'teacher')]);
+  copyTree(source, types, path => path.endsWith('.d.ts') &&
+    !path.includes('/evaluation/') && !path.includes('/optimization/'), [join(source, 'teacher')]);
 }

@@ -39,7 +39,7 @@ export function createPackageArchive(manifestValue: unknown, rootDirectory: stri
     for (const file of filesBelow(root, absolute)) paths.add(packagePath(relative(root, file).split(sep).join('/'), 'file path'));
   }
   for (const [name, target] of Object.entries(manifest.targets ?? {})) {
-    for (const path of [target.entry])
+    for (const path of [target.entry, ...(target.adaptation ? [target.adaptation] : [])])
       if (!paths.has(path)) throw new TypeError(`target ${name} references a file outside include: ${path}`);
   }
   for (const [name, path] of Object.entries(manifest.exports ?? {}))
@@ -72,6 +72,10 @@ export function parsePackageArchive(value: unknown): NatlangPackageArchive {
   });
   const sorted = [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (files.some((file, index) => file.path !== sorted[index]!.path)) throw new TypeError('package files are not canonically ordered');
+  for (const [name, target] of Object.entries(manifest.targets ?? {})) {
+    for (const path of [target.entry, ...(target.adaptation ? [target.adaptation] : [])])
+      if (!seen.has(path)) throw new TypeError(`target ${name} references a file outside include: ${path}`);
+  }
   const digest = sha256(canonicalJson({ schema: ARCHIVE_SCHEMA, manifest, files }));
   if (digest !== raw.digest) throw new TypeError('package archive digest mismatch');
   return { schema: ARCHIVE_SCHEMA, manifest, files, digest };

@@ -21,6 +21,7 @@ import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js'
 import { desugarNlCalls } from '../compiler/nl-call.js';
 import { canGenerateNl, currentFrame, runInFrame, type Frame } from '../runtime/context.js';
 import { PATH_ONLY, parseModule, parseNatlang, type ItemRecord } from '../runtime/loader.js';
+import { compileModule } from '../runtime/modules.js';
 
 /** Services the invocation kernel provides to an interpreter run. */
 export type NativeRuntimeHooks = {
@@ -40,7 +41,7 @@ export type NativeResult = { kind: string; text: string; value?: Value; codes?: 
 export type NativeAgent = (session: NativeSession) => Promise<string | void> | string | void;
 export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: NativeRuntimeHooks; agent?: NativeAgent;
   maxActions?: number; maxToolCalls?: number;
-  runId?: string; signal?: AbortSignal; timeoutMs?: number;
+  runId?: string; seedId?: string; signal?: AbortSignal; timeoutMs?: number;
   sourceRevision?: string; parentCallId?: string;
   /** Task frame of this invocation (task, caller chain, parent call). */
   frame?: Frame;
@@ -248,7 +249,7 @@ function returnTypeOf(codebase: Record<string, unknown>, name: string): string |
 export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
-  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string };
+  readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; seedId?: string };
   readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
@@ -261,11 +262,11 @@ export class NativeRuntime {
   currentCallId?: string;
   private root?: LambdaNode;
   private lastObserved?: unknown;
-  private readonly signal?: AbortSignal;
+  readonly signal?: AbortSignal;
   private readonly deadline?: number;
 
   constructor(options: NativeRuntimeOptions) {
-    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run' };
+    this.options = { maxActions: options.maxActions, maxToolCalls: options.maxToolCalls, runId: options.runId ?? 'native-run', seedId: options.seedId };
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
     this.episodeBudget = options.sharedEpisodeBudget ?? { used: 0 };
@@ -908,7 +909,9 @@ export class NativeSession {
         `${requested} is one of your tools, not a function of this program; call it directly` : undefined;
       throw new Reject([{ path: requested, code: 'no-such-function', expected: what ? `${readable}. ${what}` : readable }]);
     }
-    const record = found.record;
+    const view = this.runtime.frame?.task.programView;
+    const record = view ? view.record(found.record) : found.record;
+    const expectedRevision = view?.revisionId ?? 0;
     if (record.kind === 'namespace')
       throw new Reject([{ path: requested, code: 'no-such-function', expected: `an item inside ${requested}: ${Object.keys(record.codebase).join(', ')}` }]);
     if (name === 'read_code') {
@@ -919,14 +922,35 @@ export class NativeSession {
       }
       return { kind: 'ok', text: explanation + record.text, value: record.text };
     }
+    if (this.runtime.frame?.task.runtime.options.codeEdits === 'deny' || view?.binding?.artifact.policy.codeEdits === 'deny')
+      throw new Reject([{ path: requested, code: 'bad-action', expected: 'code edits are denied by this evaluation policy' }]);
+    if (args.expected_revision !== undefined && args.expected_revision !== expectedRevision)
+      throw new Reject([{ path: requested, code: 'bad-action', expected: 'current source revision; reread after a concurrent edit' }]);
     const text = editTextContent(record.text, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
     const updated = record.kind === 'natlang' ? parseNatlang(record.source, text, record.types, PATH_ONLY) :
       parseModule(record.source, text, record.types, PATH_ONLY);
+    updated.programId = record.programId;
     updated.codebase = record.codebase;
+    let inlineRevision: { original: InlineLambdaPlan[]; previous: InlineLambdaPlan[]; current: InlineLambdaPlan[] } | undefined;
+    if (updated.kind === 'module' && record.kind === 'module') {
+      // Validate and compile before committing: existing closures retain their live cells and slots,
+      // but subsequent invocations resolve the new static text or reject a changed contract.
+      let siblings = this.lam.codebase as Record<string, ItemRecord>;
+      for (const part of found.path.slice(0, -1)) siblings = siblings[part]?.codebase ?? {};
+      const level = { ...siblings };
+      level[record.name] = record;
+      inlineRevision = { original: [], previous: [], current: [] };
+      compileModule({ ...record, text: view?.program?.sources[record.source] ?? view?.original(record).text ?? record.text }, level,
+        plans => { inlineRevision!.original = plans; });
+      compileModule(record, level, plans => { inlineRevision!.previous = plans; });
+      compileModule(updated, { ...level, [updated.name]: updated }, plans => { inlineRevision!.current = plans; });
+    }
+    view?.commit(updated, expectedRevision, inlineRevision);
     if (!this.originalSources.has(record.source)) this.originalSources.set(record.source, record.text);
     this.lam.codebase = replaceCodebaseItem(this.lam.codebase, found.path, updated);
-    return { kind: 'ok', text: JSON.stringify({ function: found.path.join('.'), source: record.source, changed: true }),
-      value: { function: found.path.join('.'), changed: true } };
+    const revision = { function: found.path.join('.'), source: record.source, changed: true, revision: view?.revisionId ?? 0,
+      originalHash: hexDigest(view?.program?.sources[record.source] ?? record.text), effectiveHash: hexDigest(record.text), patchedHash: hexDigest(updated.text) };
+    return { kind: 'ok', text: JSON.stringify(revision), value: revision };
   }
 
   /** File tools for directory reducers, over the private folder copy. */
@@ -1326,3 +1350,4 @@ export function callableTypes(codebase: Record<string, unknown>): Record<string,
   }
   return types;
 }
+import { hexDigest } from './hash.js';

@@ -65,6 +65,18 @@
       "types": "./dist/package/index.d.ts",
       "default": "./dist/package/index.js"
     },
+    "./adaptation": {
+      "types": "./dist/adaptation/node.d.ts",
+      "default": "./dist/adaptation/node.js"
+    },
+    "./evaluation": {
+      "types": "./dist/evaluation/index.d.ts",
+      "default": "./dist/evaluation/index.js"
+    },
+    "./optimize": {
+      "types": "./dist/optimization/index.d.ts",
+      "default": "./dist/optimization/index.js"
+    },
     "./cli": {
       "types": "./dist/cli/main.d.ts",
       "default": "./dist/cli/main.js"

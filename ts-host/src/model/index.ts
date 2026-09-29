@@ -11,3 +11,5 @@ export { LLAMA_RUNTIME_RELEASE, defaultNatlangRuntimeDirectory, discoverLlamaRun
   describeLlamaRuntime } from './llama-runtime.js';
 export type { LlamaRuntimeArtifact, LlamaRuntimeRelease, LlamaServerInspection,
   LlamaRuntimeDiscovery } from './llama-runtime.js';
+
+export { executorIdentityForChoice } from './config.js';

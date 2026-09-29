@@ -50,7 +50,8 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
     category: intents[index % intents.length] })).join('\n') + '\n');
   const { appendFileSync } = await import('node:fs');
   const { SOURCE_REVIEWS } = await import('../dist/teacher/source-review.js');
-  appendFileSync(join(bankingDirectory, 'train.csv.jsonl'), SOURCE_REVIEWS.map(review =>
+  const bankingReviews = SOURCE_REVIEWS.filter(review => review.dataset === 'banking77' && review.status === 'pending');
+  appendFileSync(join(bankingDirectory, 'train.csv.jsonl'), bankingReviews.map(review =>
     JSON.stringify({ text: review.text, category: review.annotatedLabel })).join('\n') + '\n');
   appendFileSync(join(directory, 'train-00000-of-00001.parquet.jsonl'),
     [{ sms: 'Identical disputed message with two conflicting labels.', label: 'ham' },
@@ -73,7 +74,8 @@ test('dataset folder cases use disjoint records and replay per-file evidence', a
   const { labeledRows, coeditRows, cuadContracts, datasetQualityReport } = await import('../scripts/inline-curriculum/folder-data.mjs');
   const bankingRows = [...labeledRows('banking77'), ...labeledRows('banking77', 'test')];
   assert.equal(bankingRows.some(row => SOURCE_REVIEWS.some(review => review.id === row.id)), false);
-  assert.equal(datasetQualityReport().filter(row => row.reason === 'source_review_pending').length, SOURCE_REVIEWS.length);
+  assert.equal(datasetQualityReport().filter(row => row.dataset === 'banking77' && row.reason === 'source_review_pending').length,
+    bankingReviews.length);
   assert.equal([...labeledRows('sms_spam'), ...labeledRows('sms_spam', 'test')]
     .some(row => row.text.startsWith('Identical disputed')), false);
   const allEdits = [...coeditRows('gec'), ...coeditRows('gec', 'test')];

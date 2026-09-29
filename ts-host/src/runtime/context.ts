@@ -17,6 +17,7 @@ export type Frame = Readonly<{
   chain: readonly string[];
   /** Call ID of the natlang invocation that created this frame, if any. */
   parentCallId?: string;
+  programOwner?: string;
   /** Whether that invocation is an inline `nl` function: a judgment eval code handed over. */
   inline?: boolean;
   /** Active ad hoc nl/delegate layers since the most recent file-backed .nl root. */

@@ -47,3 +47,5 @@ export type { OpenAICompatibleOptions, OpenAICompatibleExchange, ChatTransport, 
 export * from './package/index.js';
 export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVirtualNatlang, loadVirtualCallables } from './runtime/virtual-project.js';
 export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
+
+export * from './adaptation/index.js';

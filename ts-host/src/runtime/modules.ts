@@ -3,6 +3,7 @@
  * (entry guards, finite iteration, `nl`, `iterateOn` sites) and evaluated once per source revision.
  */
 import ts from 'typescript';
+import { currentFrame } from './context.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import { createVirtualProgram, EVAL_COMPILER_OPTIONS } from '../compiler/host.js';
 import { analyzeInlineLambdas, type InlineLambdaPlan } from '../compiler/inline.js';
@@ -11,6 +12,8 @@ import { typeScriptText } from '../compiler/eval-check.js';
 import { NatlangSourceError, type ItemRecord, type ModuleRecord } from './loader.js';
 import * as lowered from './lowered.js';
 import * as surface from './surface.js';
+import { inlineDescriptor } from '../adaptation/inventory.js';
+import { fingerprint } from '../adaptation/identity.js';
 import { namedCallable, callableTree } from './callable.js';
 
 let defaultRealm: (() => EvalEnvironment) | undefined;
@@ -41,7 +44,7 @@ function natlangDeclaration(record: ItemRecord): string {
 }
 
 /** Compile one module to CommonJS-style JavaScript for evaluation. */
-export function compileModule(record: ModuleRecord, level: Record<string, ItemRecord>): string {
+export function compileModule(record: ModuleRecord, level: Record<string, ItemRecord>, inventory?: (plans: InlineLambdaPlan[]) => void): string {
   let plans = new Map<string, InlineLambdaPlan>();
   let checker: ts.TypeChecker | undefined;
   const path = `${FOLDER}/${record.name}.ts`;
@@ -74,22 +77,39 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     const program = createVirtualProgram(files, { ...EVAL_COMPILER_OPTIONS, paths: { '@natlang/*': ['/__natlang__/surface.d.ts'] } });
     const file = program.getSourceFile(path)!;
     const analysis = analyzeInlineLambdas(program, [file], { displayPath: () => record.source,
-      sourceRevision: record.revision });
+      sourceRevision: record.revision, authored: true });
     const errors = analysis.diagnostics.filter(item => item.severity === 'error');
     if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'));
+    analysis.plans.forEach(plan => { if (record.programId) plan.programId = record.programId; });
+    inventory?.(analysis.plans);
     plans = new Map(analysis.plans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan]));
     checker = program.getTypeChecker();
   }
   const output = ts.transpileModule(record.text, { fileName: `${record.name}.ts`, reportDiagnostics: true,
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true, isolatedModules: true },
     transformers: { before: [natlangTransformer({ plans, checker, runtime: '__natlang', context: '__natlang_context',
-      constrained: true, guardPrefix: record.id, modulePath: record.source, browser: moduleTarget === 'browser' })] } });
+      constrained: true, guardPrefix: record.programId ? JSON.stringify([record.programId, record.id]) : record.id,
+      modulePath: record.source, browser: moduleTarget === 'browser' })] } });
   const errors = (output.diagnostics ?? []).filter(item => item.category === ts.DiagnosticCategory.Error);
   if (errors.length) throw new NatlangSourceError(record.source, errors.map(item => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; '));
   return output.outputText;
 }
 
 const instances = new WeakMap<ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
+// Compilation is immutable and shareable; mutable exports remain in the task's instance cache.
+const compiled = new Map<string, string>();
+function compiledCode(record: ModuleRecord, level: Record<string, ItemRecord>): string {
+  const key = fingerprint({ target: moduleTarget, source: record.source, id: record.id, revision: record.revision,
+    programId: record.programId ?? null, text: record.text, types: record.types,
+    siblings: Object.entries(level).map(([name, item]) => ({ name, kind: item.kind,
+      text: item.kind === 'namespace' ? null : item.text,
+      ...(item.kind === 'natlang' ? { args: item.args, returns: item.returns, types: item.types, subtype: item.subtype } : {}) })) });
+  const cached = compiled.get(key);
+  if (cached !== undefined) return cached;
+  const code = compileModule(record, level);
+  if (compiled.size >= 256) compiled.delete(compiled.keys().next().value!);
+  compiled.set(key, code); return code;
+}
 
 const servicesModule = new Proxy(Object.create(null), {
   get: (_, name) => typeof name === 'string' && name !== '__esModule' && name !== 'then' ? lowered.service(name) : undefined,
@@ -97,12 +117,30 @@ const servicesModule = new Proxy(Object.create(null), {
 
 /** The live exports of a module in its folder `level` (its sibling items). */
 export function moduleInstance(record: ModuleRecord, level: Record<string, ItemRecord>): Record<string, unknown> {
-  const existing = instances.get(record);
+  const task = currentFrame()?.task;
+  const cache = task && (task.programView.binding || task.runtime.options.isolateModules || task.programView.revisionId) ?
+    task.moduleInstances : instances;
+  record = task?.programView.original(record) ?? record;
+  const patched = task?.programView.patched(record.source);
+  if (patched) record = task!.programView.record(record);
+  const existing = cache.get(record);
   if (existing) return existing.exports;
-  const code = compileModule(record, level);
+  if (task?.programView.binding && !patched) {
+    const projected = task.programView.record(record);
+    if (projected.text !== record.text) {
+      let originalPlans: InlineLambdaPlan[] = [], projectedPlans: InlineLambdaPlan[] = [];
+      compileModule(record, level, plans => { originalPlans = plans; });
+      compileModule(projected, task.programView.tree(level), plans => { projectedPlans = plans; });
+      if (originalPlans.length !== projectedPlans.length || originalPlans.some((plan, index) =>
+        inlineDescriptor(task.programView.program!.id, plan).contractHash !==
+        inlineDescriptor(task.programView.program!.id, projectedPlans[index]!).contractHash))
+        throw new NatlangSourceError(record.source, 'adapted module projection changed frozen inline contracts');
+    }
+  }
+  const code = compiledCode(record, level);
   const exports: Record<string, unknown> = {};
   const state = { exports, ready: false };
-  instances.set(record, state);
+  cache.set(record, state);
   const environment = moduleRealm();
   const require = (specifier: string): unknown => {
     if (specifier === 'natlang:services') return servicesModule;
@@ -131,7 +169,7 @@ export function moduleInstance(record: ModuleRecord, level: Record<string, ItemR
     environment.evaluateModule(code, { exports, module, require, __natlang: lowered, __natlang_context: level,
       nl: surface.nl, iterateOn: surface.iterateOn });
   } catch (error) {
-    instances.delete(record);
+    cache.delete(record);
     throw error;
   }
   if (module.exports !== exports) Object.assign(exports, module.exports);

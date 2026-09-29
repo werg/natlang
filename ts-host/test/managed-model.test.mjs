@@ -3,7 +3,21 @@ import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createManagedModelSession, inspectLlamaServer } from '../dist/model/index.js';
+import { createManagedModelSession, inspectLlamaServer, executorIdentityForChoice } from '../dist/model/index.js';
+
+test('executor identities redact credentials and fingerprint behavior headers', () => {
+  const choice = { kind: 'external', model: 'deployment-v1', endpoint: 'https://user:password@example.test/v1?access_token=private',
+    apiKeyEnv: 'PRIVATE_KEY', headers: { Authorization: 'Bearer private', 'X-Route': 'blue' },
+    request: { temperature: 0.1, access_token: 'private', nested: { refreshToken: 'private' } } };
+  const identity = executorIdentityForChoice(choice);
+  assert.equal(identity.configuration.endpoint, 'https://example.test/v1');
+  assert.equal(identity.configuration.request.temperature, 0.1);
+  assert.ok(!JSON.stringify(identity).includes('private'));
+  assert.ok(!JSON.stringify(identity).includes('password'));
+  assert.deepEqual(executorIdentityForChoice({ ...choice, headers: { ...choice.headers, Authorization: 'Bearer rotated' } }), identity);
+  assert.notEqual(executorIdentityForChoice({ ...choice, headers: { ...choice.headers, 'X-Route': 'green' } }).configuration.headersHash,
+    identity.configuration.headersHash);
+});
 
 test('managed model startup can be prepared eagerly and its child is closed with the session', async () => {
   const root = mkdtempSync(join(tmpdir(), 'natlang-managed-model-'));

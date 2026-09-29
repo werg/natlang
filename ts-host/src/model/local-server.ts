@@ -20,7 +20,7 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
-  turn(request: ModelTurnRequest): Promise<ModelTurn>;
+  turn(request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn>;
   status(): ManagedModelStatus; close(): Promise<void> };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
@@ -193,7 +193,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   process.once('exit', onExit);
   return {
     async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
-    async turn(request) { if (choice.kind === 'pi-provider') return (await piBackend()).turn(request); const options = await start(); return openAICompatibleModelTurn(options)(request); },
+    async turn(request, signal) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal); const options = await start(); signal?.throwIfAborted(); return openAICompatibleModelTurn(options)(request, signal); },
     status() { return choice.kind === 'pi-provider' ? { source: 'pi-provider', endpoint: null, model: `${choice.provider}/${choice.model}`,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,

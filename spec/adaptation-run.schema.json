@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/adaptation-run.schema.json",
+  "title": "Natlang immutable adaptation run manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "engine", "suiteHash", "programHash", "settings", "components", "splits", "executor"],
+  "properties": {
+    "schema": { "const": "natlang.adaptation-run/v1" },
+    "engine": { "type": "string", "minLength": 1 },
+    "suiteHash": { "$ref": "#/$defs/hash" },
+    "programHash": { "$ref": "#/$defs/hash" },
+    "settings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["strategy", "seed", "limits", "minibatchSize", "maxPopulation", "maxRepairs", "dependencies", "finalTest", "reflectionIdentity", "judgeIdentity"],
+      "properties": {
+        "strategy": { "enum": ["gepa", "reflection"] }, "seed": { "type": "integer" },
+        "limits": { "$ref": "#/$defs/budgetLimits" }, "minibatchSize": { "type": "integer", "minimum": 1 },
+        "maxPopulation": { "type": "integer", "minimum": 2 }, "maxHistory": { "type": "integer", "minimum": 1 },
+        "maxRepairs": { "type": "integer", "minimum": 0 },
+        "dependencies": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true } },
+        "finalTest": { "type": "boolean" },
+        "reflectionIdentity": { "type": ["object", "null"] },
+        "judgeIdentity": { "type": ["object", "null"] }, "selection": { "type": ["object", "null"] },
+        "holdoutReservation": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } }
+      }
+    },
+    "components": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "splits": {
+      "type": "object", "additionalProperties": false, "required": ["train", "validation", "test"],
+      "properties": { "train": { "$ref": "#/$defs/caseIds" }, "validation": { "$ref": "#/$defs/caseIds" }, "test": { "$ref": "#/$defs/caseIds" } }
+    },
+    "executor": {
+      "type": "object", "additionalProperties": false, "required": ["id", "configuration"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "configuration": { "type": "object" } }
+    }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "caseIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "budgetLimits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxRollouts", "maxProposals", "maxModelCalls"],
+      "properties": { "maxRollouts": { "type": "integer", "minimum": 0 }, "maxProposals": { "type": "integer", "minimum": 0 },
+        "maxModelCalls": { "type": "integer", "minimum": 0 }, "maxInputTokens": { "type": "integer", "minimum": 0 },
+        "maxOutputTokens": { "type": "integer", "minimum": 0 }, "maxElapsedMs": { "type": "integer", "minimum": 0 },
+        "maxCost": { "type": "number", "minimum": 0 },
+        "pricing": { "type": "object", "additionalProperties": false, "required": ["inputPerMillion", "outputPerMillion"],
+          "properties": { "inputPerMillion": { "type": "number", "minimum": 0 }, "outputPerMillion": { "type": "number", "minimum": 0 } } },
+        "requestBounds": { "type": "object", "additionalProperties": false, "required": ["maxInputTokens", "maxOutputTokens"],
+          "properties": { "maxInputTokens": { "type": "integer", "minimum": 0 }, "maxOutputTokens": { "type": "integer", "minimum": 0 } } }
+      }
+    }
+  }
+}

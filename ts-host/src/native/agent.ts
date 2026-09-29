@@ -1,3 +1,4 @@
+import { programGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
 import { MISSING, isLive, liveId, liveLabel, problems } from './values.js';
@@ -52,7 +53,7 @@ export function modelTurnsSoFar(messages: readonly Record<string, unknown>[]): n
     !((message.tool_calls as { id?: string }[] | undefined) ?? []).some(call => String(call.id).startsWith('scope_'))).length;
 }
 
-export type NativeModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
+export type NativeModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type NativeReviewOptions = { driver?: NativeModelDriver; threshold?: number;
   scope?: 'values' | 'actions'; withdrawalPolicy?: 'caller' | 'retry';
   prompt?: 'baseline' | 'repeat_instructions' | 'checklist';
@@ -271,7 +272,7 @@ export class NativeToolAgent {
   readonly reviews: Record<string, unknown>[] = [];
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
-      temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string);
+      temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
@@ -526,12 +527,17 @@ export class NativeToolAgent {
 
   async run(session: NativeSession): Promise<string | void> {
     // Fixed for the whole call, so the server can reuse its prompt cache across turns.
+    let adaptedSystem: string | undefined;
     const systemPrompt = () => {
+      if (adaptedSystem !== undefined) return adaptedSystem;
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
       const allowAdHoc = canGenerateNl(session.runtime.frame);
-      return (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
+      const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
       (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '');
+      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
+      programGuidance(this.options.programGuidance ?? '');
+      if (this.options.programGuidance !== undefined) adaptedSystem = composed;
+      return composed;
     };
     const openingMessages = (): Record<string, unknown>[] => {
       const reading = this.scopeReading(session);
@@ -605,9 +611,10 @@ export class NativeToolAgent {
         Math.min(budget - reply, Math.max(budget * 0.75, compactedAt + budget * 0.25));
       const availableTools = lastTurn ? only('return_result') : nearLimit ? only('compact_history') : allTools;
       if (availableTools !== allTools && !lastTurn) {
-        // Say why only compact_history is offered, on the latest tool result, as the turns-left notice does.
+        // A large opening can require compaction before the first tool result.
+        // Explain the restricted tool surface on whichever message is latest.
         const latest = messages.at(-1);
-        if (latest?.role === 'tool' && typeof latest.content === 'string' && !latest.content.includes(COMPACTION_NOTICE))
+        if ((latest?.role === 'tool' || latest?.role === 'user') && typeof latest.content === 'string' && !latest.content.includes(COMPACTION_NOTICE))
           messages[messages.length - 1] = { ...latest, content: latest.content + COMPACTION_NOTICE };
       }
       if (budget !== null && estimate(availableTools) > budget - reply) {
@@ -632,8 +639,8 @@ export class NativeToolAgent {
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
-          max_tokens: limit });
+            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
+          max_tokens: limit }, session.runtime.signal);
       } catch (error) {
         session.runtime.trace.emit('model_request', { call_id: callId, phase: 'error', turn: turns + 1,
           duration_ms: Math.round(performance.now() - started),
@@ -702,8 +709,8 @@ export class NativeToolAgent {
         const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
             session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
-            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.runId, session.lam.attempts, 'review', turns),
-          max_tokens: budget });
+            deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'review', turns),
+          max_tokens: budget }, session.runtime.signal);
         turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
         const audit: Record<string, unknown> = { proposal: this.proposals.length - 1, call_index: index,
           confidence: rawConfidence ?? null, messages: fork, calls: answer.calls ?? [], text: answer.text ?? '',

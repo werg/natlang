@@ -8,6 +8,9 @@
  *   emitted JavaScript calls the runtime through `__natlang`.
  */
 import ts from 'typescript';
+import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptation/inventory.js';
+import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
+import { declarationNamespace } from '../native/external.js';
 import { analyzeInlineLambdas, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
 import { natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
@@ -54,6 +57,10 @@ function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
 }
 
 export type BuildOptions = {
+  services?: ProgramDescriptor['services'];
+  programId?: string;
+  guidance?: string;
+  importedGuidancePrograms?: readonly string[];
   /** Project directory or tsconfig path (absolute POSIX path when `files` is supplied). */
   project: string;
   /** File access; defaults to the Node filesystem (see `buildProject` in compiler/node-project.ts). */
@@ -86,7 +93,8 @@ export type BuildOptions = {
 export type DefinitionManifest = { version: typeof NATLANG_COMPILE_VERSION;
   inline: { id: string; source: string; line: number; signature: string }[];
   named: { id: string; source: string; signature: string }[];
-  sites: string[] };
+  sites: string[];
+  adaptation?: ProgramDescriptor };
 
 export type BuildResult = { ok: boolean; diagnostics: NatlangDiagnostic[]; outputs: Record<string, string>;
   declarations: Record<string, string>; manifest: DefinitionManifest; outDir: string };
@@ -194,17 +202,26 @@ export function compileProject(options: BuildOptions): BuildResult {
     try { contextRecords.set(dir, loadCallableFolder(dir, files)); }
     catch (error) { problem(rel(dir), error instanceof NatlangSourceError ? error.message : String(error)); }
   }
+  const optimizationComponents: ComponentDescriptor[] = [];
+  const optimizationSources: Record<string, string> = {};
+  const programId = options.programId ?? basename(root);
   // Compile every callable-folder module now so errors surface at build time rather than first call.
   const checkModules = (level: Record<string, ItemRecord>) => {
     for (const item of Object.values(level)) {
+      if (item.kind !== 'namespace') item.programId = programId;
+      if (item.kind !== 'namespace') optimizationSources[item.source] = item.text;
+      if (item.kind === 'natlang') optimizationComponents.push(namedDescriptor(programId, item));
       if (item.kind === 'module') {
-        try { compileModule(item, level); }
+        try { compileModule(item, level, plans => optimizationComponents.push(...plans.map(plan => inlineDescriptor(programId, plan)))); }
         catch (error) { problem(item.source, error instanceof Error ? error.message : String(error)); }
       }
       checkModules(item.codebase);
     }
   };
-  for (const record of namedRecords.values()) checkModules(record.codebase);
+  for (const record of namedRecords.values()) {
+    record.programId = programId;
+    optimizationSources[record.source] = record.text; optimizationComponents.push(namedDescriptor(programId, record)); checkModules(record.codebase);
+  }
   for (const records of contextRecords.values()) checkModules(records);
 
   // TypeScript program over ordinary project files, with generated `.nl` declarations.
@@ -269,16 +286,58 @@ export function compileProject(options: BuildOptions): BuildResult {
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
   for (const file of sources) {
-    const analysis = analyzeInlineLambdas(program, [file], { displayPath: source => rel(source.fileName), sourceRevision: revision(file) });
+    const analysis = analyzeInlineLambdas(program, [file], { displayPath: source => rel(source.fileName), sourceRevision: revision(file), authored: true });
     diagnostics.push(...analysis.diagnostics);
+    analysis.plans.forEach(plan => { plan.programId = programId; });
     plans.set(file, analysis.plans);
+    optimizationSources[rel(file.fileName)] = file.text;
+    optimizationComponents.push(...analysis.plans.map(plan => inlineDescriptor(programId, plan)));
+  }
+  // Include dependency resolutions/configuration and conservatively all authored project files.
+  const collectSources = (dir: string): void => {
+    for (const name of fs.list(dir).sort()) {
+      if (SKIPPED_DIRS.has(name) || name.startsWith('.') || name === 'adaptations' || name.endsWith('.d.nl.ts')) continue;
+      const path = join(dir, name);
+      if (fs.isDirectory(path)) {
+        const runManifest = join(path, 'manifest.json');
+        if (fs.isFile(runManifest)) {
+          try { if (JSON.parse(fs.read(runManifest))?.schema === 'natlang.adaptation-run/v1') continue; }
+          catch { /* An ordinary manifest still contributes to the source fingerprint. */ }
+        }
+        collectSources(path);
+      }
+      else if (fs.isFile(path) && /\.(?:[cm]?ts|[cm]?js|nl|json|yaml|yml)$/.test(name)) {
+        let text = fs.read(path);
+        // Portable artifacts may live at any declared relative path. Their
+        // contents cannot participate in the build hash they themselves bind.
+        if (name.endsWith('.json')) {
+          try { if (/^natlang\.adaptation(?:\/|-)/.test(JSON.parse(text)?.schema ?? '')) continue; } catch { /* Ordinary malformed JSON remains part of the conservative fingerprint. */ }
+        }
+        if (name === 'natlang.json') {
+          try { const manifest = JSON.parse(text); if (manifest.targets) for (const target of Object.values(manifest.targets) as Record<string, unknown>[]) delete target.adaptation;
+            text = JSON.stringify(manifest); } catch { /* Parsing diagnostics belong to the manifest loader. */ }
+        }
+        optimizationSources[rel(path)] = text;
+      }
+    }
+  };
+  collectSources(root);
+  let dependencyRoot = root;
+  while (true) {
+    for (const lock of ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
+      const path = join(dependencyRoot, lock);
+      if (fs.isFile(path)) optimizationSources['@dependency-lock/' + lock] = fs.read(path);
+    }
+    const parent = dirname(dependencyRoot); if (parent === dependencyRoot) break; dependencyRoot = parent;
   }
   const manifest: DefinitionManifest = { version: NATLANG_COMPILE_VERSION,
     inline: [...plans.values()].flat().map(plan => ({ id: plan.definitionId, source: plan.sourceSpan.file, line: plan.sourceSpan.line,
       signature: `(${plan.parameters.map(parameter => `${parameter.name}: ${parameter.type.text}`).join(', ')}) => ${plan.returns.text}` })),
     named: [...namedRecords.values()].map(record => ({ id: record.id, source: record.source,
       signature: `(${Object.entries(record.args).map(([name, type]) => `${name}: ${type}`).join(', ')}) => ${record.returns}` })),
-    sites: [] };
+    sites: [], adaptation: describeProgram(programId, optimizationSources, optimizationComponents, options.guidance, options.importedGuidancePrograms,
+      options.services ? { declarations: Object.fromEntries(Object.entries(options.services.declarations).map(([name, text]) =>
+        [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)])), scopes: options.services.scopes } : undefined) };
   const ok = !diagnostics.some(item => item.severity === 'error');
   const outputs: Record<string, string> = {};
   if (options.write !== false && options.writeDeclarations !== false && fs.write) for (const [path, text] of Object.entries(declarations))
@@ -312,7 +371,7 @@ export function compileProject(options: BuildOptions): BuildResult {
       return natlangTransformer({ plans: new Map(filePlans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
-        constrained: false, guardPrefix: rel(file.fileName), modulePath: rel(file.fileName), browser: options.target === 'browser',
+        constrained: false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
         module: { natlangImports: natlangImports(source), rewrite: rewriteFor } })(context)(file);
     };
     const emit = (fileName: string, text: string) => {

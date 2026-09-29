@@ -38,6 +38,47 @@ test('archive verification rejects traversal and modified bytes', () => {
   assert.throws(() => parsePackageArchive(archive), /checksum mismatch/);
 });
 
+test('target adaptation artifacts must exist in include and are archived with their activation pointer', () => {
+  const { root, manifest } = fixture();
+  writeFileSync(join(root, 'program', 'best.json'), JSON.stringify({ schema: 'natlang.adaptation/v1', digest: 'fixture' }));
+  const activated = { ...manifest, targets: { main: { entry: 'program/main.nl', adaptation: 'program/best.json' } } };
+  const archive = createPackageArchive(activated, root);
+  assert.equal(archive.manifest.targets.main.adaptation, 'program/best.json');
+  assert.ok(archive.files.some(file => file.path === 'program/best.json'));
+
+  assert.throws(() => createPackageArchive({ ...manifest,
+    targets: { main: { entry: 'program/main.nl', adaptation: 'program/missing.json' } } }, root), /outside include/);
+  writeFileSync(join(root, 'outside.json'), '{}');
+  assert.throws(() => createPackageArchive({ ...manifest,
+    targets: { main: { entry: 'program/main.nl', adaptation: 'outside.json' } } }, root), /outside include/);
+});
+
+test('activation pointer and adaptation artifact bytes do not change compiler build identity', async () => {
+  const runtime = await import('../dist/index.js');
+  const source = { 'main.ts': "import classify from './classify.nl'; export default classify;\n",
+    'classify.nl': '---\nargs: { value: string }\nreturns: string\n---\nReturn value.\n' };
+  const first = runtime.compileVirtualProject({ files: { ...source,
+    'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', targets: { app: { adaptation: 'adaptations/one.json' } } }),
+    'adaptations/one.json': '{"revision":1}' } }, runtime, { target: 'node' });
+  const second = runtime.compileVirtualProject({ files: { ...source,
+    'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', targets: { app: { adaptation: 'adaptations/two.json' } } }),
+    'adaptations/two.json': '{"revision":2,"instruction":"changed"}' } }, runtime, { target: 'node' });
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(first.manifest.adaptation.buildHash, second.manifest.adaptation.buildHash);
+  const searchOutputs = runtime.compileVirtualProject({ files: { ...source,
+    'natlang.json': JSON.stringify({ schema: 'natlang.package/v2', targets: { app: { adaptation: 'saved/best.json' } } }),
+    'saved/best.json': JSON.stringify({ schema: 'natlang.adaptation/v1', digest: 'fixture' }),
+    'custom-search/manifest.json': JSON.stringify({ schema: 'natlang.adaptation-run/v1' }),
+    'custom-search/report.json': JSON.stringify({ quality: 1, instructions: 'generated evidence' }),
+    'custom-search/checkpoint.json': JSON.stringify({ iteration: 9 }),
+    'review.patch.manifest.json': JSON.stringify({ schema: 'natlang.adaptation-source-export/v1', files: [] }),
+  } }, runtime, { target: 'node' });
+  assert.equal(searchOutputs.ok, true);
+  assert.equal(searchOutputs.manifest.adaptation.buildHash, first.manifest.adaptation.buildHash,
+    'custom output directories with a run manifest and artifacts at arbitrary paths do not create hash cycles');
+});
+
 test('immutable store installs, resolves, lists, and rejects version rebinding', () => {
   const { root, manifest } = fixture(), store = new NatlangPackageStore(join(root, 'store'));
   const archive = createPackageArchive(manifest, root), installed = store.install(archive);

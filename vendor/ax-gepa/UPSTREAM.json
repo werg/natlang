@@ -1,0 +1,160 @@
+{
+  "repository": "https://github.com/ax-llm/ax",
+  "commit": "b780a14a3cb94d5ac572db04038399aef655c76c",
+  "snapshot": "Pristine pinned Ax source files; preserved under original repository paths.",
+  "sourcePaths": [
+    {
+      "path": "src/ax/dsp/optimizers/gepa.ts",
+      "sha256": "1c508585a9e865a09ad56f99fd779b4b5f809c7198ed6fdf7dd36776ef1257fe",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaSelection.ts",
+      "sha256": "4179ec23d017ad730145bb68b4f8277f36c4a936a7a5e495adcd0bf6d3008e4b",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaDependencies.ts",
+      "sha256": "67f2bb780059e97929529b0c4a2fd9cffcf9bd227fd6a615f30e27759921ca78",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/paretoUtils.ts",
+      "sha256": "a7c2068c3d14b8bbea6c6c32f7115b62315007ea251f5aa4316ce200afc372e1",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaEvaluation.ts",
+      "sha256": "49f4a01e970db237fedee5856909958a8b9f077b1e2cc5c3b9feb55bd32b0749",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaReflection.ts",
+      "sha256": "180de54a42e34abca955eb73ea2b4d4be975192d8db92cc7c9d3ddef731601fc",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaComponents.ts",
+      "sha256": "1f0038024e35e0696a4d7c3a9b7e1975f1756ff46aa872872da83b0a1396fc76",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaAdapter.ts",
+      "sha256": "915aa52e25d69058f228acb949d6f78f11bf4308017db30a60bfd02cc99ebe45",
+      "role": "GEPA source reference"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepa.test.ts",
+      "sha256": "f9a714cbb4bfdd9929e0e44ddd7eeca5c648fcf4e6f9bf0523eb276ad3bbca5f",
+      "role": "upstream behavior test"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaSelection.test.ts",
+      "sha256": "56919a54c8eb441756947b413155686ce1e1ea3bbfc710996931ff1e770965f7",
+      "role": "upstream behavior test"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaDependencies.test.ts",
+      "sha256": "b799f5a4911b7c29e42644bd45037165d2f29d7d891e123c72de19fab66189a1",
+      "role": "upstream behavior test"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaEvaluation.test.ts",
+      "sha256": "dcf5394f7bd18659b0eace9eb6702c305aa684f7e4d50cd479c0f56c80e4f5dc",
+      "role": "upstream behavior test"
+    },
+    {
+      "path": "src/ax/dsp/optimizers/gepaReflection.test.ts",
+      "sha256": "dfb33c15b7796de017d116b7881203f3a65ecb0a009bb6fbf8912915dd9eba1f",
+      "role": "upstream behavior test"
+    },
+    {
+      "path": "src/ax/dsp/optimizer.ts",
+      "sha256": "8fc841eb0d78e245a1ba07741ebce5b36ef10f69c7ead98e897ec99e3db65004",
+      "role": "optimizer helper reference"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "role": "license"
+    }
+  ],
+  "licenseFiles": [
+    "LICENSE"
+  ],
+  "notices": [],
+  "copiedTestOrigins": [
+    "src/ax/dsp/optimizers/gepa.test.ts",
+    "src/ax/dsp/optimizers/gepaSelection.test.ts",
+    "src/ax/dsp/optimizers/gepaDependencies.test.ts",
+    "src/ax/dsp/optimizers/gepaEvaluation.test.ts",
+    "src/ax/dsp/optimizers/gepaReflection.test.ts"
+  ],
+  "importInventory": {
+    "gepa.ts": [
+      "../../ai/types.js (AxAIService type)",
+      "../common_types.js (optimizer/evaluation contracts)",
+      "../generate.js (AxGen)",
+      "../optimizer.js (AxBaseOptimizer, AxOptimizedProgramImpl, AxParetoResult)",
+      "../template.js (ax)",
+      "../types.js (AxGenOut, AxProgrammable)",
+      "./gepaAdapter.js",
+      "./gepaBootstrap.js",
+      "./gepaComponents.js",
+      "./gepaDependencies.js",
+      "./gepaEvaluation.js",
+      "./gepaReflection.js",
+      "./gepaSelection.js",
+      "./paretoUtils.js"
+    ],
+    "gepaEvaluation.ts": [
+      "../../ai/types.js",
+      "../common_types.js",
+      "../types.js",
+      "./gepaAdapter.js"
+    ],
+    "gepaReflection.ts": [
+      "../../ai/types.js",
+      "../common_types.js",
+      "../template.js",
+      "./gepaComponents.js"
+    ],
+    "gepaSelection.ts": [
+      "./gepaComponents.js (type only)"
+    ],
+    "gepaDependencies.ts": [
+      "./gepaComponents.js (type only)"
+    ],
+    "gepaComponents.ts": [
+      "../types.js"
+    ],
+    "gepaAdapter.ts": [],
+    "optimizer.ts": [
+      "@opentelemetry/api",
+      "../ai/metrics.js (mergeCustomLabels)",
+      "../ai/types.js",
+      "./common_types.js",
+      "./generate.js",
+      "./globals.js",
+      "./optimizerLogging.js",
+      "./optimizers/gepaSelection.js (AxGEPAComponentBanditState type)",
+      "./optimizerTypes.js",
+      "./types.js"
+    ]
+  },
+  "excludedDemonstrationSource": [
+    "src/ax/dsp/optimizers/gepaBootstrap.ts"
+  ],
+  "frameworkDependenciesNotVendored": [
+    "src/ax/ai/types.ts",
+    "src/ax/ai/metrics.ts",
+    "src/ax/dsp/common_types.ts",
+    "src/ax/dsp/generate.ts",
+    "src/ax/dsp/template.ts",
+    "src/ax/dsp/types.ts",
+    "src/ax/dsp/globals.ts",
+    "src/ax/dsp/optimizerLogging.ts",
+    "src/ax/dsp/optimizerTypes.ts",
+    "src/ax/dsp/optimizer.ts (Ax framework base integration)"
+  ]
+}

@@ -31,10 +31,10 @@ export type ExportRecord =
   | { kind: 'function'; args: Record<string, string>; returns: string; async: boolean; doc?: string }
   | { kind: 'value'; type?: string };
 
-export type NatlangRecord = { kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
+export type NatlangRecord = { programId?: string; kind: 'natlang'; id: string; name: string; source: string; revision: string; text: string;
   description: string; args: Record<string, string>; returns: string; instructions: string;
   types: Record<string, string>; subtype: 'function' | 'directory-reducer'; codebase: Record<string, ItemRecord> };
-export type ModuleRecord = { kind: 'module'; id: string; name: string; source: string; revision: string; text: string;
+export type ModuleRecord = { programId?: string; kind: 'module'; id: string; name: string; source: string; revision: string; text: string;
   types: Record<string, string>; exports: Record<string, ExportRecord>; imports: string[];
   /** TypeScript declarations of the module's classes (and method-bearing interfaces), for function listings. */
   declarations?: Record<string, string>;

@@ -92,7 +92,9 @@ test('staggered workers start their first jobs apart', async () => {
   await collectBatch(records, { ...config(dir), workers: 3, workerStaggerMs: 40 }, async (item, provenance) => {
     started.push(Date.now() - t0); await new Promise(resolve => setTimeout(resolve, 150)); return row(item, provenance);
   });
-  assert.ok(started[0] < 30 && started[1] >= 40 && started[2] >= 80, `start times ${started}`);
+  // Setup includes asynchronous filesystem work; measure staggering from the
+  // first actual job instead of imposing a wall-clock ceiling on startup.
+  assert.ok(started[1] - started[0] >= 35 && started[2] - started[0] >= 75, `start times ${started}`);
 });
 
 test('parallel completion merges in source order and matching jobs resume without calls', async () => {

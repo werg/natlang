@@ -15,7 +15,8 @@ with tempfile.TemporaryDirectory() as d:
     print(json.dumps(queue.partial_metrics({'jobs':d,'index':2})))
 `], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
   assert.deepEqual(JSON.parse(output), { saved_turns: 3, fresh_model_replies: 2, completion_tokens: 20,
-    repeated_action_sets: 1, unique_action_sets: 1 });
+    repeated_action_sets: 1, repeated_request_hashes: 0, unique_action_sets: 1, unique_request_hashes: 0,
+    repetition_scope: 'action shapes across all child calls; not a semantic stall detector' });
 });
 
 test('the supervisor distinguishes a hard time budget from missing reply activity', () => {

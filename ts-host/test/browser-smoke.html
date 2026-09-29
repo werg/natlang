@@ -16,6 +16,18 @@
     if (!project.ok) throw new Error(natlang.formatDiagnostics(project.diagnostics));
     const runtime = natlang.createNatlangRuntime({ model, services: { counter } });
     const value = await runtime.run(() => project.require('main.ts').main());
+    const fixture = await (await fetch('./fixtures/adaptation-browser.json')).json();
+    const adaptedProject = natlang.compileVirtualProject({ files: fixture.files }, natlang);
+    if (!adaptedProject.ok) throw new Error(natlang.formatDiagnostics(adaptedProject.diagnostics));
+    if (adaptedProject.manifest.adaptation.buildHash !== fixture.program.buildHash) throw new Error('Node/browser build identity differs');
+    const binding = natlang.bindAdaptation(fixture.artifact, adaptedProject.manifest.adaptation, fixture.executor);
+    const adaptedRuntime = natlang.createNatlangRuntime({ program: adaptedProject.manifest.adaptation,
+      adaptation: binding, executorIdentity: fixture.executor,
+      agent: session => { session.lam.return = session.lam.body.includes('nine') ? 9 : 1; } });
+    const adaptedApp = adaptedProject.require('main.ts');
+    const adaptedValues = await Promise.all([adaptedRuntime.run(() => adaptedApp.invoke()),
+      adaptedRuntime.run(() => adaptedApp.invoke(), { adaptation: null })]);
+    if (JSON.stringify(adaptedValues) !== '[9,1]') throw new Error('portable artifact selection failed: ' + JSON.stringify(adaptedValues));
     document.getElementById('result').textContent = value === 5 && counter.count === 5 ? 'PASS browser interpreter' :
       `FAIL ${JSON.stringify({ value, counter })}`;
   } catch (error) {

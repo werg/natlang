@@ -24,7 +24,10 @@ export type CapturePlan = {
 };
 
 export type InlineLambdaPlan = {
+  programId?: string;
   sourceSpan: SourceSpan;
+  /** Present only for compiler-registered authored source. */
+  adaptation?: { label?: string; templateStart: number; templateEnd: number; expressions: string[]; visibleBindings: string[]; slotBindings: string[] };
   /** Source revision + AST span; stable for one source revision, not a user-facing name. */
   definitionId: string;
   /** Cooked template strings; interpolated values are inserted between them at invocation. */
@@ -47,6 +50,7 @@ export type BindingClassifier = (declaration: ts.Declaration) => CapturePlan['so
 export type InlineAnalysisOptions = {
   /** Files whose declarations may be captured in addition to the analyzed file itself (eval scope declarations). */
   scopeFiles?: readonly ts.SourceFile[];
+  authored?: boolean;
   /** Names never captured (the result slot, debug state, plumbing). */
   excludedNames?: ReadonlySet<string>;
   classify?: BindingClassifier;
@@ -100,6 +104,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
   options: InlineAnalysisOptions = {}): { plans: InlineLambdaPlan[]; diagnostics: NatlangDiagnostic[] } {
   const checker = program.getTypeChecker();
   const plans: InlineLambdaPlan[] = [];
+  const labels = new Set<string>();
   const diagnostics: NatlangDiagnostic[] = [];
   const displayPath = options.displayPath ?? (file => file.fileName);
   const excluded = new Set(['result', 'nl', 'iterateOn', 'self', ...(options.excludedNames ?? [])]);
@@ -377,11 +382,15 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
             message: `\`${name}\` is quoted as a name in this instruction, but no binding with that name is visible here.` });
       }
     }
+    const slotCaptures = new Set<string>();
     if (!ts.isNoSubstitutionTemplateLiteral(template)) for (const span of template.templateSpans) {
       const visit = (child: ts.Node): void => {
         if (ts.isIdentifier(child) && !(ts.isPropertyAccessExpression(child.parent) && child.parent.name === child)) {
           const symbol = checker.getSymbolAtLocation(child);
-          if (symbol && candidates.get(child.text) === symbol && !mentions.has(child.text)) mentions.set(child.text, child.getStart());
+          if (symbol && candidates.get(child.text) === symbol) {
+            slotCaptures.add(child.text);
+            if (!mentions.has(child.text)) mentions.set(child.text, child.getStart());
+          }
         }
         ts.forEachChild(child, visit);
       };
@@ -404,9 +413,26 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
       captures.push({ name, type: described, mutable, source, mentionSpan: offset });
     }
 
+    let adaptation: InlineLambdaPlan['adaptation'];
+    if (options.authored) {
+      // Attachment grammar: exactly one block annotation in the trivia immediately before the tag.
+      const trivia = file.text.slice(node.getFullStart(), node.getStart());
+      const annotations = [...trivia.matchAll(/\/\*\s*@natlangSite\s+([A-Za-z_][A-Za-z0-9_-]*)\s*\*\//g)];
+      if ((trivia.match(/@natlangSite/g) ?? []).length !== annotations.length || annotations.length > 1) {
+        report(node, 'duplicate-site', 'Ambiguous or malformed @natlangSite annotation.'); return;
+      }
+      const label = annotations[0]?.[1];
+      const labelKey = displayPath(file) + ':' + label;
+      if (label && labels.has(labelKey)) { report(node, 'duplicate-site', 'Duplicate @natlangSite label: ' + label); return; }
+      if (label) labels.add(labelKey);
+      const expressions = ts.isNoSubstitutionTemplateLiteral(template) ? [] : template.templateSpans.map(span => span.expression.getText(file));
+      const slotBindings = [...slotCaptures].sort();
+      adaptation = { ...(label ? { label } : {}), templateStart: template.getStart(), templateEnd: template.getEnd(),
+        expressions, visibleBindings: [...candidates.keys()].sort(), slotBindings };
+    }
     const sourceSpan = spanOf(node, displayPath);
     const definitionId = `nl:${hexDigest(`${options.sourceRevision ?? ''}\0${sourceSpan.file}\0${sourceSpan.start}\0${sourceSpan.end}`).slice(0, 16)}`;
-    plans.push({ sourceSpan, definitionId, strings, instructions: strings.join('${…}'),
+    plans.push({ sourceSpan, definitionId, ...(adaptation ? { adaptation } : {}), strings, instructions: strings.join('${…}'),
       parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures,
       inheritedCodebaseRevision: options.codebaseRevision ?? '' });
   };

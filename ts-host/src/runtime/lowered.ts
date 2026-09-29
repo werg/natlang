@@ -1,3 +1,5 @@
+import { inlineDescriptor } from '../adaptation/inventory.js';
+import { fingerprint } from '../adaptation/identity.js';
 /**
  * Runtime support targeted by the natlang compiler's lowering. Compiled modules import this as
  * `__natlang`; eval programs receive the same functions through their scope. Nothing here parses or
@@ -29,7 +31,7 @@ export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, 
   const types: Record<string, string> = {};
   for (const target of [plan.returns, ...plan.parameters.map(parameter => parameter.type), ...plan.captures.map(capture => capture.type)])
     Object.assign(types, target.aliases);
-  return { id: plan.definitionId, name: `nl@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
+  return { programId: plan.programId, id: plan.definitionId, name: `nl@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
     body: plan.instructions,
     params: plan.parameters.map(parameter => ({ name: parameter.name, type: targetType(parameter.type) })),
     ...(plan.openParameters ? { openParameters: true } : {}),
@@ -41,11 +43,15 @@ export function planDefinition(plan: InlineLambdaPlan, codebase: Record<string, 
 export function interpolate(strings: readonly string[], values: readonly unknown[]): string {
   let text = strings[0] ?? '';
   values.forEach((value, index) => {
-    text += typeof value === 'string' ? value : value && typeof value === 'object' ?
-      (() => { try { return JSON.stringify(value); } catch { return String(value); } })() : String(value);
+    text += interpolationText(value);
     text += strings[index + 1] ?? '';
   });
   return text.endsWith('\n') ? text : `${text}\n`;
+}
+
+function interpolationText(value: unknown): string {
+  return typeof value === 'string' ? value : value && typeof value === 'object' ?
+    (() => { try { return JSON.stringify(value); } catch { return String(value); } })() : String(value);
 }
 
 export type CaptureAccessors = Record<string, readonly [() => unknown, ((value: unknown) => void)?]>;
@@ -62,7 +68,22 @@ export function inline(plan: InlineLambdaPlan, values: readonly unknown[], acces
     captures[capture.name] = { name: capture.name, type: targetType(capture.type), mutable: capture.mutable && !!accessor[1],
       get: accessor[0], ...(capture.mutable && accessor[1] ? { set: accessor[1] } : {}) };
   }
-  return inlineCallable(planDefinition(plan, context), interpolate(plan.strings, values), captures, undefined, bound);
+  // Capture interpolation values once when the tag is evaluated, then resolve static text at invocation.
+  const renderedValues = values.map(interpolationText);
+  const render = (frame: import('./context.js').Frame) => {
+    const view = frame.task.programView;
+    const effectivePlan = (!plan.programId || plan.programId === view.program?.id) ? view.inlineRevision(plan) : plan;
+    const descriptor = view.component(plan.definitionId);
+    if (view.binding && descriptor && (!plan.programId || plan.programId === view.program?.id) && plan.adaptation && !view.patched(plan.sourceSpan.file)) {
+      const actual = inlineDescriptor(view.program!.id, plan);
+      if (actual.baselineHash !== descriptor.baselineHash ||
+        fingerprint({ ...actual.contract, servicesHash: descriptor.contract.servicesHash }) !== descriptor.contractHash)
+        throw new Error('compiled inline site differs from bound program; rebuild/revalidate');
+    }
+    const replacement = view.value(plan.definitionId, plan.programId);
+    return interpolate(replacement?.kind === 'lambda.instructions' ? replacement.template.segments : effectivePlan.strings, renderedValues);
+  };
+  return inlineCallable(planDefinition(plan, context), render, captures, undefined, bound);
 }
 
 /** A named `.nl` import compiled into a module: the definition record embedded at build time. */

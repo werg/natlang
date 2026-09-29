@@ -21,3 +21,11 @@ void loop.close();
 void BrowserDomRenderer;
 void nl;
 void iterateOn(async (value: number) => value + 1, 0).until(value => value > 2);
+
+// Portable consumption adds no Node optimizer/evaluation API to this graph.
+const identity: natlang.ExecutorIdentity = { id: 'caller-model', configuration: {} };
+if (project.manifest.adaptation) {
+  const artifact = natlang.parseAdaptation('{}');
+  const binding = natlang.bindAdaptation(artifact, project.manifest.adaptation, identity);
+  void createNatlangRuntime({ model: model.turn, program: project.manifest.adaptation, adaptation: binding, executorIdentity: identity });
+}

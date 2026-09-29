@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
+import { fingerprint } from '../adaptation/identity.js';
 import type { ModelConfig, NatlangRuntimeOptions } from '../runtime/runtime.js';
 
 export type ModelProfile = {
@@ -83,4 +84,27 @@ export function loadModelConfiguration(name?: string, overrides: ModelSelectionO
       piPayload: undefined, piMode: undefined, modelOptions: undefined, local: undefined } : {}),
     ...(overrides.model ?? environment.NATLANG_MODEL ? { model: overrides.model ?? environment.NATLANG_MODEL } : {}) };
   return { name: selected, configPath, profile, choice: resolveModelChoice(profile) };
+}
+
+/** Explicit compatibility identity without authentication material. Profiles are caller-declared metadata. */
+export function executorIdentityForChoice(choice: ResolvedModelChoice): import('../adaptation/types.js').ExecutorIdentity {
+  const credential = /(?:api.?key|authorization|password|credential|secret|access.?token|refresh.?token)/i;
+  const sanitize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(sanitize);
+    if (input && typeof input === 'object') return Object.fromEntries(Object.entries(input).filter(([key, value]) =>
+      value !== undefined && key.toLowerCase() !== 'headers' && !credential.test(key)).map(([key, value]) => {
+        if (typeof value === 'string' && /(?:endpoint|baseurl|url)$/i.test(key)) {
+          try { const url = new URL(value); return [key, url.origin + url.pathname]; } catch { /* Non-URL configuration remains explicit metadata. */ }
+        }
+        return [key, sanitize(value)];
+      }));
+    return input;
+  };
+  const configuration = sanitize(choice) as Record<string, unknown>;
+  const behaviorHeaders = Object.fromEntries(Object.entries(choice.headers ?? {}).filter(([key]) => !credential.test(key)));
+  if (Object.keys(behaviorHeaders).length) configuration.headersHash = fingerprint(behaviorHeaders, 'natlang.model-headers/v1');
+  if (choice.kind === 'external') {
+    const url = new URL(choice.endpoint); configuration.endpoint = url.origin + url.pathname;
+  }
+  return { id: choice.kind + ':' + ('provider' in choice ? choice.provider + ':' : '') + choice.model, configuration };
 }

@@ -1,0 +1,13 @@
+# Ax GEPA adaptation notes
+
+This directory is the pristine reference snapshot for the native natlang GEPA extraction. The source files retain their upstream contents and paths; no runtime adaptation has been applied here.
+
+The native implementation lives in `ts-host/src/optimization`. The adapted component selector retains Ax's bandit scoring and exploration, with native component keys and an injected PRNG. Dependency grouping retains the pinned traversal behavior. Relevant Pareto utilities retain the upstream pure operations. Scripted tests execute the pinned originals and compare those operations with the ports.
+
+The search loop is a focused native extraction. Per-example validation winners choose parents; every fourth iteration attempts a conservative three-way component merge, rejecting conflicting edits. Paired training minibatches require strict improvement and passing gates. Validation tracks a protected incumbent and baseline, with a bounded population. Whole-program guidance changes additionally require validation coverage of the program's authored lambdas. Explicit selection constraints and cost/latency tie policies are native additions. These integration choices are tested independently; there is no blanket claim of full engine parity with Ax or Python GEPA.
+
+`AxBaseOptimizer`, `AxOptimizedProgramImpl`, `ax()`, providers, signatures, telemetry, and direct prediction are absent from the native runtime graph. The single evaluator executes natlang in fresh workers with coordinator-owned model drivers. Reflection uses the native `ModelDriver` and strict instruction/template codec. No Ax generation or fallback prediction path remains.
+
+Other deliberate differences: immutable complete candidate maps; explicit semantic versus infrastructure failures; malformed metric/proposal rejection; actual request accounting including repairs and judges; optional priced, bounded request reservations; stable seeded scheduling; abort propagation; content-addressed records; atomic durable writes and integrity-checked checkpoints; and exact fingerprint checks on resume. Demonstration bootstrap and generic Ax adapter compatibility are excluded.
+
+`gepaBootstrap.ts` is intentionally excluded because demonstration bootstrap is outside this release. `optimizer.ts` is included as a helper reference because `gepa.ts` depends on Ax's optimizer base; it is not a dependency natlang may carry into the native engine. `UPSTREAM.json` records the pinned source hashes, test origins, import closure, framework-only dependencies, and license inventory. This snapshot supports algorithm-focused tests; it does not establish equivalence with Python GEPA.

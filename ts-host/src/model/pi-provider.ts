@@ -162,7 +162,8 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         throw new Error(`provider ${provider} has no credentials; run natlang auth login ${provider} or set its API key environment variable`);
       await selectModel();
     },
-    async turn(request: ModelTurnRequest): Promise<ModelTurn> {
+    async turn(request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> {
+      signal?.throwIfAborted();
       const model = await selectModel();
       const context = piContext(request, model);
       const required = request.tool_choice === 'required' ? requiredToolChoice(model.api) : undefined;
@@ -170,6 +171,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
       const maxTokens = request.max_tokens === null ? configuredMax :
         configuredMax === undefined ? request.max_tokens : Math.min(request.max_tokens, configuredMax);
       const options = { ...requestOverride,
+        ...(signal ? { signal } : {}),
         // Codex Responses rejects temperature, including natlang's usual zero default.
         ...(request.temperature === undefined || model.api === 'openai-codex-responses' ? {} :
           { temperature: request.temperature }),

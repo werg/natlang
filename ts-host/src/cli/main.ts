@@ -22,6 +22,9 @@ import { buildProject } from '../compiler/node-project.js';
 import { createNatlangRuntime, type ModelDriver, type NatlangRuntime,
   type NatlangRuntimeOptions } from '../runtime/runtime.js';
 import { fileTraceSink, applicationContextRecords, loadCallables, loadNatlang } from '../runtime/node-files.js';
+import { bindAdaptation } from '../adaptation/compatibility.js';
+import { parseAdaptation } from '../adaptation/schema.js';
+import { executorIdentityForChoice } from '../model/config.js';
 import { invokeDefinition } from '../runtime/kernel.js';
 import { resolveFrame } from '../runtime/runtime.js';
 import '../runtime/node.js';
@@ -35,6 +38,9 @@ function help(): string { return `natlang ${NATLANG_CLI_VERSION}
 
 Usage:
   natlang run [SOURCE] [OPTIONS] [-- ARGS]   Build and run an application or TS entry module.
+  natlang adapt inspect PROJECT              Inspect trainable authored components.
+  natlang eval SUITE                         Evaluate independent fixtures.
+  natlang optimize SUITE                     Optimize instructions through the runtime.
   natlang check [PROJECT]                    Type-check and natlang-check a project.
   natlang build [PROJECT] [--out DIR]        Compile a project (lowering nl, embedding .nl functions).
   natlang call NAME|FILE.nl                  Call a natural-language function.
@@ -136,7 +142,7 @@ type Parsed = { words: string[]; options: Map<string, string | true>; rest: stri
 function parseArgs(args: string[]): Parsed {
   const words: string[] = [], options = new Map<string, string | true>(), rest: string[] = [];
   const boolean = new Set(['--json', '--plain', '--no-color', '--help', '-h', '--version', '--yes', '--refresh',
-    '--lines', '--jsonl', '--filter']);
+    '--lines', '--jsonl', '--filter', '--no-adaptation']);
   let separated = false;
   for (let index = 0; index < args.length; index++) {
     const value = args[index]!;
@@ -355,8 +361,8 @@ function projectRoot(start: string): string {
 }
 
 /** Compile a project for this process's runtime; returns the emitted path of `entry`. */
-function compileFor(root: string, entry: string, outDir: string, installed: boolean): string {
-  const result = buildProject({ project: root, outDir, runtimeModule: RUNTIME_MODULE, writeDeclarations: !installed });
+function compileFor(root: string, entry: string, outDir: string, installed: boolean, programId?: string): string {
+  const result = buildProject({ project: root, outDir, programId, runtimeModule: RUNTIME_MODULE, writeDeclarations: !installed });
   if (!result.ok) throw new Error(`natlang build failed:\n${formatDiagnostics(result.diagnostics)}`);
   if (/\.(?:m?js)$/.test(entry)) return entry;
   const emitted = join(outDir, relative(root, entry)).replace(/\.m?ts$/, '.js');
@@ -373,12 +379,21 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
   const traceDirectory = resolve(option(parsed, '--traces') ?? join(stateDirectory, 'traces'));
   const workspace = resolve(option(parsed, '--workspace') ?? '.');
   const entry = join(spec.root, ...spec.target.entry.split('/'));
+  const selection = option(parsed, '--adaptation') ?? spec.target.adaptation;
+  if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
+  const artifact = !parsed.options.has('--no-adaptation') && selection ? parseAdaptation(readFileSync(
+    option(parsed, '--adaptation') ? resolve(selection) : resolve(spec.root, selection), 'utf8')) : null;
   const compiled = compileFor(spec.root, entry, spec.installed ? join(stateDirectory, 'build', spec.package?.digest ?? 'local') :
-    join(spec.root, '.natlang', 'build'), spec.installed === true);
+    join(spec.root, '.natlang', 'build'), spec.installed === true, artifact?.program.id);
   const { choice } = modelSelection(parsed);
   const model = modelSession(choice, parsed.options.has('--yes'));
-  const driver: ModelDriver = request => model.turn(request);
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), trace: fileTraceSink(traceDirectory) });
+  const driver: ModelDriver = (request, signal) => model.turn(request, signal);
+  const executorIdentity = executorIdentityForChoice(choice);
+  const inventory = buildProject({ project: spec.root, programId: artifact?.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE });
+  if (!inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+  const program = inventory.manifest.adaptation!;
+  const adaptation = artifact ? bindAdaptation(artifact, program, executorIdentity) : null;
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, driver), program, adaptation, executorIdentity, trace: fileTraceSink(traceDirectory) });
   try {
     const module = await import(pathToFileURL(compiled).href) as Record<string, unknown>;
     const name = spec.target.export ?? 'main', main = module[name];
@@ -387,7 +402,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
       target: spec.target, workspace, stateDirectory, traceDirectory, args: parsed.rest,
       io: { input: process.stdin, output: process.stdout, error: process.stderr,
         color: !parsed.options.has('--plain') && !parsed.options.has('--no-color') && Boolean(process.stdout.isTTY) },
-      model: driver, runtime };
+      model: driver, runtime, program, adaptation, executorIdentity };
     const value = await (main as TargetMain)(context);
     if (value && typeof value === 'object' && typeof (value as TargetExecutable).run === 'function') {
       const executable = value as TargetExecutable;
@@ -399,7 +414,7 @@ async function launch(parsed: Parsed, spec: Launch): Promise<number> {
 
 async function runCommand(parsed: Parsed, value = '.'): Promise<number> {
   acceptOptions(parsed, ['--target', '--export', '--profile', '--provider', '--model', '--workspace', '--state', '--traces', '--store',
-    '--plain', '--no-color', '--yes']);
+    '--plain', '--no-color', '--yes', '--adaptation', '--no-adaptation']);
   const path = resolve(value);
   if (existsSync(path) && statSync(path).isFile() && /\.(?:m?ts|m?js)$/.test(path)) {
     const root = projectRoot(path);
@@ -435,16 +450,23 @@ async function withModelRuntime<T>(parsed: Parsed, fn: (runtime: NatlangRuntime)
   const { choice } = modelSelection(parsed);
   const model = modelSession(choice, parsed.options.has('--yes'));
   const trace = option(parsed, '--trace');
-  const runtime = createNatlangRuntime({ ...runtimeModel(choice, request => model.turn(request)),
+  if (option(parsed, '--adaptation') && parsed.options.has('--no-adaptation')) throw new Error('--adaptation and --no-adaptation are mutually exclusive');
+  const artifact = option(parsed, '--adaptation') ? parseAdaptation(readFileSync(resolve(option(parsed, '--adaptation')!), 'utf8')) : null;
+  const inventory = artifact ? buildProject({ project: process.cwd(), programId: artifact.program.id, emit: false, write: false, runtimeModule: RUNTIME_MODULE }) : null;
+  if (inventory && !inventory.ok) throw new Error(formatDiagnostics(inventory.diagnostics));
+  const program = inventory?.manifest.adaptation;
+  const executorIdentity = executorIdentityForChoice(choice);
+  const adaptation = artifact && program ? bindAdaptation(artifact, program, executorIdentity) : null;
+  const runtime = createNatlangRuntime({ ...runtimeModel(choice, (request, signal) => model.turn(request, signal)), program, adaptation, executorIdentity,
     ...(trace ? { trace: fileTraceSink(resolve(trace)) } : {}) });
   try { await model.prepare(); return await fn(runtime); }
   finally { runtime.close(); await model.close(); }
 }
 
-function commandCallable(name: string): ((...args: unknown[]) => Promise<unknown>) &
+function commandCallable(name: string, adaptationRoot?: string): ((...args: unknown[]) => Promise<unknown>) &
   { [key: symbol]: { definition: { params: { name: string }[]; subtype: string } } } {
   let value: unknown;
-  if (name.endsWith('.nl')) value = loadNatlang(resolve(name));
+  if (name.endsWith('.nl')) value = loadNatlang(resolve(name), adaptationRoot);
   else {
     const context = applicationContextRecords(process.cwd());
     if (!context) throw new Error(`no natlang.d context found for ${name}`);
@@ -486,12 +508,12 @@ const pipelineValue = (value: unknown) =>
   value === null || typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 async function callCommand(parsed: Parsed, name: string): Promise<number> {
-  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl']);
+  acceptOptions(parsed, ['--inputs', '--trace', '--profile', '--provider', '--model', '--json', '--yes', '--lines', '--jsonl', '--adaptation', '--no-adaptation']);
   noTrailingArguments(parsed);
   if (parsed.options.has('--lines') && parsed.options.has('--jsonl')) throw new Error('--lines and --jsonl are mutually exclusive');
   if (option(parsed, '--inputs') && (parsed.options.has('--lines') || parsed.options.has('--jsonl')))
     throw new Error('--inputs cannot be combined with --lines or --jsonl');
-  const fn = commandCallable(name), params = fn[Symbol.for('natlang.callable')]!.definition.params;
+  const fn = commandCallable(name, option(parsed, '--adaptation') ? process.cwd() : undefined), params = fn[Symbol.for('natlang.callable')]!.definition.params;
   if (fn[Symbol.for('natlang.callable')]!.definition.subtype === 'directory-reducer')
     throw new Error(`${name} is a directory reducer; use natlang apply`);
   const inputsPath = option(parsed, '--inputs');
@@ -507,8 +529,8 @@ async function callCommand(parsed: Parsed, name: string): Promise<number> {
 }
 
 async function applyCommand(parsed: Parsed, name: string, directory: string): Promise<number> {
-  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes']); noTrailingArguments(parsed);
-  const fn = commandCallable(name), definition = fn[Symbol.for('natlang.callable')]!.definition;
+  acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--json', '--yes', '--adaptation', '--no-adaptation']); noTrailingArguments(parsed);
+  const fn = commandCallable(name, option(parsed, '--adaptation') ? process.cwd() : undefined), definition = fn[Symbol.for('natlang.callable')]!.definition;
   if (definition.subtype !== 'directory-reducer') throw new Error(`${name} is not a directory reducer`);
   if (definition.params.length) throw new Error(`${name} needs parameters; natlang apply accepts a folder-only reducer`);
   const path = resolve(directory), folder = openFolder(path, 'write');
@@ -519,6 +541,7 @@ async function applyCommand(parsed: Parsed, name: string, directory: string): Pr
 }
 
 async function askCommand(parsed: Parsed, instruction: string): Promise<number> {
+  if (parsed.options.has('--adaptation') || parsed.options.has('--no-adaptation')) throw new Error('ad hoc ask functions are not registered persistent adaptation components');
   acceptOptions(parsed, ['--trace', '--profile', '--provider', '--model', '--yes', '--lines', '--jsonl', '--filter',
     '--returns', '--files', '--jobs']); noTrailingArguments(parsed);
   const context = applicationContextRecords(process.cwd());
@@ -639,6 +662,7 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
+  if (['adapt', 'eval', 'optimize'].includes(argv[0] ?? '')) return (await import('./adaptation.js')).adaptationCommand(argv);
   const parsed = parseArgs(argv);
   const json = parsed.options.has('--json');
   const [command, ...words] = parsed.words;

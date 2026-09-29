@@ -57,7 +57,7 @@ export function makeCallable(meta: CallableMeta): NatlangCallable {
 
 /** The kernel definition of a `.nl` record. */
 export function natlangDefinition(record: NatlangRecord): CallableDefinition {
-  return { id: record.id, name: record.name, body: record.instructions,
+  return { programId: record.programId, id: record.id, name: record.name, body: record.instructions,
     params: Object.entries(record.args).map(([raw, type]) => ({ name: raw.replace(/\?$/, ''), type, optional: raw.endsWith('?') })),
     returns: record.returns, types: record.types, codebase: record.codebase as Record<string, unknown>,
     subtype: record.subtype, description: record.description, source: record.source, revision: record.revision };
@@ -129,9 +129,9 @@ export function callableTree(codebase: Record<string, ItemRecord>, bound?: Frame
 }
 
 /** An inline `nl` instance: one source definition, a fresh instance per evaluation of the tag. */
-export function inlineCallable(definition: CallableDefinition, instructions: string,
+export function inlineCallable(definition: CallableDefinition, instructions: string | ((frame: Frame) => string),
   captures: Record<string, CaptureCell>, classes?: ReadonlyMap<string, Function>, bound?: Frame): NatlangCallable {
   return makeCallable({ definition, kind: 'inline', created: currentFrame(), bound,
-    invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions, classes,
+    invoke: (args, frame) => invokeDefinition(frame, definition, args, { captures, instructions: typeof instructions === 'function' ? instructions(frame) : instructions, classes,
       manifest: { inline: true } }) });
 }

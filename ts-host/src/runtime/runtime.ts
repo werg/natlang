@@ -1,3 +1,7 @@
+import { ProgramView } from '../adaptation/program-view.js';
+import { isAdaptationBinding, bindAdaptation } from '../adaptation/compatibility.js';
+import { fingerprint } from '../adaptation/identity.js';
+import type { ProgramDescriptor, AdaptationBinding, ExecutorIdentity } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
 import type { EvalEnvironment } from '../native/evaluator.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -6,7 +10,7 @@ import { TOOLS_PROMPT } from '../native/prompt.js';
 import { NatlangContextError, currentFrame, runInFrame, type Frame } from './context.js';
 import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.js';
 
-export type ModelDriver = (request: ModelTurnRequest) => Promise<ModelTurn> | ModelTurn;
+export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number;
   /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
@@ -17,7 +21,7 @@ export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: 
 
 /** One natlang invocation's trace, delivered to the runtime's trace sink when the invocation ends. */
 export type InvocationTrace = { callId: string; parentCallId: string | null; taskId: string;
-  definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
+  adaptation?: Record<string, unknown>; definitionId: string; name: string; outcome: string; detail: string; events: Record<string, unknown>[] };
 export type TraceSink = (trace: InvocationTrace) => void;
 
 export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxActions?: number; maxToolCalls?: number;
@@ -27,6 +31,13 @@ export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxAction
 export type Services = Record<string, object>;
 
 export type NatlangRuntimeOptions = {
+  program?: ProgramDescriptor;
+  adaptation?: AdaptationBinding | null;
+  executorIdentity?: ExecutorIdentity;
+  isolateModules?: boolean;
+  signal?: AbortSignal;
+  evaluation?: { id: string; caseId: string; replicate: number };
+  codeEdits?: 'allow' | 'deny';
   model?: ModelDriver | ModelConfig;
   /** Drive interpreter sessions directly instead of through a model (fixtures, replay, tests). */
   agent?: import('../native/runtime.js').NativeAgent;
@@ -55,7 +66,7 @@ export type NatlangRuntimeOptions = {
   progressJudge?: ProgressJudgeFunction;
 };
 
-export type TaskOptions = { services?: Services; serviceDeclarations?: Record<string, string>;
+export type TaskOptions = { program?: ProgramDescriptor; adaptation?: AdaptationBinding | null; services?: Services; serviceDeclarations?: Record<string, string>;
   serviceScopes?: Record<string, string[]>; signal?: AbortSignal; trace?: TraceSink; name?: string };
 
 let defaultEnvironment: ((options: NatlangRuntimeOptions) => EvalEnvironment) | undefined;
@@ -74,18 +85,66 @@ export class NatlangTask {
   readonly signal: AbortSignal;
   readonly episodeBudget: { limit?: number; used: number };
   readonly traces: InvocationTrace[] = [];
+  readonly programView: ProgramView;
+  readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
+  private readonly pending = new Set<Promise<unknown>>();
+  track<T>(call: Promise<T>): Promise<T> { this.pending.add(call); call.finally(() => this.pending.delete(call)).catch(() => {}); return call; }
+  async drain(): Promise<void> { while (this.pending.size) await Promise.allSettled([...this.pending]); }
   private readonly abort = new AbortController();
   private callSequence = 0;
+  private readonly definitionCalls = new Map<string, number>();
+  private readonly taskOrdinal: number;
+  definitionSeedId(key: string): string { const ordinal = (this.definitionCalls.get(key) ?? 0) + 1; this.definitionCalls.set(key, ordinal); return this.taskOrdinal + '/' + key + '/' + ordinal; }
   private closed = false;
   private timer?: ReturnType<typeof setTimeout>;
+  private appPromptSnapshot?: string;
 
   constructor(readonly runtime: NatlangRuntime, options: TaskOptions = {}) {
-    this.id = `${options.name ?? 'task'}-${++taskSequence}-${Math.random().toString(36).slice(2, 8)}`;
+    let binding = options.adaptation === undefined ? runtime.options.adaptation : options.adaptation;
+    const program = options.program ?? runtime.options.program ?? binding?.program;
+    if (binding) {
+      const artifact = binding.artifact;
+      // A package can be loaded through multiple module URLs. Revalidate foreign
+      // bindings from their artifact; never trust their supplied candidate map.
+      if (!isAdaptationBinding(binding)) {
+        if (!program || !runtime.options.executorIdentity) throw new Error('adaptation must be created by bindAdaptation');
+        binding = bindAdaptation(artifact, program, runtime.options.executorIdentity);
+      }
+      if (program?.buildHash !== binding.program.buildHash || program?.id !== binding.program.id) throw new Error('task program and adaptation differ');
+      if (!runtime.options.executorIdentity || fingerprint(runtime.options.executorIdentity) !== fingerprint(binding.executor))
+        throw new Error('runtime executor identity does not match adaptation');
+      const configured = typeof runtime.options.model === 'function' ? {} : runtime.options.model ?? {};
+      const { driver: _driver, ...allSettings } = configured as Partial<ModelConfig>;
+      const settings = Object.fromEntries(Object.entries(allSettings).filter(([_key, value]) => value !== undefined));
+      if (fingerprint(settings) !== fingerprint(binding.artifact.policy.settings))
+        throw new Error('runtime inference settings differ from evaluated artifact policy; configure the evaluated profile or revalidate');
+      if (runtime.options.codeEdits && runtime.options.codeEdits !== binding.artifact.policy.codeEdits)
+        throw new Error('runtime code-edit policy differs from evaluated artifact');
+      if (fingerprint(runtime.options.limits ?? {}) !== fingerprint(binding.artifact.policy.limits ?? {}))
+        throw new Error('runtime inference limits differ from evaluated artifact policy');
+      const extra = runtime.options.systemPrompt;
+      this.appPromptSnapshot = typeof extra === 'function' ? extra() : extra ?? '';
+      if (binding.artifact.policy.systemPromptHash !== undefined) {
+        if (fingerprint(this.appPromptSnapshot, 'natlang.system-prompt/v1') !== binding.artifact.policy.systemPromptHash)
+          throw new Error('application system prompt differs from evaluated artifact policy');
+      } else if (this.appPromptSnapshot) throw new Error('declare evaluated systemPromptHash or use program guidance');
+    }
+    this.programView = new ProgramView(program, binding);
+    this.taskOrdinal = ++taskSequence;
+    this.id = `${options.name ?? 'task'}-${this.taskOrdinal}-${Math.random().toString(36).slice(2, 8)}`;
     this.services = options.services ?? runtime.options.services ?? {};
     this.serviceDeclarations = Object.fromEntries(Object.entries(options.serviceDeclarations ?? runtime.options.serviceDeclarations ?? {})
       .map(([name, text]) => [name, /^\s*declare (?:namespace|const) /.test(text) ? text.trim() : declarationNamespace(name, text)]));
     this.serviceScopes = options.serviceScopes ?? runtime.options.serviceScopes ?? {};
-    this.signal = options.signal ? AbortSignal.any([options.signal, this.abort.signal]) : this.abort.signal;
+    if (binding) {
+      const expected = program?.services ?? { declarations: {}, scopes: {} };
+      if (fingerprint({ declarations: this.serviceDeclarations, scopes: this.serviceScopes }, 'natlang.services/v1') !== fingerprint(expected, 'natlang.services/v1'))
+        throw new Error('runtime service declarations/scopes differ from evaluated program contract');
+      if (Object.keys(this.services).some(name => !Object.hasOwn(expected.declarations, name)))
+        throw new Error('adapted tasks cannot add undeclared service capabilities');
+    }
+    const externalSignal = options.signal ?? runtime.options.signal;
+    this.signal = externalSignal ? AbortSignal.any([externalSignal, this.abort.signal]) : this.abort.signal;
     this.episodeBudget = { limit: runtime.options.limits?.maxEpisodes, used: 0 };
     const timeout = runtime.options.limits?.timeoutMs;
     if (timeout !== undefined) this.timer = setTimeout(() => this.cancel(new Error('natlang task timed out')), timeout);
@@ -115,7 +174,7 @@ export class NatlangTask {
   }
   systemPrompt(): string {
     const extra = this.runtime.options.systemPrompt;
-    return TOOLS_PROMPT + (typeof extra === 'function' ? extra() : extra ?? '');
+    return TOOLS_PROMPT + (this.appPromptSnapshot ?? (typeof extra === 'function' ? extra() : extra ?? ''));
   }
   cancel(reason: unknown = new Error('natlang task cancelled')): void { this.abort.abort(reason); }
   get isClosed(): boolean { return this.closed; }
@@ -138,7 +197,7 @@ export class NatlangRuntime {
     const task = new NatlangTask(this, options);
     activeTasks.add(task);
     try { return await runInFrame(task.frame, fn); }
-    finally { task.close(); }
+    finally { await task.drain(); task.close(); }
   }
 
   /** Bind a callback to the current task so it can call natlang functions when it runs later. */

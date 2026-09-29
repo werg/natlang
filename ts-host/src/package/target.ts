@@ -1,5 +1,6 @@
 import type { ModelDriver, NatlangRuntime } from '../runtime/runtime.js';
 import type { NatlangTarget } from './manifest.js';
+import type { AdaptationBinding, ExecutorIdentity, ProgramDescriptor } from '../adaptation/types.js';
 
 export type TargetIO = { input: NodeJS.ReadableStream; output: NodeJS.WritableStream;
   error: NodeJS.WritableStream; color: boolean };
@@ -9,6 +10,10 @@ export type TargetContext = {
   dependencies: Record<string, { name: string; version: string; digest: string; root: string }>;
   targetName: string;
   target: NatlangTarget;
+  /** Validated portable program metadata and adaptation supplied by a host integration. */
+  program?: ProgramDescriptor;
+  adaptation?: AdaptationBinding | null;
+  executorIdentity?: ExecutorIdentity;
   workspace: string;
   stateDirectory: string;
   traceDirectory: string;

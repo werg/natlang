@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://natlang.dev/spec/adaptation-artifact.schema.json",
+  "title": "Natlang adaptation artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "digest", "program", "executor", "policy", "components", "provenance"],
+  "properties": {
+    "schema": { "const": "natlang.adaptation/v1" },
+    "digest": { "$ref": "#/$defs/hash" },
+    "program": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "buildHash", "protocol", "guidanceScope"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "buildHash": { "$ref": "#/$defs/hash" },
+        "protocol": { "type": "integer", "minimum": 1 },
+        "guidanceScope": { "$ref": "#/$defs/guidanceScope" }
+      }
+    },
+    "executor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "configuration"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "configuration": { "type": "object" } }
+    },
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["codeEdits", "settings"],
+      "properties": { "codeEdits": { "enum": ["allow", "deny"] }, "settings": { "type": "object" }, "systemPromptHash": { "$ref": "#/$defs/hash" },
+        "limits": { "type": "object", "additionalProperties": false, "properties": {
+          "maxEpisodes": { "type": "integer", "minimum": 0 }, "maxDepth": { "type": "integer", "minimum": 0 },
+          "maxActions": { "type": "integer", "minimum": 0 }, "maxToolCalls": { "type": "integer", "minimum": 0 }, "timeoutMs": { "type": "integer", "minimum": 0 } } } }
+    },
+    "components": { "type": "array", "items": { "$ref": "#/$defs/replacement" } },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["runId", "strategy", "engine", "suiteHash", "seed", "promotion", "evidence"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "strategy": { "type": "string", "minLength": 1 },
+        "engine": { "type": "string", "minLength": 1 },
+        "suiteHash": { "$ref": "#/$defs/hash" },
+        "seed": { "type": "integer" },
+        "promotion": { "enum": ["selected", "revalidated", "incumbent"] },
+        "evidence": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "guidanceScope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["importedPrograms"],
+      "properties": { "importedPrograms": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true } }
+    },
+    "template": {
+      "type": "object", "additionalProperties": false,
+      "required": ["segments", "slotIds"],
+      "properties": {
+        "segments": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "slotIds": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "componentValue": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["kind", "template"],
+          "properties": { "kind": { "const": "lambda.instructions" }, "template": { "$ref": "#/$defs/template" } } },
+        { "type": "object", "additionalProperties": false, "required": ["kind", "text"],
+          "properties": { "kind": { "const": "program.guidance" }, "text": { "type": "string" } } }
+      ]
+    },
+    "replacement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key", "baselineHash", "contractHash", "value"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "baselineHash": { "$ref": "#/$defs/hash" },
+        "contractHash": { "$ref": "#/$defs/hash" },
+        "value": { "$ref": "#/$defs/componentValue" }
+      }
+    }
+  }
+}
