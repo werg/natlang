@@ -44,6 +44,7 @@ test('FOLIO story holds cover single conclusions and legacy batches by source gr
 test('criterion preservation guidance does not suggest new delegation at the depth limit', () => {
   assert.match(TOOLS_PROMPT, /preserve the parent's criterion and relevant context/);
   assert.match(TOOLS_PROMPT, /a question can express the same intent as a statement/);
+  assert.match(TOOLS_PROMPT, /check the entity roles and the helper's documented evidence scope/);
   assert.doesNotMatch(TOOLS_PROMPT_AT_NL_DEPTH_LIMIT, /When delegating/);
 });
 
@@ -76,4 +77,5 @@ test('EntailmentBank proof direction and fruit-guard holds preserve source ident
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story409' } }), 'source_review_pending');
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story417' } }), 'source_review_pending');
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story378' } }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story422' } }), 'source_review_pending');
 });

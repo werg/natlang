@@ -1,5 +1,15 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Rejection follow-up 08:20,2026-09-29:** new failures have no scope/runtime errors.
+> Luna repeatedly reinterpreted a country as a movie despite role guidance. Added general
+> empty-search/helper guidance: reread original question, roles and documented store scope;
+> rephrasing the same unsupported premise is not new evidence. No answer hints added.
+> Hold FOLIO422: source FOL drops customer guards; James is not established as a customer.
+> Runtimev27 rolls at case boundaries on unchanged queuesv20/v16; actual status/PIDs:
+> runs/bonsai-recovery/runtime-v27.rollout-state.json.161 Node checks/builds/types pass.
+> Steering audit path runs/rejection-steering-20260929-0918/ (directory label is historical,
+> check actually08:20 Berlin). Keep hourly loop; next scheduled check08:43, no training.
+
 > **Hourly check 07:36, 2026-09-29:** both workers progressing. Fifteen accepted
 > runs yield207 linked decisions, no unlinked exports; Luna fixed shared-inbox deduplication.
 > Hold FOLIO417 (inclusive/exclusive-or) and378 (negation scope), plus four ambiguous

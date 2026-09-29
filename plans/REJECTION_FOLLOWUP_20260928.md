@@ -457,3 +457,22 @@ Latest rollout: immutable runtime-v21 (496 hashes), Bonsai queue-v17 / Luna queu
   Current integrated static policy audit yields zero new holds. No training. Evidence:
   runs/hourly-check-20260929-0736/{index,payment-mismatches,logic-countermodels,
   source-holds,integrated-policy-check,rollout-config}.json and queue ledgers.
+
+
+## User rejection check08:20 Berlin,2026-09-29 (runtimev27)
+
+- Latest failures have no scope failures. Luna's movie1178 question asks for directors
+  from Rattlider, a country. It repeatedly asks who directed the movie Rattlider, even
+  with world-role guidance present. Added a general system-prompt rule: after an empty
+  search/helper response, reread the original question and check entity roles and helper
+  scope before retrying. Rephrasing an unsupported premise adds no evidence. Preserve
+  tools/delegation and depth limit; do not feed target answers or country-specific hints.
+- FOLIO422 source FOL strips customer guards. James watching TV in cinemas does not
+  establish he is a customer. Non-customer James with no subscription/three-movie access
+  is an English countermodel to asserted entailments; availability also is not watching.
+  Hold source story/group aliases rather than change labels or punish valid reasoning.
+- Both workers still live at this steering check; Bonsai171 pending, Luna5 pending.
+  Runtimev27 (504 hashed files) rolls on unchanged queuesv20/v16 at case boundaries.
+  Expanded161 Node checks, Node/browser builds and browser types pass. No training.
+  Evidence in runs/rejection-steering-20260929-0918/ (directory's hour is misnamed;
+  actual UTC check06:20). Original scheduled next hourly check remains06:43 UTC.
