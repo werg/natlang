@@ -20,7 +20,7 @@ import { callMatcher } from './replay.js';
 import type { FileToolSurface } from '../native/prompt.js';
 import type { Handoff } from './handoff.js';
 import { replacesPlantedFailure } from './seeded-failure.js';
-import { quarantineReason, retiredFamily } from './curriculum-policy.js';
+import { quarantineReason, retiredFamily, generationHoldReason } from './curriculum-policy.js';
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
@@ -260,6 +260,12 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   for (const item of records) {
     const expected = expectedProvenance(item.record, config), path = join(config.jobs, `${jobKey(item)}.result.json`);
     if (await readMatching(path, item.record, expected)) { resumed++; continue; }
+    const hold = config.collectionRole === 'reference' ? undefined : generationHoldReason(item.record);
+    if (hold) {
+      await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
+        JSON.stringify({ index: item.index, program_id: item.record.id, generation_hold: hold, error: `generation held: ${hold}` }) + '\n');
+      continue;
+    }
     try { await readFile(path, 'utf8'); incompatible++; } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -511,6 +517,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   const slots = config.modelConcurrency ? new KvBudget(config.modelConcurrency) : undefined;
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
+    const hold = config.collectionRole === 'reference' ? undefined : generationHoldReason(item.record);
+    if (hold) throw new Error(`generation held: ${hold}`);
     const retired = retiredFamily(item.record);
     if (retired) throw new Error(`retired curriculum family: ${retired}`);
     const quarantine = quarantineReason(item.record);

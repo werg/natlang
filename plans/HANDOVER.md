@@ -1,5 +1,21 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Quality sweep / paused QASPER generation, 2026-09-29:** Luna subagent audited170
+> SciFact cases; corrected multi-document omissions independently. Root holds15 further
+> cases pending adjudication, preserving gold (see course log/root-adjudication.json).
+> Also hold SciFact657/748 and FOLIO406. QASPER live generation paused for an
+> extractive-equivalence oracle; static read decisions remain. Prompt now preserves
+> final newlines in span edits and explains initial iteration stop/pagination at all
+> NL depths. Frozen v36 failed depth-prompt test and was never deployed;v37 passes21
+> focused Node checks. Latest teacher snapshot421/246 admitted/1,070 approved/zero unlinked.
+> V9 published:1,306 expansion cases/3,536 approved decisions;8,531 combined static
+> decisions,42.80% reducers; zero duplicates/holdout overlap. V8 preserved. LunaPID2113145 runtime-v37/queue-v26/cap1; BonsaiPID1130311 runtime-v34
+> remains decoding its batch; v37/queue-v29/cap4 rolls only at boundary. Verify actual
+> `runs/generation-check-20260929-1055/v37.rollout-state.json`; monitorPID2112978.
+> Audit artifacts/corrected Luna report/course decisions logged in
+> `plans/DIRECTORY_EXPANSION_20260929.md`. No training.
+
+
 > **Rejection audit / quality tightening, 2026-09-29:** both workers progressing;
 > 53 Luna completions with no operational failures since v33, two Bonsai batches
 > completed plus one active-decode hard timeout. Hold SciFact claims466/576 and

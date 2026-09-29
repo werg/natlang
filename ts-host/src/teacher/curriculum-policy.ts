@@ -42,6 +42,11 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
 }
 
 
+/** Unfair answer-span contracts must not consume live generation requests. Verified static reads remain useful. */
+export function generationHoldReason(record: ProgramRecord): string | undefined {
+  return record.source === 'qasper' ? 'awaiting_extractive_equivalence_oracle' : undefined;
+}
+
 /** Old infrastructure failures must not teach models that correct actions are bad decisions. */
 export function runtimeFailureReason(row: { task: Record<string, unknown>; provenance?: Record<string, unknown>;
   outcome?: Record<string, unknown>; trajectory?: unknown[] }): string | undefined {
