@@ -751,3 +751,24 @@ Actual saved MiniCPM file rescore changes only web release (newline) to accepted
 calls. Full failure analysis records semantic errors, recovery loops, false blocked
 stops and active long-generation timeouts; partial tool outcomes remain unverified.
 Held-out traces stay out of training; use new independent training variants for patterns.
+
+
+## 2026-09-30 — stronger directory output contracts and continuing hourly checks
+
+Luna directory batch32 completed with28 accepted: one envelope instead of mapping,
+one pair of string booleans, two semantic judgment mistakes. Generic Record<string,
+unknown> let format mistakes end the call rather than guide repair. New directory-v2
+schema fixes each named output field to the type derived from source questions,
+not their gold answers. New adapter revision visible-inputs-typed-batches-v3 and case
+IDs; source IDs/groups/labels preserved. Do not republish or overwrite static v2 merely
+to incorporate typing. Native parser previously rejected quoted field names; fixed
+parser/formatter/compiler target conversion and JSON escape handling so source hash
+keys can be typed. Existing duplicate-field/type checks remain. Eight fresh native
+references passed with complete-input proofs and no failed actions/model calls.
+
+Two authorized Luna workers39580/39581 continue on64 fresh directory cases with typed
+contracts, runtime-v3, per-case exports, cap2/backoff/diskfloor retained. Native replay
+pilots stay review artifacts. Bonsai stays cap4; exact-PID boundary monitor39325 waits
+for current case then adopts JSON-content runtime-v2. Frozen runtime files/GPU server
+are unchanged. Explicit user request resumes hourly sleep/check/rejection investigation;
+check/log/handover updates continue. No student training or automatic DPO negatives.

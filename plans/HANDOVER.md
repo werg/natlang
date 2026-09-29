@@ -1,5 +1,27 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **HOURLY MONITORING RESUMED — 2026-09-29 23:50 UTC.** User requests continuing
+> hourly generation/rejection investigation and independent system usability fixes.
+> Current check: previous Luna directory batch32 done/28 accepted; one wrapped output,
+> one stringified-boolean failure, two semantic disagreements. Batch schema unknown
+> allowed the two format errors to finish. New directory-v2 adapter declares each
+> filename stem and its question-derived type, with fresh IDs and preserved source
+> groups/golds. Added quoted record field names to native parser/formatter/compiler
+> targets; duplicate checks and exact type boundaries remain. Eight native typed
+> references passed with complete visible inputs; no model calls. Default canonical
+> static v2 publication is retained; typed draft is not a new published corpus.
+> New64-case fresh directory batch: two Luna workers39580/39581, cap2/noGPU, runtime
+> runs/generation-check-20260930-hourly/runtime-v3; state/queues/per-case exports at
+> runs/luna-directory-typed-20260930/state.json. Fresh replies on both workers.
+> Bonsai35895 remains cap4 with active decode. Boundary monitor39325 waits to switch
+> collector to hourly runtime-v2 (JSON content oracle) without changing GPU server.
+> Check rollout-state/log before changing supervisor; v2 excludes later quoted-name
+> parser fix, which is present in Luna v3. Disk34GiB;1GiB floor on new workers.
+> Hourly audit record runs/generation-check-20260930-hourly/check.json; next due about
+> 2026-09-30 00:50 UTC (02:50 Berlin). Resume active sleep/check loop if interrupted.
+> No student training; existing admission/source/split/student-token gates retained.
+
+
 > **MINICPM ANALYSIS / JSON FILE FIX — 2026-09-30.** See
 > plans/MINICPM_EVALUATION_ANALYSIS.md and saved failure-analysis.json.22/24 attempted,
 > 11 final jobs,11 partial timeouts,2 unattempted; active reasoning/error loops dominate.

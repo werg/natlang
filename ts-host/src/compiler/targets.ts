@@ -156,12 +156,11 @@ export function describeTarget(program: ts.Program, checker: ts.TypeChecker, typ
       if (stringIndex && !properties.length) return `Record<string, ${convert(stringIndex.type, depth + 1)}>`;
       if (stringIndex) throw new TargetError('records that mix fixed fields and an index signature are not supported');
       const fields = properties.map(property => {
-        if (!IDENTIFIER.test(property.name)) throw new TargetError(`field name ${JSON.stringify(property.name)} is not an identifier`);
         const declaration = property.valueDeclaration ?? property.declarations?.[0];
         let fieldType = declaration ? checker.getTypeOfSymbolAtLocation(property, declaration) : checker.getTypeOfSymbol(property);
         const optional = !!(property.flags & ts.SymbolFlags.Optional);
         if (optional) fieldType = checker.getNonNullableType(fieldType);
-        return `${property.name}${optional ? '?' : ''}: ${convert(fieldType, depth + 1)}`;
+        return `${IDENTIFIER.test(property.name) ? property.name : JSON.stringify(property.name)}${optional ? '?' : ''}: ${convert(fieldType, depth + 1)}`;
       });
       return fields.length ? `{ ${fields.join(', ')} }` : '{}';
     }

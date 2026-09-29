@@ -52,7 +52,10 @@ function tokenize(source: string): Token[] {
     const single = match[2]?.replace(/\\'/g, "'");
     const kind = match[1] !== undefined || single !== undefined ? 'str' : match[3] !== undefined ? 'num' :
       match[4] !== undefined ? 'id' : 'p';
-    result.push({ kind, value: match[1] ?? single ?? match[3] ?? match[4] ?? match[5] ?? match[6]! });
+    // Double-quoted names/literals use JSON escaping, matching generated type
+    // signatures and compiler targets. Decode before duplicate-field checks.
+    const quoted = match[1] !== undefined ? JSON.parse(`"${match[1]}"`) as string : undefined;
+    result.push({ kind, value: quoted ?? single ?? match[3] ?? match[4] ?? match[5] ?? match[6]! });
     position = TOKEN.lastIndex;
   }
   return result;
@@ -98,7 +101,7 @@ class Parser {
     const fields: Extract<Type, { kind: 'record' }>['fields'] = [];
     while (this.peek()?.value !== '}') {
       const name = this.eat();
-      if (name.kind !== 'id') throw new TypeSyntaxError(`bad field name ${JSON.stringify(name.value)}`);
+      if (!['id', 'str'].includes(name.kind)) throw new TypeSyntaxError(`bad field name ${JSON.stringify(name.value)}`);
       const optional = this.peek()?.value === '?';
       if (optional) this.eat('?');
       this.eat(':');
@@ -192,8 +195,8 @@ export function parseType(text: string): Type {
 export function formatType(type: Type): string {
   switch (type.kind) {
     case 'prim': case 'name': return type.name;
-    case 'lit': return typeof type.value === 'string' ? `"${type.value}"` : String(type.value);
-    case 'record': return type.fields.length ? `{ ${type.fields.map(f => `${f.name}${f.optional ? '?' : ''}: ${formatType(f.type)}`).join(', ')} }` : '{}';
+    case 'lit': return typeof type.value === 'string' ? JSON.stringify(type.value) : String(type.value);
+    case 'record': return type.fields.length ? `{ ${type.fields.map(f => `${/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(f.name) ? f.name : JSON.stringify(f.name)}${f.optional ? '?' : ''}: ${formatType(f.type)}`).join(', ')} }` : '{}';
     case 'list': return (type.element.kind === 'union' ? `(${formatType(type.element)})` : formatType(type.element)) + '[]';
     case 'dict': return `Record<string, ${formatType(type.element)}>`;
     case 'union': return type.members.map(formatType).join(' | ');
