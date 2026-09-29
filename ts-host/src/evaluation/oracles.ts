@@ -115,7 +115,8 @@ export function agreement(actual: unknown, expected: unknown): number {
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 2;
-export type FilesOracle = { compare?: 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record'; threshold?: number; span?: number;
+export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/1';
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Reports may only quote the corresponding original source. */
   quote_sources?: Record<string, string>;
@@ -174,10 +175,51 @@ export function countLines(text: string): Record<string, number> {
 }
 const quoteText = (text: string) => text.normalize('NFKC').replace(/\s+/g, ' ').trim();
 
+/** JSON formatting is not data. Preserve strings, types, array order and every key;
+ * reject duplicate keys and unsafe numeric values rather than silently losing data.
+ */
+export function jsonFileCanonical(text: string): string | null {
+  try {
+    const value: unknown = JSON.parse(text);
+    const stack: (Set<string> | null)[] = [];
+    const tokens = [...text.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\]:,]/g)].map(match => match[0]);
+    for (let index = 0; index < tokens.length; index++) {
+      const token = tokens[index]!;
+      if (token === '{') stack.push(new Set());
+      else if (token === '[') stack.push(null);
+      else if (token === '}' || token === ']') stack.pop();
+      else if (token.startsWith('"') && tokens[index + 1] === ':') {
+        const keys = stack.at(-1), key = JSON.parse(token) as string;
+        if (!keys || keys.has(key)) return null;
+        keys.add(key);
+      }
+    }
+    const valid = (part: unknown): boolean => typeof part === 'number' ?
+      Number.isFinite(part) && (!Number.isInteger(part) || Number.isSafeInteger(part)) :
+      part !== null && typeof part === 'object' ? Object.values(part).every(valid) : true;
+    return valid(value) ? canonical(value) : null;
+  } catch { return null; }
+}
+
+export function fileContentEqual(path: string, actual: string | undefined, expected: string | undefined): boolean {
+  if (actual === undefined || expected === undefined) return actual === expected;
+  if (!/\.json$/i.test(path)) return actual === expected;
+  const parsed = jsonFileCanonical(actual);
+  return parsed !== null && parsed === jsonFileCanonical(expected);
+}
+
 export function checkFiles(actual: Record<string, string>, expected: Record<string, string>, input: Record<string, string>,
     spec: FilesOracle = {}, judgments: FilesVerdict['judgments'] = {}): FilesVerdict {
   const compare = spec.compare ?? 'exact', threshold = probability(spec.threshold ?? 0.9, 'files'),
     span = probability(spec.span ?? 0.5, 'files span');
+  if (compare === 'content') {
+    const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual)])].sort();
+    const failed = paths.filter(path => !fileContentEqual(path, actual[path], expected[path]));
+    // Structural file contracts always require every file; no partial-credit threshold.
+    return { accepted: !failed.length, score: paths.length ? (paths.length - failed.length) / paths.length : 1,
+      passed: paths.length - failed.length, items: paths.length, failed, errors: [], pending: [],
+      quality_version: DATA_QUALITY_VERSION };
+  }
   const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual), ...Object.keys(input)])].sort()
     .filter(path => expected[path] !== input[path] || actual[path] !== input[path]);
   let passed = 0, items = 0, goldPositive = 0, actualPositive = 0, matchedPositive = 0;
@@ -311,7 +353,8 @@ export async function checkFilesWithJudge(actual: Record<string, string>, expect
 
 /** Returned summaries must describe the actual output, independently of tolerance against noisy gold. */
 export function fileReturnValue(files: Record<string, string>, input: Record<string, string>, spec: FilesOracle): unknown {
-  if (spec.return_count === 'changed') return Object.keys(files).filter(path => files[path] !== input[path]).length;
+  if (spec.return_count === 'changed') return Object.keys(files).filter(path => spec.compare === 'content' ?
+    !fileContentEqual(path, files[path], input[path]) : files[path] !== input[path]).length;
   const report = files[spec.report ?? '']; if (report === undefined) throw new Error('missing report');
   if (spec.return_count === 'counts') return countLines(report);
   return csvRows(report).slice(1).filter(row => row[1]?.trim()).length;

@@ -1,5 +1,18 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **MINICPM ANALYSIS / JSON FILE FIX — 2026-09-30.** See
+> plans/MINICPM_EVALUATION_ANALYSIS.md and saved failure-analysis.json.22/24 attempted,
+> 11 final jobs,11 partial timeouts,2 unattempted; active reasoning/error loops dominate.
+> Default JSON result-file oracle now compares strict parsed content; formatting/key
+> order/newline differences pass, actual fields/types/strings/array order remain strict.
+> Exact byte oracle remains opt-in, other file types remain exact. Provenance/reuse
+> policy json-content/1 added; no broad data-quality bump or old positive data loss.
+> Saved web release rescores to accepted;5/24 under content policy vs4/24 original.
+> Original evaluation data/report retained, no GPU calls. New immutable runtime:
+> runs/file-content-oracle-20260930/runtime-v1 for next campaigns; active v39/v4 stay
+> frozen. No student training; held-out evaluation rows must never flow into train.
+
+
 > **CURRENT — 2026-09-30, supersedes historical checks below.** Workflow visible-input
 > fix is published as v2 via `data/teacher/workflowevals/static.manifest.json`.
 > All4,805 cases independently prove complete source inputs remain visible at the

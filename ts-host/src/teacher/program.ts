@@ -26,7 +26,7 @@ export type ProgramSemantics = {
   failure_seed?: { code: string; kind?: 'compile' | 'runtime' | 'boundary' };
   folder_files?: Record<string, string>;
   expected_files?: Record<string, string>;
-  /** How result files are checked when not exactly (oracle.ts checkFiles). */
+  /** Default: structural JSON content, exact text for other files. `exact` opts into byte equality. */
   files_oracle?: import('./oracle.js').FilesOracle;
 };
 export type ProgramRecord = { version: string; id: string; kind: string; semantics: ProgramSemantics; [key: string]: unknown };

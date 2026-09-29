@@ -14,7 +14,7 @@ import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
 import { externalModule } from '../native/external.js';
 import { PROGRAM_VERSION, programNode, type ProgramRecord } from './program.js';
-import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, checkOracle } from './oracle.js';
+import { fileReturnValue, checkFilesWithJudge, checkFileReturn, DATA_QUALITY_VERSION, FILE_CONTENT_COMPARISON_VERSION, checkOracle } from './oracle.js';
 import { modelOracleJudge } from './model-judge.js';
 import { callMatcher } from './replay.js';
 import type { FileToolSurface } from '../native/prompt.js';
@@ -129,6 +129,7 @@ export function jobKey({ index, record }: IndexedRecord): string {
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
     runtime: 'typescript-native', runtime_contract_version: 17, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
+    file_content_comparison_version: FILE_CONTENT_COMPARISON_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
@@ -212,7 +213,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'runtime_contract_version', 'trajectory_link_version', 'judge'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'runtime_contract_version', 'trajectory_link_version', 'judge'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -707,9 +708,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     // An authoring task is judged by running what was written, not by the files' exact text or the call's reply.
     const authoringSpec = (record.semantics as { authoring?: AuthoringSpec }).authoring;
     const authoring = authoringSpec && actualFiles ? await checkAuthoring(actualFiles, authoringSpec) : undefined;
-    // A folder's result files: exactly as expected, or as its files oracle checks them (oracle.ts checkFiles).
-    const filesCheck = folder && !authoring && record.semantics.files_oracle && actualFiles ?
-      await checkFilesWithJudge(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!, record.semantics.files_oracle, options.judge) : undefined;
+    // Default JSON file grading compares content, preserving every semantic field.
+    // Explicit exact oracles still cover byte-sensitive fixture/edit contracts.
+    const filesCheck = folder && !authoring && actualFiles ?
+      await checkFilesWithJudge(actualFiles, record.semantics.expected_files ?? folderFiles!, folderFiles!,
+        record.semantics.files_oracle ?? { compare: 'content', threshold: 1 }, options.judge) : undefined;
     const filesOk = !folder || (authoring ? authoring.ok : filesCheck ? filesCheck.accepted :
       same(actualFiles, record.semantics.expected_files ?? folderFiles));
     // A blocked case needs the model's own blocked or failed call; running out of turns also quiesces.

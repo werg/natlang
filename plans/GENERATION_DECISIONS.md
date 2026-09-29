@@ -734,3 +734,20 @@ migration or migration_candidate row, so even explicit builder inputs cannot byp
 review. Pilot artifacts and originals retained; catalog tracks review-candidates as
 transformation-pending. Future changed-context migration needs a separately reviewed
 provenance/evidence contract; no automatic relabeling of these holds as model failures.
+
+
+## 2026-09-30 — JSON file formatting is not a semantic failure
+
+User explicitly requested fixing whitespace-only rejection. Default folder checks
+now structurally compare JSON content with strict field/type/array/string preservation,
+invalid/duplicate-key/unsafe-number rejection and exact file-set coverage. Other text
+remains exact; explicit compare exact is available for byte-sensitive fixtures.
+No global whitespace stripping or partial-credit tolerance. New provenance/reuse
+identity json-content/1 prevents old strict-verdict reuse, while existing stronger
+positive exact evidence remains valid (no broad data-quality-version bump).
+Built Node and froze new runtime for future campaigns; active frozen workers unchanged.
+Actual saved MiniCPM file rescore changes only web release (newline) to accepted:
+5/24 planned vs4/24 original. Original reports/results remain; no new GPU/provider
+calls. Full failure analysis records semantic errors, recovery loops, false blocked
+stops and active long-generation timeouts; partial tool outcomes remain unverified.
+Held-out traces stay out of training; use new independent training variants for patterns.
