@@ -86,3 +86,16 @@ Audit: `runs/generation-check-20260929-0926/`.
 - V9 finished all validation/rendering/8,192-token/deduplication/holdout/mix gates and is now published:1,306 expansion cases/3,536 approved decisions/1,030 held;combined8,531 admitted decisions,3,651 directory reducers(42.7969%),42 tree edits. Zero duplicate rendered pairs or train/holdout overlap. Published-manifest validation passes, as do original source-backed/recovered bundles under v37.
 - **Publication shape improvement:** manifest now references immutable `v9.*` payload names, installed before atomic manifest replacement. Old payloads remain valid for readers holding the old manifest. Use `static.manifest.json` as authority; legacy unversioned payloads are historical. V8 also preserved in `published-v8-preserved/`. Rejection/trajectory ledger names are recorded in `quality_audit` metadata.
 - Final21 focused frozen Node checks pass, including retention of valid CONTRADICT negatives and second-document evidence. Fresh newline repair admitted successfully. Final dynamic snapshot421 results/246 admitted/1,070 approved decisions/117 held decisions/zero unlinked. Luna continues on v37; Bonsai remains actively decoding under v34 until its boundary, with exactly one v37 rollout monitor. No training.
+
+## User-requested shutdown — 2026-09-29 11:28 UTC
+
+Stopped exact migration monitor first, then both supervisors via SIGTERM/collector cancellation;
+closed Bonsai container and verified all generation processes gone. No completed result or
+checkpoint deleted. Recorded intentional shutdown events (no finish/failure) and checksummed5
+active-case artifacts. Durable checkpoint:`/home/werg/natlang/runs/shutdown-20260929-112702/checkpoint.json` (pointer:`runs/SHUTDOWN_LATEST`).
+Bonsai interrupted52/55 retain45/47 turns;53 rejected and54 accepted results preserved. Luna537
+retains3 turns. Pending next queues364 Bonsai entries/98 Luna entries. Resume old Bonsai batch
+alone under v34 before v37/queue-v29; Luna resumes v37/queue-v26 directly, existing journals.
+Do not reuse historical PIDs or old rollout config. Full exact server/worker commands and
+quality priorities are in HANDOVER.md. Computer shutdown is handled by user; no auto restart,
+no training. Unrelated working-tree changes preserved.

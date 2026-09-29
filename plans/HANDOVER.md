@@ -1,5 +1,15 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **USER-REQUESTED SHUTDOWN — 2026-09-29 11:28 UTC /13:28 Berlin.**
+> Generation workers, boundary monitor and `natlang-bonsai` container are STOPPED.
+> Nothing should automatically restart. The old PIDs below are historical; never signal
+> them or reuse the old rollout config after reboot. Shutdown completed in under3 minutes.
+> Authoritative checkpoint: `/home/werg/natlang/runs/shutdown-20260929-112702/checkpoint.json`; pointer:`runs/SHUTDOWN_LATEST`.
+> Read **Restart after shutdown** below before resuming. Current published data is V9;
+> quality changes committed as `644a96f`. Unrelated adaptation/package development edits
+> remain in the working tree and must not be reverted or accidentally committed.
+
+
 > **Quality sweep / paused QASPER generation, 2026-09-29:** Luna subagent audited170
 > SciFact cases; corrected multi-document omissions independently. Root holds15 further
 > cases pending adjudication, preserving gold (see course log/root-adjudication.json).
@@ -456,6 +466,99 @@ Collectors write `*.results.jsonl` only when they finish; before building from a
   admitted (was 1 of 6 in pilot 1).
 - **File tool surfaces** for a probe: `--file-tools all|editor|files` on the collector (`native/prompt.ts`), recorded
   as `provenance.file_tools`. Default (`all`) unchanged.
+
+
+## Restart after shutdown (latest operational state, 2026-09-29)
+
+Shutdown was explicitly requested by the user. Do not schedule or restart generation until
+work is resumed. No computer power-off command was issued; the user handles power-off.
+All exact supervisor/collector/monitor PIDs were verified gone and Docker reports no running
+Bonsai container. Completed data and JSON checkpoints were validated and the files flushed.
+
+### Durable state
+
+- `/home/werg/natlang/runs/shutdown-20260929-112702/checkpoint.json` contains exact stopped commands, queue/runtime/journal paths,
+  active entries, pending counts, child PIDs (historical), saved metrics and SHA256 checksums
+  for all5 active-case result/partial artifacts. Journals and current static manifest are
+  copied beside it. `git-status.txt` records unrelated uncommitted work.
+- Both journals have an intentional `shutdown` event, **not a finish/failure**. This keeps
+  interrupted entries eligible to resume and does not increment Luna's provider-failure
+  streak. Continue existing journals, never create a fresh journal to replay all attempts.
+- **Bonsai unfinished batch:** `bonsai-four-20260929:44b0142c749f6614`, indices52–55,
+  runtime-v34. Index52 has45 saved turns;index55 has47. Index53 has a completed rejected
+  result(20turns);index54 has a completed accepted result(11turns). Do not erase/retry
+  the rejected result automatically. The one-entry recovery queue retains the full batch
+  identity and members; collector resume skips its matching completed roots.
+- **Luna interrupted case:** `directory-expansion-20260929:luna:537`, CommitPack,
+  runtime-v37,3 saved turns. Continue queue-v26 using existing v2 journal and checkpoints.
+- Pending filtered queues at shutdown: Bonsai queue-v29 has364 entries (some batches);
+  Luna queue-v26 has98 single-case entries. These counts include interrupted entries and
+  are not counts of new training decisions.
+- Latest admission snapshot:421 teacher results/246 admitted/1,070 approved decisions/
+  117 held/zero unlinked. Published static V9:1,306 expansion cases/3,536 approved decisions;
+  combined8,531 unique decisions,3,651 directory reducers(42.80%),42 tree-edit decisions,
+  zero rendered-pair duplicates/holdout overlap. The manifest references immutable v9
+  payloads; use `data/teacher/directory-expansion/static.manifest.json` as authority.
+  V8 preserved in `runs/generation-check-20260929-1055/published-v8-preserved/`.
+
+### Resume order and commands
+
+1. Inspect `git status`, `docker ps`, GPU/process state and `runs/SHUTDOWN_LATEST`.
+   Preserve concurrent working-tree changes. Frozen runtimes v34/v37 remain immutable;
+   verify their `frozen-runtime.json` identities before use. Do not launch the stale
+   `v37.rollout-config.json` or signal its old PIDs; its monitor was intentionally stopped.
+2. Recreate the Bonsai server with the same4 slots/cap and memory settings. No student
+   training has been authorized. Last launch command:
+
+```bash
+docker run --rm --name natlang-bonsai --gpus all --memory 6g --memory-swap 6g \
+  -v /home/werg/natlang/vendor/prism/bin:/prism:ro \
+  -v /home/werg/natlang/models:/models:ro -e LD_LIBRARY_PATH=/prism \
+  -p 127.0.0.1:8081:8080 natlang-prism-runtime \
+  /prism/llama-server -m /models/Ternary-Bonsai-2-27B-PTQ1_0.gguf \
+  --host 0.0.0.0 --port 8080 -ngl 99 -fa on -c 53248 \
+  --cache-type-k q4_0 --cache-type-v q4_0 -np 4 --kv-unified \
+  --no-mmap --cache-ram 1536 --metrics --jinja \
+  --chat-template-file /models/templates/Ternary-Bonsai-2-27B.jinja \
+  --temp 1.0 --top-p 0.95 --top-k 20 --reasoning-budget 1024 --no-webui
+```
+
+3. Finish only Bonsai's interrupted batch with its original v34 runtime, preserving
+   prompt/replay provenance. The supervisor exits after this one-entry recovery queue.
+   Then use filtered queue-v29 with v37, retaining the same journal so finished batch/member
+   identities are skipped. Do not run old and new Bonsai supervisors simultaneously.
+
+```bash
+python3 scripts/run_bonsai_queue.py /home/werg/natlang/runs/shutdown-20260929-112702/bonsai.resume-current.jsonl \
+  runs/bonsai-recovery/journal.jsonl --runtime runs/bonsai-recovery/runtime-v34 \
+  --case-seconds 600 --model-concurrency 4
+# Only after the one-entry recovery supervisor exits:
+python3 scripts/run_bonsai_queue.py runs/bonsai-recovery/queue-v29.jsonl \
+  runs/bonsai-recovery/journal.jsonl --runtime runs/bonsai-recovery/runtime-v37 \
+  --case-seconds 600 --model-concurrency 4
+```
+
+4. Resume exactly one Luna worker on v37/queue-v26. This includes its interrupted case;
+   partial checkpoints replay under unchanged prompt provenance. No separate fresh repair
+   worker is needed. The reviewed newline retry already succeeded before shutdown.
+
+```bash
+python3 scripts/run_bonsai_queue.py runs/luna-repair-20260928/queue-v26.jsonl \
+  runs/luna-repair-20260928/v2.journal.jsonl --runtime runs/bonsai-recovery/runtime-v37 \
+  --case-seconds 900 --provider openai-codex --model-id gpt-6-luna \
+  --model-concurrency 1 --execution-plans --reasoning-effort low
+```
+
+Run long-lived supervisors with durable logs/session handling as before and record their
+new PIDs. After resume, check fresh checkpoints and admission, then continue hourly
+quality checks. QASPER live generation remains paused pending an extractive-equivalence
+oracle; static document-read decisions remain useful. Source holds stay pending; never
+rewrite original labels based on model judgments. Fifteen SciFact holds were root-verified
+from the Luna sweep; details/corrections are under
+`runs/generation-check-20260929-1055/luna-quality-sweep/`. Priorities after resume: monitor
+these interrupted cases, verify v37 pagination behavior in fresh graph cases, inspect
+new rejections, and improve QASPER oracle/source coverage before unpausing it. Maintain
+25% reducer target across the final admitted mix and three ad hoc NL layers per file root.
 
 ## To do, in order
 
