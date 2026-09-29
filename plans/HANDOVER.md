@@ -1,5 +1,17 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 03:50, 2026-09-29:** both workers healthy; proof chain19 repair
+> admitted. Hold FOLIO454 and three newly ambiguous BANKING77 messages after source audit.
+> TextWorld v2 shows available exits and asks for exploration notes; world cases use
+> 48 turns /384+ requests /1800 sec. Nine pending source groups added to the single Luna queue.
+> Fixed native decision/action joins with explicit invocation metadata; old ambiguous rows
+> excluded and one fresh retry queued. Identical-opening preference replays remain held.
+> Latest runtime-v21, Bonsai queue-v17 / Luna queue-v13; state/PIDs:
+> runs/bonsai-recovery/runtime-v21.rollout-state.json. Audits: runs/hourly-check-20260929-0350/.
+> Builds/browser types,158 Node tests and5 Python queue tests pass. No training.
+> Continue the hourly sleep/check loop until stopped.
+
+
 > **Hourly check 02:33, 2026-09-29:** repaired dropped `__proto__` data keys,
 > qualified service alias annotations, and stale mutable inline captures across evals.
 > Old affected runtime failures excluded from training negatives; fresh reviewed retries queued.

@@ -11,6 +11,7 @@
 import type { ModelTurn } from '../contracts.js';
 import { executeProgram, programRow, type ProgramRecord, type TeacherRow } from './collector.js';
 import { runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
+import { openingText } from './opening.js';
 import { materializeNativeRows } from './native-materializer.js';
 import { callNumbers, indexOf, observed, openingsOf, placeOf, recorded, scriptedDriver, scriptOf, type Turn } from './replay.js';
 
@@ -36,9 +37,20 @@ const program = (row: TeacherRow) => {
   return record as ProgramRecord;
 };
 
+/** Replaying indistinguishable openings cannot yet preserve concurrent call ownership safely. */
+function ambiguousInvocationOpenings(row: TeacherRow): boolean {
+  const owners = new Map<string, Set<string>>();
+  for (const turn of row.trajectory as { invocation_id?: string; context: Parameters<typeof openingText>[0] }[]) {
+    if (!turn.invocation_id) continue;
+    const opening = openingText(turn.context), calls = owners.get(opening) ?? new Set<string>();
+    calls.add(turn.invocation_id); owners.set(opening, calls);
+  }
+  return [...owners.values()].some(calls => calls.size > 1);
+}
+
 /** The sites of a run that was not accepted. */
 export function handoffSites(row: TeacherRow): Site[] {
-  if (runtimeFailureReason(row) || retiredFamily(row.task.program_ir) || quarantineReason(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
+  if (ambiguousInvocationOpenings(row) || runtimeFailureReason(row) || retiredFamily(row.task.program_ir) || quarantineReason(row.task.program_ir) || (row.outcome as Dict | undefined)?.accepted !== false) return [];
   if ((row.outcome?.quality_pending as unknown[] | undefined)?.length) return [];
   if ((row.outcome?.checks as Dict | undefined)?.seeded_failure_requirement === false) return [];
   const result = materializeNativeRows([row], { failedRuns: true });
@@ -83,6 +95,7 @@ export function handoffRecord(row: TeacherRow, handoff: Handoff): ProgramRecord 
  */
 export async function failsInPlace(row: TeacherRow, index: number, response: ModelTurn, kind: SiteKind,
     options: ReplayOptions, runId: string): Promise<string | null> {
+  if (ambiguousInvocationOpenings(row)) return 'concurrent calls share an indistinguishable replay opening';
   const runtimeFault = runtimeFailureReason(row);
   if (runtimeFault) return runtimeFault;
   if ((row.outcome?.quality_pending as unknown[] | undefined)?.length) return 'the result needs independent quality review';

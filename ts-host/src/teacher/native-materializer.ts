@@ -181,17 +181,19 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
         assistant.execution_plan : null;
       const retainedReasoning = planningAttempted ? executionPlan : assistant.reasoning ?? null;
       // A call's whole opening, its inputs included: parallel nl calls can share their instructions word for word.
-      const caller = JSON.stringify(contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage));
+      const invocation = typeof source.invocation_id === 'string' ? source.invocation_id : undefined;
+      const caller = invocation ?? JSON.stringify(contextSource.slice(0, openingLength(contextSource)).map(normalizeContextMessage));
       // A decision that sees nothing but its opening starts a call: even a call identical to an earlier one (the
       // same instructions on the same input) has its own actions.
-      if (contextSource.length === openingLength(contextSource)) { claimed.delete(caller); sentBefore.delete(caller); }
+      if (!invocation && contextSource.length === openingLength(contextSource)) { claimed.delete(caller); sentBefore.delete(caller); }
       const calls = Array.isArray(assistant.calls) ? assistant.calls.map((value, callIndex) => {
         const call = record(value, `${row.id}.trajectory[${index}].assistant.calls[${callIndex}]`);
         const normalized: Dict = { tool: String(call.tool ?? ''), source_tool: String(call.source_tool ?? call.tool ?? ''),
           arguments: structuredClone(call.arguments ?? {}), call_id: call.call_id ?? null };
         let log = claimed.get(caller);
         if (log === undefined) {
-          log = [...logs.keys()].find(key => !owners.has(key) && callMatches(normalized, logs.get(key)![next.get(key) ?? 0] ?? {}));
+          log = invocation ? (logs.has(invocation) ? invocation : undefined) :
+            [...logs.keys()].find(key => !owners.has(key) && callMatches(normalized, logs.get(key)![next.get(key) ?? 0] ?? {}));
           if (log !== undefined) { claimed.set(caller, log); owners.add(log); }
         }
         const at = log === undefined ? 0 : next.get(log) ?? 0, event = log === undefined ? undefined : logs.get(log)![at];

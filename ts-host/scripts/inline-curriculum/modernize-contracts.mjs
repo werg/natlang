@@ -23,6 +23,18 @@ export function modernizeContracts(original) {
     changes.push(family === 'commaqa_numeric' ? 'correct source sports, literal retrieval and specialist schema' :
       'canonical movie relations and corrected specialist schema');
   }
+  if (['textworld_quest', 'textworld_iterate'].includes(family) && (record.curriculum.family_version ?? 1) < 2) {
+    const guide = 'Keep exploration notes: visited rooms, observed exits, and searched containers. An object absent here may be in an unvisited room. ';
+    semantics.files[semantics.root] = semantics.files[semantics.root].replace('When it is,,', 'When it is,')
+      .replace('and act with world.act(command). ', 'and act with world.act(command). ' + guide);
+    const update = source => source.replace('  return lines.join("\\n");',
+      '  const exits = commands().filter(command => command.startsWith("go "));\n' +
+      '  if (exits.length) lines.push("Available exits: " + exits.join("; ") + ".");\n  return lines.join("\\n");');
+    for (const path of Object.keys(semantics.files)) if (path.endsWith('/world.ts')) semantics.files[path] = update(semantics.files[path]);
+    if (semantics.services?.world) semantics.services.world = update(semantics.services.world);
+    record.curriculum.family_version = 2;
+    changes.push('show currently available exits and retain exploration notes');
+  }
   if (family === 'idempotent_retry' && (record.curriculum.family_version ?? 1) < 2) {
     const [fresh] = idempotentRetry(7, 0);
     semantics.files[semantics.root] = fresh.semantics.files[fresh.semantics.root];
@@ -51,9 +63,9 @@ export function modernizeContracts(original) {
     }
   }
   if (changes.length) {
-    record.id += ':contracts-v4';
-    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/4'])];
-    record.generation = { ...record.generation, contract_migration: { version: 4, original_id: original.id,
+    record.id += ':contracts-v5';
+    record.source_revisions = [...new Set([...record.source_revisions, 'natlang.contract_migration/5'])];
+    record.generation = { ...record.generation, contract_migration: { version: 5, original_id: original.id,
       reset_handoff: !!record.handoff, changes } };
     // Replaying source edits or incorrect specialist questions under new contracts would seed incompatible state.
     delete record.handoff;

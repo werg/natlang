@@ -173,3 +173,25 @@ for (const [variant, build] of [['numeric', commaqaNumeric], ['explicit', commaq
     assert.equal(result.run.outcome.accepted, true, JSON.stringify(result.run.outcome));
   });
 }
+
+test('TextWorld navigation migration preserves goals and exposes only current exits', async () => {
+  const { textworldIterate } = await import('../scripts/inline-curriculum/textworld.mjs');
+  const [fresh] = textworldIterate(7, 0);
+  assert.equal(fresh.curriculum.family_version, 2);
+  const old = structuredClone(fresh);
+  old.curriculum.family_version = 1;
+  const worldPath = Object.keys(old.semantics.files).find(path => path.endsWith('/world.ts'));
+  const worldSource = old.semantics.services?.world ?? old.semantics.files[worldPath];
+  const legacySource = worldSource.replace(/  const exits = commands\(\).filter[^\n]+\n  if \(exits.length\) lines.push[^\n]+\n/, '');
+  if (old.semantics.services?.world) old.semantics.services.world = legacySource;
+  else old.semantics.files[worldPath] = legacySource;
+  old.handoff = { prefix: [[{ calls: [['eval', { code: 'world.look()' }]] }]] };
+  const migrated = modernizeContracts(old);
+  assert.equal(migrated.record.handoff, undefined);
+  assert.deepEqual(migrated.record.semantics.expected, old.semantics.expected);
+  assert.deepEqual(migrated.record.source_groups, old.source_groups);
+  assert.match(migrated.record.semantics.services?.world ?? migrated.record.semantics.files[worldPath], /Available exits/);
+  assert.match(migrated.record.semantics.files[migrated.record.semantics.root], /Keep exploration notes/);
+  const replay = await replayReference(migrated.record, TOOLS_PROMPT);
+  assert.equal(replay.run.outcome.accepted, true, JSON.stringify(replay.run.outcome));
+});

@@ -126,7 +126,7 @@ export function jobKey({ index, record }: IndexedRecord): string {
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
-    runtime: 'typescript-native', runtime_contract_version: 17, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
+    runtime: 'typescript-native', runtime_contract_version: 17, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
@@ -227,7 +227,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'runtime_contract_version', 'judge'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'runtime_contract_version', 'trajectory_link_version', 'judge'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -382,8 +382,8 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
   const planned = Object.hasOwn(response, 'execution_plan');
   const retainedReasoning = planned ? response.execution_plan :
     response.reasoning ?? message.reasoning_content ?? message.reasoning ?? message.thinking ?? null;
-  return { phase: 'action', context: structuredClone(request.messages),
-    request_sha256: sha256(canonical(request)),
+  return { phase: 'action', ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}), context: structuredClone(request.messages),
+    request_sha256: sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id")))),
     model_response: { calls: structuredClone(response.calls ?? []), text: response.text ?? '',
       raw_calls: structuredClone(response.raw_calls ?? []),
       ...(planned ? { execution_plan: response.execution_plan } : {}),
@@ -587,7 +587,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
-      const requestSha256 = sha256(canonical(request));
+      const requestSha256 = sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id"))));
       const recorded = unused.get(requestSha256)?.shift();
       const place = placeOf(request), replayed = handoff?.prefix[place.call]?.[place.nth];
       let response: ModelTurn;

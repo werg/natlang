@@ -253,3 +253,21 @@ test('a direct answer and synthetic reasoning are marked for training as the stu
   const [trained] = materializeNativeRows([row], { directAnswers: true }).turns;
   assert.equal(trained.training_admission.approved, true);
 });
+
+test('invocation identity links interleaved calls with identical openings and action histories', () => {
+  const row = nativeRow('identical-parallel');
+  const first = structuredClone(row.trajectory[0]), next = structuredClone(row.trajectory[1]);
+  row.outcome.action_ledger = [
+    { ...row.outcome.action_ledger[0], call_id: 'a', seq: 12 },
+    { ...row.outcome.action_ledger[0], call_id: 'b', seq: 14 },
+    { ...row.outcome.action_ledger[1], call_id: 'a', seq: 17 },
+    { ...row.outcome.action_ledger[1], call_id: 'b', seq: 19 },
+  ];
+  row.trajectory = [{ ...first, invocation_id: 'a' }, { ...first, invocation_id: 'b' },
+    { ...next, invocation_id: 'a' }, { ...next, invocation_id: 'b' }];
+  const linked = materializeNativeRows([row]);
+  assert.deepEqual(linked.unlinked, []);
+  assert.deepEqual(linked.turns.map(turn => turn.decision.assistant.calls[0].outcome.trace_seq), [12, 14, 17, 19]);
+  row.trajectory[2].invocation_id = 'wrong';
+  assert.equal(materializeNativeRows([row]).acceptedRows, 0, 'bad explicit identities must never fall back to another call');
+});

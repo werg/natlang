@@ -626,7 +626,7 @@ export class NativeToolAgent {
         messages: messages.length });
       let response: ModelTurn;
       try {
-        response = await this.driver({ messages, tools: availableTools,
+        response = await this.driver({ ...(callId ? { invocation_id: callId } : {}), messages, tools: availableTools,
           // A turn that offers one tool it must use (the compaction turn, the last turn) requires a tool call.
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),

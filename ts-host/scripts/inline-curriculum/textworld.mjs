@@ -15,7 +15,7 @@ const CACHE = process.env.NATLANG_DATASETS ?? fileURLToPath(new URL('../../../ve
 let games;
 /** The play loop, stated as the step it repeats (a loop the instruction describes is one the model writes). */
 export const TEXTWORLD_ITERATE = 'Play with iterateOn: make one nl step function that looks around and carries out the single most ' +
-  'useful command with world.act, returning what happened, and repeat it with iterateOn until world.certificate() is not null. When it is,';
+  'useful command with world.act, returning what happened, and repeat it with iterateOn until world.certificate() is not null. When it is';
 function loadGames() {
   if (games) return games;
   const dir = cachePath(CACHE, 'textworld', SOURCES.textworld.revision, 'games');
@@ -97,6 +97,8 @@ export function look(): string {
     lines.push(line);
   }
   for (const [fname, args] of facts) if (fname === "link" && args[0] === room) lines.push("A " + name(args[1]) + state(args[1]) + " leads to another room.");
+  const exits = commands().filter(command => command.startsWith("go "));
+  if (exits.length) lines.push("Available exits: " + exits.join("; ") + ".");
   return lines.join("\\n");
 }
 /** What you are carrying. */
@@ -155,7 +157,7 @@ export function textworldQuest(seed, index) {
         evalCall('world.certificate()'), returnCall(certificate)] :
       [evalCall('world.look()'), evalCall('world.commands()'),
         blockedCall(`The ${needed.map(id => game.entities[id].name).join(' and ')} the task needs is nowhere in the world I can reach.`)];
-    return curriculumCase({ family: 'textworld_quest', shape: `game${game.seed}`, variant, pairGroup: needed.length ? `textworld:${game.seed}` : null,
+    return curriculumCase({ family: 'textworld_quest', familyVersion: 2, shape: `game${game.seed}`, variant, pairGroup: needed.length ? `textworld:${game.seed}` : null,
       splitGroup: `textworld:${game.seed}`, slice: 'observation_followup', domain: 'actor', mode: 'single_call', inline: 'avoid',
       worldSemantics: 'closed_world',
       evidence: { world: [`objective: ${objective}`], retrieved: [], background: [`source: TextWorld ${game.textworld} tw-make custom seed ${game.seed} ${JSON.stringify(game.settings)}`,
@@ -164,7 +166,7 @@ export function textworldQuest(seed, index) {
         ['look around', 'search the reachable rooms and containers', 'report that the needed object is missing'],
       reference: { root: reference },
       root: { name: 'play_quest', args: {}, returns: 'string',
-        instructions: `You are in a text-adventure world (world). Your task: ${objective} Explore with world.look(), world.inventory(), and world.commands(), and act with world.act(command). When the task is accomplished, world.certificate() gives a certificate: return it.` },
+        instructions: `You are in a text-adventure world (world). Your task: ${objective} Explore with world.look(), world.inventory(), and world.commands(), and act with world.act(command). Keep exploration notes: visited rooms, observed exits, and searched containers. An object absent here may be in an unvisited room. When the task is accomplished, world.certificate() gives a certificate: return it.` },
       files: { 'play_quest/world.ts': module },
       inputs: {}, expected: variant === 'playable' ? certificate : null, ...(variant === 'playable' ? {} : { operation: 'blocked' }) });
   });
