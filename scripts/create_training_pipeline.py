@@ -144,7 +144,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
     default_static = [repo / 'data/teacher/source-backed/static.manifest.json',
                       repo / 'data/teacher/recovered/static.manifest.json',
-                      repo / 'data/teacher/directory-expansion/static.manifest.json']
+                      repo / 'data/teacher/directory-expansion/static.manifest.json',
+                      repo / 'data/teacher/workflowevals/static.manifest.json']
     static_manifests = ([] if static_bundle is False else
                         [path for path in default_static if path.exists()] if static_bundle is None else
                         [Path(path).resolve() for path in (static_bundle if isinstance(static_bundle, (list, tuple)) else [static_bundle])])
@@ -389,7 +390,7 @@ def main():
     parser.add_argument('--captures', action='append', type=Path, help='captured upstream-test calls (repeatable); defaults to existing repository capture snapshots')
     parser.add_argument('--verified-turns', action='append', type=Path, help='execution-verified native turns from unit-test replay (repeatable); defaults to existing repository pilot snapshots')
     parser.add_argument('--workspace-case', action='append', type=Path, default=[], help='JSON capture specification with workspace, source, test, function/functions and optional instruction/license; repeatable')
-    parser.add_argument('--static-bundle', type=Path, action='append', help='validated static source manifest; repeatable; defaults to source-backed, recovered and directory-expansion manifests when present')
+    parser.add_argument('--static-bundle', type=Path, action='append', help='validated static source manifest; repeatable; defaults to source-backed, recovered, directory-expansion and retired WorkflowEvals manifests when present')
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
     parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')

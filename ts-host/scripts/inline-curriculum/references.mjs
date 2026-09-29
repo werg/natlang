@@ -46,7 +46,14 @@ export async function referenceRow(record, index, options) {
   const expected = { ...expectedProvenance(record, options), synthetic_reasoning: SYNTHETIC_REASONING };
   const reference = referenceDriver(record), trajectory = [];
   const driver = async request => {
-    const response = await reference(request), turn = trajectoryTurn(request, response);
+    const last = request.messages.at(-1);
+    // Reference replay must actually expose complete evidence, including runtime cut-off pages.
+    // Only follow the runtime's numeric cut-off/page note after a file/page read.
+    const previous = trajectory.at(-1)?.assistant?.calls?.[0]?.tool;
+    const nextPage = options.followCutoffPages && ['read_file','read_page'].includes(previous) && last?.role === 'tool' ?
+      /<<(?:cut off: \d+ of \d+ characters not shown|page \d+ of \d+ shown); (?:transcript\.entry\(\d+\)\.output holds all of it; )?read_page\("([a-z]+\d*)", (\d+)\) shows the next part>>/.exec(String(last.content)) : null;
+    const response = nextPage ? {calls:[['read_page',{id:nextPage[1],page:Number(nextPage[2])}]],reasoning:'I read the next page of that output.'} : await reference(request);
+    const turn = trajectoryTurn(request, response);
     const [tool, args] = response.calls?.[0] ?? [];
     if (tool === 'return_result' && args.status === 'success' && !shown(args.value, request.messages))
       turn.assistant.direct_answer = true;

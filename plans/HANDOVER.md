@@ -1,5 +1,27 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **WORKFLOWEVALS IMPORT — 2026-09-29.** User released the four retired eval
+> repositories into training and confirmed Apache-2.0 for all (three licenses
+> recorded as user-confirmed). Pinned acquisition complete:705 scenarios/13,105
+> questions. Strict two-provider >=0.95 agreement/distribution/consensus gate:
+> 4,194 typed judgments plus611 same-scenario directory batches;8,911 held source
+> questions with reasons, original labels preserved. All4,805 native replays pass;
+> 8,453 approved decisions/zero unlinked. Bundle data/teacher/workflowevals is
+> auto-discovered by both training builders; default rematerialization matches.
+> Typed source answers now train under a narrowly scoped verified-replay exception,
+> synthetic reasoning masked. Original test provenance retained with exact pinned
+> release allowlist; never use these training sources for evaluation again.
+> First directory draft discarded read results and was withdrawn; current references
+> show all files/pages and independently check complete visible evidence.
+> See plans/WORKFLOWEVALS_IMPORT.md, course log and runs/workflowevals-20260929/.
+> Final student token/rendered-pair/concentration audit still required; no training.
+> BonsaiPID8981/v39/queue-v31 and MiniCPM evaluator were unchanged. Check evaluator
+> state BEFORE changing supervisor. New teacher pilot is prepared, not activated.
+> Older MuSiQue/QASPER/SciFact discarded-read references need later visible-evidence
+> rebuilding; their scripted conclusions remain held. Do not globally enable direct
+> answers for them. No new Luna worker. Acquisition uses bounded sequential batches.
+
+
 > **AUTHENTICATED DOWNLOAD RECOVERY — 2026-09-29 about20:52 UTC.** User
 > completed local HF login; authenticated whoami succeeds inside downloader.
 > Token mounted read-only via HF_TOKEN_PATH, never printed or embedded in args.

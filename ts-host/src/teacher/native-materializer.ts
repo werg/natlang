@@ -1,6 +1,6 @@
 import { handoffTurns, type Turn } from './replay.js';
 import { hexDigest } from '../native/hash.js';
-import { sourceConversionProblems } from './source-conversion.js';
+import { sourceConversionProblems, retiredWorkflowEvaluationReleased } from './source-conversion.js';
 import { trainingQualityReason, runtimeFailureReason, quarantineReason, retiredFamily } from './curriculum-policy.js';
 import type { ProgramRecord } from './program.js';
 
@@ -235,7 +235,12 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       for (const call of calls) earlier.set(signature(call), resultOf(call));
       // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
       // student to answer without reasoning; a student that answers directly is trained on it (options.directAnswers).
-      const heldDirect = assistant.direct_answer === true && !options.directAnswers;
+      // Released typed labels have no authored chain of thought: explicitly train their answer,
+      // masking action-note reasoning. This exception requires a verified pinned source replay.
+      const typedSourceAnswer = retiredWorkflowEvaluationReleased(taskIr) &&
+        row.provenance.synthetic_reasoning === 'action-notes/1' &&
+        (row.provenance.source_conversion as Dict | undefined)?.adapter === 'natlang.workflowevals_adapter/1';
+      const heldDirect = assistant.direct_answer === true && !options.directAnswers && !typedSourceAnswer;
       // A corrected variant (teacher/corrections.ts) trains its fix only; the rest repeats its parent's turns.
       const variant = row.provenance.variant as { decision?: number } | undefined;
       const variantContext = variant !== undefined && index !== variant.decision;

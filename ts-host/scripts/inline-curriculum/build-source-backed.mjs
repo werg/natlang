@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Build task IR and native static results without calling a model. */
-import { mkdir, readFile, writeFile, open } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, open, access } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,12 +12,19 @@ import { admitRow, validateCurriculum, renderOpening } from '../../dist/teacher/
 import { defaultToolSurfaceHash, recordDigest } from '../../dist/teacher/collector.js';
 import { materializeNativeRows } from '../../dist/teacher/native-materializer.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
-import { sourceConversionDigest } from '../../dist/teacher/source-conversion.js';
+import { loadWorkflowSources } from './workflow-sources.mjs';
+import { sourceConversionDigest, retiredWorkflowEvaluationReleased } from '../../dist/teacher/source-conversion.js';
 
-export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, excludeManifests = [], licenseResolver = pinnedRepositoryLicense }) {
-  const { manifest: acquisition, sources } = await loadSourceCache(cache);
-  const tasks = buildTaskSources(sources, limit);
-  const trajectories = await buildTrajectorySources(sources, trajectoryLimit, licenseResolver);
+export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimit = 8, excludeManifests = [], licenseResolver = pinnedRepositoryLicense, workflowCache = null }) {
+  if (workflowCache) {
+    // Published source snapshots are immutable; use a fresh output for later revisions.
+    const exists = await access(join(out, 'static.manifest.json')).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
+    if (exists) throw new Error('published_workflow_bundle_exists_use_new_output');
+  }
+  const workflow = workflowCache ? await loadWorkflowSources(workflowCache, limit) : null;
+  const { manifest: acquisition, sources } = workflow ?? await loadSourceCache(cache);
+  const tasks = workflow?.tasks ?? buildTaskSources(sources, limit);
+  const trajectories = workflow?.trajectories ?? await buildTrajectorySources(sources, trajectoryLimit, licenseResolver);
   const candidates = [...tasks.records, ...trajectories.records];
   await mkdir(out, { recursive: true });
   // Completed replays contain repeated contexts; retaining the whole corpus before serialization
@@ -46,7 +53,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
     }
   }
   const options = { modelId: 'source-static-reference', rootSeed: 928, systemPrompt: TOOLS_PROMPT,
-    contextTokens: 16384, maxTurns: 60, toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
+    contextTokens: 16384, maxTurns: 60, followCutoffPages: !!workflow, toolSurfaceSha256: await defaultToolSurfaceHash(), collectionRole: 'reference' };
   try { for (const candidate of candidates) {
     // Bind hashes to the durable JSON representation, including omission of optional undefined fields.
     const record = JSON.parse(JSON.stringify(candidate));
@@ -56,18 +63,33 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
       validateCurriculum(record);
       const opening = await renderOpening(record, TOOLS_PROMPT);
       if (record.curriculum.decisive.some(item => opening.includes(item.marker))) throw new Error('source_evidence_in_opening');
-      if (record.split !== 'train' || record.external_source.original_split === 'test' || record.external_source.original_split === 'validation')
+      if ((record.split !== 'train' || ['test','validation','dev'].includes(record.external_source.original_split)) && !retiredWorkflowEvaluationReleased(record))
         throw new Error('held_out_source');
       const identity = digest([record.source, record.source_ids, record.semantics.folder_files]);
       if (seen.has(identity)) throw new Error('duplicate_source_case');
       seen.add(identity);
       const row = JSON.parse(JSON.stringify(await referenceRow(record, cases, options)));
+      if (workflow && record.task_modality === 'directory-reducer') {
+        const visible = new Map(); let path = null;
+        for (let index = 0; index + 1 < row.trajectory.length; index++) {
+          const call = row.trajectory[index].assistant.calls[0];
+          const output = String(row.trajectory[index+1].context.at(-1)?.content ?? '');
+          if (call.tool === 'read_file') {
+            path = call.arguments.path;
+            visible.set(path, output.split('\n<<cut off:')[0]);
+          } else if (call.tool === 'read_page' && path) {
+            visible.set(path, visible.get(path) + output.replace(/\n<<page \d+ of \d+(?: shown;[^\n]*|, the last)>>[\s\S]*$/, ''));
+          }
+        }
+        for (const [path, text] of Object.entries(record.semantics.folder_files))
+          if (!visible.get(path)?.includes(text.trim())) throw new Error('reference_source_evidence_not_visible');
+      }
       const admission = admitRow(row);
       if (!admission.admitted) throw new Error(`native_admission:${admission.reasons.join(',')}`);
       const failures = row.outcome.action_ledger?.filter(event => ['error', 'refused', 'rejected'].includes(event.outcome)) ?? [];
       if (failures.length) throw new Error('native_action_failed');
       row.provenance.source_conversion = {
-        version: 'natlang.source_static_conversion/1', adapter: 'natlang.directory_source_adapter/1',
+        version: 'natlang.source_static_conversion/1', adapter: record.generation.generator,
         source: record.source, source_ids: record.source_ids, source_revisions: record.source_revisions,
         license: record.license, source_snapshot_sha256: record.external_source.snapshot_sha256,
         program_ir_sha256: recordDigest(record), native_replay_accepted: true,
@@ -111,7 +133,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
   const rejectionCounts = {};
   for (const row of rejected) rejectionCounts[row.reason] = (rejectionCounts[row.reason] ?? 0) + 1;
   const report = { version: 'natlang.source_static_bundle/1', model_calls: 0, acquisition_sha256: digest(acquisition),
-    excluded_manifests: excludeManifests,
+    excluded_manifests: excludeManifests, source_answer_policy: workflow ? 'verified_typed_labels_with_masked_synthetic_reasoning' : 'default',
     cases, by_source: bySource, results, ir, turns: fileInfo('static.turns.jsonl'),
     training_decisions: trainingDecisions,
     held_decisions: heldDecisions,
@@ -127,10 +149,10 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
 async function main() {
   const { values } = parseArgs({ options: { cache: { type: 'string', default: '../vendor/directory-sources' },
     out: { type: 'string', default: '../data/teacher/source-backed' }, limit: { type: 'string', default: '12' },
-    'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true } } });
+    'workflow-cache': { type: 'string' }, 'trajectory-limit': { type: 'string', default: '8' }, 'exclude-manifest': { type: 'string', multiple: true } } });
   const limit = Number(values.limit), trajectoryLimit = Number(values['trajectory-limit']);
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(trajectoryLimit) || trajectoryLimit < 0) throw new Error('invalid_limits');
-  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit,
+  const report = await buildSourceBundle({ cache: resolve(values.cache), out: resolve(values.out), limit, trajectoryLimit, workflowCache: values['workflow-cache'] ? resolve(values['workflow-cache']) : null,
     excludeManifests: (values['exclude-manifest'] ?? []).map(path => resolve(path)) });
   console.log(JSON.stringify(report, null, 2));
   if (!report.cases) throw new Error('no_source_cases_admitted');

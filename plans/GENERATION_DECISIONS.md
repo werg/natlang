@@ -577,3 +577,49 @@ Freeze v13 and queues v10/v6 for final rollout. Stop only the already source-hel
 repetitively failing Bonsai handoff 23 with a quality-hold event, not a negative.
 Other valid progressing cases finish before migration. First ALFWorld retry reaches
 score 100 in 22 moves. No training, source relabeling, or additional Luna workers.
+
+## 2026-09-29 — explicitly released WorkflowEvals and visible source evidence
+
+User released the four retired WorkflowEvals test repositories into training and
+confirmed Apache-2.0 for all. Keep original test provenance; record user license
+confirmation separately from upstream licensing. Breaking decision: a narrowly
+pinned retired-evaluation exception permits exactly these four revisions, which
+must no longer serve as held-out evaluation. No general source-test promotion.
+
+Import model-generated typed labels only with two-provider >=0.95 modal agreement,
+validated distributions/recomputed consensus and bounded original inputs. Preserve
+8,911 held questions, never relabel gold. Score tasks classify the original string
+ordinal index, not the weighted expected score. Selected directory batches do not
+claim complete workflows; input agent traces are review evidence, not successful
+demonstrations. 4,194 judgments plus 611 batches pass native replay.
+
+Breaking answer-policy decision: verified static conversions from these exact
+sources may train typed direct answers with synthetic action-note reasoning
+masked, rather than inventing reasoning or silently dropping the source answers.
+Other scripted sources retain their existing direct-answer policy.
+
+Trajectory inspection found the first directory reference discarded readText
+results, leaving input evidence out of the final context. Withdrew that draft;
+rebuilt using visible read_file and every read_page, plus independent complete-input
+reconstruction. New bundle has 4,805 cases / 8,453 approved decisions / zero
+unlinked. Both training-data entrypoints discover it; default rematerialization
+matches native turns. Final model-specific token/rendered dedup audit remains a
+training-build requirement. See WORKFLOWEVALS_IMPORT.md and run audit artifacts.
+
+Acquisition OOM fixed by sequential 16-row Parquet batches (1GiB). Superseded task
+scratch replays are losslessly compressed with verified decompressed hashes to
+recover disk space. Existing Bonsai v39/queue-v31/evaluation watchers were left
+running unchanged. No model training and no new Luna workers.
+
+Follow-up quality concern: older MuSiQue/QASPER/SciFact static references also have
+some discarded-readText actions. Their unsupported scripted final answers were
+already held by the existing direct-answer policy; do not enable direct answers
+for those bundles. Rebuild them with visible evidence before admitting conclusions.
+
+Final provenance improvement: joined checksum-verified scenario metadata and grouped
+security counterfactuals by upstream activity, customer turns by dialog identity.
+Replayed all4,805 again on frozen runtime-v2; default8453-turn materialization matches.
+Current teacher holdout pools share zero source IDs/groups with this new bundle.
+The prepared64-case Bonsai pilot has16 reducers (25%); it is not in the active queue.
+Static mix audit before model-specific rendering:12,486 approved decisions,7,925
+reducers (63.47%); this is supply coverage, not the final token-filtered training mix.
