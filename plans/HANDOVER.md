@@ -7,8 +7,8 @@
 > Corrected bundle published; V5's9,114 preview remains historical.
 > Runtime-v31 rolls at boundaries to Bonsai queue-v26/cap4 and Luna queue-v22/cap1;
 > actual state/PIDs: runs/directory-expansion-20260929/v31.rollout-state.json.
-> V6 publication and frozen v31 validation pass. Luna migrated; Bonsai completes its
-> progressing old batch before switching. Supervisor stall detection now recognizes
+> V6 publication and frozen v31 validation pass. Both workers migrated after completing their
+> progressing old batches. Bonsai PID701072 / Luna PID695902 (verify state before action). Supervisor stall detection now recognizes
 > actual GPU decode progress before a reply checkpoint exists; hard budgets remain.
 > Latest22 Python and29 source-review/oracle checks pass. No training.
 
