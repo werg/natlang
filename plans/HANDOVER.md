@@ -1,5 +1,18 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Luna exponential backoff, 2026-09-29:** request transport retries now use 15s base,
+> 30s cap; rate-limit retries use 45s base,120s cap. Both double with jitter clamped
+> after jitter. Supplied Retry-After/date or SDK error delay is a minimum, even above
+> caps, and survives exhaustion/timeouts/restarts through durable retry/error deadlines.
+> Retry waits are abortable and logged; watchdog recognizes intentional waits while
+> hard case budgets remain. Failed provider runs get30/60/120/240/300s nominal cooldown
+> with jitter, persisted in supervisor journal; clean completion resets it, including
+> ordinary model rejection. One Luna worker/request remains. Frozen v33 derives from
+> immutable v31 plus collector/retry files only, excluding concurrent adaptation work.
+> Boundary rollout: runs/directory-expansion-20260929/v33.rollout-state.json.
+> 21 frozen Node /13 Python checks and build pass. No training.
+
+
 > **Post-retry quality hold:** TAT-QA UUID f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1
 > admits signed-average versus expense-magnitude interpretations. Hold source unchanged.
 > V6 refresh removed its six static decisions:4,113 added decisions /9,108 total

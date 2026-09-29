@@ -356,3 +356,30 @@ test('parallel judgments complete plan/action pairs and retain durable progress 
     assert.equal(row.outcome.accepted, true);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('retry waits are durable, abortable, and removed without producing a training result', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'teacher-backoff-'));
+  const options = { ...config(dir), workers: 1, transportRetries: 1, retryDelayMs: 10000 };
+  const item = { index: 0, record: record('abort-backoff') }, controller = new AbortController();
+  let calls = 0;
+  const collecting = collectBatch([item], options, async () => {
+    calls++;
+    throw new Error('rate limit');
+  }, controller.signal);
+  const path = join(options.jobs, `${jobKey(item)}.retry.json`);
+  let event;
+  try {
+    for (let i = 0; i < 200; i++) {
+      try { event = JSON.parse(await readFile(path, 'utf8')); break; }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    assert.equal(event.reason, 'rate_limit');
+    assert.equal(event.attempt, 1);
+    assert.ok(event.until > Date.now());
+  } finally { controller.abort(); }
+  assert.deepEqual((await collecting).missing, [0]);
+  assert.equal(calls, 1);
+  await assert.rejects(readFile(path), /ENOENT/);
+  assert.equal(await readFile(options.output, 'utf8'), '');
+});

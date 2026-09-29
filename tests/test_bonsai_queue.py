@@ -161,3 +161,63 @@ def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_
     run_queue(queue, journal, tmp_path, seconds=600)
     finish = json.loads(journal.read_text().splitlines()[-1])
     assert finish['status'] == ('complete' if decoding else 'inactivity_timeout')
+
+
+def test_provider_failure_cooldown_doubles_caps_and_does_not_delay_rejections(tmp_path, monkeypatch):
+    import scripts.run_bonsai_queue as module
+    monkeypatch.setattr(module.random, 'random', lambda: 0.5)
+    assert [module.failure_cooldown(i) for i in range(1, 7)] == [30, 60, 120, 240, 300, 300]
+    now = [1000.0]
+    monkeypatch.setattr(module.time, 'time', lambda: now[0])
+    waits = []
+    def sleep(seconds):
+        waits.append(seconds)
+        now[0] += seconds
+    monkeypatch.setattr(module.time, 'sleep', sleep)
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    entries = [dict(key=str(i), source='input', jobs=str(tmp_path), output='output', index=i,
+                    seed=1, log=str(tmp_path / f'{i}.log')) for i in range(4)]
+    queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
+    commands = []
+    class Child:
+        def __init__(self, command, **kwargs):
+            self.code = [2, 1, 0, 0][len(commands)]
+            commands.append(command)
+        def wait(self, timeout=None): return self.code
+    monkeypatch.setattr(subprocess, 'Popen', Child)
+    run_queue(queue, journal, tmp_path, provider='fixture')
+    assert sum(waits) == 90
+    assert len(commands) == 4
+    assert commands[0][commands[0].index('--retry-delay-ms') + 1] == '15000'
+    finishes = [json.loads(line) for line in journal.read_text().splitlines() if json.loads(line)['event'] == 'finish']
+    assert [row['failure_streak'] for row in finishes] == [1, 2, 0, 0]
+    # Restart still observes the original deadline, rather than resetting the failure streak.
+    journal.write_text(json.dumps(finishes[0]) + '\n')
+    now[0] = 1010
+    commands.clear()
+    entries = entries[:2]
+    queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
+    waits.clear()
+    run_queue(queue, journal, tmp_path, provider='fixture')
+    assert sum(waits) == 20
+    assert json.loads(journal.read_text().splitlines()[-1])['failure_streak'] == 2
+
+
+def test_provider_retry_deadline_is_not_a_stall(tmp_path, monkeypatch):
+    from scripts.run_bonsai_queue import retry_waiting
+    entry = dict(index=0, jobs=str(tmp_path))
+    path = tmp_path / '000000-fixture.retry.json'
+    monkeypatch.setattr('scripts.run_bonsai_queue.time.time', lambda: 1000)
+    path.write_text(json.dumps(dict(until=1001000)))
+    assert retry_waiting(entry)
+    path.write_text(json.dumps(dict(until=999000)))
+    assert not retry_waiting(entry)
+    path.write_text('broken')
+    assert not retry_waiting(entry)
+
+
+def test_exhausted_provider_retry_keeps_minimum_delay(tmp_path):
+    from scripts.run_bonsai_queue import retry_deadline
+    entry = dict(index=0, jobs=str(tmp_path))
+    (tmp_path / '000000.error.json').write_text(json.dumps(dict(retry_not_before=1234567890)))
+    assert retry_deadline(entry) == 1234567.89

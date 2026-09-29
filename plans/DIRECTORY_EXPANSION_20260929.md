@@ -38,3 +38,14 @@ V6 validation and publication are complete; frozen runtime-v31 validates the pub
 The final complete training pipeline recomputes the25% requirement; a static preview meeting it does not establish the eventual joint mix.
 
 Future candidates: SMCalFlow revise/refer graph edits, SParC SQL AST revisions, and WikiIns instruction edits. They need license/split/independent-oracle review before import; no compatible execution trajectories claimed yet.
+
+## Luna operational retry policy (2026-09-29, user requested exponential backoff)
+
+- Existing collector backoff capped before jitter and did not cover provider HTTP500/usage limits or record waits. Supervisor immediately advanced on failed execution.
+- Centralized transient classification and bounded exponential jitter: provider transport base15s/cap30s; rate base45s/cap120s. Retry count unchanged (one transport retry, up to three rate retries in queue runs). Zero delay remains available for fixtures.
+- Respect supplied Retry-After headers (seconds/dates), retry_after_ms/retry_after/resets_in_seconds and explicit retry-again seconds exposed by SDK errors. SDK can flatten/drop headers: unavailable values cannot be recovered. Provider minimum takes precedence over policy caps. Hard case wall budget still applies.
+- Atomic job retry deadlines plus terminal error deadlines; logs contain attempt/reason/wait/deadline. Abortable waits clean up metadata. Deliberate provider wait is activity, not a stall. Timeouts preserve minimum delay before subsequent requests.
+- Supervisor failed-run cooldown doubles30/60/120/240 to300s cap with jitter. Finish journal records failure streak and next_allowed_at; restarts observe remaining delay. Completed executions reset streak, including ordinary rejected answers. No operational waits become training turns.
+- No concurrency change: one Luna/request, four Bonsai. Boundary rollouts v32 then v33; v33 finishes long minimum-delay persistence. Check actual state in v33.rollout-state.json. Runtime built from immutable v31 with only collector/retry source+compiled overlay, to exclude unrelated concurrent adaptation edits.
+- Build succeeds;21 Node checks against frozen v33,13 Python checks pass. Covered doubling/caps/jitter/headers, malformed delays, cancellation with no result, cooldown/reset/restart and durable exhausted-retry deadline.
+- No source gold or rejection criteria changed by retry policy. No training started.

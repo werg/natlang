@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { rateLimited, transportFailure, retryWaitMs, retryAfterMs } from './retry.js';
 import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -190,24 +192,7 @@ async function mergeCompleted(records: IndexedRecord[], config: CollectorConfig)
   return { completed, missing };
 }
 
-const errorText = (error: unknown) => String(error instanceof Error ? `${error.name}: ${error.message}` : error).toLowerCase();
-
-/** A provider refusing for request rate or concurrency (a subscription's burst limit): wait longer, then go on. */
-function rateLimited(error: unknown): boolean {
-  return /rate limit|too many requests|\b429\b/.test(errorText(error));
-}
-
-function transportFailure(error: unknown): boolean {
-  const text = errorText(error);
-  return rateLimited(error) || ['connection refused', 'connection reset', 'fetch failed', 'socket', 'timed out', 'econnreset',
-    'econnrefused', 'remote end closed', 'headerstimeout', 'bodytimeout'].some(phrase => text.includes(phrase)) ||
-    // A restarting server answers 502/503 (llama.cpp: "Loading model") until it is ready.
-    /\bmodel http (?:502|503|504)\b/.test(text) ||
-    // Slots share one KV buffer: when the running sequences together fill it, the server fails them all, and
-    // space frees as soon as any finishes. The job resumes from its journal.
-    text.includes('context size has been exceeded');
-}
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => sleep(ms);
 
 /**
  * Finished rows of earlier runs, by program digest. A row stands in for a job when the program, model, turn budget,
@@ -311,14 +296,25 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id,
+              retry_not_before: Date.now() + retryAfterMs(error),
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
           break;
         }
-        // Jitter spreads out jobs that failed together, so they do not all return at once.
-        // A rate limit lifts on the provider's clock, not ours: those waits start longer and grow further.
-        const wait = limited ? Math.min(120_000, (config.retryDelayMs ?? 5_000) * 3 * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random()) :
-          Math.min(30_000, (config.retryDelayMs ?? 5_000) * 2 ** Math.min(attempt++, 3)) * (0.5 + Math.random());
-        if (wait) await delay(wait);
+        const wait = retryWaitMs(error, attempt++, config.retryDelayMs ?? 5_000);
+        const retryPath = join(config.jobs, `${jobKey(item)}.retry.json`);
+        const event = { index: item.index, program_id: item.record.id, attempt,
+          reason: limited ? 'rate_limit' : 'transport_failure', wait_ms: wait, until: Date.now() + wait };
+        await writeAtomic(retryPath, JSON.stringify(event) + '\n');
+        process.stderr.write(`retry: ${JSON.stringify(event)}\n`);
+        try {
+          const until = event.until;
+          while (Date.now() < until) await sleep(Math.min(60_000, until - Date.now()), undefined, { signal });
+        } catch (error) {
+          if (!signal?.aborted) throw error;
+          return;
+        } finally {
+          await unlink(retryPath).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        }
       }
     }
   };

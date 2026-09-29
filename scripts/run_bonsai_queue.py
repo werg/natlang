@@ -10,6 +10,7 @@ import subprocess
 import signal
 import time
 import math
+import random
 import urllib.request
 from pathlib import Path
 
@@ -68,6 +69,31 @@ def partial_metrics(entry):
     return metrics
 
 
+def retry_deadline(entry):
+    """Provider minimum delays survive exhausted retries, timeouts, and supervisor restarts."""
+    deadline = 0
+    for index in range(entry['index'], entry['index'] + entry.get('count', 1)):
+        paths = list(Path(entry['jobs']).glob(f"{index:06d}-*.retry.json"))
+        paths.append(Path(entry['jobs']) / f"{index:06d}.error.json")
+        for path in paths:
+            try:
+                row = json.loads(path.read_text())
+                value = float(row.get('until', row.get('retry_not_before', 0))) / 1000
+                if math.isfinite(value):
+                    deadline = max(deadline, value)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    return deadline
+
+
+def retry_waiting(entry):
+    return retry_deadline(entry) > time.time()
+
+
+def failure_cooldown(streak):
+    return min(300, 30 * 2 ** min(max(0, streak - 1), 20) * (0.5 + random.random()))
+
+
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low'):
     if model_concurrency is None:
@@ -75,9 +101,16 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     queue, journal, runtime = map(Path, (queue, journal, runtime))
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
     attempted = set()
+    failure_streak, next_allowed_at = 0, 0
     if journal.exists():
         attempted = {json.loads(line)['key'] for line in journal.read_text().splitlines()
                      if line.strip() and json.loads(line).get('event') == 'finish'}
+        if provider:
+            for line in journal.read_text().splitlines():
+                row = json.loads(line)
+                if row.get('event') == 'finish' and not row.get('batch_key'):
+                    failure_streak = 0 if row['status'] == 'complete' else failure_streak + 1
+                    next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
     def record(value):
         with journal.open('a') as output:
@@ -87,6 +120,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     for entry in entries:
         if entry['key'] in attempted:
             continue
+        if provider and next_allowed_at > time.time():
+            record(dict(event='cooldown', key=entry['key'], time=time.time(),
+                        failure_streak=failure_streak, until=next_allowed_at))
+            while next_allowed_at > time.time():
+                time.sleep(min(30, next_allowed_at - time.time()))
         max_turns = entry.get('max_turns', 20)
         count = entry.get('count', 1)
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 5:
@@ -103,6 +141,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                    '--transport-retries', '1', '--file-tools', entry.get('surface', 'all')]
         command += ['--provider', provider, '--context-tokens', '16384', '--reasoning-effort', reasoning_effort] if provider else [
             '--server', 'http://127.0.0.1:8081', '--kv-tokens', '40000']
+        if provider:
+            command += ['--retry-delay-ms', '15000']
         if execution_plans:
             command.append('--execution-plans')
         case_seconds = entry.get('case_seconds', seconds)
@@ -130,7 +170,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         previous_decode = decode
                         if current['saved_turns'] != previous['saved_turns']:
                             last_activity, previous = time.monotonic(), current
-                        elif decoding:
+                        elif decoding or (provider and retry_waiting(entry)):
                             last_activity = time.monotonic()
                         elif time.monotonic() - last_activity >= 300:
                             raise TimeoutError('no checkpoint or local decode progress for 300 seconds')
@@ -156,7 +196,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     child.kill()
                     child.wait()
                 raise
+        if provider:
+            failure_streak = 0 if status == 'complete' else failure_streak + 1
+            next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
+                'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(), **partial_metrics(entry)})
         # Preserve original attempt keys when roots share one collector batch.
         # A terminal batch event covers both attempts, even when only one produced a result.
