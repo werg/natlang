@@ -169,12 +169,12 @@ do not infer full-trajectory compatibility from independently reconstructed file
 
 ## Published expansion (2026-09-29)
 
-`data/teacher/directory-expansion/static.manifest.json` now contains1,605 new cases
-(CommitPack287, TAT-QA256, MuSiQue288, QASPER300, SciFact174, TreeDST300), after
-excluding the51 pilot cases. Native replay approves4,119 decisions;1,049 remain held.
-Final tokenizer audit admits all4,119. Combined with the earlier integrated static
-preview:9,114 unique decisions, zero rendered duplicates or holdout overlap,3,676
-directory reducer decisions (40.33%) and600 non-file tree-edit decisions. These are
+`data/teacher/directory-expansion/static.manifest.json` now contains1,604 new cases
+(CommitPack287, TAT-QA255, MuSiQue288, QASPER300, SciFact174, TreeDST300), after
+excluding the51 pilot cases. Native replay approves4,113 decisions;1,049 remain held.
+Final tokenizer audit admits all4,113. Combined with the earlier integrated static
+preview:9,108 unique decisions, zero rendered duplicates or holdout overlap,3,670
+directory reducer decisions (40.29%) and600 non-file tree-edit decisions. These are
 static-preview counts, not the eventual complete generation/training mix.
 
 Both default builders include this expansion beside source-backed and recovered
@@ -182,3 +182,7 @@ bundles. The generated joint training pipeline enforces the user's25% directory/
 reducer target after final token/dedup/holdout audit. See the expansion log for source
 terms, preservation, scientific span holds, named-tree/JSON scoring corrections,
 streaming memory fixes and additional unimported tree-edit candidates.
+
+One signed-expense TAT-QA source was subsequently held; six decisions were removed
+from the earlier V5 preview. V6 published results validate under frozen runtime-v31.
+Older raw bundles and audits remain preserved; no source labels were rewritten.

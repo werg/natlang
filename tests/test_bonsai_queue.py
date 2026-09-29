@@ -1,7 +1,12 @@
 import json
 import subprocess
 import pytest
-from scripts.run_bonsai_queue import run_queue
+from scripts.run_bonsai_queue import run_queue, local_decode_progress as read_local_decode_progress
+
+
+@pytest.fixture(autouse=True)
+def no_live_server_queries(monkeypatch):
+    monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda: None)
 
 
 def test_timeout_kills_stuck_child_advances_and_resume_skips_finished(tmp_path, monkeypatch):
@@ -126,3 +131,33 @@ def test_batch_metrics_include_completed_and_running_roots(tmp_path):
     metrics = partial_metrics(dict(index=0, count=2, jobs=str(tmp_path)))
     assert metrics['fresh_model_replies'] == 2
     assert metrics['completion_tokens'] == 10
+
+
+def test_local_decode_metrics_are_finite_and_parse_failures_are_ignored(monkeypatch):
+    import io
+    for value, expected in [('42', 42), ('NaN', None), ('-1', None), ('bad', None)]:
+        monkeypatch.setattr('urllib.request.urlopen', lambda *args, **kwargs: io.BytesIO(
+            ('# metric\nllamacpp:n_decode_total ' + value + '\n').encode()))
+        assert read_local_decode_progress() == expected
+
+
+@pytest.mark.parametrize('decoding', [True, False])
+def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_path, monkeypatch, decoding):
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(dict(key='long', source='input', jobs=str(tmp_path), output='output',
+        index=0, seed=1, log=str(tmp_path / 'case.log'))) + '\n')
+    clock = [0]
+    monkeypatch.setattr('scripts.run_bonsai_queue.time.monotonic', lambda: clock[0])
+    monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda: clock[0] if decoding else None)
+    class Child:
+        def __init__(self, *args, **kwargs): self.terminated = False; self.calls = 0
+        def wait(self, timeout=None):
+            if self.terminated: return 0
+            clock[0] += 30; self.calls += 1
+            if self.calls <= 12: raise subprocess.TimeoutExpired('fixture', timeout)
+            return 0
+        def terminate(self): self.terminated = True
+    monkeypatch.setattr(subprocess, 'Popen', Child)
+    run_queue(queue, journal, tmp_path, seconds=600)
+    finish = json.loads(journal.read_text().splitlines()[-1])
+    assert finish['status'] == ('complete' if decoding else 'inactivity_timeout')

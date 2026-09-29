@@ -489,3 +489,14 @@ Old formatting-oracle failures are held. QASPER span-boundary equivalence needs 
 wrong-answer traces are preserved without admitting them as training negatives.
 Bonsai now has4slots/global requests and four independent roots per collector; one
 Luna remains. All migrations use completed journaled boundaries and preserve raw data.
+
+A reviewed formatting retry exposed a financial sign convention dispute: TAT-QA UUID
+`f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1` averages table entries(285)/(267), while gold
+uses expense magnitudes276. Its question does not specify signed values versus
+magnitudes; hold the source from all positives and negatives without relabeling.
+V6 removes six static decisions; published combined preview is9,108 decisions,40.29%
+directory reducers, zero duplicates/holdout overlap. Source-review matching now also
+recognizes modern adapters' `source` field. Frozen-v31 validation passes.
+Local stall detection now treats increasing server `n_decode_total` as real activity
+while a batched reply is not yet checkpointed. Inactivity300sec and hard wall budgets
+remain; mocked tests demonstrate both ongoing decoding and a truly motionless request.

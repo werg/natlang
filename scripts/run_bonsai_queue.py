@@ -10,7 +10,21 @@ import subprocess
 import signal
 import time
 import math
+import urllib.request
 from pathlib import Path
+
+
+def local_decode_progress():
+    """A long batched reply can be decoding before its next durable checkpoint exists."""
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:8081/metrics', timeout=2) as response:
+            for line in response.read().decode().splitlines():
+                if line.startswith('llamacpp:n_decode_total '):
+                    value = float(line.split()[1])
+                    return value if math.isfinite(value) and value >= 0 else None
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def partial_metrics(entry):
@@ -96,6 +110,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             raise ValueError('entry case_seconds must be a positive integer')
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry)
+        previous_decode = None
         record({'event': 'start', 'key': entry['key'], 'time': time.time(), 'budget_seconds': case_seconds,
                 'max_turns': max_turns})
         with Path(entry['log']).open('a') as log:
@@ -110,12 +125,18 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         break
                     except subprocess.TimeoutExpired:
                         current = partial_metrics(entry)
+                        decode = local_decode_progress() if not provider else None
+                        decoding = decode is not None and previous_decode is not None and decode > previous_decode
+                        previous_decode = decode
                         if current['saved_turns'] != previous['saved_turns']:
                             last_activity, previous = time.monotonic(), current
+                        elif decoding:
+                            last_activity = time.monotonic()
                         elif time.monotonic() - last_activity >= 300:
-                            raise TimeoutError('no saved reply for 300 seconds')
+                            raise TimeoutError('no checkpoint or local decode progress for 300 seconds')
                         record({'event': 'activity', 'key': entry['key'], 'time': time.time(),
-                                'elapsed_seconds': round(time.monotonic() - start, 1), **partial_metrics(entry)})
+                                'elapsed_seconds': round(time.monotonic() - start, 1),
+                                'local_decode_total': decode, **partial_metrics(entry)})
                 else:
                     raise subprocess.TimeoutExpired(command, case_seconds)
                 status = 'complete' if code == 0 else 'incomplete'

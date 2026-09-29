@@ -79,3 +79,8 @@ test('EntailmentBank proof direction and fruit-guard holds preserve source ident
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story378' } }), 'source_review_pending');
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story422' } }), 'source_review_pending');
 });
+
+test('source-backed financial cases are held by source UUID when signed expense interpretation is disputed', () => {
+  assert.equal(sourceReviewReason({source: 'tatqa', source_ids: ['f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1']}), 'source_review_pending');
+  assert.equal(sourceReviewReason({source: 'tatqa', source_ids: ['other']}), undefined);
+});

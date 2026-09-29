@@ -12,6 +12,12 @@ export type SourceReview = {
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
   {
+    dataset: 'tatqa', id: 'f944b361-6e00-45c8-a7e1-1f5c6e0fd6b1', aliases: [],
+    text: 'What is the average Selling, general and administrative expenses for the period December 31, 2019 and September 29, 2019?',
+    annotatedLabel: '276 million', status: 'pending',
+    reason: 'The supplied accounting table shows (285) and (267). The question does not specify whether to average signed values (-276) or expense magnitudes (276). Hold until the convention is independently established; do not penalize either interpretation or rewrite source gold.',
+  },
+  {
     dataset: 'banking77',
     id: 'a1658811502225e680d921d1ba4aa4492cc1b7225160f46c1cc360393d0f2fcd',
     aliases: ['a9a729504209367ae5cdc1fba30d835718922358d51a8f922b205513a6925935'],
@@ -152,7 +158,7 @@ export function sourceReviewReason(record: Record<string, unknown>):
   const curriculum = record.curriculum as { family?: string; shape?: string } | undefined;
   const inferred = curriculum?.family === 'entailment_premises' ? 'entailmentbank' : curriculum?.family === 'kqapro_question' ? 'kqapro' : curriculum?.family === 'anli_batch' ? 'anli' :
     ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
-  const dataset = record.dataset ?? inferred;
+  const dataset = record.dataset ?? inferred ?? record.source;
   if (typeof dataset !== 'string') return undefined;
   if (dataset === 'anli') {
     const semantics = record.semantics as { inputs?: { stories?: unknown[] } } | undefined;
