@@ -1,5 +1,23 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **NEW STUDENT CANDIDATE — 2026-09-29 about20:15 UTC.** User requested
+> peculiar-ragdoll's small Sharp MiniCPM and4-bit download/format/deployment checks.
+> Matching release is Sharp-MiniCPM5-2B-GGUF (2.5B dense Llama, not sparse).
+> Q4_K_XL1.596GB revision040713a6c4da5e58e7512e8e483d315caef41b73 is downloading
+> in `natlang-minicpm-download`; fixed Xet concurrency8,2GiB RAM/two CPUs,
+> slow network~0.3MB/s. Download is NOT yet verified and performance NOT assessed.
+> Durable completion worker `runs/sharp-minicpm5-discovery/finish-acquisition.py`
+> waits, verifies exact SHA/size, runs isolated CPU forced-tool-call smoke on8082,
+> and stops its CPU server. Actual status:`runs/sharp-minicpm5-discovery/completion.json`.
+> Read `plans/SHARP_MINICPM5_STUDENT.md` before testing/training. Template fixes:
+> content-block query stale-reasoning reset and bare CDATA terminator escaping;
+> coherent terse=false/thinking=true defaults; training terminator `<|im_end|>`.
+> Renderer now closes real targets without a synthetic user query that erased
+> target reasoning; renderer version2/cache identity changed, published static
+> payloads unchanged.12 focused renderer checks pass; actual tokenizer renders
+> one BOS/correct EOS and retains reasoning. Bonsai generation remains on GPU;
+> `scripts/serve_minicpm.sh --gpu` refuses while Bonsai is running. No training.
+
 > **CURRENT CHECK — 2026-09-29 19:40 UTC.** Bonsai PID8981 now runs frozen
 > v39/queue-v31, cap4; GPU100%/7,457MiB. Compiler-poisoned case52 freshly
 > succeeded (43 turns); the original failure remains. Current batch is progressing

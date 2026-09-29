@@ -1,0 +1,105 @@
+# Sharp-MiniCPM5 student candidate
+
+## Identity and acquisition
+
+The intended publisher has `peculiar-ragdoll/Sharp-MiniCPM5-2B-GGUF`, not a
+Sharp-MiniCPM2.5 release. Base: `openbmb/MiniCPM5-2B`, a 2.5B **dense** Llama
+architecture, 42 full-attention layers, 16 query /2 KV heads, untied embeddings,
+131,072 native context. Smaller weights suggest cheaper QLoRA than Spark, but
+training activation memory and quality still require measurement.
+
+- Quant repository revision: `040713a6c4da5e58e7512e8e483d315caef41b73`.
+- Selected file: `Sharp-MiniCPM5-2B-Q4_K_XL.gguf`,1,595,727,200 bytes.
+- Expected SHA256: `1185182d80019b86415de409584c2843dd43ae0b6211040fd363a5759cae99ed`.
+- Local directory: `models/candidates/sharp-minicpm5-2b/`.
+- Base tokenizer revision: `f97400052a43d642bbc6e9975e2397e3ae6a6b52`.
+- Acquisition/verification artifacts: `runs/sharp-minicpm5-discovery/`.
+
+Primary references: [quant/model card](https://huggingface.co/peculiar-ragdoll/Sharp-MiniCPM5-2B-GGUF),
+[base config](https://huggingface.co/openbmb/MiniCPM5-2B/blob/f97400052a43d642bbc6e9975e2397e3ae6a6b52/config.json).
+The Sharp release is quantization plus a template, not separate fine-tuned base
+weights. Future training should use the original HF base in NF4/BF16 and our
+verified template; the GGUF is for inference evaluation. Do not start training.
+Suggested standard Llama LoRA modules: `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj`;
+Spark's fused projection names are unsuitable here.
+
+## Template and format contract
+
+The GGUF metadata's embedded template matches the publisher's standalone Jinja.
+Preserve that original in the candidate directory. Our reproducible local version:
+`models/templates/Sharp-MiniCPM5-2B.jinja`, with companion kwargs JSON.
+
+1. Default `terse=false`, avoiding an added house prompt conflicting with NatLang.
+2. Default `enable_thinking=true` in both rendering and serving.
+3. Retain native XML `<function name="..."><param name="...">` calls; let
+   llama.cpp parse these to OpenAI `tool_calls`. Keep native tool instructions;
+   do not suppress them for NatLang's standard function schema surface.
+4. Local bug fix: content-block user queries also reset stale reasoning.
+5. Local bug fix: a bare `]]>` triggers CDATA wrapping and splitting.
+6. Training renderer normalizes JSON argument strings to mappings, already required
+   by the original template. Preserve nested arguments and reasoning fields.
+7. Training end token **`<|im_end|>`**, not nominal tokenizer EOS `</s>`.
+   Base generation config includes both EOS IDs1 and130073. Do not append BOS
+   externally: the template already inserts `<s>` and tokenizer add_bos is false.
+8. Renderer now closes the real target directly, without a dummy following user
+   that caused MiniCPM to discard target reasoning. Renderer version2 invalidates
+   cache reuse; previously published static datasets are unchanged.
+
+Before rendering training rows, copy the local patched Jinja to the downloaded
+base tokenizer's `chat_template.jinja` (acquisition prepares this local bundle).
+Use `scripts/render_training_corpus.py --model models/candidates/sharp-minicpm5-2b/tokenizer
+--end-token '<|im_end|>'` with the desired input/output arguments. This is tokenizer
+rendering only, not student training or a complete training-weight bundle.
+
+## Isolated deployment
+
+`scripts/serve_minicpm.sh --cpu` serves on localhost8082, one slot,4096 context,
+3GiB container RAM/two CPUs, zero GPU layers, cached official llama.cpp image.
+It uses `temp=1,top_p=.95,top_k=20,min_p=0` and q8_0 KV; **min_p=0** is the
+publisher's repetition recommendation. No dynamic image/model lookup.
+
+`scripts/serve_minicpm.sh --gpu` requires Bonsai to be paused at a case boundary
+and its server stopped first; launcher refuses while `natlang-bonsai` runs.
+Use `NATLANG_MINICPM_CTX=16384` for the later GPU pilot. These are total server
+context sizes. Stop the isolated instance with `docker stop natlang-minicpm`.
+Bonsai generation must continue during download and CPU compatibility checks.
+
+## Validation and remaining work
+
+- Local Jinja probes pass: text blocks, trailing interleaved content, nested JSON,
+  CDATA split, bare terminator, stale reasoning removal, thinking prefix.
+- GGUF header verified architecture and embedded-template identity.
+- Renderer tests12/12 pass, including real MiniCPM Jinja/tool arguments/reasoning
+  mask regression. Existing Spark nonthinking-profile probe passes.
+- Full weight download/checksum, actual llama.cpp native tool parsing, and CPU
+  smoke inference remain pending until acquisition completes. GPU benchmark and
+  comparative reducer evaluation are subsequent work; no quality claim yet.
+
+
+## Persistent acquisition state (20:15 UTC)
+
+Large-file HTTP transfer was very slow and returned truncated ranges. Abandoned
+both the sequential curl attempt and the temporary ranged downloader; do not
+resume their `.part` as a sequential prefix (it contains holes). Only the final
+HF/Xet file after SHA verification is usable. A partial inspection established
+header/template identity, not tensor integrity.
+
+Active acquisition container `natlang-minicpm-download` uses the already installed
+training image's HF/Xet downloader (no GPU), fixed8 download concurrency,
+2GiB RAM/two CPUs. No extra package installation was needed; the attempted host
+pip installation was stopped. Log:`runs/sharp-minicpm5-discovery/xet-download-fixed.log`.
+
+The durable `finish-acquisition.py` process logs to `finish.log` and independently
+checks final model size/hash before CPU smoke. Status in `completion.json` is
+`waiting_for_download`, `verifying_checksum`, `cpu_smoke`, `ready`, or `blocked`.
+CPU smoke checks forced native tool-call parsing only, not reasoning quality or
+NatLang reducer performance. Inspect `cpu-request.json`, `cpu-response.json`, and
+`cpu-server.log` for actual outcomes. The worker stops only its isolated CPU
+server; it leaves Bonsai running. On shutdown, explicitly stop the download
+container and completion worker alongside generation; nothing here should be
+mistaken for a finished benchmark.
+
+The actual HF tokenizer loaded locally and rendered our patched Jinja, producing
+one BOS and assistant terminator ID130073; teacher reasoning and XML tool-call
+arguments passed rendering. Its nominal EOS remains `</s>` and must not be used
+as the assistant turn delimiter in the SFT renderer.

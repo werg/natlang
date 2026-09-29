@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 CHUNK_ROWS = 128
-RENDERER_VERSION = "transformers-chat-template/1"
+RENDERER_VERSION = "transformers-chat-template/2"
 
 
 def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
@@ -147,9 +147,9 @@ def render_turn(turn: dict[str, Any], tokenizer: Any, end_token: str) -> dict[st
     calls = target.get("tool_calls")
     if isinstance(calls, list):
         target["tool_calls"] = [{**call, "id": f"teacher_{i}"} for i, call in enumerate(calls)]
-    after = ([{"role": "tool", "tool_call_id": call["id"], "content": "X"} for call in target["tool_calls"]]
-             if target.get("tool_calls") else [{"role": "user", "content": "X"}])
-    complete = _call_template(tokenizer, messages + [target] + after, tools, False)
+    # Render the real closed assistant turn. A synthetic following user query
+    # can make templates drop this target's reasoning or rewrite history.
+    complete = _call_template(tokenizer, messages + [target], tools, False)
     if not complete.startswith(prompt):
         raise ValueError(f"{turn.get('id', '<unknown>')}: tokenizer changed the assistant prefix")
     suffix = complete[len(prompt):]

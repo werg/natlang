@@ -27,7 +27,7 @@ class MockTokenizer:
 class BadPrefixTokenizer(MockTokenizer):
     def apply_chat_template(self, messages, **kwargs):
         value = super().apply_chat_template(messages, **kwargs)
-        return value.replace("<user>", "<human>") if len(messages) > 2 else value
+        return value.replace("<user>", "<human>") if not kwargs.get("add_generation_prompt") else value
 
 
 class NoEndTokenizer(MockTokenizer):
@@ -221,3 +221,26 @@ def test_invalid_targets_get_a_resumable_rejection_ledger(tmp_path):
     ledger.write_text('tamper')
     with pytest.raises(ValueError, match='rejection ledger differs'):
         render_corpus([source], output, model='fixture', tokenizer=MockTokenizer(), chunk_rows=1)
+
+
+def test_minicpm_closed_target_preserves_reasoning_and_native_tool_arguments():
+    jinja2 = pytest.importorskip("jinja2")
+    template = Path("models/templates/Sharp-MiniCPM5-2B.jinja").read_text()
+    env = jinja2.Environment()
+    env.filters["tojson"] = lambda value, **kwargs: json.dumps(value, ensure_ascii=kwargs.get("ensure_ascii", False))
+
+    class MiniCPMTokenizer:
+        def apply_chat_template(self, messages, **kwargs):
+            return env.from_string(template).render(messages=messages, bos_token="<s>", **kwargs)
+
+    row = {"id": "minicpm", "messages": [{"role": "user", "content": "Compute."}],
+           "tools": [], "target": {"role": "assistant", "content": "",
+           "tool_calls": [{"type": "function", "function": {"name": "eval", "arguments": '{"code":"1+1"}'}}]},
+           "teacher_reasoning": "One plus one is two.", "teacher_reasoning_trained": False,
+           "training_admission": {"approved": True}}
+    pair = render_turn(row, MiniCPMTokenizer(), "<|im_end|>")
+    assert pair["prompt"].endswith("<think>\n")
+    assert "One plus one is two." in pair["completion"]
+    assert '<function name="eval"><param name="code">1+1</param></function>' in pair["completion"]
+    assert pair["completion"].endswith("<|im_end|>")
+    assert pair["completion_masked"] == pair["completion"].index("</think>") + len("</think>")
