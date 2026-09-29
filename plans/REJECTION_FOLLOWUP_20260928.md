@@ -322,3 +322,10 @@ V18: Bonsai queue-v15 (401 entries); Luna queue-v11 (116 entries), same journals
 Validation: Node/browser builds and browser type check passed; 139 focused Node cases passed. Expanded collector run had one timing-sensitive request-cap checkpoint test failure (two saved responses observed instead of three); the isolated test passed on rerun. Investigate this checkpoint timing rather than treating the expanded suite as fully passing. No training launched.
 
 World quest failures have valid reference paths including finding the latchkey and mat; retain success certificate oracles. FOLIO171's gold Unknown is supported: heat treatment alone does not guarantee survival. Other reasoning/classification failures remain failures, not source holds.
+
+
+### Same check: checkpoint race repaired; runtime v19
+
+The flaky cap test exposed an actual slot/journal ordering race: a completed plan/action released its request slot before the driver saved its reply. A queued sibling could then hit the request cap and end execution while that completed action was still writing. Keep the pair's slot until its response is durably journaled. Replayed/planted actions use the same serialized persistence path without spending a slot. Expanded 156-test suite, including collector tests, now passes; Node/browser builds and browser types pass.
+
+Luna's fresh mutable-budget retry on v18 accepted: first round A1/A3/A5, second round A1/A5. Prototype-key repair next. V19 is a frozen checkpoint-only follow-up using the same reviewed queues/jobs/IR and provenance contract; it does not invalidate v18 data or require another repair attempt. The exact v18 rollout monitor was replaced by v19's boundary monitor: runs/bonsai-recovery/runtime-v19.rollout-state.json. Luna already on v18 and Bonsai still on v16 at replacement; each current case finishes before its next rollout. Do not interrupt them.

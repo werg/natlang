@@ -558,11 +558,17 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const teacherSend = (request: ModelTurnRequest) => admittedSend(request, send, true);
     const teacherTurn = config.executionPlans ? withExecutionPlans(teacherSend,
       { maxTokens: config.executionPlanTokens }) : teacherSend;
-    const transport = async (request: ModelTurnRequest) => {
+    const transport = async (request: ModelTurnRequest, persist: (response: ModelTurn) => Promise<void>) => {
       // Finish a plan/action pair before admitting another sibling's turn. Otherwise a large
       // Promise.all can spend the entire budget on plans without saving any completed actions.
       if (slots) await slots.acquire(1);
-      try { return await teacherTurn(request); } finally { if (slots) slots.release(1); }
+      try {
+        const response = await teacherTurn(request);
+        // Keep the pair's slot until its response is durable. Otherwise a waiting sibling can
+        // exhaust the request budget and end the run before this completed action is saved.
+        await persist(response);
+        return response;
+      } finally { if (slots) slots.release(1); }
     };
     const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest) => {
       await (judgeReady ??= judgeSession.prepare());
@@ -588,16 +594,17 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       if (recorded) {
         response = structuredClone(recorded.response);
       } else {
-        response = replayed ? structuredClone(replayed) :
-          trajectory.length === 0 && !handoff && item.record.semantics.failure_seed ?
-          { calls: [['eval', { code: item.record.semantics.failure_seed.code }]], completion_tokens: 1 } :
-          await transport(request);
-        partial.turns.push({ request_sha256: requestSha256, response: structuredClone(response) });
-        // The response is durable before its actions execute. A restart can
-        // replay it into the deterministic frozen harness without another decode.
-        // Atomic rename alone does not order concurrent snapshots: an older write can finish last.
-        journalWrites = journalWrites.then(() => writeAtomic(partialPath, JSON.stringify(partial) + '\n'));
-        await journalWrites;
+        const persist = async (turn: ModelTurn) => {
+          partial.turns.push({ request_sha256: requestSha256, response: structuredClone(turn) });
+          // Serialize atomic snapshots; an older concurrent write must never finish last.
+          journalWrites = journalWrites.then(() => writeAtomic(partialPath, JSON.stringify(partial) + '\n'));
+          await journalWrites;
+        };
+        if (replayed || (trajectory.length === 0 && !handoff && item.record.semantics.failure_seed)) {
+          response = replayed ? structuredClone(replayed) :
+            { calls: [['eval', { code: item.record.semantics.failure_seed!.code }]], completion_tokens: 1 };
+          await persist(response);
+        } else response = await transport(request, persist);
       }
       trajectory.push(trajectoryTurn(request, response));
       return response;
