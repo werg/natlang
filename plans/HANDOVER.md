@@ -1,5 +1,18 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 07:36, 2026-09-29:** both workers progressing. Fifteen accepted
+> runs yield207 linked decisions, no unlinked exports; Luna fixed shared-inbox deduplication.
+> Hold FOLIO417 (inclusive/exclusive-or) and378 (negation scope), plus four ambiguous
+> BANKING77 fee/amount/reversal messages. Model errors retained separately; no relabeling.
+> V26 queues: Bonsai queue-v20 / Luna queue-v16,176/13 pending at preparation.
+> Twelve unfinished groups transferred to the single Luna queue, bounded to at most two
+> cross-teacher attempts per source group. Integrated static bundles have zero new holds.
+> Fixed boundary-monitor failure when an old queue naturally exhausts: reusable
+> scripts/roll_teacher_runtime.py verifies all old keys finished before resuming; unexpected
+> exits with unfinished entries fail closed. Luna resumed PID640685 on v26; actual state/PIDs:
+> runs/bonsai-recovery/runtime-v26.rollout-state.json. Audits: runs/hourly-check-20260929-0736/.
+> Builds/browser types,161 Node and9 Python checks pass. No training; keep hourly loop running.
+
 > **Hourly check 06:30, 2026-09-29:** both workers progressing, Bonsai warm RAM1.97GiB.
 > Nine accepted results this hour yield168 linked decisions; three rejected results and
 > four incomplete/timeouts audited. Hold FOLIO409 after English countermodels and source

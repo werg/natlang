@@ -74,4 +74,6 @@ test('EntailmentBank proof direction and fruit-guard holds preserve source ident
   assert.equal(sourceReviewReason({ curriculum: { family: 'entailment_premises' }, source_groups: ['entailmentbank:LEAP__7_10338'] }), 'source_review_pending');
   assert.equal(sourceReviewReason({ curriculum: { family: 'entailment_premises', shape: 'LEAP_7_10339' } }), undefined);
   assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story409' } }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story417' } }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'folio_batch', shape: 'story378' } }), 'source_review_pending');
 });

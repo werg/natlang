@@ -420,3 +420,40 @@ Latest rollout: immutable runtime-v21 (496 hashes), Bonsai queue-v17 / Luna queu
   source-backed cases (overlapping counts). No training. Evidence in
   runs/hourly-check-20260929-0630/ includes snapshots, countermodels/raw source proof,
   source holds, queue orders and migration ledgers. Continue hourly loop.
+
+
+## Hourly check07:36 Berlin,2026-09-29 (runtimev26)
+
+- Snapshot: Bonsai PID618501/v25 with199 pending; Luna PID613966/v25 with2 pending.
+  Container RAM2.94GiB/6GiB; both model transports progressing. Thirteen completed
+  results each,8 Bonsai/7 Luna accepted →207 native decisions, zero unlinked exports.
+  Shared-inbox customer deduplication now succeeds for Luna; movie762 and multihop cases
+  succeed for both models. Genuine model errors include over-merging shared inboxes,
+  supplier qualification and omitted relational owners. No quality thresholds relaxed.
+- FOLIO417 uses exclusive-or for a conclusion phrased either library or LG. A monitor
+  in the library, produced by both LG/AOC, without type-c satisfies every premise and
+  makes the inclusive disjunction true. FOLIO378 negates a merged married-or-friends
+  predicate whereas the English can negate married alone. Outgoing Carol with married
+  friends is a literal-English countermodel. Hold both sources pending adjudication.
+- Payment reducer177 messages finished,13882 versus15438. Mismatch audit identifies
+  clear classification errors (unauthorized payment), plus four ambiguous fee/withdrawal
+  amount/one-dollar charge/reversal inputs. Exact canonical and legacy labeled hashes
+  now held. Preserve gold/source records; whole affected task is held, not relabeled.
+- New source holds filter24 Bonsai/8 Luna queue entries, including completed entries.
+  Prepared queuesv20/v16:176/13 pending. Twelve eligible unfinished groups transferred
+  to fresh Luna roots. Restrict repeated cross-teacher transfers to at most two prior
+  attempts per group; no extra worker, no endless duplicate replenishment.
+- **Operational bug/fix:** Luna naturally exhausted its queue before the v26 monitor
+  read /proc/613966/cmdline. The old monitor crashed before launching replacements.
+  Added reusable scripts/roll_teacher_runtime.py with explicit JSON configuration,
+  frozen-runtime hash validation and verified journal exhaustion. It resumes a naturally
+  finished queue; a missing supervisor with unfinished keys requires inspection. It
+  handles a supervisor ending during a completed-boundary stop without killing others.
+  Actual resume event starts Luna PID640685 onv26; confirmed exactly one Luna collector,
+  no orphan old collector. Bonsai rolls at its next journaled boundary. Monitor state
+  and config are recorded under the hourly audit directory and runtime-v26 rollout log.
+- Builds/browser types and161 Node checks pass;9 Python queue/order/rollout tests pass,
+  including rejecting unfinished or unrelated journal completion as resume authorization.
+  Current integrated static policy audit yields zero new holds. No training. Evidence:
+  runs/hourly-check-20260929-0736/{index,payment-mismatches,logic-countermodels,
+  source-holds,integrated-policy-check,rollout-config}.json and queue ledgers.
