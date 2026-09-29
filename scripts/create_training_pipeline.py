@@ -314,6 +314,13 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     # the staged recipe. Re-admit and materialize them on the frozen build.
     default_results = [repo / 'runs/inline-curriculum' / name for name in
                        ('ref-v1.results.jsonl', 'ref-composed-v1.results.jsonl')]
+    if teacher_results_override is None:
+        # Snapshot completed jobs across historical and current campaigns, rather
+        # than silently omitting everything outside the two reference exports.
+        generated = subprocess.check_output(
+            ['node', str(repo / 'ts-host/scripts/snapshot-generated-training.mjs'),
+             '--repo', str(repo)], cwd=repo, text=True).strip()
+        default_results.append(Path(generated))
     teacher_results = ([str(Path(path).resolve()) for path in teacher_results_override]
                        if teacher_results_override is not None else
                        [str(path) for path in default_results if path.is_file()])
@@ -354,7 +361,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             for key in ("command", "inputs"):
                 stage[key] = [value.replace(f"{p}/ts-host/", f"{r}/runtime-host/") for value in stage[key]]
             stage["inputs"].append(f"{r}/runtime-host/frozen-runtime.json")
-    return {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
+    result = {"version": "natlang.training_pipeline/1", "repository": str(repo), "stages": stages,
             "training_tracks": tracks,
             'static_source_bundle': included_static,
             'static_source_bundles': included_statics,
@@ -364,6 +371,22 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
                                  "excluded": excluded_unit_captures,
                                  'replayed_sources': [str(tasks) for tasks, _, _ in saved_replays]
                                      if verified_turns_override is None else []}}
+    result['data_inventory_explicit_input_override'] = (teacher_results_override is not None or static_bundle is not None)
+    from inventory_training_data import catalog
+    inventory_path, inventory = catalog(repo, result)
+    result['data_inventory'] = {'report': str(inventory_path), 'by_status': inventory['by_status'],
+                              'missing_required_default_inputs': inventory['missing_required_default_inputs'],
+                              'included_quality_blockers': inventory['included_quality_blockers'],
+                              'policy': inventory['policy']}
+    ready = f'{r}/data-inventory.ready.json'
+    guard = {'id': 'audit-data-inventory',
+             'command': [python, f'{p}/scripts/inventory_training_data.py', '--check-report', str(inventory_path), '--ready-out', ready],
+             'inputs': [str(inventory_path), f'{p}/scripts/inventory_training_data.py', str(repo / 'training/data_sources.json')],
+             'outputs': [ready]}
+    index = next(i for i, stage in enumerate(stages) if stage['id'] == 'train-joint')
+    stages.insert(index, guard)
+    stages[index + 1]['inputs'].append(ready)
+    return result
 
 
 def main():

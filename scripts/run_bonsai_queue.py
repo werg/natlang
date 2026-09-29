@@ -11,6 +11,7 @@ import signal
 import time
 import math
 import random
+import shutil
 import urllib.request
 from pathlib import Path
 
@@ -95,7 +96,7 @@ def failure_cooldown(streak):
 
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
-              provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low'):
+              provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0):
     if model_concurrency is None:
         model_concurrency = 1 if provider else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
@@ -120,6 +121,13 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     for entry in entries:
         if entry['key'] in attempted:
             continue
+        if min_free_mib:
+            free_mib = shutil.disk_usage(journal.parent).free // (1024 * 1024)
+            if free_mib < min_free_mib:
+                record(dict(event='storage_pause', key=entry['key'], time=time.time(),
+                            free_mib=free_mib, minimum_free_mib=min_free_mib,
+                            disposition='stopped_before_case; restart same queue/journal after freeing space'))
+                return
         if provider and next_allowed_at > time.time():
             record(dict(event='cooldown', key=entry['key'], time=time.time(),
                         failure_streak=failure_streak, until=next_allowed_at))
@@ -218,15 +226,18 @@ if __name__ == '__main__':
     parser.add_argument('--model-id', default='Ternary-Bonsai-2-27B')
     parser.add_argument('--provider')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
+    parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
     if args.case_seconds < 1:
         parser.error('--case-seconds must be positive')
+    if args.min_free_mib < 0:
+        parser.error('--min-free-mib must not be negative')
     if args.model_concurrency is not None and args.model_concurrency < 1:
         parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
     run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
-              args.model_concurrency, args.execution_plans, args.reasoning_effort)
+              args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib)

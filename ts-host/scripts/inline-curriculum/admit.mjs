@@ -35,6 +35,7 @@ if (!positionals.length || !values.ledger) throw new Error('usage: admit.mjs RES
 const written = item => item.admitted && !(values['require-technique'] && item.notes?.includes('judged_directly'));
 
 const admissions = [];
+const writtenIds = new Set();
 async function* admittedRows() {
   for (const path of positionals) {
     const input = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
@@ -43,8 +44,15 @@ async function* admittedRows() {
       const row = JSON.parse(line);
       if (!row.task?.program_ir?.curriculum) continue;
       const item = admitRow(row);
+      // Automatic historical snapshots can overlap explicitly supplied exports.
+      // Preserve the admission verdict and record why a duplicate is not emitted.
+      const duplicate = written(item) && writtenIds.has(String(row.id));
+      if (duplicate) item.notes = [...(item.notes ?? []), 'duplicate_input_trajectory_id_not_written'];
       admissions.push(item);
-      if (written(item) && values.admitted) yield JSON.stringify(stripHint(row)) + '\n';
+      if (written(item) && values.admitted && !duplicate) {
+        writtenIds.add(String(row.id));
+        yield JSON.stringify(stripHint(row)) + '\n';
+      }
       const f = item.facts;
       console.log(`${item.admitted ? 'ADMIT ' : 'REJECT'} ${item.program_id}  root turns ${f.rootTurns}, evals ${f.evals}, inline ${f.inlineCalls}, ` +
         `named ${f.namedChildCalls}, edits ${f.edits}${item.reasons.length ? `  — ${item.reasons.join('; ')}` : ''}`);

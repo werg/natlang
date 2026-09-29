@@ -13,6 +13,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # while a collector uses this checkout's dist.
 TS_HOST="${NATLANG_TS_HOST:-$ROOT/ts-host}"
 MODEL="${1:?model: lfm, ling or spark}"; OUT="${2:?output directory}"; shift 2
+# Discover historical/current completed teacher jobs by default; immutable
+# snapshots exclude eval splits and apply current admission, with a reasons ledger.
+if [ "${NATLANG_GENERATED_RESULTS:-auto}" != off ]; then
+  GENERATED_RESULT="$(node "$TS_HOST/scripts/snapshot-generated-training.mjs" --repo "$ROOT")"
+  set -- "$@" "$GENERATED_RESULT"
+fi
+for REFERENCE_RESULT in "$ROOT/runs/inline-curriculum/ref-v1.results.jsonl" "$ROOT/runs/inline-curriculum/ref-composed-v1.results.jsonl"; do
+  [ -f "$REFERENCE_RESULT" ] || continue
+  REFERENCE_PRESENT=0
+  for INPUT_RESULT in "$@"; do
+    [ "$(realpath "$INPUT_RESULT")" = "$REFERENCE_RESULT" ] && REFERENCE_PRESENT=1
+  done
+  [ "$REFERENCE_PRESENT" = 1 ] || set -- "$@" "$REFERENCE_RESULT"
+done
 STATIC_MANIFESTS=("$ROOT/data/teacher/source-backed/static.manifest.json" "$ROOT/data/teacher/recovered/static.manifest.json" "$ROOT/data/teacher/directory-expansion/static.manifest.json" "$ROOT/data/teacher/workflowevals/static.manifest.json")
 if [ -n "${NATLANG_STATIC_BUNDLE:-}" ]; then
   IFS=',' read -r -a STATIC_MANIFESTS <<< "$NATLANG_STATIC_BUNDLE"
@@ -31,6 +45,15 @@ for STATIC_MANIFEST in "${STATIC_MANIFESTS[@]}"; do
   fi
 done
 [ "$#" -gt 0 ] || { echo "no results files or ready static bundle given"; exit 2; }
+INVENTORY_ARGS=()
+for INPUT_RESULT in "$@"; do INVENTORY_ARGS+=(--input "$INPUT_RESULT"); done
+for STATIC_MANIFEST in "${STATIC_MANIFESTS[@]}"; do
+  [ "$STATIC_MANIFEST" = off ] || INVENTORY_ARGS+=(--input "$STATIC_MANIFEST")
+done
+if [ -n "${NATLANG_STATIC_BUNDLE:-}" ] || [ "${NATLANG_GENERATED_RESULTS:-auto}" = off ]; then
+  INVENTORY_ARGS+=(--allow-input-override)
+fi
+python3 "$ROOT/scripts/inventory_training_data.py" --repo "$ROOT" "${INVENTORY_ARGS[@]}"
 # REASONING_END closes the template's reasoning: reasoning no model wrote (curriculum references) is masked through it.
 REASONING_END=()
 case "$MODEL" in

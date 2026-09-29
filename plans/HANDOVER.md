@@ -1,5 +1,62 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **DATA CARRY-FORWARD — 2026-09-30.** Both builders now automatically snapshot
+> completed native teacher jobs, alongside older2,192 static reference trajectories
+> and the four source bundles. New persistent artifact catalog and committed source
+> policy expose migration/review/rerender backlogs, missing files and exclusions.
+> Default recipes check that previously included artifacts are carried forward or
+> have recorded replacement/disposition; explicit overrides are reported. Latest
+> snapshot2,745 candidate trajectories/2,414 programs from5,490 completed files,
+> not a final ready count. Catalog6,170 artifact paths (including raw JSON/archives), not distinct datasets.
+> Reviewed planning recipe runs/data-lineage-20260930/recipe.json; no training.
+> New pre-joint-training guard blocks the unresolved Workflow primitive evidence
+> issue until fixed/held. See plans/DATA_LINEAGE.md and training/data_sources.json.
+> data/teacher/data-inventory/current.json is the persistent view; immutable reports
+> and per-file generated-snapshot ledgers preserve decisions and source hashes.
+
+
+> **LATEST CHECK — 2026-09-29 22:17 UTC.** MiniCPM Q4_K_XL download is
+> complete and SHA-256 verified; CPU tool-call smoke passed (`eval`, `2+3`).
+> GPU evaluation has NOT started. Evaluator PID26597 is alive and waiting for a
+> safe completed case boundary from Bonsai PID8981, runtime-v39/queue-v31.
+> Current batch continues producing fresh replies; do not replace the supervisor
+> while this evaluator watches its identity. Evaluation plan:24 heldout native
+> cases plus13 application probes, then restore Bonsai. State/report directory:
+> runs/minicpm-eval-20260929/. Older ENOSPC traceback in worker.log is historical.
+> Luna PIDs22544/22545 are historical: current workers are26595/26596, resumed
+> on queue-resume-v2.jsonl after disk-full failures. Only the two storage-failed
+> case keys received reviewed retry suffixes; completed keys remain unchanged.
+> Superseded V5/V6 audit files were losslessly archived with digest verification;
+> ledger runs/luna-generation-20260929-two/storage-archive.jsonl. Both Luna workers
+> are alive, one provider request each. Current filesystem has42GiB available.
+>
+> **OPEN QUALITY FINDING:** Workflow primitive scripted references can answer
+> immediately although the initial rendered `state` is truncated. Directory
+> full-visible-input proofs do not cover these4,194 primitive references. Their
+> reported native approval counts must NOT be treated as a finished quality audit.
+> Next: ensure complete state is visible before primitive scripted conclusions,
+> independently prove that coverage, or hold affected static supervision. Preserve
+> the source IR and live model generation; use a new frozen runtime for rebuilding.
+> Canonical four-bundle count before this additional audit is12,471 approved native
+> decisions/7,910 reducer decisions (63.43%); previous12,486/7,925 figures read an
+> obsolete loose directory turns file instead of manifest-selected v9.
+
+
+> **TWO LUNA GENERATION WORKERS — 2026-09-29 about21:57 UTC.** User explicitly
+> increased Luna generation to two workers, superseding the earlier one-worker
+> limit. PIDs22544/22545, gpt-6-luna/openai-codex, one request per process (two
+> total), execution plans/low effort, frozen workflow runtime-v2. Disjoint queues:
+> runs/luna-generation-20260929-two/worker-{1,2}/;32 cases each, eight reducers
+> each (25% of64 roots). These collect actual model trajectories from the prepared
+> WorkflowEvals pilot; static references are already integrated separately.
+> First worker has two admitted completions; second has fresh model replies.
+> Existing15s transport/rate-limit exponential backoff and provider-failure cooldown
+> retained. New supervisor --min-free-mib1024 stops BEFORE a case if disk is low;
+> restart same queue/journal after freeing space, no attempted-case skip added.
+> State/PIDs: runs/luna-generation-20260929-two/state.json. Inspect actual processes
+> and journals, not only startup status. Bonsai/evaluator unchanged; no GPU use.
+
+
 > **WORKFLOWEVALS IMPORT — 2026-09-29.** User released the four retired eval
 > repositories into training and confirmed Apache-2.0 for all (three licenses
 > recorded as user-confirmed). Pinned acquisition complete:705 scenarios/13,105

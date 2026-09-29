@@ -1,0 +1,27 @@
+{
+  "version": "natlang.data_source_policy/1",
+  "policy": "Discover and retain all artifacts. Unknown or incompatible data remains a visible backlog; never infer approval from age, filename, or existence. Exclusion requires a recorded reason. All selected data still passes final split, native, token and dedup audits.",
+  "trajectory_identity_policy": "Latest eligible completed artifact per trajectory ID enters the default snapshot; all older copies/revisions remain on disk and in the ledger with their hash and replacement link. Different IDs are not discarded for similar content; final rendered-pair audit handles that.",
+  "replacements": {},
+  "required_default_inputs": [
+    "runs/inline-curriculum/ref-v1.results.jsonl",
+    "runs/inline-curriculum/ref-composed-v1.results.jsonl",
+    "data/teacher/source-backed/static.manifest.json",
+    "data/teacher/recovered/static.manifest.json",
+    "data/teacher/directory-expansion/static.manifest.json",
+    "data/teacher/workflowevals/static.manifest.json"
+  ],
+  "decisions": [
+    {"glob": "data/external_pilot/jeff-test-tasks.jsonl", "status": "evaluation_only", "reason": "Preserved benchmark tasks remain test-only; STATIC_DATA_RECOVERY.md"},
+    {"glob": "data/external_pilot/*finqa*", "status": "transformation_pending", "next_action": "Modern numeric IR, explicit operand evidence, source-answer agreement; preserve dev split."},
+    {"glob": "data/external_pilot/*scone*", "status": "transformation_pending", "next_action": "Expand reviewed state adapter with continuity and intermediate-state checks; retain source license/groups."},
+    {"glob": "data/external_pilot/*sgd*", "status": "transformation_pending", "next_action": "Expand modern dialogue-state adapter; validate service-local transitions and split groups."},
+    {"glob": "data/external_pilot/*clevr*", "status": "transformation_pending", "next_action": "Expand scene adapter; replay source programs and preserve validation split."},
+    {"glob": "data/external_pilot/*sales*", "status": "quality_review_pending", "next_action": "Review synthetic labels, provenance and company split groups; dedup consolidated/top-up sources."},
+    {"glob": "data/external_pilot/*nanojev*", "status": "transformation_pending", "next_action": "Expand reviewed typed-decision adapter beyond the pilot; preserve source labels and groups."},
+    {"glob": "data/leaf_references.jsonl", "status": "quality_review_pending", "next_action": "Join modern types, prompts and original review provenance; do not undo existing quarantine."},
+    {"glob": "data/teacher/legacy-decisions.archive*", "status": "transformation_pending", "next_action": "Recover compatible current-IR inputs and original trajectories; never fabricate modern reasoning."},
+    {"glob": "data/*.sft.jsonl*", "status": "rerender_review_pending", "next_action": "Locate original tasks/trajectories and rebuild using current IR, admission and the selected student's template."},
+    {"glob": "data/teacher/workflowevals/static.manifest.json", "status": "integrated_quality_fix_pending", "next_action": "Prove complete visible primitive state before scripted conclusions, or hold those decisions; directory evidence already checked."}
+  ]
+}

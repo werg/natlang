@@ -623,3 +623,69 @@ Current teacher holdout pools share zero source IDs/groups with this new bundle.
 The prepared64-case Bonsai pilot has16 reducers (25%); it is not in the active queue.
 Static mix audit before model-specific rendering:12,486 approved decisions,7,925
 reducers (63.47%); this is supply coverage, not the final token-filtered training mix.
+
+
+## 2026-09-29 — user requested two Luna generation workers
+
+Supersedes the one-worker limit. Started22544/22545 on disjoint32-case queues from
+WorkflowEvals teacher pilot, each24 primitive/eight directory roots; total64 cases
+and25% directory reducers. One model request per process means two total. Both
+use frozen runtime-v2, gpt-6-luna/openai-codex, low effort/execution plans. Initial
+model responses present; first two completions admitted. Existing transport and
+rate-limit exponential retry delays/cooldowns remain. Bonsai/MiniCPM watchers and
+GPU ownership unchanged.
+
+Filesystem has only about2GiB free. Added optional --min-free-mib supervisor floor;
+new Luna workers use1024MiB and stop before starting another case if below it.
+No finish event is written for that unattempted case, so restarting the same queue
+and journal resumes it. Default0 preserves the running supervisors' configuration.
+State and per-worker journals/results/logs: runs/luna-generation-20260929-two/.
+
+
+## 2026-09-29 22:17 UTC — storage recovery, eval handoff and primitive evidence audit
+
+The final authenticated1MiB range completed; exact model SHA verified and CPU
+tool-call smoke passed. Signed-URL refresh failures now re-enter the downloader
+retry loop. Evaluation PID26597 waits for a safe Bonsai boundary; GPU benchmarks
+have not started. Preserve Bonsai PID8981 identity until that handoff.
+
+Disk exhaustion interrupted two Luna cases and the first evaluation watcher.
+Lossless SHA-checked archival of superseded V5/V6 audit JSONL recovered about896MiB;
+archive ledger is runs/luna-generation-20260929-two/storage-archive.jsonl. Resumed
+Luna with PIDs26595/26596 and reviewed retry keys only for the two storage failures.
+The current filesystem reports42GiB available. Earlier watcher traceback is stale.
+
+New quality finding: primitive WorkflowEvals references immediately return the gold
+while initial state rendering can truncate input. Existing directory evidence proof
+is insufficient for these references. Do not claim4,194 primitive static conclusions
+are fully audited until complete visible state is proved or they are held. Live
+teacher IR remains useful. Rebuild on a new frozen runtime, leaving live v2 intact.
+Canonical manifest-selected static counts correct the earlier loose-file count:
+12,471 native approved decisions/7,910 reducers (63.43%), before this new audit and
+final student rendering/dedup.
+
+
+## 2026-09-30 — automatic full-corpus discovery and persistent carry-forward
+
+User wants all data tracked across pipeline/IR changes. Replaced default omission
+of historical native teacher jobs with automatic, immutable admission-filtered
+snapshots in both builders. Older static reference sets and source/code lanes remain.
+Latest eligible artifact per trajectory ID is selected; older variants are retained
+and ledger-linked, never deleted. Overlap with explicit exports is deduplicated
+at admission with a note. Default required inputs and previously included artifacts
+cannot silently disappear: a replacement/policy decision or explicit input override
+is required. Added persistent version/status/next-action catalog and immutable
+per-build report, source policy, transformation inputs/outputs and missing-file
+retention. Unknown artifacts remain visible migration/review backlog.
+
+Actual full-corpus planning audit:5,490 completed files;2,745 selected trajectories
+across2,414 unique programs;684 repeated eligible IDs.3,836 cataloged artifact
+paths include derived/archive copies; do not sum them as distinct examples.
+Created runs/data-lineage-20260930/recipe.json without executing collection/training.
+Pre-joint inventory readiness explicitly blocks Workflow primitive hidden-input
+references until repaired/held; generation remains on its existing frozen runtimes.
+
+Raw JSON/source archives expanded the persistent catalog to6,170 artifact paths;
+630 are transformation-pending and125 rerender-review under recorded source policies.
+These are files (including duplicates/derivatives), not training-example counts.
+Readable overview: data/teacher/data-inventory/overview.md.
