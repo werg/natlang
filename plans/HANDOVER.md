@@ -1,5 +1,22 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **CURRENT CHECK — 2026-09-29 19:40 UTC.** Bonsai PID8981 now runs frozen
+> v39/queue-v31, cap4; GPU100%/7,457MiB. Compiler-poisoned case52 freshly
+> succeeded (43 turns); the original failure remains. Current batch is progressing
+> (56 saved turns/21 fresh replies);353 pending entries/742 roots including current.
+> Luna v38/queue-v27 finished its five retries and exited; all five rejected, no
+> new worker started. Fresh audit includes separate repair jobs previously missed:
+>555 results/365 admitted/1,703 approved decisions/191 held/zero unlinked.
+> Artifact: `runs/check-20260929-190056/generation-quality-review.json`.
+> MuSiQue57 and783 have source-question/gold disputes (unveiling vs launch;
+> US vs English Portsmouth); hold adjudication is still outstanding, including
+> propagation into static/queued data.801 is an exact-wording false negative.
+> Correction to the earlier span-F1 claim: partial overlap remains excluded by
+> the training gate and is insufficient proof of equivalence. Future adapter is
+> restored to normalized exact plus original source aliases. Published V9 unchanged.
+> Next: propagate verified source holds, curate answer equivalence independently,
+> and include repair output paths explicitly in the next SFT build. No training.
+
 > **GENERATION CHECK — 2026-09-29 about19:00 UTC.** BonsaiPID5386 on
 > frozen v37/queue-v29 continues with cap4; GPU100%/7,457MiB. One long case
 > is progressing; two post-reboot hard timeouts reached their wall budgets with

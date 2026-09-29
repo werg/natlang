@@ -162,3 +162,37 @@ remain unchanged. One Luna worker/cap1, no extra repair workers, no student trai
 - Quality priorities: inspect the poisoned-case fresh repair under v39; evaluate
   retry outcomes before more attempts; continue held-source/QASPER filters;
   monitor reducer share. No student training or weights changed.
+
+
+## 19:40 UTC: deployed fix, retry review, audit coverage correction
+
+- Bonsai v39 boundary rollout completed: PID8981, queue-v31, four concurrent
+  requests. GPU100%/7,457MiB; current batch has56 saved turns and21 fresh replies
+  with increasing decode.353 pending queue entries/742 roots including current.
+- Poisoned inline case52 fresh repair accepted in43 trajectory turns, confirming
+  the compiler fix in production. Preserve original failed attempt.
+- Single Luna retry worker finished all five attempts and exited normally; all
+  five rejected. Do not blindly repeat. Cases771/819 still need model link reasoning;
+  819 has the supplied Germans-to-Brazil five-million chain.
+- Independent source inspection changes the earlier diagnosis: MuSiQue57
+  (`2hop__151457_15815`) asks about unveiling; articles/1 says June1985, whereas
+  gold October18,1985 refers to test-market deployment. MuSiQue783
+  (`2hop__258019_8600`) links Woodbury Langdon's Portsmouth, New Hampshire to
+  Southampton's relation to English Portsmouth. Preserve gold; these are pending
+  source adjudication, not established model errors. Holds must still propagate
+  into static/queued data before claiming those datasets are clean.
+- Case801 correctly includes the complete gold phrase with subject Yale University;
+  normalized exact rejects the extra subject. Keep its trajectory for independently
+  reviewed equivalence, without turning rejected samples into negatives.
+- **Course correction:** undo the future MuSiQue span-F1 threshold0.9 policy.
+  Token overlap can accept wrong qualifiers and the training quality gate already
+  holds partial span agreement. Therefore the previous assertion that this policy
+  admits correct paraphrases into training was inaccurate. Use normalized exact
+  with original source answer aliases pending a reliable equivalence policy.
+  Frozen v39 and published static V9 already use the old exact contract.
+- Audit coverage fix: `runs/check-20260929-190056/audit-v39.mjs` includes expansion
+  jobs AND this check's separately stored binding/Luna repair jobs. Snapshot555
+  results/365 admitted trajectories/1,703 approved decisions/191 held/zero unlinked.
+  These counts are audit admission, not a newly published SFT dataset. Explicitly
+  add repair result output paths to the next SFT build; published V9 unchanged.
+- No workers interrupted, no student training, no tests run during this check.
