@@ -188,7 +188,8 @@ function hostCopy(value: unknown, seen = new Map<object, unknown>()): unknown {
   if (seen.has(value)) return seen.get(value);
   if (Array.isArray(value)) { const out: unknown[] = []; seen.set(value, out); for (const item of value) out.push(hostCopy(item, seen)); return out; }
   const out: Record<string, unknown> = {}; seen.set(value, out);
-  for (const [key, item] of Object.entries(value)) out[key] = hostCopy(item, seen);
+  for (const [key, item] of Object.entries(value)) Object.defineProperty(out, key,
+    { value: hostCopy(item, seen), enumerable: true, writable: true, configurable: true });
   return out;
 }
 const itemRef = (container: Record<string, Value>, key: string, type: Type, env: TypeEnv, path: string, deny = ''): Ref =>
@@ -490,6 +491,7 @@ export class NativeSession {
   private cuts: { shown: string; full: string }[] = [];
   /** Types this call's evals declared (`type X = …`, `interface X { … }`), by name. */
   private localTypes: Record<string, Type> = {};
+  private activeScopeLocals?: Map<string, [() => unknown, ((value: unknown) => void)?]>;
   constructor(readonly runtime: NativeRuntime, readonly lam: LambdaNode, readonly env: TypeEnv) {}
 
   /** Whether the model declared this persistent local with let (true) or const. */
@@ -1071,15 +1073,35 @@ export class NativeSession {
     const locals = splitScope(Object.fromEntries(localNames.map(name => [name, this.lam.let[name]!])));
     let finished: unknown;
     const plans = compiled.plans ?? [];
+    this.activeScopeLocals = new Map();
     const live = { inputs: inputs.live, locals: locals.live, captures: captureRead, callables: this.callables(),
       services: this.availableServices(), folder: this.lam.projectTransaction?.folder.root(),
       callInputs: inputsBinding || inputsObject ? frozenCopy(this.lam.args) : undefined,
       transcript: transcriptBinding ? new TranscriptView(this.transcript.slice()) : undefined,
       request: (tool: string, args: Record<string, unknown>) => { requested ??= { tool, args }; },
+      bindLocal: (name: string, get: () => unknown, set?: (value: unknown) => void) => {
+        this.activeScopeLocals?.set(name, [get, set]);
+      },
       inline: (index: number, values: unknown[], accessors: Record<string, unknown>) => {
         const plan = plans[index];
         if (!plan) throw new Error('internal error: unknown inline plan');
-        return hooks.inline(this, plan, values, accessors);
+        const bound = { ...accessors };
+        for (const capture of plan.captures) {
+          if (!capture.mutable || capture.source === 'block' ||
+              !(localNames.includes(capture.name) || compiled.bindings.some(binding => binding.name === capture.name))) continue;
+          const accessor = accessors[capture.name] as [() => unknown, ((value: unknown) => void)?];
+          if (!accessor) continue;
+          this.activeScopeLocals?.set(capture.name, accessor);
+          bound[capture.name] = [
+            () => { const active = this.activeScopeLocals?.get(capture.name); return active ? active[0]() : this.lam.let[capture.name]; },
+            (value: unknown) => {
+              const active = this.activeScopeLocals?.get(capture.name);
+              if (active?.[1]) active[1](value);
+              else this.lam.let[capture.name] = coerce(value, this.lam.letTypes[capture.name]!, this.env, `let/${capture.name}`);
+            },
+          ];
+        }
+        return hooks.inline(this, plan, values, bound);
       },
       finite: hooks.finite, guard: hooks.guard,
       iterateOn: (step: unknown, initial: unknown, ...args: unknown[]) => hooks.iterateOn(this, step, initial, ...args),
@@ -1112,7 +1134,7 @@ export class NativeSession {
       if (unsettled) throw new Error(`${unsettled[0]} holds a promise that could not be kept: await the call that made it`);
       const annotations = new Map(compiled.bindings.map(binding => [binding.name, binding.annotation]));
       // A local annotated with a type an eval declared stores that type's definition, which later evals can read.
-      const typesHere = evalTypeDeclarations(code), localTypes = { ...this.localTypes, ...typesHere };
+      const typesHere = evalTypeDeclarations(code), localTypes = { ...evalTypeDeclarations(Object.values(this.runtime.declarations).join("\n")), ...this.localTypes, ...typesHere };
       const initializers = new Map(compiled.bindings.map(binding => [binding.name, binding.initializer]));
       const mutability = new Map(compiled.bindings.map(binding => [binding.name, binding.mutable]));
       const staged: [string, Type, Value][] = [];
@@ -1165,6 +1187,7 @@ export class NativeSession {
         this.lam.let[name] = value;
         if (mutability.has(name)) this.scopeLocalMutability.set(name, mutability.get(name)!);
       }
+      this.activeScopeLocals = undefined;
       if (functionResult !== undefined) {
         this.lam.return = functionResult;
         this.failureDebug = undefined;
@@ -1223,7 +1246,7 @@ export class NativeSession {
         code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);
       if (error instanceof Reject) { const result = rejected(error); return { ...result, text: result.text + note }; }
       return { kind: 'error', text: message + note };
-    }
+    } finally { this.activeScopeLocals = undefined; }
   }
 
   private resolve(path: string): Ref {

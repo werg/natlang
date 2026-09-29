@@ -1,5 +1,16 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **Hourly check 02:33, 2026-09-29:** repaired dropped `__proto__` data keys,
+> qualified service alias annotations, and stale mutable inline captures across evals.
+> Old affected runtime failures excluded from training negatives; fresh reviewed retries queued.
+> Hold ambiguous KQA Pro train:33143 and FOLIO477 without relabeling.
+> V18 boundary rollout: Bonsai queue-v15 / Luna queue-v11, actual state/PIDs at
+> runs/bonsai-recovery/runtime-v18.rollout-state.json. V17 was superseded before deployment.
+> Builds/browser types and 139 focused Node tests pass; one expanded collector checkpoint
+> timing failure needs investigation (isolated rerun passes). Audits: runs/hourly-check-20260929-0233/.
+> One Luna worker, no training. Continue the hourly sleep/check loop until stopped.
+
+
 > **Hourly check 01:25, 2026-09-29:** v15 movie-awards retry and board retry
 > are training-admitted; country query remains an incomplete model interpretation
 > failure (actual input verified visible). Hold FOLIO 416 after countermodel review.

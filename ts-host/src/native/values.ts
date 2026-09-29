@@ -118,7 +118,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
   }
   if (wanted.kind === 'dict' || wanted.kind === 'record') {
     if (!plain(raw)) return reject(path, 'type-mismatch', formatType(type), preview(raw));
-    const out: Record<string, Value> = {};
+    const out: Record<string, Value> = Object.create(null);
     for (const [key, value] of Object.entries(raw)) {
       if (key.startsWith('$')) return reject(`${path}/${key}`, 'reserved-key');
       if (wanted.kind === 'dict') out[key] = coerce(value, wanted.element, env, `${path}/${key}`);
@@ -129,7 +129,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
         out[key] = coerce(value, field.type, env, `${path}/${key}`);
       }
     }
-    return wanted.kind === 'record' ? Object.fromEntries(wanted.fields.filter(f => f.name in out).map(f => [f.name, out[f.name]!])) : out;
+    return wanted.kind === 'record' ? Object.fromEntries(wanted.fields.filter(f => Object.hasOwn(out, f.name)).map(f => [f.name, out[f.name]!])) : Object.fromEntries(Object.entries(out));
   }
   return reject(path, 'type-mismatch', formatType(type), preview(raw));
 }

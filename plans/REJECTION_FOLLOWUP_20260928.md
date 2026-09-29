@@ -300,3 +300,25 @@ Python queue checks, including no-loss/order/budget-preservation checks. Admissi
 snapshot: one of three Luna v15 finals admitted (two source-held FOLIO finals), one
 of one early Bonsai finals admitted. Later arriving finals are checked next hour.
 Artifacts: runs/hourly-check-20260929-0125/. The hourly sleep/check loop continues.
+
+
+## Hourly check 02:33, 2026-09-29 — runtime correctness before model blame
+
+Snapshot: Bonsai 23 finals / 15 accepted; Luna 32 finals / 21 accepted on v16. Both producing fresh replies, no server or transport crash. Warm Bonsai RAM about 2.68 GiB.
+
+Confirmed and repaired three runtime faults:
+- Portable object copying and dictionary coercion lost the own `__proto__` key. Reconciliation's provided helper correctly computed 56; the runtime dropped it. Copy own properties safely and filter record fields with Object.hasOwn. Preserve ordinary output object prototypes; do not relax the eval prototype-mutation restriction.
+- External service annotations such as `(proof.Step)[]` passed TypeScript but failed native parsing/resolution. Parse qualified names and resolve namespace-local aliases structurally. Invalid Step values still fail type checking.
+- Saved inline NL functions captured the old eval's lexical `budget`. A subsequent eval changed it to 4000 but children still computed with 5000. Connect mutable top-level captures to the active transaction's accessors, then the committed scope. Block-local and immutable captures retain lexical behavior. Clear active accessors after success or failure.
+
+Breaking decisions / quality gates:
+- Add runtime_contract_version=17 to collection provenance and reuse matching. Old failed prototype-key reconciliation, late-binding, and affected proof-verifier runs are excluded from negative materialization, handoff-site discovery and admission. Preserve original rows; fresh retries have new keys.
+- Hold KQA Pro train:33143: English asks about a nominated work; original symbolic program instead reads nomination statement-is-subject-of (award ceremony). KB separately gives Citizen Kane as for-work. No answer relabeling.
+- Hold FOLIO story477: English never states TikTok is an APP or equates programmed with a program; generic APP premise has ambiguous quantification. Do not silently supply the missing connections / XOR interpretation to force gold.
+- Frozen v17 was prepared, then superseded before either worker deployed it when additional source/reuse review landed. Preserve v17 and its unused queues; deploy new immutable v18. Only the exact waiting rollout monitor was stopped; no progressing workers interrupted.
+
+V18: Bonsai queue-v15 (401 entries); Luna queue-v11 (116 entries), same journals. Reviewed fresh retries: proof chain19 root reset, Luna mutable budget and prototype-key reconciliation. Family/source rotation and large folder budgets preserved. Boundary monitor: runs/bonsai-recovery/runtime-v18.rollout-state.json (initial PID 541963).
+
+Validation: Node/browser builds and browser type check passed; 139 focused Node cases passed. Expanded collector run had one timing-sensitive request-cap checkpoint test failure (two saved responses observed instead of three); the isolated test passed on rerun. Investigate this checkpoint timing rather than treating the expanded suite as fully passing. No training launched.
+
+World quest failures have valid reference paths including finding the latchkey and mat; retain success certificate oracles. FOLIO171's gold Unknown is supported: heat treatment alone does not guarantee survival. Other reasoning/classification failures remain failures, not source holds.

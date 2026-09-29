@@ -37,3 +37,16 @@ export function quarantineReason(record: ProgramRecord): string | undefined {
   if (curriculum?.family === 'folder_mixed' && record.dataset === 'banking77' && curriculum.payment_scope_version !== 2)
     return 'legacy_payment_scope';
 }
+
+
+/** Old infrastructure failures must not teach models that correct actions are bad decisions. */
+export function runtimeFailureReason(row: { task: Record<string, unknown>; provenance?: Record<string, unknown>;
+  outcome?: Record<string, unknown>; trajectory?: unknown[] }): string | undefined {
+  if (row.outcome?.accepted !== false || Number(row.provenance?.runtime_contract_version ?? 0) >= 17) return;
+  const record = row.task.program_ir as ProgramRecord;
+  const family = (record.curriculum as { family?: string } | undefined)?.family ?? record.family;
+  if (family === 'inline_late_binding' || (record.family === 'cb_reconciliation' &&
+      JSON.stringify(record.semantics.expected).includes('__proto__')) ||
+      (family === 'logic_proof_verifier' && JSON.stringify(row.trajectory).includes('bad character at')))
+    return 'obsolete_runtime_contract';
+}

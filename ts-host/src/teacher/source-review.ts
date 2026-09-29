@@ -104,6 +104,18 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
     annotatedLabel: 'planning=Unknown; planning or math=False; chemistry or math=False; conditional=True', status: 'pending',
     reason: 'Math(james) is unconstrained: with chemistry, award, experiment and planning false, either value of Math satisfies the premises (a different student witnesses the existential). Both disputed conclusions therefore admit true and false models rather than being contradicted.',
   },
+  {
+    dataset: 'kqapro', id: 'train:33143', aliases: ['train_33143'],
+    text: 'What was the work that Robert Wise was nominated for the Academy Award for Best Film Editing about?',
+    annotatedLabel: '14th Academy Awards', status: 'pending',
+    reason: 'The English asks about the nominated work, but the original program reads the nomination statement-is-subject-of qualifier (the award ceremony). The KB separately gives Citizen Kane as for-work. The wording does not unambiguously request the ceremony.',
+  },
+  {
+    dataset: 'folio', id: 'story:477', aliases: ['folio:story:477', 'story477'],
+    text: 'All software is programmed. An APP is either related to YouTube or Instagram.',
+    annotatedLabel: 'program=True; good or program=True; not related and program=False; related or program=False', status: 'pending',
+    reason: 'The English does not state that TikTok is an APP, or equate programmed with a program. Its generic APP premise also leaves quantification ambiguous. Those missing connections and the exclusive-or reading cannot be silently supplied to force the source labels.',
+  },
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */
@@ -121,7 +133,7 @@ export function pendingSourceReview(dataset: string, id: string): SourceReview |
 export function sourceReviewReason(record: Record<string, unknown>):
     string | undefined {
   const curriculum = record.curriculum as { family?: string; shape?: string } | undefined;
-  const inferred = curriculum?.family === 'anli_batch' ? 'anli' :
+  const inferred = curriculum?.family === 'kqapro_question' ? 'kqapro' : curriculum?.family === 'anli_batch' ? 'anli' :
     ['folio_batch', 'folio_entailment'].includes(curriculum?.family ?? '') ? 'folio' : undefined;
   const dataset = record.dataset ?? inferred;
   if (typeof dataset !== 'string') return undefined;
@@ -134,7 +146,7 @@ export function sourceReviewReason(record: Record<string, unknown>):
   }
   const ids = [record.dataset_records, record.source_ids, dataset === 'folio' ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);
-  if (dataset === 'folio' && curriculum?.shape) ids.push(curriculum.shape);
+  if (['folio', 'kqapro'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
   return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id)) ?
     'source_review_pending' : undefined;
 }

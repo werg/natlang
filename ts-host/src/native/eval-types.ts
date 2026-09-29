@@ -11,15 +11,38 @@ import { parseType, type Type } from './types.js';
  */
 export function evalTypeDeclarations(code: string): Record<string, Type> {
   const file = ts.createSourceFile('eval.ts', code, ts.ScriptTarget.ES2022, true);
-  const declared: Record<string, Type> = {};
-  for (const statement of file.statements) {
-    let text: string | undefined;
-    if (ts.isTypeAliasDeclaration(statement) && !statement.typeParameters) text = statement.type.getText(file);
-    else if (ts.isInterfaceDeclaration(statement) && !statement.typeParameters && !statement.heritageClauses)
-      text = `{ ${statement.members.map(member => member.getText(file).replace(/[;,]\s*$/, '')).join('; ')} }`;
-    else continue;
-    try { declared[statement.name.text] = parseType(text); } catch { declared[statement.name.text] = parseType('unknown'); }
-  }
+  const declared: Record<string, Type> = Object.create(null);
+  const namespaces = new Map<string, string>();
+  const walk = (statements: ts.NodeArray<ts.Statement>, namespace = '') => {
+    for (const statement of statements) {
+      if (ts.isModuleDeclaration(statement) && statement.body && ts.isModuleBlock(statement.body)) {
+        walk(statement.body.statements, namespace + statement.name.text + '.');
+        continue;
+      }
+      let text: string | undefined;
+      if (ts.isTypeAliasDeclaration(statement) && !statement.typeParameters) text = statement.type.getText(file);
+      else if (ts.isInterfaceDeclaration(statement) && !statement.typeParameters && !statement.heritageClauses)
+        text = `{ ${statement.members.map(member => member.getText(file).replace(/[;,]\s*$/, '')).join('; ')} }`;
+      else continue;
+      const name = namespace + statement.name.text;
+      try { declared[name] = parseType(text); } catch { declared[name] = parseType('unknown'); }
+      namespaces.set(name, namespace);
+    }
+  };
+  walk(file.statements);
+  // References inside a service namespace use that namespace's aliases, rather than eval-local names.
+  const qualify = (type: Type, namespace: string): Type => {
+    const child = (inner: Type) => qualify(inner, namespace);
+    switch (type.kind) {
+      case 'name': return Object.hasOwn(declared, namespace + type.name) ? { ...type, name: namespace + type.name } : type;
+      case 'record': return { ...type, fields: type.fields.map(field => ({ ...field, type: child(field.type) })) };
+      case 'list': case 'dict': return { ...type, element: child(type.element) };
+      case 'union': return { ...type, members: type.members.map(child) };
+      case 'lambda': return { ...type, params: child(type.params) as typeof type.params, returns: child(type.returns) };
+      default: return type;
+    }
+  };
+  for (const [name, namespace] of namespaces) if (namespace) declared[name] = qualify(declared[name]!, namespace);
   return declared;
 }
 
@@ -28,7 +51,7 @@ export function inlineDeclaredTypes(type: Type, declared: Record<string, Type>, 
   const inline = (inner: Type) => inlineDeclaredTypes(inner, declared, seen);
   switch (type.kind) {
     case 'name': {
-      const definition = declared[type.name];
+      const definition = Object.hasOwn(declared, type.name) ? declared[type.name] : undefined;
       if (!definition || seen.has(type.name)) return type;
       return inlineDeclaredTypes(definition, declared, new Set([...seen, type.name]));
     }

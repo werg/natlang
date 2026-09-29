@@ -841,3 +841,44 @@ test('a reply that is only a JSON value of the declared type is the result; pros
   const wrong = open({ type: '() => { verdict: "entailed" | "unknown" }', instructions: 'Judge.' });
   assert.equal(wrong.session.acceptTextResult('{"verdict": "maybe"}'), false, 'a value of another type is not the result');
 });
+
+
+test('portable dictionary keys preserve __proto__ through eval, locals and typed results', async () => {
+  const { lam, session } = open({ type: '() => { totals: Record<string, number> }', instructions: 'Return totals.' });
+  const result = await session.applyAsync('eval', { code:
+    'const totals: Record<string, number> = JSON.parse(\'{"__proto__":56,"constructor":177,"toString":9}\'); return { totals };' });
+  assert.equal(result.kind, 'ok', result.text);
+  const expected = JSON.parse('{"__proto__":56,"constructor":177,"toString":9}');
+  assert.deepEqual(lam.let.totals, expected);
+  assert.deepEqual(lam.return, { totals: expected });
+  assert.equal((await session.applyAsync('eval', { code: 'totals["__proto__"]' })).value, 56);
+});
+
+test('qualified service aliases preserve structural validation for eval bindings', async () => {
+  const { externalModule } = await import('../dist/native/external.js');
+  const proof = externalModule('proof', 'type Claim = string; type Step = { claim: Claim, from?: string }; export function verify(steps: Step[]): boolean { return steps[0].claim === "fact"; }');
+  const { lam, session } = open({ type: '() => boolean', instructions: 'Verify.' },
+    { services: { proof: proof.exports }, declarations: { proof: proof.declaration } });
+  const result = await session.applyAsync('eval', { code:
+    'const steps: (proof.Step)[] = [{ claim: "fact", from: "F1" }]; return proof.verify(steps);' });
+  assert.equal(result.kind, 'ok', result.text);
+  assert.equal(lam.return, true);
+  assert.deepEqual(lam.let.steps, [{ claim: 'fact', from: 'F1' }]);
+  const bad = await session.applyAsync('eval', { code: 'const invalid: proof.Step[] = [{ claim: 3 }];' });
+  assert.equal(bad.kind, 'rejected', bad.text);
+});
+
+
+test('saved inline functions read the current mutable local across eval transactions', async () => {
+  const seen = [];
+  const { session } = open({ type: '() => boolean', instructions: 'Judge.' }, { agent: async child => {
+    const read = await child.applyAsync('eval', { code: 'budget' });
+    seen.push(read.value);
+    child.lam.return = read.value >= 4600;
+  } });
+  assert.equal((await session.applyAsync('eval', { code: 'let budget = 0; const fits = nl<boolean>`Does the amount fit within budget?`; budget = 5000; const first = await fits();' })).kind, 'ok');
+  const second = await session.applyAsync('eval', { code: 'budget = 4000; const second = await fits(); second' });
+  assert.equal(second.kind, 'ok', second.text);
+  assert.equal(second.value, false);
+  assert.deepEqual(seen, [5000, 4000]);
+});

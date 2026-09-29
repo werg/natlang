@@ -53,3 +53,18 @@ test('movie schema version 3 is held until migrated to world-derived ownership',
   record.curriculum.family_version = 4;
   assert.equal(quarantineReason(record), undefined);
 });
+
+
+test('ambiguous KQA Pro qualifier wording is held without changing its source answer', () => {
+  assert.equal(sourceReviewReason({ curriculum: { family: 'kqapro_question', shape: 'train_33143' } }), 'source_review_pending');
+  assert.equal(sourceReviewReason({ curriculum: { family: 'kqapro_question', shape: 'train_33144' } }), undefined);
+});
+
+test('runtime failures are excluded from negatives until recollected under fixed contracts', async () => {
+  const { runtimeFailureReason } = await import('../dist/teacher/curriculum-policy.js');
+  const row = { task: { program_ir: { family: 'cb_reconciliation', semantics: { expected: JSON.parse('{"totals":{"__proto__":56}}') } } }, outcome: { accepted: false } };
+  assert.equal(runtimeFailureReason(row), 'obsolete_runtime_contract');
+  assert.equal(runtimeFailureReason({ ...row, provenance: { runtime_contract_version: 17 } }), undefined);
+  assert.equal(runtimeFailureReason({ ...row, outcome: { accepted: true } }), undefined);
+  assert.equal(runtimeFailureReason({ task: { program_ir: { curriculum: { family: 'inline_late_binding' } } }, outcome: { accepted: false } }), 'obsolete_runtime_contract');
+});

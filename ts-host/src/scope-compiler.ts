@@ -547,6 +547,8 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
     // Your own locals come back as mutable copies (only parameters are frozen); the eval commits them when it succeeds.
     ...localOptions.filter(binding => !shadowedLocals.has(binding.name)).map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name}` +
       `${binding.annotation ? `: ${binding.annotation}` : ''} = __natlang_copy(__locals.${binding.name});`),
+    ...localOptions.filter(binding => binding.mutable && !shadowedLocals.has(binding.name)).map(binding =>
+      `__live.bindLocal?.(${JSON.stringify(binding.name)}, () => ${binding.name}, (__v: any) => { ${binding.name} = __v; });`),
     ...captureOptions.map(binding => `${binding.mutable ? 'let' : 'const'} ${binding.name} = __captures.${binding.name};`),
     ...helperNames.map(name => `const ${name} = __natlang_callable(${JSON.stringify(name)});`),
     ...serviceNames.map(name => `const ${name} = __live.services[${JSON.stringify(name)}];`),

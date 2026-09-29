@@ -11,7 +11,7 @@ import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { executeProgram, recordDigest, sha256, type ProgramRun } from './collector.js';
 import { PROGRAM_VERSION, type ProgramRecord } from './program.js';
 import { DATA_QUALITY_VERSION, csvRows } from './oracle.js';
-import { RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
+import { runtimeFailureReason, RETIRED_FAMILIES, quarantineReason } from './curriculum-policy.js';
 import { sourceConversionProblems } from './source-conversion.js';
 
 export const CURRICULUM_VERSION = 'natlang.inline_curriculum/1';
@@ -253,7 +253,7 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
   const facts = runFacts(record, (row.trajectory ?? []) as Turn[]);
   const reasons: string[] = sourceConversionProblems(row), notes: string[] = [];
   if (RETIRED_FAMILIES.has(c.family)) reasons.push('retired_family');
-  const quarantine = quarantineReason(record);
+  const quarantine = quarantineReason(record) ?? runtimeFailureReason(row);
   if (quarantine) reasons.push(quarantine);
   for (const name of obsoleteOutcomes((row.trajectory ?? []) as Turn[])) reasons.push(`obsolete_outcome:${name}`);
   const outcome = row.outcome ?? {};
