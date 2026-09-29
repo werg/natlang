@@ -1,5 +1,22 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **AUTHENTICATED DOWNLOAD RECOVERY — 2026-09-29 about20:52 UTC.** User
+> completed local HF login; authenticated whoami succeeds inside downloader.
+> Token mounted read-only via HF_TOKEN_PATH, never printed or embedded in args.
+> Earlier Xet transfer failed with CAS response-decoding error; both old watchers
+> exited safely and Bonsai never paused. Replaced it with authenticated resolver
+> plus validated resumable1MiB HTTP ranges/eight connections; completed ranges
+> fsynced/journaled, final exact size/SHA required. Retained64.4MB from old valid
+> ranges; latest71.8MB/1.596GB (4.5%),~0.20MB/s,zero new retries. No demonstrated
+> token-driven speed gain yet; prior failure was not an HTTP429 quota error.
+> Actual progress:`runs/sharp-minicpm5-discovery/download-state.json`;
+> downloader container natlang-minicpm-download (1GiB/two CPUs), persistent
+> range journal ranges.jsonl; script download-authenticated.py. Ignore sparse
+> .part apparent size as a progress measure. Completion watcherPID16040;
+> evaluation watcherPID16053 waiting for verified acquisition. Both resumed;
+> BonsaiPID8981 continues unchanged. Earlier12763/14970 watcher PIDs historical.
+> Evaluation state and eventual report remain runs/minicpm-eval-20260929/.
+
 > **STUDENT EVALUATION QUEUED — 2026-09-29 about20:30 UTC.** User explicitly
 > requested evaluation. Download remains incomplete; no model performance score
 > yet. Durable evaluator PID14970 waits on acquisition/CPU smoke, then verifies

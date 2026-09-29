@@ -139,3 +139,26 @@ manual launches. `report.json` will contain scores and missing-case denominators
 Stopping the evaluator during a swap triggers server cleanup and Bonsai restore;
 for whole-machine shutdown stop it first and then stop the restored supervisor.
 Stop the acquisition completion worker too, so it cannot start its CPU smoke.
+
+
+## Authenticated recovery (20:52 UTC)
+
+Xet reconstruction failed with response-body decoding error. Acquisition and
+queued evaluation watchers exited without pausing Bonsai. User then configured
+local HF authentication. The downloader's authenticated API identity check
+succeeds; token is read from a read-only mounted file, not logged or embedded in
+commands. No evidence yet that the token improves payload bandwidth: previous
+failure was a decoding error, not an HTTP429 quota response.
+
+New `download-authenticated.py` uses authenticated HF metadata/resolve requests,
+then ranged requests to the signed CDN URL without forwarding the HF bearer
+credential to the CDN. Eight connections,1MiB chunks, durable fsynced range
+journal, retry delay/backoff, and final exact size/SHA verification. Retains
+completed ranges from earlier transport; never treat sparse file length as bytes
+received. `download-state.json` gives completed bytes and session transfer rate.
+Downloader container is detached and bounded to1GiB/two CPUs. Old Xet logs and
+blocked statuses preserved. Current completion/evaluation watcher PIDs16040 and
+16053; BonsaiPID8981 unchanged. These supersede earlier watcher PIDs.
+
+Initial authenticated snapshot71,761,920/1,595,727,200 bytes (4.5%),~0.20MB/s,
+zero retries. Evaluation remains pending real weight checksum and CPU smoke.
