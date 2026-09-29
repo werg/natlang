@@ -9,7 +9,7 @@
 > RAM. Fixed TreeDST sibling-order scoring; JSON whitespace scoring correction and
 > ambiguous QASPER-negative holds now deployed in runtime-v30 at boundaries. Bonsai actively
 > uses4slots/global cap4, 1,536MiB host cache/6GiB cap, four roots/collector. Initial
-> sample: mean3.68 active slots,18.27tokens/wall sec, GPU7.46GiB/server RAM2.85GiB.
+> sample: mean3.68 active slots,18.27tokens/wall sec, GPU7,457MiB (~7.28GiB)/initial server RAM2.85GiB.
 > Keep four pending longer evidence, one Luna/cap1. State/PIDs:
 > runs/directory-expansion-20260929/{v30.rollout-state.json,json-repair.rollout-state.json}.
 > Bonsai queue-v25/cap4; Luna queue-v21/cap1 includes two reviewed JSON-format retries.
