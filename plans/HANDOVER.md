@@ -1,3 +1,13 @@
+# Current source-curriculum publication — 2026-09-30
+
+Directory-expansion quality-v23 is published at `data/teacher/directory-expansion/static.manifest.json` (SHA-256 `7778ba25d1d5ca0828de23f589c9de74429f86d9a1d9e90c3fa7fa8f1a4db8c6`). It contains 1,222 cases: 287 commitpack, 219 TATQA, 241 MuSiQue, 300 QASPER, 154 SciFact, and 21 TreeDST; 4,187 materialized turns, 3,205 approved decisions and 982 held decisions. Three root-approved TATQA source holds remain explicit and are not DPO negatives. The original MuSiQue source hold remains; one exact reviewed Oklahoma annual-event variant is included.
+
+`training/data_sources.json` now maps quality-v21 and quality-v22 artifacts transitively to v23 while preserving every prior replacement link (catalog SHA-256 `774cbb3941c210b28150a314d030a041544b59f6ed58c0a74aff0b9ae311787c`). Post-publication `staticBundleInput` and current-policy hash verification passed; receipt: `runs/generation-check-20260930-hourly/quality-v23-review-candidate/quality-v23.postpublication-verification.json` (SHA-256 `256a059dde4dcfbcb82ea0963844db2a4da7bcc17e423e376ab303edccb628c8`).
+
+This publication is **not training-ready**. Root must refresh recipe23, then complete the recipe-bound corpus, template/render, split, dedup and reducer-ratio gates before selecting or starting student training. Frozen runtime-v20 is already pinned at `runs/generation-check-20260930-hourly/runtime-v20/frozen-runtime.json`; do not modify it. Previous handover notes below are historical and may describe earlier manifests, runtimes, or queue states.
+
+---
+
 ## Hourly checkpoint — 2026-09-30 12:25:51.941 UTC
 
 Bonsai PID110507 exhausted its current queue and exited normally around12:21:25UTC; GPU0% at checkpoint is explained by completion. No live generation workers until next qualified campaign launch. Do not restart exhausted queues. Preparing eligible coverage audit/current-runtime campaign; server35762 remains available. This hour96journal finishes =40Bonsai parent batches+56member aliases. Exact spool reconciliation:50distinct saved results, allID/digestmatched,48current admitted/materialized,2rejected,221approveddecisions,0missing/sourceerrors. Main reader0errors/0non-success finishes/0futureunstartedholds. Reader scope is explicit; journal aliases are not cases. Reports `hourly-health-next/health-2026-09-30T122551941Z.json` (SHA2072ce58f1ee2478a32b7a594eed2b1a28d3e9b1f0e39a73fa4889f7e1baaaac) and `bonsai-canonical-job-spool-supplement-asof-2026-09-30T122551941Z.json` (SHA0b014380…c03). Nextcheck13:25:51.941UTC.
