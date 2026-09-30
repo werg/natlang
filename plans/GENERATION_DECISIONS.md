@@ -1160,3 +1160,22 @@ distinctID andstrictreviewvalidator. Oldblocked/raw/sourcecaseheld; no automatic
 positivetransform. Futureteacherfreshretry/referenceaudit onlyafterrootreview.
 No blanketunitconversions, no unsupportedgoldrewrites. Unitcontractapprovalmust
 beexplicitvisible andproofbound; centralholdexceptiononlyforreviewednewvariant.
+
+## 2026-09-30 06:25 UTC — reviewed lakh representation and runtime-v12
+
+- System format defect: the generic TaTQA prompt demanded a source unit but excluded
+  lakh from the scale enum. A distinct, source-specific visible prompt now explicitly
+  retains the displayed lakh quantity with empty scale. Original 242.5 gold, table,
+  notes, reference, source groups and hashes remain unchanged.
+- Admission exception applies only to the exact reviewed variant with immutable
+  identity/prompt/gold/input/reference checks. The original blocked row stays held;
+  no failure becomes a positive or DPO negative through reinterpretation.
+- Native reference replay passed all checks in five turns, with unchanged inputs and
+  matching answer.json/return; build passed. No tests or model calls in this audit.
+- Frozen runtime-v12 deployed to all three teachers at journaled case boundaries.
+  Luna PIDs 84926/85014; Bonsai 85050. Provider/GPU caps unchanged (2/4). New queues
+  exclude future held source cases while preserving historical/current attempts.
+- Fresh independent Luna retries: reviewed lakh variant and the real CommitPack
+  README truncation failure. Distinct jobs/seeds/keys preserve both original failures.
+  These are not automatically causal DPO pairs. Preservation manifest and rollout
+  evidence live under runs/generation-check-20260930-hourly.

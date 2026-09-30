@@ -5,6 +5,9 @@ import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
 import { reviewedMusiqueAliasFor } from './musique-reviewed-aliases.mjs';
+import { TATQA_LAKH_CONTRACT_REVISION, TATQA_LAKH_SOURCE_ID, TATQA_LAKH_VARIANT_SUFFIX,
+  TATQA_LAKH_VARIANT_ID, TATQA_LAKH_REPLACEMENT_PROMPT, validateTatqaLakhBase,
+  isReviewedTatqaLakhVariant } from '../../dist/teacher/tatqa-unit-contract.js';
 
 export const SOURCE_ADAPTER_VERSION = 'natlang.directory_source_adapter/1';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -61,6 +64,10 @@ const TATQA_NUMERIC_TEXT = /^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)
 /** Add the evidence-bounded scale rule to future TATQA tasks and saved IR variants. */
 export function applyEvidenceScaleContract(record) {
   if (record.source !== 'tatqa') return record;
+  if (record.id?.endsWith(TATQA_LAKH_VARIANT_SUFFIX)) {
+    if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    return record;
+  }
   const suffix = ':evidence-scale-v2';
   const numericSuffix = ':numeric-answer-v1';
   const promptPath = record.semantics?.root;
@@ -105,6 +112,10 @@ export function applyEvidenceScaleContract(record) {
 /** Give numeric-only TaTQA rows the versioned numeric display contract. */
 export function applyTatqaNumericContract(record) {
   if (record.source !== 'tatqa') return record;
+  if (record.id?.endsWith(TATQA_LAKH_VARIANT_SUFFIX)) {
+    if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    return record;
+  }
   let expected;
   try { expected = JSON.parse(record.semantics?.expected); } catch { return record; }
   if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
@@ -146,6 +157,25 @@ export function applyTatqaNumericContract(record) {
   record.semantics.files_oracle = { ...record.semantics.files_oracle, compare: 'tatqa-answer-record' };
   record.generation = { ...record.generation, numeric_answer_contract_revision: TATQA_NUMERIC_CONTRACT_REVISION };
   record.external_source = { ...record.external_source, numeric_answer_contract_revision: TATQA_NUMERIC_CONTRACT_REVISION };
+  return record;
+}
+
+/** Apply the one reviewed source-unit representation; gold/source bytes stay unchanged. */
+export function applyReviewedTatqaUnitContract(record) {
+  if (record.source !== 'tatqa' || record.source_ids?.[0] !== TATQA_LAKH_SOURCE_ID) return record;
+  if (record.id === TATQA_LAKH_VARIANT_ID) {
+    if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    return record;
+  }
+  if (!validateTatqaLakhBase(record)) throw new Error(`tatqa_lakh_contract_source_or_base_mismatch:${record.source_ids?.[0]}`);
+  const promptPath = record.semantics.root;
+  record.semantics.files[promptPath] = TATQA_LAKH_REPLACEMENT_PROMPT;
+  record.id = `${record.id}${TATQA_LAKH_VARIANT_SUFFIX}`;
+  record.generation = { ...record.generation, source_unit_contract_revision: TATQA_LAKH_CONTRACT_REVISION,
+    source_unit_contract_source_id: TATQA_LAKH_SOURCE_ID };
+  record.external_source = { ...record.external_source, source_unit_contract_revision: TATQA_LAKH_CONTRACT_REVISION,
+    source_unit_contract_source_id: TATQA_LAKH_SOURCE_ID };
+  if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_invalid:${record.source_ids?.[0]}`);
   return record;
 }
 
@@ -308,6 +338,7 @@ return result;`;
         }
         applyEvidenceScaleContract(record);
         applyTatqaNumericContract(record);
+        applyReviewedTatqaUnitContract(record);
         return record;
       });
     }

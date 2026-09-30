@@ -1,3 +1,22 @@
+> **CURRENT — 2026-09-30 06:25 UTC: all three teachers on frozen runtime-v12.**
+> Boundary rollout 84904 completed without overlapping collectors: Luna 84926/85014
+> (two provider workers, cap 2, exponential backoff); Bonsai 85050, queue-v40, cap 4,
+> server 4. Exact authority: hourly/runtime-v12-rollout-state.json, check.json and
+> runs/luna-file-tree-20260930/state.json. Do not restart older rollout watchers.
+> Latest three source holds now active in teachers. Original 559 file/tree roots
+> remain preserved; 550 eligible originals plus one separately reviewed lakh variant.
+> Lakh output bug fixed with explicit source-unit convention, original gold/inputs/
+> reference unchanged. Strict shared validator pins source, hashes, gold, expected
+> files, prompt and reference. Native replay: five turns, admitted, no tool failures.
+> Original blocked trace remains held. Fresh independent Luna retries queued for
+> this new variant and CommitPack README truncation; hourly/reviewed-retries-v12/
+> manifest.json records preservation/hashes. Do not infer DPO pairs from retries.
+> Audit: hourly/tatqa-lakh-reviewed-contract. Recipe-v12 refresh running (session
+> 13333), includes directory quality-v7. No student training/eval or unit tests.
+> Additional new numeric rejection audit assigned to existing Luna source agent:
+> hourly/rejection-audit-0625-numeric. Next full check remains 07:08 UTC. Continue
+> the active-thread hourly loop and log course changes; preserve frozen runtimes.
+
 > **CURRENT — 2026-09-30 06:08 UTC hourly check.**
 > Allteachersfrozenv11: Luna79716/79801, Bonsai80478 queue39 cap4/server4; GPU98%,
 > disk23.31GiB. Freshprogress. Newfile/tree319uniqueoriginscompleted (265rawaccepted/

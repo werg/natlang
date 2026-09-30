@@ -1,3 +1,5 @@
+import { isReviewedTatqaLakhVariant, TATQA_LAKH_SOURCE_ID } from './tatqa-unit-contract.js';
+
 /** Source annotation disputes stay out of generation and training until adjudicated. */
 export type SourceReview = {
   dataset: string;
@@ -291,6 +293,8 @@ export function sourceReviewReason(record: Record<string, unknown>):
   const ids = [record.dataset_records, record.source_ids, ['folio', 'entailmentbank'].includes(dataset) ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);
   if (['folio', 'kqapro', 'entailmentbank'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
-  return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id)) ?
+  const reviewedLakhVariant = dataset === 'tatqa' && isReviewedTatqaLakhVariant(record);
+  return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id) &&
+    !(reviewedLakhVariant && id === TATQA_LAKH_SOURCE_ID)) ?
     'source_review_pending' : undefined;
 }
