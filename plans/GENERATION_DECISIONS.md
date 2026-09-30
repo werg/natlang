@@ -1334,7 +1334,7 @@ Root approved supervisor output-accounting/2: exact frozen-native IR digests, ma
 
 Root found original missing MuSiQue question asks which foreign group but gold380 is year. Original now source-held, rawpartial/history retained. Staticquality-v19:1233cases/3236approved,73cumulativeholds; allsourcecatalog replacements recorded. Preparing fresh distinct explicityear question, not original trajectory migration. Recipe20 stale after this1hold; refresh21 after hourly audit.
 
-## 2026-09-30 10:53 UTC — exact numerical contracts, durable gates and failure visibility
+## 2026-09-30 10:52 UTC — exact numerical contracts, durable gates and failure visibility
 
 Exact-input computational outputs remain exact; no target injection or generic numeric tolerance. Judgment-derived scores would require a separately declared bounded contract. Reviewed minimum-age aliases preserve the same exact age, rather than changing the target.
 

@@ -1,4 +1,4 @@
-## Current authority — 2026-09-30 10:53 UTC
+## Current authority — 2026-09-30 10:52 UTC
 
 - Bonsai PID **110507** is running frozen runtime-v19 with four concurrent requests/server slots. Its last journal completion was followed by a new start; generation is progressing. This process imported the older supervisor; use output-accounting/2 at the next natural campaign boundary.
 - Both Luna source-derived jobs finished successfully: clarified SciFact claim returned SUPPORT (2 admitted decisions), explicit MuSiQue year question returned 380 (5). These are new cases with new teacher runs; the malformed originals remain held. No Luna generation worker is currently live. Preparing two queues of up to 12 source-qualified title-path cases each; review before launch.
