@@ -1,3 +1,14 @@
+> **2026-09-30T10:11:47.549Z minimum-age contract approved.** Futurebuilder applies
+> exact evidence/full-base-digest pinned minimum-age adapter afteralias/groupassembly.
+> Canonical+titled variant controls rejectgold/prompt/source/ref/groupdrift. Root
+> approved3decision migration of unchanged teacher answer21yearsold; raworiginal
+> remainsstrictrejected and preserved. New separatelyapproved .result at
+> hourly/musique-minimum-age-reviewed/audit-revision-2/migrated-saved-pilot.result.json;
+> root-approval.json pinsbothhashes. Earliercandidatecopy supersededbylatestapproved.
+> Recipe20 predatesit; nextrefresh carriesitautomatically. Noprompt/answerinjection.
+> Future review-only candidates MUST use .review-candidate.json, not .result.json,
+> toprevent auto snapshot admissionbefore rootapproval. No generalfuzzyoracle.
+
 > **2026-09-30T10:06:13.215Z recipe-v20/current policy.** Snapshot2542selected
 > teachertrajectories/2075programs, Luna1774/Bonsai634; explicit792+1400legacy
 > andallfourstaticincluded. Staticquality-v18:1234cases/3237approved;72cumulative

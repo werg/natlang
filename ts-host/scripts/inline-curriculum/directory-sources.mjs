@@ -5,6 +5,7 @@ import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
 import { reviewedMusiqueAliasFor, reviewedMusiqueAliasRemovalFor } from './musique-reviewed-aliases.mjs';
+import { applyMinimumAgeReviewedContract } from './musique-minimum-age-reviewed.mjs';
 import { markdownTerminalNewlineBody } from '../../dist/evaluation/oracles.js';
 import { TATQA_LAKH_CONTRACT_REVISION, TATQA_LAKH_SOURCE_ID, TATQA_LAKH_VARIANT_SUFFIX,
   TATQA_LAKH_VARIANT_ID, TATQA_LAKH_REPLACEMENT_PROMPT, validateTatqaLakhBase,
@@ -508,7 +509,7 @@ return result;`;
         applyReviewedMusiqueOracleAlias(record);
         record.source_groups.push(...(row.question_decomposition ?? []).map(q => `musique:seed:${q.id}`));
         record.source_groups.push(...row.paragraphs.map(p => `document:${digest([p.title, p.paragraph_text])}`));
-        return record;
+        return applyMinimumAgeReviewedContract(record);
       });
     }
   }
