@@ -1,4 +1,4 @@
-> **06:36 UTC: four more source holds, v13 boundary rollout pending.**
+> **06:34 UTC: four more source holds, v13 boundary rollout pending.**
 > Root checked full tables, notes and references from the 0625 numeric delta audit.
 > cc42e86a: signed expense table versus positive expense-magnitude note/gold;
 > 122bddf9: gold uses OTHER ACCOUNTS for both years despite question asking Costs
