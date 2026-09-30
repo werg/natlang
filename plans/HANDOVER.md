@@ -1,3 +1,39 @@
+> **2026-09-30T10:06:13.215Z recipe-v20/current policy.** Snapshot2542selected
+> teachertrajectories/2075programs, Luna1774/Bonsai634; explicit792+1400legacy
+> andallfourstaticincluded. Staticquality-v18:1234cases/3237approved;72cumulative
+>holds; fourstatic32677approved/6160cases. No missingdefaults/qualityblockers.
+> Gzip fullsnapshot hashes independently verified:67344798compressedbytes vs
+>523126712uncompressedbytes (~64.2MiB vs498.9MiB). Earlier~2.5GiB claim was
+>diskdelta estimate, not this serializedsnapshot size; use measuredbytes.
+> Uncompressed/content SHA2ccdc...b1de; compressed32988...39b8; manifest/2.
+> Currentrecipe20 not finalstudentrender/split/token/dedup/25%mix approval; no training.
+> MuSiQue11consolidatedholds publishedroot-fifth-batch; prior pendingfifth superseded.
+> SciFact694original held for Lice/Live AND unqualifiedstronger/causalclaim; typo
+>alone insufficient to admit gold. Source-derived narrower newcase beingprepared,
+>not a trajectory migration. Minimum-age adapter rootreview ongoing; no builderwiring.
+> Supervisor empty-success accounting fix assigned; no liveprocesspatch yet.
+
+> **Luna next304 completion audit:**302actual joinedrows,155rawaccepted/147rawreject,
+>150current-native candidates. MuSiQue246rows:101rawaccepted/145rawreject,96candidates;
+> SciFact56rows:54accepted/2reject,54candidates. These152admissionheldrows are NOT
+>152bad source roots; candidate/migration/source reasons differ. Two missingrows
+>preexisting: source164 originalfalse-inactivity(known reviewed retry retained),
+>source3hop1__11265_35341_79479 empty export despite complete journal underreview.
+> Since09:17 no noncomplete finishes. SciFact480 clearsemanticpolarityerror;
+>694possible Lice/Live typo underreview. Evidence luna-next-completion-audit-0944.
+> Five root source-read holds staged root-pending-fifth-batch.json, NOT published:
+>Swedish official-versus-standard, Dill header/Brockdalebody, unnamedmultiple
+>Thessaloniki churches, unspecified Astros playoffopponents, Johnson township
+>Indiana vsNewYorkcountychain. No training; consolidate before recipe refresh.
+
+> **2026-09-30T09:48:47.005791+00:00 pilots completed.** Both isolated queues done normally:
+> Islamicmathematics14.9s/2replies admitted2decisions; Iowa23.7s/3replies returned
+> 21 years old vs minimum-age gold21orolder. Source-supported equivalence held,
+> not modelnegative; root reviewing pinned minimum-age adapter. Each read only
+> two title-selected articles. No claim measured improvement vs matched control.
+> PIDs133004/133005 no longer live; check/state completed. Bonsai110507 continues.
+> No exhausted queue restart. Original results retained; no target injection.
+
 > **2026-09-30T09:46:46.851176+00:00 two Luna pilots launched.** PIDs133004/133005,
 > isolated pilot-v19 queues/journals/jobs; gpt-6-luna low cap1 each,1200s/40turn/
 >256requests/executionplans/backoff unchanged. Native title-path-r2 variants retain

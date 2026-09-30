@@ -50,7 +50,13 @@
     "data/teacher/directory-expansion/quality-v14.static.turns.jsonl": "data/teacher/directory-expansion/quality-v15.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v15.train.ir.jsonl": "data/teacher/directory-expansion/quality-v16.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v15.static.results.jsonl": "data/teacher/directory-expansion/quality-v16.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v15.static.turns.jsonl": "data/teacher/directory-expansion/quality-v16.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v15.static.turns.jsonl": "data/teacher/directory-expansion/quality-v16.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v16.train.ir.jsonl": "data/teacher/directory-expansion/quality-v17.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v16.static.results.jsonl": "data/teacher/directory-expansion/quality-v17.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v16.static.turns.jsonl": "data/teacher/directory-expansion/quality-v17.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v17.train.ir.jsonl": "data/teacher/directory-expansion/quality-v18.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v17.static.results.jsonl": "data/teacher/directory-expansion/quality-v18.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v17.static.turns.jsonl": "data/teacher/directory-expansion/quality-v18.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -236,6 +242,24 @@
       "approved_decisions": 3249,
       "root_adjudications": "runs/generation-check-20260930-hourly/musique-included-source-sweep/root-fourth-batch.json",
       "reason": "Root-read nonexistent rejoining event, distinct TV series, music-video rumors versus song subject. Original source/golds preserved; no model negatives.",
+      "dpo_negatives_created": false
+    },
+    "directory-expansion-fourth-multihop-review": {
+      "revision": "quality-v17",
+      "held_published_cases": 11,
+      "cases": 1235,
+      "approved_decisions": 3238,
+      "root_adjudications": "runs/generation-check-20260930-hourly/musique-included-source-sweep/root-fifth-batch.json",
+      "reason": "Explicit entity/event mismatch or multiple visible referents; calibrated source-read decisions preserve golds.",
+      "dpo_negatives_created": false
+    },
+    "directory-expansion-scifact-typo-review": {
+      "revision": "quality-v18",
+      "held_published_cases": 1,
+      "cases": 1234,
+      "approved_decisions": 3237,
+      "root_adjudications": "runs/generation-check-20260930-hourly/scifact-claim694-source-review.json",
+      "reason": "Malformed Lice versus Live vaccine claim; reviewed visible correction pending, original source/gold preserved.",
       "dpo_negatives_created": false
     }
   }

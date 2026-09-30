@@ -1315,3 +1315,11 @@ Both Luna queues completed normally; old authorities are recorded as completed, 
 ## 2026-09-30T09:46:46.851176+00:00 — isolated article-title pilots
 
 Root approved standalone title-path-v2-r2 after pinned-hash/idempotence/current-source checks and native controls. First physical H1 only; no arbitrary code/gold rewriting; unsupported numeric-path reference code fails closed. Two source-qualified variants launched into the existing Luna slots (133004/133005), unchanged budgets/caps/backoff/frozenv19, separate immutable queues/output/jobs. Prior exhausted queues retained. No general speed/reliability claim from two pilots; shared builder unchanged.
+
+## 2026-09-30T10:06:13.215Z — source holds, measured compressed snapshot
+
+Root confirmed11 more MuSiQue event/entity/ambiguity holds and SciFact694 malformed claim. Directory static quality-v18 contains1234cases/3237approved,72cumulativeholds. Root withheld typo-only SciFact admission: abstract does not resolve unqualified stronger/causal induce wording. A new source-derived narrower claim requires a new run, not migration of prior trajectory. Calibrations withdrew invented Watch Dem Roll video predicate and retained Bernini composite-authorship caveat; ambiguous biographical country links remain review, no unsupported false-source claims.
+
+Recipe20 carries2542generatedteachertrajectories/2075programs, both792+1400legacysets and all4staticbundles; no missingdefaults/included blockers, finalstudent audits pending. Fullgzip hash verified67344798bytes vs523126712uncompressedbytes; earlier~2.5GiB estimate described observed diskdelta, not measuredsnapshotbytes. Originals retained; no training.
+
+Found old supervisor complete exit0 versus15turn unfinishedpartial/emptyexport/no manifest. Futurecompletion accounting fix underreview; original retained, not answerfailure/DPOnegative. Two pilots completed, no live Luna process until nextreviewedqueue launch; Bonsai continues.
