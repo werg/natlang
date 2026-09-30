@@ -1,3 +1,15 @@
+> **2026-09-30 10:17 UTC current policy/accounting.** Supervisor output-accounting/2
+> rootapproved in scripts/run_bonsai_queue.py; newinvocations validateexactnative
+>embeddedIR/exportrows/manifest/sourcehash beforecomplete; explicitpolicy skips
+>normalexitsonly, hardtimeouts/inactivitypreserved. Bonsai110507 stillold imported
+>runner untilnextnaturalboundary/campaign; no urgentrestart. Savedaccepted/rejected
+>exports pass, old15turnemptyexport fails; originalsretained. No tests.
+> Originalmissing MuSiQue question asksgroup, gold380year; centrallysourceheld.
+> Staticquality-v19:1233cases/3236approved,73cumulativeholds, catalogcurrent.
+> Recipe20 staleby1hold, refresh21afterhourlyaudit. Fresh distinct WHEN derivative
+>+clarifiedSciFact prediction derivative beingpreparedfortwoexistingLunaslots.
+> Scheduled10:17:18health assignedLunaadmissionagent; currentauthorities unchanged.
+
 > **2026-09-30T10:11:47.549Z minimum-age contract approved.** Futurebuilder applies
 > exact evidence/full-base-digest pinned minimum-age adapter afteralias/groupassembly.
 > Canonical+titled variant controls rejectgold/prompt/source/ref/groupdrift. Root

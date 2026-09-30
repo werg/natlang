@@ -5,6 +5,7 @@ Timeouts and failures remain explicit in the append-only journal and are not tra
 Restart skips attempted entries; use a new journal for an explicitly reviewed retry pass.
 """
 import argparse
+import hashlib
 import json
 import subprocess
 import signal
@@ -16,6 +17,167 @@ import urllib.request
 from pathlib import Path
 
 
+OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def read_json(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def canonical_json_sha256(value):
+    payload = json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+    return hashlib.sha256(payload).hexdigest()
+
+
+def frozen_record_digests(records, runtime=None):
+    runtime = Path(runtime) if runtime else Path(__file__).resolve().parents[1] / 'ts-host'
+    code = """
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+const [collector] = process.argv.slice(1);
+const { recordDigest } = await import(pathToFileURL(collector).href);
+const records = JSON.parse(readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(records.map(record => recordDigest(record))));
+"""
+    output = subprocess.check_output(['node', '--input-type=module', '-e', code,
+        str(runtime / 'dist/teacher/collector.js')], input=json.dumps(records), text=True)
+    return json.loads(output)
+
+
+def output_accounting(entry, runtime=None):
+    """Validate exact collector rows and batch manifest before a queue key can be called complete."""
+    jobs = resolve_entry_jobs(entry, runtime)
+    root = Path(entry['jobs'])
+    states, result_ids, result_digests, saved_result_rows = [], [], [], []
+    candidate_result_rows = []
+    for job in jobs:
+        result_path = root / f"{job['key']}.result.json"
+        partial_path = root / f"{job['key']}.partial.json"
+        error_path = root / f"{job['index']:06d}.error.json"
+        row = read_json(result_path)
+        if result_path.is_file() and row is None:
+            state = 'invalid_result'
+        elif row is not None:
+            program = row.get('task', {}).get('program_ir', {})
+            provenance = row.get('provenance', {})
+            terminal = row.get('outcome', {}).get('status') in {'done', 'quiesced', 'failed'} and \
+                isinstance(row.get('outcome', {}).get('accepted'), bool)
+            exact = program.get('id') == job['program_id'] and \
+                provenance.get('program_ir_sha256') == job['digest'] and terminal
+            state = 'result' if exact else 'invalid_result'
+            if exact:
+                candidate_result_rows.append((job, row, result_path))
+        else:
+            error = read_json(error_path)
+            if error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and \
+                    error.get('generation_hold') and error.get('generation_hold') == job.get('generation_hold'):
+                state = 'generation_held'
+            elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and error.get('generation_hold'):
+                state = 'invalid_generation_hold'
+            elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id']:
+                message = str(error.get('error', '')).lower()
+                state = 'transport_failed' if any(term in message for term in
+                    ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
+            elif partial_path.is_file():
+                partial = read_json(partial_path)
+                state = 'partial_without_terminal_result' if partial and \
+                    partial.get('program_id') == job['program_id'] and \
+                    partial.get('provenance', {}).get('program_ir_sha256') == job['digest'] else 'invalid_partial'
+            else:
+                state = 'missing_terminal_result'
+        states.append({'index': job['index'], 'program_id': job['program_id'],
+                       'digest': job['digest'], 'state': state})
+
+    embedded_records = [row.get('task', {}).get('program_ir') for _, row, _ in candidate_result_rows]
+    try:
+        embedded_digests = frozen_record_digests(embedded_records, runtime)
+    except Exception as error:
+        embedded_digests = []
+        embedded_digest_error = f'{type(error).__name__}: {error}'
+    else:
+        embedded_digest_error = None
+    states_by_job = {(state['index'], state['digest']): state for state in states}
+    for position, (job, row, result_path) in enumerate(candidate_result_rows):
+        state = states_by_job[(job['index'], job['digest'])]
+        if position >= len(embedded_digests) or embedded_digests[position] != job['digest']:
+            state['state'] = 'invalid_result_ir_digest'
+            continue
+        state['state'] = 'result'
+        result_ids.append(job['program_id'])
+        result_digests.append(job['digest'])
+        saved_result_rows.append(row)
+
+    output = Path(entry['output'])
+    manifest = read_json(str(output) + '.manifest.json')
+    output_exists = output.is_file()
+    output_hash = sha256_file(output) if output_exists else None
+    output_rows, output_error = [], None
+    if output_exists:
+        try:
+            with output.open() as source:
+                for line_number, line in enumerate(source, 1):
+                    if line.strip():
+                        output_rows.append(json.loads(line))
+        except (OSError, ValueError) as error:
+            output_error = f'{type(error).__name__}: {error}'
+    output_row_errors = []
+    if output_rows != saved_result_rows:
+        output_row_errors.append('merged output rows do not structurally equal the ordered exact saved job rows')
+    output_row_hashes = [canonical_json_sha256(row) for row in output_rows]
+    saved_row_hashes = [canonical_json_sha256(row) for row in saved_result_rows]
+    manifest_ok = bool(manifest and manifest.get('version') == 'natlang.teacher_batch.native/1' and
+        manifest.get('range') == {'start': entry['index'], 'count': len(jobs)} and
+        manifest.get('completed') == len(result_ids) and
+        manifest.get('missing') == [state['index'] for state in states if state['state'] != 'result'] and
+        manifest.get('output_sha256') == output_hash and manifest.get('source') == entry['source'] and
+        manifest.get('source_sha256') == sha256_file(entry['source']) and not output_error and
+        output_row_hashes == saved_row_hashes and not output_row_errors)
+    all_accounted = all(state['state'] in {'result', 'generation_held'} for state in states)
+    any_held = any(state['state'] == 'generation_held' for state in states)
+    unresolved = [state['state'] for state in states if state['state'] not in {'result', 'generation_held'}]
+    if not manifest_ok or not all_accounted:
+        disposition = next((value for value in ('transport_failed', 'partial_without_terminal_result',
+            'invalid_result_ir_digest', 'invalid_generation_hold', 'invalid_result', 'invalid_partial',
+            'failed', 'missing_terminal_result') if value in unresolved),
+            'export_validation_failed')
+        complete = False
+    else:
+        disposition = 'explicit_generation_hold' if any_held else 'all_exact_results_exported'
+        complete = True
+    transport_retry_observed = False
+    if not complete and disposition == 'partial_without_terminal_result':
+        collector_log = Path(entry.get('log', ''))
+        if collector_log.is_file():
+            try:
+                text = collector_log.read_text(errors='replace')
+                transport_retry_observed = any(job['program_id'] in line and 'retry:' in line and
+                    ('transport_failure' in line or 'rate_limit' in line) for line in text.splitlines())
+            except OSError:
+                pass
+    if not complete and transport_retry_observed and disposition == 'partial_without_terminal_result':
+        disposition = 'transport_failure_with_partial_checkpoint'
+    return {'version': OUTPUT_ACCOUNTING_VERSION, 'complete': complete, 'disposition': disposition,
+            'expected_jobs': len(jobs), 'exact_result_rows': len(result_ids),
+            'explicitly_generation_held': sum(state['state'] == 'generation_held' for state in states),
+            'job_states': states, 'output_exists': output_exists, 'output_sha256': output_hash,
+            'output_rows': len(output_rows), 'output_error': output_error, 'output_row_errors': output_row_errors,
+            'saved_row_hashes': saved_row_hashes, 'output_row_hashes': output_row_hashes,
+            'embedded_digest_error': embedded_digest_error,
+            'manifest_present': manifest is not None, 'manifest_valid': manifest_ok,
+            'transport_retry_observed': transport_retry_observed}
+
+
 def resolve_entry_jobs(entry, runtime=None):
     """Use the collector's own digest: indices can overlap between source campaigns."""
     if '_resolved_jobs' not in entry:
@@ -24,14 +186,16 @@ def resolve_entry_jobs(entry, runtime=None):
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 const [collector, source, start, count] = process.argv.slice(1);
-const { recordDigest } = await import(pathToFileURL(collector).href);
+const collectorUrl = pathToFileURL(collector);
+const { recordDigest } = await import(collectorUrl.href);
+const { generationHoldReason } = await import(new URL('./curriculum-policy.js', collectorUrl).href);
 const lines = readFileSync(source, 'utf8').split(/\\r?\\n/);
 const jobs = [];
 for (let index = Number(start); index < lines.length && jobs.length < Number(count); index++) {
   if (!lines[index]?.trim()) continue;
   const record = JSON.parse(lines[index]);
   const digest = recordDigest(record);
-  jobs.push({index, program_id: record.id, digest,
+  jobs.push({index, program_id: record.id, digest, generation_hold: generationHoldReason(record) ?? null,
     key: `${String(index).padStart(6, '0')}-${digest.slice(0,16)}`});
 }
 if (jobs.length !== Number(count)) throw new Error('source range exceeds frozen batch');
@@ -146,7 +310,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             for line in journal.read_text().splitlines():
                 row = json.loads(line)
                 if row.get('event') == 'finish' and not row.get('batch_key'):
-                    failure_streak = 0 if row['status'] == 'complete' else failure_streak + 1
+                    failure_streak = 0 if row['status'] in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
                     next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
     def record(value):
@@ -241,12 +405,29 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     child.kill()
                     child.wait()
                 raise
+        try:
+            accounting = output_accounting(entry, runtime)
+        except Exception as error:
+            accounting = {'version': OUTPUT_ACCOUNTING_VERSION, 'complete': False,
+                          'disposition': 'accounting_error', 'error': f'{type(error).__name__}: {error}'}
+        normal_collector_exit = status in {'complete', 'incomplete'} and code in {0, 2}
+        if accounting['complete'] and normal_collector_exit:
+            if accounting['explicitly_generation_held'] == accounting['expected_jobs']:
+                status = 'skipped'
+            elif accounting['explicitly_generation_held'] and code in {0, 2}:
+                status = 'complete_with_skips'
+            elif code == 0:
+                status = 'complete'
+        elif status == 'complete' and not accounting['complete']:
+            # A successful process exit is not proof that the exact job rows reached the merged output.
+            status = 'incomplete_export'
         if provider:
-            failure_streak = 0 if status == 'complete' else failure_streak + 1
+            failure_streak = 0 if status in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
             next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
-                'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(), **partial_metrics(entry)})
+                'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(),
+                'output_accounting': accounting, **partial_metrics(entry)})
         # Preserve original attempt keys when roots share one collector batch.
         # A terminal batch event covers both attempts, even when only one produced a result.
         for member in entry.get('members', []):
