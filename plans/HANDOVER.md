@@ -1,3 +1,10 @@
+> **2026-09-30T09:12:18.619166+00:00 source holds protected.** Eleven root-adjudicated holds
+> now central policy + static directoryquality-v15:1250cases/3253approved,56
+> cumulativeholds; fourstatic32693approved. Catalog replacements explicit. Raw
+> originals/golds preserved; no modelnegative. Pending-third-batch superseded
+> root-third-batch.json. Build passed. Teachers remain immutablev19; futurequeue
+> check pending, consolidate next rollout after fullsourceaudit. Recipe18 stale.
+
 > **2026-09-30 09:03 UTC retry admission/source audit:** TreeDST v19 fresh retry
 > independently admitted, exact expected Tree, five materialized decisions/zero
 > unlinked; only successful edit and finish approved. State+utterance visible in
