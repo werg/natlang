@@ -1192,3 +1192,14 @@ or use these as DPO negatives. Published static quality-v8 excludes three affect
 canonical cases (1290 cases,3397 approved decisions); one held source was absent.
 Frozenv13 boundary rollout retains current attempts/history/clean batch members,
 with unchanged worker caps. Final student audits remain pending.
+
+## 2026-09-30 06:42 UTC — correction of audited source identity
+
+The cc42 expense audit UUID had c56c where the saved source is c56d. Root copied
+that typo into the hold; an independent policy count/artifact join and the broader
+Luna sweep caught it. Corrected exact source ID, mechanically checked all five
+reported identities against saved IR, and published quality-v9 excluding the now
+matched case. Contrary to the earlier log, the fourth source WAS in canonical
+static data; it failed the identity match. Preserve original audit evidence/backup,
+raw source/gold/traces and all prior static publications. No labels or DPO pairs
+changed. Frozenv14 rollout applies the corrected hold at teacher boundaries.

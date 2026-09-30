@@ -1,3 +1,20 @@
+> **CURRENT — 2026-09-30 06:42 UTC: expense case identity corrected; v14 rollout pending.**
+> Earlier audit typed cc42e86a-c56c..., but saved IR is cc42e86a-c56d... . Root's
+> source-policy join caught eligible547 instead of546; broader Luna sweep caught
+> the same mismatch. Exact actual ID now centrally held. All other4 audit IDs
+> matched artifacts. Agent correcting report with backup. Identity proof:
+> hourly/tatqa-numeric-campaign/current-source-admission.audit.json. This corrects
+> the earlier statement that the fourth case was absent from canonical static;
+> it WAS present but failed to match the typo. Static quality-v9 now excludes it:
+>1289cases/3392approved/17 cumulativeholds, allfourstatic32832approved. Golds/raw
+> traces unchanged, replacement catalog explicit. Originalcampaign546eligible:
+>287CommitPack/238TATQA/21TreeDST, plus1 distinct reviewedlakhvariant.
+> Frozenv14 includes correctedID. Soleboundary watcher87674/config/state/log
+> hourly/runtime-v14-rollout*; previousv13workers86353/86475/87000 until boundary.
+> Future queues Luna-N.v14/ Bonsaiqueue-v42. No caps/journal/server changes.
+> Recipe-v13 predates this correction; refreshv14 after publication. Broaderaudit
+> in progress, nextfullcheck07:08UTC. Don't infer completeness from referencepass.
+
 > **CURRENT — 2026-09-30 06:38 UTC: all teachers frozen runtime-v13.**
 > Boundary rollout86322 completed: Luna86353/86475, Bonsai87000 queue-v41. Same caps
 > (Luna2 provider, Bonsai4/GPU/server4), backoff and journals. Authorities updated.
