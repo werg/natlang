@@ -1,5 +1,48 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **CURRENT — 2026-09-30 02:35 UTC hourly check; supersedes all process/publication details below.**
+> Bonsai54068 now runs queue-v33/runtime-v6, cap4/server4; rollout completed without
+> overlap. Source holds excluded3 more future roots after reserved-seed filtering.
+> Luna53036/53160 run runtime-v5 and explicit-field campaign; cap2/backoff/noGPU.
+> Authority: runs/luna-directory-explicit-20260930/state.json. Its journals remain in
+> the readable predecessor directories; prior states are marked rolled-forward.
+> Pending499-case chain retains gold/source groups; one source-held case excluded.
+>
+> At start128 completed/120 accepted. Eight audits: five false schema blocks, one
+> retrieval churn/late any(...) error, one rubric dispute, one genuine factual-support
+> error. Fresh directory-v4 prompts list exactly the fixed filename-stem fields and
+> state how to place them in return_result.value. Eval structural cutoffs now name
+> a read_page route to the full value, starting page1; native transcript remains full.
+> Eight references passed complete-input proof; actual large eval replay read10 pages.
+> Seven reviewed retries: all six schema/retrieval blocks repaired; factual-support
+> case77 still rejects (confuses quoted agent policy with tool-supported timelines).
+> No automatic DPO labels from these retries; changed prompt/context must be respected.
+>
+> Source holds preserve gold: Workflow alias435c... claims_supported bank-advice
+> ambiguity; FOLIO story395 exclusive/inclusive either-or ambiguity; TATQA directors
+> chairman ambiguity (previous check). FOLIO's exclusive released premise can explain
+> source gold; do not relabel the allegedly tautological conclusions. Audit reports
+> in hourly/rejection-audit-0208, folio395-audit, static-holds-0208.
+>
+> **Canonical static publications filtered, original files retained:** Workflow
+> quality-v3:4,803 cases/28,958 approved decisions,2 cases held. Directory-expansion
+> quality-v3b:1,305 cases/3,529 approved decisions/1,030 already-excluded decisions,
+>1 case held. Hold ledgers and prior manifests live beside each canonical manifest;
+> validated all retained rows and hashes before publication. Other two bundles pass.
+> Four bundles now32,969 approved decisions; old32,993 claim superseded. Failed first
+> directory quality-v3 scratch is unpublished; canonical uses quality-v3b. The first
+> filter attempt incorrectly assumed every materialized decision was approved; fixed
+> to retain existing exclusion flags/counts. No source labels/input histories changed.
+> New filter-static-bundle.mjs only permits explicit source/evaluation holds, otherwise
+> fails closed. Replacement catalog now follows revision chains and rejects cycles.
+>
+> Latest planning-only recipe-v6 includes current publications and automatic snapshot:
+>1,448 selected generated trajectories/1,291 programs, no inventory omissions/quality
+> blockers. Not student-ready; render/token/split/dedup/mix remain. No student training.
+> Exact next hourly due in hourly/check.json (~03:35 UTC, Berlin+2h); continue active
+> sleep/check loop. Keep frozen v5/v6 immutable and re-read process states on resume.
+
+
 > **CURRENT HOURLY CHECK — 2026-09-30 01:08 UTC, supersedes process details below.**
 > Typed Luna batch64 completed:61 accepted,3 independently checked semantic errors,
 > zero format failures. New readable typed directory-v3 adapter keeps full source

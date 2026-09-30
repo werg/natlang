@@ -598,9 +598,16 @@ export class NativeSession {
   /** A value of the current call's result, cut by structure; all of it goes to the call's transcript entry. */
   private showValue(value: unknown): string {
     const root = this.lam.projectTransaction?.folder;
-    const shown = renderValue(value, { root, holder: `transcript.entry(${this.transcript.length}).output` });
+    const holder = `transcript.entry(${this.transcript.length}).output`;
+    let shown = renderValue(value, { root, holder });
     const full = renderValue(value, { root, budget: Infinity });
-    if (shown !== full) this.cuts.push({ shown, full });
+    if (shown !== full) {
+      // A structural preview may omit whole fields/items. Give the model a
+      // direct route to the complete value rather than another identical eval.
+      const { id, count } = this.pages.add(full);
+      shown += `\n<<full value: ${count} pages; read_page("${id}", 1) shows the first page>>`;
+      this.cuts.push({ shown, full });
+    }
     return shown;
   }
   private record(name: string, args: Record<string, unknown>, result: NativeResult): NativeResult {

@@ -11,6 +11,18 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'folio', id: 'story:395', aliases: ['folio:story:395', 'story395'],
+    text: 'Political-attribute premises and eight conclusions about a U.S. government official.',
+    annotatedLabel: 'C1 unknown; C2 entailed; C3 contradicted; C4 entailed; C5 contradicted; C6 unknown; C7 unknown; C8 contradicted',
+    status: 'pending',
+    reason: 'Released premise FOL makes the conservative-or-Republican clause exclusive, while other premise disjunctions are inclusive. English conclusions have ambiguous either/or and no released conclusion FOL. Inclusive readings make C5/C8 tautological but exclusive readings can support the original False labels. Preserve gold and clarify source-aware disjunction semantics before training or preference negatives; C2 additionally requires using the source exclusive premise.',
+  },
+  { dataset: 'workflowevals:agent-trace-observability',
+    id: 'typesafe/evalsafe-agent-trace-observability:435c6484b49cb7f4fb1e910c7aec0bc2caf4ef1fedda7160ebaf27003063ac09', aliases: [],
+    text: 'Are the factual claims in the final message supported by a successful tool result or user statement?',
+    annotatedLabel: 'true', status: 'pending',
+    reason: 'A generalized bank-authorization explanation is phrased as an empirical statement (typically just the bank showing...) but the rubric excludes general advice. Successful tool evidence supports the settled charge, not that banking explanation. Whether this is advice or an unsupported factual assertion needs independent rubric clarification; preserve source gold and exclude preference negatives.',
+  },
   { dataset: 'tatqa', id: '80fd3023-eb50-4db7-a299-ffcd06d604fa', aliases: [],
     text: 'What is the average age of the directors in the company?', annotatedLabel: '58.75', status: 'pending',
     reason: 'The table labels four people Director (69,55,62,49), averaging58.75, and Garo H. Armen age67 Executive Chairman of the Board of Directors. Including that board chairman gives60.4, a defensible reading of directors; CFO is excluded under either reading. Preserve source gold and hold pending independent clarification; neither interpretation is a DPO negative.',

@@ -116,14 +116,21 @@ def catalog(repo, config=None):
         for entry in artifacts.values():
             if not entry.get('ever_recipe_input') or entry.get('direct_recipe_input'):
                 continue
-            replacement = policy.get('replacements', {}).get(entry['path'])
+            replacements = policy.get('replacements', {})
+            chain = [entry['path']]
+            while chain[-1] in replacements:
+                target = replacements[chain[-1]]
+                if target in chain:
+                    raise ValueError('Cyclic data replacement policy: ' + ' -> '.join([*chain, target]))
+                chain.append(target)
+            replacement = chain[-1] if len(chain) > 1 else None
             decision = next((d for d in policy['decisions'] if fnmatch.fnmatch(entry['path'], d['glob'])), None)
             resolution = ('replacement_input' if replacement and str(repo / replacement) in inputs else
                           'recorded_source_decision' if decision else
                           'caller_explicit_input_override' if config.get('data_inventory_explicit_input_override') else
                           'unreviewed_omission')
             not_carried.append({'path': entry['path'], 'resolution': resolution, 'replacement': replacement,
-                                'decision': decision})
+                                'replacement_chain': chain, 'decision': decision})
     if config and not config.get('data_inventory_explicit_input_override'):
         missing_inputs = [name for name in policy['required_default_inputs']
                           if not (repo / name).is_file() or str(repo / name) not in inputs]

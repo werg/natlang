@@ -230,7 +230,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     add("prepare", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared", "--code", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl",
                        "--native", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns,
                        "--split-records", f"{r}/teacher-programs.jsonl"]),
-        [f"{p}/scripts/prepare_training_stages.py", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns, f"{r}/teacher-programs.jsonl"],
+        [f"{p}/scripts/prepare_training_stages.py", f"{p}/scripts/corpus.py", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns, f"{r}/teacher-programs.jsonl"],
         [f"{r}/prepared/manifest.json", f"{r}/prepared/general.jsonl", f"{r}/prepared/coding.jsonl", f"{r}/prepared/splits.json"])
     model_args = ["--model", model] + (["--revision", revision] if revision else [])
     train_model_args = ["--model", model] + (["--model-revision", revision] if revision else [])
@@ -349,7 +349,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             [preference_pairs, f'{preference_pairs}.manifest.json', f'{preference_pairs}.audit.jsonl'])
     turn_paths = [path for _, path in teacher_tracks]
     add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json"]),
-        [f"{p}/scripts/prepare_training_stages.py", *turn_paths, f"{r}/prepared/splits.json"],
+        [f"{p}/scripts/prepare_training_stages.py", f"{p}/scripts/corpus.py", *turn_paths, f"{r}/prepared/splits.json"],
         [f"{r}/prepared-teacher/manifest.json", f"{r}/prepared-teacher/teacher.jsonl"])
     add('assemble-joint', py([f'{p}/scripts/assemble_joint_curriculum.py', '--output', f'{r}/joint.jsonl',
                               '--general', f'{r}/prepared/general.jsonl', '--coding', f'{r}/prepared/coding.jsonl',

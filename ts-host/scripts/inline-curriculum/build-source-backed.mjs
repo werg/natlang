@@ -127,7 +127,7 @@ export async function buildSourceBundle({ cache, out, limit = 12, trajectoryLimi
   for (const row of rejected) rejectionCounts[row.reason] = (rejectionCounts[row.reason] ?? 0) + 1;
   const report = { version: 'natlang.source_static_bundle/1', model_calls: 0, acquisition_sha256: digest(acquisition),
     excluded_manifests: excludeManifests, source_answer_policy: workflow ? 'verified_typed_labels_with_masked_synthetic_reasoning' : 'default',
-    ...(workflow ? {source_input_visibility:'natlang.visible_source_inputs/1',adapter_revision:'visible-inputs-readable-typed-batches-v4'} : {}),
+    ...(workflow ? {source_input_visibility:'natlang.visible_source_inputs/1',adapter_revision:'visible-inputs-explicit-field-batches-v5'} : {}),
     cases, by_source: bySource, results, ir, turns: fileInfo('static.turns.jsonl'),
     training_decisions: trainingDecisions,
     held_decisions: heldDecisions,

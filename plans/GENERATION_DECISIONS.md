@@ -806,3 +806,50 @@ Board of Directors. Gold averages four exact Director rows (58.75); including ch
 produces60.4. Added source review hold without relabeling either interpretation as a
 model negative. Hold propagates to current generation/admission; frozen workers retained.
 No GPU evaluation rerun, unit tests, student training or automatic DPO negatives.
+
+
+## 2026-09-30 02:08 hourly check — explicit field maps and complete eval pages
+
+Both Luna workers progressed128 cases/120 oracle-accepted by check start; no transport
+failures/timeouts. Audit eight: five misread fixed schemas as incompatible with filename
+maps; one large repeated retrieval ended in any(...) ReferenceError and false block;
+one genuine claims-supported error; one rubric ambiguity. Directory-v4 root prompts
+explicitly enumerate the fields, identify them as filename stems and explain placement
+inside return_result.value. Source labels and inputs remain unchanged. Eight real
+reference replays passed complete-input proof;7 reviewed retries ran on the new prompt,
+all6 schema/retrieval blocks repaired. Case77 still misclassifies directly tool-supported
+timelines using a separate quoted agent policy; retain the real failure, no special
+answer override. No preference pairs inferred across changed prompts.
+
+Structured eval previews now offer read_page starting at page1 for the full value.
+Previously the full value existed in transcript but repetitive evals reproduced the
+same structural cutoff. Native large-input source38 replay read10 full pages and
+completed; audit-only modified scripted trace is not training. Reference page follower
+recognizes the new hint. Node build passed; active runs moved at journaled boundaries:
+Luna runtime-v5/cap2; Bonsai runtime-v6/queue-v33/cap4. No GPU server change.
+
+Bonsai long FOLIO case148 performed real delegated work then rejected; source formal
+premise uses exclusive conservative-or-Republican, while English either/or conclusions
+are ambiguous and no conclusion FOL is released. Exclusive readings can support the
+source labels. Added whole-story395 review hold, preserved gold. Workflow claim435c...
+bank-advice/factual-assertion ambiguity also held. Three future source-held Bonsai roots
+removed while retaining current case and other roots; case150 completed accepted.
+
+**Publication/course decision:** source-backed/recovered pass current admission;
+TATQA hold blocks one directory-expansion static case, Workflow hold blocks one
+primitive and one batch. Instead of leaving both whole bundles unavailable, publish
+quality-filtered revisions preserving all original files/golds/trajectories. Generic
+filter-static-bundle.mjs hash-checks IR/result pairs, only permits explicit source-review
+or reserved-evaluation holds, rematerializes flags, validates retained admission and
+publishes manifest last. Workflow quality-v3:4,803 cases/28,958 decisions (2 held);
+directory quality-v3b:1,305 cases/3,529 approved decisions (1 held), preserving1,030
+existing disapproved decisions. First directory filter assumed all decisions approved
+and aborted; scratch quality-v3 was never published. All4 bundles32,969 approved
+source decisions. Explicit hold ledgers exclude source disputes from DPO negatives.
+Replacement chains now resolve transitively with cycle rejection, preventing a later
+quality revision from looking like lost older data. Added corpus-policy dependency to
+stage preparation so resume cannot reuse splits after a policy change.
+
+Planning recipe-v6 now includes current static publications and automatic snapshot
+(1,448 trajectories/1,291 programs) with no inventory omissions/quality blockers.
+Final student/template/token/group/dedup/25%-mix audits still pending; no training run.
