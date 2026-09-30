@@ -1,5 +1,11 @@
 # Generation decisions — 2026-09-27 continuation
 
+## 2026-09-30 20:04 UTC quality hold and coverage correction
+
+- Bonsai124/314saved,72rawaccepted52reject; Luna106batchcomplete99currentadmitted/480decisions. Replenishment256workflowfreshsourcesbeingprepared; failed-source review and semantic aliases remain separate.
+- Corrected priorfreshclaim:106launched =94fresh+12previouslycoveredSciFact. HistoricalscansmustjoinBOTHsource_ids/external_source.source_id; preserved earlierproofandv7/v8corrections.
+- Addedcentralpendinghold3hop1__642758_643936_45121, includinghistoricgold-matchingpositives, afterindependentvisible-sourceMiddelburghomonymreview. Preservegold/history; noDPOnegative. Nodebuild/nativeholdcheckpassed. Static/recipecarryforwardpending; previousinventoryreadinessstale.
+
 ## 2026-09-30 14:32 UTC substantive Luna coverage campaign
 
 - Started two Luna workers261656/261657 on106freshsource cases:50SciFact and56workflow,53perworker. Workflow static data already exists; model runs add strategies. Root scanned6438saved Luna rows and confirmed zero selected-source attempts. Successful same-source outcomes suppress retries even if prompt/IR revisions differ; failed-only cases need diagnosis first.
