@@ -4,7 +4,7 @@ export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'sp
 /** Bump whenever answer comparison semantics change so older outcomes cannot stand in for new runs. */
 export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record'; rubric?: string; context?: unknown; [key: string]: unknown };
+  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact'; rubric?: string; context?: unknown; [key: string]: unknown };
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
 
 /** TreeDST's author implementation keys children by name; sibling order is not semantic.
@@ -100,7 +100,7 @@ export function tatqaAnswerRecordCanonical(value: unknown): string | null {
   } catch { return null; }
 }
 
-export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown): boolean {
+export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown, numericComparison: 'rounded-2dp' | 'exact' = 'rounded-2dp'): boolean {
   if (typeof actual !== 'string' || typeof expected !== 'string') return false;
   const left = tatqaAnswerRecordCanonical(actual), right = tatqaAnswerRecordCanonical(expected);
   if (left === null || right === null) return false;
@@ -109,6 +109,7 @@ export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown): boo
     const a = JSON.parse(left) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
     const b = JSON.parse(right) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
     if (a.scale !== b.scale || !a.answer.numeric || !b.answer.numeric) return false;
+    if (numericComparison === 'exact') return a.answer.exact === b.answer.exact;
     return a.answer.exact === b.answer.exact || (!!a.answer.rounded && !!b.answer.rounded &&
       a.answer.rounded === b.answer.rounded);
   } catch { return false; }
@@ -185,8 +186,8 @@ export function agreement(actual: unknown, expected: unknown): number {
 
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 2;
-export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/1';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record' | 'markdown-terminal-newline'; threshold?: number; span?: number;
+export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/2';
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record' | 'tatqa-answer-record-exact' | 'markdown-terminal-newline'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
   markdown_terminal_newline_paths?: string[];
@@ -360,11 +361,13 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     if (want === input[path]) { item(path, got === want); continue; }
     if (compare === 'json-string-record') {
       const parsed = jsonStringRecordCanonical(got);
-      item(path, parsed !== null && parsed === jsonStringRecordCanonical(want));
+      const candidates = [want, ...(spec.alternates?.[path] ?? [])];
+      item(path, parsed !== null && candidates.some(candidate => parsed === jsonStringRecordCanonical(candidate)));
       continue;
     }
-    if (compare === 'tatqa-answer-record') {
-      item(path, path === 'answer.json' && tatqaAnswerRecordsEqual(got, want));
+    if (compare === 'tatqa-answer-record' || compare === 'tatqa-answer-record-exact') {
+      item(path, path === 'answer.json' && tatqaAnswerRecordsEqual(got, want,
+        compare === 'tatqa-answer-record-exact' ? 'exact' : 'rounded-2dp'));
       continue;
     }
     if (compare === 'csv') {
@@ -479,6 +482,15 @@ export function checkFileReturn(actual: unknown, files: Record<string, string>, 
     const written = files['answer.json'];
     return written !== undefined && tatqaAnswerRecordsEqual(actual, written);
   }
+  if (spec.compare === 'tatqa-answer-record-exact') {
+    const written = files['answer.json'];
+    return written !== undefined && tatqaAnswerRecordsEqual(actual, written, 'exact');
+  }
+  if (spec.compare === 'json-string-record') {
+    const written = files['answer.json'];
+    const returned = jsonStringRecordCanonical(actual);
+    return written !== undefined && returned !== null && returned === jsonStringRecordCanonical(written);
+  }
   if (!spec.return_count) return true;
   try { return canonical(actual) === canonical(fileReturnValue(files, input, spec)); } catch { return false; }
 }
@@ -500,8 +512,9 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
     const answer = jsonStringRecordCanonical(actual);
     return { accepted: answer !== null && candidates.some(candidate => jsonStringRecordCanonical(candidate) === answer), level };
   }
-  if (level === 'normalized' && spec.normalization === 'tatqa-answer-record') {
-    return { accepted: candidates.some(candidate => tatqaAnswerRecordsEqual(actual, candidate)), level };
+  if (level === 'normalized' && (spec.normalization === 'tatqa-answer-record' || spec.normalization === 'tatqa-answer-record-exact')) {
+    return { accepted: candidates.some(candidate => tatqaAnswerRecordsEqual(actual, candidate,
+      spec.normalization === 'tatqa-answer-record-exact' ? 'exact' : 'rounded-2dp')), level };
   }
   if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };
   if (level === 'agreement') {

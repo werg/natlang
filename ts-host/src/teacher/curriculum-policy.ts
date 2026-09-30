@@ -91,7 +91,7 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
   if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
       record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
   if (record.source === 'tatqa' && (typeof record.semantics.oracle !== 'object' ||
-      !['json-string-record', 'tatqa-answer-record'].includes(record.semantics.oracle.normalization ?? ''))) return 'obsolete_json_format_oracle';
+      !['json-string-record', 'tatqa-answer-record', 'tatqa-answer-record-exact'].includes(record.semantics.oracle.normalization ?? ''))) return 'obsolete_json_format_oracle';
   if (record.source === 'tatqa' && typeof record.semantics.oracle === 'object' &&
       record.semantics.oracle.normalization === 'json-string-record' &&
       JSON.parse(tatqaAnswerRecordCanonical(record.semantics.expected) ?? '{}').answer?.numeric === true &&
