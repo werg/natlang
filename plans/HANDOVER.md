@@ -1,3 +1,10 @@
+> **2026-09-30 07:00 UTC user numerical policy:** bounded synthetic exact-target correction may
+> be considered for subjective judgment scores, with raw output/provenance retained
+> and causal consistency reviewed. Code/computations from exact inputs stay exact
+> (explicit rounding/format equivalence allowed). No injection enabled; current
+> failures are arithmetic/units/scope. Returned actual file/edit counts and sums must
+> agree with decisions/actions even when classification involves judgment.
+
 > **2026-09-30 06:49 UTC audit workflow:** before applying source holds from a `new_cases`
 > report, run `python3 scripts/verify_source_audit_identities.py AUDIT --output NEW`
 > from repository root. It joins exact source/program/question identities to saved

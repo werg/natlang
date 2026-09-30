@@ -1212,3 +1212,18 @@ the artifact IR; pins hashes and writes new immutable audit evidence. Actual 062
 report reproduced one mismatch, with other four cases matching. This is an audit
 workflow guard, not an oracle, admission relaxation, unit test, or training promotion.
 Apply it before copying reviewed IDs into policy. Corrections retain original reports.
+
+## 2026-09-30 07:00 UTC — numerical target correction scope clarified by user
+
+User permits considering bounded injection of an exact training target for numbers
+that represent model judgment. Computations/code outputs based on exact inputs
+must remain exact. Existing explicitly stated rounding/display equivalence remains
+valid. Preserve raw model outputs and identify any injected example as a synthetic
+correction with target provenance, bound/rubric and consistent surrounding trace;
+never pretend the original model predicted that value. No correction is active yet.
+Current source audit concerns table arithmetic/units/question scope. File/edit counts
+and sums following semantic classification must match the actual decisions/actions;
+these are not free numerical ratings eligible for terminal-value substitution.
+No active subjective numeric-rating mismatch was found in the inspected generators;
+workflow confidence is source-label admission metadata, not a numerical output
+that needs target injection. Source/oracle conflicts remain review holds.
