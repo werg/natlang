@@ -24,7 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts.corpus import split_programs, file_digest, digest, index_pairs
 from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_loss,
                                         validate_training_audit,
-                                        validate_training_audit_tokenizer)
+                                        validate_training_audit_tokenizer,
+                                        validate_training_inventory_audit,
+                                        validate_training_mix_audit)
 
 import torch
 
@@ -359,6 +361,14 @@ def main():
     ap.add_argument("--max-len", type=int, default=3072)
     ap.add_argument("--require-audit", action="store_true",
                     help="require a ready sibling .manifest.json matching the data bytes and --max-len")
+    ap.add_argument("--require-mix-audit", type=Path,
+                    help="require a version-2 reducer mix report bound to this exact ready corpus")
+    ap.add_argument("--required-reducer-share", type=float, default=0.25,
+                    help="required reducer share when --require-mix-audit is set")
+    ap.add_argument("--require-data-inventory-ready", type=Path,
+                    help="require an inventory readiness record bound to an immutable report")
+    ap.add_argument("--inventory-policy", type=Path,
+                    help="current data-source policy whose hash must match the inventory report")
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--rank", type=int, default=32)
     ap.add_argument("--load-in-4bit", action="store_true",
@@ -412,10 +422,28 @@ def main():
     ap.add_argument("--no-merge", action="store_true",
                     help="save the resumable checkpoint but skip exporting a merged model at completion")
     a = ap.parse_args()
+    if (a.require_data_inventory_ready is None) != (a.inventory_policy is None):
+        ap.error("--require-data-inventory-ready and --inventory-policy must be supplied together")
+    if a.require_mix_audit is not None and not a.require_audit:
+        ap.error("--require-mix-audit requires --require-audit")
+    if (a.require_mix_audit is None) != (a.require_data_inventory_ready is None):
+        ap.error("joint curriculum gates require both mix and inventory reports")
+    if a.require_mix_audit is not None and not 0 < a.required_reducer_share < 1:
+        ap.error("--required-reducer-share must be between zero and one")
     audit_manifest = None
     if a.require_audit:
         try:
             audit_manifest = validate_training_audit(a.data, a.max_len, a.model, a.model_revision)
+        except (OSError, ValueError) as exc:
+            ap.error(str(exc))
+    joint_gate_identity = None
+    if a.require_mix_audit is not None:
+        try:
+            mix_identity = validate_training_mix_audit(
+                a.require_mix_audit, a.data, a.required_reducer_share, audit_manifest)
+            inventory_identity = validate_training_inventory_audit(
+                a.require_data_inventory_ready, a.inventory_policy)
+            joint_gate_identity = {**mix_identity, **inventory_identity}
         except (OSError, ValueError) as exc:
             ap.error(str(exc))
     stop = install_stop_handlers()
@@ -484,6 +512,8 @@ def main():
                     "gradient_checkpointing": a.gradient_checkpointing,
                     "checkpoint_above_tokens": a.checkpoint_above_tokens,
                     "require_audit": a.require_audit}
+        if joint_gate_identity is not None:
+            identity["joint_gate_identity"] = joint_gate_identity
         if a.exclude_modules:
             identity["exclude_modules"] = a.exclude_modules
         if a.no_expert_lora:

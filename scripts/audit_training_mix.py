@@ -2,6 +2,7 @@
 """Measure the reducer target on admitted decisions after the final corpus audit."""
 import argparse
 from collections import Counter
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -22,6 +23,8 @@ def modality(row):
     root = semantics.get('files', {}).get(semantics.get('root'), '')
     if '\nkind: directory-reducer\n' in root:
         return 'directory-reducer'
+    if '\nkind: file-reducer\n' in root:
+        return 'file-reducer'
     family = row.get('task_family', program.get('family', ''))
     identifier = str(row.get('program_id', ''))
     if any(family == 'curriculum_' + item or identifier.startswith('inline-curriculum:' + item + ':')
@@ -64,14 +67,53 @@ def audit(paths, target=0.25):
             'policy': 'Expand verified supply; do not duplicate decisions or silently downsample other tasks to meet the target.'}
 
 
+def build_report(paths, target=0.25):
+    """Bind a mix decision to the exact token-audited corpus and policy code."""
+    paths = [Path(path).resolve() for path in paths]
+    if len(paths) != 1:
+        raise ValueError('a production mix audit must cover exactly one ready corpus')
+    data_path = paths[0]
+    def file_sha256(path):
+        digest = hashlib.sha256()
+        with path.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return digest.hexdigest()
+
+    data_sha256 = file_sha256(data_path)
+    manifest_path = data_path.with_name(data_path.name + '.manifest.json')
+    manifest = json.loads(manifest_path.read_text())
+    audit_identity = manifest.get('audit') if isinstance(manifest, dict) else None
+    if (not isinstance(manifest, dict) or manifest.get('sha256') != data_sha256
+            or not isinstance(audit_identity, dict) or audit_identity.get('ready') is not True
+            or not isinstance(manifest.get('renderer'), dict)):
+        raise ValueError('mix input is not bound to a ready, hash-matching rendered-corpus audit')
+    report = audit(paths, target)
+    report.update({
+        'version': 'natlang.training_mix_audit/2',
+        'dataset': {'path': str(data_path), 'sha256': data_sha256},
+        'training_audit': {
+            'path': str(manifest_path),
+            'sha256': file_sha256(manifest_path),
+            'renderer': manifest['renderer'],
+            'max_len': audit_identity.get('max_len'),
+        },
+        'policy_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    })
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--reducer-share', type=float, default=0.25)
     parser.add_argument('--require-target', action='store_true')
+    parser.add_argument('--bind-ready-corpus', action='store_true',
+                        help='emit a production version-2 report bound to one ready token-audited corpus')
     args = parser.parse_args()
-    report = audit(args.input, args.reducer_share)
+    report = (build_report(args.input, args.reducer_share) if args.bind_ready_corpus
+              else audit(args.input, args.reducer_share))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     staged = args.output.with_suffix(args.output.suffix + '.pending')
     staged.write_text(json.dumps(report, indent=2) + '\n')

@@ -71,6 +71,81 @@ def validate_training_audit_tokenizer(manifest, tokenizer, model, revision):
             raise ValueError(f"training audit tokenizer mismatch: {key}")
 
 
+def _sha256_file(path):
+    hasher = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(block)
+    return hasher.hexdigest()
+
+
+def validate_training_mix_audit(mix_path, data_path, target, training_manifest):
+    """Fail closed unless the saved reducer gate matches this exact audited corpus."""
+    from scripts.audit_training_mix import build_report
+
+    mix_path, data_path = Path(mix_path), Path(data_path).resolve()
+    try:
+        saved = json.loads(mix_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read reducer-mix audit {mix_path}: {exc}") from exc
+    if not isinstance(saved, dict) or saved.get("version") != "natlang.training_mix_audit/2":
+        raise ValueError("reducer-mix audit is missing the supported version-2 provenance")
+    expected = build_report([data_path], target)
+    if saved != expected:
+        raise ValueError("reducer-mix audit does not match the current corpus, audit manifest, target, or policy")
+    if saved.get("target_met") is not True:
+        raise ValueError("reducer-mix audit does not meet the required reducer target")
+    expected_renderer = training_manifest.get("renderer")
+    if saved.get("training_audit", {}).get("renderer") != expected_renderer:
+        raise ValueError("reducer-mix audit renderer does not match the trainer's token audit")
+    return {"mix_audit_sha256": _sha256_file(mix_path),
+            "mix_policy_sha256": saved["policy_sha256"],
+            "target_reducer_share": target,
+            "dataset_sha256": saved["dataset"]["sha256"]}
+
+
+def validate_training_inventory_audit(ready_path, policy_path):
+    """Validate immutable inventory report bytes and the policy still in force."""
+    ready_path, policy_path = Path(ready_path), Path(policy_path).resolve()
+    try:
+        ready = json.loads(ready_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read data-inventory readiness record {ready_path}: {exc}") from exc
+    if not isinstance(ready, dict) or ready.get("ready") is not True:
+        raise ValueError("data-inventory readiness record is absent or not ready")
+    report_ref = ready.get("report")
+    if not isinstance(report_ref, str) or not report_ref:
+        raise ValueError("data-inventory readiness record has no report path")
+    report_path = Path(report_ref)
+    if not report_path.is_absolute():
+        report_path = Path(__file__).resolve().parents[1] / report_path
+    try:
+        report_bytes = report_path.read_bytes()
+        report = json.loads(report_bytes)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read data-inventory report {report_path}: {exc}") from exc
+    report_sha = hashlib.sha256(report_bytes).hexdigest()
+    policy_sha = _sha256_file(policy_path)
+    if ready.get("sha256") != report_sha:
+        raise ValueError("data-inventory report does not match its ready record")
+    if not isinstance(report, dict) or report.get("version") != "natlang.training_data_inventory/1":
+        raise ValueError("unsupported data-inventory report version")
+    report_policy = report.get("policy")
+    if not isinstance(report_policy, str) or Path(report_policy).resolve() != policy_path:
+        raise ValueError("data-inventory report is bound to a different training policy path")
+    if report.get("policy_sha256") != policy_sha:
+        raise ValueError("training data policy changed since the inventory report was produced")
+    missing = report.get("missing_required_default_inputs", [])
+    quality = report.get("included_quality_blockers", [])
+    if not isinstance(missing, list) or not isinstance(quality, list):
+        raise ValueError("data-inventory blocker fields must be arrays")
+    blockers = missing + quality
+    if blockers:
+        raise ValueError("data-inventory report has blockers: " + ", ".join(blockers))
+    return {"ready_sha256": _sha256_file(ready_path), "report_sha256": report_sha,
+            "policy_sha256": policy_sha}
+
+
 def _cpu_checkpoint_self_check():
     # Import the production writer and collator lazily; this remains a CPU-only
     # gate and runs the exact serialization/swap helper used by the trainer.

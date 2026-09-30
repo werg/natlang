@@ -253,6 +253,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     def train(name, previous, lr):
         checkpoint = f"{r}/train-{name}/checkpoint/state.json"
         inputs = [f"{r}/{name}.ready.jsonl", f"{r}/{name}.ready.jsonl.manifest.json", f"{p}/scripts/train_lora.py", f"{p}/scripts/corpus.py",
+                  f"{p}/scripts/training_readiness.py",
                   f'{r}/training-readiness.json']
         args = [f"{p}/scripts/train_lora.py", f"{r}/{name}.ready.jsonl", f"{r}/train-{name}", *train_model_args, '--require-audit',
                 "--epochs", "1", "--lr", lr, "--rank", "32", "--accum", "16", "--microbatch", "1", "--batch-tokens", "16384", "--max-len", "16384",
@@ -265,6 +266,13 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             args += ["--init-adapter", str(Path(init_adapter).resolve())]
             inputs += [str(Path(init_adapter).resolve() / "adapter_model.safetensors")]
         args += list(train_args)
+        if name == 'joint':
+            mix_report = f'{r}/joint.mix.json'
+            inventory_ready = f'{r}/data-inventory.ready.json'
+            policy = str(repo / 'training/data_sources.json')
+            args += ['--require-mix-audit', mix_report, '--required-reducer-share', '0.25',
+                     '--require-data-inventory-ready', inventory_ready, '--inventory-policy', policy]
+            inputs += [mix_report, f'{p}/scripts/audit_training_mix.py', policy]
         add(f"train-{name}", py(args, gpu=True), inputs,
             [checkpoint, f"{r}/train-{name}/checkpoint/weights/adapter_model.safetensors"], training_state=checkpoint,
             min_free_vram_mib=min_free_vram_mib)
@@ -360,11 +368,11 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
         [f'{r}/joint.jsonl', f'{r}/joint.jsonl.manifest.json'])
     render('joint', f'{r}/joint.jsonl')
     add('audit-joint-mix', py([f'{p}/scripts/audit_training_mix.py', '--input', f'{r}/joint.ready.jsonl',
-                              '--output', f'{r}/joint.mix.json', '--reducer-share', '0.25', '--require-target']),
+                              '--output', f'{r}/joint.mix.json', '--reducer-share', '0.25',
+                              '--require-target', '--bind-ready-corpus']),
         [f'{p}/scripts/audit_training_mix.py', f'{r}/joint.ready.jsonl', f'{r}/joint.ready.jsonl.manifest.json'],
         [f'{r}/joint.mix.json'])
     train('joint', 'coding', '0.00002')
-    stages[-1]['inputs'].append(f'{r}/joint.mix.json')
     # All source observation/replay/teacher work uses one frozen interpreter build.
     frozen_stages = {"observe-source", "synthetic", "teacher-seeds", "teacher", "materialize-teacher", 'validate-static-sources', 'correct-existing-curriculum'}
     for stage in stages:
