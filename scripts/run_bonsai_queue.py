@@ -25,14 +25,16 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 const [collector, source, start, count] = process.argv.slice(1);
 const { recordDigest } = await import(pathToFileURL(collector).href);
-const records = readFileSync(source, 'utf8').split(/\\r?\\n/).filter(line => line.trim()).map(JSON.parse);
+const lines = readFileSync(source, 'utf8').split(/\\r?\\n/);
 const jobs = [];
-for (let index = Number(start); index < Number(start) + Number(count); index++) {
-  if (!records[index]) throw new Error(`missing source record ${index}`);
-  const digest = recordDigest(records[index]);
-  jobs.push({index, program_id: records[index].id, digest,
+for (let index = Number(start); index < lines.length && jobs.length < Number(count); index++) {
+  if (!lines[index]?.trim()) continue;
+  const record = JSON.parse(lines[index]);
+  const digest = recordDigest(record);
+  jobs.push({index, program_id: record.id, digest,
     key: `${String(index).padStart(6, '0')}-${digest.slice(0,16)}`});
 }
+if (jobs.length !== Number(count)) throw new Error('source range exceeds frozen batch');
 process.stdout.write(JSON.stringify(jobs));
 """
         output = subprocess.check_output(['node', '--input-type=module', '-e', code,

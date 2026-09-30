@@ -1,3 +1,35 @@
+> **2026-09-30 08:05 UTC corrected precision audit:** exact recipe-v16 ordered
+> existing_teacher_results plus all four current static manifests audited:10691
+> saved resultrows,322 accepted generic-normalized answerchecks,0changedpositives,
+>0QAspanchecks. Includes792ref-v1/1400ref-composed/2306snapshot/6193staticcases.
+> Old1278-subset audit preserved/superseded withhash; root verified exact paths/counts.
+> Frozenv18 matches current built tree. Luna100243/100068 nowv18; Bonsai97277 waits
+> boundary on broader-expansion346 retainedgroup; check state for replacement PID.
+> Next full health08:11UTC, recipe refresh once per hour/batch.
+
+> **CURRENT — 2026-09-30 08:02 UTC: v18 numeric precision/source holds rollout pending.**
+> Frozenv18 adds exact decimal comparison to generic normalized answers and QA
+> numeric guards, without generic rounding. Collector answer_comparison_version
+> normalized-decimal-exact/2 forbids stale checkpoint/result reuse for new collection.
+> Root found float normalization could equate distinct large integers/highprecision
+> decimals. Luna is correcting its data audit: initial scan mislabeled an older
+>1278 snapshot as recipe-v16; exact recipe input is537e372... with2306 trajectories.
+> Do not claim current snapshot audited until corrected report/identity joins finish.
+> Six root-reviewed MuSiQue holds from41-result nextpool audit: next0/154/159/165/
+>23/158 for date/count, wrongbodyterm, pluralgold, metric, age/scope, wrongeventdate.
+> Preserve all golds. Next4/169 flags withdrawn after full root reads: Scottish1698
+> and LadyGagaFame chain are supported. Static directoryquality-v13 now1267cases/
+>3270approved/39cumulativeholds, allfourstatic32710approved, catalogchain explicit.
+> All530 eligible original file/tree cases have model results, zero missingeligible.
+> Including v12/v17 retries489 have rawacceptedattempt: C287/287,TATQA183/222,
+> TreeDST19/21. Rawacceptance is not current/finaladmission. Reviewedlakhvariant
+> separate. Four v17 fresh retries pass (threeMarkdown and actual full-datealias);
+> infrastructure retry finishes with source-supported expandedKhagan answer, held
+> for extractiveequivalence instead of modelnegative. Evidence original-cohort-
+> coverage-0758.json and reviewed-retries-v17/outcomes.audit.json. v18 solewatcher
+> migrates Luna97137/97063 and Bonsai97277 at boundaries, same queues/caps/journals.
+> Nextfullhourcheck08:11UTC and consolidated recipe refresh; no tests/training.
+
 > **CURRENT — 2026-09-30 07:45 UTC: all teachers runtime-v17.**
 > Boundary rollout complete, no overlapping collectors. Luna97137/97063 on
 > combined v17 queues; Bonsai97277 on existing queue-v44. Same journals/caps/server.

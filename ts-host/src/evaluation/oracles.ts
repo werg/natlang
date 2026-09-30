@@ -1,6 +1,8 @@
 /** Answer checks used by generated and dataset-backed teacher cases. */
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged'];
+/** Bump whenever answer comparison semantics change so older outcomes cannot stand in for new runs. */
+export const ANSWER_COMPARISON_VERSION = 'normalized-decimal-exact/2';
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
   threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record'; rubric?: string; context?: unknown; [key: string]: unknown };
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
@@ -114,7 +116,12 @@ export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown): boo
 function normalizeText(value: unknown): string {
   const text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
   const number = text.replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, '');
-  if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(number)) return `number:${Number(number)}`;
+  if (number.length <= 512 && /^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(number)) {
+    // Reuse only TaTQA's exact decimal representation; generic normalized answers must never
+    // inherit its optional source-specific two-decimal rounding equivalence.
+    const exact = tatqaNumberForms(number)?.exact ?? (number.endsWith('.') ? tatqaNumberForms(`${number}0`)?.exact : undefined);
+    if (exact !== undefined) return `number:${exact}`;
+  }
   const date = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
   if (date) return `date:${date[3]}-${date[1]!.padStart(2, '0')}-${date[2]!.padStart(2, '0')}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `date:${text}`;
@@ -134,10 +141,10 @@ function words(value: unknown, qa = false): string[] {
 /** Multiset token F1; repeated words count only when they occur on both sides. */
 export function spanF1(actual: unknown, expected: unknown, qa = false): number {
   if (qa) {
-    const numbers = (value: unknown) => String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const numbers = (value: unknown) => String(value).match(/[+-]?\d+(?:\.\d+)?/g)?.map(token =>
+      tatqaNumberForms(token)?.exact ?? token).sort() ?? [];
     const goldNumbers = numbers(expected), gotNumbers = numbers(actual);
-    if (goldNumbers.length && canonical(goldNumbers.sort((a, b) => a - b)) !==
-        canonical(gotNumbers.sort((a, b) => a - b))) return 0;
+    if (goldNumbers.length && canonical(goldNumbers) !== canonical(gotNumbers)) return 0;
   }
   const left = words(actual, qa), right = words(expected, qa);
   if (qa && [actual, expected].some(value => ['yes', 'no', 'noanswer'].includes(String(value).trim().toLowerCase())) &&
