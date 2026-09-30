@@ -1,3 +1,12 @@
+## Live generation update — 2026-09-30 11:16:36 UTC
+
+- Two Luna workers **186820 / 186821** now run **13 independently source-reviewed MuSiQue title-path variants**, split 6/7, frozen runtime-v19, one request each, 40 turns / 256 requests / 1,200 seconds and existing backoff. Authority: `runs/generation-check-20260930-hourly/musique-title-path-r2-next/revision-4/launch.json`. Previous 24/21/17 proposals are preserved and must not be launched.
+- Bonsai **110507** continues with four requests. Next full check remains **11:24:31.182 UTC**. No exhausted queue restart or frozen runtime mutation.
+- Failure candidates now have a separate content-addressed compressed inventory, full original evidence, manifest and recipe carryforward receipt (commit `e599ca7`). Default command stdout compatibility preserved; recipe opts into JSON. No negative labels assigned. Catalog now schema-dispatches failure versus positive manifests; first refresh exposed/fixed a KeyError, interrupted artifacts preserved.
+- Recipe-v21 published with quality-v20 sources and failure inventory; subsequent holds make it stale. Refresh after the next hourly check and settled quality-v22. Do not report snapshot selection as final training readiness.
+- New source review uncovered nine additional holds since quality-v19; final quality-v22 publication is underway. Two further relation ambiguities (Esperanto formation city; Egypt century qualifier) remain review and excluded from this queue. Root withdrew incorrect flags: explicit Unicode subset supports WGL-4, military branch of XXX Corps means British Army, and a proportional plague answer need not be a headcount. Root corrected Mongol/Jin support to the actual Yuan article.
+- Route audit confirms child calls: **2,566 approved child decisions**, 5.34% of 48,033 audited static-plus-generated projection decisions; this excludes legacy/general/coding/final split/dedup. Nine selected rows fail materialization (seven legacy checkpoints; two missing invocation attribution). Keep excluded; no fabricated trace migration. Reports: `runs/data-lineage-20260930/route-audit/`.
+
 ## Current authority — 2026-09-30 10:52 UTC
 
 - Bonsai PID **110507** is running frozen runtime-v19 with four concurrent requests/server slots. Its last journal completion was followed by a new start; generation is progressing. This process imported the older supervisor; use output-accounting/2 at the next natural campaign boundary.

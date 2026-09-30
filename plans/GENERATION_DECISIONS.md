@@ -1343,3 +1343,11 @@ Root reviewed and committed bd7bffd: joint training requires current inventory-p
 Fresh clarified SciFact and explicit-year MuSiQue derivatives completed with SUPPORT/380 and seven admitted decisions total. Malformed originals remain held; no trajectory migration across changed prompts.
 
 Read-only DPO carryflow audit found rejected teacher attempts absent from default pair discovery: positive snapshot selection excludes them, and ledger next-action text is advisory. Authorised narrow separate failure-candidate inventory implementation; retain causal/same-prompt/approved-positive pair gates, no automatic negatives. Delegation audit must inspect actual NL child invocation evidence, not only top-level delegate actions.
+
+## 2026-09-30T11:16:36.494054+00:00 — reviewed title batch and failure carryforward
+
+Root independently reviewed source chains; reduced24 proposed cases to13 beforelaunch. Hold reasons include ambiguous entities/answer sets, planned-versus-actual events, missing final residence and first-event date. Cleared overstrict analysis of explicitly requested Unicode subset, military branch OF a corps, and natural proportional answer. Corrected irrelevant Qing citation to exactYuan/Mongol/Jin excerpt. Launch186820/186821,6/7freshqueues, frozen19, existing limits/backoff, host output-accounting2. Priorproposals preserved, no extra workers.
+
+Separate failure inventory committed e599ca7 with stream processing, exact original evidence, negative-ineligible labels and immutable manifest/carryforward receipt; no automatic pairing. Added --json opt-in to preserve old CLI consumers. New manifest type exposed catalogKeyError, fixed schema dispatch (b02e5b8); originalfailed/interrupted snapshot artifacts retained. Recipe21 published againstquality20 but subsequentholds require nextrefresh.
+
+Verified actual childNL invocation contexts/ledgerIDs, not only explicitdelegate actions:2566approved childdecisions/48033auditedprojection(5.34%). Finalmix scope notcovered. Nine positive-selected trajectories failmaterialization correctly:7checkpointcaptures and2 missing invocation-attribution traces. No safe manualmigration found; excludedfinaltraining. No tests/studenttraining run.
