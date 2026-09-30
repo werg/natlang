@@ -11,7 +11,7 @@ import {createGzip} from 'node:zlib';
 import {parseArgs} from 'node:util';
 import {admitRow} from '../dist/teacher/curriculum.js';
 import {classifyAdmissionReasons} from './admission-dispositions.mjs';
-const {values} = parseArgs({options:{repo:{type:'string'},out:{type:'string'}}});
+const {values} = parseArgs({options:{repo:{type:'string'},out:{type:'string'},json:{type:'boolean',default:false}}});
 const repo = resolve(values.repo ?? process.cwd());
 const out = resolve(values.out ?? join(repo,'data/teacher/generated-snapshots'));
 await mkdir(out,{recursive:true});
@@ -101,5 +101,46 @@ async function writeDurableExclusive(path,content){
   try { await link(staging,path); } finally { await unlink(staging); }
 }
 await writeDurableExclusive(ledgerPath,ledger.map(x=>JSON.stringify(x)+'\n').join(''));
+if(JSON.stringify(admissionPolicy)!==JSON.stringify(await policyIdentity()))throw Error('Admission policy changed while failure inventory was assembled; rerun snapshot.');
+const failureCandidates=ledger.filter(item=>item.dispositions.some(d=>d.category==='candidate_failure')&&item.sha256&&item.file)
+  .map(item=>({item,candidate_id:createHash('sha256').update(`${item.file}\0${item.sha256}`).digest('hex')}))
+  .sort((a,b)=>a.candidate_id.localeCompare(b.candidate_id));
+async function* failureLines(){
+  for(const {item,candidate_id} of failureCandidates){
+    const bytes=await readFile(item.file);
+    if(createHash('sha256').update(bytes).digest('hex')!==item.sha256)throw Error('Failure candidate changed during inventory: '+item.file);
+    let result;try{result=JSON.parse(bytes);}catch{throw Error('Failure candidate became unreadable: '+item.file);}
+    const program=result.task?.program_ir;
+    yield JSON.stringify({version:'natlang.teacher_failure_candidate/1',candidate_id,
+      source_artifact:{path:item.file,sha256:item.sha256},trajectory_id:result.id??null,
+      program_id:program?.id??item.program_id??null,task:result.task??null,
+      source_groups:program?.source_groups??null,provenance:result.provenance??null,
+      outcome:result.outcome??null,admission_reasons:item.reasons,dispositions:item.dispositions,
+      dpo_negative_eligible:false,raw_result:result})+'\n';
+  }
+}
+const failureContentHash=createHash('sha256');
+const failureContentDigest=new Transform({transform(chunk,encoding,callback){failureContentHash.update(chunk);callback(null,chunk);}});
+const failureTmp=join(out,nonce+'.failure-candidates.jsonl.gz.tmp'),failureCompressed=createHash('sha256');
+const failureCompressedDigest=new Transform({transform(chunk,encoding,callback){failureCompressed.update(chunk);callback(null,chunk);}});
+await pipeline(Readable.from(failureLines()),failureContentDigest,createGzip(),failureCompressedDigest,createWriteStream(failureTmp,{flags:'wx'}));
+if(JSON.stringify(admissionPolicy)!==JSON.stringify(await policyIdentity()))throw Error('Admission policy changed during failure inventory; rerun snapshot.');
+const failureContentSha256=failureContentHash.digest('hex');
+const failureDigest=failureCompressed.digest('hex'),failurePath=join(out,failureDigest+'.failure-candidates.jsonl.gz');
+const failureCompleted=await open(failureTmp,'r+');try{await failureCompleted.sync();}finally{await failureCompleted.close();}
+try{await link(failureTmp,failurePath);}catch(error){
+  if(error.code!=='EEXIST')throw error;
+  const check=createHash('sha256');for await(const chunk of createReadStream(failurePath))check.update(chunk);
+  if(check.digest('hex')!==failureDigest)throw Error('Existing failure candidate path has unexpected bytes: '+failurePath);
+}
+await unlink(failureTmp);
+const ledgerSha256=createHash('sha256').update(ledger.map(x=>JSON.stringify(x)+'\n').join('')).digest('hex');
+const failureManifestPath=join(out,nonce+'.failure-candidates.manifest.json');
+const failureManifest={version:'natlang.teacher_failure_inventory/1',created_at:new Date().toISOString(),
+  candidates:failureCandidates.length,artifact:{path:failurePath,sha256:failureDigest,content_sha256:failureContentSha256,encoding:'gzip'},
+  positive_snapshot:{path,sha256:digest,content_sha256:contentSha256},source_ledger:{path:ledgerPath,sha256:ledgerSha256},
+  policy_identity:admissionPolicy,negative_labels_assigned:false,automatic_pair_generation:false};
+await writeDurableExclusive(failureManifestPath,JSON.stringify(failureManifest,null,2)+'\n');
+manifest.failure_candidates={path:failurePath,sha256:failureDigest,manifest:failureManifestPath,candidates:failureCandidates.length};
 await writeDurableExclusive(join(out,nonce+'.manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-console.log(path);
+console.log(values.json?JSON.stringify({results:path,manifest:join(out,nonce+'.manifest.json'),failure_candidates:failurePath,failure_manifest:failureManifestPath}):path);

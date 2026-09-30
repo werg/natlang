@@ -322,18 +322,30 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     # the staged recipe. Re-admit and materialize them on the frozen build.
     default_results = [repo / 'runs/inline-curriculum' / name for name in
                        ('ref-v1.results.jsonl', 'ref-composed-v1.results.jsonl')]
+    generated_failure_inventory = None
     if teacher_results_override is None:
         # Snapshot completed jobs across historical and current campaigns, rather
         # than silently omitting everything outside the two reference exports.
-        generated = subprocess.check_output(
+        generated_info = json.loads(subprocess.check_output(
             ['node', str(repo / 'ts-host/scripts/snapshot-generated-training.mjs'),
-             '--repo', str(repo)], cwd=repo, text=True).strip()
-        default_results.append(Path(generated))
+             '--repo', str(repo), '--json'], cwd=repo, text=True).strip())
+        default_results.append(Path(generated_info['results']))
+        generated_failure_inventory = {
+            'artifact': str(Path(generated_info['failure_candidates']).resolve()),
+            'manifest': str(Path(generated_info['failure_manifest']).resolve()),
+        }
     teacher_results = ([str(Path(path).resolve()) for path in teacher_results_override]
                        if teacher_results_override is not None else
                        [str(path) for path in default_results if path.is_file()])
     if len(set(teacher_results)) != len(teacher_results):
         raise ValueError('duplicate existing teacher results input')
+    if generated_failure_inventory:
+        carry_path = f'{r}/teacher-failure-candidates.jsonl.gz'
+        add('carryforward-generated-failures', ['node', f'{p}/ts-host/scripts/carryforward-failure-inventory.mjs',
+            generated_failure_inventory['manifest'], carry_path],
+            [generated_failure_inventory['manifest'], generated_failure_inventory['artifact'],
+             f'{p}/ts-host/scripts/carryforward-failure-inventory.mjs'],
+            [carry_path, f'{carry_path}.manifest.json'])
     if teacher_results:
         existing = f'{r}/existing-curriculum'
         admitted, turns = f'{existing}.admitted.jsonl', f'{existing}.turns.jsonl'
@@ -385,6 +397,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             'static_source_bundle': included_static,
             'static_source_bundles': included_statics,
             'existing_teacher_results': teacher_results,
+            'generated_failure_candidates': generated_failure_inventory,
             'dpo_pair_build': {'stage': 'build-existing-preferences', 'training_started': False,
                               'policy': 'Current-runtime causal pairs only; source/migration holds are not negative labels. Student rendering/split/token audits required before DPO.'} if teacher_results else None,
             'excluded_legacy_turns': excluded_turns,
