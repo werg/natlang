@@ -1351,3 +1351,11 @@ Root independently reviewed source chains; reduced24 proposed cases to13 beforel
 Separate failure inventory committed e599ca7 with stream processing, exact original evidence, negative-ineligible labels and immutable manifest/carryforward receipt; no automatic pairing. Added --json opt-in to preserve old CLI consumers. New manifest type exposed catalogKeyError, fixed schema dispatch (b02e5b8); originalfailed/interrupted snapshot artifacts retained. Recipe21 published againstquality20 but subsequentholds require nextrefresh.
 
 Verified actual childNL invocation contexts/ledgerIDs, not only explicitdelegate actions:2566approved childdecisions/48033auditedprojection(5.34%). Finalmix scope notcovered. Nine positive-selected trajectories failmaterialization correctly:7checkpointcaptures and2 missing invocation-attribution traces. No safe manualmigration found; excludedfinaltraining. No tests/studenttraining run.
+
+## 2026-09-30T11:25:36.838Z — hourly check and stop unhelpful wording retries
+
+BonsaiongoingGPU97%,138canonicalfinishes/0nonsuccesssince10:24,0futureunstartedheldcases. Luna13titlejobscompletedfullaccounting,1accepted/12rejected; source-read outcomes predominantlywording/specificity equivalence. Rootstoppedadditionaltitleonlyretrybatchpendingboundedsource-backedalias proposals. No fuzzy/substring/generalnumericvalue relaxation; wrong computionalresultsstaywrong. Actualrecordedanswers/originalgolds unchanged, no DPOnegativeassignment.
+
+Sourcequality22nowcurrentexplicitpublicationfield;4static6150cases/32667approveddecisions. Nineadditionalholds sincequality19 and2unresolvedrelationreviews logged. Recipe22publishedwithdurablefailureinventory; finalcarryforward/hashreadinessauditongoing. CurrentbuilderpreservesoriginalCLIstdout, distinguishesmanifesttypes, carrieslegacy4static/allgeneratedeligibleinputs. No training.
+
+Hourlyreader initialreportcaughtasyncgeneratorfor/ofreadfailure; rootfixedforawaitanddescendingauditsort, secondreporthasnoreaderrors. Bothpreserved; initialnotclaimzerooutcomes. Readerlateraddscompleteness/errorgate. DirectqueueoutputcountsdoNOTcoverallBonsai per-batchsavedjobs; supplementarycanonicaljoinneeded. Updatedcheckflatcounts/currentpolicy and next12:25:36.838UTC.

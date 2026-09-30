@@ -1,3 +1,12 @@
+## Current authority — 2026-09-30 11:25:36.838 UTC checkpoint
+
+- Bonsai **110507** remains active at four concurrent requests; sampled GPU **97%**. Hourly journal audit: **138 completed finishes, zero non-success finishes** since10:24; current queue has **zero future unstarted held rows**. Next full inspection **12:25:36.838 UTC**.
+- Luna workers186820/186821 completed all13 title variants with exact output-accounting/2 proof. **No live Luna generation worker.** One raw accepted;12 rejected and held. Initial review finds mostly source-supported wording/specificity differences. Do not launch another title retry batch until bounded evidence-backed equivalence proposals are root-reviewed; no broad fuzzy comparator, no automatic DPO negatives, no numerical value relaxation.
+- Current static **quality-v22**, fourbundles **6,150 cases /32,667 approved decisions**; directory1,224cases/3,227decisions. Nine added holds sincequality19, originals preserved. `current_publication_revision` now identifies current publication; inherited `quality_revision` describes older origin.
+- **Recipe-v22 published**, separate failure inventory and all required source lanes included; fresh exact carryforward/hash/readiness audit underway. Recipe21 and its audit retained as historical/stale. No final student render/split/token/dedup or training.
+- Authoritative health JSON: `runs/generation-check-20260930-hourly/hourly-health-next/health-2026-09-30T112536838Z.json` (SHA0931ae3b…523c2534). Earlier11:24:50 report has per-file async-iterator read errors; preserved, NOT evidence for zero generated outputs. Reader corrected. These direct queue output counts do not include all Bonsai per-batch saved/spooled jobs; canonical generation output supplement is underway.
+- check.json flat quality/recipe fields are reconciled; next inspection follows its clock. State records completed workers; never restart exhausted queues. Disk sample9.6GiB free; gzip future snapshots only. No tests/studenttraining run.
+
 ## Live generation update — 2026-09-30 11:16:36 UTC
 
 - Two Luna workers **186820 / 186821** now run **13 independently source-reviewed MuSiQue title-path variants**, split 6/7, frozen runtime-v19, one request each, 40 turns / 256 requests / 1,200 seconds and existing backoff. Authority: `runs/generation-check-20260930-hourly/musique-title-path-r2-next/revision-4/launch.json`. Previous 24/21/17 proposals are preserved and must not be launched.
