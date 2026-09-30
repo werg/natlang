@@ -1,3 +1,14 @@
+> **2026-09-30 06:49 UTC audit workflow:** before applying source holds from a `new_cases`
+> report, run `python3 scripts/verify_source_audit_identities.py AUDIT --output NEW`
+> from repository root. It joins exact source/program/question identities to saved
+> result.task.program_ir, pins both hashes, exits nonzero for mismatches, and writes
+> immutable evidence. This checks identity only, not semantic correctness. Actual
+> 0625 audit reproduced1 mismatch in identity-check-initial.json; existing Luna agent
+> now correcting report/derivation description with backups and rerunning the check.
+> Four broader-sweep root-reviewed candidates recorded pending next batch in
+> hourly/tatqa-remaining-source-sweep/root-adjudications-pending.json. Current policies
+> stillv14; final training release must wait for quality adjudication, no training run.
+
 > **CURRENT — 2026-09-30 06:44 UTC: all teachers frozen runtime-v14.**
 > Boundary rollout87674 completed: Luna87754/87694, Bonsai87740 queue-v42, same
 > caps/provider/backoff/journals/server. Exact authorities updated. Recipe-v14:

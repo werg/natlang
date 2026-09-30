@@ -1203,3 +1203,12 @@ matched case. Contrary to the earlier log, the fourth source WAS in canonical
 static data; it failed the identity match. Preserve original audit evidence/backup,
 raw source/gold/traces and all prior static publications. No labels or DPO pairs
 changed. Frozenv14 rollout applies the corrected hold at teacher boundaries.
+
+## 2026-09-30 06:49 UTC — artifact identity guard for source reviews
+
+Added a reusable read-only source-audit identity verifier. It validates exact reported
+source ID, optional program ID/question, and saved external-source identity against
+the artifact IR; pins hashes and writes new immutable audit evidence. Actual 0625
+report reproduced one mismatch, with other four cases matching. This is an audit
+workflow guard, not an oracle, admission relaxation, unit test, or training promotion.
+Apply it before copying reviewed IDs into policy. Corrections retain original reports.
