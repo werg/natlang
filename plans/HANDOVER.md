@@ -1,3 +1,34 @@
+> **CURRENT — 2026-09-30 07:20 UTC: Luna extension active; Bonsai v16 boundary pending.**
+> Runtime-v15 was prepared but never deployed. Sole rollout93792 moves v14 DIRECT
+> to frozenv16. Original Luna queues exhausted normally; new Luna PIDs93802/93803
+> are on v16 combined queues, retaining all historical keys/journals. Bonsai87740/v14
+> finishes case91 then moves to queue-v44/v16. Check latest v16 state for exact PID.
+> Same caps: two Luna provider workers, four Bonsai/server slots, exponential backoff.
+> Next pool304:248MuSiQue/56SciFact,152per Luna worker. Root verified hashes, every
+> queue index/key and current/frozen eligibility.301 future duplicate Bonsai roots
+> reserved to Luna; completed/current attempts preserved, clean contiguous groups
+> retained. Three other selected sources were already absent/completed in future
+> Bonsai range. QASPER300 remains generation-held, verified static rows included.
+> Next-pool prior coverage121 admitted successes,18 explicit failed-attempt repair
+> backlog; static references not counted as generated. Manifest/prior-job-coverage
+> in runs/luna-directory-next-20260930. No source/gold/reference/group rewrites.
+> Full TATQA sweep239 rows: agent222pass/16review/1existinghold. Root checked ALL16
+> review source inputs before applying holds. Some agent IDs/content/calculations
+> needed correction; do not trust ordinal-based recommendations. Root classifications
+> override EPS wrong-sign assertion (direction ambiguity), goodwill wrong-aggregation
+> assertion (population/dash ambiguity), and other unsupported flags withdrawn.
+> Directory quality-v12:1273cases/3276approved/33 cumulativeholds; TATQA222 remaining.
+> Allfourstatic32716approved.16 new source holds preserve all old golds/traces and
+> static publications, no auto DPO negatives. Catalog replacement chain explicit.
+> Original file/tree559 now530 eligible originals plus1 reviewedlakhvariant.
+> Hourlycheck at07:11UTC: all workers healthy, GPU98%, disk19.86GiB;548 original
+> origins had raw model results. Current recipe-v14 predates16holds; refresh next
+> as one batch. Source snapshots use6.2GiB: avoid copying full snapshots per tiny
+> change; publish policy/ledger immediately and consolidate inventory refreshes.
+> New non-TATQA rejection audit hourly/rejection-audit-0708-other: README duplicate
+> insertion is real error; two terminal-newline-only mismatches need narrow review.
+> Nextfullhourcheck08:11UTC. Continue active thread loop; no student training/tests.
+
 > **2026-09-30 07:00 UTC user numerical policy:** bounded synthetic exact-target correction may
 > be considered for subjective judgment scores, with raw output/provenance retained
 > and causal consistency reviewed. Code/computations from exact inputs stay exact

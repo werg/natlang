@@ -1227,3 +1227,27 @@ these are not free numerical ratings eligible for terminal-value substitution.
 No active subjective numeric-rating mismatch was found in the inspected generators;
 workflow confidence is source-label admission metadata, not a numerical output
 that needs target injection. Source/oracle conflicts remain review holds.
+
+## 2026-09-30 07:20 UTC — complete source sweep and next Luna assignment
+
+Root checked all16 conservative TATQA review findings from the239-row sweep before
+central holds/staticpublication. Scope, units, period/direction, population and
+prose-versus-rounded-table conflicts are held without rewriting golds. Unsupported
+agent recommendations were withdrawn after full-input review; retain correction
+history. EPS direction and goodwill population are ambiguities, not proven arithmetic
+errors. Staticquality-v12 keeps1273 cases/3276 approved decisions (allfour32716), with
+explicit transitive replacements and prior artifacts preserved.
+
+Luna original queues exhausted normally. Prepared304 new non-TATQA directory cases
+(248MuSiQue/56SciFact), balanced152 each, are appended in new immutable queues with
+same journals/two provider workers.301 matching future Bonsai tasks are assigned to
+Luna to broaden generation without redundant future GPU work; preserve current and
+completed attempts. Other prior failures remain explicit repair backlog, not complete
+training data. QASPER generation remains held; its independently verified statics
+stay included. Runtime-v15 was never deployed; exact-PID boundary watcher93792 rolls
+v14 directly to frozenv16, maintaining caps4Bonsai/2Luna and backoff.
+
+Refresh immutable full training snapshots after consolidated audit batches/hourly
+checks; their6.2GiB cumulative footprint makes per-small-change refresh wasteful.
+Current policy/lineage holds are published immediately; clearly mark prior recipes
+as stale until refreshed. No deletion of preserved data or student training.

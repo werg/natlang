@@ -29,7 +29,16 @@
     "data/teacher/directory-expansion/quality-v7.static.turns.jsonl": "data/teacher/directory-expansion/quality-v8.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v8.train.ir.jsonl": "data/teacher/directory-expansion/quality-v9.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v8.static.results.jsonl": "data/teacher/directory-expansion/quality-v9.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v8.static.turns.jsonl": "data/teacher/directory-expansion/quality-v9.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v8.static.turns.jsonl": "data/teacher/directory-expansion/quality-v9.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v9.train.ir.jsonl": "data/teacher/directory-expansion/quality-v10.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v9.static.results.jsonl": "data/teacher/directory-expansion/quality-v10.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v9.static.turns.jsonl": "data/teacher/directory-expansion/quality-v10.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v10.train.ir.jsonl": "data/teacher/directory-expansion/quality-v11.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v10.static.results.jsonl": "data/teacher/directory-expansion/quality-v11.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v10.static.turns.jsonl": "data/teacher/directory-expansion/quality-v11.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v11.train.ir.jsonl": "data/teacher/directory-expansion/quality-v12.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v11.static.results.jsonl": "data/teacher/directory-expansion/quality-v12.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v11.static.turns.jsonl": "data/teacher/directory-expansion/quality-v12.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -175,6 +184,18 @@
       "actual_source_id": "cc42e86a-c56d-4638-b94c-bf4cc5ebd7c5",
       "reason": "Correct one-character audit UUID typo; case was present in prior canonical publication. Current policy/artifact identity join verified.",
       "audit": "runs/generation-check-20260930-hourly/tatqa-numeric-campaign/current-source-admission.audit.json"
+    },
+    "directory-expansion-full-tatqa-sweep": {
+      "revision": "quality-v12",
+      "source_rows_audited": 239,
+      "new_source_holds": 16,
+      "cases": 1273,
+      "approved_decisions": 3276,
+      "remaining_tatqa_cases": 222,
+      "audit": "runs/generation-check-20260930-hourly/tatqa-remaining-source-sweep/audit.jsonl",
+      "root_adjudication": "runs/generation-check-20260930-hourly/tatqa-remaining-source-sweep/root-final-batch.json",
+      "reason": "Root verified wrong measures, unit conflicts, unclear scope/population/period/direction and prose-vs-table rounding discrepancies; original golds retained.",
+      "dpo_negatives_created": false
     }
   }
 }
