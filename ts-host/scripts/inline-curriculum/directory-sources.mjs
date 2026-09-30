@@ -52,6 +52,44 @@ export function sourceCase({ source, info, sourceId, group, task, files, expecte
   return record;
 }
 
+const TATQA_SCALE_CONTRACT_REVISION = 'tatqa-evidence-scale-v2';
+const TATQA_SCALE_CONTRACT = 'Use a nonempty scale only when the question or source evidence establishes it for the requested quantity. Use empty scale for dimensionless quantities or when no scale is stated. Do not infer scale from financial-report conventions or unrelated table rows.';
+
+/** Add the evidence-bounded scale rule to future TATQA tasks and saved IR variants. */
+export function applyEvidenceScaleContract(record) {
+  if (record.source !== 'tatqa') return record;
+  const suffix = ':evidence-scale-v2';
+  const promptPath = record.semantics?.root;
+  const prompt = record.semantics?.files?.[promptPath];
+  if (typeof prompt !== 'string') throw new Error(`tatqa_scale_contract_prompt_missing:${record.source_ids?.[0]}`);
+
+  if (record.id.endsWith(suffix)) {
+    if (prompt.split(TATQA_SCALE_CONTRACT).length - 1 !== 1 ||
+        record.generation?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION ||
+        record.external_source?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION)
+      throw new Error(`tatqa_scale_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    return record;
+  }
+  if (record.id.includes(suffix)) throw new Error(`tatqa_scale_contract_id_malformed:${record.source_ids?.[0]}`);
+
+  const matches = prompt.split(TATQA_SCALE_CONTRACT).length - 1;
+  if (matches > 1) throw new Error(`tatqa_scale_contract_prompt_duplicated:${record.source_ids?.[0]}`);
+  let nextPrompt = prompt;
+  if (matches === 0) {
+    const insertion = 'Preserve source files.';
+    if (!prompt.includes(insertion) || prompt.split(insertion).length !== 2)
+      throw new Error(`tatqa_scale_contract_prompt_anchor_missing:${record.source_ids?.[0]}`);
+    nextPrompt = prompt.replace(insertion, `${TATQA_SCALE_CONTRACT}\n${insertion}`);
+  }
+
+  record.semantics.files[promptPath] = nextPrompt;
+  const baseId = record.id;
+  record.id = `${baseId}${suffix}`;
+  record.generation = { ...record.generation, task_contract_revision: TATQA_SCALE_CONTRACT_REVISION };
+  record.external_source = { ...record.external_source, task_contract_revision: TATQA_SCALE_CONTRACT_REVISION };
+  return record;
+}
+
 /** Reusable adapter for future builds and reviewed variants cloned from historical IR. */
 export function applyReviewedMusiqueOracleAlias(record) {
   if (record.source !== 'musique') return record;
@@ -209,6 +247,7 @@ return result;`;
           record.curriculum.decisive = [{ marker, source: 'file', note: 'Read the source table before choosing the computation.' }];
           record.curriculum.plausible_actions = ['read source evidence', 'return an unverified answer'];
         }
+        applyEvidenceScaleContract(record);
         return record;
       });
     }

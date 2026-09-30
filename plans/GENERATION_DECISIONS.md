@@ -938,3 +938,19 @@ and existingcap4, then preserves filteredv34work. V8monitor65189 still awaitedv7
 not initialized/signaled a worker: stopped that exactpending monitor, preparedv35,
 restarted66207. No live queue mutation. V7monitor62418 still owns currentboundary;
 66207 waits predecessorcompletion, derivesexactnewPID, then uses nextboundary.
+
+
+## 2026-09-30 04:21 UTC — generic evidence-scale prompt revision
+
+After holding contradictory/missing-unit source contracts, future TATQA roots now
+clarify that scale follows the question/source evidence for the requested quantity,
+empty for dimensionless or unstated units, rather than financial conventions/unrelated
+rows. Shared applyEvidenceScaleContract produces distinct :evidence-scale-v2 IDs and
+revision metadata; source golds, references, source groups and evidence stay unchanged.
+Idempotence and structural preservation checked; saved failed176 variant native replay
+accepted103.1/empty scale in5turns. Audit-only replay is not training; a new independently
+sampled teacher retry isqueued instead. No specific gold hints or pairs across prompts.
+Queue-v36 adds this1fresh retry ahead of2reviewedMuSiQue variants/filteredv34work. V8
+monitor66207 was still waiting for v7, with no rollout state/no worker signals; stopped
+that exact pending watcher before creatingv36, restarted67297. ActualBonsai54068/v6
+currentcase remains immutable; v7monitor62418 thenv8monitor67297 own serialboundaries.

@@ -11,18 +11,24 @@
 > Catalog replacement chain3b→4 preserves prior data. Recipe-v8 planning snapshot
 >1,676generated trajectories/1,519programs; no omissions/included blockers. Final
 > student rendering/token/group/dedup/25%-mix still pending.
-> Bonsai v7 monitor62418 still awaits current54068 boundary; **v8 monitor66207 waits
+> Bonsai v7 monitor62418 still awaits current54068 boundary; **v8 monitor67297 waits
 > for v7 rollout state to complete**, then resolves exact new PID and moves it at
-> another case boundary onto frozenruntime-v8/queue-v35. Queue-v34 removes3 future
+> another case boundary onto frozenruntime-v8/queue-v36. Queue-v34 removes3 future
 > defective TATQA roots, preserves9 clean roots from mixed batches and current root.
 > Read BOTH monitor states before any manual action; neither overlaps collectors.
 > No global scale prompt default added while source conventions remain disputed.
 > Two reviewed MuSiQue aliases are implemented with exact primary gold, source snapshot
 > and evidence-file hashes. New distinct-ID variants preserve visible prompts/golds.
 > Four native audits accepted both primary/alias answers (audit-only, no training rows).
-> Queue-v35 adds2 independent fresh Bonsai retries before v34; frozenv8 handles their
+> Queue-v36 adds1 generic TATQA evidence-scale-v2 prompt retry then2 MuSiQue retries
+> before v34; frozenv8 handles their
 > standard oracle.alternates. Pending v8 monitor65189 was stopped before predecessor
-> finished or any v8 worker launched, replaced by66207. Historical rejects stay held.
+> finished or any v8 worker launched, replaced by66207, then67297 after the generic TATQA variant was prepared. No v8
+> worker had launched at either monitor replacement. Historical rejects stay held.
+> Future TATQA adapter prompts clarify scale from question/evidence for requested
+> quantity; empty for dimensionless/unstated scale, no inference from unrelated rows.
+> New :evidence-scale-v2 ID/task_contract_revision preserves gold/groups/evidence.
+> Actual native reference replay accepted; reference audit is not training data.
 
 
 > **CURRENT — 2026-09-30 03:56 UTC; supersedes earlier process/snapshot details.**
