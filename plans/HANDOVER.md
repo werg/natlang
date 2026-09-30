@@ -1,3 +1,13 @@
+> **06:28 UTC results:** reviewed lakh retry obeyed the new unit format but still
+> failed semantically (1602.85 included commission/allowances, expected gross-salary
+> subtotal 242.5); preserved files, no scope/tool failures. Remains rejected. README
+> retry accepted with complete expected edited file, including unrelated lines.
+> No automatic DPO pairs. Outcomes hourly/reviewed-retries-v12/outcomes.audit.json.
+> Recipe-v12 completed: 2116 selected trajectories / 1817 programs, all four
+> static bundles present (32856 approved decisions), no missing default inputs or
+> included quality blockers. Snapshot predates the final retry results; next refresh
+> will discover them. Final student render/split/token/dedup/25% mix audits pending.
+
 > **CURRENT — 2026-09-30 06:25 UTC: all three teachers on frozen runtime-v12.**
 > Boundary rollout 84904 completed without overlapping collectors: Luna 84926/85014
 > (two provider workers, cap 2, exponential backoff); Bonsai 85050, queue-v40, cap 4,
