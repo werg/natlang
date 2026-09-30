@@ -1,3 +1,21 @@
+> **2026-09-30 09:03 UTC retry admission/source audit:** TreeDST v19 fresh retry
+> independently admitted, exact expected Tree, five materialized decisions/zero
+> unlinked; only successful edit and finish approved. State+utterance visible in
+> all decisions. Audit adjacent retry/outcomes.audit.{json,md}. Original timeout
+> preserved/no DPO pair from runtime artifact. Full MuSiQue audit177/282 so far,
+>121pass/56review; review flags require root adjudication, not automatic holds.
+> Eleven additional root-reviewed holds saved pending-third-batch.json for next
+> consolidated publication/runtime batch; no training, recipe18 remains stale.
+
+> **2026-09-30 08:56:53 UTC all teachers runtime-v19.** Boundary watcher110320
+> completed, no overlapping collectors. Luna111689/110834, Bonsai110507; immutable
+> prep-v2 queues/journals/caps unchanged. Current state/check authorities updated.
+> Saved TreeDST retry rawaccepted/allchecks in135.9s using omittedvaluefinish;
+> final native admission audit pending. Luna slowcase101 finished726.5s/111replies:
+> source asks salt lawBelgium but only India evidence; actual NOT FOUND is not
+> modelnegative. Root added it to pending sourcehold batch, gold preserved.
+> Next fullcheck09:13:19UTC; recipe18 stale after staticv14 sourceholds.
+
 > **2026-09-30T08:55:07.855679+00:00 alias adapter reviewed.** Future MuSiQue builder uses
 > reviewed-oracle-alias-removal-v2 for exact two bad source alternates. Raw originals
 > preserved; three matching accepted legacy rows returned valid primaries, so no
