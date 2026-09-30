@@ -1251,3 +1251,9 @@ Refresh immutable full training snapshots after consolidated audit batches/hourl
 checks; their6.2GiB cumulative footprint makes per-small-change refresh wasteful.
 Current policy/lineage holds are published immediately; clearly mark prior recipes
 as stale until refreshed. No deletion of preserved data or student training.
+
+## 2026-09-30 07:32 UTC — exact computations and current inventory
+
+User explicitly confirmed code/computational results from exact inputs must be exact. Bounded synthetic numerical correction remains only a possible future policy for subjective judgments, with original output/provenance retained; no injection enabled. Recipe-v16 refresh includes current source holds, four static bundles/32716 approved decisions and2306 selected generated trajectories/1881 programs; no missing defaults or included quality blockers. Final student formatting/split/token/dedup/25%mix audits remain required.
+
+Root read MuSiQue2hop__128979_90736 and SciFactclaim347 saved inputs. MuSiQue full date June19,1985 is explicitly supported by same article behind year1985; prepare strict pinned alias/fresh independent retry, do not promote historical trace. SciFact supplied insulin-maintains-progenitors sentence supports the differentiation claim by causal inference; retain SUPPORT. Absence of an explicit suppression experiment does not establish CONTRADICT. External full-paper facts are not added to visible evidence. Evidence: hourly/rejection-audit-0708-other/root-adjudications-0732.json.

@@ -1,3 +1,11 @@
+> **2026-09-30 07:32 UTC inventory refresh:** recipe-v16 now includes current source holds,
+> all four static bundles (32716 approved decisions), 2306 selected generated
+> trajectories /1881 programs; no missing default inputs or included quality blockers.
+> These are admitted candidates before final student render/split/token/dedup/mix
+> audits, not training already run. Luna93802/93803 remain v16; Bonsai87740 finishes
+> its v14 boundary case. No numerical target injection enabled; exact-input code
+> and computational results must remain exact, as the user explicitly confirmed.
+
 > **CURRENT — 2026-09-30 07:20 UTC: Luna extension active; Bonsai v16 boundary pending.**
 > Runtime-v15 was prepared but never deployed. Sole rollout93792 moves v14 DIRECT
 > to frozenv16. Original Luna queues exhausted normally; new Luna PIDs93802/93803
