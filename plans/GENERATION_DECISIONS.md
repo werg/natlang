@@ -1,5 +1,17 @@
 # Generation decisions — 2026-09-27 continuation
 
+## 2026-09-30 14:14 UTC Luna queue replenishment
+
+- Resumed two Luna workers on independently reviewed signed-P&L derivative and unchanged maturity-row repair. Broader missing Luna source coverage audit underway; completed finite queues do not imply overall target completion.
+- Repaired prepared derivative identity in a fresh version: synthetic source_ids and external_source.source_id must agree, parent UUID remains derived_from_source_id. Preserve earlier drafts.
+- Corrected hourly reader: absent unfinished outputs are explicitly pending; absent finished outputs remain errors. Generalized canonical spool supplement to current authority queue/runtime and report baseline.24completed Bonsai results16admitted8rejected, no missing results; new rejects being reviewed.
+
+## 2026-09-30 13:17 UTC generation status reconciliation
+
+- Verified live Bonsai PID223773, four requests,98%GPU and fresh journal progress. Previous exhausted queue remains completed; no duplicate restart.
+- Reconciled check.json to audited recipe-v23:2679selected trajectories/2129programs and1511unlabeled failure candidates. Inventory readiness is separate from final training readiness and from pending signed-P&L source review.
+- Keep the prepared one-case CommaQA queue pending for the next campaign boundary rather than adding another supervisor to the active four-request campaign. No queue mutation or breaking data change.
+
 ## 2026-09-28 static corpus recovery audit
 
 - Reconnected the two saved reference sets to staged training through frozen-runtime
