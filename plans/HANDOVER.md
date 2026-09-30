@@ -1,3 +1,15 @@
+> **05:20 UTC quality update:** Three TATQA aggregation/percentage-change cases now
+> centrally sourceheld (e27c8621...,f6ef3a62...,7a6c059d...), golds retained. Directory
+> staticquality-v5 published after hash/fulladmission verification:1299cases/3459approved
+> decisions,7cumulativeheldcases; fourstatic32899approved. Catalog4→5links preserve
+> history. Sourcehold patch built, not yet frozen/rolled; runtime-v9 rollout still
+> owns currentBonsai70991/v8boundary; Luna74281/74312alreadyv9. Nextv10 must serialize
+> Bonsai afterv9completion and freeze upcoming reviewed numericcontract if adopted.
+> Latestrecipe-v9 predates threeholds; refresh recipe-v10 once sourcechanges settled.
+> Numericrepresentation/precision audit delegated to luna_admission_dpo_audit at
+> hourly/tatqa-numeric-equivalence-review; sourceagentcorrecting cross-case tabletext
+> in hourly/tatqa-new-contract-review. Rootverifiedactual Industrial30/28net-salesinput.
+
 > **05:11 UTC update:** 
 > Recipe-v9 refresh completed: 1851 selected generated trajectories/1674 programs, no missing default inputs/included quality blockers; static approved decisions remain32935. Planning snapshot, not final training export.
 > Luna runtime-v9 boundary rollout completed: worker1 PID74281, worker2 PID74312; authority/check updated. Bonsai70991 still awaiting currentcase boundary under monitor74250.

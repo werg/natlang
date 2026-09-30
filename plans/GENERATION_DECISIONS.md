@@ -1020,3 +1020,23 @@ not survive/initialize; verified no monitorstate, then detachedPopen74250 starte
 
 Recipe-v9 refresh completed: 1851 selected generated trajectories/1674 programs, no missing default inputs/included quality blockers; static approved decisions remain32935. Planning snapshot, not final training export.
 Luna runtime-v9 boundary rollout completed: worker1 PID74281, worker2 PID74312; authority/check updated. Bonsai70991 still awaiting currentcase boundary under monitor74250.
+
+
+## 2026-09-30 05:20 UTC — three narrow TATQA aggregation/change source holds
+
+Independent review and root input verification establish ambiguous question contracts:
+e27c8621... total at two dates can mean two net balances versus sum; f6ef3a62...
+all years as of2019 can mean all reporting columns versus2019-only;7a6c059d...
+percentage change in net-sales share permits relativegrowth versus percentagepoints.
+Preserve allgolds, centralpendingholds exclude generated/static/DPOoutputs. Allthree
+newLunacampaignindices311/404/416 alreadycompleted, so no activeLunaqueueedit.
+Agent report initially included another question's table in IndustrialSolutionssection;
+root read actualtable(30/28shares,net-salesnote), requested report correction before
+policy publication. Do not rely on copied summaries without source verification.
+Directoryquality-v5 filters only3cases after fullIR/results hash/admission checks:
+1299cases/3459approved decisions;36decisions removed,7cumulativeheldcases. Original
+quality-v4files/golds retained, catalog4→5replacementchain. Fourstatic32899approved.
+Proportion0.14 versus13.968percent is representation-equivalent, not arithmeticerror;
+no sourcehold or broadfraction/percent admission change without reviewed formatcontract.
+TATQA numericrepresentation/precision improvements under focusedreview; rawnegatives
+remain preserved for audit and should not be assumed causal DPOpairs.

@@ -11,6 +11,21 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'tatqa', id: 'e27c8621-cc51-42a3-abb1-9503bcc35a77', aliases: [],
+    text: 'What is the total Net deferred tax assets (liabilities) for as of March 29, 2019 and March 30, 2018?',
+    annotatedLabel: '-293 million', status: 'pending',
+    reason: 'Gold sums two balance-sheet dates (253 plus -546); total can instead name the net row at each as-of date, and the visible answer contract permits multiple spans. Preserve gold and hold pending an explicit combined-date aggregation contract; supported two-date values are not preference negatives.',
+  },
+  { dataset: 'tatqa', id: 'f6ef3a62-3137-40b2-bcca-8e2329ae8f8f', aliases: [],
+    text: 'What is the sum of Three-year PSU awards for all years as of 2019?',
+    annotatedLabel: '4.5 million', status: 'pending',
+    reason: 'Gold sums only the 2019 column (4.3 plus 0.2), while all years also supports summing displayed reporting periods (18.9). Preserve gold and hold until the aggregation axis is made explicit; neither supported reading should teach a preference negative.',
+  },
+  { dataset: 'tatqa', id: '7a6c059d-c900-4878-a926-caf29c23f85a', aliases: [],
+    text: 'What was the percentage change in Industrial Solutions in 2019 from 2018?',
+    annotatedLabel: '2 percent', status: 'pending',
+    reason: 'Visible net-sales shares increase from 28 to 30 percent. Gold is the two-percentage-point difference; percentage change also supports relative growth 7.142857 percent. Preserve gold and hold until relative versus percentage-point change is explicit; scale is evidenced, but the requested operation is ambiguous.',
+  },
   { dataset: 'folio', id: 'story:425', aliases: ['folio:story:425', 'story425'],
     text: 'Car owners choose to drive; James has a car or works for Meta.',
     annotatedLabel: 'C1 unknown; C2 unknown; C3 contradicted; C4 entailed; C5 entailed; C6 contradicted',
