@@ -1084,3 +1084,27 @@ defaultinputs, fourstatic32899decisions. Systematic TATQAoperationwording audit 
 UTCtimes (numericfreeze05:27, rollout/snapshot05:28, commit05:29/latestnote05:32;
 three-holdpublicationcommit05:16). Earlier estimated05:37/05:43headings ran ahead
 of clock; corrected. Authoritative processevents retain actualepochtimestamps.
+
+
+## 2026-09-30 05:43 UTC — quantities need their own units, not table-wide cue matching
+
+Newnumericrejection c9026c61... employeeFTE421.1−413.9=7.2, goldmillion, modelblank.
+Root read fullmixedUSDmstaff-cost table, separateemployee-countsection,108seafarer
+note andFTEdefinition. Million appliesmonetary costs, notpeople; centralpendinghold
+retainsgoldandblocksfalseDPO. Earlier unitvisibilitymatchingcannot certify that a
+unitbelongs to requestedquantity. Independent quantityattachmentaudit inprogress.
+Rootalsoverified8b50fee5... sourceprovidesSanmina shares17.7/16.0%, questionasks
+revenuechangewithnoamounts/annualtotals; holdpendingexplicitshare/point operation.
+bd73aadd... asksbalance-sheettotalaccruals2019/2018, goldcombined541+567 whereas
+individualas-ofvaluesaresupported; narrowholdmatchingearliertwo-dateassetcase.
+Milderannualconsolidatedrevenuecandidatec35adb... notautomaticallyheld; totalrevenue
+in2018and2019 reasonablyspecifiescombinedsum, no additional observeddisputeyet.
+Other namedshare-changequestionswithexplicitmetriccontextnotheldbykeywordalone.
+Directoryquality-v6:1296cases/3439approved,20decisionsexcluded,10cumulativeheldcases;
+fourstatic32879approved, priorv5retained/catalog5→6. Newsourceholdpatchbuilt butnot
+frozen/rolleduntilquantityauditdone; do notmutatev10 orpendingv9/v10Bonsaimonitors.
+Nextsnapshotneededafterholdbatch. Currenteligiblefile/tree553cases(287CommitPack,
+245TATQA,21TreeDST) after6newTATQAholds; original559sourcecasesremainpreserved.
+TreeDSTcaseonlyChineseFood/Chinesefood differenceaudited; sourceexactmatchmetric
+isstrict andutteranceusesChinesefood, so no globalleafcasefold basedononefailure.
+Structuralname/collisionsemanticsandnumeric/nonlinguisticvaluesmustremainexact.

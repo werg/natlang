@@ -11,6 +11,21 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'tatqa', id: 'c9026c61-8220-4148-84ef-584f5602b529', aliases: [],
+    text: 'What was the change in the total number of permanent employees from 2018 to 2019?',
+    annotatedLabel: '7.2 million', status: 'pending',
+    reason: 'Employee FTE totals421.1 and413.9 differ by7.2 people. USDm labels the separate staff-cost section, while the note explicitly describes108 seafarers and FTE counts. Gold million incorrectly attaches a monetary magnitude to headcount. Preserve source gold and hold pending unit correction; blank-scale headcount is not a preference negative.',
+  },
+  { dataset: 'tatqa', id: '8b50fee5-6fa5-44e4-8c27-5e4e76b9abed', aliases: [],
+    text: 'What was the change in net revenue from Sanmina from 2018 to 2019?',
+    annotatedLabel: '1.7 percent', status: 'pending',
+    reason: 'Source gives Sanmina shares17.7 and16.0 percent, not revenue amounts or annual total revenues. Gold is their percentage-point difference, but the question asks revenue change without naming share or difference in points. Amount changes are underdetermined and relative share growth is10.625 percent. Preserve gold and hold pending explicit share/operation wording.',
+  },
+  { dataset: 'tatqa', id: 'bd73aadd-d28b-4b28-a310-4cda4d112659', aliases: [],
+    text: 'What is the total accruals and allowances for 2019 and 2018?',
+    annotatedLabel: '1108 million', status: 'pending',
+    reason: 'Gold combines balance-sheet amounts541 and567 across two dates; the wording also permits reporting the accruals-and-allowances total at each date, and the visible answer contract allows multiple spans. Preserve gold and hold pending an explicit combined-date aggregation instruction; supported date-specific values are not preference negatives.',
+  },
   { dataset: 'tatqa', id: 'e27c8621-cc51-42a3-abb1-9503bcc35a77', aliases: [],
     text: 'What is the total Net deferred tax assets (liabilities) for as of March 29, 2019 and March 30, 2018?',
     annotatedLabel: '-293 million', status: 'pending',

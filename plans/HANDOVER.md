@@ -1,3 +1,17 @@
+> **05:43 UTC source-quality update:** Directorystaticquality-v6 now1296cases/
+>3439approveddecisions (10cumulativeheldcases); fourstatic32879approved. Three new
+> sourceholds: c9026c61... headcount7.2 wrongly labeledmillion by mixedstaffcost table;
+>8b50fee5... asksSanmina revenuechange but providesonlyshares;bd73aadd... combined
+> two-datebalances versusindividualvalues. Rootfullinputsverified; originalgolds
+> preserved, centralDPO/generation/admission holds. Independentquantity-unit audit
+> ongoing at hourly/tatqa-quantity-unit-audit. Newsourceholdpatchbuilt, not frozen;
+> batch into nextversionafteraudit, serializebehindexistingBonsai-v9/v10monitors.
+> Currenteligiblefile/treetarget553(original559minus6newholds):287CommitPack,
+>245TATQA,21TreeDST. Latestrecipe-v10 predateslatestthreeholds; refreshoncebatchdone.
+> Chinesefoodleaf-casingaudit hourly/treedst-value-casing-audit confirmsonecaseonly;
+> upstreamexactmatchpolicy strict, no globalcasefoldimplemented. Finaldataquality
+> and25%mixstillpending. Continue activehourlyloop; nextfullinspection~06:04UTC.
+
 > **05:32 UTC rollout/snapshot update:** Luna-v10 completed independently at
 > boundaries: worker1PID77324,worker2PID77384 on numeric-campaign/luna-N.queue.jsonl,
 > frozenv10; authority/check updated. First7newnumericcases all accepted (small sample,
