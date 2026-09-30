@@ -1373,3 +1373,9 @@ Rootmatched10candidatepayloads against exactoriginalprovider/runtime/IRvisiblein
 Resolvedfalse traceintegrityalarm: recordedtrace_sha256hashescollectorcanonicalparsed events, rawJSONLfilehashis differentserializationidentity. Bothrecordedexplicitly, canonicalmatches10/10. Noactualtracechanges.
 
 Rootcalibrated5Bonsairejections: metricselection(2percentvs0.7million) andaggregationunit(8meanannualtotalsvs4meanfourcells) arenotnecessarilyarithmeticdefectsunderambiguousquestions. Signeddifference±7 alsooperationconventionreview. Keepgold/originals; source-operationclarifications pending, noautomaticpreference negatives.
+
+## 2026-09-30 12:14:39 UTC — reviewed source-builder contracts
+
+Approved deterministic future-builder integration for ten bounded source-pinned wording equivalences and the exact Oklahoma three-event variant. Actual isolated buildTaskSources replay and native reference/admission/materialization audit passed; Node build succeeded. Original source holds and golds persist; no fuzzy comparison, numerical tolerance, target injection, history-gate exception, frozen-runtime mutation or teacher answer rewrite. Preserve original review-origin metadata despite its historical “not wired” field; current approval is recorded here and in HANDOVER. Static Oklahoma carryforward is prepared separately before publication.
+
+Correction: the five rejected Bonsai rows contain three ambiguous operations, one missing unit, and one faithful text-span variation, not two proven arithmetic errors. Computations from explicit inputs/operations stay exact. Clarify source task operations with new IDs; retain originals and avoid negative labels for ambiguity.

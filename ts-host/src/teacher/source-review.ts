@@ -1,4 +1,5 @@
 import { isReviewedTatqaLakhVariant, TATQA_LAKH_SOURCE_ID } from './tatqa-unit-contract.js';
+import { isReviewedOklahomaAnnualEventVariant, OKLAHOMA_EVENT_SOURCE_ID } from './musique-oklahoma-event-contract.js';
 
 /** Source annotation disputes stay out of generation and training until adjudicated. */
 export type SourceReview = {
@@ -387,7 +388,9 @@ export function sourceReviewReason(record: Record<string, unknown>):
     .flatMap(value => Array.isArray(value) ? value : []);
   if (['folio', 'kqapro', 'entailmentbank'].includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
   const reviewedLakhVariant = dataset === 'tatqa' && isReviewedTatqaLakhVariant(record);
+  const reviewedOklahomaEventVariant = dataset === 'musique' && isReviewedOklahomaAnnualEventVariant(record);
   return ids.some(id => typeof id === 'string' && pendingSourceReview(dataset, id) &&
-    !(reviewedLakhVariant && id === TATQA_LAKH_SOURCE_ID)) ?
+    !(reviewedLakhVariant && id === TATQA_LAKH_SOURCE_ID) &&
+    !(reviewedOklahomaEventVariant && id === OKLAHOMA_EVENT_SOURCE_ID)) ?
     'source_review_pending' : undefined;
 }

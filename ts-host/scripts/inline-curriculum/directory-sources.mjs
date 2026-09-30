@@ -5,7 +5,9 @@ import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
 import { reviewedMusiqueAliasFor, reviewedMusiqueAliasRemovalFor } from './musique-reviewed-aliases.mjs';
+import { applyReviewedMusiqueOutputEquivalence, reviewedOutputEquivalenceEntry } from './musique-reviewed-output-equivalences.mjs';
 import { applyMinimumAgeReviewedContract } from './musique-minimum-age-reviewed.mjs';
+import { applyReviewedOklahomaAnnualEventContract } from './musique-oklahoma-annual-event-reviewed.mjs';
 import { markdownTerminalNewlineBody } from '../../dist/evaluation/oracles.js';
 import { TATQA_LAKH_CONTRACT_REVISION, TATQA_LAKH_SOURCE_ID, TATQA_LAKH_VARIANT_SUFFIX,
   TATQA_LAKH_VARIANT_ID, TATQA_LAKH_REPLACEMENT_PROMPT, validateTatqaLakhBase,
@@ -497,7 +499,7 @@ return result;`;
         const files = Object.fromEntries(row.paragraphs.map(p => [`articles/${p.idx}.md`, `# ${p.title}\n\n${p.paragraph_text}\n`]));
         if (Object.values(files).join('').length > 22000) throw new Error('oversize_context');
         count++;
-        const record = sourceCase({ source: 'musique', info, sourceId: row.id,
+        let record = sourceCase({ source: 'musique', info, sourceId: row.id,
           // Shared paragraphs connect many tasks; keeping this pilot together is conservative.
           group: `musique:train-v1.0-pilot`,
           task: `${row.question}\nRead the articles to answer. Return only the answer text. Preserve the workspace.`,
@@ -509,6 +511,9 @@ return result;`;
         applyReviewedMusiqueOracleAlias(record);
         record.source_groups.push(...(row.question_decomposition ?? []).map(q => `musique:seed:${q.id}`));
         record.source_groups.push(...row.paragraphs.map(p => `document:${digest([p.title, p.paragraph_text])}`));
+        record = applyReviewedOklahomaAnnualEventContract(record);
+        const outputEquivalence = reviewedOutputEquivalenceEntry(row.id);
+        if (outputEquivalence) record = applyReviewedMusiqueOutputEquivalence(record, outputEquivalence.accepted);
         return applyMinimumAgeReviewedContract(record);
       });
     }
