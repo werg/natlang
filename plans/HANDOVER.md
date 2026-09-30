@@ -1,3 +1,17 @@
+> **2026-09-30T09:22:07.154305+00:00 hourly check/recipe current.**
+> Exactlive Luna111689/110834+Bonsai110507/v19 confirmed. Since08:13:19 zero
+> noncomplete finishes. Nextpool246unique digestjoined results:102rawaccepted/
+>144rawreject,98current-native candidates;20sourceholds,284eligible targetroots.
+>66held queueoccurrences allfinished, zero unstarted heldroots: no urgentrollout.
+> Root09:14GPU98%,serverRSS3.03GiB/container2.97GiBof6GiB; later09:17GPU0%
+> instantaneous sample recorded, not a utilizationaverage. Diskabout15–16GiBfree.
+> Recipe-v19 currentcentralpolicy:2473selectedgeneratedtrajectories/2020programs,
+> fourstatic32693approveddecisions/6176cases; explicitlegacy792+1400refs retained,
+> no missingdefaults/included explicitqualityblockers. Sourcegoldaudit ongoing;
+> finalstudentrender/token/split/dedup/25%mix audits pending; no training/tests.
+> Evidence hourly/hourly-health-0913/report-2026-09-30T091718031Z.{json,md},
+> check-0914-system.json. Nextfullcheck10:17:18UTC; continue activehourlyloop.
+
 > **2026-09-30T09:12:18.619166+00:00 source holds protected.** Eleven root-adjudicated holds
 > now central policy + static directoryquality-v15:1250cases/3253approved,56
 > cumulativeholds; fourstatic32693approved. Catalog replacements explicit. Raw

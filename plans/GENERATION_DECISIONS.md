@@ -1299,3 +1299,7 @@ Future shared source builder removes exactly two source aliases in evidence-pinn
 ## 2026-09-30T09:12:18.619166+00:00 — second root-reviewed multihop hold batch
 
 Eleven source-specific holds centrally published and directory staticquality-v15 filters1250cases/3253approved decisions,56cumulativeholds. Entire originalsource/gold preserved. Scopes include municipality versuscountry denominator, distinct Congo countries, same-name counties/villages, song versusvideo rumors, corporateoffice versusoperationscenter, diocese versuschurch body, unrelated educationinstitution, television series versusfranchise/soundtrack and salt-law Belgium premise versusIndia evidence. Sourceauditflags alone nevertriggerautomatic holds. Rootretained Nigeria2012 adult-HIVrate as natural suppliedmeasure despite broadcountry wording, avoiding blanket literalist exclusions. No DPO negatives; recipe18 explicitlystale until refresh. Teachersv19 frozenunchanged, futurequeueauditpending.
+
+### 2026-09-30T09:22:07.154913+00:00 — hourly current inventory
+
+Read-only health report joins exact304nextIRdigests and canonicaljournals;246uniquecompleted origins,102rawaccepted/144rejected,98current-native candidates. Zero new noncomplete finishes since08:13:19; zero futureheldroots (66heldqueueoccurrences allfinished). No urgentruntime rollout for11newholds. Recipe-v19 refreshedonce thishour,2473selectedtrajectories/2020programs, allfourstatic32693approved/6176cases, priorlegacyrefs explicitlyretained. Finalstudentadmission remainspending, no training. Next10:17:18UTC.
