@@ -2,6 +2,7 @@ import { hasExistingTreeValueContract } from './tree-contract.js';
 /** Shared collection/admission policy for exercises whose premise no longer exists in the runtime. */
 import type { ProgramRecord } from './program.js';
 import { sourceReviewReason } from './source-review.js';
+import { tatqaAnswerRecordCanonical, tatqaAnswerRecordsEqual } from '../evaluation/oracles.js';
 
 // Untyped nl results now run open, so inline_type_repair no longer triggers its required compiler refusal.
 export const RETIRED_FAMILIES: ReadonlySet<string> = new Set(['inline_type_repair']);
@@ -55,7 +56,13 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
   if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
       record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
   if (record.source === 'tatqa' && (typeof record.semantics.oracle !== 'object' ||
-      record.semantics.oracle.normalization !== 'json-string-record')) return 'obsolete_json_format_oracle';
+      !['json-string-record', 'tatqa-answer-record'].includes(record.semantics.oracle.normalization ?? ''))) return 'obsolete_json_format_oracle';
+  if (record.source === 'tatqa' && typeof record.semantics.oracle === 'object' &&
+      record.semantics.oracle.normalization === 'json-string-record' &&
+      JSON.parse(tatqaAnswerRecordCanonical(record.semantics.expected) ?? '{}').answer?.numeric === true &&
+      tatqaAnswerRecordsEqual(row.outcome?.value, record.semantics.expected) &&
+      tatqaAnswerRecordsEqual((row.outcome?.files as Record<string, string> | undefined)?.['answer.json'], row.outcome?.value))
+    return 'legacy_tatqa_numeric_display_oracle';
   // Extractive annotations do not enumerate every semantically equivalent span boundary.
   // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
   if ((record.source === 'qasper' || record.source === 'musique') &&

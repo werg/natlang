@@ -2,7 +2,7 @@
 export type OracleLevel = 'exact' | 'normalized' | 'span' | 'agreement' | 'judged';
 export const ORACLE_LEVELS: readonly OracleLevel[] = ['exact', 'normalized', 'span', 'agreement', 'judged'];
 export type OracleSpec = OracleLevel | { level: OracleLevel; alternates?: unknown[];
-  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record'; rubric?: string; context?: unknown; [key: string]: unknown };
+  threshold?: number; normalization?: 'qa' | 'named-tree' | 'json-string-record' | 'tatqa-answer-record'; rubric?: string; context?: unknown; [key: string]: unknown };
 export type OracleVerdict = { accepted: boolean; level: OracleLevel; score?: number; verdict?: string; needs_review?: boolean };
 
 /** TreeDST's author implementation keys children by name; sibling order is not semantic.
@@ -47,6 +47,69 @@ export function jsonStringRecordCanonical(value: unknown): string | null {
     }
     return canonical(JSON.parse(value));
   } catch { return null; }
+}
+
+const TATQA_SCALES = new Set(['', 'percent', 'thousand', 'million', 'billion']);
+const TATQA_NUMERIC = /^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)$/;
+
+/** Canonical exact decimal, plus an optional 2dp form when rounding is unambiguous. */
+function tatqaNumberForms(value: string): { exact: string; rounded: string | null } | null {
+  if (value.length > 512 || !TATQA_NUMERIC.test(value)) return null;
+  const negative = value.startsWith('-');
+  const unsigned = value.replace(/^[+-]/, '').replace(/,/g, '');
+  const [wholeRaw = '0', fractionRaw = ''] = unsigned.split('.');
+  const whole = wholeRaw || '0';
+  const digits = `${whole}${fractionRaw}`.replace(/^0+(?=\d)/, '');
+  // Equivalent decimal encodings such as 12, 12.0 and +12.00 share one exact form.
+  const normalizedExact = (() => {
+    let d = digits, scale = fractionRaw.length;
+    while (scale > 0 && d.endsWith('0')) { d = d.slice(0, -1); scale--; }
+    if (!d) d = '0';
+    return `${negative && d !== '0' ? '-' : ''}${d}:${scale}`;
+  })();
+  const magnitude = BigInt(digits || '0');
+  if (fractionRaw.length <= 2) {
+    const cents = magnitude * 10n ** BigInt(2 - fractionRaw.length);
+    return { exact: normalizedExact, rounded: `${negative && cents !== 0n ? '-' : ''}${cents}` };
+  }
+  const scaleFactor = 10n ** BigInt(fractionRaw.length - 2);
+  let cents = magnitude / scaleFactor;
+  const remainder = magnitude % scaleFactor;
+  const half = scaleFactor / 2n;
+  // Exclude exact half-cent ties from rounded equality; exact decimal equality remains valid.
+  const tie = remainder === half;
+  if (remainder > half) cents++;
+  return { exact: normalizedExact,
+    rounded: tie ? null : `${negative && cents !== 0n ? '-' : ''}${cents}` };
+}
+
+/** TaTQA-only comparison: strict record schema and scale, with source scorer's numeric rounding. */
+export function tatqaAnswerRecordCanonical(value: unknown): string | null {
+  const recordText = jsonStringRecordCanonical(value);
+  if (recordText === null || typeof value !== 'string') return null;
+  try {
+    const record = JSON.parse(value) as Record<string, unknown>;
+    if (Object.keys(record).length !== 2 || !Object.hasOwn(record, 'answer') || !Object.hasOwn(record, 'scale') ||
+        typeof record.answer !== 'string' || typeof record.scale !== 'string' || !TATQA_SCALES.has(record.scale)) return null;
+    const numeric = tatqaNumberForms(record.answer);
+    return JSON.stringify({ answer: numeric ? { numeric: true, exact: numeric.exact, rounded: numeric.rounded } :
+      { numeric: false, text: record.answer },
+      scale: record.scale });
+  } catch { return null; }
+}
+
+export function tatqaAnswerRecordsEqual(actual: unknown, expected: unknown): boolean {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  const left = tatqaAnswerRecordCanonical(actual), right = tatqaAnswerRecordCanonical(expected);
+  if (left === null || right === null) return false;
+  if (left === right) return true;
+  try {
+    const a = JSON.parse(left) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
+    const b = JSON.parse(right) as { answer: { numeric: boolean; exact?: string; rounded?: string | null; text?: string }; scale: string };
+    if (a.scale !== b.scale || !a.answer.numeric || !b.answer.numeric) return false;
+    return a.answer.exact === b.answer.exact || (!!a.answer.rounded && !!b.answer.rounded &&
+      a.answer.rounded === b.answer.rounded);
+  } catch { return false; }
 }
 function normalizeText(value: unknown): string {
   const text = String(value ?? '').normalize('NFKC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
@@ -116,7 +179,7 @@ export function agreement(actual: unknown, expected: unknown): number {
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 2;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/1';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record'; threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
   /** Reports may only quote the corresponding original source. */
   quote_sources?: Record<string, string>;
@@ -252,6 +315,10 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
       item(path, parsed !== null && parsed === jsonStringRecordCanonical(want));
       continue;
     }
+    if (compare === 'tatqa-answer-record') {
+      item(path, path === 'answer.json' && tatqaAnswerRecordsEqual(got, want));
+      continue;
+    }
     if (compare === 'csv') {
       try {
         const [head, ...rows] = csvRows(want), [gotHead, ...gotRows] = csvRows(got);
@@ -360,6 +427,10 @@ export function fileReturnValue(files: Record<string, string>, input: Record<str
   return csvRows(report).slice(1).filter(row => row[1]?.trim()).length;
 }
 export function checkFileReturn(actual: unknown, files: Record<string, string>, input: Record<string, string>, spec: FilesOracle): boolean {
+  if (spec.compare === 'tatqa-answer-record') {
+    const written = files['answer.json'];
+    return written !== undefined && tatqaAnswerRecordsEqual(actual, written);
+  }
   if (!spec.return_count) return true;
   try { return canonical(actual) === canonical(fileReturnValue(files, input, spec)); } catch { return false; }
 }
@@ -380,6 +451,9 @@ export async function checkOracle(actual: unknown, expected: unknown, oracle: Or
   if (level === 'normalized' && spec.normalization === 'json-string-record') {
     const answer = jsonStringRecordCanonical(actual);
     return { accepted: answer !== null && candidates.some(candidate => jsonStringRecordCanonical(candidate) === answer), level };
+  }
+  if (level === 'normalized' && spec.normalization === 'tatqa-answer-record') {
+    return { accepted: candidates.some(candidate => tatqaAnswerRecordsEqual(actual, candidate)), level };
   }
   if (level === 'normalized') return { accepted: candidates.some(candidate => normalized(actual) === normalized(candidate)), level };
   if (level === 'agreement') {

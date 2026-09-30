@@ -54,20 +54,32 @@ export function sourceCase({ source, info, sourceId, group, task, files, expecte
 
 const TATQA_SCALE_CONTRACT_REVISION = 'tatqa-evidence-scale-v2';
 const TATQA_SCALE_CONTRACT = 'Use a nonempty scale only when the question or source evidence establishes it for the requested quantity. Use empty scale for dimensionless quantities or when no scale is stated. Do not infer scale from financial-report conventions or unrelated table rows.';
+const TATQA_NUMERIC_CONTRACT_REVISION = 'tatqa-numeric-answer-v1';
+const TATQA_NUMERIC_CONTRACT = 'For numeric answers, put only the numeric value in answer (no currency symbol, percent sign, units, or explanatory words); put the source-supported unit only in scale. You may round numeric answers to two decimal places when needed. Preserve the sign and use the scale established by the question or source evidence.';
+const TATQA_NUMERIC_TEXT = /^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)$/;
 
 /** Add the evidence-bounded scale rule to future TATQA tasks and saved IR variants. */
 export function applyEvidenceScaleContract(record) {
   if (record.source !== 'tatqa') return record;
   const suffix = ':evidence-scale-v2';
+  const numericSuffix = ':numeric-answer-v1';
   const promptPath = record.semantics?.root;
   const prompt = record.semantics?.files?.[promptPath];
   if (typeof prompt !== 'string') throw new Error(`tatqa_scale_contract_prompt_missing:${record.source_ids?.[0]}`);
 
-  if (record.id.endsWith(suffix)) {
+  const hasNumericVariant = record.id.endsWith(numericSuffix);
+  const evidenceId = hasNumericVariant ? record.id.slice(0, -numericSuffix.length) : record.id;
+  if (evidenceId.endsWith(suffix)) {
     if (prompt.split(TATQA_SCALE_CONTRACT).length - 1 !== 1 ||
         record.generation?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION ||
         record.external_source?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION)
       throw new Error(`tatqa_scale_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    if (hasNumericVariant && (prompt.split(TATQA_NUMERIC_CONTRACT).length - 1 !== 1 ||
+        record.generation?.numeric_answer_contract_revision !== TATQA_NUMERIC_CONTRACT_REVISION ||
+        record.external_source?.numeric_answer_contract_revision !== TATQA_NUMERIC_CONTRACT_REVISION ||
+        record.semantics?.oracle?.normalization !== 'tatqa-answer-record' ||
+        record.semantics?.files_oracle?.compare !== 'tatqa-answer-record'))
+      throw new Error(`tatqa_numeric_contract_variant_mismatch:${record.source_ids?.[0]}`);
     return record;
   }
   if (record.id.includes(suffix)) throw new Error(`tatqa_scale_contract_id_malformed:${record.source_ids?.[0]}`);
@@ -87,6 +99,53 @@ export function applyEvidenceScaleContract(record) {
   record.id = `${baseId}${suffix}`;
   record.generation = { ...record.generation, task_contract_revision: TATQA_SCALE_CONTRACT_REVISION };
   record.external_source = { ...record.external_source, task_contract_revision: TATQA_SCALE_CONTRACT_REVISION };
+  return record;
+}
+
+/** Give numeric-only TaTQA rows the versioned numeric display contract. */
+export function applyTatqaNumericContract(record) {
+  if (record.source !== 'tatqa') return record;
+  let expected;
+  try { expected = JSON.parse(record.semantics?.expected); } catch { return record; }
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
+      typeof expected.answer !== 'string' || typeof expected.scale !== 'string' ||
+      !['', 'percent', 'thousand', 'million', 'billion'].includes(expected.scale) ||
+      !TATQA_NUMERIC_TEXT.test(expected.answer)) return record;
+
+  const suffix = ':numeric-answer-v1';
+  const promptPath = record.semantics?.root;
+  const prompt = record.semantics?.files?.[promptPath];
+  const validContract = () => typeof prompt === 'string' && prompt.split(TATQA_NUMERIC_CONTRACT).length - 1 === 1 &&
+    record.generation?.numeric_answer_contract_revision === TATQA_NUMERIC_CONTRACT_REVISION &&
+    record.external_source?.numeric_answer_contract_revision === TATQA_NUMERIC_CONTRACT_REVISION &&
+    record.semantics?.oracle?.normalization === 'tatqa-answer-record' &&
+    record.semantics?.files_oracle?.compare === 'tatqa-answer-record';
+  if (record.id.endsWith(suffix)) {
+    if (!validContract()) throw new Error(`tatqa_numeric_contract_variant_mismatch:${record.source_ids?.[0]}`);
+    return record;
+  }
+  if (record.id.includes(suffix)) throw new Error(`tatqa_numeric_contract_id_malformed:${record.source_ids?.[0]}`);
+  if (!record.id.endsWith(':evidence-scale-v2') || record.generation?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION ||
+      record.external_source?.task_contract_revision !== TATQA_SCALE_CONTRACT_REVISION ||
+      record.semantics?.oracle?.normalization !== 'json-string-record' ||
+      record.semantics?.files_oracle?.compare !== 'json-string-record' || typeof prompt !== 'string')
+    throw new Error(`tatqa_numeric_contract_requires_evidence_scale_v2:${record.source_ids?.[0]}`);
+
+  const matches = prompt.split(TATQA_NUMERIC_CONTRACT).length - 1;
+  if (matches > 1) throw new Error(`tatqa_numeric_contract_prompt_duplicated:${record.source_ids?.[0]}`);
+  let nextPrompt = prompt;
+  if (matches === 0) {
+    const insertion = 'Preserve source files.';
+    if (!prompt.includes(insertion) || prompt.split(insertion).length !== 2)
+      throw new Error(`tatqa_numeric_contract_prompt_anchor_missing:${record.source_ids?.[0]}`);
+    nextPrompt = prompt.replace(insertion, `${TATQA_NUMERIC_CONTRACT}\n${insertion}`);
+  }
+  record.semantics.files[promptPath] = nextPrompt;
+  record.id = `${record.id}${suffix}`;
+  record.semantics.oracle = { ...record.semantics.oracle, normalization: 'tatqa-answer-record' };
+  record.semantics.files_oracle = { ...record.semantics.files_oracle, compare: 'tatqa-answer-record' };
+  record.generation = { ...record.generation, numeric_answer_contract_revision: TATQA_NUMERIC_CONTRACT_REVISION };
+  record.external_source = { ...record.external_source, numeric_answer_contract_revision: TATQA_NUMERIC_CONTRACT_REVISION };
   return record;
 }
 
@@ -248,6 +307,7 @@ return result;`;
           record.curriculum.plausible_actions = ['read source evidence', 'return an unverified answer'];
         }
         applyEvidenceScaleContract(record);
+        applyTatqaNumericContract(record);
         return record;
       });
     }

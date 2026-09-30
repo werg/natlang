@@ -1,3 +1,29 @@
+> **CURRENT — 2026-09-30 05:37 UTC: numeric-contract rollout queued.**
+> Frozenruntime-v10 adds three TATQA sourceholds and opt-in numeric-answer-v1 adapter/
+> tatqa-answer-record oracle/files checks. Strict answer/scale strings, exact scale,
+> numeric-only decimal/sign/grouped-comma/2dp equality; no prose/currency extraction,
+> no fraction/percent conversion, half-cent ties exact-only. Return/file agreement now
+> required. Four actual oldcandidate+native-reference audits pass, audit-only; old
+> rawfailedtraces stay unchanged under legacy_tatqa_numeric_display_oracle migration
+> hold(no falseDPOnegatives/auto-positive). Read hourly/tatqa-numeric-equivalence-review.
+> FutureIR/queues in hourly/tatqa-numeric-campaign/manifest.json:559Lunarows249numeric
+> updates; Bonsai1229IRrows255updates. Source/gold/groups/references preserved. New
+> Lunaqueues retain historicalkeys except3explicitsourceholds(alreadyfinished). Jobdirs
+> same; numericvariant IDs/checksums prevent incompatiblepartialreuse. Targetclean
+> file/tree556cases(original559 minus3sourceholds); finalunique25%mix stillpending.
+> Luna-v10 boundarymonitor77277 config/state/log/audit hourly/luna-v10-rollout* owns
+> current74281/74312, samecap2/provider/backoff/journals, switches newqueue paths/v10.
+> Bonsai-v10 monitor77278 waits runtime-v9 monitor74250 completion(all3runningstate),
+> derives exactnewBonsaiPID onqueue37, then nextboundary→frozenv10/queue38. Current
+> Bonsai70991/v8/queue36 still slowheldFOLIO425; preservecheckpoint/currentboundary.
+> Read BOTH runtime-v9 and bonsai-v10 states before signaling. Never manually duplicate.
+> Queue38 removes3futureTATQAholds and preserves6cleanmixedbatchmembers withsplitkeys.
+> Source audit tablecopycorrection completed; allfourTATQAinputsverified,holdsstand.
+> Staticdirectoryquality-v5:1299cases/3459approved; allfourstatic32899approved.
+> Recipe-v10 refreshing(session45601); latestcompletedrecipe-v9 1851trajectories/
+>1674programs(predates3TATQAholds). Fullnextcheck~06:04UTC in hourly/check.json.
+> Keep hourlyloop active, inspect failures, refreshauthorityPIDs/queues afterrollouts.
+
 > **05:20 UTC quality update:** Three TATQA aggregation/percentage-change cases now
 > centrally sourceheld (e27c8621...,f6ef3a62...,7a6c059d...), golds retained. Directory
 > staticquality-v5 published after hash/fulladmission verification:1299cases/3459approved

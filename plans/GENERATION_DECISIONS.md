@@ -1040,3 +1040,36 @@ Proportion0.14 versus13.968percent is representation-equivalent, not arithmetice
 no sourcehold or broadfraction/percent admission change without reviewed formatcontract.
 TATQA numericrepresentation/precision improvements under focusedreview; rawnegatives
 remain preserved for audit and should not be assumed causal DPOpairs.
+
+
+## 2026-09-30 05:37 UTC — opt-in TATQA numeric answer contract
+
+New tatqa-answer-record oracle/files comparator validates strict exactly answer/scale
+strings, duplicate-key rejection, exact enumscale, standalone decimal sign/grouped
+commas and decimalBigInt canonicalization. Numerically equal displays(+6/6,12.0/12)
+and unambiguous two-decimal rounding(21.7674/21.77,2.5671/2.57) agree. Half-cent
+ties retain exact equality only to avoid falsely claiming Pythonfloat parity. Numeric
+strings bounded512chars; no extracting numbers from prose/currency/%/unit text or
+scale conversion. GenericJSON/TreeDST policies unchanged. Returnedrecord must agree
+with answer.json under same comparator; sourcefiles remain exact/preserved.
+Source official evaluator rounds numericanswers to2dp; upstream scale_em is a separate
+metric, not a mandatory EM gate. Our exactscale requirement is deliberately stricter.
+Source: https://github.com/NExTplusplus/TAT-QA/blob/master/tatqa_metric.py .
+Future numeric-only TATQA variants add :numeric-answer-v1 after evidence-scale-v2,
+explicit visible numeric-display instructions, oracle/files normalization metadata.
+No hidden annotatedscale instruction: root caught/removed it before freezing. Helpers
+composeidempotently. Originalgold/evidence/groups/reference preserved. Native4reference
+audits accepted; actual4oldcandidate oracle/files/returnagreement checks pass. Their
+raw historical verdicts/bytes remain unchanged and central legacy_tatqa_numeric_display
+_oracle hold prevents falseDPOnegatives pending migration review; no auto promotion.
+
+Prepared futurequeuevariants:559Lunacases,249numericIRupdates;1229BonsaisourceIRrows,
+255prompt/oracleupdates(includeevidence-scale revisions). Three sourceheldLunakeys
+omitted(alreadycompleted). Bonsaiqueue38 removes3futureheldTATQAroots and retains
+6cleanmembers from2mixed4-rootbatches withdistinctsplitkeys; currentheldFOLIO425
+root preserved untilnormalboundary. Joboutput directories, seeds/caps/history retained.
+Manifest/hashes/preservationaudit hourly/tatqa-numeric-campaign. No in-flight source
+orqueue edits; original sources stillon disk. TwoLuna boundarymonitor77277 owns current
+74281/74312→frozenv10/newqueues. Bonsaimonitor77278 waits v9monitor74250state, derives
+exactnewPID/queue37 then nextboundary→v10/queue38. No overlappingcollectors/restarts.
+Recipe-v10 refresh started after threeholds/currentpolicy; no studenttraining/tests.
