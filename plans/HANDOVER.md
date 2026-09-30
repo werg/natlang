@@ -1,3 +1,13 @@
+> **05:43 UTC rollout/snapshot update:** Luna-v10 completed independently at
+> boundaries: worker1PID77324,worker2PID77384 on numeric-campaign/luna-N.queue.jsonl,
+> frozenv10; authority/check updated. First7newnumericcases all accepted (small sample,
+> no rate claim). All249convertedLunacases verified original-arithmetic-gold, not year/
+> count/span golds. Recipe-v10 completed1905trajectories/1704programs, no missing default
+> inputs/included blockers; fourstatic32899decisions. Bonsai-v9 thenv10monitors still
+> serialpending, check exactstates. Oldworkers not running; journals copiedhistory caveat
+> remains. Operation/wording sweep delegated to luna_source_oracle_audit, readonly,
+> hourly/tatqa-operation-contract-audit. Continue hourlyloop, nextfullcheck~06:04UTC.
+
 > **CURRENT — 2026-09-30 05:37 UTC: numeric-contract rollout queued.**
 > Frozenruntime-v10 adds three TATQA sourceholds and opt-in numeric-answer-v1 adapter/
 > tatqa-answer-record oracle/files checks. Strict answer/scale strings, exact scale,

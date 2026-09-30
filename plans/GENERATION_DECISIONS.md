@@ -1073,3 +1073,9 @@ orqueue edits; original sources stillon disk. TwoLuna boundarymonitor77277 owns 
 74281/74312→frozenv10/newqueues. Bonsaimonitor77278 waits v9monitor74250state, derives
 exactnewPID/queue37 then nextboundary→v10/queue38. No overlappingcollectors/restarts.
 Recipe-v10 refresh started after threeholds/currentpolicy; no studenttraining/tests.
+
+Luna-v10 rollout completed:77324/77384, newqueues/frozenv10; authorityupdated.
+First7newnumericcasesaccepted (small sample, not comparison-rateclaim). All249
+convertedLunanumericroots have original-arithmetic-gold adaptation (not year/count
+spans). Recipe-v10:1905selectedtrajectories/1704programs, no includedblockers/missing
+defaultinputs, fourstatic32899decisions. Systematic TATQAoperationwording audit ongoing.
