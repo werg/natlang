@@ -1,3 +1,25 @@
+> **CURRENT — 2026-09-30 08:16 UTC hourly check/inventory complete.**
+> All v18 workers healthy: Luna100243/100068, Bonsai100628; GPU99%,7457/8188MiB,
+> server35762/container2.295GiBof6GiB. Disk18.23GiB before latestsnapshot. Fullcheck
+> actual08:13:19UTC saved check-0812.json; next09:13:19UTC. Nextpool106unique
+> results:36rawaccepted/70reject, MuSiQue sofar; rawacceptance not finaladmission.
+> Only new noncomplete events: known fixedfalseinactivity0012 (independentretry
+> finished) and Bonsai broader-expansion346retained1 genuinehard1200stimeout,
+>11replies/23558tokens; savedtrace investigation assigned Luna sourceoracleagent
+> hourly/timeout-0813-bonsai. No other new transport failures. Whole282included
+> MuSiQue source-quality sweep assigned Luna qualityagent under hourly/musique-
+> included-source-sweep; root must fullread all flagged cases beforeholds.
+> Recipe-v18 nowcurrentpolicy:2362selectedgeneratedtrajectories/1931programs,
+> allfourstatic32710approved, no missingdefaultinputs/includedqualityblockers.
+> Legacyref inputs remain explicitly included. Finalstudentrender/split/token/
+> dedup/25%mix audits remainpending; no tests/studenttraining. Continueactive
+> threadhourlyloop, do not restart completedwatchers or mutate frozen runtimes.
+
+> **CURRENT — 2026-09-30 08:06 UTC: all teachers runtime-v18.**
+> Boundary rollout100001 complete, no overlapping collectors. Luna100243/100068,
+> Bonsai100628, same queues/journals/caps/server. Exactnumeric comparison and six
+> sourceholds deployed. Nextfullcheck08:11UTC then consolidated recipe refresh.
+
 > **2026-09-30 08:05 UTC corrected precision audit:** exact recipe-v16 ordered
 > existing_teacher_results plus all four current static manifests audited:10691
 > saved resultrows,322 accepted generic-normalized answerchecks,0changedpositives,
