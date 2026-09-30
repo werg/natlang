@@ -1131,3 +1131,32 @@ Luna79716/79801v11 latestfilteredqueues. HeldFOLIOcurrentrootnormalboundedtimeou
 finishpreserved; nexteligibleBonsaicasefreshresponses/GPU93%. NointermediateBonsai
 v9/v10restarts. Latestrecipe-v11:1964trajectories/1740programs, static32879decisions.
 Newnumericrejectionauditongoing; nextfullhourcheck~06:04.
+
+
+## 2026-09-30 06:08 UTC — full hourly check and next reviewed unit repair
+
+Allteachersv11:79716/79801Luna,80478Bonsai queue39; freshprogress/GPU98%,disk23.31GiB.
+Newfile/tree319completed uniqueorigins:CommitPack122accepted/1reject;TATQA124/51;
+TreeDST19/2. Numeric72completed/63rawaccepted/9reject. Counts are attempts, not
+finaladmission; currentworkingnewholds supersede pinnedv11candidatepolicy. Nextcheck
+07:08UTC incheck.json. Currentpartials nowreallystore invocationID/time/toolpreview
+andhash(bounded2000chars), verifiedactualBonsairuntime18metadata, notmerelycode.
+
+Rootfullinputreviewconfirmed87fe0836... displayed20.5percentchange versus15.8million
+goldwithoutspecifiedoperation;81304522... changebetweenvestingcategorieshasno
+subtractiondirection;d3a5439d... unitlakhcan'tbeexpressedbyourenum/newpromptwhile
+goldblank. Threecentralpendingholds; directoryquality-v7 removes23decisions/3cases:
+1293cases/3416approved,13cumulativeholds; allfourstatic32856approved. Originalgolds/
+traces/publications retained, catalog6→7. Runtimepatchnotyetfrozen pendingunitrepair.
+Proportion2f301...97.21/empty versus0.97/empty remainsreal100x math/formatfailure,
+no toolerrors. Removedstaleadmissioncommentclaimingalldelegateditemsrequired; actual
+logicallowsdirect/mixed/delegatedcorrectsolutions, unchanged.
+
+SYSTEM FORMAT BUG: Generic evidence-scale/numericprompt made unlistedlakh units
+impossible despite original242.5/blank sourceconvention. Do notblamehonestblocking
+model. Lunaadmissionagentpreparingexactsource/evidence-scoped visibleunitcontract
+variant:explicitnumericunitsstaylakh,scaleempty; preservegold/ref/evidence/groups,
+distinctID andstrictreviewvalidator. Oldblocked/raw/sourcecaseheld; no automatic
+positivetransform. Futureteacherfreshretry/referenceaudit onlyafterrootreview.
+No blanketunitconversions, no unsupportedgoldrewrites. Unitcontractapprovalmust
+beexplicitvisible andproofbound; centralholdexceptiononlyforreviewednewvariant.

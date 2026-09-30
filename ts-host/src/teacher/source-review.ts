@@ -11,6 +11,21 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'tatqa', id: '87fe0836-3e88-4a25-91fb-7f2a50ba3e15', aliases: [],
+    text: 'What was the change in adjusted operating profit?',
+    annotatedLabel: '15.8 million', status: 'pending',
+    reason: 'Source row explicitly gives92.9/77.1 million and20.5 in a per-cent-change column. Change without an absolute-versus-relative qualifier supports either15.8 million or20.5 percent. Preserve gold and hold pending an explicit operation contract; the displayed percent answer is not a preference negative.',
+  },
+  { dataset: 'tatqa', id: '81304522-e0c9-4824-90ff-5fd7ec0b6130', aliases: [],
+    text: 'What is the change in Weighted-average grant date fair value between the options with two year vesting and three year vesting?',
+    annotatedLabel: '0.01 with empty scale', status: 'pending',
+    reason: 'Two-year and three-year values are0.59 and0.58. Change between these categories does not fix subtraction direction or request an absolute difference; gold uses first-minus-second while a transition from first to second yields-0.01. Preserve gold and hold until direction is explicit; sign alone must not teach a preference negative.',
+  },
+  { dataset: 'tatqa', id: 'd3a5439d-5041-4856-8c2c-434203b8acaa', aliases: [],
+    text: 'What is the total gross salary of the CEO and MD?',
+    annotatedLabel: '242.5 with empty scale', status: 'pending',
+    reason: 'Visible remuneration table explicitly uses lakh, but gold scale is blank and the adapter enum excludes lakh while instructing empty scale only for dimensionless or unstated units. The revised format contract cannot represent the evidenced unit. Preserve original annotation and hold pending a reviewed unit representation; honest blocking is not a model failure.',
+  },
   { dataset: 'tatqa', id: 'c9026c61-8220-4148-84ef-584f5602b529', aliases: [],
     text: 'What was the change in the total number of permanent employees from 2018 to 2019?',
     annotatedLabel: '7.2 million', status: 'pending',

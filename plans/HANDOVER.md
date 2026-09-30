@@ -1,3 +1,22 @@
+> **CURRENT — 2026-09-30 06:08 UTC hourly check.**
+> Allteachersfrozenv11: Luna79716/79801, Bonsai80478 queue39 cap4/server4; GPU98%,
+> disk23.31GiB. Freshprogress. Newfile/tree319uniqueoriginscompleted (265rawaccepted/
+>54reject):CommitPack122/1,TATQA124/51,TreeDST19/2; numeric72/63accepted/9reject.
+> Fullcheckhourly/check-0605.json; nextcheck07:08UTC incheck.json. Realnewpartial
+> telemetry invocationID/timestamps/boundedtoolpreview/hashverified. Admissionallows
+> direct/mixed/delegatedcorrectsolutions; stalecontrarycommentremovedonly, no rulechange.
+> Directoryquality-v7 now1293cases/3416approved/13cumulativeholds; allstatic32856.
+> Newholds87fe... absolutevspercentchange,813045... sign/direction, d3a... lakhformat.
+> These sourceholdpatchesbuilt(notyetfrozen); v11teachingstillongoing. Oldraw/golds
+> unchanged. Latestrecipe-v11 1964/1740 predatesnew3holds; refreshafterunitbatchdone.
+> SYSTEM FORMAT issue: ourgenericpromptcan'texpressunlistedlakh despiteoriginalgold
+> blank-scaleconvention. Lunaadmissionagentimplementingreviewedexplicitunitvariant
+> sharedvalidator/adapter, outputhourly/tatqa-lakh-reviewed-contract. Rootmustreview
+> before source-review.ts exception/freeze; don'toverwritedirtysource-review.ts.
+> Newunitvariant mayexempt ONLY exactsource/hash/prompt/gold-approved d3case; old
+> sourceblockedtracesremainheld/noDPOnegative/autopromotion. Newteacherfreshretry and
+> audit-onlyreferenceifapproved. Keep ballmoving; no studenttraining/eval/unit tests.
+
 > **CURRENT — 2026-09-30 05:55 UTC: all three teachers on frozenruntime-v11.**
 > Soleboundaryrollout79671 completed: Bonsai80478/runtime-v11/queue39 cap4/server4;
 > Luna79716/79801/runtime-v11/latestv11queues cap2/provider/noGPU/backoff. Supervisor

@@ -298,7 +298,6 @@ export function admitRow(row: { id?: string; task: { program_ir: ProgramRecord }
       return matches.every(fragment => opening.includes(fragment)) ||
         !!child.evidence?.length && child.evidence.every(marker => shows(opening, marker));
     });
-    // A run that delegates must delegate every item the reference does; one that judges directly is noted below.
     // Reference children demonstrate one solution; mixed direct/delegated coverage is valid.
     const firstAnswer = turns.find(turn => (turn.assistant?.calls ?? []).some(call =>
       call.tool === 'return_result' || call.tool === 'eval' && stagesResult(String((call.arguments as Record<string, unknown>)?.code ?? ''))) ||

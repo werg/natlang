@@ -20,7 +20,10 @@
     "data/teacher/directory-expansion/quality-v4.static.turns.jsonl": "data/teacher/directory-expansion/quality-v5.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v5.train.ir.jsonl": "data/teacher/directory-expansion/quality-v6.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v5.static.results.jsonl": "data/teacher/directory-expansion/quality-v6.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v5.static.turns.jsonl": "data/teacher/directory-expansion/quality-v6.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v5.static.turns.jsonl": "data/teacher/directory-expansion/quality-v6.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v6.train.ir.jsonl": "data/teacher/directory-expansion/quality-v7.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v6.static.results.jsonl": "data/teacher/directory-expansion/quality-v7.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v6.static.turns.jsonl": "data/teacher/directory-expansion/quality-v7.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -140,6 +143,14 @@
       "audit": "runs/generation-check-20260930-hourly/tatqa-operation-contract-audit/audit.json",
       "quantity_audit": "runs/generation-check-20260930-hourly/tatqa-quantity-unit-audit",
       "reason": "Employee-count million scale and two specific ambiguous quantity/aggregation contracts; golds retained."
+    },
+    "directory-expansion-direction-unit-review": {
+      "revision": "quality-v7",
+      "held_cases": 3,
+      "cases": 1293,
+      "approved_decisions": 3416,
+      "audit": "runs/generation-check-20260930-hourly/rejection-audit-0604-numeric/audit.json",
+      "reason": "Amount-versus-percent change, unspecified subtraction direction, and unsupported lakh-scale format. Originals retained."
     }
   }
 }
