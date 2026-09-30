@@ -1,3 +1,11 @@
+> **CURRENT — 2026-09-30 06:44 UTC: all teachers frozen runtime-v14.**
+> Boundary rollout87674 completed: Luna87754/87694, Bonsai87740 queue-v42, same
+> caps/provider/backoff/journals/server. Exact authorities updated. Recipe-v14:
+>2192 selected generated trajectories/1852 programs, allfourstatic32832 approved,
+> no missing defaultinputs or included quality blockers. Sourceidentity corrected;
+> final student render/split/token/dedup and25%mix audits stillpending. BroaderLuna
+> sourceaudit continues with explicit coverage; nextfullhourcheck07:08UTC.
+
 > **CURRENT — 2026-09-30 06:42 UTC: expense case identity corrected; v14 rollout pending.**
 > Earlier audit typed cc42e86a-c56c..., but saved IR is cc42e86a-c56d... . Root's
 > source-policy join caught eligible547 instead of546; broader Luna sweep caught
