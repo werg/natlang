@@ -1,6 +1,6 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
-> **CURRENT HOURLY CHECK — 2026-09-30 01:12 UTC, supersedes process details below.**
+> **CURRENT HOURLY CHECK — 2026-09-30 01:08 UTC, supersedes process details below.**
 > Typed Luna batch64 completed:61 accepted,3 independently checked semantic errors,
 > zero format failures. New readable typed directory-v3 adapter keeps full source
 > instance mappings/golds and uses question names rather than opaque hash keys.
@@ -27,8 +27,8 @@
 > executive chairman, plausible answer60.4 includes him. Preserve gold, no DPO negative.
 > Latest source hold/downstream script changes are in working runtime, after frozenv4;
 > do not modify v4. Admission/export uses current code. No student training authorized.
-> `runs/generation-check-20260930-hourly/check.json` stores exact next due time (~02:12
-> UTC/04:12 Berlin). Continue requested hourly active-thread sleep/check loop.
+> `runs/generation-check-20260930-hourly/check.json` stores exact next due time (~02:08
+> UTC/04:08 Berlin). Continue requested hourly active-thread sleep/check loop.
 
 
 > **HOURLY MONITORING RESUMED — 2026-09-29 23:50 UTC.** User requests continuing
