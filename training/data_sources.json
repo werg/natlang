@@ -41,7 +41,10 @@
     "data/teacher/directory-expansion/quality-v11.static.turns.jsonl": "data/teacher/directory-expansion/quality-v12.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v12.train.ir.jsonl": "data/teacher/directory-expansion/quality-v13.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v12.static.results.jsonl": "data/teacher/directory-expansion/quality-v13.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v12.static.turns.jsonl": "data/teacher/directory-expansion/quality-v13.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v12.static.turns.jsonl": "data/teacher/directory-expansion/quality-v13.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v13.train.ir.jsonl": "data/teacher/directory-expansion/quality-v14.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v13.static.results.jsonl": "data/teacher/directory-expansion/quality-v14.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v13.static.turns.jsonl": "data/teacher/directory-expansion/quality-v14.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -199,6 +202,17 @@
       "root_adjudication": "runs/generation-check-20260930-hourly/tatqa-remaining-source-sweep/root-final-batch.json",
       "reason": "Root verified wrong measures, unit conflicts, unclear scope/population/period/direction and prose-vs-table rounding discrepancies; original golds retained.",
       "dpo_negatives_created": false
+    },
+    "directory-expansion-multihop-chain-review": {
+      "revision": "quality-v14",
+      "held_published_cases": 6,
+      "cases": 1261,
+      "approved_decisions": 3264,
+      "root_adjudications": [
+        "runs/generation-check-20260930-hourly/musique-included-source-sweep/root-first-batch.json",
+        "runs/generation-check-20260930-hourly/musique-included-source-sweep/root-second-batch.json"
+      ],
+      "reason": "Unveiling-versus-release date, unnamed individual, unspecified Olympic type/time, wrong country, wrong legislature, wrong expedition. Original golds retained; no DPO negatives."
     }
   }
 }

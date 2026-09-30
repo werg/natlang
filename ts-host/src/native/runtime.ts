@@ -115,7 +115,7 @@ function rejected(error: Reject): NativeResult {
 }
 /** What the model is told when a value is staged as the call's result. */
 const stagedMessage = (value: Value) => `\nStaged ${stagedText(value)} as the result. If this is the result of the task you were given and ` +
-  'you are satisfied with it, you can reply done (without a tool call) to return exactly this value, or keep working and return a different value later.';
+  'you are satisfied with it, reply done to return exactly this value without a tool call, or call return_result with status "success" and omit value to finish using this exact stored result. You can keep working and return a different value later.';
 /** A staged value, in full when it is small, so it can be checked (and never needs retyping); long ones are cut by structure. */
 function stagedText(value: Value): string {
   return renderValue(value, { budget: 1500 });
@@ -841,14 +841,20 @@ export class NativeSession {
       }
       if (status !== 'success') throw new Reject([{ path: 'status', code: 'bad-action', expected: '"success", "blocked", or "failed"' }]);
       if (this.lam.type.kind !== 'lambda') throw new Reject([{ path: 'value', code: 'bad-action', expected: 'a typed call' }]);
-      if (!Object.hasOwn(args, 'value')) throw new Reject([{ path: 'value', code: 'bad-action',
-        expected: `a ${formatType(this.lam.type.returns)} (status "success" returns a value)` }]);
       let value: Value;
-      try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
-      catch (first) {
-        // Some models send structured values as JSON text.
-        if (typeof args.value !== 'string') throw first;
-        try { value = coerce(JSON.parse(args.value), this.lam.type.returns, this.env, 'return'); } catch { throw first; }
+      if (!Object.hasOwn(args, 'value')) {
+        if (this.lam.return === MISSING) throw new Reject([{ path: 'value', code: 'bad-action',
+          expected: `a ${formatType(this.lam.type.returns)} or a complete typed result already staged in this call` }]);
+        // Reuse the staged object as-is. finish() below still checks completeness, live holes,
+        // pending transactions, and the normal terminal validation path.
+        value = this.lam.return;
+      } else {
+        try { value = coerce(args.value, this.lam.type.returns, this.env, 'return'); }
+        catch (first) {
+          // Some models send structured values as JSON text.
+          if (typeof args.value !== 'string') throw first;
+          try { value = coerce(JSON.parse(args.value), this.lam.type.returns, this.env, 'return'); } catch { throw first; }
+        }
       }
       this.lam.return = value;
       if (!this.finish()) throw new Reject([{ path: 'value', code: 'bad-action', expected: `a complete ${formatType(this.lam.type.returns)}` }]);

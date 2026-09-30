@@ -129,7 +129,7 @@ export function jobKey({ index, record }: IndexedRecord): string {
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
-    runtime: 'typescript-native', runtime_contract_version: 18, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
+    runtime: 'typescript-native', runtime_contract_version: 19, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
     file_content_comparison_version: FILE_CONTENT_COMPARISON_VERSION,
     answer_comparison_version: ANSWER_COMPARISON_VERSION,
     counter_loop_policy_version: 2,

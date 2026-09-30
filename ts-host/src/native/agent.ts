@@ -29,7 +29,8 @@ const thought = (reasoning: string | undefined) => reasoning ? { reasoning_conte
  * "it does not" with status blocked, and the caller got an error for a perfectly good answer.
  */
 export const RETURN_RESULT_DESCRIPTION = 'Finish the call. With status "success", value is the result and must have the declared ' +
-  'return type. With status "blocked" (required information is missing; do not guess) or "failed" (the instructions require an ' +
+  'return type; if a complete typed result is already staged, you may omit value to return that exact stored result. With status ' +
+  '"blocked" (required information is missing; do not guess) or "failed" (the instructions require an ' +
   'invalid or contradictory operation), give the reason instead of a value. A negative answer (false, no, none, zero, an empty ' +
   'list) is a result like any other: return it with status "success".';
 /** The finishing tool's description before its sentence on negative answers; kept for migrating collected data. */
@@ -330,7 +331,8 @@ export class NativeToolAgent {
           description: 'What you are doing, what you have found and ruled out, and what is left.' } }, ['note']),
       tool('return_result', RETURN_RESULT_DESCRIPTION,
         { status: { type: 'string', enum: ['success', 'blocked', 'failed'] },
-          value: session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {},
+          value: { ...(session.lam.type.kind === 'lambda' ? schemaOf(session.lam.type.returns, session.env) : {}),
+            description: 'For success, provide a value of the declared return type, or omit it only to return the exact complete result already staged.' },
           reason: { type: 'string', description: 'For "blocked": what is missing. For "failed": why it cannot be done.' } }, ['status']),
     ];
     const ownCode = Object.keys(session.lam.codebase).length > 0;
@@ -668,7 +670,7 @@ export class NativeToolAgent {
       tokens += response.completion_tokens === undefined ? limit ?? 0 : Math.max(1, response.completion_tokens);
       if (timedOut() || (maxTokens !== undefined && tokens > maxTokens))
         return 'episode token or wall-clock budget exhausted';
-      if (!response.calls?.length && availableTools !== allTools && !lastTurn) {
+      if (!response.calls?.length && availableTools !== allTools && !lastTurn && !response.truncated) {
         // The compaction turn was answered without the tool: its text is not a result. Compact without a note.
         const elided = pinNote(null) + collapseHistory(messages, protectedLength);
         compactedAt = estimate(allTools);
@@ -685,7 +687,9 @@ export class NativeToolAgent {
         // Code written into a reply has not run; saying so is what a model that wrote its eval out as text needs.
         const unrun = /```(?:ts|typescript|js|javascript)?\s*\n/.test(response.text ?? '') ?
           'The code in your reply was not run: code runs only when you call eval with it. ' : '';
-        const feedback = response.truncated ? `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. Take the next step with one tool call.` :
+        const feedback = response.truncated ? `Your reply was cut off ${limit === null ? 'at the length limit' : `at the ${limit}-token limit`} before any tool call. ` +
+          (session.lam.return !== MISSING && !missing ? 'A complete typed result is already staged. Call return_result with {status: "success"} and omit value to return that exact result, or reply "done" to return it without a tool call.' :
+            'Take the next step with one tool call.') :
           unrun + (missing || 'The staged result is incomplete.');
         messages.push({ role: 'assistant', content: response.text ?? '', ...thought(response.reasoning) }, { role: 'user', content: feedback });
         continue;

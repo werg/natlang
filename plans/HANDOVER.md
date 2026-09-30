@@ -1,3 +1,13 @@
+> **CURRENT — 2026-09-30T08:37:15.270331+00:00 source-policy/finalization batch.**
+> Six independently reviewed MuSiQue source holds published as directory quality-v14:
+>1261 cases/3264 approved decisions,45 cumulative holds; all four static32704.
+> Original golds/results preserved; no preference negatives. Recipe-v18 is STALE
+> relative to these holds; consolidated refresh pending next health/audit batch.
+> Staged-result omitted-value finish fix built/native-audited, contract19; runtime-v19
+> immutable queues/boundary rollout being prepared, NOT launched yet. Existing
+> v18 authority remains Luna100243/100068, Bonsai100628. Next full09:13:19UTC.
+> Full included MuSiQue source audit ongoing; root must verify flags before holds.
+
 > **CURRENT — 2026-09-30 08:16 UTC hourly check/inventory complete.**
 > All v18 workers healthy: Luna100243/100068, Bonsai100628; GPU99%,7457/8188MiB,
 > server35762/container2.295GiBof6GiB. Disk18.23GiB before latestsnapshot. Fullcheck

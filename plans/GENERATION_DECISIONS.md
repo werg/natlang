@@ -1281,3 +1281,9 @@ All530 eligible original cases attempted,489rawacceptedanyattempt incl reviewedv
 Allv18workers deployed (Luna100243/100068,Bonsai100628). Actualfullcheck08:13:19UTC GPU99%,7457/8188MiB, container2.295GiB/6GiB, disk18.23GiBbeforeinventoryrefresh. Next09:13:19UTC. Nextpool106uniqueactualresults36rawaccepted/70reject (MuSiQue), not finaladmission. One Bonhardtimeout at1200s (broader-expansion346retained1,11savedreplies/23558completiontokens) is being independently audited for progress/repetition/sourcecontract before anybudgetchange. KnownLunafalseinactivity fixed/retried; no othernewtransportfailures. Fullincluded282MuSiQue sourceaudit delegatedread-only; rootreviewrequired beforeholds, oldlabels preserved.
 
 Consolidatedrecipe-v18 currentpolicyincludes2362selectedgeneratedtrajectories/1931programs plus explicitlegacyreferenceinputs/allfourstaticbundles32710approved. No missingdefaults or includedqualityblockers. Finalstudentformatting/split/token/dedup/25%mix audits notyetcomplete; no trainingstarted/tests.
+
+## 2026-09-30T08:37:15.270331+00:00 — exact computation and staged finalization
+
+Exact-input computational/code outputs remain exact; no target injection or generic tolerance enabled. Contract19 permits omitted `value` on successful `return_result` only for an existing staged result, through normal completeness/type/transaction guards. Explicit values remain validated. Truncation feedback points to this shorter finish path when a complete result exists. Native TreeDST and file reference audits pass; missing stage, incomplete stage and wrong explicit values reject. Build passed, no tests/providers used in audits. Deployment pending reviewed journal-boundary rollout.
+
+Six source-specific MuSiQue holds published quality-v14, preserved originals/golds and excluded from preference negatives. Root adjudications in hourly/musique-included-source-sweep/root-{first,second}-batch.json. Recipe-v18 explicitly stale pending refresh.
