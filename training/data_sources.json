@@ -23,7 +23,10 @@
     "data/teacher/directory-expansion/quality-v5.static.turns.jsonl": "data/teacher/directory-expansion/quality-v6.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v6.train.ir.jsonl": "data/teacher/directory-expansion/quality-v7.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v6.static.results.jsonl": "data/teacher/directory-expansion/quality-v7.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v6.static.turns.jsonl": "data/teacher/directory-expansion/quality-v7.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v6.static.turns.jsonl": "data/teacher/directory-expansion/quality-v7.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v7.train.ir.jsonl": "data/teacher/directory-expansion/quality-v8.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v7.static.results.jsonl": "data/teacher/directory-expansion/quality-v8.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v7.static.turns.jsonl": "data/teacher/directory-expansion/quality-v8.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -151,6 +154,15 @@
       "approved_decisions": 3416,
       "audit": "runs/generation-check-20260930-hourly/rejection-audit-0604-numeric/audit.json",
       "reason": "Amount-versus-percent change, unspecified subtraction direction, and unsupported lakh-scale format. Originals retained."
+    },
+    "directory-expansion-numeric-delta-review": {
+      "revision": "quality-v8",
+      "new_source_holds": 4,
+      "held_published_cases": 3,
+      "cases": 1290,
+      "approved_decisions": 3397,
+      "audit": "runs/generation-check-20260930-hourly/rejection-audit-0625-numeric/audit.json",
+      "reason": "Sign convention conflict, wrong source column, unsupported million scale, ambiguous year averaging. Original golds retained."
     }
   }
 }

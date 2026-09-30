@@ -1179,3 +1179,16 @@ beexplicitvisible andproofbound; centralholdexceptiononlyforreviewednewvariant.
   README truncation failure. Distinct jobs/seeds/keys preserve both original failures.
   These are not automatically causal DPO pairs. Preservation manifest and rollout
   evidence live under runs/generation-check-20260930-hourly.
+
+## 2026-09-30 06:36 UTC — numeric delta source quality holds
+
+Independent audit of five new numeric rejects, then root review of full source
+inputs and references: four source/prompt issues and one genuine row-selection
+model error. Central holds now cover expense sign convention cc42e86a, wrong-column
+gold122bddf9, absent magnitude unit3257598a, and year/average ambiguity85d145d7.
+Gold122bdd uses Other Accounts for both years, not mixed columns; its question names
+Costs and Expenses. Preserve golds and all originals; do not promote model outputs
+or use these as DPO negatives. Published static quality-v8 excludes three affected
+canonical cases (1290 cases,3397 approved decisions); one held source was absent.
+Frozenv13 boundary rollout retains current attempts/history/clean batch members,
+with unchanged worker caps. Final student audits remain pending.

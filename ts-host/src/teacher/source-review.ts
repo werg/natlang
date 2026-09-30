@@ -262,6 +262,23 @@ export const SOURCE_REVIEWS: readonly SourceReview[] = [
   {"dataset": "folio", "id": "story:417", "aliases": ["folio:story:417", "story417"], "text": "L-2021 is either in the library or produced by LG.", "annotatedLabel": "False", "status": "pending", "reason": "The source treats either-or as exclusive. A library monitor produced by both AOC and LG without type-c satisfies all premises and makes the inclusive English disjunction true. English also omits a monitor premise for L-2021."},
   {"dataset": "folio", "id": "story:378", "aliases": ["folio:story:378", "story378"], "text": "Carol is not getting married or has friends who are getting married.", "annotatedLabel": "Carol outgoing=False; neither celebrating nor outgoing=True", "status": "pending", "reason": "The source negates the whole merged getting-married-or-friends predicate, whereas English can negate getting married alone. Carol with married friends, outgoing, enjoying celebrations and attending weddings satisfies the literal English but falsifies the source conclusions. The negation scope needs adjudication."},
   {"dataset": "folio", "id": "story:422", "aliases": ["folio:story:422", "story422"], "text": "Customers either subscribe to AMC service or HBO service. James watches TV series in cinemas.", "annotatedLabel": "weekly cinema or three movies=True; availability or TV=True", "status": "pending", "reason": "No English premise establishes James as a customer; the source formalization removes customer guards. A non-customer James watching TV in cinemas but without subscriptions or three-movie access satisfies the premises and falsifies the asserted entailments. Availability also does not establish actual weekly watching."},
+  { dataset: 'tatqa', id: 'cc42e86a-c56c-4638-b94c-bf4cc5ebd7c5', aliases: [],
+    text: 'What is the average Income tax expense for the period September 29, and December 31, 2019?',
+    annotatedLabel: '45 million', status: 'pending',
+    reason: 'The table shows signed expenses $(62) and $(28), while the note describes positive expense magnitudes. Gold averages magnitudes to45; the numeric preserve-sign contract permits-45. Hold until a visible sign convention is reviewed; preserve gold and do not penalize either interpretation.' },
+  { dataset: 'tatqa', id: '122bddf9-6c71-4366-ae62-30794bdf4a0b', aliases: [],
+    text: 'What was the change in the Additions Charged to Costs and Expenses between 2017 and 2019?',
+    annotatedLabel: '138.2 million', status: 'pending',
+    reason: 'Question names Costs and Expenses, whose2019/2017 cells are16.2/15.2 (change1). Gold/reference175.8-37.6 instead uses the Other Accounts column for both years. Hold the question/gold column mismatch without relabeling or treating the supported answer1 as a model error.' },
+  { dataset: 'tatqa', id: '3257598a-e0b7-4e35-844c-cf5868d12a08', aliases: [],
+    text: 'What is the average Equity securities?',
+    annotatedLabel: '21 million', status: 'pending',
+    reason: 'Equity securities23/19 support average21, but no visible table heading or note establishes million for those cells. The note about unrelated asset factoring131million does not establish this table scale. Gold conflicts with the evidence-bounded scale contract; preserve gold and hold pending source-unit review.' },
+  { dataset: 'tatqa', id: '85d145d7-834b-4c61-961a-1eac0b7afc77', aliases: [],
+    text: 'What is the 2019 average performance bonds?',
+    annotatedLabel: '665 million', status: 'pending',
+    reason: 'The question specifies2019, whose performance-bonds cell is337million. Gold/reference averages2019/2018 cells337/993 to665 without specifying a two-year averaging population. Hold this question/aggregation mismatch while preserving source gold and evidence.' },
+
 ];
 
 /** Stable visible identity also catches legacy batches that omitted dataset_records. */

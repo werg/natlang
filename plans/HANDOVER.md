@@ -1,3 +1,21 @@
+> **06:36 UTC: four more source holds, v13 boundary rollout pending.**
+> Root checked full tables, notes and references from the 0625 numeric delta audit.
+> cc42e86a: signed expense table versus positive expense-magnitude note/gold;
+> 122bddf9: gold uses OTHER ACCOUNTS for both years despite question asking Costs
+> and Expenses (correct requested-column change is1). Agent report initially said
+> mixed columns; correction requested. 3257598a: no visible million unit for equity;
+> 85d145d7: 2019 question versus two-year average gold. Hold all four, preserve raw
+> gold/inputs/traces; no automatic relabel or DPO negatives. 5688b0ff remains genuine
+> totals-row model error. Source review compiled/frozenv13, exact boundary watcher
+> 86322 owns all teachers; read hourly/runtime-v13-rollout-state.json for new PIDs.
+> Old v12 PIDs84926/85014/85050 until their boundaries. Same caps/provider/backoff.
+> Future Bonsai queue-v41 retains clean members of filtered batches; new Luna v13
+> queues preserve completed history. Campaign546 eligible originals plus1 reviewed
+> lakh variant. Directorystaticquality-v8 removes3 published cases:1290/3397 approved;
+> cumulative16 static holds, allfourstatic32837 approved. Fourth new held source was
+> not in the current canonical static bundle. Replacement chain explicit in catalog.
+> Recipe-v12 now predates these4holds; refreshv13 after rollout. Next07:08UTC check.
+
 > **06:28 UTC results:** reviewed lakh retry obeyed the new unit format but still
 > failed semantically (1602.85 included commission/allowances, expected gross-salary
 > subtotal 242.5); preserved files, no scope/tool failures. Remains rejected. README
