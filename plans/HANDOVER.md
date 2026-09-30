@@ -1,5 +1,27 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **LUNA UPDATE — 2026-09-30 04:41 UTC: new file/tree campaign authority.**
+> Workers69180/69181 now frozenruntime-v8, cap2/providerLuna/backoff/noGPU; previous
+>61176/61177 both finished current roots and stopped before either replacement.
+> Authority **runs/luna-file-tree-20260930/state.json**, monitor69128 completed.
+> Queues retain each worker's entire balanced predecessor queue (finished keys skip;
+> remaining Workflow roots finish first), then279/280new cost-balanced roots. Journals
+> deliberately remain balanced/worker-N/journal.jsonl, including copied old histories:
+> do not sum historical finish events across journals. Old result jobs retained in
+> explicit worker directories; newfile/tree jobs in new worker directories.
+> New559roots: CommitPack287visible-command file edits; TATQA251financial reducers with
+> evidence-scale-v2 prompts; TreeDST21tree edits. Canonicalquality-v4source/hash in
+> newcampaignmanifest; no source/evidence/gold/group changes. Six references accepted,
+> admitted and matched expected. All287CommitPack exact-file requests audited: visible
+> replacement defines edit, target/span provided, other files preserved; no hidden edits.
+> No student training/GPUeval/tests. Target final25%unique admitted reducer decisions
+> remains; raw case count/modality labels do not establish that finalshare.
+> Bonsai54068/v6 still largeFOLIO212, nearing3600sec; v7monitor62418 thenv8monitor67297
+> serialrollouts pending. Read source-aware audit hourly/folio-slow-212-audit when ready;
+> freshdecode/repeatedwork does not prove useful semantic progress. Nextfullhourcheck
+> remains hourly/check.json (~04:57UTC); keep monitoring/checkloop active.
+
+
 > **UPDATE — 2026-09-30 04:07 UTC: TATQA unit visibility holds/publication.**
 > Root verified3 additional defective scale contracts:13026d09... has million without
 > visible scale;36308f38... has thousand for zero without visible scale;2b89071f... has

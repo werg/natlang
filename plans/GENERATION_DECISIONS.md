@@ -954,3 +954,22 @@ Queue-v36 adds this1fresh retry ahead of2reviewedMuSiQue variants/filteredv34wor
 monitor66207 was still waiting for v7, with no rollout state/no worker signals; stopped
 that exact pending watcher before creatingv36, restarted67297. ActualBonsai54068/v6
 currentcase remains immutable; v7monitor62418 thenv8monitor67297 own serialboundaries.
+
+
+## 2026-09-30 04:41 UTC — continuing two Luna workers on audited file/tree reducers
+
+Prepared559source-backed roots from canonicaldirectory quality-v4:287CommitPack,
+251TATQA,21TreeDST. No quarantine/generation-held cases; sourcegold/evidence/group
+lineage preserved. TATQAuses newevidence-scale-v2 contract. Sixnative references match
+expected/accept/admit. CommitPack all287exact-file oracles audited againstvisible
+replacement requests, unique target/span, sourcefiles preserved: no hiddeneditgoal.
+Cost-balanced new279/280roots. Newqueues retain all old balancedkeys so finishedskip
+and remainingWorkflowcases complete first, avoiding lostwork/redundantgeneration.
+Coordinatedboundary rollout69128 moved old61176/61177 to69180/69181 on frozenv8;
+both oldsupervisors/children stopped before either replacement. Existingbalancedjournals
+retained, including duplicatedcarry-forward histories; sourcejobdirectoriesunchanged.
+Authority newfile/treecampaignstate; cap2/noGPU/backoff unchanged. This continues
+file/treecoverage toward25%final unique admitted decisions, not a rawrow targetclaim.
+Bonsai largeFOLIO212 remainsbounded3600sec, manyfreshreplies and repeatedwholebatch
+work; read-onlyLuna audit considers schema/retry/lifecycle causes, no prematureclaim
+that freshdecode is usefulprogress. V7thenV8 serialboundarymonitors remainauthority.
