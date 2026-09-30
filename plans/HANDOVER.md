@@ -1,3 +1,25 @@
+> **CURRENT — 2026-09-30 05:47 UTC: consolidated latest runtime rollout.**
+> Quantityunit auditcomplete: employee7.2million isbadsourceunit; fiveotherreviewed
+> share-countmagnitudeunitsaresupported. Goodwill123 versus61.5 remainswrongtotal
+> insteadaverage; dashzero/populationambiguity noted, noextra hold. Finalsourceholds
+> compiled/frozenruntime-v11. Directoryquality-v6/allfourstaticcounts3439/32879.
+> Rootstopped ONLY pending obsoleteBonsaimonitors77278(v10waiting predecessor)
+> and74250(v9waitingcurrentBonsai; itsLunarolloutsalreadycompletedandadvanced).
+> Verifiedexactcommands/noBonsainewPID/no v10state; no teachers/server signaled.
+> Supersessionproof hourly/runtime-v11-supersession.audit.json. Oldv9stateBonsaiwaiting
+> isnowarchived/superseded; DO NOT restartv9/v10watchers oruse themas liveauthority.
+> Newsoleboundarymonitor79671 owns allthree: Bonsai70991/v8/queue36 currentheld
+> FOLIO425 finishesnormally, thenDIRECT→v11/queue39; skips intermediatev9/v10.
+> Luna1already79716/v11/newluna-1.v11queue; Luna2still77384/v10 at recordedboundary
+> (read latestv11state forreplacement). Samecap2/provider/backoff/journals; Bonsai4.
+> Config/state/log/audit hourly/runtime-v11-rollout*. Sourcecampaignauthority
+> runs/luna-file-tree-20260930/state.json perworker. Latestqueues omitthreenewholds
+> andretaincleanmixedBonsaimembers; alloldIR/jobs/traces preserved, noin-flightedit.
+> Neweligible553file/treeroots:287CommitPack/245TATQA/21TreeDST. Quantityfilteraudit
+> hourly/tatqa-numeric-campaign/quantity-filter.audit.json. Recipe-v11 refreshsession
+>4548, latestv10 snapshot1905/1704 predateslast3holds; updateoncecomplete.
+> Continueactivehourlyloop; nextfullcheck~06:04UTC from hourly/check.json.
+
 > **05:43 UTC source-quality update:** Directorystaticquality-v6 now1296cases/
 >3439approveddecisions (10cumulativeheldcases); fourstatic32879approved. Three new
 > sourceholds: c9026c61... headcount7.2 wrongly labeledmillion by mixedstaffcost table;

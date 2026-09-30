@@ -1108,3 +1108,20 @@ Nextsnapshotneededafterholdbatch. Currenteligiblefile/tree553cases(287CommitPack
 TreeDSTcaseonlyChineseFood/Chinesefood differenceaudited; sourceexactmatchmetric
 isstrict andutteranceusesChinesefood, so no globalleafcasefold basedononefailure.
 Structuralname/collisionsemanticsandnumeric/nonlinguisticvaluesmustremainexact.
+
+
+## 2026-09-30 05:47 UTC — consolidate pending Bonsai rollouts
+
+Quantityunit auditindependentlyconfirmsemployeeunitdefect andfiveothershareunits
+supported. Noextra blanketunit holds. Frozenv11finalholds; newLunaqueuesomit3latest
+heldkeys, Bonsaiqueue39 removes3futureheldroots/preserves6cleanmixedbatchmembers.
+COURSE CHANGE: stop obsoletependingBonsaiv10watcher77278 thenv9watcher74250, after
+exactcommand/statechecks(v9Bonsaiwaiting/no newPID, v10nostate/predecessorwait).
+Teacher70991/v8currentcase andserverunchanged; alreadyadvancedLunateachersuntouched.
+Solev11monitor79671 nowownsall3currentboundaries, Bonsaidirectv8→v11/queue39,
+Lunav10→v11/latestfilteredqueues. Avoid2intermediateBonsairestarts/casewaits.
+Oldmonitorstatesretainedassupersededhistory, proof runtime-v11-supersession.audit.json.
+No journalfinishfabrication or interrupted modelwork; currentboundedheldroot finishes
+normalbudget andrawpartialpreserved. Newsource/queuefilesareimmutableindependent
+variants; samecaps/seeds/jobs/journals. Luna1new79716, Luna2pending77384 atinspection.
+Recipe-v11refreshstartedafterlatestholds; planningonly, no training/eval/tests.
