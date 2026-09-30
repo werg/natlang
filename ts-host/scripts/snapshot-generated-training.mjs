@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Discover completed native teacher jobs, retaining immutable inputs and an exclusion ledger.
 // Admission here selects candidates; native materialization and final split/token/dedup audits still apply.
-import {readdir, readFile, mkdir, stat, open, rename, writeFile} from 'node:fs/promises';
+import {readdir, readFile, mkdir, stat, open, link, unlink} from 'node:fs/promises';
+import {createReadStream, createWriteStream} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
+import {Readable, Transform} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
+import {createGzip} from 'node:zlib';
 import {parseArgs} from 'node:util';
 import {admitRow} from '../dist/teacher/curriculum.js';
 import {classifyAdmissionReasons} from './admission-dispositions.mjs';
@@ -48,7 +52,7 @@ for (const base of [join(repo,'runs'),join(repo,'data/teacher')]) for await (con
     selected.set(row.id,{item,mtime,model:row.provenance.model,family:p.curriculum.family});
   }else item.reasons=['superseded_eligible_trajectory_id'];
 }
-const nonce=randomUUID(), tmp=join(out,nonce+'.results.tmp'), stream=await open(tmp,'wx'), hash=createHash('sha256'), programs=new Set();
+const nonce=randomUUID(), tmp=join(out,nonce+'.results.jsonl.gz.tmp'), contentHash=createHash('sha256'), compressedHash=createHash('sha256'), programs=new Set();
 for(const item of ledger)if(item.reasons.includes('superseded_eligible_trajectory_id')){
   const kept=selected.get(item.id).item;
   item.replacement={file:kept.file,sha256:kept.sha256};
@@ -62,23 +66,40 @@ for(const item of ledger){
   if(item.dispositions.some(d=>d.category==='candidate_failure'))
     item.dpo_next_action='Requires an approved replacement at the same prompt and current-runtime in-place failure proof; this hold is not itself a negative label.';
 }
-try{
+async function* selectedLines(){
   for(const [id,c] of [...selected].sort(([a],[b])=>a.localeCompare(b))){
     const bytes=await readFile(c.item.file);
     if(createHash('sha256').update(bytes).digest('hex')!==c.item.sha256)throw Error('Completed artifact changed during snapshot: '+c.item.file);
-    const line=JSON.stringify(JSON.parse(bytes))+'\n';await stream.writeFile(line);hash.update(line);programs.add(c.item.program_id);
+    const line=JSON.stringify(JSON.parse(bytes))+'\n';programs.add(c.item.program_id);
     bump(summary.by_model,c.model??'unknown');bump(summary.by_family,c.family??'unknown');
+    yield line;
   }
-  await stream.sync();
-}finally{await stream.close();}
-const digest=hash.digest('hex'), path=join(out,digest+'.results.jsonl');
+}
+const contentDigest=new Transform({transform(chunk,encoding,callback){contentHash.update(chunk);callback(null,chunk);}});
+const compressedDigest=new Transform({transform(chunk,encoding,callback){compressedHash.update(chunk);callback(null,chunk);}});
+await pipeline(Readable.from(selectedLines()),contentDigest,createGzip(),compressedDigest,createWriteStream(tmp,{flags:'wx'}));
+const completed=await open(tmp,'r+');
+try { await completed.sync(); } finally { await completed.close(); }
+const contentSha256=contentHash.digest('hex'), digest=compressedHash.digest('hex'), path=join(out,digest+'.results.jsonl.gz');
 if(JSON.stringify(admissionPolicy)!==JSON.stringify(await policyIdentity()))throw Error('Admission policy changed during inventory; rerun snapshot.');
-// Same digest means same immutable bytes. A repeated inventory can safely reuse them.
-await rename(tmp,path);
+// Publish without replacing any existing immutable snapshot.
+try { await link(tmp,path); }
+catch(error) {
+  if(error.code!=='EEXIST') throw error;
+  const existingHash=createHash('sha256');
+  for await(const chunk of createReadStream(path)) existingHash.update(chunk);
+  if(existingHash.digest('hex')!==digest) throw Error('Existing snapshot path has unexpected bytes: '+path);
+}
+await unlink(tmp);
 summary.selected_trajectories=selected.size;summary.unique_programs=programs.size;
 const ledgerPath=join(out,nonce+'.ledger.jsonl');
 summary.repeated_eligible_trajectory_ids=summary.eligible_files-selected.size;
-const manifest={version:'natlang.generated_training_snapshot/1',time:new Date().toISOString(),selection:'Explicit teacher role, train split, current IR and admission; latest eligible artifact per trajectory ID',admission_policy_identity:admissionPolicy,final_training_audited:false,results:{path,sha256:digest},ledger:ledgerPath,summary};
-await writeFile(ledgerPath,ledger.map(x=>JSON.stringify(x)+'\n').join(''),{flag:'wx'});
-await writeFile(join(out,nonce+'.manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
+const manifest={version:'natlang.generated_training_snapshot/2',time:new Date().toISOString(),selection:'Explicit teacher role, train split, current IR and admission; latest eligible artifact per trajectory ID',admission_policy_identity:admissionPolicy,final_training_audited:false,results:{path,sha256:digest,content_sha256:contentSha256,encoding:'gzip'},ledger:ledgerPath,summary};
+async function writeDurableExclusive(path,content){
+  const staging=`${path}.${randomUUID()}.tmp`,handle=await open(staging,'wx');
+  try { await handle.writeFile(content); await handle.sync(); } finally { await handle.close(); }
+  try { await link(staging,path); } finally { await unlink(staging); }
+}
+await writeDurableExclusive(ledgerPath,ledger.map(x=>JSON.stringify(x)+'\n').join(''));
+await writeDurableExclusive(join(out,nonce+'.manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 console.log(path);

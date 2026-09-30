@@ -1303,3 +1303,11 @@ Eleven source-specific holds centrally published and directory staticquality-v15
 ### 2026-09-30T09:22:07.154913+00:00 — hourly current inventory
 
 Read-only health report joins exact304nextIRdigests and canonicaljournals;246uniquecompleted origins,102rawaccepted/144rejected,98current-native candidates. Zero new noncomplete finishes since08:13:19; zero futureheldroots (66heldqueueoccurrences allfinished). No urgentruntime rollout for11newholds. Recipe-v19 refreshedonce thishour,2473selectedtrajectories/2020programs, allfourstatic32693approved/6176cases, priorlegacyrefs explicitlyretained. Finalstudentadmission remainspending, no training. Next10:17:18UTC.
+
+## 2026-09-30T09:43:36.988517+00:00 — complete source coverage, narrow holds and compressed snapshots
+
+Full 282-case MuSiQue source audit finished; 84 review flags require root adjudication. Root requested a second question-consistency pass after spotting county-versus-county-seat and ocean-versus-atoll conflations. Natural band “born” wording and routine background links do not automatically justify holds. Four independently source-read contradictions/relation mismatches are held centrally and in static quality-v16 (1246 cases/3249 approved decisions; 60 cumulative holds). Golds/originals preserved; no DPO negatives. Recipe19 stale.
+
+Future generated snapshots use gzip with immutable compressed-byte SHA and uncompressed content SHA (manifest/2); old plain artifacts remain readable and unchanged. Shared streaming reader covers admission, materializer, handoff/DPO and static inputs. Writer fsyncs gzip, ledger and manifest; publishes manifest last atomically. Actual saved native row yielded identical admission and materialized decision; malformed/truncated gzip rejected. Syntax checked, no tests/full snapshot or provider calls. This prevents repeated approximately2.5GiB plain snapshot growth.
+
+Both Luna queues completed normally; old authorities are recorded as completed, Bonsai stays active. Preparing two source-qualified article-title filename pilot variants in separate queues for existing Luna slots. No extra worker, no existing queue mutation, no frozen runtime mutation.

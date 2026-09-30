@@ -4,8 +4,7 @@
 // The ledger holds one admission per row with its concrete rejection reasons; coverage by family,
 // slice, domain, mode, inline use, and turn count is printed and written beside the ledger.
 import { writeFile } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { writeAtomic } from '../../dist/teacher/collector.js';
 import { parseArgs } from 'node:util';
 import { admitRow, callName, coverage, openingLength } from '../../dist/teacher/curriculum.js';
@@ -38,10 +37,7 @@ const admissions = [];
 const writtenIds = new Set();
 async function* admittedRows() {
   for (const path of positionals) {
-    const input = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
-    for await (const line of input) {
-      if (!line.trim()) continue;
-      const row = JSON.parse(line);
+    for await (const row of jsonlRows(path)) {
       if (!row.task?.program_ir?.curriculum) continue;
       const item = admitRow(row);
       // Automatic historical snapshots can overlap explicitly supplied exports.

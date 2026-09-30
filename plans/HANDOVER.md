@@ -1,3 +1,19 @@
+> **2026-09-30T09:43:36.988517+00:00 source/storage update.** Full included MuSiQue audit282/282
+> completed,198pass/84review flags; question-consistency correction underway.
+> Flags are not holds. Root confirmed four more cases: Ålanders wished but never
+> rejoined Sweden; separate Law & Order series; two song-subject/video-rumor chains.
+> Central + staticquality-v16:1246cases/3249approved,60cumulativeholds. Catalog
+> replacements recorded, recipe19 now stale; no training. Frozenv19 untouched.
+> Both Luna queues completed normally through index151; oldPIDs111689/110834
+> absent, state queue_completed. Bonsai110507 live. Two title-path pilot variants
+> being prepared for existing two Luna slots; do not restart exhausted queues.
+> Future snapshots now gzip, stream readers plain/gzip, compressed/content hashes,
+> fsynced data+ledger and atomic manifest-last publication. Tiny actual native-row
+> admission/materialization equivalence and bad-gzip fail-closed audited; syntax
+> passes. No fullsnapshot yet; preserve all old artifacts. About13GiB free.
+> Title filename helper remains standalone pending rootreview, no builder wiring.
+> Next scheduled full health10:17:18UTC; continue active hourly loop.
+
 > **2026-09-30T09:22:07.154305+00:00 hourly check/recipe current.**
 > Exactlive Luna111689/110834+Bonsai110507/v19 confirmed. Since08:13:19 zero
 > noncomplete finishes. Nextpool246unique digestjoined results:102rawaccepted/

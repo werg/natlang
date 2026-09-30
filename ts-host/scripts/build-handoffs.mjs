@@ -8,9 +8,8 @@
  *
  * Run the output with the collector like any IR file; build-preference-pairs.mjs turns the accepted runs into pairs.
  */
-import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from './jsonl-stream.mjs';
 import { parseArgs } from 'node:util';
 import { retiredFamily } from '../dist/teacher/curriculum-policy.js';
 import { quarantineReason, runtimeFailureReason, trainingQualityReason } from '../dist/teacher/curriculum-policy.js';
@@ -26,9 +25,7 @@ export const replayOptions = provenance => ({ systemPrompt: TOOLS_PROMPT, contex
 
 export async function* rowsOf(paths) {
   const seen = new Set();
-  for (const path of paths) for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) {
-    if (!line.trim()) continue;
-    const row = JSON.parse(line);
+  for (const path of paths) for await (const row of jsonlRows(path)) {
     if (row.version !== 'natlang.teacher_trajectory.native/1' || seen.has(row.id)) continue;
     seen.add(row.id);
     // A hinted case is handed over and trained without its hint, as admission trains hinted runs.
