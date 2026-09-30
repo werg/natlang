@@ -71,6 +71,25 @@ def main():
     STATE = Path(config['state'])
     from scripts.freeze_training_runtime import tree_identity
     assert tree_identity(RUNTIME) == json.loads((RUNTIME / 'frozen-runtime.json').read_text())['files']
+    predecessor = config.get('predecessor_rollout_state')
+    if predecessor:
+        deadline = time.monotonic() + 7200
+        while time.monotonic() < deadline:
+            try:
+                prior = json.loads(Path(predecessor).read_text())
+            except (FileNotFoundError, json.JSONDecodeError):
+                prior = []
+            if prior and all(item.get('phase') == 'running' for item in prior):
+                by_name = {item['name']: item for item in prior}
+                for worker in workers:
+                    previous = by_name[worker['name']]
+                    if previous['queue'] != worker['old_queue']:
+                        raise RuntimeError('Predecessor queue does not match the expected old queue')
+                    worker['old_pid'] = previous['new_pid']
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError('Predecessor rollout did not finish; no supervisors were signaled')
     if config.get('journal_sources'):
         if not config.get('restart_barrier'):
             raise RuntimeError('Journal migration requires a coordinated stop barrier')

@@ -897,3 +897,25 @@ Three fresh rejects are two outcome-judgment mistakes and one incomplete-reading
 no new source holds/schema/runtime errors. Recipe-v7 planning snapshot1,638selected
 trajectories/1,481programs, canonical static decisions32,969, no included blockers or
 missing defaults. Student rendering/token/group/dedup/final25%-mix still pending.
+
+
+## 2026-09-30 04:07 UTC — source unit visibility and explicit filtered carry-forward
+
+Luna's254-case TATQA audit found209 nonempty golds with visible matching unit cues,
+two without explicit scale, and one empty gold conflicting with explicit target units.
+Root read all three full tables/notes and confirmed: unbilled receivables13026d09...
+million notrecoverable; zero cashdeposit difference36308f38... thousand notrecoverable;
+netcash difference2b89071f...376.2 has explicit millions but blankgold. Added narrow
+source holds, preserving annotations/evidence and excluding scale-only DPO labels.
+The earlier103.1weightedshares case has no unit and blankgold agrees, so model-invented
+million remains a real unsupported inference. No global missing-unit default yet.
+
+Published quality-v4 directory static after full retained admission/hash verification:
+1,302cases/3,495approved decisions,1,030existingexcluded decisions;3new holds/4cumulative.
+Prior quality-v3b manifest/files retained; catalog3b→4 chain. All4static32,935approved.
+Recipe-v8 no omissions/blockers; snapshot1,676trajectories/1,519programs, planningonly.
+Queue-v34 removes3futureheld TATQAroots while retaining9clean mixed-batch members/current.
+Frozenv8 includes holds/loop fix. V8monitor65189 waits for v7monitor62418 rollout, checks
+expected predecessor queue, obtains exact new PID, then waits another journaledboundary.
+No active queue/runtime mutation or overlapping supervisors. Helper predecessor wait is
+bounded2hours and fails without signaling if incomplete. New audits/originalfiles retained.

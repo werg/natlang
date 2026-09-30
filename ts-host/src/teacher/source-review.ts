@@ -11,6 +11,21 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'tatqa', id: '13026d09-600d-4268-8f3a-9521bec907c4', aliases: [],
+    text: 'What are the average unbilled receivables from 2018 to 2019?',
+    annotatedLabel: '176.45 million', status: 'pending',
+    reason: 'Visible table gives $183.5 and $169.4 and notes give other monetary values without any magnitude unit. Their average176.45 is recoverable, but gold million is not supported by supplied evidence. Preserve source gold pending recovery of independently sourced unit context; neither blank nor million should become a preference negative.',
+  },
+  { dataset: 'tatqa', id: '36308f38-3fc0-4fd2-93c7-c5493a2a9eb9', aliases: [],
+    text: 'What is the difference in the Level 2 and 3 cash on deposit as of September 2019?',
+    annotatedLabel: '0 thousand', status: 'pending',
+    reason: 'Visible Level2/3 cash-on-deposit cells are $- and $-, with no magnitude unit in table or notes. Zero is recoverable but cannot establish the annotated thousand scale. Preserve gold and hold until independent source unit context is available; no preference negative from scale alone.',
+  },
+  { dataset: 'tatqa', id: '2b89071f-451c-45df-96e9-e204efb03d38', aliases: [],
+    text: 'What was the difference in net cash provided by operating activities in 2019?',
+    annotatedLabel: '376.2 with empty scale', status: 'pending',
+    reason: 'Target table header explicitly says in millions; net cash is377.1 versus0.9, and a note names377.1 million for fiscal2019. Difference376.2 retains that unit, conflicting with the empty gold scale. Preserve original annotation and hold pending independent source/oracle clarification; do not penalize a supported million answer.',
+  },
   { dataset: 'folio', id: 'story:395', aliases: ['folio:story:395', 'story395'],
     text: 'Political-attribute premises and eight conclusions about a U.S. government official.',
     annotatedLabel: 'C1 unknown; C2 entailed; C3 contradicted; C4 entailed; C5 contradicted; C6 unknown; C7 unknown; C8 contradicted',

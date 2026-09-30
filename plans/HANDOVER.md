@@ -1,5 +1,26 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **UPDATE — 2026-09-30 04:07 UTC: TATQA unit visibility holds/publication.**
+> Root verified3 additional defective scale contracts:13026d09... has million without
+> visible scale;36308f38... has thousand for zero without visible scale;2b89071f... has
+> blank despite explicit target in-millions header/note. Golds retained/source held;
+> bc012d28... remains model-error (unsupported inferred million, no source hold).
+> Full254-case audit hourly/tatqa-scale-visibility-audit. Directory static quality-v4
+> published:1,302cases/3,495approved decisions/1,030existing excluded decisions;3 newly
+> held,4 cumulative across revisions. Four static bundles32,935approved decisions.
+> Catalog replacement chain3b→4 preserves prior data. Recipe-v8 planning snapshot
+>1,676generated trajectories/1,519programs; no omissions/included blockers. Final
+> student rendering/token/group/dedup/25%-mix still pending.
+> Bonsai v7 monitor62418 still awaits current54068 boundary; **v8 monitor65189 waits
+> for v7 rollout state to complete**, then resolves exact new PID and moves it at
+> another case boundary onto frozenruntime-v8/queue-v34. Queue-v34 removes3 future
+> defective TATQA roots, preserves9 clean roots from mixed batches and current root.
+> Read BOTH monitor states before any manual action; neither overlaps collectors.
+> No global scale prompt default added while source conventions remain disputed.
+> Narrow reviewed MuSiQue aliases/independent retry variants being prepared; raw
+> historical rejects remain unchanged and excluded from preference negatives.
+
+
 > **CURRENT — 2026-09-30 03:56 UTC; supersedes earlier process/snapshot details.**
 > Bonsai54068 remains queue-v33/runtime-v6, cap4/server4, GPU98–99%. Boundary
 > monitor62418 awaits current handoff:392:train-v32:0 before moving onto frozen
