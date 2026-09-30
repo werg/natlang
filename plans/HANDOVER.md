@@ -11,14 +11,18 @@
 > Catalog replacement chain3b→4 preserves prior data. Recipe-v8 planning snapshot
 >1,676generated trajectories/1,519programs; no omissions/included blockers. Final
 > student rendering/token/group/dedup/25%-mix still pending.
-> Bonsai v7 monitor62418 still awaits current54068 boundary; **v8 monitor65189 waits
+> Bonsai v7 monitor62418 still awaits current54068 boundary; **v8 monitor66207 waits
 > for v7 rollout state to complete**, then resolves exact new PID and moves it at
-> another case boundary onto frozenruntime-v8/queue-v34. Queue-v34 removes3 future
+> another case boundary onto frozenruntime-v8/queue-v35. Queue-v34 removes3 future
 > defective TATQA roots, preserves9 clean roots from mixed batches and current root.
 > Read BOTH monitor states before any manual action; neither overlaps collectors.
 > No global scale prompt default added while source conventions remain disputed.
-> Narrow reviewed MuSiQue aliases/independent retry variants being prepared; raw
-> historical rejects remain unchanged and excluded from preference negatives.
+> Two reviewed MuSiQue aliases are implemented with exact primary gold, source snapshot
+> and evidence-file hashes. New distinct-ID variants preserve visible prompts/golds.
+> Four native audits accepted both primary/alias answers (audit-only, no training rows).
+> Queue-v35 adds2 independent fresh Bonsai retries before v34; frozenv8 handles their
+> standard oracle.alternates. Pending v8 monitor65189 was stopped before predecessor
+> finished or any v8 worker launched, replaced by66207. Historical rejects stay held.
 
 
 > **CURRENT — 2026-09-30 03:56 UTC; supersedes earlier process/snapshot details.**

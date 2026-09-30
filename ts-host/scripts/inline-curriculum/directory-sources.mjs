@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
+import { reviewedMusiqueAliasFor } from './musique-reviewed-aliases.mjs';
 
 export const SOURCE_ADAPTER_VERSION = 'natlang.directory_source_adapter/1';
 export const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -48,6 +49,35 @@ export function sourceCase({ source, info, sourceId, group, task, files, expecte
   record.external_source = { source, source_id: sourceId, original_split: info.original_split,
     revision: info.revision ?? null, snapshot_sha256: info.sha256, license,
     files: info.files, adaptation };
+  return record;
+}
+
+/** Reusable adapter for future builds and reviewed variants cloned from historical IR. */
+export function applyReviewedMusiqueOracleAlias(record) {
+  if (record.source !== 'musique') return record;
+  const review = reviewedMusiqueAliasFor({
+    sourceId: record.external_source?.source_id ?? record.source_ids?.[0],
+    snapshotSha256: record.external_source?.snapshot_sha256,
+    primary: record.semantics?.expected,
+    files: record.semantics?.folder_files,
+  });
+  if (!review) return record;
+  if (record.id.endsWith(':reviewed-alias-v1')) {
+    if (!record.semantics.oracle?.alternates?.includes(review.accepted) ||
+        record.generation?.oracle_review?.registry !== review.audit.registry)
+      throw new Error(`reviewed_musique_alias_variant_contract_mismatch:${review.audit.source_id}`);
+    return record;
+  }
+
+  const oracle = record.semantics.oracle;
+  if (!oracle || typeof oracle !== 'object' || !Array.isArray(oracle.alternates))
+    throw new Error(`reviewed_musique_alias_oracle_contract_missing:${review.audit.source_id}`);
+  record.semantics.oracle = { ...oracle,
+    alternates: [...new Set([...oracle.alternates, review.accepted])] };
+  const audit = { ...review.audit, base_ir_id: record.id, variant: 'reviewed-alias-v1' };
+  record.id = `${record.id}:reviewed-alias-v1`;
+  record.generation = { ...record.generation, oracle_review: audit };
+  record.external_source = { ...record.external_source, oracle_review: audit };
   return record;
 }
 
@@ -205,6 +235,7 @@ return result;`;
           // equivalence, and partial span agreement is held by the training quality gate.
           oracle: { level: 'normalized', alternates: row.answer_aliases ?? [] },
           adaptation: 'original-train-question; all supplied paragraphs; no generated evidence' });
+        applyReviewedMusiqueOracleAlias(record);
         record.source_groups.push(...(row.question_decomposition ?? []).map(q => `musique:seed:${q.id}`));
         record.source_groups.push(...row.paragraphs.map(p => `document:${digest([p.title, p.paragraph_text])}`));
         return record;

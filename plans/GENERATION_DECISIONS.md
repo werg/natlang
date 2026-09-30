@@ -919,3 +919,22 @@ Frozenv8 includes holds/loop fix. V8monitor65189 waits for v7monitor62418 rollou
 expected predecessor queue, obtains exact new PID, then waits another journaledboundary.
 No active queue/runtime mutation or overlapping supervisors. Helper predecessor wait is
 bounded2hours and fails without signaling if incomplete. New audits/originalfiles retained.
+
+
+## 2026-09-30 04:13 UTC — reviewed MuSiQue aliases and independent fresh variants
+
+Two exact source/evidence-scoped oracle allowances: source4hop1__205937_144938_83779_69861
+accepts North Korea and China alongside original North Korean-Chinese forces; source
+3hop1__478606_751065_78953 accepts Western Europe alongside original north-westerncoast
+answer. Both are explicitly supported by supplied articles and suitable for the actual
+question. Registry matches exact primary gold, original snapshot and full evidencefile
+hashes/text; drift fails closed. No general token overlap/fuzzy matching. Futureadapter
+and historicalIRclones share applyReviewedMusiqueOracleAlias, distinct :reviewed-alias-v1
+IDs and reviewprovenance; visibleprompt, inputs, primarygold/reference preserved.
+Four actual native audit replays accepted bothprimary andalias returns. Audit records
+are not training; raw failed original trajectories remain unchanged/reviewheld.
+Queue-v35 prepends2 fresh independent Bonsai variants with newseeds/jobs,2400sec limits
+and existingcap4, then preserves filteredv34work. V8monitor65189 still awaitedv7 and had
+not initialized/signaled a worker: stopped that exactpending monitor, preparedv35,
+restarted66207. No live queue mutation. V7monitor62418 still owns currentboundary;
+66207 waits predecessorcompletion, derivesexactnewPID, then uses nextboundary.
