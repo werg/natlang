@@ -1333,3 +1333,13 @@ Exact source/prompt/full-base-digest/evidence pinned Iowa adapter adds21,21years
 Root approved supervisor output-accounting/2: exact frozen-native IR digests, matching saved terminal rows and merged export, batch manifest/hash/source/count checks required for complete. Explicit frozen-policy holds can skip on normal exit only; hard timeouts/inactivity remain failures. Only incomplete partials trigger log scanning. Saved accepted/rejected terminal rows pass; missing15turn partial fails. Syntax/native saved-artifact audits run, no tests. Running Bonsai process unchanged; next new supervisors use fix.
 
 Root found original missing MuSiQue question asks which foreign group but gold380 is year. Original now source-held, rawpartial/history retained. Staticquality-v19:1233cases/3236approved,73cumulativeholds; allsourcecatalog replacements recorded. Preparing fresh distinct explicityear question, not original trajectory migration. Recipe20 stale after this1hold; refresh21 after hourly audit.
+
+## 2026-09-30 10:53 UTC — exact numerical contracts, durable gates and failure visibility
+
+Exact-input computational outputs remain exact; no target injection or generic numeric tolerance. Judgment-derived scores would require a separately declared bounded contract. Reviewed minimum-age aliases preserve the same exact age, rather than changing the target.
+
+Root reviewed and committed bd7bffd: joint training requires current inventory-policy hashes and a version-2 mix report bound to exact ready corpus, token-audit manifest, renderer and audit code. Mandatory gate arguments follow caller overrides. Resume identity includes gate hashes; stale reports fail closed. Existing unbound mix analysis remains available. Reducer25% is a minimum gate, not a balancing sampler. No tests or training run.
+
+Fresh clarified SciFact and explicit-year MuSiQue derivatives completed with SUPPORT/380 and seven admitted decisions total. Malformed originals remain held; no trajectory migration across changed prompts.
+
+Read-only DPO carryflow audit found rejected teacher attempts absent from default pair discovery: positive snapshot selection excludes them, and ledger next-action text is advisory. Authorised narrow separate failure-candidate inventory implementation; retain causal/same-prompt/approved-positive pair gates, no automatic negatives. Delegation audit must inspect actual NL child invocation evidence, not only top-level delegate actions.

@@ -1,3 +1,16 @@
+## Current authority — 2026-09-30 10:53 UTC
+
+- Bonsai PID **110507** is running frozen runtime-v19 with four concurrent requests/server slots. Its last journal completion was followed by a new start; generation is progressing. This process imported the older supervisor; use output-accounting/2 at the next natural campaign boundary.
+- Both Luna source-derived jobs finished successfully: clarified SciFact claim returned SUPPORT (2 admitted decisions), explicit MuSiQue year question returned 380 (5). These are new cases with new teacher runs; the malformed originals remain held. No Luna generation worker is currently live. Preparing two queues of up to 12 source-qualified title-path cases each; review before launch.
+- Last full health checkpoint: **10:24:31.182 UTC**; next due **11:24:31.182 UTC**. Evidence: `runs/generation-check-20260930-hourly/hourly-health-1017/health-2026-09-30T102431182Z.json`. Disk free now about **9.7 GiB**; preserve originals and use compressed snapshots.
+- Four current static bundles contain **6,159 cases / 32,676 approved decision IDs**. Directory quality-v19 has 73 cumulative holds. Recipe-v20 is stale: refresh after the pending failure-inventory integration, carrying all four static bundles, both legacy reference sets, approved minimum-age migration and the two new teachers.
+- Joint training now requires a hash-bound version-2 reducer mix audit and current policy/inventory readiness; checkpoint identity includes gate hashes (commit `bd7bffd`). **25% is a minimum admission gate**, not an exact sampling share. Final student rendering, token budgets, source-group splits and deduplication remain required; no training has run.
+- Exact numerical computation remains exact. The reviewed minimum-age migration accepts equivalent expressions of 21 only, with wrong ages rejected. No numerical target injection or general tolerance is enabled.
+- DPO audit found rejected attempts are omitted from the positive-only snapshot and automatic pair discovery. A separate durable failure-candidate lane is being implemented. Candidates require approved repairs and existing same-prompt, current-runtime causal checks before becoming pairs; source-held outcomes are not negatives.
+- Delegation distribution audit is still underway. Counting explicit top-level delegate calls alone misses child NL calls inside evaluation; do not report zero delegation from that measure.
+
+### Historical updates (newest first; current authority above supersedes stale counts)
+
 > **2026-09-30 10:17 UTC current policy/accounting.** Supervisor output-accounting/2
 > rootapproved in scripts/run_bonsai_queue.py; newinvocations validateexactnative
 >embeddedIR/exportrows/manifest/sourcehash beforecomplete; explicitpolicy skips
