@@ -89,7 +89,7 @@ export function invokeDefinition(frame: Frame, definition: CallableDefinition, p
   options: InvokeOptions = {}): Promise<unknown> {
   const call = runDefinition(frame, definition, positional, options);
   call.catch(() => {});
-  return frame.task.track(call);
+  return frame.task.track(call, frame.parentCallId);
 }
 
 async function runDefinition(frame: Frame, definition: CallableDefinition, positional: unknown[],
@@ -237,6 +237,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
     for (const transaction of extraTransactions) if (transaction.open) transaction.abort();
     throw error;
   } finally {
+    await task.drainChildren(callId);
     task.record({ callId, parentCallId: frame.parentCallId ?? null, taskId: task.id, definitionId: definition.id,
       name: definition.name, outcome, detail, adaptation: adaptationProvenance, events: runtime.trace.events as Record<string, unknown>[] });
     environment.close();

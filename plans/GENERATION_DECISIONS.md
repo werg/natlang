@@ -973,3 +973,50 @@ file/treecoverage toward25%final unique admitted decisions, not a rawrow targetc
 Bonsai largeFOLIO212 remainsbounded3600sec, manyfreshreplies and repeatedwholebatch
 work; read-onlyLuna audit considers schema/retry/lifecycle causes, no prematureclaim
 that freshdecode is usefulprogress. V7thenV8 serialboundarymonitors remainauthority.
+
+
+## 2026-09-30 05:04 UTC — scoped child lifetime and useful partial telemetry
+
+Slow FOLIO212 timed out at3610sec after109fresh replies/72623completiontokens.
+Old partials lack tool observations/call IDs, so exact orphan-response counts cannot
+be recovered. Code inspection found a real amplification hazard: Promise.all first
+rejection let sibling NL calls survive while the parent started another batch.
+Track children by caller ID; drain the current invocation's cohort with allSettled
+before eval releases locals or invocation closes its environment. Nested children
+settle transitively, original errors preserved; no global drain or blanket cancellation.
+BREAKING: successful eval with still-pending unawaited NL calls now settles them then
+returns a clear await-all error before snapshot/coercion/commit. External child effects
+are not claimed rolled back. Runtime contract18 prevents old checkpoint reuse under
+new semantics. Existing admitted positives are not blanket held by version alone.
+Node build passed; actual source referenceRow172/182/212 parallel batches accepted
+(8/5/8turns). Audit summaries only; no training rows/provider/GPU calls/unit tests.
+Old failed partial cannot faithfully replay, so failure-path verification is limited.
+Partials now add invocation ID, request/observation timestamps and bounded2000-char
+last tool output preview/hash, without changing request hashes or model context.
+
+05:00 full inspection: Bonsai70991 on frozenv8/queue36, cap4/server4/GPU99%; both
+serial v7/v8 rollouts completed. Luna69180/69181 on frozenv8, two provider workers
+continue new559file/tree roots after priorWorkflowkeys.96completed/69accepted/27
+rejected at inspection; raw run counts, not final admitted/deduplicated mix. Generic
+TATQA scale retry accepted103.1/blank; reviewed western-Europe retry accepted;
+NorthKorea-and-China question returned only NorthKorea and still failed (no broad
+relaxation). Current source/FOLIO425 wording and fresh Luna failures under review.
+
+
+## 2026-09-30 05:09 UTC — narrow FOLIO425 hold and runtime-v9 boundary rollout
+
+Independent sourceaudit confirmed pinnedFOLIO425 HaveCars→Drive abstraction absent
+from visible chooses-to-drive wording; explicit choice/action countermodels invalidate
+English-only certainty onC3-C6. Central pending sourcehold includes historical variants
+and prevents falseDPO negatives; golds preserved, no globalFOLIO interpretation change.
+All4canonicalstaticbundles containzero425rows, so no static republish. Root audited
+actual queue ranges:6future single roots held pluscurrent425root preserved untilboundary.
+Queue37 preserves361otherentries; originalqueue36 retained. Agent initial explicitkey/
+limitedrange count missed these roots, superseded by root queue.audit.json.
+Frozenv9 includes childdrain/telemetry/contract18/sourcehold. Exact-PID boundarymonitor
+74250 owns Luna69180/69181 andBonsai70991 independently, samejournals/caps; Bonsai
+nextqueue37. No in-flight runtime/queue mutation. Initial shell background launch did
+not survive/initialize; verified no monitorstate, then detachedPopen74250 started.
+
+Recipe-v9 refresh completed: 1851 selected generated trajectories/1674 programs, no missing default inputs/included quality blockers; static approved decisions remain32935. Planning snapshot, not final training export.
+Luna runtime-v9 boundary rollout completed: worker1 PID74281, worker2 PID74312; authority/check updated. Bonsai70991 still awaiting currentcase boundary under monitor74250.

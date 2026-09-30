@@ -11,6 +11,12 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'folio', id: 'story:425', aliases: ['folio:story:425', 'story425'],
+    text: 'Car owners choose to drive; James has a car or works for Meta.',
+    annotatedLabel: 'C1 unknown; C2 unknown; C3 contradicted; C4 entailed; C5 entailed; C6 contradicted',
+    status: 'pending',
+    reason: 'Released FOL conflates choosing to drive with actual driving (HaveCars implies Drive), but this mapping is absent from visible English. Separate choice/action predicates admit countermodels to C3-C6. Preserve source gold and hold this story pending a visible stipulated abstraction or independent source clarification; do not train preference negatives on the disputed reading.',
+  },
   { dataset: 'tatqa', id: '13026d09-600d-4268-8f3a-9521bec907c4', aliases: [],
     text: 'What are the average unbilled receivables from 2018 to 2019?',
     annotatedLabel: '176.45 million', status: 'pending',

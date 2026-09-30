@@ -128,7 +128,7 @@ export function jobKey({ index, record }: IndexedRecord): string {
 
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
-    runtime: 'typescript-native', runtime_contract_version: 17, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
+    runtime: 'typescript-native', runtime_contract_version: 18, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
     file_content_comparison_version: FILE_CONTENT_COMPARISON_VERSION,
     counter_loop_policy_version: 2,
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
@@ -400,7 +400,9 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
     raw_response_sha256: raw ? sha256(canonical(raw)) : null };
 }
 
-type PartialTurn = { request_sha256: string; response: ModelTurn };
+type PartialTurn = { request_sha256: string; response: ModelTurn; invocation_id?: string;
+  requested_at?: string; observed_at?: string;
+  last_tool_observation?: { content_preview: string; content_sha256: string; truncated: boolean } };
 type PartialJob = { version: string; program_id: string; provenance: Record<string, unknown>; turns: PartialTurn[] };
 
 async function loadPartial(path: string, item: IndexedRecord,
@@ -593,6 +595,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+      const requestedAt = new Date().toISOString();
       const requestSha256 = sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id"))));
       const recorded = unused.get(requestSha256)?.shift();
       const place = placeOf(request), replayed = handoff?.prefix[place.call]?.[place.nth];
@@ -601,7 +604,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         response = structuredClone(recorded.response);
       } else {
         const persist = async (turn: ModelTurn) => {
-          partial.turns.push({ request_sha256: requestSha256, response: structuredClone(turn) });
+          const last = request.messages.at(-1) as { role?: unknown; content?: unknown } | undefined;
+          const observation = last?.role === 'tool' && typeof last.content === 'string' ? {
+            content_preview: last.content.slice(0, 2000), content_sha256: sha256(last.content),
+            truncated: last.content.length > 2000 } : undefined;
+          partial.turns.push({ request_sha256: requestSha256, response: structuredClone(turn),
+            ...(request.invocation_id ? { invocation_id: request.invocation_id } : {}),
+            requested_at: requestedAt, observed_at: new Date().toISOString(),
+            ...(observation ? { last_tool_observation: observation } : {}) });
           // Serialize atomic snapshots; an older concurrent write must never finish last.
           journalWrites = journalWrites.then(() => writeAtomic(partialPath, JSON.stringify(partial) + '\n'));
           await journalWrites;

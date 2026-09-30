@@ -88,7 +88,34 @@ export class NatlangTask {
   readonly programView: ProgramView;
   readonly moduleInstances = new WeakMap<import('./loader.js').ModuleRecord, { exports: Record<string, unknown>; ready: boolean }>();
   private readonly pending = new Set<Promise<unknown>>();
-  track<T>(call: Promise<T>): Promise<T> { this.pending.add(call); call.finally(() => this.pending.delete(call)).catch(() => {}); return call; }
+  private readonly pendingChildren = new Map<string, Set<Promise<unknown>>>();
+  track<T>(call: Promise<T>, parentCallId?: string): Promise<T> {
+    this.pending.add(call);
+    if (parentCallId) {
+      let children = this.pendingChildren.get(parentCallId);
+      if (!children) this.pendingChildren.set(parentCallId, children = new Set());
+      children.add(call);
+    }
+    call.finally(() => {
+      this.pending.delete(call);
+      if (parentCallId) {
+        const children = this.pendingChildren.get(parentCallId);
+        children?.delete(call);
+        if (children?.size === 0) this.pendingChildren.delete(parentCallId);
+      }
+    }).catch(() => {});
+    return call;
+  }
+  async drainChildren(parentCallId: string): Promise<void> {
+    while (true) {
+      const children = this.pendingChildren.get(parentCallId);
+      if (!children?.size) return;
+      await Promise.allSettled([...children]);
+    }
+  }
+  hasPendingChildren(parentCallId: string): boolean {
+    return (this.pendingChildren.get(parentCallId)?.size ?? 0) > 0;
+  }
   async drain(): Promise<void> { while (this.pending.size) await Promise.allSettled([...this.pending]); }
   private readonly abort = new AbortController();
   private callSequence = 0;

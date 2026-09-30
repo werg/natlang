@@ -1,3 +1,37 @@
+> **05:11 UTC update:** 
+> Recipe-v9 refresh completed: 1851 selected generated trajectories/1674 programs, no missing default inputs/included quality blockers; static approved decisions remain32935. Planning snapshot, not final training export.
+> Luna runtime-v9 boundary rollout completed: worker1 PID74281, worker2 PID74312; authority/check updated. Bonsai70991 still awaiting currentcase boundary under monitor74250.
+> 
+> **CURRENT — 2026-09-30 05:09 UTC; supersedes older process details below.**
+> Hourly check completed: Bonsai70991 frozenv8/queue36 cap4/server4/GPU99%; v7/v8
+> rollouts both complete. Luna69180/69181 frozenv8, two provider workers/noGPU,
+> new559file/tree campaign active; authority runs/luna-file-tree-20260930/state.json.
+> At05:04 newcampaign96completed/69accepted/27rejected (raw runs, not unique admission).
+> GenericTATQA scale retry accepted103.1/blank; MuSiQueWesternEurope accepted;
+> NorthKorea-only retry remains wrong/incomplete. New rejection audit delegated to
+> luna_admission_dpo_audit, output hourly/rejection-audit-0500 (await final evidence).
+> Scoped child-lifetime fix built and frozen as hourly/runtime-v9, runtimecontract18:
+> failed parallel eval settles its owned children before parent retry/environmentclose.
+> Success with pending unawaited NL children now drains then errors before commit;
+> external effects are not rolled back. Properly awaited parallel references172/182/212
+> accepted, audit-only summaries hourly/scoped-child-drain-audit; no unit tests/GPU calls.
+> Old slowpartial cannot faithfully replay; do not claim exact orphan-response counts.
+> Partial journals now add callID/time/last-tool preview(max2000chars)/hash; hashes unchanged.
+> FOLIOstory425 now source-review-held: hidden FOL conflates choosing/actual driving,
+> visible English permits countermodels; original gold retained. No canonicalstatic rows
+> affected. Root actual-range queue audit found six future425roots and one current root
+> (agent initial queue count was incomplete). Queue37 removes only six future singles,
+> preserves currentcase/other361entries. Audit hourly/folio-story425-source-review.
+> Boundary rollout monitor74250 owns ALL three teachers, config/state/log/audit
+> hourly/runtime-v9-rollout*. Each old exactPID/children must finish before replacement;
+> same Luna queues/journals/caps, Bonsai switches queue37. Inspect monitor state before
+> signaling anything; update newcampaignauthority/check.json once newPIDs launched.
+> Recipe-v9 refresh running after hold; session52217 if still active. Latestprevious
+> recipe-v8 has1676generated/1519programs; fourstaticbundles32935approved decisions.
+> Planning only: no student training; final rendering/token/groups/dedup/25%-mix pending.
+> Next hourly fullcheck ~06:04UTC in hourly/check.json. Continue active-thread loop,
+> sleep <=60seconds chunks, investigate new rejections and keep decisions here logged.
+
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
 > **LUNA UPDATE — 2026-09-30 04:41 UTC: new file/tree campaign authority.**

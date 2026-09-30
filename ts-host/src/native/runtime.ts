@@ -1151,6 +1151,12 @@ export class NativeSession {
     try {
       const evaluated = await this.runtime.evaluate(this.lam, source,
         { inputs: inputs.portable, locals: locals.portable }, live, timeoutMs);
+      const frame = this.runtime.frame;
+      const parentCallId = frame?.parentCallId;
+      if (parentCallId && frame!.task.hasPendingChildren(parentCallId)) {
+        await frame!.task.drainChildren(parentCallId);
+        throw new Error('eval started child calls that were not awaited; await all child calls (for example with Promise.all(...)) before leaving eval');
+      }
       const raw = finished as { result?: unknown; returned?: boolean;
         bindings?: Record<string, unknown>; captures?: Record<string, unknown> } | undefined;
       if (!raw || typeof raw !== 'object' || !raw.bindings || typeof raw.bindings !== 'object')
@@ -1282,7 +1288,12 @@ export class NativeSession {
         code, scopeBefore, message, error instanceof Reject ? error.diagnostics : [], error, traceMark);
       if (error instanceof Reject) { const result = rejected(error); return { ...result, text: result.text + note }; }
       return { kind: 'error', text: message + note };
-    } finally { this.activeScopeLocals = undefined; }
+    } finally {
+      const frame = this.runtime.frame;
+      const parentCallId = frame?.parentCallId;
+      if (parentCallId) await frame!.task.drainChildren(parentCallId);
+      this.activeScopeLocals = undefined;
+    }
   }
 
   private resolve(path: string): Ref {
