@@ -3,6 +3,7 @@ import gzip
 import hashlib
 import json
 import random
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -37,6 +38,12 @@ def program_id(row):
     if not sep or not turn.isdigit():
         raise ValueError(f"Cannot recover program identity from {row['id']!r}")
     return name
+
+
+def reserved_evaluation(row):
+    """Pinned native probe/test pools, including derived handoff lineage."""
+    return any(re.match(r"^s(?:102|900):", str(group))
+               for group in [row.get("program_id", ""), *(row.get("source_groups") or [])])
 
 
 def split_programs(pairs, holdout=200, seed=0):
@@ -77,7 +84,10 @@ def split_programs(pairs, holdout=200, seed=0):
             raise ValueError(f"Unsupported explicit corpus split {split!r}")
     if any(len(labels) > 1 for labels in explicit.values()):
         raise ValueError("Linked corpus records have conflicting explicit train/test splits")
-    fixed_held = {key for key, labels in explicit.items() if "test" in labels}
+    reserved = {root(program_id(row)) for row in pairs if reserved_evaluation(row)}
+    if any("train" in explicit[key] for key in reserved):
+        raise ValueError("Reserved native evaluation lineage is labeled train; rebuild admission/stages before training")
+    fixed_held = {key for key, labels in explicit.items() if "test" in labels} | reserved
     fixed_train = {key for key, labels in explicit.items() if "train" in labels}
     if fixed_held & fixed_train:
         raise ValueError("Linked corpus records have conflicting explicit train/test splits")

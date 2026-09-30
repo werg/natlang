@@ -8,7 +8,7 @@ const RULES = [
   { category: 'duplicate_or_superseded', action: 'retain_original_and_link_selected_replacement', matches: r =>
     /^(?:superseded_eligible_trajectory_id|duplicate_input_trajectory_id_not_written)$/.test(r) },
   { category: 'evaluation_or_unsupported', action: 'preserve_evaluation_scope_do_not_migrate_into_training', matches: r =>
-    /^(?:held_out_source_conversion|held_out_source_quality|not_training_split)$/.test(r) },
+    /^(?:held_out_source_conversion|held_out_source_quality|held_out_reserved_curriculum|not_training_split)$/.test(r) },
   { category: 'migration_or_replay_pending', action: 'replay_with_current_runtime_or_refresh_evidence', matches: r =>
     /^(?:obsolete_(?:outcome|program_ir|runtime_contract|named_tree_oracle|json_format_oracle)|requires_non_curriculum_adapter|unsupported_source_conversion|source_conversion_(?:digest_mismatch|not_validated|snapshot_mismatch)|source_input_visibility_unverified|incomplete_trajectory|the replay saw other results than the run did|replay failed)$/.test(r) },
   { category: 'oracle_or_source_review', action: 'retain_raw_evidence_for_source_or_oracle_review', matches: r =>

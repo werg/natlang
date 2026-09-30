@@ -11,6 +11,10 @@ export type SourceReview = {
 
 /** IDs use model-visible text; aliases preserve the earlier text+label identity. */
 export const SOURCE_REVIEWS: readonly SourceReview[] = [
+  { dataset: 'tatqa', id: '80fd3023-eb50-4db7-a299-ffcd06d604fa', aliases: [],
+    text: 'What is the average age of the directors in the company?', annotatedLabel: '58.75', status: 'pending',
+    reason: 'The table labels four people Director (69,55,62,49), averaging58.75, and Garo H. Armen age67 Executive Chairman of the Board of Directors. Including that board chairman gives60.4, a defensible reading of directors; CFO is excluded under either reading. Preserve source gold and hold pending independent clarification; neither interpretation is a DPO negative.',
+  },
   {"dataset": "scifact", "id": "claim:79", "aliases": [], "text": "Active caspase-11 protein promotes pyroptosis.", "annotatedLabel": "SUPPORT", "status": "pending", "reason": "Abstract5099266 studies phagosome/lysosome fusion and caspase activation, but never establishes pyroptosis. The required cell-death mechanism would need outside evidence. Preserve source gold pending independent adjudication."},
   {"dataset": "scifact", "id": "claim:104", "aliases": [], "text": "Allogeneic mechanical circulatory support is not as effective as autologous mechanical circulatory support for treating acute myocardial infarction.", "annotatedLabel": "CONTRADICT", "status": "pending", "reason": "Abstract40164383 compares mesenchymal stem cell injections for ischemic cardiomyopathy. The claim expands MSC to mechanical circulatory support and changes the clinical condition to acute myocardial infarction. Preserve source gold pending independent adjudication."},
   {"dataset": "scifact", "id": "claim:160", "aliases": [], "text": "Bacterial meningitis can be diagnosed on the basis of positive cerebrospinal fluid (CSF) cultures.", "annotatedLabel": "SUPPORT", "status": "pending", "reason": "Abstract52874170 establishes biochemical CSF markers but does not discuss positive CSF cultures. A medically plausible assertion is not sufficient document-only evidence. Preserve source gold pending independent adjudication."},

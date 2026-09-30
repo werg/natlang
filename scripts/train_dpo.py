@@ -28,7 +28,7 @@ import argparse, json, math, random, sys, time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scripts.corpus import file_digest
+from scripts.corpus import file_digest, reserved_evaluation
 from scripts.train_lora import install_stop_handlers, set_layer_checkpointing
 from scripts.training_readiness import clip_finite_grad_norm_, require_finite_loss
 
@@ -103,6 +103,8 @@ def main():
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     tok = AutoTokenizer.from_pretrained(a.model, trust_remote_code=a.trust_remote_code)
     rows = [json.loads(line) for line in a.data.open() if line.strip()]
+    if any(reserved_evaluation(row) for row in rows):
+        raise SystemExit("Reserved native evaluation lineage in preference input; rebuild admission before DPO")
     pairs, too_long = [], 0
     for row in rows:
         chosen = encode(tok, row["prompt"], row["chosen"], row.get("chosen_masked", 0))

@@ -83,5 +83,14 @@
       "status": "transformation_pending",
       "next_action": "Strict offline replay candidates remain held by history_migration_review_pending; preserve originals and independent review before promotion."
     }
-  ]
+  ],
+  "reserved_native_evaluation": {
+    "source_group_prefixes": [
+      "s102:",
+      "s900:"
+    ],
+    "status": "evaluation_only",
+    "reason": "Native references.mjs reserves seed102 probe and seed900 test. No training release; hold even mislabeled train and preserve original artifacts.",
+    "admission_reason": "held_out_reserved_curriculum"
+  }
 }

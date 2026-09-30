@@ -1,5 +1,36 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **CURRENT HOURLY CHECK — 2026-09-30 01:12 UTC, supersedes process details below.**
+> Typed Luna batch64 completed:61 accepted,3 independently checked semantic errors,
+> zero format failures. New readable typed directory-v3 adapter keeps full source
+> instance mappings/golds and uses question names rather than opaque hash keys.
+>499 fresh reducer cases prepared,8 reference replays accepted with complete visible
+> inputs/no model calls. Two Luna workers45744/45745, cap2/backoff/noGPU, immutable
+> runtime-v4; `runs/luna-directory-readable-20260930/state.json` owns queues/logs.
+> Callback compiler now propagates declared Promise<boolean> slots through unannotated
+> async callbacks; saved source-pattern analysis returns boolean/no diagnostics.
+> Bonsai43115 still on runtime-v2, cap4. Boundary monitor46447 targets runtime-v4 and
+> queue-v32, preserving current handoff:727. It excludes56 future reserved roots;
+>18 clean roots from mixed batches retained as separate entries. Check monitor state
+> before signaling any process; never run overlapping supervisors.
+>
+> **Breaking admission decision:** native s102 probe/s900 test source groups remain
+> evaluation-only even when old artifacts say train. Audit found1,835 historical
+> accepted teacher/train s102 trajectories (1,575 previously passed admission), no
+> released scope. Central admission and downstream SFT/stage/DPO guards now protect
+> these groups. New builder refuses training on reserved seeds. All raw data preserved.
+> Refreshed generated snapshot selects1,278 trajectories/1,121 programs; raw2,775
+> held artifact count is not unique examples. Snapshot manifest beefc689 under
+> data/teacher/generated-snapshots; seed report under hourly/seed-audit. This decreases
+> selected data intentionally; regenerate recipe/stages, never reuse old approval.
+> TATQA source80fd3023-eb50-4db7-a299-ffcd06d604fa held: gold58.75 excludes the
+> executive chairman, plausible answer60.4 includes him. Preserve gold, no DPO negative.
+> Latest source hold/downstream script changes are in working runtime, after frozenv4;
+> do not modify v4. Admission/export uses current code. No student training authorized.
+> `runs/generation-check-20260930-hourly/check.json` stores exact next due time (~02:12
+> UTC/04:12 Berlin). Continue requested hourly active-thread sleep/check loop.
+
+
 > **HOURLY MONITORING RESUMED — 2026-09-29 23:50 UTC.** User requests continuing
 > hourly generation/rejection investigation and independent system usability fixes.
 > Current check: previous Luna directory batch32 done/28 accepted; one wrapped output,

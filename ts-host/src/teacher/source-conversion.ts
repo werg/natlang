@@ -85,10 +85,15 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   const program = row.task?.program_ir as Dict | undefined;
   const quality = (program?.external_source as Dict | undefined)?.quality as Dict | undefined;
   const generator = (program?.generation as Dict | undefined)?.generator;
+  // These native curriculum pools are reserved in references.mjs. Handoffs
+  // retain their source groups even when their own split is mislabeled train.
+  const reservedEvaluation = Array.isArray(program?.source_groups) &&
+    program.source_groups.some(group => typeof group === 'string' && /^s(?:102|900):/.test(group));
   const qualityRequired = ['natlang.recovered_source_adapter/1','natlang.workflowevals_adapter/1'].includes(String(generator));
   const qualityProblems = (!quality && qualityRequired) || quality &&
     (quality.version !== 'natlang.source_quality/1' || quality.status !== 'eligible' ||
      !Array.isArray(quality.checks) || !quality.checks.length || quality.checks.some(item => typeof item !== 'string' || !item)) ? ['source_quality_held'] : [];
+  if (reservedEvaluation) qualityProblems.push('held_out_reserved_curriculum');
   // Offline history replays are review artifacts until a migration admission
   // contract verifies both teacher provenance and the changed runtime context.
   if (provenance.history_migration || provenance.collection_role === 'migration_candidate')

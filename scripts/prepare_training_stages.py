@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json, digest_file
+from corpus import reserved_evaluation
 
 
 def records(paths):
@@ -50,7 +51,8 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
                 "lanes": {"code": list(map(str, code_paths)), "native": list(map(str, native_paths)),
                           "teacher": list(map(str, teacher_paths)), "split": list(map(str, split_paths))},
                 "registry": digest_file(registry) if registry else None,
-                "builder_sha256": digest_file(__file__)}
+                "builder_sha256": digest_file(__file__),
+                "split_policy_sha256": digest_file(Path(__file__).with_name("corpus.py"))}
     manifest_path = output / "manifest.json"
     if manifest_path.exists():
         old = json.loads(manifest_path.read_text())
@@ -90,7 +92,7 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
         fixed[root] = label
     for row in all_rows:
         root = find(groups(row)[0])
-        if row.get("split") in ("test", "validation", "valid", "dev"):
+        if reserved_evaluation(row) or row.get("split") in ("test", "validation", "valid", "dev"):
             held.add(root)
     for root in held:
         if fixed.get(root) == "train":
@@ -143,7 +145,8 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
     registry_out = output / "splits.json"
     atomic_json(registry_out, {"version": "natlang.split_registry/1", "groups": {key: splits[find(key)] for key in sorted(parent)}})
     outputs[registry_out.name] = digest_file(registry_out)
-    manifest = {"identity": identity, "outputs": outputs, "counts": counts}
+    manifest = {"identity": identity, "outputs": outputs, "counts": counts,
+                "reserved_evaluation_input_rows": sum(reserved_evaluation(row) for row in all_rows)}
     atomic_json(manifest_path, manifest)
     return manifest
 

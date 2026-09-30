@@ -136,8 +136,14 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
     if (outer.parent && ts.isReturnStatement(outer.parent)) {
       let fn: ts.Node | undefined = outer.parent;
       while (fn && !ts.isFunctionLike(fn)) fn = fn.parent;
-      if (fn && ts.isFunctionLike(fn) && fn.type && ts.getCombinedModifierFlags(fn as ts.Declaration) & ts.ModifierFlags.Async) {
-        const signature = checker.getSignatureFromDeclaration(fn);
+      if (fn && ts.isFunctionLike(fn) && ts.getCombinedModifierFlags(fn as ts.Declaration) & ts.ModifierFlags.Async) {
+        // An unannotated async callback can still have a declared caller slot,
+        // e.g. review_each(..., async item => { return await nl`...`(item); }).
+        // Its Promise<boolean> contract must reach the inline child as boolean.
+        const contextual = !fn.type && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) ?
+          checker.getContextualType(fn)?.getCallSignatures() : undefined;
+        const signature = fn.type ? checker.getSignatureFromDeclaration(fn) :
+          contextual?.length === 1 ? contextual[0] : undefined;
         const declared = signature && awaitedType(checker, checker.getReturnTypeOfSignature(signature)).type;
         if (declared && !(declared.flags & ts.TypeFlags.Any)) return declared;
       }

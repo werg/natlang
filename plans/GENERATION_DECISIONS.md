@@ -772,3 +772,37 @@ pilots stay review artifacts. Bonsai stays cap4; exact-PID boundary monitor39325
 for current case then adopts JSON-content runtime-v2. Frozen runtime files/GPU server
 are unchanged. Explicit user request resumes hourly sleep/check/rejection investigation;
 check/log/handover updates continue. No student training or automatic DPO negatives.
+
+
+## 2026-09-30 — callback contracts, readable jobs, and reserved evaluation lineage
+
+Bonsai relational-policy125/133 exposed an actual compiler bug: unannotated async
+callbacks discarded their caller-declared Promise<boolean> target for nested nl.
+False-bearing objects could consequently pass JavaScript truthiness checks. Contextual
+caller signatures now determine the awaited target; predicate prompt example uses
+nl<boolean>. Native build passed; saved failing-shape compiler audit yields boolean
+and no diagnostics. No broad conversion of objects to booleans or weaker checks.
+
+Typed Luna batch64 finished61 accepted/3 source-verified judgment errors, no output
+format errors. Two final answers inverted the model's own conclusion, one misordered
+explicit card-lock authorization. Readable node/question keys plus final per-field
+polarity check replace opaque hashes in fresh directory-v3 cases. All original instance
+IDs, labels and groups retained; canonical static-v2 publication unchanged. Two workers
+on499 fresh cases;8 actual reference replays passed complete-input proof, no provider calls.
+
+**Breaking decision:** references.mjs reserves s102 probe and s900 test; no native
+training release exists. Historical generation incorrectly labeled s102 train. Audit
+found1,835 unique accepted historical teacher/train trajectories,1,575 previously
+admitted. New central hold held_out_reserved_curriculum excludes them, retains source
+artifacts/ledger and routes to evaluation rather than model failure. Generator rejects
+reserved train seeds; old materialized SFT/stages and DPO have downstream guards.
+Refreshed snapshot selects1,278 trajectories/1,121 programs and tracks2,775 raw reserved
+artifact holds. Old snapshots remain; regenerate admission/stages before training.
+Bonsai queue-v32 preserves the active case, holds56 future reserved roots and retains18
+clean mixed-batch roots. Boundary runtime rollout keeps cap4 and no worker overlap.
+
+TATQA128 is source ambiguity: chairman age67 is explicitly Executive Chairman of the
+Board of Directors. Gold averages four exact Director rows (58.75); including chairman
+produces60.4. Added source review hold without relabeling either interpretation as a
+model negative. Hold propagates to current generation/admission; frozen workers retained.
+No GPU evaluation rerun, unit tests, student training or automatic DPO negatives.
