@@ -1,3 +1,9 @@
+## Accounting clarification — 2026-09-30 11:47 UTC
+
+The 11:25 checkpoint recorded **138 journal finish events**, including parent/member aliases. Exact spool reconciliation finds **60 distinct Bonsai case results**, 55 currently admitted/materialized (237 approved decisions), five rejected; all60exactID/digestjoined, no missing saved results. The other15distinct model results are13title variants and2derivatives. Thus **75 distinct case results**, not138newcases. Evidence: `hourly-health-next/bonsai-canonical-job-spool-supplement-asof-112536838Z.json` under the generation-check run. Empty working aggregate export did not mean missing saved jobs. Both partial/failed reader reports are preserved with a scope correction and future error/completeness gates.
+
+Recipe22 inventory audit passes16/16carryforward/hash checks;2,618selectedteacherrows/2,107programs and1,509retained failure candidates, allnegative-ineligible. Fourstatic6150cases/32667approveddecisions andbothlegacy792/1400sets verified. Readyrecord `runs/data-lineage-20260930/data-inventory-v22.ready.json` validatesagainstcurrentpolicy; inventoryonly, notfinalstudent readiness. Additional exact freshderivative-selection proof supplement pending. Nextfullcheck12:25:36.838UTC; Bonsaiactive, Lunaequivalenceadaptersunderreview.
+
 ## Current authority — 2026-09-30 11:25:36.838 UTC checkpoint
 
 - Bonsai **110507** remains active at four concurrent requests; sampled GPU **97%**. Hourly journal audit: **138 completed finishes, zero non-success finishes** since10:24; current queue has **zero future unstarted held rows**. Next full inspection **12:25:36.838 UTC**.

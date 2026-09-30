@@ -1359,3 +1359,9 @@ BonsaiongoingGPU97%,138canonicalfinishes/0nonsuccesssince10:24,0futureunstartedh
 Sourcequality22nowcurrentexplicitpublicationfield;4static6150cases/32667approveddecisions. Nineadditionalholds sincequality19 and2unresolvedrelationreviews logged. Recipe22publishedwithdurablefailureinventory; finalcarryforward/hashreadinessauditongoing. CurrentbuilderpreservesoriginalCLIstdout, distinguishesmanifesttypes, carrieslegacy4static/allgeneratedeligibleinputs. No training.
 
 Hourlyreader initialreportcaughtasyncgeneratorfor/ofreadfailure; rootfixedforawaitanddescendingauditsort, secondreporthasnoreaderrors. Bothpreserved; initialnotclaimzerooutcomes. Readerlateraddscompleteness/errorgate. DirectqueueoutputcountsdoNOTcoverallBonsai per-batchsavedjobs; supplementarycanonicaljoinneeded. Updatedcheckflatcounts/currentpolicy and next12:25:36.838UTC.
+
+## 2026-09-30 11:47 UTC — deduplicate journal aliases in progress counts
+
+Spool audit reconciles123Bonsaifinish events as60parentcase finishes+63member aliases; all60exactnative source/jobmatches exist,55admitted/materialized/237decisions,5rejects. Add13title and2derivatives=75distinctmodelresults inhour, not138newcases. Earlier138figure describesjournalfinish events only. Directemptyaggregateoutput isaworkingexport, notmissingdurablejobs. Futurehealth reports distinguishmetadataerrors, limitedoutputscope and canonicaljobresultcoverage.
+
+Recipe22inventory/hash/carryforwardaudit16checks passes; root validatedreadyrecord currentpolicy. Stillnotfinalstudentrender/split/token/dedup/mix readiness. Ten scopedoracle-only equivalencereviews underway, actualteacherhistory/runtime/modelvisibleinputs unchanged; broad history-replay admissiongate stays closed.
