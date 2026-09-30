@@ -1,3 +1,12 @@
+> **2026-09-30T09:46:46.851176+00:00 two Luna pilots launched.** PIDs133004/133005,
+> isolated pilot-v19 queues/journals/jobs; gpt-6-luna low cap1 each,1200s/40turn/
+>256requests/executionplans/backoff unchanged. Native title-path-r2 variants retain
+> golds/oracles/sourceproofs/bodybytes; first-lineH1 and stale reference path controls
+> fail closed. Root checked hashes, idempotence and current source eligibility.
+> Helper standalone; no sharedbuilder wiring. Launch authority
+> hourly/musique-title-path-v2/pilot-v19/launch.json; check+state updated. Old completed
+> queues/journals retained. Bonsai110507 v19 cap4 ongoing. Nextfullcheck10:17:18UTC.
+
 > **2026-09-30T09:43:36.988517+00:00 source/storage update.** Full included MuSiQue audit282/282
 > completed,198pass/84review flags; question-consistency correction underway.
 > Flags are not holds. Root confirmed four more cases: Ålanders wished but never

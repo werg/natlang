@@ -1311,3 +1311,7 @@ Full 282-case MuSiQue source audit finished; 84 review flags require root adjudi
 Future generated snapshots use gzip with immutable compressed-byte SHA and uncompressed content SHA (manifest/2); old plain artifacts remain readable and unchanged. Shared streaming reader covers admission, materializer, handoff/DPO and static inputs. Writer fsyncs gzip, ledger and manifest; publishes manifest last atomically. Actual saved native row yielded identical admission and materialized decision; malformed/truncated gzip rejected. Syntax checked, no tests/full snapshot or provider calls. This prevents repeated approximately2.5GiB plain snapshot growth.
 
 Both Luna queues completed normally; old authorities are recorded as completed, Bonsai stays active. Preparing two source-qualified article-title filename pilot variants in separate queues for existing Luna slots. No extra worker, no existing queue mutation, no frozen runtime mutation.
+
+## 2026-09-30T09:46:46.851176+00:00 — isolated article-title pilots
+
+Root approved standalone title-path-v2-r2 after pinned-hash/idempotence/current-source checks and native controls. First physical H1 only; no arbitrary code/gold rewriting; unsupported numeric-path reference code fails closed. Two source-qualified variants launched into the existing Luna slots (133004/133005), unchanged budgets/caps/backoff/frozenv19, separate immutable queues/output/jobs. Prior exhausted queues retained. No general speed/reliability claim from two pilots; shared builder unchanged.
