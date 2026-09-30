@@ -1,3 +1,30 @@
+> **2026-09-30T08:55:07.855679+00:00 alias adapter reviewed.** Future MuSiQue builder uses
+> reviewed-oracle-alias-removal-v2 for exact two bad source alternates. Raw originals
+> preserved; three matching accepted legacy rows returned valid primaries, so no
+> blanket hold. Native variants pass primary/reject removedalias, drift/idempotence
+> audited. Runtime-v19 immutable unaffected. Bonsai110507 retry completed135.9s,
+> correct Tree/all outcomechecks, used omitted-value finish; admission audit pending.
+> Luna2 now110834/v19; Luna1 still100243/v18 waiting boundary. State actualpath
+> hourly/runtime-v19-rollout-v2-state.json; watcher110320, do not restart.
+
+> **2026-09-30 08:48:57 UTC v19 rollout launched.** Sole watcher110320 uses
+> runtime-v19-rollout-config-v2.json, frozenmanifest5f0a9e...verified605files.
+> Old v18 authorities100243/100068/100628 until respective journaled boundaries.
+> Completed/current entries preserved; original held roots alreadyfinished, no
+> future-held removals necessary. Independent TreeDST633ad retry first Bonsai
+> item, original40turn/384request/1200s budgets, own source/jobs/output.
+> Read state for replacement PIDs before further changes; never restart watchers.
+
+> **2026-09-30T08:45:23.109715+00:00 pending quality work:**
+> Five additional root-reviewed candidate holds saved in
+> hourly/musique-included-source-sweep/root-pending-third-batch.json; deferred
+> to next consolidated policy batch. No training; recipe-v18 remains stale.
+> Two invalid source aliases (Islam; Gun laws in Iowa) found; no accepted recipe
+> rows returned those aliases, all three matching rows returned valid primaries.
+> Evidence-scoped modern alias-removal adapters assigned Luna sourceoracleagent.
+> v19 rollout preparation first draft superseded: retry budget/order and
+> completed/current grouped-entry preservation must be corrected before launch.
+
 > **CURRENT — 2026-09-30T08:37:15.270331+00:00 source-policy/finalization batch.**
 > Six independently reviewed MuSiQue source holds published as directory quality-v14:
 >1261 cases/3264 approved decisions,45 cumulative holds; all four static32704.

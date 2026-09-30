@@ -1287,3 +1287,11 @@ Consolidatedrecipe-v18 currentpolicyincludes2362selectedgeneratedtrajectories/19
 Exact-input computational/code outputs remain exact; no target injection or generic tolerance enabled. Contract19 permits omitted `value` on successful `return_result` only for an existing staged result, through normal completeness/type/transaction guards. Explicit values remain validated. Truncation feedback points to this shorter finish path when a complete result exists. Native TreeDST and file reference audits pass; missing stage, incomplete stage and wrong explicit values reject. Build passed, no tests/providers used in audits. Deployment pending reviewed journal-boundary rollout.
 
 Six source-specific MuSiQue holds published quality-v14, preserved originals/golds and excluded from preference negatives. Root adjudications in hourly/musique-included-source-sweep/root-{first,second}-batch.json. Recipe-v18 explicitly stale pending refresh.
+
+### 2026-09-30 08:48:57 UTC — v19 rollout preparation correction
+
+First prepared queues/config preserved as superseded evidence. Root review caught mixed completed-group splitting (would rerun completed work) and retry budget/order changes. Prep-v2 preserves finished/current entries verbatim and places independent TreeDST retry first with original budgets. Frozen605files and queue hashes independently verified. Sole watcher110320 launched exact-PID journal boundaries; no extra teacher slots/server changes.
+
+## 2026-09-30T08:55:07.855679+00:00 — reviewed invalid MuSiQue aliases
+
+Future shared source builder removes exactly two source aliases in evidence-pinned v2 variants: Islam (primary Islamic mathematics) and Gun laws in Iowa (primary21 or older.). Pins original IR ID, full prompt, snapshot, primary, exact oracle shape and support-file hashes. Drift fails closed; idempotence validates full review metadata. Originals preserved, no blanket legacy-positive hold: exact recipe-v18 scan found three matching accepted rows, all valid primaries, no alias exploitation. Native variants accept primaries/reject invalid aliases; no model calls/tests/training rows. Evidence hourly/musique-alias-removal-v2. Frozen v19 unaffected; no immediate teacher rollout needed for future-builder-only adapter.

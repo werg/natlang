@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
-import { reviewedMusiqueAliasFor } from './musique-reviewed-aliases.mjs';
+import { reviewedMusiqueAliasFor, reviewedMusiqueAliasRemovalFor } from './musique-reviewed-aliases.mjs';
 import { markdownTerminalNewlineBody } from '../../dist/evaluation/oracles.js';
 import { TATQA_LAKH_CONTRACT_REVISION, TATQA_LAKH_SOURCE_ID, TATQA_LAKH_VARIANT_SUFFIX,
   TATQA_LAKH_VARIANT_ID, TATQA_LAKH_REPLACEMENT_PROMPT, validateTatqaLakhBase,
@@ -183,8 +183,38 @@ export function applyReviewedTatqaUnitContract(record) {
 /** Reusable adapter for future builds and reviewed variants cloned from historical IR. */
 export function applyReviewedMusiqueOracleAlias(record) {
   if (record.source !== 'musique') return record;
+  const sourceId = record.external_source?.source_id ?? record.source_ids?.[0];
+  const removal = reviewedMusiqueAliasRemovalFor({
+    sourceId,
+    irId: record.id,
+    snapshotSha256: record.external_source?.snapshot_sha256,
+    primary: record.semantics?.expected,
+    prompt: record.semantics?.files?.[record.semantics?.root],
+    oracle: record.semantics?.oracle,
+    files: record.semantics?.folder_files,
+  });
+  if (removal) {
+    const suffix = ':reviewed-oracle-alias-removal-v2';
+    const { rejected, audit: removalAudit, oracleState } = removal;
+    if (record.id.endsWith(suffix)) {
+      const baseId = record.id.slice(0, -suffix.length);
+      const expectedAudit = { ...removalAudit, base_ir_id: baseId, variant: 'reviewed-oracle-alias-removal-v2' };
+      if (oracleState !== 'removed' || JSON.stringify(record.generation?.oracle_review) !== JSON.stringify(expectedAudit) ||
+          JSON.stringify(record.external_source?.oracle_review) !== JSON.stringify(expectedAudit))
+        throw new Error(`reviewed_musique_alias_removal_variant_mismatch:${sourceId}`);
+      return record;
+    }
+    if (oracleState !== 'base')
+      throw new Error(`reviewed_musique_alias_removal_oracle_mismatch:${sourceId}`);
+    const audit = { ...removalAudit, base_ir_id: record.id, variant: 'reviewed-oracle-alias-removal-v2' };
+    record.semantics.oracle = { ...record.semantics.oracle, alternates: [] };
+    record.id = `${record.id}${suffix}`;
+    record.generation = { ...record.generation, oracle_review: audit };
+    record.external_source = { ...record.external_source, oracle_review: audit };
+    return record;
+  }
   const review = reviewedMusiqueAliasFor({
-    sourceId: record.external_source?.source_id ?? record.source_ids?.[0],
+    sourceId,
     snapshotSha256: record.external_source?.snapshot_sha256,
     primary: record.semantics?.expected,
     files: record.semantics?.folder_files,
@@ -471,8 +501,8 @@ return result;`;
           group: `musique:train-v1.0-pilot`,
           task: `${row.question}\nRead the articles to answer. Return only the answer text. Preserve the workspace.`,
           files, expected: row.answer, actions: [evalCall(`const files = await folder.files('articles/*.md');\nfor (const file of files) await file.readText();`), returnCall(row.answer)],
-          // Preserve exact source-backed aliases. Token overlap alone cannot establish
-          // equivalence, and partial span agreement is held by the training quality gate.
+          // Start with the source-provided aliases, then apply only exact reviewed
+          // corrections; token overlap alone cannot establish equivalence.
           oracle: { level: 'normalized', alternates: row.answer_aliases ?? [] },
           adaptation: 'original-train-question; all supplied paragraphs; no generated evidence' });
         applyReviewedMusiqueOracleAlias(record);
