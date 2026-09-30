@@ -5,6 +5,7 @@ import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { buildBroaderSources } from './broader-sources.mjs';
 import { reviewedMusiqueAliasFor } from './musique-reviewed-aliases.mjs';
+import { markdownTerminalNewlineBody } from '../../dist/evaluation/oracles.js';
 import { TATQA_LAKH_CONTRACT_REVISION, TATQA_LAKH_SOURCE_ID, TATQA_LAKH_VARIANT_SUFFIX,
   TATQA_LAKH_VARIANT_ID, TATQA_LAKH_REPLACEMENT_PROMPT, validateTatqaLakhBase,
   isReviewedTatqaLakhVariant } from '../../dist/teacher/tatqa-unit-contract.js';
@@ -208,6 +209,114 @@ export function applyReviewedMusiqueOracleAlias(record) {
   return record;
 }
 
+const COMMITPACK_MARKDOWN_EDIT_REVISION = 'commitpack-markdown-terminal-newline-v1';
+const COMMITPACK_MARKDOWN_EDIT_SUFFIX = ':markdown-terminal-newline-v1';
+const COMMITPACK_MARKDOWN_EDIT_CONTRACT = 'Apply the explicit change request in change-request.json to its target Markdown file exactly once. Match the entire nonempty find text at its unique occurrence and replace it with replace_with. Do not repeat the replacement if find remains inside replace_with. Preserve the unmatched prefix and suffix byte-for-byte. Do not make any other content edits. A single final LF or CRLF at end of the Markdown file may be present or absent. Preserve every other file exactly and return the target path.';
+const sortedFileMapDigest = files => digest(Object.entries(files ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+const shaText = text => createHash('sha256').update(text).digest('hex');
+
+function commitpackMarkdownProof(record) {
+  if (record.source !== 'commitpack' || record.generation?.generator !== SOURCE_ADAPTER_VERSION ||
+      record.task_modality !== 'directory-reducer' || record.semantics?.root !== 'process_workspace.nl')
+    throw new Error('commitpack_markdown_contract_wrong_source');
+  const input = record.semantics.folder_files, expected = record.semantics.expected_files;
+  if (!input || !expected || typeof input !== 'object' || typeof expected !== 'object' || Array.isArray(input) || Array.isArray(expected))
+    throw new Error('commitpack_markdown_contract_files_missing');
+  let request;
+  try { request = JSON.parse(input['change-request.json']); } catch { throw new Error('commitpack_markdown_contract_request_invalid'); }
+  const path = safePath(request?.path);
+  const before = input[path], after = expected[path];
+  if (!/\.md$/i.test(path) || path === 'change-request.json' || typeof before !== 'string' || typeof after !== 'string' ||
+      typeof request.find !== 'string' || !request.find.trim() || typeof request.replace_with !== 'string' || !request.replace_with.trim())
+    throw new Error('commitpack_markdown_contract_requires_nonempty_markdown_edit');
+  const matches = before.split(request.find).length - 1;
+  if (matches !== 1 || before.replace(request.find, request.replace_with) !== after)
+    throw new Error('commitpack_markdown_contract_source_gold_disagreement');
+  if (markdownTerminalNewlineBody(before) === markdownTerminalNewlineBody(after))
+    throw new Error('commitpack_markdown_contract_vacuous_eof_only_edit');
+  const inputPaths = Object.keys(input).sort(), expectedPaths = Object.keys(expected).sort();
+  if (JSON.stringify(inputPaths) !== JSON.stringify(expectedPaths) ||
+      inputPaths.some(name => name !== path && input[name] !== expected[name]))
+    throw new Error('commitpack_markdown_contract_unexpected_expected_file_change');
+  if (record.external_source?.source !== 'commitpack' ||
+      record.external_source?.source_id !== record.source_ids?.[0] ||
+      record.external_source?.commit?.old_file !== path || record.external_source?.commit?.new_file !== path)
+    throw new Error('commitpack_markdown_contract_source_identity_mismatch');
+  const currentPrompt = record.semantics.files?.[record.semantics.root];
+  const contractSuffix = `${COMMITPACK_MARKDOWN_EDIT_CONTRACT}\nPreserve source files.`;
+  const basePrompt = currentPrompt?.endsWith(`${contractSuffix}\n`)
+    ? `${currentPrompt.slice(0, -`${contractSuffix}\n`.length)}The explicit replacement defines this scoped edit task.\n`
+    : currentPrompt;
+  return { request, path, before, after, inputSha256: sortedFileMapDigest(input), expectedSha256: sortedFileMapDigest(expected),
+    requestSha256: shaText(input['change-request.json']), expectedGoldSha256: shaText(String(record.semantics.expected)),
+    referenceSha256: shaText(JSON.stringify(record.curriculum?.reference)), sourceIdsSha256: shaText(JSON.stringify(record.source_ids)),
+    sourceGroupsSha256: shaText(JSON.stringify(record.source_groups)), sourceRevisionsSha256: shaText(JSON.stringify(record.source_revisions)),
+    commitSha256: shaText(JSON.stringify(record.external_source?.commit)), commitpackSourceId: record.external_source?.source_id,
+    externalSourceSha256: shaText(JSON.stringify(record.external_source)), licenseSha256: shaText(JSON.stringify(record.license)),
+    answerOracleSha256: shaText(JSON.stringify(record.semantics.oracle)), basePromptSha256: shaText(String(basePrompt)),
+    baseId: record.id.endsWith(COMMITPACK_MARKDOWN_EDIT_SUFFIX) ? record.id.slice(0, -COMMITPACK_MARKDOWN_EDIT_SUFFIX.length) : record.id };
+}
+
+function validCommitpackMarkdownVariant(record) {
+  try {
+    const proof = commitpackMarkdownProof(record), metadata = record.generation?.markdown_edit_contract;
+    const prompt = record.semantics.files?.[record.semantics.root];
+    return record.id === `${metadata?.base_id}${COMMITPACK_MARKDOWN_EDIT_SUFFIX}` &&
+      metadata?.revision === COMMITPACK_MARKDOWN_EDIT_REVISION && metadata?.target_path === proof.path &&
+      metadata?.base_id === proof.baseId && metadata?.input_files_sha256 === proof.inputSha256 &&
+      metadata?.expected_files_sha256 === proof.expectedSha256 && metadata?.request_sha256 === proof.requestSha256 &&
+      metadata?.expected_gold_sha256 === proof.expectedGoldSha256 && metadata?.reference_sha256 === proof.referenceSha256 &&
+      metadata?.source_ids_sha256 === proof.sourceIdsSha256 && metadata?.source_groups_sha256 === proof.sourceGroupsSha256 &&
+      metadata?.source_revisions_sha256 === proof.sourceRevisionsSha256 && metadata?.commit_sha256 === proof.commitSha256 &&
+      metadata?.external_source_sha256 === proof.externalSourceSha256 && metadata?.license_sha256 === proof.licenseSha256 &&
+      metadata?.answer_oracle_sha256 === proof.answerOracleSha256 && metadata?.base_prompt_sha256 === proof.basePromptSha256 &&
+      metadata?.source_id === proof.commitpackSourceId && metadata?.prompt_sha256 === shaText(prompt) &&
+      record.semantics.files_oracle?.compare === 'markdown-terminal-newline' &&
+      JSON.stringify(record.semantics.files_oracle.markdown_terminal_newline_paths) === JSON.stringify([proof.path]) &&
+      record.semantics.files_oracle.threshold === 1 &&
+      record.generation?.markdown_edit_contract_revision === COMMITPACK_MARKDOWN_EDIT_REVISION &&
+      prompt?.endsWith(`${COMMITPACK_MARKDOWN_EDIT_CONTRACT}\nPreserve source files.\n`) &&
+      record.generation?.markdown_edit_contract_prompt_sha256 === shaText(prompt);
+  } catch { return false; }
+}
+
+/** Permit one scoped Markdown EOF terminator variation while preserving every other source byte. */
+export function applyScopedMarkdownEditContract(record) {
+  if (record.source !== 'commitpack') return record;
+  if (record.id?.endsWith(COMMITPACK_MARKDOWN_EDIT_SUFFIX)) {
+    if (!validCommitpackMarkdownVariant(record)) throw new Error('commitpack_markdown_variant_mismatch');
+    return record;
+  }
+  let proof;
+  try { proof = commitpackMarkdownProof(record); }
+  catch (error) {
+    if (['commitpack_markdown_contract_requires_nonempty_markdown_edit',
+      'commitpack_markdown_contract_vacuous_eof_only_edit'].includes(error.message)) return record;
+    throw error;
+  }
+  const basePrompt = record.semantics.files?.[record.semantics.root];
+  const anchor = 'The explicit replacement defines this scoped edit task.';
+  if (typeof basePrompt !== 'string' || basePrompt.split(anchor).length !== 2 || !basePrompt.endsWith(`${anchor}\n`))
+    throw new Error('commitpack_markdown_prompt_anchor_mismatch');
+  const prompt = basePrompt.replace(anchor, `${COMMITPACK_MARKDOWN_EDIT_CONTRACT}\nPreserve source files.`);
+  record.semantics.files[record.semantics.root] = prompt;
+  record.id = `${record.id}${COMMITPACK_MARKDOWN_EDIT_SUFFIX}`;
+  record.semantics.files_oracle = { compare: 'markdown-terminal-newline', markdown_terminal_newline_paths: [proof.path], threshold: 1 };
+  const metadata = { revision: COMMITPACK_MARKDOWN_EDIT_REVISION, base_id: proof.baseId, target_path: proof.path,
+    input_files_sha256: proof.inputSha256, expected_files_sha256: proof.expectedSha256,
+    request_sha256: proof.requestSha256, expected_gold_sha256: proof.expectedGoldSha256,
+    reference_sha256: proof.referenceSha256, source_ids_sha256: proof.sourceIdsSha256,
+    source_groups_sha256: proof.sourceGroupsSha256, source_revisions_sha256: proof.sourceRevisionsSha256,
+    commit_sha256: proof.commitSha256, source_id: proof.commitpackSourceId,
+    external_source_sha256: proof.externalSourceSha256, license_sha256: proof.licenseSha256,
+    answer_oracle_sha256: proof.answerOracleSha256, base_prompt_sha256: proof.basePromptSha256,
+    prompt_sha256: shaText(prompt) };
+  record.generation = { ...record.generation, markdown_edit_contract_revision: COMMITPACK_MARKDOWN_EDIT_REVISION,
+    markdown_edit_contract_prompt_sha256: shaText(prompt), markdown_edit_contract: metadata };
+  if (!validCommitpackMarkdownVariant(record)) throw new Error('commitpack_markdown_variant_invalid');
+  return record;
+}
+
 // Whole-line replacements avoid constructing ambiguous partial-token edits from commits.
 export function replacement(oldText, newText) {
   if (typeof oldText !== 'string' || typeof newText !== 'string' || oldText === newText) throw new Error('empty_edit');
@@ -292,6 +401,7 @@ return matching[0].id;`;
         record.external_source.commit = { commit: row.commit, repositories: row.repos, old_file: row.old_file,
           new_file: row.new_file, repository_license: row.license, original_row_sha256: digest(row) };
         record.source_groups.push(`repository:${row.repos.split(',')[0]}`);
+        applyScopedMarkdownEditContract(record);
         return record;
       });
     }

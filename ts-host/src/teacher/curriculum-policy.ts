@@ -2,7 +2,7 @@ import { hasExistingTreeValueContract } from './tree-contract.js';
 /** Shared collection/admission policy for exercises whose premise no longer exists in the runtime. */
 import type { ProgramRecord } from './program.js';
 import { sourceReviewReason } from './source-review.js';
-import { tatqaAnswerRecordCanonical, tatqaAnswerRecordsEqual } from '../evaluation/oracles.js';
+import { markdownTerminalNewlineEqual, tatqaAnswerRecordCanonical, tatqaAnswerRecordsEqual } from '../evaluation/oracles.js';
 
 // Untyped nl results now run open, so inline_type_repair no longer triggers its required compiler refusal.
 export const RETIRED_FAMILIES: ReadonlySet<string> = new Set(['inline_type_repair']);
@@ -48,11 +48,46 @@ export function generationHoldReason(record: ProgramRecord): string | undefined 
   return record.source === 'qasper' ? 'awaiting_extractive_equivalence_oracle' : undefined;
 }
 
+/** Exact old CommitPack false-negative shape: every non-target file and causal check still passes. */
+function legacyMarkdownTerminalNewlineFailure(row: { task?: Record<string, unknown>; outcome?: Record<string, unknown> }): boolean {
+  const record = row.task?.program_ir as ProgramRecord | undefined, outcome = row.outcome;
+  const generation = record?.generation as Record<string, unknown> | undefined;
+  if (!record || record.source !== 'commitpack' || !outcome || outcome.accepted !== false ||
+      record.id.endsWith(':markdown-terminal-newline-v1') ||
+      generation?.markdown_edit_contract_revision === 'commitpack-markdown-terminal-newline-v1' ||
+      record.semantics.files_oracle?.compare === 'markdown-terminal-newline' ||
+      JSON.stringify(outcome.rejection_reasons) !== JSON.stringify(['files']) || outcome.status !== 'done') return false;
+  const input = record.semantics.folder_files as Record<string, string> | undefined;
+  const expected = record.semantics.expected_files as Record<string, string> | undefined;
+  const actual = outcome.files as Record<string, string> | undefined;
+  if (!input || !expected || !actual || typeof input['change-request.json'] !== 'string') return false;
+  let request: { path?: unknown; find?: unknown; replace_with?: unknown };
+  try { request = JSON.parse(input['change-request.json']); } catch { return false; }
+  const path = request.path;
+  if (typeof path !== 'string' || path.startsWith('/') || path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..') ||
+      !/\.md$/i.test(path) || typeof request.find !== 'string' || !request.find.trim() ||
+      typeof request.replace_with !== 'string' || !request.replace_with.trim()) return false;
+  const before = input[path], gold = expected[path], got = actual[path];
+  if (typeof before !== 'string' || typeof gold !== 'string' || typeof got !== 'string' || got === gold ||
+      before.split(request.find).length !== 2 || before.replace(request.find, request.replace_with) !== gold ||
+      markdownTerminalNewlineEqual(path, before, gold) || !markdownTerminalNewlineEqual(path, got, gold)) return false;
+  const expectedPaths = Object.keys(expected).sort(), inputPaths = Object.keys(input).sort(), actualPaths = Object.keys(actual).sort();
+  if (JSON.stringify(expectedPaths) !== JSON.stringify(inputPaths) || JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths) ||
+      inputPaths.some(name => name !== path && (input[name] !== expected[name] || actual[name] !== expected[name]))) return false;
+  const checks = outcome.checks as Record<string, unknown> | undefined;
+  const filesCheck = outcome.files_check as { failed?: unknown[]; errors?: unknown[]; pending?: unknown[] } | undefined;
+  return outcome.value === record.semantics.expected && checks?.answer === true && checks?.file_return_consistency === true &&
+    checks.files === false && Object.entries(checks).filter(([key, value]) => key !== 'files' && value !== true).length === 0 &&
+    JSON.stringify(filesCheck?.failed) === JSON.stringify([path]) &&
+    !(filesCheck?.errors?.length) && !(filesCheck?.pending?.length);
+}
+
 /** Old infrastructure failures must not teach models that correct actions are bad decisions. */
 export function runtimeFailureReason(row: { task: Record<string, unknown>; provenance?: Record<string, unknown>;
   outcome?: Record<string, unknown>; trajectory?: unknown[] }): string | undefined {
   if (row.outcome?.accepted !== false) return;
   const record = row.task.program_ir as ProgramRecord;
+  if (legacyMarkdownTerminalNewlineFailure(row)) return 'legacy_markdown_terminal_newline_oracle';
   if (record.source === 'treedst' && (typeof record.semantics.oracle !== 'object' ||
       record.semantics.oracle.normalization !== 'named-tree')) return 'obsolete_named_tree_oracle';
   if (record.source === 'tatqa' && (typeof record.semantics.oracle !== 'object' ||

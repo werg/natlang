@@ -179,8 +179,10 @@ export function agreement(actual: unknown, expected: unknown): number {
 /** File contracts fail closed on malformed reports and unverified rewrites. */
 export const DATA_QUALITY_VERSION = 2;
 export const FILE_CONTENT_COMPARISON_VERSION = 'json-content/1';
-export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record'; threshold?: number; span?: number;
+export type FilesOracle = { compare?: 'content' | 'exact' | 'moves' | 'rewrite' | 'csv' | 'counts' | 'json-string-record' | 'tatqa-answer-record' | 'markdown-terminal-newline'; threshold?: number; span?: number;
   total?: number; rubric?: string; alternates?: Record<string, string[]>;
+  /** Explicitly allowlisted Markdown files whose one terminal line ending may vary. */
+  markdown_terminal_newline_paths?: string[];
   /** Reports may only quote the corresponding original source. */
   quote_sources?: Record<string, string>;
   /** Alternate annotated clauses, keyed by the report row's id. */
@@ -271,6 +273,15 @@ export function fileContentEqual(path: string, actual: string | undefined, expec
   return parsed !== null && parsed === jsonFileCanonical(expected);
 }
 
+/** Remove at most one terminal LF or CRLF. No other whitespace or line-ending normalization occurs. */
+export function markdownTerminalNewlineBody(text: string): string {
+  return text.endsWith('\r\n') ? text.slice(0, -2) : text.endsWith('\n') ? text.slice(0, -1) : text;
+}
+export function markdownTerminalNewlineEqual(path: string, actual: string | undefined, expected: string | undefined): boolean {
+  return typeof actual === 'string' && typeof expected === 'string' && /\.md$/i.test(path) &&
+    markdownTerminalNewlineBody(actual) === markdownTerminalNewlineBody(expected);
+}
+
 export function checkFiles(actual: Record<string, string>, expected: Record<string, string>, input: Record<string, string>,
     spec: FilesOracle = {}, judgments: FilesVerdict['judgments'] = {}): FilesVerdict {
   const compare = spec.compare ?? 'exact', threshold = probability(spec.threshold ?? 0.9, 'files'),
@@ -282,6 +293,36 @@ export function checkFiles(actual: Record<string, string>, expected: Record<stri
     return { accepted: !failed.length, score: paths.length ? (paths.length - failed.length) / paths.length : 1,
       passed: paths.length - failed.length, items: paths.length, failed, errors: [], pending: [],
       quality_version: DATA_QUALITY_VERSION };
+  }
+  if (compare === 'markdown-terminal-newline') {
+    const allow = spec.markdown_terminal_newline_paths;
+    const validAllow = Array.isArray(allow) && allow.length > 0 && new Set(allow).size === allow.length &&
+      allow.every(path => typeof path === 'string' && path.length > 0 && !path.startsWith('/') &&
+        !path.includes('\\') && !path.split('/').some(part => !part || part === '.' || part === '..') && /\.md$/i.test(path));
+    if (!validAllow) return { accepted:false, score:0, passed:0, items:0, failed:[], errors:['invalid_markdown_terminal_newline_allowlist'], pending:[], quality_version:DATA_QUALITY_VERSION };
+    const allowed = new Set(allow);
+    const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual), ...Object.keys(input)])].sort();
+    const failed: string[] = [], errors: string[] = [];
+    for (const path of allowed) {
+      if (typeof input[path] !== 'string' || typeof expected[path] !== 'string')
+        errors.push(`missing_markdown_target:${path}`);
+    }
+    let passed = 0;
+    for (const path of paths) {
+      const got = actual[path], want = expected[path], before = input[path];
+      const ok = allowed.has(path) ? markdownTerminalNewlineEqual(path, got, want) : got === want && want === before;
+      if (allowed.has(path)) {
+        if (before === undefined || want === undefined || got === undefined ||
+            markdownTerminalNewlineEqual(path, before, want)) errors.push(`invalid_or_vacuous_markdown_target:${path}`);
+      } else if (want !== before) errors.push(`unexpected_expected_change:${path}`);
+      if (want === undefined || got === undefined || before === undefined) {
+        if (!(want === undefined && got === undefined && before === undefined)) errors.push(`missing_or_unexpected_file:${path}`);
+      }
+      if (ok) passed++; else failed.push(path);
+    }
+    const score = paths.length ? passed / paths.length : 1;
+    return { accepted: !errors.length && !failed.length && score >= threshold, score, passed, items:paths.length,
+      failed, errors, pending:[], quality_version:DATA_QUALITY_VERSION };
   }
   const paths = [...new Set([...Object.keys(expected), ...Object.keys(actual), ...Object.keys(input)])].sort()
     .filter(path => expected[path] !== input[path] || actual[path] !== input[path]);

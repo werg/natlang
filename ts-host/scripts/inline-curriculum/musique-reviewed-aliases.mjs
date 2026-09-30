@@ -23,6 +23,15 @@ const REVIEWED_ALIASES = Object.freeze({
       Object.freeze({ path: 'articles/8.md', sha256: '49169269d2bd6fe4152973cdcc3de324214c3c9d33fb6e598f08ef0e41930623', text: 'is a sovereign country in western Europe. Lying off the north - western coast of the European mainland' }),
     ]),
   }),
+  '2hop__128979_90736': Object.freeze({
+    primary: '1985',
+    accepted: 'June 19, 1985',
+    rationale: 'The supplied WAJM article places the station in Atlantic City; the supplied Golden Nugget Atlantic City article identifies Atlantic City as its location and explicitly gives its opening date as June 19, 1985. That date is a more precise supported answer consistent with the primary year answer.',
+    evidence: Object.freeze([
+      Object.freeze({ path: 'articles/8.md', sha256: '27b061349f5857e375e7a1bd63f5b60bde3fca6a448ea2b502f527f93ee2e7cd', text: 'WAJM, assigned to 88.9 FM and licensed to Atlantic City, New Jersey' }),
+      Object.freeze({ path: 'articles/10.md', sha256: '924086dc3cc92d11056f890bbe326c959130e395da514d2251ec0124640612a6', text: 'Golden Nugget Atlantic City Location Atlantic City, New Jersey Address 1 Castle Boulevard Opening date June 19, 1985' }),
+    ]),
+  }),
 });
 
 /**

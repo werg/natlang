@@ -16,6 +16,32 @@ import urllib.request
 from pathlib import Path
 
 
+def resolve_entry_jobs(entry, runtime=None):
+    """Use the collector's own digest: indices can overlap between source campaigns."""
+    if '_resolved_jobs' not in entry:
+        runtime = Path(runtime) if runtime else Path(__file__).resolve().parents[1] / 'ts-host'
+        code = """
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+const [collector, source, start, count] = process.argv.slice(1);
+const { recordDigest } = await import(pathToFileURL(collector).href);
+const records = readFileSync(source, 'utf8').split(/\\r?\\n/).filter(line => line.trim()).map(JSON.parse);
+const jobs = [];
+for (let index = Number(start); index < Number(start) + Number(count); index++) {
+  if (!records[index]) throw new Error(`missing source record ${index}`);
+  const digest = recordDigest(records[index]);
+  jobs.push({index, program_id: records[index].id, digest,
+    key: `${String(index).padStart(6, '0')}-${digest.slice(0,16)}`});
+}
+process.stdout.write(JSON.stringify(jobs));
+"""
+        output = subprocess.check_output(['node', '--input-type=module', '-e', code,
+            str(runtime / 'dist/teacher/collector.js'), entry['source'],
+            str(entry['index']), str(entry.get('count', 1))], text=True)
+        entry['_resolved_jobs'] = json.loads(output)
+    return entry['_resolved_jobs']
+
+
 def local_decode_progress():
     """A long batched reply can be decoding before its next durable checkpoint exists."""
     try:
@@ -40,16 +66,21 @@ def partial_metrics(entry):
             if digest in requests:
                 metrics["repeated_request_hashes"] += 1
             requests.add(digest)
-    indices = range(entry['index'], entry['index'] + entry.get('count', 1))
-    # Resolve each root independently: a finished root has a result while its siblings
-    # may still have partial checkpoints. Count each root once, preferring the result.
-    for index in indices:
-        results = list(Path(entry['jobs']).glob(f"{index:06d}-*.result.json"))
-        paths = results or list(Path(entry['jobs']).glob(f"{index:06d}-*.partial.json"))
+    # Resolve each root independently, taking its latest exact-identity artifact.
+    # A fresh partial can supersede a result from an earlier attempt of the same IR.
+    for job in resolve_entry_jobs(entry):
+        result = Path(entry['jobs']) / f"{job['key']}.result.json"
+        partial = Path(entry['jobs']) / f"{job['key']}.partial.json"
+        paths = sorted((path for path in (result, partial) if path.exists()),
+                       key=lambda path: path.stat().st_mtime_ns, reverse=True)
         for path in paths:
             completed = path.name.endswith('.result.json')
             try:
-                turns = json.loads(path.read_text())['trajectory' if completed else 'turns']
+                row = json.loads(path.read_text())
+                program_id = row.get('task', {}).get('program_ir', {}).get('id') if completed else row.get('program_id')
+                if program_id != job['program_id'] or row.get('provenance', {}).get('program_ir_sha256') != job['digest']:
+                    continue
+                turns = row['trajectory' if completed else 'turns']
             except (OSError, ValueError, KeyError):
                 continue
             metrics['saved_turns'] += len(turns)
@@ -64,6 +95,7 @@ def partial_metrics(entry):
                 if action in seen:
                     metrics['repeated_action_sets'] += 1
                 seen.add(action)
+            break  # Count this root once, never both its partial and finished result.
     metrics['unique_action_sets'] = len(seen)
     metrics['unique_request_hashes'] = len(requests)
     metrics['repetition_scope'] = 'action shapes across all child calls; not a semantic stall detector'
@@ -73,12 +105,14 @@ def partial_metrics(entry):
 def retry_deadline(entry):
     """Provider minimum delays survive exhausted retries, timeouts, and supervisor restarts."""
     deadline = 0
-    for index in range(entry['index'], entry['index'] + entry.get('count', 1)):
-        paths = list(Path(entry['jobs']).glob(f"{index:06d}-*.retry.json"))
-        paths.append(Path(entry['jobs']) / f"{index:06d}.error.json")
+    for job in resolve_entry_jobs(entry):
+        paths = [Path(entry['jobs']) / f"{job['key']}.retry.json",
+                 Path(entry['jobs']) / f"{job['index']:06d}.error.json"]
         for path in paths:
             try:
                 row = json.loads(path.read_text())
+                if row.get('program_id') != job['program_id']:
+                    continue
                 value = float(row.get('until', row.get('retry_not_before', 0))) / 1000
                 if math.isfinite(value):
                     deadline = max(deadline, value)
@@ -121,6 +155,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     for entry in entries:
         if entry['key'] in attempted:
             continue
+        resolve_entry_jobs(entry, runtime)
         if min_free_mib:
             free_mib = shutil.disk_usage(journal.parent).free // (1024 * 1024)
             if free_mib < min_free_mib:

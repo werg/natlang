@@ -1,3 +1,32 @@
+> **CURRENT — 2026-09-30 07:45 UTC: all teachers runtime-v17.**
+> Boundary rollout complete, no overlapping collectors. Luna97137/97063 on
+> combined v17 queues; Bonsai97277 on existing queue-v44. Same journals/caps/server.
+> Source-specific supervisor monitoring active; five independent retries ongoing.
+> Next hourly inspection08:11UTC; refresh recipe once after current quality batch.
+
+> **CURRENT — 2026-09-30 07:43 UTC: v17 boundary rollout pending.**
+> All v16 workers migrated normally: Luna93802/93803, Bonsai94895. Sole new
+> runtime-v17-rollout watcher waits for their journaled boundaries, preserving
+> queues/caps/journals. Check state for new PIDs before further changes. Five
+> retries precede Luna continuation: CommitPack136/180/73 scoped Markdown variants,
+> reviewed MuSiQue date alias, independent retry of false inactivity interruption.
+> Supervisor bug: original and next campaigns reuse indices in jobs directory;
+> old index-only lookup chose an unrelated completed result over current partial.
+> Interrupted worker2 next0012 actually saved45 replies, old telemetry reported5.
+> Fixed lookup uses frozen collector digest plus program ID/provenance hash, picks
+> latest matching result/partial once per root; retry deadlines also source-specific.
+> Raw artifacts/journal timeout retained; no false model-negative label. Evidence
+> hourly/supervisor-program-identity/audit.json. Existing old PIDs only adopt fix
+> when restarted at boundary. No change to hard/inactivity budgets or backoff.
+> Markdown comparator is opt-in for changed allowlisted .md target only: remove at
+> most one EOF LF/CRLF; body, other files, code files remain exact. Missing targets,
+> extra blanklines and unrelated edits fail; EOF-only tasks keep old exact contract.
+> Future CommitPack variants clearly request replacement exactly once. Native
+> references73/136/180 pass; old136/180 migration holds, duplicate73/truncated42
+> remain wrong. MuSiQue date alias pins input hashes; old trace not promoted.
+> Recipe-v16 predates new migration classifier; refresh once with next hourly batch.
+> Native/build audits only, no tests or student training. Next full check08:11UTC.
+
 > **2026-09-30 07:32 UTC inventory refresh:** recipe-v16 now includes current source holds,
 > all four static bundles (32716 approved decisions), 2306 selected generated
 > trajectories /1881 programs; no missing default inputs or included quality blockers.
