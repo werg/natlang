@@ -1022,7 +1022,7 @@ Recipe-v9 refresh completed: 1851 selected generated trajectories/1674 programs,
 Luna runtime-v9 boundary rollout completed: worker1 PID74281, worker2 PID74312; authority/check updated. Bonsai70991 still awaiting currentcase boundary under monitor74250.
 
 
-## 2026-09-30 05:20 UTC — three narrow TATQA aggregation/change source holds
+## 2026-09-30 05:16 UTC — three narrow TATQA aggregation/change source holds
 
 Independent review and root input verification establish ambiguous question contracts:
 e27c8621... total at two dates can mean two net balances versus sum; f6ef3a62...
@@ -1042,7 +1042,7 @@ TATQA numericrepresentation/precision improvements under focusedreview; rawnegat
 remain preserved for audit and should not be assumed causal DPOpairs.
 
 
-## 2026-09-30 05:37 UTC — opt-in TATQA numeric answer contract
+## 2026-09-30 05:29 UTC — opt-in TATQA numeric answer contract
 
 New tatqa-answer-record oracle/files comparator validates strict exactly answer/scale
 strings, duplicate-key rejection, exact enumscale, standalone decimal sign/grouped
@@ -1079,3 +1079,8 @@ First7newnumericcasesaccepted (small sample, not comparison-rateclaim). All249
 convertedLunanumericroots have original-arithmetic-gold adaptation (not year/count
 spans). Recipe-v10:1905selectedtrajectories/1704programs, no includedblockers/missing
 defaultinputs, fourstatic32899decisions. Systematic TATQAoperationwording audit ongoing.
+
+05:34UTC log correction: matched recent note headings to actual commit/artifact
+UTCtimes (numericfreeze05:27, rollout/snapshot05:28, commit05:29/latestnote05:32;
+three-holdpublicationcommit05:16). Earlier estimated05:37/05:43headings ran ahead
+of clock; corrected. Authoritative processevents retain actualepochtimestamps.

@@ -1,4 +1,4 @@
-> **05:43 UTC rollout/snapshot update:** Luna-v10 completed independently at
+> **05:32 UTC rollout/snapshot update:** Luna-v10 completed independently at
 > boundaries: worker1PID77324,worker2PID77384 on numeric-campaign/luna-N.queue.jsonl,
 > frozenv10; authority/check updated. First7newnumericcases all accepted (small sample,
 > no rate claim). All249convertedLunacases verified original-arithmetic-gold, not year/
@@ -8,7 +8,7 @@
 > remains. Operation/wording sweep delegated to luna_source_oracle_audit, readonly,
 > hourly/tatqa-operation-contract-audit. Continue hourlyloop, nextfullcheck~06:04UTC.
 
-> **CURRENT — 2026-09-30 05:37 UTC: numeric-contract rollout queued.**
+> **CURRENT — 2026-09-30 05:29 UTC: numeric-contract rollout queued.**
 > Frozenruntime-v10 adds three TATQA sourceholds and opt-in numeric-answer-v1 adapter/
 > tatqa-answer-record oracle/files checks. Strict answer/scale strings, exact scale,
 > numeric-only decimal/sign/grouped-comma/2dp equality; no prose/currency extraction,
@@ -34,7 +34,7 @@
 >1674programs(predates3TATQAholds). Fullnextcheck~06:04UTC in hourly/check.json.
 > Keep hourlyloop active, inspect failures, refreshauthorityPIDs/queues afterrollouts.
 
-> **05:20 UTC quality update:** Three TATQA aggregation/percentage-change cases now
+> **05:16 UTC quality update:** Three TATQA aggregation/percentage-change cases now
 > centrally sourceheld (e27c8621...,f6ef3a62...,7a6c059d...), golds retained. Directory
 > staticquality-v5 published after hash/fulladmission verification:1299cases/3459approved
 > decisions,7cumulativeheldcases; fourstatic32899approved. Catalog4→5links preserve
