@@ -58,7 +58,7 @@ try {
 }
 if(!held.length)throw Error('no_holds_require_publication');
 const identity=key=>({path:streams[key].path.slice(root.length+1),sha256:streams[key].hash.digest('hex'),rows:streams[key].rows});
-const next={...prior,cases:streams.ir.rows,by_source:bySource,ir:identity('ir'),results:identity('results'),turns:identity('turns'),
+const next={...prior,current_publication_revision:revision,cases:streams.ir.rows,by_source:bySource,ir:identity('ir'),results:identity('results'),turns:identity('turns'),
   training_decisions:approvedDecisions,held_decisions:heldDecisions,
   quality_filter:{revision,prior_manifest_sha256:priorHash,prior_cases:prior.cases,held_cases:held.length,reasons,ledger:identity('ledger'),
     policy:'Only explicit source-review/reserved-evaluation holds; original inputs, golds and trajectories unchanged; no DPO negatives.'},

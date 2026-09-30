@@ -65,7 +65,10 @@
     "data/teacher/directory-expansion/quality-v19.static.turns.jsonl": "data/teacher/directory-expansion/quality-v20.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v20.train.ir.jsonl": "data/teacher/directory-expansion/quality-v21.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v20.static.results.jsonl": "data/teacher/directory-expansion/quality-v21.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v20.static.turns.jsonl": "data/teacher/directory-expansion/quality-v21.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v20.static.turns.jsonl": "data/teacher/directory-expansion/quality-v21.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v21.train.ir.jsonl": "data/teacher/directory-expansion/quality-v22.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v21.static.results.jsonl": "data/teacher/directory-expansion/quality-v22.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v21.static.turns.jsonl": "data/teacher/directory-expansion/quality-v22.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -297,6 +300,15 @@
       "source_ids": ["3hop1__709382_146811_31262", "4hop1__38130_8966_31714_52260"],
       "root_adjudications": "runs/generation-check-20260930-hourly/musique-additional-source-holds/root-decision-v21.json",
       "reason": "Hank Snow's death residence is not supplied; a Privy Council passport date range does not answer the first-date question. Original golds preserved; no DPO negatives."
+    },
+    "directory-expansion-multihop-answer-and-event-holds": {
+      "revision": "quality-v22",
+      "held_published_cases": 4,
+      "cases": 1224,
+      "approved_decisions": 3227,
+      "source_ids": ["2hop__5371_5400", "3hop2__103025_25582_21116", "2hop__130410_85298", "2hop__79686_65123"],
+      "root_adjudications": "runs/generation-check-20260930-hourly/musique-additional-source-holds/root-decision-v22.json",
+      "reason": "Three ambiguous country/event/minimum-age contracts plus one valid source with multiple annual-event answers under a strict single-answer oracle. Preserve golds; no DPO negatives."
     }
   }
 }
