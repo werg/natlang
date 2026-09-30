@@ -93,6 +93,12 @@ export function sourceConversionProblems(row: { task?: Dict; provenance?: Dict; 
   const qualityProblems = (!quality && qualityRequired) || quality &&
     (quality.version !== 'natlang.source_quality/1' || quality.status !== 'eligible' ||
      !Array.isArray(quality.checks) || !quality.checks.length || quality.checks.some(item => typeof item !== 'string' || !item)) ? ['source_quality_held'] : [];
+  const sourceIdentity = program?.external_source as Dict | undefined;
+  if ((program?.generation as Dict | undefined)?.operation_derivative &&
+      (typeof sourceIdentity?.source_id !== 'string' ||
+       !Array.isArray(program?.source_ids) || !program.source_ids.includes(sourceIdentity.source_id) ||
+       sourceIdentity.source_id === sourceIdentity.derived_from_source_id))
+    qualityProblems.push('operation_derivative_source_identity_mismatch');
   if (reservedEvaluation) qualityProblems.push('held_out_reserved_curriculum');
   // Offline history replays are review artifacts until a migration admission
   // contract verifies both teacher provenance and the changed runtime context.

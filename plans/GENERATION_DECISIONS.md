@@ -1,5 +1,11 @@
 # Generation decisions — 2026-09-27 continuation
 
+## 2026-09-30 14:32 UTC substantive Luna coverage campaign
+
+- Started two Luna workers261656/261657 on106freshsource cases:50SciFact and56workflow,53perworker. Workflow static data already exists; model runs add strategies. Root scanned6438saved Luna rows and confirmed zero selected-source attempts. Successful same-source outcomes suppress retries even if prompt/IR revisions differ; failed-only cases need diagnosis first.
+- Added explicit derivative source-identity admission guard after finding the same inherited-parent-ID bug in two preparation drafts. Corrected drafts pass; originals remain immutable. Node build/native metadata audit passed; no tests.
+- Preserve superseded128case proposal and incomplete initial coverage ledger. Source-aware review and root independent launch proof correct exact-IR overcounts; ledger correction and quality-v24 publication/recipe refresh remain tracked.
+
 ## 2026-09-30 14:14 UTC Luna queue replenishment
 
 - Resumed two Luna workers on independently reviewed signed-P&L derivative and unchanged maturity-row repair. Broader missing Luna source coverage audit underway; completed finite queues do not imply overall target completion.
