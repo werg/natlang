@@ -1,3 +1,13 @@
+> **CURRENT — 2026-09-30 06:38 UTC: all teachers frozen runtime-v13.**
+> Boundary rollout86322 completed: Luna86353/86475, Bonsai87000 queue-v41. Same caps
+> (Luna2 provider, Bonsai4/GPU/server4), backoff and journals. Authorities updated.
+> Recipe-v13 completed: 2156 selected generated trajectories / 1833 programs;
+> all four static bundles present, 32837 approved static decisions, no missing
+> default inputs or included quality blockers. Final student audits pending.
+> Broader read-only included-TATQA source audit assigned to existing Luna quality
+> agent: hourly/tatqa-remaining-source-sweep. No extra provider/GPU jobs. Root must
+> check evidence before any hold/recovery. Next full hourly check07:08UTC.
+
 > **06:34 UTC: four more source holds, v13 boundary rollout pending.**
 > Root checked full tables, notes and references from the 0625 numeric delta audit.
 > cc42e86a: signed expense table versus positive expense-magnitude note/gold;
