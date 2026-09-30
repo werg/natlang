@@ -99,17 +99,31 @@ def catalog(repo, config=None):
         if name not in artifacts:
             artifacts[name] = dict(old, present=False, status='missing_artifact', next_action='Locate archived/renamed source and record replacement lineage; do not silently drop.')
     snapshots = []
+    failure_inventories = []
     snapshot_dir = repo / 'data/teacher/generated-snapshots'
     if snapshot_dir.exists():
         grouped_snapshots = {}
+        grouped_failures = {}
         for path in snapshot_dir.glob('*.manifest.json'):
             value = json.loads(path.read_text())
-            if not config or value['results']['path'] in inputs:
-                digest = value['results']['sha256']
-                grouped_snapshots.setdefault(digest, []).append(dict(value, manifest=str(path)))
+            if value.get('version') in {'natlang.generated_training_snapshot/1', 'natlang.generated_training_snapshot/2'}:
+                if 'results' not in value or 'sha256' not in value['results']:
+                    raise ValueError(f'Generated snapshot manifest lacks result identity: {path}')
+                if not config or value['results']['path'] in inputs:
+                    digest = value['results']['sha256']
+                    grouped_snapshots.setdefault(digest, []).append(dict(value, manifest=str(path)))
+            elif value.get('version') == 'natlang.teacher_failure_inventory/1':
+                if 'artifact' not in value or 'sha256' not in value['artifact']:
+                    raise ValueError(f'Failure inventory manifest lacks artifact identity: {path}')
+                if not config or value['artifact']['path'] in inputs or str(path.resolve()) in inputs:
+                    digest = value['artifact']['sha256']
+                    grouped_failures.setdefault(digest, []).append(dict(value, manifest=str(path)))
         for values in grouped_snapshots.values():
             latest = max(values, key=lambda e: e['time'])
             snapshots.append(dict(latest, equivalent_manifest_records=[e['manifest'] for e in values]))
+        for values in grouped_failures.values():
+            latest = max(values, key=lambda e: e['created_at'])
+            failure_inventories.append(dict(latest, equivalent_manifest_records=[e['manifest'] for e in values]))
     missing_inputs = []
     not_carried = []
     if config:
@@ -140,7 +154,8 @@ def catalog(repo, config=None):
     report = {'version': 'natlang.training_data_inventory/1', 'policy': str(policy_path),
               'policy_sha256': hashlib.sha256(policy_path.read_bytes()).hexdigest(),
               'artifacts': list(artifacts.values()), 'by_status': dict(Counter(e['status'] for e in artifacts.values())),
-              'generated_snapshots': snapshots, 'missing_required_default_inputs': missing_inputs,
+              'generated_snapshots': snapshots, 'generated_failure_inventories': failure_inventories,
+              'missing_required_default_inputs': missing_inputs,
               'not_carried_forward': not_carried,
               'scope': 'Persistent data artifact catalog plus immutable generated-job snapshots with per-file admission ledgers. Counts overlap; not a final training-ready count.',
               'discovery_formats': ['jsonl', 'jsonl.gz', 'json', 'json.gz', 'parquet', 'csv', 'arrow', 'zip', 'tar.gz'],
@@ -173,6 +188,12 @@ def catalog(repo, config=None):
         overview.append(f"- {s['selected_trajectories']:,} selected trajectories / {s['unique_programs']:,} unique programs from {s['completed_files']:,} completed files. Final training audit pending. Manifest: `{snapshot['manifest']}`.")
         if s.get('exclusion_categories'):
             overview.append('- Held-file disposition counts (can overlap): ' + ', '.join(f'{k}: {v:,}' for k,v in s['exclusion_categories'].items()))
+    overview += ['', '## Generated teacher failure candidates', '']
+    if failure_inventories:
+        for inventory in failure_inventories:
+            overview.append(f"- {inventory['candidates']:,} retained failure candidates; immutable artifact `{inventory['artifact']['path']}` (SHA-256 `{inventory['artifact']['sha256']}`), manifest `{inventory['manifest']}`. Candidate retention does not assign DPO negatives or create pairs.")
+    else:
+        overview.append('- No generated failure-candidate inventory was carried into this recipe.')
     overview += ['', '## DPO pairs', '',
                  f"{report['dpo_inventory']['artifacts']} recorded pair artifacts; {report['dpo_inventory']['verified_pairs_across_distinct_content_sets']} native causally verified pairs after collapsing byte-identical sets. Final rendering/split/token/dedup audit pending.",
                  report['dpo_inventory']['count_caveat']]
