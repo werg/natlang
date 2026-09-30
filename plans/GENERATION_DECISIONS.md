@@ -1365,3 +1365,11 @@ Hourlyreader initialreportcaughtasyncgeneratorfor/ofreadfailure; rootfixedforawa
 Spool audit reconciles123Bonsaifinish events as60parentcase finishes+63member aliases; all60exactnative source/jobmatches exist,55admitted/materialized/237decisions,5rejects. Add13title and2derivatives=75distinctmodelresults inhour, not138newcases. Earlier138figure describesjournalfinish events only. Directemptyaggregateoutput isaworkingexport, notmissingdurablejobs. Futurehealth reports distinguishmetadataerrors, limitedoutputscope and canonicaljobresultcoverage.
 
 Recipe22inventory/hash/carryforwardaudit16checks passes; root validatedreadyrecord currentpolicy. Stillnotfinalstudentrender/split/token/dedup/mix readiness. Ten scopedoracle-only equivalencereviews underway, actualteacherhistory/runtime/modelvisibleinputs unchanged; broad history-replay admissiongate stays closed.
+
+## 2026-09-30T11:54:32.489Z — ten source-backed oracle-only approvals
+
+Rootmatched10candidatepayloads against exactoriginalprovider/runtime/IRvisibleinputs, helperderivedaliasIR, unchangedoutputs/files/actionledgers/fulltrajectories/providerhashes. checkOracle+admitRow+materializerpassed10rows37decisions. Publishedapproved.resultfileswithhashboundrootapproval/provenance, originalsretained. No genericmigrationgatechange: these areunchangedhistories/runtimewithhiddenoraclecorrection, notofflinehistoryreplay. Futurebuilderintegrationpending. Recipe22staleonlybythesetennewpositives; nextfullhourlysnapshot includesautomatically.
+
+Resolvedfalse traceintegrityalarm: recordedtrace_sha256hashescollectorcanonicalparsed events, rawJSONLfilehashis differentserializationidentity. Bothrecordedexplicitly, canonicalmatches10/10. Noactualtracechanges.
+
+Rootcalibrated5Bonsairejections: metricselection(2percentvs0.7million) andaggregationunit(8meanannualtotalsvs4meanfourcells) arenotnecessarilyarithmeticdefectsunderambiguousquestions. Signeddifference±7 alsooperationconventionreview. Keepgold/originals; source-operationclarifications pending, noautomaticpreference negatives.
