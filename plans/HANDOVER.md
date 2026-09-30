@@ -1,3 +1,20 @@
+> **CURRENT — 2026-09-30 05:55 UTC: all three teachers on frozenruntime-v11.**
+> Soleboundaryrollout79671 completed: Bonsai80478/runtime-v11/queue39 cap4/server4;
+> Luna79716/79801/runtime-v11/latestv11queues cap2/provider/noGPU/backoff. Supervisor
+> authoritycheck.json and Luna file-tree/state.json updated. Old70991/v8rootended
+> normallyat3600limit; finaljournalpreserved. CurrentBonsai nexteligiblecase47produces
+> freshresponses/GPU93%; nooverlap/in-flightqueueedit/serverrestart. Alloldermonitors
+> andruntime-v9/v10Bonsaistatesarchived/superseded; DO NOT restartthem. Readv11state.
+> Latestrecipe-v11 completed1964selectedtrajectories/1740programs; fourstatic32879
+> approveddecisions. Directoryquality-v6 has1296cases/3439approved/10cumulativeholds.
+> LatestnewLunacampaign261completed/211rawaccepted;47newnumericvariants/41accepted,
+>6rejects atprecheck (includes employeehold). Rawattempt counts differ from unique
+> admittedsource decisions. Numericrejectionaudit delegated, hourly/rejection-audit-0604-
+> numeric; awaitreport. Original559file/treesources retained;553eligible after6newholds.
+> No source/goldrewrites or unsafeadmissionrelaxations. Allsourceunits/operation/tree
+> audits and decisions below. Nextfullhourinspection~06:04UTC in hourly/check.json;
+> keep active-threadhourlyloop; no studenttraining/eval/tests.
+
 > **CURRENT — 2026-09-30 05:47 UTC: consolidated latest runtime rollout.**
 > Quantityunit auditcomplete: employee7.2million isbadsourceunit; fiveotherreviewed
 > share-countmagnitudeunitsaresupported. Goodwill123 versus61.5 remainswrongtotal

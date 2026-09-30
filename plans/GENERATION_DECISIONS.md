@@ -1125,3 +1125,9 @@ No journalfinishfabrication or interrupted modelwork; currentboundedheldroot fin
 normalbudget andrawpartialpreserved. Newsource/queuefilesareimmutableindependent
 variants; samecaps/seeds/jobs/journals. Luna1new79716, Luna2pending77384 atinspection.
 Recipe-v11refreshstartedafterlatestholds; planningonly, no training/eval/tests.
+
+05:55UTC allthreev11rolloutscomplete: Bonsai80478directfrom70991/v8toqueue39/v11;
+Luna79716/79801v11 latestfilteredqueues. HeldFOLIOcurrentrootnormalboundedtimeout
+finishpreserved; nexteligibleBonsaicasefreshresponses/GPU93%. NointermediateBonsai
+v9/v10restarts. Latestrecipe-v11:1964trajectories/1740programs, static32879decisions.
+Newnumericrejectionauditongoing; nextfullhourcheck~06:04.
