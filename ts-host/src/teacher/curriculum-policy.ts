@@ -58,7 +58,8 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
       record.semantics.oracle.normalization !== 'json-string-record')) return 'obsolete_json_format_oracle';
   // Extractive annotations do not enumerate every semantically equivalent span boundary.
   // Preserve wrong-answer traces for review without teaching valid paraphrases as negatives.
-  if (record.source === 'qasper' && (row.outcome?.rejection_reasons as string[] | undefined)?.includes('answer'))
+  if ((record.source === 'qasper' || record.source === 'musique') &&
+      (row.outcome?.rejection_reasons as string[] | undefined)?.includes('answer'))
     return 'unreviewed_extractive_answer_equivalence';
   if (Number(row.provenance?.runtime_contract_version ?? 0) >= 17) return;
   const family = (record.curriculum as { family?: string } | undefined)?.family ?? record.family;

@@ -1,5 +1,55 @@
 # Handover: training data, preference pairs, directory reducers (2026-09-27 evening)
 
+> **CURRENT — 2026-09-30 03:56 UTC; supersedes earlier process/snapshot details.**
+> Bonsai54068 remains queue-v33/runtime-v6, cap4/server4, GPU98–99%. Boundary
+> monitor62418 awaits current handoff:392:train-v32:0 before moving onto frozen
+> runtime-v7; inspect hourly/bonsai-v7-rollout-state.json before signaling/restarting.
+> No student training/GPU eval. V7 adds safe same-block positive const-literal counter
+> steps (e.g. i += chunk with const chunk=3000), preserving mutable/dynamic/zero/
+> negative/counter-shadow refusals. Saved MuSiQue snippet refused22 times now compiles.
+> Audit hourly/const-step-audit/report.json; Node build passed. Collector records
+> counter_loop_policy_version2 and requires it for checkpoint reuse. No unit tests.
+>
+> Luna balanced workers61176/61177, cap2/backoff/noGPU, unchanged frozen runtime-v5.
+> **Authority runs/luna-directory-balanced-20260930/state.json.** Coordinated exact-PID
+> boundary stop finished both prior cases before either restart.150 pending entries
+> split75/75 by visible-input size; source/index/seed/jobs retained, outputs/logs now
+> worker-specific. At03:52,144 remained across the new queues; old jobs directories
+> remain authoritative result storage. Both new journals contain hashed copies of
+> BOTH old histories for resume: never sum copied finish events across journals.
+> Predecessor explicit state marked rolled-forward. New helper supports old_journal,
+> a restart barrier, distinct new journals and filtering history by queue membership.
+> Actual rollover audit runs/luna-directory-balanced-20260930/rollout.jsonl.
+>
+> Latest raw Luna chain361 completed artifacts/342 oracle-accepted (includes reviewed
+> retries; NOT unique training examples). Current explicit results207/197. Three new
+> rejects:199 missed unfulfilled work after malformed tool calls;201 ignored succeeded
+> cancellation/reschedule;444 falsely blocked after incomplete bulk reading. Prior7
+> mostly criterion confusion; no new schema failures or justified new source holds.
+> Reports hourly/rejection-audit-0335 and -0355. Case135 asks policy-required handoff,
+> not missing verification/tool503/voluntary actual handoff: root retains model-error
+> classification despite initial subagent hold suggestion. claims_supported permits
+> factual support in tool error payloads too; do not invent a successful-call-only rule.
+>
+> Bonsai11 completed entries last hour, no timeout. MuSiQue169/185 rejected plausible
+> evidence-supported paraphrases. **New admission/DPO guard:** all MuSiQue answer
+> mismatches require unreviewed_extractive_answer_equivalence (same as QASPER), with
+> raw verdicts/golds retained. Accepted MuSiQue generation continues; reviewed aliases
+> and faithful replay remain pending, no false-negative promotion. Actual5-row audit
+> confirms2 held paraphrases/2 admitted exact positives/TATQA mismatch retained.
+> TATQA176 computed103.1 correctly but invented million with no visible unit; root
+> does NOT add a source hold just from that convention. Scale-visibility audit ongoing
+> before any global prompt default (some other gold scales may lack explicit units).
+>
+> Planning-only recipe-v7 automatically includes1,638 selected generated trajectories/
+>1,481 programs and all4 canonical static bundles (32,969 approved static decisions).
+> No inventory omissions/included quality blockers; final student render/token/split/
+> dedup/25%-reducer-mix still pending. Source disputes, evaluation and migration holds
+> remain. Continue hourly active-thread checks: exact next due hourly/check.json.
+> Frozen runtimes immutable; no hosted automation. Unrelated untracked research/plans
+> and unsloth_compiled_cache must remain untouched.
+
+
 > **CURRENT — 2026-09-30 02:35 UTC hourly check; supersedes all process/publication details below.**
 > Bonsai54068 now runs queue-v33/runtime-v6, cap4/server4; rollout completed without
 > overlap. Source holds excluded3 more future roots after reserved-seed filtering.

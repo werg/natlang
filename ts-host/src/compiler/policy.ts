@@ -69,6 +69,26 @@ function rootIdentifier(expression: ts.Expression): string | undefined {
   return ts.isIdentifier(root) ? root.text : undefined;
 }
 
+/** Resolve a const numeric literal declared earlier in the same lexical statement list. */
+function constNumericLiteralBefore(node: ts.ForStatement, name: string): number | undefined {
+  const list = node.parent;
+  if (!ts.isBlock(list) && !ts.isSourceFile(list)) return;
+  const loopIndex = list.statements.indexOf(node);
+  if (loopIndex < 0) return;
+  for (let i = loopIndex - 1; i >= 0; i--) {
+    const statement = list.statements[i]!;
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== name) continue;
+      if (!(statement.declarationList.flags & ts.NodeFlags.Const) || !declaration.initializer ||
+          !ts.isNumericLiteral(declaration.initializer)) return;
+      const value = Number(declaration.initializer.text.replaceAll('_', ''));
+      return Number.isFinite(value) && value > 0 ? value : undefined;
+    }
+  }
+  return;
+}
+
 /** Check whether a counter `for` loop has a canonical monotone finite form. */
 function canonicalFor(node: ts.ForStatement): string | undefined {
   const initializer = node.initializer;
@@ -95,9 +115,11 @@ function canonicalFor(node: ts.ForStatement): string | undefined {
     direction = step.operator === ts.SyntaxKind.PlusPlusToken ? 'up' : step.operator === ts.SyntaxKind.MinusMinusToken ? 'down' : undefined;
   else if (step && ts.isBinaryExpression(step) && ts.isIdentifier(step.left) && step.left.text === counter &&
       (step.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken || step.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken) &&
-      ts.isNumericLiteral(step.right) && Number(step.right.text) > 0)
+      ((ts.isNumericLiteral(step.right) && Number(step.right.text.replaceAll('_', '')) > 0) ||
+        (ts.isIdentifier(step.right) && step.right.text !== counter &&
+          constNumericLiteralBefore(node, step.right.text) !== undefined)))
     direction = step.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ? 'up' : 'down';
-  if (!direction) return 'step the counter with ++, --, += n or -= n for a positive literal n';
+  if (!direction) return 'step the counter with ++, --, += n or -= n for a positive numeric literal or a same-scope const numeric literal';
   if ((direction === 'up') !== upward) return 'step the counter toward its bound';
   const assigned = assignedIdentifiers(node.statement);
   if (assigned.has(counter)) return 'do not assign the counter inside the loop body';

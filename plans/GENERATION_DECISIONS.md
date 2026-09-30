@@ -853,3 +853,47 @@ stage preparation so resume cannot reuse splits after a policy change.
 Planning recipe-v6 now includes current static publications and automatic snapshot
 (1,448 trajectories/1,291 programs) with no inventory omissions/quality blockers.
 Final student/template/token/group/dedup/25%-mix audits still pending; no training run.
+
+
+## 2026-09-30 03:56 UTC — equivalent answers, finite loops, balanced Luna queues
+
+Root source/rubric review overrides two overly broad audit suggestions: Workflow135's
+handoff_required asks policy/entitlement escalation, not missing prerequisites or an
+actual voluntary escalation; retain model-error classification. TATQA176 has correct
+103.1 but no evidence for invented million; no annotation hold solely for conventional
+unit inference. A separate scale-visibility audit precedes global prompt changes.
+claims_supported accepts factual evidence from tool error payloads; success is needed
+for claiming an action completed, not for every fact in an error response.
+
+**Admission decision:** MuSiQue answer mismatches now receive the existing extractive
+answer-equivalence review reason. Two current rejects are supported paraphrases
+(North Korea and China; Western Europe). Preserve original labels/verdicts and exclude
+unreviewed negatives/handoffs/materialization. Exact accepted positives remain useful;
+no fuzzy global text oracle, source-label rewrite or wholesale generation pause.
+Five actual collected rows audited under rebuilt admission; two exact positives pass,
+two paraphrases held, TATQA invented scale remains wrong_return. Alias-based repair
+still requires explicit reviewed source contracts and faithful replay.
+
+**Compiler usability:** const chunk=3000; i+=chunk is finite but old literal-only
+counter guard caused22 repeated refusals in one saved trace. Permit only a preceding
+same-block/source const with finite positive direct NumericLiteral. No alias/expression
+or outer-scope evaluation. Reject counter-name shadowing, mutable/dynamic/zero/negative
+steps; existing bound/body guards remain. Saved snippet now compiles; comparison audit
+preserves refusals and literal success. Build passed; no unit tests. Collector adds
+counter_loop_policy_version2 to provenance/reuse keys. Frozen runtime-v7 prepared;
+Bonsai monitor62418 moves54068 only after its journaled case boundary. Luna staysv5.
+
+**Queue operations:** static even/odd Luna assignment left fast worker nearly done and
+slow worker about150 cases behind. Added coordinated stop barrier/old_journal/history
+carry-forward support. Both old supervisors53036/53160 completed current roots and
+stopped before new61176/61177 launched.150 pending entries split75/75 by estimated
+input size, source/index/seed/jobs preserved. Worker-specific new outputs prevent races
+when moved entries originally shared old output paths. Both distinct journals retain
+hashed old histories for resume; copied finishes are not additive progress. Actual
+rollover confirms no overlapping workers. Authority balanced state; cap2/noGPU/backoff.
+
+At03:52 raw chain361completed/342oracle-accepted includes retries, not unique admission.
+Three fresh rejects are two outcome-judgment mistakes and one incomplete-reading block;
+no new source holds/schema/runtime errors. Recipe-v7 planning snapshot1,638selected
+trajectories/1,481programs, canonical static decisions32,969, no included blockers or
+missing defaults. Student rendering/token/group/dedup/final25%-mix still pending.

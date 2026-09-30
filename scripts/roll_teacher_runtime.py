@@ -1,5 +1,6 @@
 """Move exact queue supervisors after their current journaled case finishes."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import signal
@@ -40,11 +41,13 @@ def children(pid):
 
 def events(worker):
     rows = []
-    for line in Path(worker['journal']).read_text().splitlines():
+    for line in Path(worker.get('old_journal', worker['journal'])).read_text().splitlines():
         if not line.strip():
             continue
         try:
-            rows.append(json.loads(line))
+            row = json.loads(line)
+            if 'old_entries' not in worker or row.get('key') in worker['old_entries']:
+                rows.append(row)
         except json.JSONDecodeError:
             # A concurrent append can expose its final, incomplete line; retry next tick.
             break
@@ -68,10 +71,19 @@ def main():
     STATE = Path(config['state'])
     from scripts.freeze_training_runtime import tree_identity
     assert tree_identity(RUNTIME) == json.loads((RUNTIME / 'frozen-runtime.json').read_text())['files']
+    if config.get('journal_sources'):
+        if not config.get('restart_barrier'):
+            raise RuntimeError('Journal migration requires a coordinated stop barrier')
+        targets = [Path(worker['journal']).resolve() for worker in workers]
+        if len(set(targets)) != len(targets) or any(path.exists() for path in targets):
+            raise RuntimeError('Migrated journals must be distinct, new files')
+        for source in config['journal_sources']:
+            if not Path(source).is_file():
+                raise RuntimeError(f'Missing journal source: {source}')
 
     for worker in workers:
-        rows = events(worker)
         worker['old_entries'] = {e['key']: e for e in map(json.loads, Path(worker['old_queue']).read_text().splitlines())}
+        rows = events(worker)
         if not process_live(worker['old_pid']):
             if not queue_exhausted(worker['old_entries'], rows):
                 raise RuntimeError(f"old {worker['name']} supervisor disappeared with unfinished queue entries; inspect before resuming")
@@ -94,6 +106,7 @@ def main():
         worker['phase'] = 'waiting'
         emit('await_case_boundary', worker, supervisor_pid=worker['old_pid'], key=worker['active_key'])
 
+    journals_prepared = not config.get('journal_sources')
     for tick in range(72000):
         for worker in workers:
             if worker['phase'] == 'waiting':
@@ -122,6 +135,27 @@ def main():
                     if time.monotonic() - worker['stop_time'] > 30:
                         raise RuntimeError(f"{worker['name']} did not stop; refusing overlapping worker")
                     continue
+                worker['phase'] = 'ready'
+                emit('old_supervisor_stopped', worker, exact_pid=worker['old_pid'])
+        ready_to_restart = not config.get('restart_barrier') or all(
+            worker['phase'] in ('ready', 'running') for worker in workers)
+        if ready_to_restart and not journals_prepared:
+            rows, sources = [], []
+            for source in config['journal_sources']:
+                raw = Path(source).read_bytes()
+                # Parse every completed line after all old writers have stopped.
+                rows.extend(json.loads(line) for line in raw.decode().splitlines() if line.strip())
+                sources.append(dict(path=source, sha256=hashlib.sha256(raw).hexdigest()))
+            payload = ''.join(json.dumps(row) + '\n' for row in rows)
+            for worker in workers:
+                with Path(worker['journal']).open('x') as stream:
+                    stream.write(payload)
+                emit('journal_history_carried_forward', worker, sources=sources, events=len(rows))
+            journals_prepared = True
+        if ready_to_restart:
+            for worker in workers:
+                if worker['phase'] != 'ready':
+                    continue
                 command = [sys.executable, str(ROOT / 'scripts/run_bonsai_queue.py'),
                            worker['queue'], worker['journal'], '--runtime', str(RUNTIME), *worker['extra']]
                 with Path(worker['log']).open('a') as log:
@@ -133,7 +167,7 @@ def main():
                      journal=worker['journal'], runtime=str(RUNTIME))
         if all(worker['phase'] == 'running' for worker in workers):
             STATE.write_text(json.dumps(workers, indent=2) + '\n')
-            print('Both workers migrated at journaled boundaries; no overlapping Luna collectors.', flush=True)
+            print('All workers migrated at journaled boundaries; no overlapping collectors.', flush=True)
             break
         time.sleep(0.05)
     else:
