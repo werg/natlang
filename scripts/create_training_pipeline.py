@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json
+from reviewed_training_inputs import resolve_reviewed_turn_inputs
 
 
 def file_project_has_subfunctions(ir):
@@ -139,6 +140,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
                                  for key in ('helpers', 'imports', 'recursive')):
                     saved_replays.append((tasks_path, captures_path, len(tasks)))
     verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else compatible_turns)
+    verified_turns, resolved_turn_replacements, turn_input_aliases = resolve_reviewed_turn_inputs(
+        repo, verified_turns, allow_coalesce=verified_turns_override is None)
     for path in verified_turns:
         if Path(path).is_file() and not current_program_turns(path):
             raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
@@ -398,6 +401,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             'static_source_bundles': included_statics,
             'existing_teacher_results': teacher_results,
             'generated_failure_candidates': generated_failure_inventory,
+            'resolved_training_turn_replacements': resolved_turn_replacements,
+            'coalesced_training_turn_input_aliases': turn_input_aliases,
             'dpo_pair_build': {'stage': 'build-existing-preferences', 'training_started': False,
                               'policy': 'Current-runtime causal pairs only; source/migration holds are not negative labels. Student rendering/split/token audits required before DPO.'} if teacher_results else None,
             'excluded_legacy_turns': excluded_turns,

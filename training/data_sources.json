@@ -78,7 +78,9 @@
     "data/teacher/directory-expansion/quality-v23.static.results.jsonl": "data/teacher/directory-expansion/quality-v24.static.results.jsonl",
     "data/teacher/directory-expansion/quality-v23.static.turns.jsonl": "data/teacher/directory-expansion/quality-v24.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v23.holds.jsonl": "data/teacher/directory-expansion/quality-v24.holds.jsonl",
-    "data/teacher/directory-expansion/quality-v23.static.manifest.json": "data/teacher/directory-expansion/quality-v24.static.manifest.json"
+    "data/teacher/directory-expansion/quality-v23.static.manifest.json": "data/teacher/directory-expansion/quality-v24.static.manifest.json",
+    "data/teacher/self-improvement/folder-revisions/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-held-v2/verified-turns.jsonl",
+    "data/teacher/self-improvement/folder-api-v2/verified-turns.jsonl": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -86,7 +88,10 @@
     "data/teacher/source-backed/static.manifest.json",
     "data/teacher/recovered/static.manifest.json",
     "data/teacher/directory-expansion/static.manifest.json",
-    "data/teacher/workflowevals/static.manifest.json"
+    "data/teacher/workflowevals/static.manifest.json",
+    "data/teacher/self-improvement/folder-api-v1/verified-turns.jsonl",
+    "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl",
+    "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl"
   ],
   "decisions": [
     {
@@ -155,6 +160,29 @@
       "glob": "runs/native-history-migration-*/*/review-candidates.jsonl",
       "status": "transformation_pending",
       "next_action": "Strict offline replay candidates remain held by history_migration_review_pending; preserve originals and independent review before promotion."
+    },
+    {
+      "glob": "data/teacher/self-improvement/folder-revisions/verified-turns.jsonl",
+      "status": "source_review_approved",
+      "reason": "Hold all 23 old turns: both exact producer final sources fail required train cases. An empty replacement candidate records the hold; approval and pinned manifest are required before any consumer resolves it.",
+      "replacement": "data/teacher/self-improvement/folder-revisions-held-v2/verified-turns.jsonl",
+      "review_manifest": "data/teacher/self-improvement/folder-revisions-held-v2/root-approved-review-manifest-v1.json",
+      "dpo_negative": false,
+      "review_manifest_sha256": "f305beca5b9dc7150c7b4340b44f2d7c1b4cca88e085502fb7238fdb92b2ead8"
+    },
+    {
+      "glob": "data/teacher/self-improvement/folder-api-v2/verified-turns.jsonl",
+      "status": "source_review_approved",
+      "reason": "Full exact-source review found native-aggregation retains return value.length despite task goal and train/validation cases requiring sum. Preserve the original 69 rows; default uses only the 59-row source-review candidate after an approved manifest is pinned.",
+      "replacement": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl",
+      "review_manifest": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/root-approved-review-manifest-v1.json",
+      "dpo_negative": false,
+      "review_manifest_sha256": "8fca567d48307cd3162b6de78ffbcb25fd27ec45d84a85a5c6694e11aafded55"
+    },
+    {
+      "glob": "data/teacher/self-improvement/folder-revisions-reviewed-v1/verified-turns.jsonl",
+      "status": "source_review_hold_unapproved",
+      "reason": "Preserved 11-row prototype is not approved: its original producer was baseline-retained and fails the empty-input train case. Never use this candidate as a default or explicit turn input."
     }
   ],
   "reserved_native_evaluation": {
