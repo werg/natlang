@@ -1,3 +1,13 @@
+## Next-runtime guidance and evolving improvement lane — 2026-10-01 12:48 UTC
+
+Frozen **runtime-v21** prepared by cloning20andchangingonly `dist/native/prompt.js` toaddthreecommittedAPPROACHbullets (relevantfieldselection, actualslicedelegation, minimalleafedit). Every618parentfilehashverified, onlyone changed; no compiler/oracle/recursion/tool change, JSsyntaxchecked, no tests/modelsrun. ManifestSHA **923b53a908903f0b2131cad29c75dc638955e52de44804ae005199a3b58f93e7**, receipt `runtime-v21/root-review.json`. RunningBonsai392661/Luna483514/483515remain20; don'tmutateeitherfrozenruntime.
+
+NextLuna541nowreviewedfor21: all541currentadmitted/frozen21materialized,5862decisions,0reject/unlinked; receipt `luna-next-campaign-audit-v5/root-runtime21-reference-review.json`. Rollingcontroller **500258** replaces489449withoutanysuccessorlaunch. Planv5SHA **c28e883114701716abc2947e16876ece68e7f72850e883c6aa62861c7bd02bcd**; exactqueue/proofs/failurefinishhashespreserved. Future541storage-recoveryapprovalsruntime21updatedimmutably; current3queueskeep20approvals. NextBonsai512+oneinfrarepairproposalbeingpreparedfor21, modernMarkdowncontractsrequired.
+
+**Newqualityblocker:** currentfolder-revisions-v4nowhas76rows/sevenproducers andincludesmigratedbadaggregation10rows, digest4c2eb950…dbf26c2 (sourcevalue.length, declaredsumcasesfail). Earliernotevalidv4empty-reductionhistorymustnotbeinterpretedasapprovaloftheevolvedentirev4corpus. Rootheldcurrentv4laneincatalog, pinningartifact; qualityagentprepared66-rowcandidate `folder-revisions-v4-reviewed-v1/verified-turns.jsonl` withunapprovedmanifest. Preserveoriginal76/candidates; fullsevenproducerreview+rootapprovalneeded. Recipe26draftcannotbereadyuntilthispartitionandninependingMuSiQueholdcandidatesareadjudicated/published. Newgzipmodelsnapshot3646trajectories/2806programs,1623failurecandidates; snapshotsselectionisnotfinalstudentreadiness.
+
+---
+
 ## Sweep findings — 2026-10-01 12:35 UTC
 
 Bonsai missingmember48 isconfirmedstoragefailure: `batch-0048.collector.log`SHA0383ccf8b2fc678da7fbfb161212b17bf299ea1fb567e8774c42896bbc1380be hasENOSPCwriteAtomic/worker/Promise.all. Batchfinish11:03:22 preserves49/50/51exactresults; only48mayberepaired, aseparateexplicitinfraexceptionin nextqueue. Notproviderstall orsemanticnegative.
