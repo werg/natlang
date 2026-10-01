@@ -80,7 +80,8 @@
     "data/teacher/directory-expansion/quality-v23.holds.jsonl": "data/teacher/directory-expansion/quality-v24.holds.jsonl",
     "data/teacher/directory-expansion/quality-v23.static.manifest.json": "data/teacher/directory-expansion/quality-v24.static.manifest.json",
     "data/teacher/self-improvement/folder-revisions/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-held-v2/verified-turns.jsonl",
-    "data/teacher/self-improvement/folder-api-v2/verified-turns.jsonl": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl"
+    "data/teacher/self-improvement/folder-api-v2/verified-turns.jsonl": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl",
+    "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -186,11 +187,14 @@
     },
     {
       "glob": "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl",
-      "status": "source_review_hold_unapproved",
-      "reason": "Current76-row v4 corpus reuses accepted-but-wrong migrated native-aggregation source value.length for declared sum inputs. Hold entire lane until source-bound exact partition independently reviewed; version migration does not rehabilitate invalid producer output.",
+      "status": "source_review_approved",
+      "reason": "Root verified all7producers and exact76-row partition: exclude10wrongaggregationrows, retain66unchanged validrows.",
       "artifact_sha256": "ef6cff515a52bd64e6831ba3155b335166a4a862e8769e063f511b18641ddd60",
       "dpo_negative": false,
-      "next_action": "Audit all7producer sources and declared train/validation inputs; immutable reviewed partition/root approval required."
+      "next_action": "Audit all7producer sources and declared train/validation inputs; immutable reviewed partition/root approval required.",
+      "review_manifest": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/root-approved-review-manifest-v1.json",
+      "review_manifest_sha256": "1fe3fbfbb32581b99ca1d4b78f52266ac0a45b854261bc05c10ec40cf45d9158",
+      "replacement": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl"
     }
   ],
   "reserved_native_evaluation": {
