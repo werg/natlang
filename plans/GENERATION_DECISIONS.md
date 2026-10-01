@@ -1511,3 +1511,11 @@ Required default source paths now resolve through strictly approved catalog repl
 - The publication entry/default pointer did not alone satisfy historical carry-forward inventory. Add exactly three workflowquality3→quality4 artifact mappings; preserve all old paths/history. No weakening strict retained-subset legacy turn approvals.
 - Root independent default inventory/hash/gzip/sourcehold audit passes:6138staticcases/32652decisions,3887generatedpositives/3006programs,289reviewedturns,1630nonnegativefailurecandidates.9requiredresolved,0unreviewedomissions. Recipe30draft; finalstudentgatespending, no tests/models/training.
 - Rejected unpublished draft losslesslyarchived with all three roundtripSHA matches;2.334GBsaved, canonicaldata untouched. Approved hardlinked artifacts0444 readonly; no future inplace edits.
+
+## 2026-10-01 15:12 UTC — Investigate stall rather than hide it; correct inactive guidance
+
+- ReviewLuna293asexactincompletefinishonly, notinfrastructureprooforsemanticnegative. Preserveraw17-responsepartial/emptyoutput. Same frozen20 diagnosticreplaymatches17requestSHAs/reaches18threquestin354ms withzero modelcalls; provider/planningstallsuspected,historicalphaseunknown.
+- Newcontroller617447planv7 allows5precisefailedfinishhashes; activeworkersunchanged, no caseautomaticallyrerunoradmitted.
+- Foundmissingproviderdeadline/cancellationforwarding. Concrete source-onlytimeout/phasepatchbeingreviewed; preserveoriginalfrozenruntimes and delayedtransportretrybehavior, exclude implicitcase retryonnewtypeddeadline. Future23handoffrequiresfullrootreview.
+- Found prior3guidancebulletschangedunusedAPPROACHprompt; supervisorneverenabledoptionalguide. Correct claim andwireminimalguidanceintoactualdefaultprompt in future runtime ratherthantreatingunusedtextasdeployedfix.
+- Hourlysweep15:08deltaBonsai36results/35accepted1reject/158decisions; one newLunastall investigated. Next16:08UTC, continuingactivefollow-through.

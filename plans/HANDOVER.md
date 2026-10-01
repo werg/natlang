@@ -1,3 +1,19 @@
+## 15:08 sweep; Luna stall and masked prompt bug — 2026-10-01 15:12 UTC
+
+Fullsweep15:08:45.534UTC; next **16:08:45UTC /18:08 Berlin**.0blockingreadererrors, main821savedaggregaterows/788admitted/33reject/6506approveddecisions (notallnewcases). Bonsaidelta9parentbatches/36exactresults:35admitted,1reject,158approveddecisions,0missing/sourceerrors. GPU100%,container2.94GiB/6GiB,60GiBfree. Canonicalevents106finishes/1newnon-success: Lunacase293below. Agentreviewingnewrejections now. Rootremainsactive.
+
+Monitor caught Lunaw1case293 failure14:55:05beforehourlysweep: keyddcb4f2…b905,canonicalfinishSHA `8ea92b2f8577ae9325e311448d4c65e54507ca37d4647f87ed8a935fc22e1f8a`,statusinactivity_timeout460.5sec,17savedresponses/2652tokens/0outputrows. Lastresponse14:49:31,lastrequestedaction console.log(contract.relevant_excerpts). **last_tool_observation belongs to preceding request**, so savedtrace doesnotprove lastactionhistoricallycompleted. Rootthen diagnosticallyreplayed all17savedresponses underSAMEruntime20/seed962/config: **17/17requestSHAmatches,354ms, reached18threquestwithlasttooloutput**;0modelcalls,noanswerinvented,no rawpartialchange. Artifact `runs/generation-check-20261001-resume/replay-luna-293.json`. Stronglypoints toprovider/planningrequeststall, but historicalphaseunrecorded. Do NOT stateproveninfrastructurefailureorsourcerejection.
+
+Rootpreservedpartial/emptyoutput, reviewedexactfailedfinish as excludedincompleteattempt only; noDPOlabel/goldchange/automaticretry. NewLunarollingcontroller **617447** replaces554491aftercheckingoldwaitingworkers[]; planv7SHA `4519dbbf487fa8301e0c5c99d3ad2b4dd069f053b056095fd7f959385855b173`,fivetotalexactfailedfinishhashes; runningworkersunchanged. Receipt `root-luna-293-failure-review.json`,schedulerlaunch-v7. Actualmonitorchecks0alerts; monitor584649/Bonsaicontroller580812stilllive.
+
+**Concretebugs found:** Pi send wrapper omitsjobAbortSignalandhasnorequestdeadline; onlysupervisor300sec inactivitykill bounds it. Source-onlyproviderdeadline/phaseimplementation inreview (no dist/frozenchanges): needscontrolledtypeddeadlinewinnerrace,boundedprepare+cleanup,preciseprovenance,terminaldeadlinebypassesimplicitwhole-case retries. Existingcollector retriesloadpartial responses byexactrequestSHAthenreexecuteactions; no genericrollback-safetyclaim. Futureimmutable23requiredafterrootreview; current20/21/22unchanged.
+
+**Correction of earlierguidance claim:** defaultSystemPrompt=TOOLS_PROMPT; APPPROACH_PROMPT is appendedonlywith--approach-guide, which supervisorneverpasses. Thus threeguidancebulletsaddedinfrozen21/22arepresentbutNOTactuallyusedbythesequeues. Agentpreparingdedicatedalways-usedGUIDANCEexport/defaultteacherprompt wiring, respectingdepthlimitwithoutunrelatedTOOLS_PROMPTdirtychanges orblindfullguideenablement. Do notclaimfuture22workersalreadyreceivethosebullets.
+
+Migrationauditfinds1110unique pendingartifacts/1535reasoninstances;402inline_delegation_ban.129single-obsolete-reasonaccepted/train/teacherartifactsareboundedreplay-prioritycohort, notdata-onlyrecoverable.113missing_observationinstancesacross52artifacts:0exactmarkersinsavedtoolcontent,no safeinvention/pro-motion. Audit `runs/data-lineage-20260930/migration-backlog-audit-v1/`. Nohistoryrewrites,promotions,tests,newmodelcallsorGPUevaluation.
+
+---
+
 ## Default recipe30 root reviewed — 2026-10-01 14:50 UTC
 
 Added exactly three static workflowquality3→quality4 replacement edges (IR/results/turns) to catalog; initialpublicationentry/defaultpointer alone did not resolve all historical required carry-forward paths. Existing API/history mappings preserved. Strict legacy reviewed-turn resolver remains unchanged: these static transformed cases use publication/source-equivalence lineage, not a false retained-subset-turn approval.
