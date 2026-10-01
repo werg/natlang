@@ -1,8 +1,8 @@
-import type {ImprovementPolicy,RewriteRequest,TrainingEvidence,SourceFile} from '../../types';
+import type {ImprovementPolicy,RewriteRequest,TrainingEvidence,SourceFile,ExperimentOutcome} from '../types';
 
 /** Pass the actual training evidence through unchanged; the model chooses only its hypothesis. */
-export function request(policy:ImprovementPolicy,hypothesis:string,evidence:unknown[],sourceFiles:SourceFile[]):RewriteRequest {
-  return {brief:brief(policy,evidence as TrainingEvidence[],sourceFiles,hypothesis),objective:policy.objective??'quality',goal:policy.goal,mode:policy.mode,hypothesis,sourceFiles,evidence,allowedFiles:policy.allowedFiles};
+export function request(policy:ImprovementPolicy,hypothesis:string,evidence:unknown[],sourceFiles:SourceFile[],history:ExperimentOutcome[]=[],lastExperiment?:unknown):RewriteRequest {
+  return {history,...(lastExperiment?{lastExperiment}:{}),brief:brief(policy,evidence as TrainingEvidence[],sourceFiles,hypothesis),objective:policy.objective??'quality',goal:policy.goal,mode:policy.mode,hypothesis,sourceFiles,evidence,allowedFiles:policy.allowedFiles};
 }
 
 /** A small first read; complete source and observations remain available in the typed context. */

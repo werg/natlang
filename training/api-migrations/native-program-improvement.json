@@ -511,6 +511,44 @@
         "timingNote": "Unconstrained run had a cold-start worker timeout before model entry. Timeout test passed isolated; complete bounded-concurrency run passed. No timeout behavior or assertion was weakened."
       },
       "incidentInventory": "runs/self-improvement-data/native-compact-incidents"
+    },
+    {
+      "id": "ordinary-runtime-combined-editor",
+      "old": "Optimizer-specific replacement system prompt, restricted tool list and separate semantic planner",
+      "new": "Ordinary runtime tools, additive app systemPrompt, one semantic diagnosis-and-edit directory reducer",
+      "migration": "Remove ModelConfig.prompt/tools; keep NatlangRuntimeOptions.systemPrompt as additive app instructions. Replace authored planner/editor snapshots using migrate-improver-lifecycle.mjs. Recollect execution observations. Configure the improvement application adapter explicitly when collecting flat-evaluator fixtures.",
+      "builders": [
+        "ts-host/scripts/self-improvement/migrate-improver-lifecycle.mjs",
+        "ts-host/scripts/self-improvement/build-followup-cases.mjs",
+        "ts-host/scripts/self-improvement/run-followup-study.mjs"
+      ],
+      "families": [
+        "rejected-edit-revision",
+        "semantic-classification",
+        "structured-extraction",
+        "pagination",
+        "multi-file-directory-reducer",
+        "meta-improvement"
+      ],
+      "verification": [
+        "ts-host/test/runtime.test.mjs",
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/teacher-collector.test.mjs"
+      ],
+      "required_cases": [
+        "app prompt addition retains shared guidance and ordinary tools",
+        "write_file and typed finish in one response",
+        "rejected source and train trace visible to next edit",
+        "cost search continues after an accepted gain",
+        "generic execution adapter identity in provenance",
+        "inner optimizer request cost and diagnostics"
+      ],
+      "migration_result": {
+        "rows": 13,
+        "migrated": 13,
+        "output": "runs/self-improvement-data/combined-editor-v1/decomposed-recollection.jsonl",
+        "disposition": "recollect-required; source snapshots replaced; admission revoked; original observations retained as history"
+      }
     }
   ],
   "source_research": "ts-host/scripts/self-improvement/sources.json",

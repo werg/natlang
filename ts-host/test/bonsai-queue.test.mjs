@@ -39,13 +39,13 @@ for budget in [60,600]:
         entry=dict(_resolved_jobs=[dict(key='test',program_id='test',digest='digest',index=0)],key='test',index=0,jobs=d,source='source',output='out',seed=1,log=str(p/'log'),case_seconds=budget)
         (p/'queue').write_text(json.dumps(entry)+'\\n')
         with patch.object(queue.subprocess,'Popen',return_value=child),patch.object(queue.time,'monotonic',side_effect=lambda:clock[0]):
-            queue.run_queue(p/'queue',p/'journal',p,600)
+            queue.run_queue(p/'queue',p/'journal',p,600,no_observation_seconds=300)
         events=[json.loads(line) for line in (p/'journal').read_text().splitlines()]
         statuses.append(events[-1]['status'])
         assert any(e['event']=='activity' for e in events)
 print(json.dumps(statuses))
 `], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
-  assert.deepEqual(JSON.parse(output.trim().split('\n').at(-1)), ['timeout', 'inactivity_timeout']);
+  assert.deepEqual(JSON.parse(output.trim().split('\n').at(-1)), ['timeout', 'no_observation_limit']);
 });
 
 test('the same bounded supervisor configures one Luna request including planning without the local server', () => {

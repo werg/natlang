@@ -275,3 +275,23 @@ test('service scope is exact unless descendant authority is explicitly requested
   assert.equal(await rt.run(()=>step()),true);assert.deepEqual(seen.step,['records']);assert.deepEqual(seen.child,selector.endsWith('/**')?['records']:[]);
  }
 });
+
+test('app system instructions add to ordinary runtime guidance and retain normal tools',async()=>{
+ const marker='APP_INSTRUCTIONS: prefer a brief answer.';
+ const fn=loadNatlang(join(tree({'answer.nl':nlFile({},'number','Write seven.txt and return seven.','kind: directory-reducer\n')}),'answer.nl'));
+ const requests=[];
+ const runtime=createNatlangRuntime({systemPrompt:()=>marker,model:async request=>{
+  requests.push(request);
+  return {calls:[['write_file',{path:'seven.txt',content:'7'}],['eval',{code:'return 7;',finish:true}]]};
+ }});
+ const folder=Folder.fromFiles({});
+ assert.equal(await runtime.run(()=>folder.apply(fn)),7);
+ assert.equal(await folder.readText('seven.txt'),'7');
+ const {TOOLS_PROMPT}=await import('../dist/native/prompt.js');
+ const prompt=String(requests[0].messages[0].content);
+ assert.ok(prompt.startsWith(TOOLS_PROMPT));
+ assert.ok(prompt.includes(marker));
+ const names=requests[0].tools.map(tool=>tool.function.name);
+ for(const name of ['eval','write_file','edit_file'])assert.ok(names.includes(name),name+' missing');
+});
+

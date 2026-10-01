@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
+import { hexDigest } from './hash.js';
 import type { ChangeSet } from './scoped-fs.js';
 
 function describe(bytes: Uint8Array | undefined): Record<string, unknown> | undefined {
   if (bytes === undefined) return undefined;
   const result: Record<string, unknown> = { bytes: bytes.byteLength,
-    sha256: createHash('sha256').update(bytes).digest('hex') };
+    sha256: hexDigest(bytes) };
   try {
     const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
     if (!text.includes('\0')) result.text = text;

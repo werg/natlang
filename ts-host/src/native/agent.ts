@@ -296,7 +296,6 @@ export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
-      tools?:readonly string[]; standalonePrompt?:boolean;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
@@ -405,7 +404,7 @@ export class NativeToolAgent {
 
   tools(session: NativeSession): unknown[] {
     const tools=this.toolsScope(session);
-    return this.options.tools ? tools.filter(tool=>this.options.tools!.includes(tool.function.name)) : tools;
+    return tools;
   }
 
   private scopeOpening(session: NativeSession): string {
@@ -559,8 +558,8 @@ export class NativeToolAgent {
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
       const allowAdHoc = canGenerateNl(session.runtime.frame);
       const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
-      (!this.options.standalonePrompt && Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (!this.options.standalonePrompt && session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
+      (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
+      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
       programGuidance(this.options.programGuidance ?? '');
       if (this.options.programGuidance !== undefined) adaptedSystem = composed;
       return composed;
@@ -779,7 +778,7 @@ export class NativeToolAgent {
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        const result: NativeResult = this.options.tools && !this.options.tools.includes(name) ? {kind:'rejected',text:'Tool is not exposed in this call: '+name} : await session.applyAsync(name, args);
+        const result: NativeResult = await session.applyAsync(name, args);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;

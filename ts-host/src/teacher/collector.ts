@@ -56,12 +56,15 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** The agent's context budget in prompt tokens (see NativeToolAgent contextTokens). */
   contextTokens: number; toolSurfaceSha256: string;
   /** Model turns allowed per call; unlimited unless set. A collection run should set one. */
+  /** Caller-supplied execution adapter for external fixtures; identity is pinned in provenance. */
+  execution?: {identity:string;run:typeof executeProgram};
   maxTurns?: number;
   /** Sampling temperature; greedy unless set. Reasoning models are tuned for sampling (Ling: 1.0) and, decoded
    * greedily, can skip their thinking. */
   temperature?: number;
   endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
   providerRequestControls?: ProviderRequestControls;
+  chatRequestControls?: Record<string, unknown>;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
   providerRequestTimeoutMs?: number;
   /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
@@ -156,6 +159,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
+    ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
       stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
@@ -166,6 +170,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
         version: PROVIDER_ACTION_CYCLE_POLICY_VERSION, timeout_ms: options.providerActionCycleTimeoutMs,
         retry: 'no-case-retry' } }),
       provider_cleanup: { timeout_ms: PROVIDER_CLEANUP_TIMEOUT_MS, scope: 'session-close-best-effort' } } : {}),
+    ...(options.execution ? {execution_adapter:options.execution.identity} : {}),
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
@@ -729,7 +734,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     };
     const runId = programRunId(item.index, expected);
     let run: ProgramRun;
-    try { run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) }); }
+    try { run = await (config.execution?.run ?? executeProgram)(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalProviderDeadline ?? error; }
     if (fatalProviderDeadline) throw fatalProviderDeadline;
     if (exhausted) throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
@@ -778,17 +783,6 @@ export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolea
  */
 export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
-  const fixture=record.semantics.evaluation_fixture;
-  if(fixture){
-    if(fixture.kind!=='flat-program-evaluator')throw Error('unsupported improvement evaluation fixture');
-    const {improveProgram}=await import('../improvement/program.js');
-    const traces:import('../runtime/runtime.js').InvocationTrace[]=[];
-    const run=await improveProgram({folder:Folder.fromFiles(fixture.caseDefinition.files),...fixture.caseDefinition,
-      improverSource:Folder.fromFiles(record.semantics.files).snapshot(),improver:driver,executor:driver,executorId:fixture.executorId??'canonical-improvement-fixture',
-      signal:options.signal,seed:options.rootSeed,trace:trace=>traces.push(trace),budget:{maxModelCalls:104,maxRollouts:40,maxProposals:2*fixture.caseDefinition.policy.maxExperiments,maxElapsedMs:600000}});
-    const accepted=!!run.validation&&!!run.baseline&&run.state.done&&run.validation.gatesPassed&&run.validation.quality>=run.baseline.quality&&run.state.incumbent===run.folder.digest;
-    return {outcome:{accepted,kind:accepted?'done':'failed',value:run.state,source:run.sourceManifest,quality:run.validation?.quality??null,baseline:run.baseline?.quality??null,disposition:run.disposition,ledger:run.ledger},trace:traces.flatMap(trace=>trace.events) as Record<string,unknown>[]};
-  }
   const root = programNode(record);
   const folderFiles = record.semantics.folder_files;
   if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))

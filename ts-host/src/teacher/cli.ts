@@ -1,10 +1,12 @@
 #!/usr/bin/env node
+import { chatRequestControls } from './chat-request-controls.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import {pathToFileURL} from 'node:url';
 import { collectBatch, defaultSystemPrompt, defaultToolSurfaceHash, loadRecords, nativeJobRunner,
   sha256, writeAtomic, type CollectorConfig } from './collector.js';
 
@@ -39,11 +41,13 @@ async function main(): Promise<void> {
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
+      '         --chat-request-config FILE  JSON sampling/template controls retained in provenance\n' +
       '         --provider-request-config FILE  JSON transport controls retained in provenance\n' +
       '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
       '           (optional Pi provider collection resource controls; off by default)\n' +
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
+      '         --execution-adapter MODULE  caller-supplied program execution fixture\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
@@ -64,13 +68,21 @@ async function main(): Promise<void> {
   if (flags.has('--provider-request-config') && !provider) throw new Error('--provider-request-config requires --provider');
   const controls = flags.has('--provider-request-config') ? providerRequestControls(JSON.parse(
     await readFile(resolve(flags.get('--provider-request-config')!), 'utf8'))) : undefined;
+  if (flags.has('--chat-request-config') && provider) throw new Error('--chat-request-config requires an OpenAI-compatible server');
+  const chatControls = flags.has('--chat-request-config') ? chatRequestControls(JSON.parse(
+    await readFile(resolve(flags.get('--chat-request-config')!), 'utf8'))) : undefined;
   const judgeModelId = flags.get('--judge-model-id');
   if ([judgeModelId, flags.get('--judge-server'), flags.get('--judge-provider')].some(Boolean) &&
       (!judgeModelId || Number(flags.has('--judge-server')) + Number(flags.has('--judge-provider')) !== 1))
     throw new Error('--judge-model-id needs exactly one of --judge-server or --judge-provider');
   if (flags.has('--execution-plan-tokens') && !flags.has('--execution-plans'))
     throw new Error('--execution-plan-tokens requires --execution-plans');
-  const config: CollectorConfig = { jobs, output, modelId: flags.get('--model-id')!,
+  const adapterPath=flags.get('--execution-adapter');
+  let execution:CollectorConfig['execution'];
+  if(adapterPath){const path=resolve(adapterPath),loaded=(await import(pathToFileURL(path).href)).default;
+    if(!loaded||typeof loaded.identity!=='string'||typeof loaded.run!=='function')throw Error('execution adapter must export default {identity,run}');
+    execution={identity:loaded.identity+':'+sha256(await readFile(path)),run:loaded.run};}
+  const config: CollectorConfig = { jobs, output, ...(execution?{execution}:{}), modelId: flags.get('--model-id')!,
     rootSeed: integer(flags, '--root-seed', 0), workers: integer(flags, '--workers', 6),
     contextTokens: integer(flags, '--context-tokens', 16384),
     ...(flags.has('--max-turns') ? { maxTurns: integer(flags, '--max-turns', 0) } : {}),
@@ -81,6 +93,7 @@ async function main(): Promise<void> {
       { providerRequestTimeoutMs: integer(flags, '--provider-request-timeout-ms', 0) } : {}),
     ...(flags.has('--provider-action-cycle-timeout-ms') ?
       { providerActionCycleTimeoutMs: integer(flags, '--provider-action-cycle-timeout-ms', 0) } : {}),
+    ...(chatControls ? { chatRequestControls: chatControls } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
@@ -105,7 +118,7 @@ async function main(): Promise<void> {
     // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
     request: { ...(flags.has('--thinking-tokens') ? { thinking_budget_tokens: integer(flags, '--thinking-tokens', 0) } : {}),
       top_p: 0.95, top_k: 20,
-      chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' } } };
+      chat_template_kwargs: { reasoning_effort: flags.get('--reasoning-effort') ?? 'low' }, ...chatControls } };
   // A call is compacted as it nears its context budget, so the server must accept a request of that size; a server
   // with a smaller context would reject the call's later requests. llama.cpp reports its per-request context in /props.
   if (config.endpoint) {

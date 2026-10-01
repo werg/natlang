@@ -2,7 +2,7 @@ import {Folder} from '../native/scoped-fs.js';
 import {createNatlangRuntime} from '../runtime/node.js';
 import {loadVirtualNatlang} from '../runtime/virtual-project.js';
 import {AUTHORED_IMPROVER} from './authored-source.js';
-import {PROGRAM_PROMPT,PROGRAM_TOOLS,PROGRAM_CONTEXT_TOKENS} from './prompt.js';
+import {TOOLS_PROMPT} from '../native/prompt.js';
 import {CounterexampleSuite,type IndependentOracle} from './counterexamples.js';
 import {SourceEvaluator} from './host.js';
 import {UsageGateway} from '../evaluation/usage.js';
@@ -14,7 +14,7 @@ export async function counterexampleGuidedImprove(options:ImproveProgramOptions 
  let suite=new CounterexampleSuite(options.cases,options.oracle,options.maxChecks);
  const gateway=options.gateway??new UsageGateway(options.budget);
  const evaluator=()=>new SourceEvaluator(options.contract,[...suite.cases],options.executor,gateway,{executorId:options.executorId,signal:options.signal,executeCase:options.executeCase});
- const task=createNatlangRuntime({model:{prompt:PROGRAM_PROMPT,tools:PROGRAM_TOOLS,contextTokens:PROGRAM_CONTEXT_TOKENS,driver:(request,signal)=>gateway.request(options.improver,request,signal,'reflection')},signal:options.signal,network:false,codeEdits:'deny',seed:{mode:'derived',root:options.seed??0},
+ const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(options.improver,request,signal,'reflection')},signal:options.signal,network:false,codeEdits:'deny',seed:{mode:'derived',root:options.seed??0},
   services:{counterexamples:{evidence:async(source:import('../native/scoped-fs.js').FolderSnapshot)=>{const e=evaluator(),report=await e.evaluate(source,{split:'train'});return e.page(report.evidence);},
    admit:async(inputs:unknown[][])=>{const admitted=await suite.admit(inputs);suite=admitted.suite;return {suite:suite.version,admitted:admitted.admission.accepted.length,remainingChecks:suite.remainingChecks};},
    repair:async(source:import('../native/scoped-fs.js').FolderSnapshot)=>{const result=await improveProgram({...options,folder:source.branch(),cases:[...suite.cases],gateway,directory:undefined,singleStep:false});const training=result.validation?await evaluator().evaluate(result.folder,{split:'train'}):null;return {folder:result.folder,quality:training?.quality??0,eligible:!!result.validation?.gatesPassed&&result.state.done,disposition:result.disposition};}}},

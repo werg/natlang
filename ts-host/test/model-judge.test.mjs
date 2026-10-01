@@ -33,7 +33,7 @@ test('judge identity is included in resumable job provenance', () => {
     judgeModel: { modelId: 'judge-v1', provider: 'provider', piOptions: { reasoningEffort: 'low' } } };
   assert.deepEqual(expectedProvenance(record, config).judge,
     { model: 'judge-v1', transport: 'pi-provider', provider: 'provider',
-      pi_options: { reasoningEffort: 'low' }, provider_cleanup: { timeout_ms: 15000, scope: 'session-close-best-effort' } });
+      pi_options: { reasoningEffort: 'low' }, stream_observation: {version:'pi-stream-observation/1',detail:'aggregate-delta-counts',watchdog_refresh:false}, provider_cleanup: { timeout_ms: 15000, scope: 'session-close-best-effort' } });
 });
 
 test('native collector sends judged oracle outcomes to the separate model', async () => {

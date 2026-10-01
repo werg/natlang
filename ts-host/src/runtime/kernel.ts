@@ -211,7 +211,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(task.services, event =>
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
-  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => model.prompt ?? task.systemPrompt(), standalonePrompt: model.prompt !== undefined, tools:model.tools,
+  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,

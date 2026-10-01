@@ -36,6 +36,7 @@ await runtime.run(() => review(observations, criterion));
 ```
 
 - `natlang build` / `buildProject` compile a project: they check types and callable folders, plan `nl` calls, generate `foo.d.nl.ts`, and emit JavaScript bound to a runtime. `compileVirtualProject` does the same in memory (browser pages, workers, tests).
+- `createNatlangRuntime({ systemPrompt: "App instructions…" })` appends application instructions to the shared runtime prompt. A callback is also supported. Additions retain the ordinary tools and call-specific language guidance.
 - `runtime.run(fn, options)` creates a task; `runtime.bind(fn)` carries it into callbacks from uncompiled code.
 - A failed call rejects with `NatlangCallError`; traces are delivered to the `trace` sink.
 - `defineNatlang(source)` creates a natural-language function from `.nl` text at run time.

@@ -385,3 +385,19 @@ test('retry waits are durable, abortable, and removed without producing a traini
   await assert.rejects(readFile(path), /ENOENT/);
   assert.equal(await readFile(options.output, 'utf8'), '');
 });
+
+test('external execution adapters are caller supplied and identified in provenance',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'teacher-adapter-'));
+ const item={index:0,record:record('external-fixture')};
+ let received;
+ const options={...config(dir),endpoint:'http://127.0.0.1:1',workers:1,execution:{identity:'application-fixture/1',run:async(program)=>{
+  received=program;return {outcome:{accepted:true,kind:'done',value:1},trace:[]};
+ }}};
+ assert.equal(expectedProvenance(item.record,options).execution_adapter,'application-fixture/1');
+ assert.equal(expectedProvenance(item.record,config(dir)).execution_adapter,undefined);
+ await collectBatch([item],options,nativeJobRunner(options));
+ assert.equal(received.id,item.record.id);
+ const result=JSON.parse((await readFile(options.output,'utf8')).trim());
+ assert.equal(result.outcome.accepted,true);
+ assert.equal(result.provenance.execution_adapter,'application-fixture/1');
+});

@@ -52,7 +52,7 @@ test('evaluation executes source bytes in fresh workers and seals validation and
 
 test('installed authored reducer performs an actual propose-check-evaluate-accept-select loop', async () => {
   const source = baseline(), traces = [];
-  const model = scriptedModel(opening => opening.includes('test request.hypothesis') ?
+  const model = scriptedModel(opening => opening.includes('Choose one coherent, evidenced hypothesis') ?
     'await folder.file("main.ts").writeText("export function solve(value: number): number { return value + 1; }"); return await bookkeeping.finish(folder,"fix increment",["number contract"]);' :
     'const base = folder.snapshot(); const before = await evaluator.evaluate(base,{split:"train"}); const parent = base.branch(); const candidate = await parent.propose(rewriteProgram,{goal:policy.goal,mode:policy.mode,hypothesis:"increment",brief:"exact increment repair",sourceFiles:[],evidence:before.outcomes,allowedFiles:policy.allowedFiles}); const checked = await evaluator.check(candidate.folder); if (!checked.valid) throw Error(checked.diagnostics.join("\\n")); const measured = await evaluator.evaluate(candidate.folder,{split:"validation"}); await parent.accept(candidate); const selected = (parent.snapshot()).digest; await folder.select(folder.at(selected)); return {iteration:state.iteration+1,done:true,incumbent:selected,quality:measured.quality,population:[{source:selected,quality:measured.quality,parent:base.digest}],history:[{source:selected,parent:base.digest,accepted:true,selected:true,reason:"improved"}],stopReason:"completed"}');
   const result = await improveProgram({folder:source,contract,cases,policy:{maxExperiments:2,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']}, improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;}, executor:()=>{throw Error('no model');},executorId:'exact',budget,trace:trace=>traces.push(trace)});
@@ -139,7 +139,7 @@ test('meta-evaluation executes the edited frozen improver and shares its parent 
  assert.match(await bad.readText('improveStep.nl'),/Frozen baseline-only/);
  const driver=scriptedModel(opening=>opening.includes('Frozen baseline-only')?
   'const snapshot=folder.snapshot(); const measured=await evaluator.evaluate(snapshot,{split:"validation"}); const source=(snapshot).digest; return {iteration:1,done:true,incumbent:source,quality:measured.quality,population:[{source,quality:measured.quality,parent:""}],history:[],stopReason:"baseline-only"};':
-  opening.includes('test request.hypothesis')?
+  opening.includes('Choose one coherent, evidenced hypothesis')?
   'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}"); return {summary:"increment",changed:["main.ts"],preserves:["numeric contract"]};':
   'const base=folder.snapshot(); const parent=base.branch(); const proposal=await parent.propose(rewriteProgram,{goal:policy.goal,mode:policy.mode,hypothesis:"increment",brief:"exact increment repair",sourceFiles:[],evidence:[],allowedFiles:policy.allowedFiles}); const measured=await evaluator.evaluate(proposal.folder,{split:"validation"}); await parent.accept(proposal); const source=(parent.snapshot()).digest; await folder.select(folder.at(source)); return {iteration:1,done:true,incumbent:source,quality:measured.quality,population:[{source,quality:measured.quality,parent:base.digest}],history:[{source,parent:base.digest,accepted:true,selected:true,reason:"measured improvement"}],stopReason:"completed"};');
  const metaCases=[{id:'meta-train',group:'meta-train',split:'train',args:[],expected:null}];
@@ -149,7 +149,10 @@ test('meta-evaluation executes the edited frozen improver and shares its parent 
  assert.throws(()=>new SourceEvaluator({entry:'improveStep.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase}),/evaluation level/);
  const evaluator=new SourceEvaluator({entry:'improveStep.nl',exportName:'default',programId:'meta-improver'},metaCases,driver.driver,gateway,{executorId:'meta',executeCase,evaluationLevel:2});
  assert.equal((await evaluator.evaluate(bad.snapshot(),{split:'train'})).quality,0);
- assert.equal((await evaluator.evaluate(original.snapshot(),{split:'train'})).quality,1);
+ const report=await evaluator.evaluate(original.snapshot(),{split:'train'});
+ assert.equal(report.quality,1);assert.ok(report.modelCalls>0);
+ assert.ok(evaluator.page(report.evidence)[0].value.diagnostics.history.length>0);
+ assert.equal(evaluator.page(report.evidence)[0].value.diagnostics.done,true);
  assert.ok(gateway.ledger.rollouts>2);assert.ok(gateway.ledger.usage.modelCalls>0);assert.equal(gateway.ledger.proposals,1);
 });
 
@@ -230,14 +233,14 @@ test('a failed computation prevents finishing an older staged result in the same
  assert.equal(training.quality,1);assert.equal(training.modelCalls,6);
 });
 
- test('simplified native lifecycle invokes diagnosis, editing and selection with real capabilities',async()=>{
+ test('native lifecycle combines diagnosis and editing with ordinary capabilities',async()=>{
  const model=scriptedModel(opening=>{
-  if(opening.includes('test request.hypothesis'))return 'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}");return await bookkeeping.finish(folder,"increment",["number contract"]);';
-  if(opening.includes('Plan one evidenced source change'))return 'if(context.evidence.length===0 || context.sourceFiles[0].path!=="main.ts")throw Error("missing prepared context");return "Return the increment rather than the input.";';
-  return 'return await lifecycle.step(folder,evaluator,planExperiment,rewriteProgram,state,policy);';
+  if(opening.includes('Choose one coherent, evidenced hypothesis'))return 'await folder.file("main.ts").writeText("export function solve(value: number): number {return value+1;}");return await bookkeeping.finish(folder,"increment",["number contract"]);';
+
+  return 'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy);';
  });
- const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{if(String(request.messages[1].content).includes("Plan one evidenced source change")){const opening=request.messages.map(message=>String(message.content)).join("\n");assert.match(opening,/brief: string/);assert.match(opening,/main\.ts/);return {text:"Return the increment rather than the input."};}const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(result.state.iteration,1);assert.equal(result.state.history[0].accepted,true);assert.equal(result.state.history[0].selected,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,3);
+ const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
+ assert.equal(result.disposition,'improved',result.error);assert.equal(result.state.iteration,1);assert.equal(result.state.history[0].accepted,true);assert.equal(result.state.history[0].selected,true);assert.equal(result.validation.quality,1);assert.equal(result.ledger.roles.reflection.modelCalls,2);
  });
 
 test('declared allocation permits more than 24 requests across finite native experiments',async()=>{
@@ -250,27 +253,27 @@ test('declared allocation permits more than 24 requests across finite native exp
  assert.equal(result.state.iteration,3,result.error);assert.equal(result.ledger.roles.reflection.modelCalls,30);assert.equal(result.state.done,true);
 });
 
-test('the next semantic plan sees the actual rejected source and train trace without validation answers',async()=>{
- let plans=0;
+test('the next edit sees the rejected source and training trace without validation answers',async()=>{
+ let edits=0;
  const model=scriptedModel(opening=>{
-  if(opening.includes('Plan one evidenced source change')){plans++;return plans===1?'return "Try adding two.";':'if(!context.lastExperiment.sourceFiles[0].text.includes("value+2")||context.lastExperiment.training[0].passed!==false)throw Error("rejected evidence lost");if("expected" in context.lastExperiment.validation)throw Error("validation answer leaked");return "The trial overshot; add one instead.";';}
-  if(opening.includes('test request.hypothesis'))return 'const delta=request.hypothesis.includes("two")?2:1;await folder.file("main.ts").writeText("export function solve(value:number):number{return value+"+delta+";}");return await bookkeeping.finish(folder,"test delta",["number contract"]);';
-  return 'return await lifecycle.step(folder,evaluator,planExperiment,rewriteProgram,state,policy);';
+  if(opening.includes('Choose one coherent, evidenced hypothesis')){
+   edits++;return (edits===1?'': 'const previous=JSON.parse(JSON.stringify(request.lastExperiment));if(!previous.sourceFiles[0].text.includes("value+2")||previous.training[0].passed!==false)throw Error("rejected evidence lost");if("expected" in previous.validation)throw Error("validation answer leaked");')+'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+'+(edits===1?2:1)+';}");return await bookkeeping.finish(folder,"test delta",["number contract"]);';
+  }
+  return 'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy);';
  });
  const result=await improveProgram({folder:baseline(),contract,cases,policy:{maxExperiments:3,maxPopulation:3,strategy:'adaptive',mode:'structural',goal:'increment',allowedFiles:['main.ts']},improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact',budget:{...budget,maxModelCalls:60}});
- assert.equal(result.disposition,'improved',result.error);assert.equal(plans,2);assert.deepEqual(result.state.history.map(row=>row.accepted),[false,true]);assert.equal(result.ledger.roles.reflection.modelCalls,6);assert.equal(result.state.lastExperiment.validation.quality,1);
+ assert.equal(result.disposition,'improved',result.error);assert.equal(edits,2);assert.deepEqual(result.state.history.map(row=>row.accepted),[false,true]);assert.equal(result.ledger.roles.reflection.modelCalls,4);assert.equal(result.state.lastExperiment.validation.quality,1);
 });
 
-test('cost search continues after its first gain and lets the semantic planner stop when no opportunity remains',async()=>{
- let plans=0;
+test('cost search continues after a gain and the editor stops when no opportunity remains',async()=>{
+ let edits=0;
  const model=scriptedModel(opening=>{
-  if(opening.includes('Plan one evidenced source change')){plans++;return 'return context.opportunity.kind==="none"?"":context.evidence[0].modelCalls===5?"cost3":"cost1";';}
-  if(opening.includes('test request.hypothesis'))return 'await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;} //"+request.hypothesis);return await bookkeeping.finish(folder,"lower measured cost",["number contract"]);';
-  return 'return await lifecycle.step(folder,evaluator,planExperiment,rewriteProgram,state,policy);';
+  if(opening.includes('Choose one coherent, evidenced hypothesis')){edits++;return 'if(request.evidence[0].modelCalls>1)await folder.file("main.ts").writeText("export function solve(value:number):number{return value+1;} //"+(request.evidence[0].modelCalls===5?"cost3":"cost1"));return await bookkeeping.finish(folder,"lower measured cost",["number contract"]);';}
+  return 'return await lifecycle.step(folder,evaluator,rewriteProgram,state,policy);';
  });
  const executeCase=Object.assign(async(folder,row)=>{const text=await folder.readText('main.ts');return {value:row.expected,modelCalls:text.includes('cost1')?1:text.includes('cost3')?3:5};},{identity:'deterministic-cost-fixture',evaluationLevel:1});
  const result=await improveProgram({folder:Folder.fromFiles({'main.ts':'export function solve(value:number):number{return value+1;}'}),contract,cases:cases.filter(row=>row.id.endsWith('1')),policy:{maxExperiments:4,maxPopulation:4,strategy:'adaptive',mode:'structural',objective:'model-calls',goal:'reduce requests',allowedFiles:['main.ts']},executeCase,improver:async(request,signal)=>{const turn=await model.driver(request,signal);for(const [name,args]of turn.calls??[])if(name==='eval')args.finish=true;return turn;},executor:()=>{throw Error('no inference');},executorId:'exact-cost',budget:{...budget,maxModelCalls:60}});
- assert.equal(result.disposition,'transformed',result.error);assert.equal(plans,3);assert.deepEqual(result.state.history.map(row=>row.accepted),[true,true,false]);assert.equal(result.validation.modelCalls,1);assert.equal(result.state.stopReason,'No further evidenced change.');
+ assert.equal(result.disposition,'transformed',result.error);assert.equal(edits,3);assert.deepEqual(result.state.history.map(row=>row.accepted),[true,true,false]);assert.equal(result.validation.modelCalls,1);assert.equal(result.state.stopReason,'No further evidenced change.');
 });
 
 test('training traces pair each action with its own outcome, including atomic terminal actions',async()=>{

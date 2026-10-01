@@ -11,7 +11,7 @@ import {compileVirtualProject} from '../dist/runtime/virtual-project.js';
 import * as runtime from '../dist/runtime/node.js';
 
 test('native bookkeeping treats correct multi-request executions as efficiency opportunities',()=>{
- const files={'main.ts':AUTHORED_IMPROVER['improveStep/planExperiment/bookkeeping.ts'].replace("'../../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
+ const files={'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
  const build=compileVirtualProject({files},runtime,{constrained:true,target:"node"});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
  const helper=build.require('main.ts'),policy={objective:'model-calls',goal:'Reduce requests while preserving judgment.',mode:'instruction',allowedFiles:['solve.nl']};
  const evidence=[{passed:true,modelCalls:3,modelTrace:[{calls:[{name:'return_result'}],observation:'typed answer staged'}]}];
@@ -67,19 +67,19 @@ test('decision curriculum uses actual correct training costs rather than validat
 });
 
 test('authored experiment helper measures edits and never installs a rejected candidate',async()=>{
- const files={'main.ts':AUTHORED_IMPROVER['improveStep/experiment.ts'].replace("'../types'","'./types'").replace("'./planExperiment/bookkeeping'","'./bookkeeping'").replace("'./planExperiment/feedback'","'./feedback'"),'capabilities.ts':AUTHORED_IMPROVER['improveStep/capabilities.ts'].replace("'../types'","'./types'"),'feedback.ts':AUTHORED_IMPROVER['improveStep/planExperiment/feedback.ts'].replace("'../../types'","'./types'").replace("'../capabilities'","'./capabilities'"),'bookkeeping.ts':AUTHORED_IMPROVER['improveStep/planExperiment/bookkeeping.ts'].replace("'../../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
+ const files={'main.ts':AUTHORED_IMPROVER['improveStep/experiment.ts'].replace("'../types'","'./types'").replace("'./feedback'","'./feedback'"),'capabilities.ts':AUTHORED_IMPROVER['improveStep/capabilities.ts'].replace("'../types'","'./types'"),'feedback.ts':AUTHORED_IMPROVER['improveStep/feedback.ts'].replace("'../types'","'./types'").replace("'../capabilities'","'./capabilities'"),'context.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']};
  const build=compileVirtualProject({files},runtime,{constrained:true,target:"node"});assert.equal(build.ok,true,JSON.stringify(build.diagnostics));
  const helper=build.require('main.ts');
  const task=runtime.createNatlangRuntime();
  const execute=(...args)=>task.run(()=>helper.test(...args));
  const policy={objective:'model-calls',goal:'Batch judgments.',mode:'structural',allowedFiles:['solve.nl'],maxExperiments:3,maxPopulation:3,strategy:'adaptive'};
  let accepts=0,proposals=0,changed=true,valid=true,calls=4,fixture=false;
- const candidate={digest:'candidate',filePaths:()=>['solve.nl'],readText:async()=> 'edited candidate source'},parent={digest:'parent',branch:()=>({filePaths:()=>["solve.nl"],readText:async()=>"judge then count",propose:async()=>{proposals++;return {folder:candidate,diff:{changes:changed?[{path:'solve.nl'}]:[]}};},accept:async()=>{accepts++;return candidate;}})};
+ const candidate={digest:'candidate',filePaths:()=>['solve.nl'],readText:async()=> 'edited candidate source'},parent={digest:'parent',branch:()=>({filePaths:()=>["solve.nl"],readText:async()=>"judge then count",propose:async()=>{proposals++;return {value:{summary:"Batch judgments."},folder:candidate,diff:{changes:changed?[{path:'solve.nl'}]:[]}};},accept:async()=>{accepts++;return candidate;}})};
  const folder={at:()=>parent};
  const evaluator={evaluate:async(source,request)=>({source:source.digest,quality:1,sourceBytes:100,modelCalls:source===candidate?calls:4,gatesPassed:true,evidence:'train',scores:request.split==='validation'?[{caseId:'v',quality:1}]:undefined}),page:()=>[{passed:!fixture,modelCalls:4,...(fixture?{failureKind:'fixture',error:'broken fixture'}:{})}],check:async()=>({valid,diagnostics:['bad contract']})};
  let result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,false);assert.match(result.reason,/calls 4 vs 4/);assert.equal(accepts,0);assert.equal(result.feedback.sourceFiles[0].text,"edited candidate source");assert.equal(result.feedback.training[0].modelCalls,4);assert.deepEqual(result.feedback.validation,{quality:1,modelCalls:4});
  calls=2;result=await execute(folder,evaluator,'parent',{},policy,'Batch judgments.');assert.equal(result.accepted,true);assert.equal(result.source,'candidate');assert.equal(result.modelCalls,2);assert.equal(accepts,1);
- changed=false;result=await execute(folder,evaluator,'parent',{},policy,'No-op.');assert.match(result.reason,/no source change/);assert.equal(accepts,1);
+ changed=false;result=await execute(folder,evaluator,'parent',{},policy,'No-op.');assert.match(result.reason,/No supported hypothesis/);assert.equal(accepts,1);
  changed=true;valid=false;result=await execute(folder,evaluator,'parent',{},policy,'Invalid edit.');assert.match(result.reason,/Compilation rejected/);assert.equal(accepts,1);
  fixture=true;const before=proposals;result=await execute(folder,evaluator,'parent',{},policy,'Invent repair.');assert.match(result.reason,/^fixture-error: broken fixture/);assert.equal(proposals,before);
 });
@@ -93,8 +93,8 @@ test('retired optimizer templates migrate to the exact lifecycle and lose stale 
  assert.equal(old.training_admission.approved,true);assert.deepEqual(migrated.row.messages,old.messages);
  assert.equal(migrateLifecycle(migrated.row).changes,0);
  assert.equal(AUTHORED_IMPROVER['improveStep/selectCandidate.nl'],undefined);
- const wrapped={id:'wrapped-plan',files:{...AUTHORED_IMPROVER,'improveStep/planExperiment.nl':AUTHORED_IMPROVER['improveStep/planExperiment.nl'].replace('returns: string','returns: ExperimentPlan')},training_admission:{approved:true}};
- const current=migrateLifecycle(wrapped);assert.equal(current.changes,1);assert.equal(current.row.training_admission.approved,false);assert.equal(current.row.files['improveStep/planExperiment.nl'],AUTHORED_IMPROVER['improveStep/planExperiment.nl']);assert.equal(migrateLifecycle(current.row).changes,0);
+ const wrapped={id:'wrapped-plan',files:{...AUTHORED_IMPROVER,'improveStep/planExperiment.nl':'Retired plan with ExperimentPlan'},training_admission:{approved:true}};
+ const current=migrateLifecycle(wrapped);assert.equal(current.changes,1);assert.equal(current.row.training_admission.approved,false);assert.equal(current.row.files['improveStep/planExperiment.nl'],undefined);assert.equal(migrateLifecycle(current.row).changes,0);
 });
 
 test('structural curriculum reconstructs measured literal writes without executing them or reusing closed tests',()=>{

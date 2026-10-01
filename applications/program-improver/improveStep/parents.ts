@@ -1,4 +1,4 @@
-import type {PopulationMember} from '../../types';
+import type {PopulationMember} from '../types';
 /** GEPA per-case frontier archive, with seeded sampling weighted by validation wins. */
 export function frontierParent(population: PopulationMember[], seed: number): string {
   const cases = [...new Set(population.flatMap(member => (member.scores ?? []).map(score => score.caseId)))].sort();

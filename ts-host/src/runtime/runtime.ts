@@ -13,8 +13,6 @@ import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.
 export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number;
-  /** Model-visible tools and a complete replacement opening; neither changes eval capabilities. */
-  tools?:readonly string[]; prompt?:string;
   /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
   contextTokens?: number | null;
   /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
@@ -65,6 +63,7 @@ export type NatlangRuntimeOptions = {
   /** Allow `fetch` in eval (default: true). */
   network?: boolean;
   /** Extra system prompt text appended for every invocation. */
+  /** Application instructions appended to the shared runtime prompt. */
   systemPrompt?: string | (() => string);
   statistics?: IterationStatisticsStore;
   progressJudge?: ProgressJudgeFunction;

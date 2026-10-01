@@ -1,4 +1,4 @@
-import {PROGRAM_PROMPT,PROGRAM_TOOLS,PROGRAM_CONTEXT_TOKENS} from '../improvement/prompt.js';
+import {TOOLS_PROMPT} from '../native/prompt.js';
 /** Host effects and exact GEPA primitives for the authored component-search reducer.
  * Selection math derives from Ax; see vendor/ax-gepa/UPSTREAM.json. No host search loop. */
 import { Folder } from '../native/scoped-fs.js';
@@ -101,7 +101,7 @@ export function merge():unknown;
 export function check(candidate:unknown):Promise<{valid:boolean;id:string;feedback?:string}>;
 export function evaluate(id:string,split:'mini'|'train'|'validation',parent?:boolean):Promise<{evidence:string;quality:number;gatesPassed:boolean}>;
 export function finish(decision:unknown):Promise<{state:ComponentLoopState;candidate:Candidate}>;`;
-  const runtime=createNatlangRuntime({model:{tools:PROGRAM_TOOLS,prompt:PROGRAM_PROMPT,contextTokens:PROGRAM_CONTEXT_TOKENS,driver:(request,signal)=>gateway.request(options.reflection,request,signal??options.signal,'reflection'),maxTurns:16,maxTokens:32000,turnTokens:4096,maxFailureRepairs:settings.maxRepairs},
+  const runtime=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(options.reflection,request,signal??options.signal,'reflection'),maxTurns:16,maxTokens:32000,turnTokens:4096,maxFailureRepairs:settings.maxRepairs},
     services:{search:services},serviceDeclarations:{search:declaration},serviceScopes:{search:['componentSearchStep.nl']},trace:context.trace,network:false,codeEdits:'deny',signal:options.signal});
   const folder=Folder.fromFiles({'components.json':JSON.stringify(member().value)});
   const initial:LoopState={iteration:state.iteration,incumbent:state.incumbent,done:gateway.ledger.proposals>=gateway.limits.maxProposals,stopReason:''};

@@ -4,7 +4,7 @@ import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 const [output,command='probe']=process.argv.slice(2);
-if(!output||!['probe','flat-probe','native','direct','confirm','draft'].includes(command))throw Error('usage: structural-study.mjs OUTPUT [probe|flat-probe|native|direct|confirm|draft]');
+if(!output||!['probe','flat-probe','native','separated','direct','confirm','draft'].includes(command))throw Error('usage: structural-study.mjs OUTPUT [probe|flat-probe|native|direct|confirm|draft]');
 await mkdir(output,{recursive:true});
 const path=join(output,'protocol.json');let protocol;
 try{protocol=JSON.parse(await readFile(path,'utf8'));}catch(error){
@@ -39,7 +39,7 @@ const runtimeImport=path=>import(pathToFileURL(join(frozenRuntime,path)).href);
 const {Folder,SourceEvaluator,OperationJournal,improveProgram,openAICompatibleModelTurn,createNatlangRuntime}=await runtimeImport('index.js');
 const {loadVirtualNatlang,compileVirtualProject}=await runtimeImport('runtime/virtual-project.js');
 const {AUTHORED_IMPROVER}=await runtimeImport('improvement/authored-source.js');
-const {PROGRAM_PROMPT,PROGRAM_TOOLS,PROGRAM_CONTEXT_TOKENS}=await runtimeImport('improvement/prompt.js');
+const {TOOLS_PROMPT}=await runtimeImport('native/prompt.js');
 const {UsageGateway}=await runtimeImport('evaluation/usage.js');
 const {createPiModelBackend}=await runtimeImport('model/pi-provider.js');
 const {fingerprint}=await runtimeImport('adaptation/identity.js');
@@ -56,7 +56,7 @@ const student=async(request,signal)=>{const turn=await rawStudent(request,signal
 const evaluator=new SourceEvaluator(protocol.contract,protocol.cases,student,gateway,{executorId:protocol.executor.model,timeoutMs:protocol.executorTimeoutMs,signal,sourcePolicy:{baseline:protocol.files,mode:protocol.policy.mode,allowedFiles:protocol.policy.allowedFiles},journal:new OperationJournal(join(output,command+'-journal'))});
 const baseline=Folder.fromFiles(protocol.files);let result;
 // Reuse only exact completed baseline executions, preserving their original measured costs.
-const baselineEvidenceFrom=command==='direct'?join(output,'native-journal'):command==='native'?protocol.baselineEvidenceFrom:undefined;
+const baselineEvidenceFrom=command==='direct'?join(output,'native-journal'):['native','separated'].includes(command)?protocol.baselineEvidenceFrom:undefined;
 if(baselineEvidenceFrom){
  const sourceJournal=new OperationJournal(baselineEvidenceFrom),targetJournal=new OperationJournal(join(output,command+'-journal'));
  const reused=[];
@@ -78,7 +78,7 @@ if(command==='probe'||command==='flat-probe'){
  const frozenPath=join(output,'freeze.json');try{const old=JSON.parse(await readFile(frozenPath,'utf8'));if(JSON.stringify(old)!==JSON.stringify(freeze))throw Error('Confirmation source changed.');}catch(error){if(error.code!=='ENOENT')throw error;await writeFile(frozenPath,JSON.stringify(freeze,null,2)+'\n');}
  const identity=createHash('sha256').update(JSON.stringify(freeze)).digest('hex');result={freeze:identity,comparisons:{}};
  for(const arm of ['native','direct']){
-  const armEvaluator=new SourceEvaluator(protocol.contract,protocol.cases,student,gateway,{executorId:protocol.executor.model,timeoutMs:protocol.executorTimeoutMs,signal,journal:new OperationJournal(join(output,'confirmation'))});
+  const armEvaluator=new SourceEvaluator(protocol.contract,protocol.cases,student,gateway,{executorId:protocol.executor.model,timeoutMs:protocol.executorTimeoutMs,signal,journal:new OperationJournal(join(output,'confirmation-'+arm))});
   result.comparisons[arm]=await armEvaluator.confirmPair(baseline.snapshot(),Folder.fromFiles(freeze.sources[arm]).snapshot(),identity);
  }
  result.ledger=gateway.snapshot();
@@ -88,25 +88,24 @@ if(command==='probe'||command==='flat-probe'){
  try{
   if(command==='draft'){
    if(!protocol.observedTraining?.length)throw Error('Draft diagnostic requires pinned actual training observations.');
-   const helpers=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/planExperiment/bookkeeping.ts'].replace("'../../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},await runtimeImport('runtime/node.js'),{constrained:true,target:'node'});
+   const helpers=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},await runtimeImport('runtime/node.js'),{constrained:true,target:'node'});
    if(!helpers.ok)throw Error(JSON.stringify(helpers.diagnostics));
    const bookkeeping=helpers.require('main.ts');
    const authored=loadVirtualNatlang(AUTHORED_IMPROVER,'improveStep.nl');
    const sourceFiles=Object.entries(protocol.files).map(([path,text])=>({path,text})),evidence=protocol.observedTraining;
-   const task=createNatlangRuntime({model:{tools:PROGRAM_TOOLS,prompt:PROGRAM_PROMPT,contextTokens:PROGRAM_CONTEXT_TOKENS,driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
-   const context={parent:baseline.snapshot().digest,sourceFiles,evidence,opportunity:bookkeeping.opportunity(protocol.policy,evidence),history:[]};
-   const plan=await task.run(()=>baseline.snapshot().branch().apply(authored.planExperiment,bookkeeping.brief(protocol.policy,evidence,sourceFiles),context,protocol.policy));
-   const proposal=await task.run(()=>baseline.propose(authored.rewriteProgram,bookkeeping.request(protocol.policy,plan,evidence,sourceFiles)));
+   const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
+   const proposal=await task.run(()=>baseline.propose(authored.rewriteProgram,bookkeeping.request(protocol.policy,'',evidence,sourceFiles)));
+   const plan=proposal.value.summary;
    const checked=await evaluator.check(proposal.folder);
    result={plan,edit:proposal.value,checked,files:Object.fromEntries(proposal.folder.filePaths().map(path=>[path,new TextDecoder().decode(proposal.folder.readBytesSync(path))])),ledger:gateway.snapshot(),disposition:'draft-diagnostic',studentMeasured:false,interpretation:'Actual optimizer planning/editing with pinned prior development observations; compiler/edit-scope check only. No new student or held-out improvement claim.'};
-  }else if(command==='native'){
-   const improved=await improveProgram({folder:baseline,contract:protocol.contract,cases:protocol.cases,policy:protocol.policy,improver:optimizer,executor:student,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs,budget:protocol.budget,gateway,signal,directory:join(output,'native-journal'),trace:trace=>{void appendFile(join(output,'native-traces.ndjson'),JSON.stringify(trace)+'\n');}});
+  }else if(command==='native'||command==='separated'){
+   const improved=await improveProgram({folder:baseline,contract:protocol.contract,cases:protocol.cases,policy:protocol.policy,improver:optimizer,executor:student,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs,budget:protocol.budget,gateway,signal,...(command==='separated'?{improverSource:Folder.fromFiles(protocol.separatedSource).snapshot()}:{}),directory:join(output,command+'-journal'),trace:trace=>{void appendFile(join(output,command+'-traces.ndjson'),JSON.stringify(trace)+'\n');}});
    const {folder,evaluator,...portable}=improved;result={...portable,source:folder.digest};
   }else{
    const train=await evaluator.evaluate(baseline.snapshot(),{split:'train'}),validation=await evaluator.evaluate(baseline.snapshot(),{split:'validation'});
    const editor=loadVirtualNatlang(AUTHORED_IMPROVER,'improveStep.nl').rewriteProgram;
-   const task=createNatlangRuntime({model:{tools:PROGRAM_TOOLS,prompt:PROGRAM_PROMPT,contextTokens:PROGRAM_CONTEXT_TOKENS,driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,seed:{mode:'derived',root:0},onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
-   const proposal=await task.run(()=>baseline.propose(editor,{brief:'Source: '+JSON.stringify(protocol.files)+'; actual training: '+JSON.stringify(evaluator.page(train.evidence)),objective:'model-calls',goal:protocol.policy.goal,mode:'structural',hypothesis:'Make the strongest coherent structural simplification supported by these actual student executions. Diagnose the traces yourself.',sourceFiles:baseline.snapshot().filePaths().map(path=>({path,text:new TextDecoder().decode(baseline.snapshot().readBytesSync(path))})),evidence:evaluator.page(train.evidence),allowedFiles:protocol.policy.allowedFiles}));
+   const task=createNatlangRuntime({model:{driver:(request,signal)=>gateway.request(optimizer,request,signal,'reflection'),maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4},signal,codeEdits:'deny',network:false,seed:{mode:'derived',root:0},onFolderProposal:()=>gateway.reserve('proposals',1,signal)});
+   const proposal=await task.run(()=>baseline.propose(editor,{brief:'Source: '+JSON.stringify(protocol.files)+'; actual training: '+JSON.stringify(evaluator.page(train.evidence)),objective:protocol.policy.objective??'quality',goal:protocol.policy.goal,mode:protocol.policy.mode,hypothesis:'Make the strongest coherent structural simplification supported by these actual student executions. Diagnose the traces yourself.',sourceFiles:baseline.snapshot().filePaths().map(path=>({path,text:new TextDecoder().decode(baseline.snapshot().readBytesSync(path))})),evidence:evaluator.page(train.evidence),allowedFiles:protocol.policy.allowedFiles}));
    const checked=await evaluator.check(proposal.folder);const candidate=checked.valid?await evaluator.evaluate(proposal.folder,{split:'validation'}):null;
    const candidateTrain=checked.valid?await evaluator.evaluate(proposal.folder,{split:'train'}):null;
    const accepted=!!candidate?.gatesPassed&&!!candidateTrain?.gatesPassed&&(candidate.quality>validation.quality||candidate.quality===validation.quality&&candidate.modelCalls<validation.modelCalls);

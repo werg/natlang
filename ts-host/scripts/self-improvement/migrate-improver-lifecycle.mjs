@@ -13,7 +13,7 @@ export function migrateLifecycle(row){
    value.function.description='Run TypeScript in this call\'s persistent scope. A final expression inspects; a typed return stages; finish:true completes the fresh typed final expression or explicit return in one action.';
    schemaChanges++;
   }
-  if(value.files&&typeof value.files==='object'&&typeof value.files['improveStep.nl']==='string'&&('improveStep/measureBaseline.nl'in value.files||'improveStep/selectCandidate.nl'in value.files||'improveStep/runExperiment.nl'in value.files||value.files['improveStep/planExperiment.nl']?.includes('frame: SearchFrame')||value.files['improveStep/planExperiment.nl']?.includes('returns: ExperimentPlan')||value.files['improveStep/planExperiment.nl']?.includes('context.brief'))){
+  if(value.files&&typeof value.files==='object'&&typeof value.files['improveStep.nl']==='string'&&('improveStep/measureBaseline.nl'in value.files||'improveStep/selectCandidate.nl'in value.files||'improveStep/runExperiment.nl'in value.files||'improveStep/planExperiment.nl'in value.files||value.files['improveStep/planExperiment.nl']?.includes('frame: SearchFrame')||value.files['improveStep/planExperiment.nl']?.includes('returns: ExperimentPlan')||value.files['improveStep/planExperiment.nl']?.includes('context.brief')||value.files['improveStep/rewriteProgram.nl']?.includes('Write each complete replacement once with await folder.file')||value.files['improveStep.nl'].includes('planExperiment'))){
    const prior=fingerprint(value.files);
    // The template is a training task, not an execution replay. Retain the old snapshot separately for audit.
    value.retiredAuthoredIdentity=prior;
@@ -25,7 +25,7 @@ export function migrateLifecycle(row){
  };
  visit(copy);
  if(changes||schemaChanges){
-  copy.migration={version:'natlang.authored-lifecycle/2',sourceId:row.id,sourceHash:createHash('sha256').update(JSON.stringify(row)).digest('hex'),changes,schemaChanges,disposition:'recollect-required',reason:'Retired experiment plumbing and wrapped plans replaced by a primitive semantic hypothesis with a visible brief and one exact experiment; eval schema includes atomic completion. Old actions and observations are historical context, not executions of the new source.'};
+  copy.migration={version:'natlang.authored-lifecycle/3',sourceId:row.id,sourceHash:createHash('sha256').update(JSON.stringify(row)).digest('hex'),changes,schemaChanges,disposition:'recollect-required',reason:'Retired separate planning and editing replaced by one semantic directory reducer with actual training evidence and rejected-edit feedback; eval schema includes atomic completion and program execution uses the normal call-specific tool surface. Old actions and observations are historical context, not executions of the new source.'};
   copy.training_admission={kind:'migration-recollection-required',approved:false,reason:copy.migration.reason};
   copy.trace_admission={admitted:false};
  }
@@ -35,6 +35,6 @@ if(process.argv[1]&&new URL(import.meta.url).pathname===process.argv[1]){
  const [input,output]=process.argv.slice(2);if(!output)throw Error('usage: migrate-improver-lifecycle.mjs INPUT_JSONL OUTPUT_JSONL');
  const original=await readFile(input,'utf8'),rows=original.trim().split('\n').filter(Boolean).map(JSON.parse).map(migrateLifecycle);
  await mkdir(dirname(output),{recursive:true});await writeFile(output,rows.map(result=>JSON.stringify(result.row)).join('\n')+'\n');
- const manifest={version:'natlang.authored-lifecycle/2',input,output,inputHash:createHash('sha256').update(original).digest('hex'),rows:rows.length,migrated:rows.filter(result=>result.changes||result.schemaChanges).length,recollect:rows.filter(result=>result.changes||result.schemaChanges).map(result=>result.row.id),positiveSFT:false};
+ const manifest={version:'natlang.authored-lifecycle/3',input,output,inputHash:createHash('sha256').update(original).digest('hex'),rows:rows.length,migrated:rows.filter(result=>result.changes||result.schemaChanges).length,recollect:rows.filter(result=>result.changes||result.schemaChanges).map(result=>result.row.id),positiveSFT:false};
  await writeFile(output+'.manifest.json',JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({rows:manifest.rows,migrated:manifest.migrated,positiveSFT:false}));
 }

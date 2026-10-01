@@ -2,7 +2,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import * as runtime from '../runtime/node.js';
 import * as targetRuntime from './target-runtime.js';
-import {PROGRAM_PROMPT,PROGRAM_TOOLS,PROGRAM_CONTEXT_TOKENS} from './prompt.js';
+import {TOOLS_PROMPT} from '../native/prompt.js';
 import { Folder,APPLY_TO_FOLDER } from '../native/scoped-fs.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { compileVirtualProject } from '../runtime/virtual-project.js';
@@ -24,7 +24,7 @@ try {
     return [name, serviceBuild.require('service.ts')];
   }));
   if (typeof target !== 'function') throw new Error('target entry is not callable');
-  const task = runtime.createNatlangRuntime({ model: {prompt:PROGRAM_PROMPT,tools:PROGRAM_TOOLS,contextTokens:PROGRAM_CONTEXT_TOKENS,driver:request => new Promise((resolve, reject) => {
+  const task = runtime.createNatlangRuntime({ model: {driver:request => new Promise((resolve, reject) => {
     const id = sequence++; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, request });
   })}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request')}), services, serviceDeclarations: workerData.services, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
   const folder=workerData.folder?Folder.fromFiles(workerData.folder):undefined;

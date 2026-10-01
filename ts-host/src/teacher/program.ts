@@ -19,8 +19,6 @@ export type ProgramSemantics = {
   files: Record<string, string>;
   inputs: Record<string, unknown>;
   expected: unknown;
-  /** Host-supplied flat evaluator for authored improvement programs; never target authority. */
-  evaluation_fixture?: {kind:'flat-program-evaluator';caseDefinition:{files:Record<string,string>;contract:import('../improvement/types.js').ProgramContract;cases:import('../improvement/types.js').ImprovementCase[];policy:import('../improvement/program.js').ImprovementPolicy};executorId?:string};
   /** Evidence strength behind `expected`: exact comparison, normalized comparison, span evidence, or a judgment. */
   oracle?: OracleSpec;
   operation?: string;
