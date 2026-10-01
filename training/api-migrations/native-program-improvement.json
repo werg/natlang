@@ -599,7 +599,7 @@
         "ts-host/scripts/self-improvement/replay-followup-study.mjs",
         "ts-host/scripts/self-improvement/export-followup-training.mjs"
       ],
-      "source_research": "Actual Luna/Bonsai multi-file reducer failures: missing report effects, ambiguous first requests, and constant-path shortcuts. Training failures alone inform revisions.",
+      "source_research": "Actual Luna/Bonsai multi-file reducer failures: missing report effects, ambiguous first requests, and constant-path shortcuts. Training failures alone inform revisions. Actual urgent-files editor refusal confused allowed source paths with report.json runtime output; clarify editor contexts and collect new file-program trajectories.",
       "families": [
         "multi-file-directory-reducer",
         "rejected-edit-revision",
@@ -612,7 +612,8 @@
         "out-of-order case replay",
         "validation file outputs remain unavailable",
         "matching file paths and file count change across cases",
-        "student service opening hides implementation while exact calls still execute"
+        "student service opening hides implementation while exact calls still execute",
+        "source-edit paths distinguish program source from runtime output files"
       ],
       "verification": [
         "ts-host/test/native-improvement-training.test.mjs"

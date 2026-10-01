@@ -7,7 +7,7 @@ export function request(policy:ImprovementPolicy,hypothesis:string,evidence:unkn
 
 /** A small first read; complete source and observations remain available in the typed context. */
 export function brief(policy:ImprovementPolicy,evidence:TrainingEvidence[],sourceFiles:SourceFile[],hypothesis:string=''):string {
-  const lines=['Goal: '+policy.goal,'Mode: '+policy.mode+'; objective: '+(policy.objective??'quality'),'Allowed edits: '+policy.allowedFiles.join(', ')];
+  const lines=['Goal: '+policy.goal,'Mode: '+policy.mode+'; objective: '+(policy.objective??'quality'),'Allowed source edits: '+policy.allowedFiles.join(', '),'Execution output files belong to the target runtime folder; implement their behavior in source, not in this draft.'];
   if(hypothesis)lines.push('Hypothesis: '+hypothesis);
   for(const file of sourceFiles)lines.push('Source '+file.path+':\n'+file.text.slice(0,1200)+(file.text.length>1200?'\n[clipped; full text in sourceFiles]':''));
   for(const row of evidence){
