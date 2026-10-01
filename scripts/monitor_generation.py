@@ -39,6 +39,32 @@ def live(pid, signature):
         return False
 
 
+def additional_teacher_alerts(authority):
+    alerts = []
+    for name, teacher in authority.get('additional_teachers', {}).items():
+        state = teacher.get('state', 'unknown')
+        if teacher.get('status_file'):
+            try:
+                state = read_json(Path(teacher['status_file'])).get('state', 'unknown')
+            except (OSError, ValueError):
+                alerts.append(f'{name}: worker status unreadable')
+        if state.startswith('paused') or state in {'failed', 'stopped'}:
+            alerts.append(f'{name}: {state}; investigate before resuming')
+        elif state == 'finished':
+            alerts.append(f'{name}: assignment finished; review results and replenish qualified work')
+        elif teacher.get('sync_status'):
+            try:
+                sync = read_json(Path(teacher['sync_status']))
+                checked = dt.datetime.fromisoformat(sync['checked_at'].replace('Z', '+00:00'))
+                if (dt.datetime.now(dt.timezone.utc) - checked).total_seconds() > 180:
+                    alerts.append(f'{name}: remote sync stale; remote progress unknown')
+                if sync.get('transfer_exit_code') or sync.get('import_exit_code'):
+                    alerts.append(f'{name}: remote transfer or import failed')
+            except (OSError, ValueError, KeyError, TypeError):
+                alerts.append(f'{name}: remote sync status unreadable')
+    return alerts
+
+
 def same_queue_worker_live(command):
     """Find any already-running supervisor bound to this exact queue and journal."""
     expected = [os.fsencode(str(part)) for part in command]
@@ -584,6 +610,7 @@ def main():
                 luna = authority.get('luna_workers', [])
                 luna_live = [w.get('pid') for w in luna if live(w.get('pid'), 'run_bonsai_queue.py')]
                 needs_review = []
+                needs_review.extend(additional_teacher_alerts(authority))
                 needs_review.extend('storage_pause_recovery_blocked: ' + item.get('reason', 'approval mismatch')
                                     for item in recovery if item.get('status') == 'blocked')
                 successor_checks, successor_alerts = reviewed_successor_health(authority)

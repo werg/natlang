@@ -69,7 +69,9 @@ def main():
                         tmp = args.authority.with_suffix('.sync.tmp')
                         tmp.write_text(json.dumps(authority, indent=2) + '\n')
                         tmp.replace(args.authority)
-            if state in {'finished', 'stopped'} or state.startswith('paused'):
+            # A paused deployment can recover independently. Keep pulling its status
+            # and evidence so the local monitor does not retain a stale failure.
+            if state in {'finished', 'stopped'}:
                 break
             time.sleep(45)
 
