@@ -1,3 +1,15 @@
+## Recovery and hourly follow-through — 2026-10-01 12:07 UTC
+
+Mechanical audits continued at09:43/10:43/11:43 but root ended its active turn and did not act on hourly-agent escalations. Luna workers376000/376001 stopped at storage floor around11:00; filesystem briefly exhausted, later recovered to71GiB. Rollingcontroller389122 failedclosed on incomplete predecessor rather than launch successors. Do not describe those queues as completed.
+
+Root restarted **483514 /483515** on the SAME original v4 queues/journals at12:04 after verifying unchanged pinned artifacts and storage-pause evidence. Saved completed and failed attempts are skipped; unattempted work resumes. Evidence `runs/generation-check-20261001-resume/luna-storage-resume-1206.json`. Bonsai **392661** is active on256-case successor, GPU98%. Runtime-v20 remains frozen.
+
+Rolling controller **484210**, plan `luna-next-campaign-audit-v5/root-approved-successor-plan-v3.json`, SHA fbd4c64cfa876a6501dd4dd6606130f6a81c5a9baa59993236f478fb51187f82, binds resumed PIDs and allows exactly four reviewed empty failed finish records by canonical event hashes. Failures remain excluded and preserved. All other incomplete outcomes still require review; no false positive accounting or blanket failure bypass. Old v2 claim/failedcontroller evidence retained. Root is preparing approved automatic same-queue storage resume in monitor; not yet enabled.
+
+Requested immediate sweep completed12:06:58UTC: zero blocking reader errors/futureholds; Bonsai delta8exactrows/8admitted/65decisions/zero missing. Main scope438savedrows; don't confuse this with new cases. Reports `hourly-health-next/health-2026-10-01T120658135Z.json` and matching spool; nextfull13:06:58UTC. Existing timeout/admission agents renewed for active failure/UXreview; root must remain active and act on alerts instead of ending after setup. Missing Bonsai member48 from earlier partial batch and oversized invoice paging loops are under investigation. Stop monitors/controllers/agents plus workers for intentional shutdown.
+
+---
+
 ## Continuous utilization — 2026-10-01 08:43 UTC
 
 Bonsai recovery supervisor **332364** remains active with four concurrent requests; GPU sampled at **98% / 7,457 MiB**. At 08:43, 29 of 37 recovery parent batches had finished; the current batch was producing fresh replies (29 saved replies, zero repeated request hashes). These are batch counts, not case counts. Two Luna workers **376000 / 376001** remain active on the 1,024-case campaign; journals showed 52 and 27 completed queue entries respectively, with fresh replies on both active cases.

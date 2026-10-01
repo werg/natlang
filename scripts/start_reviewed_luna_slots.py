@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Roll each of two reviewed Luna slots forward as its own queue finishes."""
 import argparse
+import hashlib
 import fcntl
 import json
 import os
@@ -11,7 +12,7 @@ from generation_authority import authority_lock
 from start_reviewed_generation_successor import atomic_json, digest, running
 
 
-def verify_finished(predecessor):
+def verify_finished(predecessor, reviewed_failures=None):
     if digest(predecessor['queue']) != predecessor['queue_sha256']:
         raise ValueError('Predecessor queue changed')
     keys = {json.loads(line)['key'] for line in Path(predecessor['queue']).read_text().splitlines() if line.strip()}
@@ -23,8 +24,14 @@ def verify_finished(predecessor):
                 finishes[event['key']] = event
     for key in keys:
         event = finishes.get(key, {})
-        if event.get('status') not in {'complete', 'complete_with_skips', 'skipped'} or not event.get('output_accounting', {}).get('complete'):
-            raise ValueError(f'Incomplete predecessor needs agent review: {key}')
+        if event.get('status') in {'complete', 'complete_with_skips', 'skipped'} and event.get('output_accounting', {}).get('complete'):
+            continue
+        # A reviewed failed attempt stays excluded; it must never become a positive.
+        expected = (reviewed_failures or {}).get(key)
+        actual = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if event and expected == actual:
+            continue
+        raise ValueError(f'Incomplete predecessor needs agent review: {key}')
 
 
 def main():
@@ -56,7 +63,7 @@ def main():
             for index, (predecessor, worker) in enumerate(zip(plan['predecessors'], plan['workers'])):
                 if index in started or running(predecessor['pid']):
                     continue
-                verify_finished(predecessor)
+                verify_finished(predecessor, plan.get('reviewed_failed_finishes'))
                 for file, expected in plan['artifact_hashes'].items():
                     if digest(file) != expected:
                         raise ValueError(f'Reviewed artifact/policy changed: {file}')

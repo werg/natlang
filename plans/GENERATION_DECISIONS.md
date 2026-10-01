@@ -1449,3 +1449,7 @@ Inventoryfoundlegacyfalsepositivezero-fallbackturns(12)innewdefaultfolder-revisi
 - Full legacy source review expanded the folder-revision hold from12zero-fallback turns to all23turns, and found10additional v2aggregation turns whose validation subset happened to pass. Candidate review must preserve source-specific retained/excluded partitions and cannot replace old history with successful fresh v4 history. Originals remain immutable; no fabricated DPO labels.
 
 - 08:45 disk safety: reclaimed1.451GB inactive downloadable Homebrew/pnpm caches and generated thumbnails older24h, no open handles. Audited each deletion; training/model/original artifacts preserved. Approximately2.8GB free afterward. Hourly agent investigating sudden consumption.
+
+## 2026-10-01 12:07 UTC — Restore response to hourly alerts
+
+Mechanical hourly audits persisted, but root follow-through stopped when its turn ended. Luna storage-paused queues are now resumed with original journals; terminal successes/failures preserved, only unattempted entries run. New rolling plan binds resumed PIDs and precisely hashes four reviewed empty failed finish records so those excluded failures do not block unrelated approved next work. Unreviewed incomplete work still blocks. Preparing approved automatic storage-pause recovery to avoid dependence on root for this specific reversible event. Next full sweep13:06:58UTC. No tests/frozenruntimechange.
