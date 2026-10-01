@@ -10,6 +10,7 @@ from pathlib import Path
 import uuid
 
 from run_training_pipeline import atomic_json
+from reviewed_training_inputs import resolve_reviewed_turn_inputs
 
 
 def catalog(repo, config=None):
@@ -125,6 +126,7 @@ def catalog(repo, config=None):
             latest = max(values, key=lambda e: e['created_at'])
             failure_inventories.append(dict(latest, equivalent_manifest_records=[e['manifest'] for e in values]))
     missing_inputs = []
+    required_input_resolutions = []
     not_carried = []
     if config:
         for entry in artifacts.values():
@@ -146,8 +148,24 @@ def catalog(repo, config=None):
             not_carried.append({'path': entry['path'], 'resolution': resolution, 'replacement': replacement,
                                 'replacement_chain': chain, 'decision': decision})
     if config and not config.get('data_inventory_explicit_input_override'):
-        missing_inputs = [name for name in policy['required_default_inputs']
-                          if not (repo / name).is_file() or str(repo / name) not in inputs]
+        for name in policy['required_default_inputs']:
+            original = repo / name
+            if original.is_file() and str(original.resolve()) in inputs:
+                required_input_resolutions.append({'required': name, 'resolved': name, 'mode': 'direct'})
+                continue
+            decision = next((d for d in policy.get('decisions', [])
+                             if d.get('glob') == name and d.get('status') == 'source_review_approved'), None)
+            replacement = policy.get('replacements', {}).get(name)
+            if original.is_file() and decision and replacement:
+                resolved, audit, _ = resolve_reviewed_turn_inputs(repo, [original])
+                if len(resolved) == 1 and resolved[0] in inputs and audit and audit[0].get('replacement') == replacement:
+                    required_input_resolutions.append({'required': name, 'resolved': replacement,
+                                                       'mode': 'catalog_pinned_approved_replacement',
+                                                       'review_manifest': audit[0]['review_manifest'],
+                                                       'review_manifest_sha256': audit[0]['review_manifest_sha256'],
+                                                       'replacement_sha256': audit[0]['replacement_sha256']})
+                    continue
+            missing_inputs.append(name)
         if not snapshots:
             missing_inputs.append('automatic completed-teacher snapshot')
         missing_inputs.extend(e['path'] for e in not_carried if e['resolution'] == 'unreviewed_omission')
@@ -155,6 +173,7 @@ def catalog(repo, config=None):
               'policy_sha256': hashlib.sha256(policy_path.read_bytes()).hexdigest(),
               'artifacts': list(artifacts.values()), 'by_status': dict(Counter(e['status'] for e in artifacts.values())),
               'generated_snapshots': snapshots, 'generated_failure_inventories': failure_inventories,
+              'required_input_resolutions': required_input_resolutions,
               'missing_required_default_inputs': missing_inputs,
               'not_carried_forward': not_carried,
               'scope': 'Persistent data artifact catalog plus immutable generated-job snapshots with per-file admission ledgers. Counts overlap; not a final training-ready count.',

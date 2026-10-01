@@ -1,3 +1,9 @@
+## Default carry-forward verified — 2026-10-01 13:12 UTC
+
+Fixed `scripts/inventory_training_data.py` required-input accounting to recognize only catalog-approved replacements validated by the strict reviewed-input resolver, with hashes checked and the replacement actually included in the recipe. **Recipe28 uses default inputs, no explicit overrides**. Root recomputed the inventory and checked all seven reviewed lane byte/count hashes: nine required inputs resolve; 289 reviewed turns carried forward. Recipe SHA `55f7adc0dd131f35bf81f85f27f0752c03b36ab19a5dcef9af16c37b86f3164f`; root receipt `runs/data-lineage-20260930/recipe-v28-review/root-review.json`. Recipes26/27 remain preserved. Recipe28 is still a draft, pending nine source-hold publications and final student readiness gates. No tests or training run.
+
+---
+
 ## Hourly sweep and follow-through — 2026-10-01 13:07 UTC
 
 Root is actively following hourly alerts again. Monitor **490927** completed the 13:07:46 UTC sweep; next full check **14:07:46 UTC (16:07 Berlin)**. Bonsai **392661**, Luna **483514 / 483515**, and rolling Luna controller **500258** remain active. GPU was 98% utilized; approximately 68 GiB free. The hourly Bonsai supplement contains 28 new exact results, 26 admitted trajectories, 108 approved decisions, two rejects, and no missing results/source errors. Main reader scope: 572 saved aggregate rows and zero blocking reader errors. Empty active case210/673 outputs are pending, not failed finishes. Current Luna journals contain 209 and159 completed entries and only the four previously reviewed failed finishes. Use dated reports rather than stale flat authority counters.

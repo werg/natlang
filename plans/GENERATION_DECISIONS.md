@@ -1478,3 +1478,7 @@ Currentv4improvementlaneevolvedto76rowswith10migratedfalse-positiveaggregationtu
 - Approved exact66/10 partition of evolving v4 lane after all producer/case reviews. Across legacy reviews,43 physical turns excluded and289 retained. Recipe27 remains draft and uses explicit overrides; default pipeline automatic inclusion is being investigated separately.
 - Root independent scan rejected Bonsai512 v3 proposal for a previously attempted source; rebuild exclusions rather than weakening freshness checks. Originals/proposals remain preserved.
 - Generic successor now follows authoritative queue/journal across resumed PIDs, allows only reviewed exact failed events, and locks final liveness checks, claims, launch and authority reconciliation together. This prevents storage recovery racing a handoff. Syntax parsed; no tests run.
+
+## 2026-10-01 13:12 UTC — Repair default inventory replacement accounting
+
+Required default source paths now resolve through strictly approved catalog replacements only when manifest and physical row hashes validate and the replacement is present in actual recipe inputs. Default recipe28 carries all289 reviewed turns and resolves all nine required inputs without overrides. Root independently recomputed inventory and checked lane hashes/counts. Source-hold publication and final renderer readiness remain pending. No tests/training run.
