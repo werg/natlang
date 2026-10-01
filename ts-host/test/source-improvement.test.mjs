@@ -153,6 +153,8 @@ test('meta-evaluation executes the edited frozen improver and shares its parent 
  assert.equal(report.quality,1);assert.ok(report.modelCalls>0);
  assert.ok(evaluator.page(report.evidence)[0].value.diagnostics.history.length>0);
  assert.equal(evaluator.page(report.evidence)[0].value.diagnostics.done,true);
+ const feedback=evaluator.page(report.evidence)[0].value;
+ assert.deepEqual(feedback,JSON.parse(JSON.stringify(feedback)),'nested meta feedback must be portable iteration state');
  assert.ok(gateway.ledger.rollouts>2);assert.ok(gateway.ledger.usage.modelCalls>0);assert.equal(gateway.ledger.proposals,1);
 });
 

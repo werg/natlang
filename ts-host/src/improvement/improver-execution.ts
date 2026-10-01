@@ -21,8 +21,8 @@ export function improverExecution(cases:readonly ImproverCase[],models:{improver
     const quality=completed && checked.valid && heldout?.gatesPassed && heldout.quality===1 ? 1 : 0;
     return {modelCalls:gateway.ledger.usage.modelCalls-beforeCalls,
       value:{source:result.folder.digest,files:sourceFiles(result.folder),quality,disposition:result.disposition,
-        diagnostics:{done:result.state.done,stopReason:result.state.stopReason,error:result.error,history:result.state.history,training:(result.state as unknown as {lastExperiment?:unknown}).lastExperiment}},
+        diagnostics:{done:result.state.done,stopReason:result.state.stopReason,...(result.error!==undefined?{error:result.error}:{}),history:result.state.history,...((result.state as unknown as {lastExperiment?:unknown}).lastExperiment!==undefined?{training:(result.state as unknown as {lastExperiment?:unknown}).lastExperiment}:{})}},
       score:{quality,gates:{contract:checked.valid,completed}}};
-  },{evaluationLevel:2 as const,identity:fingerprint({cases:frozen,improver:models.improverId,executor:models.executorId,level:2,diagnosticsVersion:2,executorTimeoutMs:options.executorTimeoutMs??120000})});
+  },{evaluationLevel:2 as const,identity:fingerprint({cases:frozen,improver:models.improverId,executor:models.executorId,level:2,diagnosticsVersion:3,executorTimeoutMs:options.executorTimeoutMs??120000})});
   return execute;
 }

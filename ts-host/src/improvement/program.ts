@@ -1,3 +1,4 @@
+import {NATLANG_COMPILE_VERSION} from '../compiler/intrinsics.js';
 import {TOOLS_PROMPT} from '../native/prompt.js';
 import { OperationJournal } from './operations.js';
 import { fingerprint } from '../adaptation/identity.js';
@@ -27,7 +28,7 @@ export async function improveProgram(options: ImproveProgramOptions) {
   // The selected improver is frozen for this invocation; adoption only affects later invocations.
   const step = loadVirtualNatlang(authored, 'improveStep.nl');
   const journal = options.directory ? new OperationJournal(options.directory) : undefined;
-  const identity = fingerprint({ runtime:6,evaluation:SOURCE_EVALUATION_VERSION,authored, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384,limits:{maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4,maxRequests:options.budget.maxModelCalls}}, seed: options.seed ?? 0, source: options.folder.snapshot().digest, contract: options.contract, cases: options.cases, policy: options.policy, transformation:options.transformation??null, executor: options.executorId, executorTimeoutMs:options.executorTimeoutMs??120000, execution:options.executeCase?.identity ?? null, evaluationLevel:options.evaluationLevel??1, budget: options.budget });
+  const identity = fingerprint({ runtime:6,compiler:NATLANG_COMPILE_VERSION,evaluation:SOURCE_EVALUATION_VERSION,authored, opening:{prompt:TOOLS_PROMPT,tools:"native-default",contextTokens:16384,limits:{maxTurns:16,maxTokens:24000,turnTokens:2048,maxFailureRepairs:4,maxRequests:options.budget.maxModelCalls}}, seed: options.seed ?? 0, source: options.folder.snapshot().digest, contract: options.contract, cases: options.cases, policy: options.policy, transformation:options.transformation??null, executor: options.executorId, executorTimeoutMs:options.executorTimeoutMs??120000, execution:options.executeCase?.identity ?? null, evaluationLevel:options.evaluationLevel??1, budget: options.budget });
   const savedIdentity = journal?.read<string>('run-identity')?.value;
   if (savedIdentity && savedIdentity !== identity) throw new Error('resume requires the same frozen source, cases, policy, executor and allocation');
   journal?.record('run-identity', identity);

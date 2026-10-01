@@ -12,8 +12,8 @@ export type EvalImport = { name: string; params: { name: string; type: string; o
   children: EvalImport[] };
 
 export type EvalScopeDeclarations = {
-  /** Invocation identity: independently generated eval functions are distinct even at identical source offsets. */
-  invocationId?: string;
+  /** Stable parent call identity keeps independently created inline functions distinct. */
+  scopeIdentity?: string;
   types: Record<string, string>;
   inputs: { name: string; type: string }[];
   locals: { name: string; type: string; mutable: boolean }[];
@@ -80,7 +80,7 @@ export function analyzeEvalSnippet(source: string, scope: EvalScopeDeclarations)
   const scopeFile = program.getSourceFile(SCOPE_FILE)!;
   const inputs = new Set(scope.inputs.map(input => input.name));
   const { plans, diagnostics } = analyzeInlineLambdas(program, [snippet], {
-    sourceRevision: hexDigest(`${scope.invocationId ?? ''}\0${source}`),
+    sourceRevision: hexDigest(`${scope.scopeIdentity ?? ''}\0${source}`),
     scopeFiles: [scopeFile], displayPath: () => 'eval',
     classify: declaration => declaration.getSourceFile() === scopeFile ?
       (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && inputs.has(declaration.name.text) ? 'input' : 'local') :

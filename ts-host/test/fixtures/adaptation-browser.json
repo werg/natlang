@@ -5,7 +5,7 @@
   "program": {
     "schema": "natlang.program/v1",
     "id": "project",
-    "protocol": 4,
+    "protocol": 6,
     "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
     "sources": {
       "main.ts": "import { nl } from '@natlang/node';\nexport const judge = /* @natlangSite portable */ nl<number>`Return one.`;\nexport async function invoke(): Promise<number> { await Promise.resolve(); return judge(); }\n"
@@ -39,11 +39,11 @@
           "slots": [],
           "helpers": [],
           "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
-          "protocol": 4,
+          "protocol": 6,
           "visibleBindings": [],
           "slotBindings": []
         },
-        "contractHash": "cfb79700e2d52662a72a4c11d807b8417dc7afce1981fb52c06d9feaadcc8e5c",
+        "contractHash": "54a63055a4219e1fc1dae12913d9b36efc6c6c41813088b9f5c5127f4b5556bc",
         "constraints": {
           "maxChars": 32000,
           "requiredBindings": []
@@ -77,11 +77,11 @@
           "slots": [],
           "helpers": [],
           "servicesHash": "40f04142095536e082fd7586d919bd5aacac2676db4f37fc830f64a91d8eef41",
-          "protocol": 4,
+          "protocol": 6,
           "visibleBindings": [],
           "slotBindings": []
         },
-        "contractHash": "ff38094d85252df67c21eb89a626569dbdd32d13cf701d150d393a3e82608b0a",
+        "contractHash": "ec890c48cf70820809a8d071ebd2570143c002768b89fef1fe7e06489c1ec11f",
         "constraints": {
           "maxChars": 32000,
           "requiredBindings": []
@@ -94,11 +94,11 @@
   },
   "artifact": {
     "schema": "natlang.adaptation/v1",
-    "digest": "4fcf570e3acc321cc9f606fe6a04e3a3405fbbacc8879cb646d088ce90d8f8aa",
+    "digest": "f58ccfae942e79e650fed18365f701627d97847caa7972137a4c85139e19ccfb",
     "program": {
       "id": "project",
       "buildHash": "a2b773a0df9bf511c5f594c95344900b0f17aeb711e981b7898f5342e2d77c49",
-      "protocol": 4,
+      "protocol": 6,
       "guidanceScope": {
         "importedPrograms": []
       }
@@ -117,7 +117,7 @@
       {
         "key": "project::main.ts::site%3Aportable%3Ainstructions",
         "baselineHash": "76bab8522c3f7257ad2bcda64f7f7a24638b957d37a84af1b9deeff9fe667ed7",
-        "contractHash": "cfb79700e2d52662a72a4c11d807b8417dc7afce1981fb52c06d9feaadcc8e5c",
+        "contractHash": "54a63055a4219e1fc1dae12913d9b36efc6c6c41813088b9f5c5127f4b5556bc",
         "value": {
           "kind": "lambda.instructions",
           "template": {

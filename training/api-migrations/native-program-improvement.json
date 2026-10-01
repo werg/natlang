@@ -549,6 +549,45 @@
         "output": "runs/self-improvement-data/combined-editor-v1/decomposed-recollection.jsonl",
         "disposition": "recollect-required; source snapshots replaced; admission revoked; original observations retained as history"
       }
+    },
+    {
+      "id": "stable-inline-and-invocation-training",
+      "old": "Invocation-nonce inline identities; exported child turns labelled as root restarts; dropped terminal tool actions",
+      "new": "Compiler 6 parent-qualified stable inline identities, lexical child loading, exact per-invocation export with terminal action evidence",
+      "migration": "Reexecute original optimizer and student responses under current compiler and explicit source/evidence identity migration. Revoke admission for incomplete recordings. Never rewrite original provider observations. Load nested callable source with its original inherited type scope. Replace exported synthetic initial state with trace initial arguments and final result/folder. Exclude sealed confirmation cases from fixtures. Regenerate portable adaptation artifacts for compiler 6. Retire export-improvement.mjs in favor of the verified per-invocation exporter; retain source groups, incident provenance and actual teacher reasoning when available.",
+      "builders": [
+        "ts-host/scripts/self-improvement/replay-followup-study.mjs",
+        "ts-host/scripts/self-improvement/export-followup-training.mjs"
+      ],
+      "source_research": "Actual Luna/Bonsai exchanges from twelve independently specified semantic failure programs; no held-out failures used as curriculum.",
+      "verification": [
+        "ts-host/test/runtime.test.mjs",
+        "ts-host/test/interpreter.test.mjs",
+        "ts-host/test/native-improvement-training.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ],
+      "required_cases": [
+        "identical inline eval seeds across fresh tasks",
+        "independent nested inline definitions versus recursion",
+        "direct child loading with inherited and shadowed types",
+        "terminal and intermediate successful actions",
+        "changed replay input refused",
+        "parallel completion order preserved",
+        "root continuation starts at actual iteration",
+        "nested diagnostic values are portable JSON"
+      ],
+      "migration_result": {
+        "verified_loops": 7,
+        "verified_invocations": 28,
+        "admitted_turns": 73,
+        "manifest": "runs/native-next-six-20261001/training-current-v6/manifest.json",
+        "providerCallsDuringReplay": 0,
+        "quarantined": [
+          "followup-approved-sum",
+          "followup-recommendation-flags"
+        ],
+        "disposition": "Incomplete provider recordings retained as failure evidence; remaining live study cases processed when complete."
+      }
     }
   ],
   "source_research": "ts-host/scripts/self-improvement/sources.json",

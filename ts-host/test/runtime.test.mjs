@@ -295,3 +295,33 @@ test('app system instructions add to ordinary runtime guidance and retain normal
  for(const name of ['eval','write_file','edit_file'])assert.ok(names.includes(name),name+' missing');
 });
 
+test('inline nl created in eval has stable definition identities and seeds across fresh tasks',async()=>{
+ const fn=loadNatlang(join(tree({'answer.nl':nlFile({value:'number'},'number','Delegate to an inline semantic call.')}),'answer.nl'));
+ const seeds=[],definitions=[];
+ for(let run=0;run<2;run++){
+  const taskSeeds=[];const runtime=createNatlangRuntime({signal:AbortSignal.timeout(5000),seed:{mode:'derived',root:37},trace:trace=>definitions.push(trace.definitionId),model:async request=>{
+   taskSeeds.push(request.seed);
+   return {calls:[['eval',{code:String(request.messages[1].content).split('\n')[0].includes('answer(')?'const echo = nl<number>`Return value unchanged.`; return await echo(value);':'return value;',finish:true}]]};
+  }});
+  assert.equal(await runtime.run(()=>fn(9)),9);seeds.push(taskSeeds);
+ }
+ assert.deepEqual(seeds[0],seeds[1]);
+ assert.equal(definitions[0],definitions[2]);
+});
+
+test('a child loaded directly retains its owning function and folder type scopes',async()=>{
+ const {loadVirtualNatlang}=await import('../dist/runtime/virtual-project.js');
+ const files={
+  'types.ts':'export type Value = number;',
+  'outer.nl':'---\nargs: {}\nreturns: number\ntypes: {Local: string}\n---\nDelegate.',
+  'outer/nested/types.ts':'export type Value = string;',
+  'outer/nested/child.nl':'---\nargs: {value: Value, label: Local}\nreturns: string\n---\nReturn label plus value.'
+ };
+ const outer=loadVirtualNatlang(files,'outer.nl');
+ const child=loadVirtualNatlang(files,'outer/nested/child.nl');
+ const requests=[];
+ const runtime=createNatlangRuntime({model:async request=>{requests.push(request);return {text:'prefix-x'};}});
+ assert.equal(await runtime.run(()=>child('x','prefix-')),'prefix-x');
+ assert.equal(await runtime.run(()=>outer.nested.child('x','prefix-')),'prefix-x');
+ assert.deepEqual(requests[0].messages,requests[1].messages);
+});

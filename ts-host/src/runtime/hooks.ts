@@ -53,7 +53,7 @@ export function evalDeclarations(session: NativeSession): EvalScopeDeclarations 
     }
   };
   collect(codebase);
-  return { types, invocationId: session.runtime.options.runId,
+  return { types, scopeIdentity: session.runtime.options.seedId ?? String(session.runtime.frame?.adHocDepth ?? 0),
     inputs: lam.type.kind === 'lambda' ? lam.type.params.fields.map(field => ({ name: field.name, type: formatType(field.type) })) : [],
     locals: Object.entries(lam.letTypes).filter(([name]) => Object.hasOwn(lam.let, name))
       .map(([name, type]) => ({ name, type: formatType(type), mutable: true })),

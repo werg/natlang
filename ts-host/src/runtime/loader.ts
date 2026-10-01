@@ -286,6 +286,26 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
 export function loadNamedFunction(path: string, files: SourceFiles): NatlangRecord {
   if (!files.isFile(path) || files.extname(path) !== '.nl') throw new NatlangSourceError(path, 'expected a .nl file');
   const dir = files.dirname(path);
+  // A child loaded by its own path has the same lexical types as when reached through its owner.
+  const names = [files.basename(path, '.nl')];
+  let ancestor = dir;
+  while (true) {
+    const parent = files.dirname(ancestor);
+    if (parent === ancestor) break;
+    const owner = files.join(parent, files.basename(ancestor) + '.nl');
+    if (files.isFile(owner)) {
+      let record: ItemRecord = loadNamedFunction(owner, files);
+      for (const name of names) {
+        const child: ItemRecord | undefined = record.codebase[name];
+        if (!child) throw new NatlangSourceError(path, 'function is absent from its owning callable folder');
+        record = child;
+      }
+      if (record.kind !== 'natlang') throw new NatlangSourceError(path, 'expected a natural-language function');
+      return record;
+    }
+    names.unshift(files.basename(ancestor));
+    ancestor = parent;
+  }
   const typesFile = files.join(dir, 'types.ts');
   const types = files.isFile(typesFile) ? readTypeAliases(files.read(typesFile)) : {};
   const record = parseNatlang(path, files.read(path), types, files);
