@@ -1441,3 +1441,9 @@ Launched1024freshLunacasesunder2workersafter independentfullhistory/sourceIR/gat
 Staged256caseBonsaisuccessor(192reducers)behind currentrecovery. Controllerclaimslaunchonce, requirescompletepredecessoraccounting andrehashesallsource/queue/runtime/policy artifacts; no rerunsor unreviewedlaunches. Addedstreamedrecord-digestsCLI toexposeofficialcollectorcanonicaldigest andkeeprawline/fileSHAidentitiesseparate. OriginalBonsaiproposalmetadatafixrecordedinmanifest-v2 only; IR/queueunchanged. ClearedunusedElectronarchivecacheonly(1.416GiB), alltrainingdata/modelweights/historyretained.
 
 Inventoryfoundlegacyfalsepositivezero-fallbackturns(12)innewdefaultfolder-revisionslane. Keepreadinessblockedwhileexactproducer-boundexclusionandpipelineguardareprepared; schema-v2aloneisnotqualityadmission. No raw historyrewrite/fabricatednegativepairs.
+
+## 2026-10-01 08:43 UTC — Keep both teachers supplied
+
+- Staged independently reviewed successors: Bonsai256 and Luna541. Luna continuation is per-slot so a completed worker does not wait for the other512-case queue. Preserve the two-request Luna limit and four-request Bonsai configuration.
+- Shared authority lock coordinates hourly-monitor and successor updates, avoiding lost worker IDs during simultaneous handoffs. Controllers389121/389122 and monitor389123 supersede earlier PIDs; stop all during intentional shutdown. Syntax parsed, no tests run.
+- Full legacy source review expanded the folder-revision hold from12zero-fallback turns to all23turns, and found10additional v2aggregation turns whose validation subset happened to pass. Candidate review must preserve source-specific retained/excluded partitions and cannot replace old history with successful fresh v4 history. Originals remain immutable; no fabricated DPO labels.

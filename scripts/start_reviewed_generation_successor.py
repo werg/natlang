@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from generation_authority import authority_lock
 
 
 def digest(path):
@@ -104,20 +105,21 @@ def main():
         atomic_json(record, launch)
         # Reconcile only this provider's authority. The hourly monitor reads these current paths.
         authority_path = Path(plan['authority'])
-        authority = json.loads(authority_path.read_text())
-        if plan.get('provider'):
-            authority.update(luna_workers=launch['workers'], luna_runtime=plan['runtime'], luna_status='reviewed_successor_running')
-        else:
-            worker = launch['workers'][0]
-            authority.update(bonsai_supervisor=worker['pid'], bonsai_queue=worker['queue'], bonsai_journal=worker['journal'],
-                             bonsai_runtime=plan['runtime'], bonsai_status='reviewed_successor_running')
-        authority.setdefault('active_journals', []).extend(w['journal'] for w in launch['workers'])
-        atomic_json(authority_path, authority)
-        if plan.get('provider') and plan.get('luna_state'):
-            state_path = Path(plan['luna_state'])
-            state = json.loads(state_path.read_text())
-            state.update(workers=launch['workers'], runtime=plan['runtime'], status='reviewed_successor_running', latest_launch=str(record))
-            atomic_json(state_path, state)
+        with authority_lock(authority_path):
+            authority = json.loads(authority_path.read_text())
+            if plan.get('provider'):
+                authority.update(luna_workers=launch['workers'], luna_runtime=plan['runtime'], luna_status='reviewed_successor_running')
+            else:
+                worker = launch['workers'][0]
+                authority.update(bonsai_supervisor=worker['pid'], bonsai_queue=worker['queue'], bonsai_journal=worker['journal'],
+                                 bonsai_runtime=plan['runtime'], bonsai_status='reviewed_successor_running')
+            authority.setdefault('active_journals', []).extend(w['journal'] for w in launch['workers'])
+            atomic_json(authority_path, authority)
+            if plan.get('provider') and plan.get('luna_state'):
+                state_path = Path(plan['luna_state'])
+                state = json.loads(state_path.read_text())
+                state.update(workers=launch['workers'], runtime=plan['runtime'], status='reviewed_successor_running', latest_launch=str(record))
+                atomic_json(state_path, state)
         print(json.dumps(launch), flush=True)
 
 

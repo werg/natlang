@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from generation_authority import authority_lock
 
 
 def utc():
@@ -71,15 +72,16 @@ def main():
                     spool = subprocess.run(['node', str(args.spool_reader), str(report_path)],
                                            check=True, capture_output=True, text=True, timeout=300)
                     spool_metadata = json.loads(spool.stdout)
-                    current = read_json(args.authority)
-                    # Do not overwrite a newer inspection's baseline or worker authority.
-                    if current['checked_at'] == authority['checked_at']:
-                        checked = dt.datetime.fromisoformat(report['checked_at'].replace('Z', '+00:00'))
-                        current.update(checked_at=report['checked_at'],
-                                       next_check_at=(checked + dt.timedelta(hours=1)).isoformat(),
-                                       last_status_report=str(report_path),
-                                       latest_bonsai_spool=spool_metadata['op'])
-                        atomic_json(args.authority, current)
+                    with authority_lock(args.authority):
+                        current = read_json(args.authority)
+                        # Do not overwrite a newer inspection's baseline or worker authority.
+                        if current['checked_at'] == authority['checked_at']:
+                            checked = dt.datetime.fromisoformat(report['checked_at'].replace('Z', '+00:00'))
+                            current.update(checked_at=report['checked_at'],
+                                           next_check_at=(checked + dt.timedelta(hours=1)).isoformat(),
+                                           last_status_report=str(report_path),
+                                           latest_bonsai_spool=spool_metadata['op'])
+                            atomic_json(args.authority, current)
                     event = dict(event='hourly_audit', time=utc(), health=metadata,
                                  spool=spool_metadata,
                                  blocking_reader_errors=report['completeness']['blocking_error_count'],
