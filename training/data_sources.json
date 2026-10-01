@@ -183,6 +183,14 @@
       "glob": "data/teacher/self-improvement/folder-revisions-reviewed-v1/verified-turns.jsonl",
       "status": "source_review_hold_unapproved",
       "reason": "Preserved 11-row prototype is not approved: its original producer was baseline-retained and fails the empty-input train case. Never use this candidate as a default or explicit turn input."
+    },
+    {
+      "glob": "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl",
+      "status": "source_review_hold_unapproved",
+      "reason": "Current76-row v4 corpus reuses accepted-but-wrong migrated native-aggregation source value.length for declared sum inputs. Hold entire lane until source-bound exact partition independently reviewed; version migration does not rehabilitate invalid producer output.",
+      "artifact_sha256": "ef6cff515a52bd64e6831ba3155b335166a4a862e8769e063f511b18641ddd60",
+      "dpo_negative": false,
+      "next_action": "Audit all7producer sources and declared train/validation inputs; immutable reviewed partition/root approval required."
     }
   ],
   "reserved_native_evaluation": {
