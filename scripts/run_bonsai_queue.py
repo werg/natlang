@@ -306,12 +306,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
     if journal.exists():
         attempted = {json.loads(line)['key'] for line in journal.read_text().splitlines()
                      if line.strip() and json.loads(line).get('event') == 'finish'}
-        if provider:
-            for line in journal.read_text().splitlines():
-                row = json.loads(line)
-                if row.get('event') == 'finish' and not row.get('batch_key'):
-                    failure_streak = 0 if row['status'] in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
-                    next_allowed_at = row.get('next_allowed_at', 0)
+        for line in journal.read_text().splitlines():
+            row = json.loads(line)
+            if row.get('event') == 'finish' and not row.get('batch_key'):
+                failure_streak = 0 if row['status'] in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
+                next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
     def record(value):
         with journal.open('a') as output:
@@ -329,7 +328,21 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                             free_mib=free_mib, minimum_free_mib=min_free_mib,
                             disposition='stopped_before_case; restart same queue/journal after freeing space'))
                 return
-        if provider and next_allowed_at > time.time():
+        if not provider:
+            # An offline server must not consume every remaining queue key.
+            # Waiting happens before the attempt starts or its case budget begins.
+            while True:
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=5) as response:
+                        if response.status != 200:
+                            raise RuntimeError(f'server health status {response.status}')
+                    break
+                except Exception as error:
+                    record(dict(event='service_wait', key=entry['key'], time=time.time(),
+                                retry_seconds=30, error=f'{type(error).__name__}: {error}',
+                                disposition='unstarted; waiting for local teacher health'))
+                    time.sleep(30)
+        if next_allowed_at > time.time():
             record(dict(event='cooldown', key=entry['key'], time=time.time(),
                         failure_streak=failure_streak, until=next_allowed_at))
             while next_allowed_at > time.time():
@@ -421,9 +434,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         elif status == 'complete' and not accounting['complete']:
             # A successful process exit is not proof that the exact job rows reached the merged output.
             status = 'incomplete_export'
-        if provider:
-            failure_streak = 0 if status in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
-            next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
+        failure_streak = 0 if status in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
+        next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(),
