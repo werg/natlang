@@ -1433,3 +1433,11 @@ Published source-reviewed staticquality24: remove unsupported MuSiQue source82 a
 Added singleton hourly health monitor with60second availability heartbeat, exact batch spool reconciliation and authority-baseline race check. It reports idle capacity for agent review; it does not autonomously weaken admission, launch unreviewed work or perform AI repairs. Full check now68recoveryrows55admitted13rejected, no transport failures; Luna250/256accepted. Nextsource-safe queues prioritized to keep both teachers useful.
 
 Missing-server watcher previously defaulted to6slots and could forcibly replace a live loading container after failed health. Changed default to4slots/53248context, singleton flock, bounded exponential delay and restore-only-if-container-absent; existing container health failure is reported without destructive replacement. Shell syntax parsed, no tests. Stop watcher and hourly monitor during intentional shutdown. Catalogquality24 reviewed: allpriorlineage plusfive newedges preserved. Recipe24 explicitstale/missing-input blockers, freshsnapshot refresh pending.
+
+## 2026-10-01 08:12 UTC — reviewed successor handoff and streaming identities
+
+Launched1024freshLunacasesunder2workersafter independentfullhistory/sourceIR/gate/currentnative audit; earlieremptyproposal/report-pointerdiagnosticsretained. StreamlargeJSONL andnativeauditboundedchunks; admitRowrequiresfullsavedresult, notIRwrapper. Sixpriorworkflowrejectsaremodelanswererrors,no oraclechange.
+
+Staged256caseBonsaisuccessor(192reducers)behind currentrecovery. Controllerclaimslaunchonce, requirescompletepredecessoraccounting andrehashesallsource/queue/runtime/policy artifacts; no rerunsor unreviewedlaunches. Addedstreamedrecord-digestsCLI toexposeofficialcollectorcanonicaldigest andkeeprawline/fileSHAidentitiesseparate. OriginalBonsaiproposalmetadatafixrecordedinmanifest-v2 only; IR/queueunchanged. ClearedunusedElectronarchivecacheonly(1.416GiB), alltrainingdata/modelweights/historyretained.
+
+Inventoryfoundlegacyfalsepositivezero-fallbackturns(12)innewdefaultfolder-revisionslane. Keepreadinessblockedwhileexactproducer-boundexclusionandpipelineguardareprepared; schema-v2aloneisnotqualityadmission. No raw historyrewrite/fabricatednegativepairs.
