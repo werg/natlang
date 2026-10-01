@@ -1505,3 +1505,9 @@ Required default source paths now resolve through strictly approved catalog repl
 - Correct prior concern: canonical parsed-object turn digests are insensitive to row formatting; reserialization was an exact byte-preservation failure, not a proved broken turn source_ref. Preserve audit correction.
 - Hardlink approved immutable artifacts to avoid duplicate disk use. Losslessly archive only rejected unpublished draft largefiles with original/archive/roundtrip hash receipts; do not remove canonical source data or training positives.
 - Root supplemental integrity scan confirms512fresh targets have zero historical/queued/originalpartial collisions. Scanner dependency-link exclusions explicit; unmatched directory/artifact links/readchanges failclosed. Prior approved inventory/queues/plans immutable.
+
+## 2026-10-01 14:50 UTC — Explicit static replacement chains and default recipe30
+
+- The publication entry/default pointer did not alone satisfy historical carry-forward inventory. Add exactly three workflowquality3→quality4 artifact mappings; preserve all old paths/history. No weakening strict retained-subset legacy turn approvals.
+- Root independent default inventory/hash/gzip/sourcehold audit passes:6138staticcases/32652decisions,3887generatedpositives/3006programs,289reviewedturns,1630nonnegativefailurecandidates.9requiredresolved,0unreviewedomissions. Recipe30draft; finalstudentgatespending, no tests/models/training.
+- Rejected unpublished draft losslesslyarchived with all three roundtripSHA matches;2.334GBsaved, canonicaldata untouched. Approved hardlinked artifacts0444 readonly; no future inplace edits.

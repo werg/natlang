@@ -84,7 +84,10 @@
     "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl",
     "data/teacher/directory-expansion/quality-v24.train.ir.jsonl": "data/teacher/directory-expansion/quality-v25.train.ir.jsonl",
     "data/teacher/directory-expansion/quality-v24.static.results.jsonl": "data/teacher/directory-expansion/quality-v25.static.results.jsonl",
-    "data/teacher/directory-expansion/quality-v24.static.turns.jsonl": "data/teacher/directory-expansion/quality-v25.static.turns.jsonl"
+    "data/teacher/directory-expansion/quality-v24.static.turns.jsonl": "data/teacher/directory-expansion/quality-v25.static.turns.jsonl",
+    "data/teacher/workflowevals/quality-v3.train.ir.jsonl": "data/teacher/workflowevals/quality-v4.train.ir.jsonl",
+    "data/teacher/workflowevals/quality-v3.static.results.jsonl": "data/teacher/workflowevals/quality-v4.static.results.jsonl",
+    "data/teacher/workflowevals/quality-v3.static.turns.jsonl": "data/teacher/workflowevals/quality-v4.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
