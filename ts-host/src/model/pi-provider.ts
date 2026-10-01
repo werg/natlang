@@ -8,7 +8,7 @@ import type { Api, AssistantMessage, Context, Credential, CredentialStore, Messa
   ModelsApiStreamOptions, ModelsSimpleStreamOptions, Tool } from '@earendil-works/pi-ai';
 import { modelTools } from './chat-completion.js';
 import { defaultNatlangConfigDirectory } from '../package/store.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelStreamProgress, ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 const emptyUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -162,7 +162,7 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         throw new Error(`provider ${provider} has no credentials; run natlang auth login ${provider} or set its API key environment variable`);
       await selectModel();
     },
-    async turn(request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn> {
+    async turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn> {
       signal?.throwIfAborted();
       const model = await selectModel();
       const context = piContext(request, model);
@@ -187,10 +187,47 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         ...(required ? { toolChoice: required } : {}),
         ...(apiKeyEnv && environment[apiKeyEnv] ? { apiKey: environment[apiKeyEnv] } : {})
       } as ModelsApiStreamOptions<Api>;
-      const reply = mode === 'simple' && request.tool_choice !== 'required' ?
-        await models.completeSimple(model, context, options as ModelsSimpleStreamOptions) :
-        await models.complete(model, context, options);
-      if (reply.stopReason === 'error' || reply.stopReason === 'aborted') throw new Error(reply.errorMessage ?? `provider ${provider} failed`);
+      const stream = mode === 'simple' && request.tool_choice !== 'required' ?
+        models.streamSimple(model, context, options as ModelsSimpleStreamOptions) :
+        models.stream(model, context, options);
+      const started = Date.now(), startedAt = new Date(started).toISOString();
+      const counts = { deltaEvents: 0, deltaBytes: 0, textDeltaEvents: 0, textDeltaBytes: 0,
+        thinkingDeltaEvents: 0, thinkingDeltaBytes: 0, toolCallDeltaEvents: 0, toolCallDeltaBytes: 0 };
+      const emit = (status: ModelStreamProgress['status']) => {
+        if (!onProgress) return;
+        const progress: ModelStreamProgress = { status, ...counts, startedAt,
+          observedAt: new Date().toISOString(), elapsedMs: Date.now() - started };
+        try { onProgress(progress); } catch { /* progress observers must not affect model turns */ }
+      };
+      let lastEmitted = 0;
+      const finalMessage = stream.result();
+      void finalMessage.catch(() => undefined);
+      let reply: AssistantMessage;
+      try {
+        for await (const event of stream) {
+          let kind: 'text' | 'thinking' | 'toolcall' | undefined;
+          let delta: string | undefined;
+          if (event.type === 'text_delta') { kind = 'text'; delta = event.delta; }
+          else if (event.type === 'thinking_delta') { kind = 'thinking'; delta = event.delta; }
+          else if (event.type === 'toolcall_delta') { kind = 'toolcall'; delta = event.delta; }
+          if (!kind || !delta) continue;
+          const bytes = Buffer.byteLength(delta, 'utf8');
+          if (!bytes) continue;
+          counts.deltaEvents++; counts.deltaBytes += bytes;
+          if (kind === 'text') { counts.textDeltaEvents++; counts.textDeltaBytes += bytes; }
+          else if (kind === 'thinking') { counts.thinkingDeltaEvents++; counts.thinkingDeltaBytes += bytes; }
+          else { counts.toolCallDeltaEvents++; counts.toolCallDeltaBytes += bytes; }
+          const now = Date.now();
+          if (lastEmitted === 0 || now - lastEmitted >= 15_000) { emit('progress'); lastEmitted = now; }
+        }
+        reply = await finalMessage;
+        if (reply.stopReason === 'error' || reply.stopReason === 'aborted')
+          throw new Error(reply.errorMessage ?? `provider ${provider} failed`);
+        emit('completed');
+      } catch (error) {
+        emit('failed');
+        throw error;
+      }
       const calls = reply.content.filter(block => block.type === 'toolCall');
       const text = reply.content.filter(block => block.type === 'text').map(block => block.text).join('');
       const reasoning = reply.content.filter(block => block.type === 'thinking').map(block => block.thinking).join('\n');

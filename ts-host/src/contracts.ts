@@ -17,3 +17,11 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
   execution_plan?: string | null;
   /** The reply stopped at max_tokens. */
   truncated?: boolean };
+
+
+/** Aggregate-only progress from a streaming provider turn. Contains no generated content. */
+export type ModelStreamProgress = { status: 'progress' | 'completed' | 'failed';
+  deltaEvents: number; deltaBytes: number; textDeltaEvents: number; textDeltaBytes: number;
+  thinkingDeltaEvents: number; thinkingDeltaBytes: number; toolCallDeltaEvents: number;
+  toolCallDeltaBytes: number; startedAt: string; observedAt: string; elapsedMs: number };
+export type ModelStreamProgressSink = (progress: ModelStreamProgress) => void;

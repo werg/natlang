@@ -24,7 +24,7 @@ import { quarantineReason, retiredFamily, generationHoldReason } from './curricu
 import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelStreamProgress, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
   withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 
@@ -137,6 +137,14 @@ export function jobKey({ index, record }: IndexedRecord): string {
   return `${String(index).padStart(6, '0')}-${recordDigest(record).slice(0, 16)}`;
 }
 
+function logProviderStreamProgress(role: 'teacher' | 'judge', provider: string, requestOrdinal: number,
+  progress: ModelStreamProgress): void {
+  try {
+    process.stderr.write(`${JSON.stringify({ event: 'provider_stream_progress', role, provider,
+      request_ordinal: requestOrdinal, ...progress })}\n`);
+  } catch { /* progress logging must not affect collection */ }
+}
+
 export function expectedProvenance(record: ProgramRecord, options: ProvenanceOptions): Record<string, unknown> {
   return { program_ir_sha256: recordDigest(record), model: options.modelId, tool_schema: TOOL_SCHEMA,
     runtime: 'typescript-native', runtime_contract_version: 19, trajectory_link_version: 2, collector_version: TEACHER_BATCH_VERSION, execution_policy_version: 2, data_quality_version: DATA_QUALITY_VERSION,
@@ -147,6 +155,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
+      stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
       ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
         version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
         retry: 'no-case-retry' } }),
@@ -167,6 +176,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
         pi_options: options.judgeModel.piOptions ?? {},
+        stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
         ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
           version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
           retry: 'no-case-retry' } }),
@@ -601,7 +611,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         parentSignal, call: () => session.prepare() }));
       return withProviderRequestDeadline({ role: 'teacher', provider: config.provider!, phase: 'provider_turn', requestOrdinal,
         timeoutMs: config.providerRequestTimeoutMs, parentSignal,
-        call: requestSignal => session.turn(request, requestSignal) });
+        call: requestSignal => session.turn(request, requestSignal,
+          progress => logProviderStreamProgress('teacher', config.provider!, requestOrdinal, progress)) });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     try {
@@ -661,7 +672,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
         parentSignal, call: () => judgeSession.prepare() }));
       return withProviderRequestDeadline({ role: 'judge', provider: judgeConfig.provider!, phase: 'provider_turn', requestOrdinal,
         timeoutMs: config.providerRequestTimeoutMs, parentSignal,
-        call: requestSignal => judgeSession.turn(request, requestSignal) });
+        call: requestSignal => judgeSession.turn(request, requestSignal,
+          progress => logProviderStreamProgress('judge', judgeConfig.provider!, requestOrdinal, progress)) });
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
     const judge = judgeTransport ? async (input: Parameters<ReturnType<typeof modelOracleJudge>>[0]) => {
       const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>

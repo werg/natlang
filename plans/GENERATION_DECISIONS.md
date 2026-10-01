@@ -1545,3 +1545,22 @@ Required default source paths now resolve through strictly approved catalog repl
 - Correct inherited22prompt source/dist mismatch without changing old snapshot:23 preserves existing compiled optional guidance and synchronizes its source. Preserve all unrelated dirty changes.
 - Replace only waiting controllers with671283Luna/671284Bonsai, immutable plans and future23storage approvals. Current20teachers/active recovery approvals unchanged. Exact historical failure exclusions retained, no blind retry.
 - Keep real stream-progress monitoring a separate proposal; no fake activity, universal latency cutoff, tests or model calls.
+
+## 2026-10-01 16:11 UTC — Hourly follow-through and genuine progress candidate
+
+- Actual16:09sweep0new non-success finishes; Bonsai16/16new exactresults admitted, main+111rows/+109admitted/+2Luna rejects under audit. Next17:09UTC, rootactive.
+- Stage separate source-only aggregate Pi stream observation, never model content or fake progress. No watchdog refresh/defaultdeadline or23snapshot mutation. Rootreview/freeze pending.
+- Keep recipe31draft until complete default carry-forward and source-policy audit; training remains off.
+
+## 2026-10-01 16:20 UTC — Correct rejection scope and review fresh recipe
+
+- Correct16:11 attribution: two main rejects include one Bonsai result from still-active batch184 and one Luna case343, not two Luna. Finished Bonsai spool16/16accepted has narrower scope. Wrapper/polarity errors repeat known classes; preserve gold/history, future typed schemas/minimal predicate guidance address ambiguity.
+- Root independently recomputed recipe31default inventory:9requiredinputs,41oldpaths accounted(40replacement/1approvedhold),2laneidentitystages correctly consumed. Streamed all4037positives through currentadmitRow and ALLcurrent sourceReviewReason predicates:0held, compressed/content hashes exact;1632failurecandidates allnonnegative. Draftonly, finalstudentgatespending.
+- Root verified runtime24:621files/exact10source/dist/typechanges; genuineaggregate streaming observation, unchanged prompts/watchdog, deadlines off. Native referenceproof/handoff review pending.
+
+## 2026-10-01 16:23 UTC — Approve aggregate observation and preserve training scope
+
+- Bind next queues to24 with genuine aggregate Pi stream observation, no content/fake heartbeat/watchdog extension/default deadlines. Preserve all current20teacher work and oldsnapshots/plans.
+- Root independently verifies621files and1054native references; actual24providerstream behavior remains to inspect at first live handoff. Waitingcontrollers701232/701233 and future24recoverypins have0healthalerts.
+- Publish recipe31 as inventory draft only after defaultcarryforward/4037positive fullpolicy/gzip/1632nonnegativefailure audit. Finalstudentgates remain pending; no training.
+- Preserve two unlinked historical rows as explicit linkage holds; sourceevidence doesnot support deterministicownership. Other attempts remain available.

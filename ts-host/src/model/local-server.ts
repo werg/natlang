@@ -9,7 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { defaultNatlangCacheDirectory } from '../package/store.js';
 import { DEFAULT_MODEL_RELEASE } from '../model-default.js';
 import { openAICompatibleModelTurn, type OpenAICompatibleOptions } from './openai-compatible.js';
-import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import type { ModelStreamProgressSink, ModelTurn, ModelTurnRequest } from '../contracts.js';
 import { describeLlamaRuntime, discoverLlamaRuntime, type LlamaRuntimeDiscovery,
   type LlamaServerInspection } from './llama-runtime.js';
 import { resolveModelChoice, type ModelProfile, type ResolvedModelChoice } from './config.js';
@@ -20,7 +20,7 @@ export type { ModelProfile } from './config.js';
 export type ManagedModelStatus = { source: 'external' | 'managed-local' | 'pi-provider'; endpoint: string | null;
   model: string; executable: string | null; modelPath: string | null; running: boolean };
 export type ManagedModelSession = { prepare(): Promise<ManagedModelStatus>;
-  turn(request: ModelTurnRequest, signal?: AbortSignal): Promise<ModelTurn>;
+  turn(request: ModelTurnRequest, signal?: AbortSignal, onProgress?: ModelStreamProgressSink): Promise<ModelTurn>;
   status(): ManagedModelStatus; close(): Promise<void> };
 export type ManagedModelRuntimeOptions = { ensureRuntime?:
   (discovery: LlamaRuntimeDiscovery) => Promise<LlamaServerInspection | null> };
@@ -193,7 +193,7 @@ export function createResolvedModelSession(choice: ResolvedModelChoice,
   process.once('exit', onExit);
   return {
     async prepare() { if (choice.kind === 'pi-provider') await (await piBackend()).prepare(); else await start(); return this.status(); },
-    async turn(request, signal) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal); const options = await start(); signal?.throwIfAborted(); return openAICompatibleModelTurn(options)(request, signal); },
+    async turn(request, signal, onProgress) { signal?.throwIfAborted(); if (choice.kind === 'pi-provider') return (await piBackend()).turn(request, signal, onProgress); const options = await start(); signal?.throwIfAborted(); return openAICompatibleModelTurn(options)(request, signal); },
     status() { return choice.kind === 'pi-provider' ? { source: 'pi-provider', endpoint: null, model: `${choice.provider}/${choice.model}`,
       executable: null, modelPath: null, running: false } : external ? { source: 'external', endpoint: external.endpoint, model: external.model,
       executable: null, modelPath: null, running: false } : { source: 'managed-local', endpoint: local?.endpoint ?? null,
