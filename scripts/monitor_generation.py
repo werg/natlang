@@ -166,9 +166,15 @@ def reviewed_successor_health(authority):
                 if actual_hash != expected_hash:
                     local.append(f'pinned_artifact_hash_mismatch:{file}:expected={expected_hash}:actual={actual_hash}')
             local.extend(reviewed_predecessor_failures(plan))
+            controller_live = live(descriptor.get('pid'), Path(expected_command[1]).name)
+            check['controller_live'] = controller_live
+            if controller_live:
+                actual_command = process_command(descriptor.get('pid'))
+                if actual_command != expected_command:
+                    local.append(f'controller_command_mismatch:actual={actual_command!r}')
             launch = read_json(launch_path) if launch_path.is_file() else None
             if launch is None:
-                if not live(descriptor.get('pid'), Path(expected_command[1]).name):
+                if not controller_live:
                     local.append('controller_dead_before_launch_record')
                 check['launch_status'] = 'missing'
             else:
@@ -183,16 +189,7 @@ def reviewed_successor_health(authority):
                              or len(workers) != len(planned_workers))):
                     local.append(f'terminal_launch_worker_count_mismatch:launched={len(workers) if isinstance(workers, list) else "invalid"}:'
                                  f'planned={len(planned_workers) if isinstance(planned_workers, list) else "invalid"}')
-                controller_live = live(descriptor.get('pid'), Path(expected_command[1]).name)
-                check['controller_live'] = controller_live
-                if controller_live:
-                    actual_command = process_command(descriptor.get('pid'))
-                    if actual_command != expected_command:
-                        local.append(f'controller_command_mismatch:actual={actual_command!r}')
-                    if launch.get('status') in SUCCESSOR_TERMINAL_LAUNCH_STATUSES:
-                        # A controller may exit after a successful handoff; an exit here is also expected.
-                        pass
-                elif launch.get('status') not in SUCCESSOR_TERMINAL_LAUNCH_STATUSES:
+                if not controller_live and launch.get('status') not in SUCCESSOR_TERMINAL_LAUNCH_STATUSES:
                     local.append(f'controller_dead_during_handoff:launch_status={launch.get("status")}')
             if local:
                 check['status'] = 'needs_review'
