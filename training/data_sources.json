@@ -472,6 +472,26 @@
       "training_ready": false,
       "recipe_refresh_required": true,
       "dpo_negatives_created": false
+    },
+    "workflowevals-quality-v4-publication": {
+      "revision": "quality-v4",
+      "cases": 4803,
+      "approved_decisions": 28975,
+      "held_decisions": 0,
+      "exact_source_bound_replacements": 164,
+      "preserved_cases": 4639,
+      "additive_cases": 0,
+      "manifest": "data/teacher/workflowevals/quality-v4.static.manifest.json",
+      "manifest_sha256": "bc6ee512e014177c2fb5b1b141bdfab3dcae12f1ad1fd9bf5fbcaf71f840b1f1",
+      "default_pointer": "data/teacher/workflowevals/static.manifest.json",
+      "approval": "runs/bonsai-followup-20261001-v5/workflow-quality-v4-byte-preserved-stage-v2/root-partition-approval.json",
+      "approval_sha256": "b52108dc685158474768a9c07caae0d669963d101a5029f1d314b9aa44398f54",
+      "lineage": "data/teacher/workflowevals/quality-v4.replacement-lineage.jsonl",
+      "lineage_sha256": "9057f849381650f4ba554975eb364e2fc6ba3dd138fe83fe955c3a8192d6c0f1",
+      "reason": "Replace164legacy broad-output directory-v1 contracts with official typed directory-v4 contracts on the exact same source groups and unchanged gold values. Preserve4639other case byte rows and27822unchanged turn byte rows; originalquality3 retained.",
+      "training_ready": false,
+      "recipe_refresh_required": true,
+      "dpo_negatives_created": false
     }
   }
 }

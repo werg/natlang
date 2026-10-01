@@ -1498,3 +1498,10 @@ Required default source paths now resolve through strictly approved catalog repl
 - Rejected first workflowquality4 staging publication because unchanged4,639rows were reserialized, risking stored source-row hashes. Require exact retained bytes and source-bound one-for-one164replacement mapping; no additions or hidden gold changes. Preserve failed draft for audit.
 - Strengthen reusable provenance inventory to hash exactly parsed bytes, check filesystem identity/timestamps and fail closed on stream/catalog errors. Existing pinned inventory remains immutable; new integrity scan is separate.
 - Root reference audit memory fix streams all records but retains only requested targets/factory rows; no tests/models/training. Full14:08sweep zero new infrastructure failures; continuing hourly15:08.
+
+## 2026-10-01 14:37 UTC — Publish typed static replacement and explicit archive scope
+
+- Root published164exact source-bound typed workflow reducers in quality4; preserve4639othercases/27822otherturn byte rows. Source snapshots/IDs/groups/revisions/license/split/golds unchanged. Default pointer/catalognowincludeupgrade automatically;6138staticcases/32652decisions. Student readiness pending, no training.
+- Correct prior concern: canonical parsed-object turn digests are insensitive to row formatting; reserialization was an exact byte-preservation failure, not a proved broken turn source_ref. Preserve audit correction.
+- Hardlink approved immutable artifacts to avoid duplicate disk use. Losslessly archive only rejected unpublished draft largefiles with original/archive/roundtrip hash receipts; do not remove canonical source data or training positives.
+- Root supplemental integrity scan confirms512fresh targets have zero historical/queued/originalpartial collisions. Scanner dependency-link exclusions explicit; unmatched directory/artifact links/readchanges failclosed. Prior approved inventory/queues/plans immutable.
