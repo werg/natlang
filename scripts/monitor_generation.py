@@ -68,6 +68,142 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+SUCCESSOR_PIN_BASENAMES = {
+    'curriculum-policy.js', 'curriculum.js', 'source-review.js', 'source-conversion.js',
+    'run_bonsai_queue.py', 'start_reviewed_luna_slots.py',
+    'start_reviewed_generation_successor.py', 'generation_authority.py',
+}
+SUCCESSOR_COMPLETE_STATUSES = {'complete', 'complete_with_skips', 'skipped'}
+SUCCESSOR_TERMINAL_LAUNCH_STATUSES = {'running', 'complete', 'completed', 'finished', 'success'}
+
+
+def process_command(pid):
+    try:
+        return [part.decode(errors='replace') for part in
+                Path(f'/proc/{int(pid)}/cmdline').read_bytes().split(b'\0') if part]
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def reviewed_predecessor_failures(plan):
+    """Report unreviewed failed canonical parent finishes, never child/member aliases."""
+    reviewed = plan.get('reviewed_failed_finishes', {})
+    alerts = []
+    for predecessor in plan.get('predecessors', []):
+        queue_path = Path(predecessor.get('queue', ''))
+        journal_path = Path(predecessor.get('journal', ''))
+        try:
+            keys = {json.loads(line)['key'] for line in queue_path.read_text().splitlines() if line.strip()}
+            finishes = {}
+            for line in journal_path.read_text().splitlines():
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                if event.get('event') == 'finish' and not event.get('batch_key'):
+                    finishes[event['key']] = event
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+            alerts.append(f'predecessor_evidence_unreadable:{journal_path}:{type(error).__name__}:{error}')
+            continue
+        for key in keys:
+            # Mirror the reviewed handoff check: only the latest parent finish per queue key counts.
+            event = finishes.get(key)
+            if event is None:
+                continue
+            good = (event.get('status') in SUCCESSOR_COMPLETE_STATUSES
+                    and event.get('output_accounting', {}).get('complete') is True)
+            if good:
+                continue
+            canonical_hash = hashlib.sha256(json.dumps(
+                event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            if reviewed.get(key) == canonical_hash:
+                continue
+            alerts.append(f'unreviewed_predecessor_finish:{key}:sha256={canonical_hash}')
+    return alerts
+
+
+def reviewed_successor_health(authority):
+    """Check small, root-pinned successor controller bindings on each monitor heartbeat."""
+    checks, alerts = [], []
+    registry = authority.get('reviewed_successor_controllers', [])
+    if not isinstance(registry, list):
+        return [{'status': 'blocked', 'error': 'reviewed_successor_controllers must be a list'}], [
+            'successor_registry_invalid:reviewed_successor_controllers must be a list']
+    for descriptor in registry:
+        if not isinstance(descriptor, dict):
+            checks.append({'status': 'needs_review', 'error': 'successor descriptor must be an object'})
+            alerts.append('successor_registry_invalid:descriptor must be an object')
+            continue
+        check = {'pid': descriptor.get('pid'), 'plan_path': descriptor.get('plan_path'),
+                 'plan_sha256': descriptor.get('plan_sha256'), 'launch_record': descriptor.get('launch_record'),
+                 'status': 'ok', 'alerts': [], 'checked_artifact_hashes': {}}
+        local = check['alerts']
+        try:
+            plan_path = Path(descriptor['plan_path'])
+            launch_path = Path(descriptor['launch_record'])
+            expected_plan_sha = descriptor['plan_sha256']
+            expected_command = descriptor['command']
+            if not isinstance(expected_command, list) or len(expected_command) < 2:
+                raise ValueError('reviewed successor command is missing or incomplete')
+            if not plan_path.is_file():
+                raise ValueError('reviewed successor plan is missing')
+            actual_plan_sha = sha256_file(plan_path)
+            if actual_plan_sha != expected_plan_sha:
+                local.append(f'plan_hash_mismatch:expected={expected_plan_sha}:actual={actual_plan_sha}')
+            plan = read_json(plan_path)
+            if str(Path(plan.get('launch_record', '')).resolve()) != str(launch_path.resolve()):
+                local.append('plan_launch_record_path_mismatch')
+            if plan.get('root_approved') is not True:
+                local.append('plan_not_root_approved')
+            for file, expected_hash in plan.get('artifact_hashes', {}).items():
+                if Path(file).name not in SUCCESSOR_PIN_BASENAMES:
+                    continue
+                try:
+                    actual_hash = sha256_file(file)
+                except OSError as error:
+                    local.append(f'pinned_artifact_missing:{file}:{type(error).__name__}')
+                    continue
+                check['checked_artifact_hashes'][file] = actual_hash
+                if actual_hash != expected_hash:
+                    local.append(f'pinned_artifact_hash_mismatch:{file}:expected={expected_hash}:actual={actual_hash}')
+            local.extend(reviewed_predecessor_failures(plan))
+            launch = read_json(launch_path) if launch_path.is_file() else None
+            if launch is None:
+                if not live(descriptor.get('pid'), Path(expected_command[1]).name):
+                    local.append('controller_dead_before_launch_record')
+                check['launch_status'] = 'missing'
+            else:
+                check['launch_status'] = launch.get('status')
+                if (str(Path(launch.get('plan', '')).resolve()) != str(plan_path.resolve())
+                        or launch.get('plan_sha256') != expected_plan_sha):
+                    local.append('launch_record_plan_binding_mismatch')
+                workers = launch.get('workers', [])
+                planned_workers = plan.get('workers', [])
+                if (launch.get('status') in SUCCESSOR_TERMINAL_LAUNCH_STATUSES
+                        and (not isinstance(workers, list) or not isinstance(planned_workers, list)
+                             or len(workers) != len(planned_workers))):
+                    local.append(f'terminal_launch_worker_count_mismatch:launched={len(workers) if isinstance(workers, list) else "invalid"}:'
+                                 f'planned={len(planned_workers) if isinstance(planned_workers, list) else "invalid"}')
+                controller_live = live(descriptor.get('pid'), Path(expected_command[1]).name)
+                check['controller_live'] = controller_live
+                if controller_live:
+                    actual_command = process_command(descriptor.get('pid'))
+                    if actual_command != expected_command:
+                        local.append(f'controller_command_mismatch:actual={actual_command!r}')
+                    if launch.get('status') in SUCCESSOR_TERMINAL_LAUNCH_STATUSES:
+                        # A controller may exit after a successful handoff; an exit here is also expected.
+                        pass
+                elif launch.get('status') not in SUCCESSOR_TERMINAL_LAUNCH_STATUSES:
+                    local.append(f'controller_dead_during_handoff:launch_status={launch.get("status")}')
+            if local:
+                check['status'] = 'needs_review'
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as error:
+            local.append(f'{type(error).__name__}: {error}')
+            check['status'] = 'needs_review'
+        alerts.extend(f'successor_controller:{check.get("pid")}:{alert}' for alert in local)
+        checks.append(check)
+    return checks, alerts
+
+
 def verify_frozen_runtime(runtime_path, manifest_path):
     runtime_path = Path(runtime_path).resolve()
     manifest = json.loads(Path(manifest_path).read_text())
@@ -453,6 +589,8 @@ def main():
                 needs_review = []
                 needs_review.extend('storage_pause_recovery_blocked: ' + item.get('reason', 'approval mismatch')
                                     for item in recovery if item.get('status') == 'blocked')
+                successor_checks, successor_alerts = reviewed_successor_health(authority)
+                needs_review.extend(successor_alerts)
                 if not bonsai_live:
                     needs_review.append('bonsai_idle: review completion and replenish qualified work')
                 if len(luna_live) < authority.get('luna_concurrency', 2):
@@ -461,7 +599,8 @@ def main():
                                  luna_live_pids=luna_live, needs_agent_review=needs_review,
                                  next_check_at=authority['next_check_at'],
                                  storage_pause_recovery=recovery,
-                                 storage_pause_status_updates=status_updates)
+                                 storage_pause_status_updates=status_updates,
+                                 reviewed_successor_controllers=successor_checks)
                 atomic_json(args.state_dir / 'status.json', heartbeat)
                 due = dt.datetime.fromisoformat(authority['next_check_at'].replace('Z', '+00:00'))
                 if dt.datetime.now(dt.timezone.utc) >= due:

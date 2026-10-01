@@ -81,7 +81,10 @@
     "data/teacher/directory-expansion/quality-v23.static.manifest.json": "data/teacher/directory-expansion/quality-v24.static.manifest.json",
     "data/teacher/self-improvement/folder-revisions/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-held-v2/verified-turns.jsonl",
     "data/teacher/self-improvement/folder-api-v2/verified-turns.jsonl": "data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl",
-    "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl"
+    "data/teacher/self-improvement/folder-revisions-v4/verified-turns.jsonl": "data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl",
+    "data/teacher/directory-expansion/quality-v24.train.ir.jsonl": "data/teacher/directory-expansion/quality-v25.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v24.static.results.jsonl": "data/teacher/directory-expansion/quality-v25.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v24.static.turns.jsonl": "data/teacher/directory-expansion/quality-v25.static.turns.jsonl"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -427,6 +430,45 @@
       "approval": "runs/generation-check-20260930-hourly/quality-v24-review-candidate-v3/root-approval.json",
       "approval_sha256": "11e3253db146b030a0a7adf100c5f58783a3a1a7c2611a59263e7552409c9aad",
       "reason": "Published root-approved quality-v24 with the two held originals removed and exact signed P&L derivative included; originals/golds retained in prior immutable lineage.",
+      "training_ready": false,
+      "recipe_refresh_required": true,
+      "dpo_negatives_created": false
+    },
+    "directory-expansion-quality-v25-publication": {
+      "revision": "quality-v25",
+      "cases": 1212,
+      "approved_decisions": 3195,
+      "held_decisions": 972,
+      "source_counts": {
+        "commitpack": 287,
+        "tatqa": 219,
+        "musique": 231,
+        "qasper": 300,
+        "scifact": 154,
+        "treedst": 21
+      },
+      "removed_source_ids": [
+        "inline-curriculum:source_tatqa:3048041ea579f7ba19b3:v1",
+        "inline-curriculum:source_musique:427e5ecffded031e4316:v1"
+      ],
+      "added_signed_derivative_source_id": "tatqa-derived:374c4ad9-300a-44b0-95bc-77f05de463b0:signed-pnl-current-minus-prior",
+      "excluded_held_source_ids": [
+        "2hop__508148_422982",
+        "2hop__680238_39199",
+        "2hop__724321_135710",
+        "2hop__797255_91782",
+        "2hop__87221_773040",
+        "3hop1__222807_488956_368521",
+        "3hop1__288125_233976_24199",
+        "3hop1__384316_488956_88978",
+        "3hop1__642758_643936_45121",
+        "3hop1__749370_715233_43805"
+      ],
+      "manifest": "data/teacher/directory-expansion/static.manifest.json",
+      "manifest_sha256": "aa1731ccf605856a9193119f706c765d5e095ea10650ed4b9e84746289f53f3c",
+      "approval": "runs/generation-check-20260930-hourly/hourly-health-next/bonsai-rejection-audit-1823/source-hold-publication-v4/root-source-partition-approval.json",
+      "approval_sha256": "782c255cc2c0c85d4ff9e68ef37e63aaf1840adc5be432854ca7162410343825",
+      "reason": "Nine independently confirmed source-chain holds published; exact physical partitions, originals preserved, no preference negatives.",
       "training_ready": false,
       "recipe_refresh_required": true,
       "dpo_negatives_created": false

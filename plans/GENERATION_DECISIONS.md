@@ -1482,3 +1482,11 @@ Currentv4improvementlaneevolvedto76rowswith10migratedfalse-positiveaggregationtu
 ## 2026-10-01 13:12 UTC — Repair default inventory replacement accounting
 
 Required default source paths now resolve through strictly approved catalog replacements only when manifest and physical row hashes validate and the replacement is present in actual recipe inputs. Default recipe28 carries all289 reviewed turns and resolves all nine required inputs without overrides. Root independently recomputed inventory and checked lane hashes/counts. Source-hold publication and final renderer readiness remain pending. No tests/training run.
+
+## 2026-10-01 13:54 UTC — Publish exact holds and monitor handoff health
+
+- Published nine independently confirmed MuSiQue source holds and exact static quality25 partition. Preserved sources, golds, raw trajectories and prior publications. No source-held failure becomes a DPO negative.
+- Frozen22 changes only source-review source/module relative to21 (eleven literal records); active teachers20 continue unchanged. Re-admitted541pending cases,5862decisions; controller554491 and future storage approvals now22. Stopped only waiting controller500258 after checking successor record workers[], not active workers.
+- Monitor565131 flags waiting-controller death, changed plan/current policy/helper pins, and unreviewed latest failed parent finishes each minute. It does not retry semantic failures. Actual reviewed-controller inspection passed; no tests run. Full hourly audit remains14:07:46UTC.
+- Root verified default recipe29 carries6138static cases,3768model trajectories and289reviewed turns. All held positives absent;1626failure candidates retained/ineligible as DPO negatives. Final rendering/token/split/dedup/mix gates pending. Current-vs-frozen module differences are explicitly recorded; original execution histories remain bound to their original runtime.
+- Complete provenance-based history scan shrank fresh traditional reducers to92. Preserve50%nextbatch reducer target by preparing164official typed workflow directory-v4 cases with native source conversion and256primitives, not reusing obsolete broad output schemas or pretending attempted cases are fresh. Modern adapter preparation remains unapproved until root audit.
