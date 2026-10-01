@@ -1,3 +1,4 @@
+import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { rateLimited, transportFailure, retryWaitMs, retryAfterMs } from './retry.js';
@@ -60,6 +61,7 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
    * greedily, can skip their thinking. */
   temperature?: number;
   endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
+  providerRequestControls?: ProviderRequestControls;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
   providerRequestTimeoutMs?: number;
   /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
@@ -155,6 +157,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
+      ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
       stream_observation: { version: 'pi-stream-observation/1', detail: 'aggregate-delta-counts', watchdog_refresh: false },
       ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
         version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
@@ -581,8 +584,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     // A handoff (teacher/handoff.ts) replays another model's turns, call by call, up to the turn handed over.
     const handoff = item.record.handoff as Handoff | undefined;
     const placeOf = callMatcher(handoff?.openings ?? []);
-    const session = config.provider ? createManagedModelSession({ provider: config.provider,
-      model: config.modelId, piOptions: config.piOptions }) : undefined;
+    const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
+      config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
     const judgeSession = judgeConfig?.provider ? createManagedModelSession({ provider: judgeConfig.provider,
       model: judgeConfig.modelId, piOptions: judgeConfig.piOptions }) : undefined;

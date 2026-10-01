@@ -14,6 +14,7 @@ import { MISSING, Reject, coerce, dump, dumpState, isLive, isPending, liveLabel,
   type LambdaNode, type Value } from './values.js';
 import { changes, NativeTraceRecorder } from './trace.js';
 import { FileHandle, Folder, FolderHandle, editTextContent, fileListingText, type EntryStat } from './scoped-fs.js';
+import { fileDiffPreview } from './file-diff-preview.js';
 import type { PythonHost } from './folder-python.js';
 import { compileScopeSnippet, SCOPE_RUNTIME_PRELUDE } from '../scope-compiler.js';
 import { livePreview, renderValue } from './agent.js';
@@ -994,7 +995,8 @@ export class NativeSession {
     else if (name === 'write_file') { folder.writeText(path, String(args.content ?? '')); value = { path, changed: true }; }
     else if (name === 'edit_file') value = await folder.editText(path, String(args.find ?? ''), String(args.replace_with ?? ''), args.fuzzy === true);
     else value = folder.diffSync(path);
-    const text = name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
+    const text = name === 'diff_files' ? fileDiffPreview(value as ReturnType<Folder['diffSync']>) :
+      name === 'list_files' ? fileListingText(value as EntryStat[]) : typeof value === 'string' ? value : JSON.stringify(value, null, 1);
     return { kind: 'ok', text: this.show(text), value: value as Value };
   }
 

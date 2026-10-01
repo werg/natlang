@@ -1,3 +1,11 @@
+## Missed agent check-ins: mechanical audits did not wake the agent — 2026-10-01 20:29 UTC
+
+User asked why the hourly check-in did not fire. Monitor584649 actually persisted audits at18:09,19:10,and20:10UTC and remained healthy at20:27. `monitor_generation.py` only writes files/stdout; no agent wakeup or chat notification is configured. Root ended its active turn after the watchdog change, so independent investigation and user reporting did not run hourly. This is a follow-through failure, not a stopped generation monitor. Do not describe mechanical audit completion as agent investigation/check-in completion. Do not promise a future chat check-in without an active turn or a verified scheduled-agent delivery mechanism.
+
+Current20:27 heartbeat: Bonsai live; Luna783977(runtime24 successor) and483515(old predecessor) live; controllers have0alerts. Last20:10 completed Bonsai spool20exactresults/20admitted/120decisions. Saved reports18:09 through20:10 still need agent rejection review and the live runtime24 stream/supervisor handoff needs inspection. Current aggregate report scope changed at queue handoff; do not interpret falling current-queue totals as loss of historical training data.
+
+---
+
 ## Observation-aware collection supervisor approved — 2026-10-01 17:38 UTC
 
 User requested implementation after rejecting blanket timeouts. `scripts/run_bonsai_queue.py` now defaults to **no silence cutoff**. Optional `--no-observation-seconds` is a collection resource ceiling, reports `no_observation_limit` with stuckness unknown, and never determines answer correctness or DPO eligibility. This is an intentional status/policy change from the unconditional 300-second `inactivity_timeout`. Explicit case wall budgets remain 1200 seconds for Luna and 4800 seconds for Bonsai; limits do not enter language semantics.
@@ -1975,3 +1983,15 @@ new rejections, and improve QASPER oracle/source coverage before unpausing it. M
   changes (`build.mjs` verifies every reference by replay and writes no shard if one fails).
 
 Oct1 recovery follow-up: first four recovered Bonsai results all exact identity/hash matches, three current admissions/21 approved decisions, one rejection, zero missing spool results/source errors. Health report05:28:05.966UTC and matching canonical spool supplement saved; next formal check06:28UTC. Review of supervisor changes and Python syntax parsing completed; live supervisors loaded the health-wait/backoff patch at launch. In-flight server loss can still fail the current batch; health waiting prevents subsequent unstarted batches being consumed. No automatic blind semantic retry.
+
+### 2026-10-01 21:02 UTC — additional OpenRouter teacher
+
+User provided key in `~/.config/natlang/openrouter.env` (private, outside repo); **explicitly omit `enforce_distillable_text`**, never echo/read key into tool output. Worker started via `scripts/start_openrouter_teacher.py runs/space-bunny-20261001/root-approved-worker-plan.json`. Check `runs/space-bunny-20261001/worker-status.json`, `journal.jsonl`, `worker.log`, and `launcher.log`; initial live PIDs 822917/822922. Singleton flock guards launch. To stop, SIGTERM launcher; it propagates to supervisor and collector, retaining partials. Do not launch duplicates.
+
+64 existing exact approved CommitPack cases, additional teacher coverage, 51 Markdown + 13 YAML/YML, first 8 mixed pilot. Root v25 native gold/reference audit admitted 64 with 256 linked decisions; `root-reference-review.json`. Exact plan/hash pins, private credential loading, zero-price Stealth-only routing/no fallback, auto tool choice, wire seed omitted, low reasoning/8192 output tokens, one request, exponential transport/failure delays, pause after 3 consecutive failures, retirement stop October 5. Model catalog transport template Qwen is **not** a fallback model; wire ID remains Space Bunny. User-required omitted distillation flag remains absent. Native tools/source golds/admission gates unchanged.
+
+Isolated runtime v25 manifest SHA `86177acfe927ae3a0cc5f55a6558b44f6ccf7068c3dc2f5cfaf2966919935602`, derived from frozen v24 with only provider controls and compact exact diff presentation. Dependencies remain shared but critical SDK actual files separately hash-pinned. Existing Bonsai/Luna runtime/queued handoff pins untouched. New supervisor creates missing log parents and ignores valid cleanup observations before identity validation. Canonical cleanup fix still needs safe integration after partial Luna handoff completes.
+
+Authority registers `additional_teachers.space_bunny` + active journal. Main current Bonsai/Luna outcome totals do not count this separate queue automatically: explicitly join its result paths or report separately. Generated snapshot already discovers all completed `.result.json` under `runs/`, so accepted explicit-teacher train rows enter its next rebuild; do not claim a newly published training snapshot. The 64-case pilot does not alter the global source-case count.
+
+20:33 manual sweep: +49 rows since 20:10, all admitted. Saved new-reject audit 17:09–20:33: 8 supported-gold model failures, no source or admission bugs; exact edits must preserve internal/EOF line breaks. Diff preview change improves visibility without byte normalization. Root changes/proofs in `runs/space-bunny-20261001` and `runs/generation-check-20261001-resume/manual-check-2035/`; detailed course decisions in GENERATION_DECISIONS.

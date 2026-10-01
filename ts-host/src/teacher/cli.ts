@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
+      '         --provider-request-config FILE  JSON transport controls retained in provenance\n' +
       '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
       '           (optional Pi provider collection resource controls; off by default)\n' +
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
@@ -59,6 +61,9 @@ async function main(): Promise<void> {
   if (!['student', 'teacher'].includes(collectionRole)) throw new Error('invalid collection role');
   const provider = flags.get('--provider');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
+  if (flags.has('--provider-request-config') && !provider) throw new Error('--provider-request-config requires --provider');
+  const controls = flags.has('--provider-request-config') ? providerRequestControls(JSON.parse(
+    await readFile(resolve(flags.get('--provider-request-config')!), 'utf8'))) : undefined;
   const judgeModelId = flags.get('--judge-model-id');
   if ([judgeModelId, flags.get('--judge-server'), flags.get('--judge-provider')].some(Boolean) &&
       (!judgeModelId || Number(flags.has('--judge-server')) + Number(flags.has('--judge-provider')) !== 1))
@@ -94,7 +99,7 @@ async function main(): Promise<void> {
         piOptions: { reasoningEffort: flags.get('--judge-reasoning-effort') ?? 'low' } } :
         { endpoint: flags.get('--judge-server') }) } } : {}),
     toolSurfaceSha256: await defaultToolSurfaceHash(),
-    ...(provider ? { provider, piOptions: { reasoningEffort: flags.get('--reasoning-effort') ?? 'low' } } :
+    ...(provider ? { provider, ...(controls ? { providerRequestControls: controls } : {}), piOptions: { reasoningEffort: flags.get('--reasoning-effort') ?? 'low' } } :
       { endpoint: flags.get('--server') ?? 'http://127.0.0.1:8081' }),
     // The thinking budget is the server's (serve_bonsai.sh --reasoning-budget) unless given: a server that enforces a
     // request budget ends a turn at it, so a small default cut every turn of a verbose reasoner short of its tool call.
