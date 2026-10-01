@@ -1,3 +1,15 @@
+## Current checkpoint — 2026-10-01 07:42–07:49 UTC
+
+Bonsai332364 healthy, GPU98%,17completed recovery batches/68exactresults:55currentadmitted,13rejected,277approved decisions,0missing/sourceidentityerrors. This is cumulative recovery; since05:28,64results/52admitted/12reject/256decisions. Remaining77recoverycases; no transport/supervisor failures. Full health `hourly-health-next/health-2026-10-01T074236085Z.json` and matching canonical spool supplement;0metadata readererrors/futureholds. Next full check08:42:36UTC.
+
+Both Luna workers333669/333670 finished all256workflow cases normally:250rawaccepted/6rejects. Updated authority/state marks queues completed. Existingquality agent prioritizes next256fresh workflow proposals before fullinputrejectionaudit. Root independent approval required before launch. Existingadmissionagent prepares successor Bonsai campaign, excludingall prior attempts and all145currentqueuedrecoverytargets; do not leave teachers idle once approved eligible work is ready. Neither idle Luna nor fully consumed queue implies all corpus work complete.
+
+Persistent hourly health monitor **367674** runs `scripts/monitor_generation.py`, launch/status/journal under `runs/generation-check-20261001-resume/hourly-monitor/`. It checks worker availability every60sec and fullhealth/spools hourly; records `needs_agent_review` for idle workers. It does not independently perform AI repairs or launch unreviewed queues. Missing-server watcher launch recorded in `server-watch-launch.json` there: four slots/53248context, singleton lock, exponential restart delay; restores only absent container and never kills live/loading container on health failure. Stop both monitors explicitly during requested shutdown.
+
+Quality24 catalog/root hashes and allfive v23→v24 edges independently verified; everyprior replacement edge retained. Recipe24 is a draft carrying allfourstatics/twolegacy/model/failure lanes, but STALE model snapshot still includes held source82 (positive line488) and does not cover currentgeneration. Missing historic folder-api-v1 verified-turns artifact also blocks inventory; no ready record/training. Existing source-oracle agent refreshing current-policy gzip snapshot/recipe and investigating recoverable missing lineage. Disk4.7GiBfree; no deletions/plain large snapshots. Continue preserving unrelated API/program-improvement work.
+
+---
+
 ## Current checkpoint — 2026-10-01 05:28 UTC
 
 This section supersedes historical live-process and publication notes below. Bonsai server was absent on inspection; previous server log shows orderly cleanup, but the cause is not established. Original 314-case campaign preserved 169 exact saved results (103 raw accepted, 66 raw rejected); 37 unfinished batches exhausted through transport failures after server loss. These are not 37 semantic failures. Recovery contains only the 145 unsaved cases, in 37 batches, with no reruns of saved positives or negatives.

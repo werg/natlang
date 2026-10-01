@@ -73,7 +73,12 @@
     "data/teacher/directory-expansion/quality-v22.static.results.jsonl": "data/teacher/directory-expansion/quality-v23.static.results.jsonl",
     "data/teacher/directory-expansion/quality-v22.static.turns.jsonl": "data/teacher/directory-expansion/quality-v23.static.turns.jsonl",
     "data/teacher/directory-expansion/quality-v22.holds.jsonl": "data/teacher/directory-expansion/quality-v23.holds.jsonl",
-    "data/teacher/directory-expansion/quality-v22.static.manifest.json": "data/teacher/directory-expansion/quality-v23.static.manifest.json"
+    "data/teacher/directory-expansion/quality-v22.static.manifest.json": "data/teacher/directory-expansion/quality-v23.static.manifest.json",
+    "data/teacher/directory-expansion/quality-v23.train.ir.jsonl": "data/teacher/directory-expansion/quality-v24.train.ir.jsonl",
+    "data/teacher/directory-expansion/quality-v23.static.results.jsonl": "data/teacher/directory-expansion/quality-v24.static.results.jsonl",
+    "data/teacher/directory-expansion/quality-v23.static.turns.jsonl": "data/teacher/directory-expansion/quality-v24.static.turns.jsonl",
+    "data/teacher/directory-expansion/quality-v23.holds.jsonl": "data/teacher/directory-expansion/quality-v24.holds.jsonl",
+    "data/teacher/directory-expansion/quality-v23.static.manifest.json": "data/teacher/directory-expansion/quality-v24.static.manifest.json"
   },
   "required_default_inputs": [
     "runs/inline-curriculum/ref-v1.results.jsonl",
@@ -352,6 +357,36 @@
       "candidate_manifest_sha256": "21c9d11daf57f63631c1dcac4da92304ea71fc41de755b587f22deb326d4ed95",
       "current_policy_audit_sha256": "49a2a65441e54f5f5bd4a943dc6dff89006024ed2adfacb4c79d632c5c9c48c6",
       "reason": "Three root-approved TATQA source-review holds applied; exact source-backed Oklahoma annual-event variant included; originals/golds retained and no DPO negatives created.",
+      "training_ready": false,
+      "recipe_refresh_required": true,
+      "dpo_negatives_created": false
+    },
+    "directory-expansion-quality-v24-publication": {
+      "revision": "quality-v24",
+      "cases": 1221,
+      "approved_decisions": 3204,
+      "held_decisions": 981,
+      "source_counts": {
+        "commitpack": 287,
+        "tatqa": 219,
+        "musique": 240,
+        "qasper": 300,
+        "scifact": 154,
+        "treedst": 21
+      },
+      "removed_source_ids": [
+        "inline-curriculum:source_tatqa:3048041ea579f7ba19b3:v1",
+        "inline-curriculum:source_musique:427e5ecffded031e4316:v1"
+      ],
+      "added_signed_derivative_source_id": "tatqa-derived:374c4ad9-300a-44b0-95bc-77f05de463b0:signed-pnl-current-minus-prior",
+      "excluded_held_source_ids": [
+        "3hop1__642758_643936_45121"
+      ],
+      "manifest": "data/teacher/directory-expansion/static.manifest.json",
+      "manifest_sha256": "12ec245d4c203c0ef109ec8e81849c563b38eb584ac8794fc8c9fbd40e2bfa05",
+      "approval": "runs/generation-check-20260930-hourly/quality-v24-review-candidate-v3/root-approval.json",
+      "approval_sha256": "11e3253db146b030a0a7adf100c5f58783a3a1a7c2611a59263e7552409c9aad",
+      "reason": "Published root-approved quality-v24 with the two held originals removed and exact signed P&L derivative included; originals/golds retained in prior immutable lineage.",
       "training_ready": false,
       "recipe_refresh_required": true,
       "dpo_negatives_created": false
