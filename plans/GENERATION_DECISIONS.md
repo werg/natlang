@@ -1453,3 +1453,9 @@ Inventoryfoundlegacyfalsepositivezero-fallbackturns(12)innewdefaultfolder-revisi
 ## 2026-10-01 12:07 UTC — Restore response to hourly alerts
 
 Mechanical hourly audits persisted, but root follow-through stopped when its turn ended. Luna storage-paused queues are now resumed with original journals; terminal successes/failures preserved, only unattempted entries run. New rolling plan binds resumed PIDs and precisely hashes four reviewed empty failed finish records so those excluded failures do not block unrelated approved next work. Unreviewed incomplete work still blocks. Preparing approved automatic storage-pause recovery to avoid dependence on root for this specific reversible event. Next full sweep13:06:58UTC. No tests/frozenruntimechange.
+
+## 2026-10-01 12:22 UTC — Prevent repeat storage idle and paging waste
+
+- Explicitqueue-scopedautomaticstorageresumeenabledforfivealreadyreviewedqueues, after4GiBfreeandfullartifact/authority/duplicatechecks. Monitor490927. Rollingcontroller489449bindsqueueidentityacrossPIDchanges; fourreviewedfailedattemptsremainexcluded. Intentionalshutdownmuststopmonitor/controllers.
+- Source-boundlegacyguardrootapproved33heldturns/59retained; oldproducersandcandidateevidenceimmutable. Resolverapprovedstatusbugfixed; freshrecipe/readinesspending.
+- Futurepromptguidance covers actualslicedelegation andminimalleafedits. Currentfrozen20unchanged. ExistingboundedMarkdownEOFvariantmustbeappliedtonextfreshsourceIRs beforegeneration; legacyqueuedIRs otherwisekeepcreatingavoidablefalse-negatives. Historicalrow74keptunchanged/heldpendingnewteacherorexplicitoracle-onlymigrationreview.

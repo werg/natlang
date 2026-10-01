@@ -1,3 +1,15 @@
+## Durable storage recovery enabled — 2026-10-01 12:22 UTC
+
+Monitor **490927** supersedes389123 (`hourly-monitor/launch-v3.json`). Root approved future storage-pause recovery for **five specific queues**: bothactiveLunav4queues, currentBonsai256queue, and bothreviewedLunav5successors. Approvals/pinnedhashes are under `runs/generation-check-20261001-resume/storage-recovery/queue-*-approved-v2.json`, configured in authority `storage_pause_recovery`. Recovery is limited to latestrecordedstoragepause onanunfinisheduniquequeuekey, absentPID/exactcommand, unchangedqueue/supervisor/all618frozenruntimefiles/exactauthoritybinding; requiresatleast4GiBfree. Capturespauseevent/journalhash/oldnewPIDs beforeclaim; crashafterclaimrequiresreview. Stops/otherfailures neverauto-resume. Disablethisconfiguration/stopmonitor forintentionalshutdown.
+
+Rollingcontroller **489449** supersedes484210 afterreviewedpendingclaimwithnoworkers. V4planSHA **8437a61ac54ed240d71d0b42f30a460004fd2b93b9bd8fb1769de8cbaa0c0bd6**. FollowscurrentPID byexactpredecessorqueue/journalbinding, soapprovedstorageresume doesn'tbreakhandoff; rechecksworkerabsenceunderlock. Fourexactreviewedfailedfinishhashesstayexcluded. Newunreviewedincompletefinishesstillblockforrootreview. ActiveLuna483514/483515; Bonsai392661; watcher368408. Nextfull13:06:58UTC.
+
+Root approved legacyreview partitions:59v2turnsretained/10aggregationheld; all23oldfolderrevisionsturnsheld. NewrootapprovedmanifestsSHA8fca567d48307cd3162b6de78ffbcb25fd27ec45d84a85a5c6694e11aafded55 andf305beca5b9dc7150c7b4340b44f2d7c1b4cca88e085502fb7238fdb92b2ead8. Exactphysicalrowpartitionsandallproducerhashes/fullcaseinputcomputationsverified; originalartifactsuntouched, noDPOlabels. Fixedresolverapproved-statuslookupbugandcatalogpins. Current-manifesthistoricalpointerupdated; recipe25remainshistoricallyblockedandfreshrecipe/readinesspending. Onlyownedguard/builder/cataloghunkscommitted, unrelatedAPIchangeedgesremainworkingtree.
+
+Next-runtimepromptguidance committed: selectrelevantfieldsfromlargeinputs; passactualdisjointitem/pageslicestohelpersinsteadofsamefullpacket+PAGElabel; deepcopytree/editrequestedleaf/preservewrappersandsiblings. Frozen20unchanged, soongoingjobsdon'tyetreceivethesefutureguidancechanges. EOF-onlyMarkdownreject74confirmedbenignexistingboundedvariant; oldqueuedIRlackednewcontract. NextBonsaiprep mustapplyexisting `applyScopedMarkdownEditContract` beforequeuecreation, preservingoriginalIR/sourceproofandnewcanonicaldigest. Do notrewritehistoricalprompt/historytoartificiallypromoteoldrow. Next512freshBonsaicampaignbeingpreparedwithreducerspriority; rootapprovalrequiredbeforelaunch.
+
+---
+
 ## Recovery and hourly follow-through — 2026-10-01 12:07 UTC
 
 Mechanical audits continued at09:43/10:43/11:43 but root ended its active turn and did not act on hourly-agent escalations. Luna workers376000/376001 stopped at storage floor around11:00; filesystem briefly exhausted, later recovered to71GiB. Rollingcontroller389122 failedclosed on incomplete predecessor rather than launch successors. Do not describe those queues as completed.
