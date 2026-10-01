@@ -14,7 +14,7 @@ const design={schema:'natlang.followup-study/1',allocation,programs:rows.map(row
 const designPath=join(output,'design.json');
 try{if(JSON.stringify(JSON.parse(await readFile(designPath,'utf8')))!==JSON.stringify(design))throw Error('Study design changed');}catch(error){if(error.code!=='ENOENT')throw error;await writeFile(designPath,JSON.stringify(design,null,2)+'\n');}
 let prior;try{prior=JSON.parse(await readFile(join(output,'progress.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
-const started=prior?.startedAt??Date.now();let calls=prior?.calls??0,attempts=prior?.attempts??0;const outcomes=prior?.outcomes??[];
+const started=prior?.startedAt??Date.now()-(prior?.elapsedMs??0);let calls=prior?.calls??0,attempts=prior?.attempts??0;const outcomes=prior?.outcomes??[];
 const completed=new Set(outcomes.map(row=>row.program+':'+row.arm));
 for(const row of rows){
  const directory=join(output,row.id);await mkdir(directory,{recursive:true});

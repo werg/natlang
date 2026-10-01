@@ -6,9 +6,9 @@ import {isDeepStrictEqual} from 'node:util';
 import {Folder,improveProgram,SourceEvaluator,OperationJournal} from '../../dist/index.js';
 import {UsageGateway} from '../../dist/evaluation/usage.js';
 import {fingerprint} from '../../dist/adaptation/identity.js';
-export const canonicalRequest=request=>JSON.stringify({messages:request.messages.map(message=>({...message,...(typeof message.content==='string'?{content:message.content.replace(/evidence: "[a-f0-9]{1,63}" (?=<<cut off:)/g,'evidence: "<clipped-evidence-ref>" ')}:{})})),tools:request.tools,seed:request.seed,max_tokens:request.max_tokens}).replace(/task-\d+-[a-z0-9]+/g,'task-ID');
-export function recordedDriver(exchanges,{translate=value=>value,compareSeed=true}={}){
- const key=request=>canonicalRequest({...translate(request),...(compareSeed?{}:{seed:undefined})});
+export const canonicalRequest=request=>JSON.stringify({executionContext:request.invocation_id?.startsWith('case:')?request.invocation_id.split('/')[0]:undefined,messages:request.messages.map(message=>({...message,...(typeof message.content==='string'?{content:message.content.replace(/evidence: "[a-f0-9]{1,63}" (?=<<cut off:)/g,'evidence: "<clipped-evidence-ref>" ')}:{})})),tools:request.tools,seed:request.seed,max_tokens:request.max_tokens}).replace(/task-\d+-[a-z0-9]+/g,'task-ID');
+export function recordedDriver(exchanges,{translate=value=>value,compareSeed=true,compareExecutionContext=true}={}){
+ const key=request=>canonicalRequest({...translate(request),...(compareSeed?{}:{seed:undefined}),...(compareExecutionContext?{}:{invocation_id:undefined})});
  const order=new Map(exchanges.map((exchange,index)=>[exchange,index])),finished=new Set(),waiters=[];
  const groups=new Map();for(const exchange of exchanges){const id=exchange.request.invocation_id;const group=groups.get(id)??[];group.push(exchange);groups.set(id,group);}
  const remaining=[...groups.values()],bound=new Map();let actions=0;const mismatches=[];const replayed=[];let seedChanges=0;
@@ -59,8 +59,9 @@ export async function replayCase(directory,output){
  const body=protocol.files[protocol.contract.entry].split('---').slice(2).join('---').trim();
  const baselineTasks=new Set(probe.filter(row=>String(row.request.messages[1].content).includes(body)).map(row=>row.request.invocation_id.split('/')[0]));
  const baselineExchanges=probe.filter(row=>baselineTasks.has(row.request.invocation_id.split('/')[0]));
- const optimizer=recordedDriver(optimizerExchanges,{translate}),student=recordedDriver([...baselineExchanges,...studentExchanges],{translate,compareSeed:compileVersion>=6});
- const migration={originalCompiler:compileVersion,currentCompiler:6,originalSuite:original.baseline.suiteVersion,currentSuite:evaluator.suiteVersion,evidenceReferencesTranslated:original.baseline.suiteVersion!==evaluator.suiteVersion,confirmationCasesExcluded:true,clippedEvidenceReferencesNormalized:true,studentSeedPolicy:compileVersion<6?'reexecute original actions under stable parent-qualified seeds; provider responses are recorded, not newly sampled':'exact'};
+ const hasExecutionContext=[...baselineExchanges,...studentExchanges].every(exchange=>exchange.request.invocation_id?.startsWith('case:'));
+ const optimizer=recordedDriver(optimizerExchanges,{translate}),student=recordedDriver([...baselineExchanges,...studentExchanges],{translate,compareSeed:compileVersion>=6,compareExecutionContext:hasExecutionContext});
+ const migration={originalCompiler:compileVersion,currentCompiler:6,originalSuite:original.baseline.suiteVersion,currentSuite:evaluator.suiteVersion,evidenceReferencesTranslated:original.baseline.suiteVersion!==evaluator.suiteVersion,executionContextMigration:hasExecutionContext?'exact':'current observations gain exact case/source/seed identity; old provider observations remain unchanged; full request continuations must match',confirmationCasesExcluded:true,clippedEvidenceReferencesNormalized:true,studentSeedPolicy:compileVersion<6?'reexecute original actions under stable parent-qualified seeds; provider responses are recorded, not newly sampled':'exact'};
 
  try{
   const result=await improveProgram({folder:Folder.fromFiles(protocol.files),contract:protocol.contract,cases,policy:protocol.policy,improverSource:Folder.fromFiles(original.authored.files).snapshot(),improver:optimizer,executor:student,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs,budget:protocol.budget,directory:journalPath,signal:AbortSignal.timeout(60000),trace:trace=>traces.push(trace)});

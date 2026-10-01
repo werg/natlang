@@ -19,7 +19,7 @@ import { validateCases } from '../evaluation/suite.js';
 import { UsageGateway } from '../evaluation/usage.js';
 import type { CheckReport, EvaluationReport, ImprovementCase, Outcome, ProgramContract, ProgramEvaluator } from './types.js';
 
-export const SOURCE_EVALUATION_VERSION='source-evaluation/14';
+export const SOURCE_EVALUATION_VERSION='source-evaluation/16';
 export function sourceFiles(snapshot: FolderSnapshot): Record<string, string> {
   if (!(snapshot instanceof FolderSnapshot)) throw new TypeError('evaluate requires an immutable folder snapshot');
   return Object.fromEntries(snapshot.filePaths().map(path => [path, new TextDecoder('utf-8', { fatal: true }).decode(snapshot.readBytesSync(path))]));
@@ -155,7 +155,7 @@ export class SourceEvaluator implements ProgramEvaluator {
       const exact = !result.error && isDeepStrictEqual(result.value, row.expected) && (!row.expectedFiles || isDeepStrictEqual(result.files,row.expectedFiles));
       const quality = result.score?.quality ?? (exact ? 1 : 0), gates = result.score?.gates ?? {compiles:true,completed:!result.error,requiredCorrect:!row.required||exact};
       if (!Number.isFinite(quality) || quality < 0 || quality > 1 || Object.values(gates).some(value => typeof value !== 'boolean')) throw new Error('invalid independent fixture score');
-      outcomes.push({ caseId: row.id, passed:quality===1 && Object.values(gates).every(Boolean), quality, gates, ...(serviceDeclarations?{serviceDeclarations}:{}), ...(result.modelCalls!==undefined?{modelCalls:result.modelCalls}:{}), ...(request.split==='train'&&result.modelTrace?{modelTrace:result.modelTrace,modelTraceTruncated:result.modelTraceTruncated??false}:{}), ...(result.value !== undefined ? {value:result.value} : {}), ...(result.error !== undefined ? {error:result.error,...(result.failureKind?{failureKind:result.failureKind}:{})} : {}), evidence: reference + ':' + row.id,...(request.split==='train'?{args:row.args,expected:row.expected,...(row.expectedFiles?{expectedFiles:row.expectedFiles}:{})}:{}) });
+      outcomes.push({ caseId: row.id, passed:quality===1 && Object.values(gates).every(Boolean), quality, gates, ...(serviceDeclarations?{serviceDeclarations}:{}), ...(result.modelCalls!==undefined?{modelCalls:result.modelCalls}:{}), ...(request.split==='train'&&result.modelTrace?{modelTrace:result.modelTrace,modelTraceTruncated:result.modelTraceTruncated??false}:{}), ...(result.value !== undefined ? {value:result.value} : {}), ...(result.error !== undefined ? {error:result.error,...(result.failureKind?{failureKind:result.failureKind}:{})} : {}), evidence: reference + ':' + row.id,...(request.split==='train'?{args:row.args,expected:row.expected,...(row.expectedFiles?{expectedFiles:row.expectedFiles,...(result.files?{files:result.files}:{})}:{})}:{}) });
     }
     // Only training evidence can expose case outputs through the injected reader.
     if (request.split === 'train') this.evidence.set(reference, outcomes);
@@ -190,7 +190,7 @@ export class SourceEvaluator implements ProgramEvaluator {
           const pending=pendingTrace.get(message.request.invocation_id);
           if(pending){const messages=message.request.messages;let last=-1;for(let index=messages.length-1;index>=0;index--)if(messages[index].role==='assistant'&&messages[index].tool_calls?.length){last=index;break;}if(last>=0)pending.entry.observation=messages.slice(last+1).filter((item:{role:string})=>item.role==='tool').map((item:{content:unknown})=>String(item.content)).join('\n').slice(0,1000);}
           modelCalls++;
-          try { const turn = await this.gateway.request(this.driver, message.request, signal, 'executor');
+          try { const turn = await this.gateway.request(this.driver, {...message.request,invocation_id:'case:'+fingerprint({source:folder.digest,caseId:row.id,seed})+'/'+message.request.invocation_id}, signal, 'executor');
             if(row.split==='train'){const entry={calls:(turn.calls??[]).map(([name,args])=>({name,arguments:Object.fromEntries(Object.entries(args).map(([key,value])=>[key,typeof value==='string'?value.slice(0,1500):value])),truncated:Object.values(args).some(value=>typeof value==='string'&&value.length>1500)})),observation:''};modelTrace.push(entry);pendingTrace.set(message.request.invocation_id,{entry});}
             if (!closed) worker.postMessage({ id: message.id, turn }); }
           catch (error) { close(error instanceof Error ? error : new Error(String(error))); }

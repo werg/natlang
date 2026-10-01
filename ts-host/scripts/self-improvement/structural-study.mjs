@@ -49,7 +49,9 @@ const allocationIdentity=fingerprint({protocol,runtime:JSON.parse(await readFile
 const priorIdentity=allocation.read('identity')?.value;if(priorIdentity&&priorIdentity!==allocationIdentity)throw Error('Study allocation identity changed.');
 allocation.record('identity',allocationIdentity);
 const gateway=new UsageGateway(protocol.budget,allocation.read('ledger')?.value);gateway.onUpdate=ledger=>allocation.record('ledger',ledger);
-const signal=AbortSignal.timeout(Math.max(1,protocol.budget.maxElapsedMs-gateway.ledger.elapsedMs));
+const interrupted=new AbortController();
+process.once('SIGTERM',()=>interrupted.abort(new Error('study assignment interrupted')));
+const signal=AbortSignal.any([interrupted.signal,AbortSignal.timeout(Math.max(1,protocol.budget.maxElapsedMs-gateway.ledger.elapsedMs))]);
 const rawStudent=openAICompatibleModelTurn({...protocol.executor,request:{temperature:0.2}});
 const log=async(role,request,turn)=>{await appendFile(join(output,'exchanges.ndjson'),JSON.stringify({at:new Date().toISOString(),command,role,request,turn})+'\n');console.log(JSON.stringify({command,role,calls:turn.calls?.map(call=>call[0]),text:turn.text?.slice(0,80)}));};
 const student=async(request,signal)=>{const turn=await rawStudent(request,signal);await log('student',request,turn);return turn;};

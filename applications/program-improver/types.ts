@@ -15,6 +15,6 @@ export type SearchFrame = {current:SearchState;baselineBytes:number};
 export type ExperimentResult = {source:string;parent:string;accepted:boolean;reason:string;quality:number;sourceBytes:number;modelCalls?:number;scores:{caseId:string;quality:number}[];feedback?:ExperimentFeedback};
 
 
-export type TrainingEvidence={caseId?:string;quality?:number;gates?:Record<string,boolean>;evidence?:string;modelTraceTruncated?:boolean;expectedFiles?:Record<string,string>;passed:boolean;modelCalls?:number;failureKind?:string;error?:string;value?:unknown;expected?:unknown;args?:unknown[];modelTrace?:{calls:unknown;observation:string}[];serviceDeclarations?:Record<string,string>};
+export type TrainingEvidence={caseId?:string;quality?:number;gates?:Record<string,boolean>;evidence?:string;modelTraceTruncated?:boolean;expectedFiles?:Record<string,string>;files?:Record<string,string>;passed:boolean;modelCalls?:number;failureKind?:string;error?:string;value?:unknown;expected?:unknown;args?:unknown[];modelTrace?:{calls:unknown;observation:string}[];serviceDeclarations?:Record<string,string>};
 
 export type ExperimentFeedback={diagnostics?:string[];sourceFiles:SourceFile[];training:TrainingEvidence[];validation?:{quality:number;modelCalls?:number};reason:string};

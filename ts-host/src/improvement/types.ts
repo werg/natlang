@@ -1,5 +1,5 @@
 import type { FolderSnapshot } from '../native/scoped-fs.js';
-export type ImprovementCase = { id: string; group: string; split: 'train' | 'validation' | 'test'; args: unknown[]; expected: unknown; services?: Record<string, string>; folder?: Record<string, string>; expectedFiles?:Record<string,string>; required?:boolean };
+export type ImprovementCase = { id: string; group: string; split: 'train' | 'validation' | 'test'; args: unknown[]; expected: unknown; services?: Record<string, string>; folder?: Record<string, string>; expectedFiles?:Record<string,string>;files?:Record<string,string>; required?:boolean };
 export type ProgramContract = { entry: string; exportName: string; signature?: string; programId: string };
 export type CheckReport = { source: string; valid: boolean; diagnostics: string[]; contract: ProgramContract };
 export type Outcome = { caseId: string; passed: boolean; quality: number; gates: Record<string,boolean>; value?: unknown; modelCalls?:number; modelTrace?:{calls:unknown;observation:string}[]; modelTraceTruncated?:boolean; serviceDeclarations?:Record<string,string>; failureKind?:'fixture'|'target'|'timeout'; error?: string; evidence: string; args?:unknown[];expected?:unknown;expectedFiles?:Record<string,string> };

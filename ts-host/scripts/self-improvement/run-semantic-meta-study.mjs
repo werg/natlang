@@ -51,6 +51,9 @@ try{
  const result=await improveProgram({folder:Folder.fromFiles(protocol.source),contract:{entry:'improveStep.nl',exportName:'default',programId:'semantic-meta-improver'},cases,policy:protocol.policy,improver:optimizer('outer-optimizer'),executor:student,executorId:protocol.student.model,executeCase:execution,evaluationLevel:2,budget:protocol.budget,gateway,signal,directory:join(output,'journal'),trace:trace=>{void appendFile(join(output,'traces.ndjson'),JSON.stringify(trace)+'\n');}});
  const {folder,evaluator,...portable}=result;await writeFile(join(output,'result.json'),JSON.stringify(portable,null,2));
  // Freeze once. Reuse development cache, never use the final report to edit this candidate.
- if(result.validation&&result.state.done){const confirmation=await evaluator.confirmPair(Folder.fromFiles(protocol.source).snapshot(),folder,'semantic-meta-final-v1');await writeFile(join(output,'confirmation.json'),JSON.stringify({confirmation,ledger:gateway.snapshot()},null,2));}
+ if(result.validation&&result.state.done){
+  let confirmation;try{confirmation={confirmation:await evaluator.confirmPair(Folder.fromFiles(protocol.source).snapshot(),folder,'semantic-meta-final-v1'),disposition:'completed'};}catch(error){confirmation={disposition:'confirmation-exhausted-or-failed',error:String(error)};}
+  await writeFile(join(output,'confirmation.json'),JSON.stringify({...confirmation,ledger:gateway.snapshot()},null,2));
+ }
  console.log(JSON.stringify({done:true,disposition:result.disposition,quality:result.validation?.quality,calls:gateway.ledger.usage.modelCalls}));
 }finally{backend.close();}

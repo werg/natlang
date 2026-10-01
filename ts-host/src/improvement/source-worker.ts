@@ -2,7 +2,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import * as runtime from '../runtime/node.js';
 import * as targetRuntime from './target-runtime.js';
-import {TOOLS_PROMPT} from '../native/prompt.js';
+import ts from 'typescript';
 import { Folder,APPLY_TO_FOLDER } from '../native/scoped-fs.js';
 import { loadVirtualNatlang } from '../runtime/virtual-project.js';
 import { compileVirtualProject } from '../runtime/virtual-project.js';
@@ -18,6 +18,7 @@ try {
   const build = compileVirtualProject({ files: workerData.files }, targetRuntime, { programId: workerData.contract.programId, constrained: true, target: 'node' });
   if (!build.ok) throw new Error('target build failed');
   const target = workerData.contract.entry.endsWith('.nl') ? loadVirtualNatlang(workerData.files, workerData.contract.entry) : build.require(workerData.contract.entry)[workerData.contract.exportName];
+  const serviceDeclarations=Object.fromEntries(Object.entries(workerData.services??{}).map(([name,source])=>[name,ts.transpileDeclaration(source as string,{fileName:name+'.ts',compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText]));
   const services = Object.fromEntries(Object.entries(workerData.services ?? {}).map(([name, source]) => {
     const serviceBuild = compileVirtualProject({ files: { 'service.ts': source as string } }, runtime, { constrained: true, target: 'node' });
     if (!serviceBuild.ok) throw new FixtureError('fixture service failed compilation: '+name+'\n'+serviceBuild.diagnostics.filter(row=>row.severity==='error').map(row=>row.message).join('\n'));
@@ -26,7 +27,7 @@ try {
   if (typeof target !== 'function') throw new Error('target entry is not callable');
   const task = runtime.createNatlangRuntime({ model: {driver:request => new Promise((resolve, reject) => {
     const id = sequence++; pending.set(id, { resolve, reject }); parentPort!.postMessage({ type: 'request', id, request });
-  })}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request')}), services, serviceDeclarations: workerData.services, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
+  })}, trace:trace=>parentPort!.postMessage({type:'trace',callId:trace.callId,events:trace.events.filter(event=>event.kind==='action'||event.kind==='model_request')}), services, serviceDeclarations, network: false, codeEdits: 'deny', seed: { mode: 'derived', root: workerData.seed }, limits: workerData.limits });
   const folder=workerData.folder?Folder.fromFiles(workerData.folder):undefined;
   const value = await task.run(() => folder ? (typeof (target as unknown as Record<PropertyKey,unknown>)[APPLY_TO_FOLDER]==='function'?folder.apply(target, ...workerData.args):target(folder,...workerData.args)) : target(...workerData.args));
   parentPort!.postMessage({ type: 'result', value: JSON.parse(JSON.stringify(value)),...(folder?{files:Object.fromEntries(folder.filePaths().map(path=>[path,new TextDecoder().decode(folder.readBytesSync(path))]))}:{}) });

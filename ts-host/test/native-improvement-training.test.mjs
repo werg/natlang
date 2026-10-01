@@ -39,3 +39,62 @@ test('app collection adapter executes the supplied reducer state without restart
  assert.equal(result.outcome.value.iteration,2);
  assert.equal(result.outcome.source['solve.nl'],files['solve.nl']);
 });
+
+test('evaluation recordings distinguish identical visible calls with different host fixtures',async()=>{
+ const {SourceEvaluator}=await import('../dist/index.js');
+ const {UsageGateway}=await import('../dist/evaluation/usage.js');
+ const {canonicalRequest}=await import('../scripts/self-improvement/replay-followup-study.mjs');
+ const source=Folder.fromFiles({'solve.nl':'---\nkind: directory-reducer\nargs: {}\nreturns: number\n---\nReturn the number in value.txt.'}).snapshot();
+ const cases=[{id:'alpha',group:'alpha',split:'train',args:[],folder:{'value.txt':'1'},expected:1},{id:'beta',group:'beta',split:'validation',args:[],folder:{'value.txt':'2'},expected:2}];
+ const exchanges=[];
+ const driver=async request=>{
+  const turn={calls:[['eval',{code:"return Number(await folder.file('value.txt').readText());",finish:true}]]};
+  exchanges.push({request,turn});return turn;
+ };
+ const contract={programId:'fixture-identities',entry:'solve.nl',exportName:'default'};
+ const evaluator=new SourceEvaluator(contract,cases,driver,new UsageGateway({maxModelCalls:20,maxRollouts:4,maxProposals:0}),{executorId:'scripted',timeoutMs:10000});
+ assert.equal((await evaluator.evaluate(source,{split:'train'})).quality,1);
+ assert.equal((await evaluator.evaluate(source,{split:'validation'})).quality,1);
+ assert.deepEqual(exchanges[0].request.messages,exchanges[1].request.messages);
+ assert.notEqual(canonicalRequest(exchanges[0].request),canonicalRequest(exchanges[1].request));
+ const replay=recordedDriver(exchanges);
+ const repeated=new SourceEvaluator(contract,cases,replay,new UsageGateway({maxModelCalls:20,maxRollouts:4,maxProposals:0}),{executorId:'scripted',timeoutMs:10000});
+ assert.equal((await repeated.evaluate(source,{split:'validation'})).quality,1);
+ assert.equal((await repeated.evaluate(source,{split:'train'})).quality,1);
+ assert.equal(replay.audit().unconsumedRequests,0);
+});
+
+test('file reducer diagnostics expose actual training effects without opening validation outputs',async()=>{
+ const {SourceEvaluator}=await import('../dist/index.js');
+ const {UsageGateway}=await import('../dist/evaluation/usage.js');
+ const source=Folder.fromFiles({'solve.nl':'---\nkind: directory-reducer\nargs: {}\nreturns: string\n---\nReturn done.'}).snapshot();
+ const files={'notes/a.txt':'No rush.'},expected={...files,'report.json':'{"urgent":[]}'};
+ const cases=['train','validation'].map(split=>({id:split,group:split,split,args:[],folder:files,expected:'done',expectedFiles:expected}));
+ const evaluator=new SourceEvaluator({programId:'file-effects',entry:'solve.nl',exportName:'default'},cases,async()=>({calls:[['return_result',{status:'success',value:'done'}]]}),new UsageGateway({maxModelCalls:20,maxRollouts:4,maxProposals:0}),{executorId:'scripted',timeoutMs:10000});
+ const train=await evaluator.evaluate(source,{split:'train'});
+ const evidence=evaluator.page(train.evidence)[0];
+ assert.equal(evidence.passed,false);assert.deepEqual(evidence.files,files);
+ assert.deepEqual(evidence.expectedFiles,expected);
+ const runtime=await import('../dist/runtime/node.js');
+ const {compileVirtualProject}=await import('../dist/runtime/virtual-project.js');
+ const compiled=compileVirtualProject({files:{'main.ts':AUTHORED_IMPROVER['improveStep/context.ts'].replace("'../types'","'./types'"),'types.ts':AUTHORED_IMPROVER['types.ts']}},runtime,{constrained:true,target:'node'});
+ assert.equal(compiled.ok,true);
+ const brief=compiled.require('main.ts').brief({goal:'Write report.json.',mode:'structural',objective:'quality',allowedFiles:['solve.nl']},[evidence],[]);
+ assert.match(brief,/File effects:.*report.json.*<missing>/);
+ const validation=await evaluator.evaluate(source,{split:'validation'});
+ assert.equal(validation.outcomes,undefined);assert.throws(()=>evaluator.page(validation.evidence),/Training evidence reference unavailable/);
+});
+
+
+test('student service openings contain public types without fixture implementation',async()=>{
+ const {SourceEvaluator}=await import('../dist/index.js');
+ const {UsageGateway}=await import('../dist/evaluation/usage.js');
+ const source=Folder.fromFiles({'solve.nl':'---\nargs: {}\nreturns: number\n---\nReturn store.read().'}).snapshot();
+ const requests=[];
+ const driver=async request=>{requests.push(request);return {calls:[['eval',{code:'return await store.read();',finish:true}]]};};
+ const cases=[{id:'train',group:'train',split:'train',args:[],expected:7,services:{store:'export function read():number{return 7;}'}}];
+ const evaluator=new SourceEvaluator({programId:'public-fixture',entry:'solve.nl',exportName:'default'},cases,driver,new UsageGateway({maxModelCalls:4,maxRollouts:1,maxProposals:0}),{executorId:'scripted',timeoutMs:10000});
+ assert.equal((await evaluator.evaluate(source,{split:'train'})).quality,1);
+ const opening=JSON.stringify(requests[0].messages);
+ assert.match(opening,/read\(\): number/);assert.doesNotMatch(opening,/return 7/);
+});

@@ -588,6 +588,35 @@
         ],
         "disposition": "Incomplete provider recordings retained as failure evidence; remaining live study cases processed when complete."
       }
+    },
+    {
+      "id": "file-effects-and-case-recording",
+      "old": "File checks returned only scalar values; indistinguishable evaluator openings could bind to the wrong recorded case",
+      "new": "Training evidence includes actual file effects; evaluator recordings carry source/case/seed identity as transport metadata; target service openings contain public declarations, never fixture implementations",
+      "migration": "Reexecute recorded training actions under source-evaluation/16 and regenerate file-effect observations. Preserve original provider replies. Historical records without case identity require explicit offline migration and full continuation matching; quarantine ambiguous or incomplete recordings. Regenerate current reducer cases with changing matching paths and note counts before first execution; preserve original unexecuted protocols and amendment provenance. Recollect provider turns whose opening exposed a fixture implementation; do not relabel them as current successful observations.",
+      "builders": [
+        "ts-host/scripts/self-improvement/build-followup-cases.mjs",
+        "ts-host/scripts/self-improvement/replay-followup-study.mjs",
+        "ts-host/scripts/self-improvement/export-followup-training.mjs"
+      ],
+      "source_research": "Actual Luna/Bonsai multi-file reducer failures: missing report effects, ambiguous first requests, and constant-path shortcuts. Training failures alone inform revisions.",
+      "families": [
+        "multi-file-directory-reducer",
+        "rejected-edit-revision",
+        "recorded-execution"
+      ],
+      "required_cases": [
+        "matching return value with missing output file",
+        "incorrect or unexpected file contents",
+        "identical model-visible openings with different folder contents",
+        "out-of-order case replay",
+        "validation file outputs remain unavailable",
+        "matching file paths and file count change across cases",
+        "student service opening hides implementation while exact calls still execute"
+      ],
+      "verification": [
+        "ts-host/test/native-improvement-training.test.mjs"
+      ]
     }
   ],
   "source_research": "ts-host/scripts/self-improvement/sources.json",

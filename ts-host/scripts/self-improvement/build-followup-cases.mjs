@@ -41,7 +41,13 @@ export function followupCases(){
   ['keep-files','the reviewer recommends the product overall, despite mixed details','keep',[['Lovely box, terrible product. Avoid it.','Bad setup, but now I recommend it.'],['I recommend the old one. This replacement disappoints.','I would happily buy this again.'],['Another expensive paperweight. Returned.','Not perfect; still worth buying.']]]
  ]){
   const goal=`Read all notes/*.txt and classify whether ${criterion}. Write report.json with exactly {"${key}":[sorted matching paths]}; preserve original files. Serialize that object with JSON.stringify, without extra whitespace. Return "done".`;
-  const examples=sets.map(([a,b])=>{const folder={'notes/a.txt':a,'notes/b.txt':b};return {args:[],folder,expected:'done',expectedFiles:{...folder,'report.json':JSON.stringify({[key]:['notes/b.txt']})}};});
+  const examples=sets.map(([a,b],index)=>{
+   const vary=id!=='refund-files';
+   const folder=index===1&&vary?{'notes/a.txt':b,'notes/b.txt':a}:{'notes/a.txt':a,'notes/b.txt':b};
+   const matching=index===1&&vary?['notes/a.txt']:['notes/b.txt'];
+   if(index===2&&vary){folder['notes/c.txt']=id==='urgent-files'?'Production has stopped. Please intervene immediately.':'Despite a fiddly setup, I recommend this and would buy it again.';matching.push('notes/c.txt');}
+   return {args:[],folder,expected:'done',expectedFiles:{...folder,'report.json':JSON.stringify({[key]:matching})}};
+  });
   add(id,'directory-reducer','{}','string','', 'Return "done" after inspecting the first note. Do not write a report.',goal,examples,{reducer:true});
  }
  return rows;
