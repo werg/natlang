@@ -145,6 +145,57 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     for path in verified_turns:
         if Path(path).is_file() and not current_program_turns(path):
             raise ValueError(f'retired program/prompt snapshot must be replayed before training: {path}')
+    # The two approved folder-improvement replacement lanes reused turn IDs
+    # across different runtime APIs. Keep source artifacts immutable, but create
+    # a hash-pinned derived view with lane-qualified IDs before any dedup or
+    # rehearsal stage can mistake those examples for the same record.
+    reviewed_identity_lanes = {
+        'data/teacher/self-improvement/folder-revisions-v4-reviewed-v1/verified-turns.jsonl':
+            'folder-revisions-v4-reviewed-v1',
+        'data/teacher/self-improvement/folder-api-v2-reviewed-v1/verified-turns.jsonl':
+            'folder-api-v2-reviewed-v1',
+    }
+    reviewed_turn_identity_derivations = []
+    derived_paths = {}
+    reviewed_replacement_pins = {}
+    for replacement in resolved_turn_replacements:
+        relative = replacement['replacement']
+        if relative not in reviewed_identity_lanes:
+            continue
+        pin = (replacement['replacement_sha256'], replacement['review_manifest'],
+               replacement['review_manifest_sha256'])
+        if relative in reviewed_replacement_pins and reviewed_replacement_pins[relative] != pin:
+            raise ValueError(f'inconsistent reviewed identity pins for {relative}')
+        reviewed_replacement_pins[relative] = pin
+    verified_turn_paths = {str(Path(path).resolve()) for path in verified_turns}
+    for relative, lane in reviewed_identity_lanes.items():
+        source_path = str((repo / relative).resolve())
+        if source_path not in verified_turn_paths:
+            continue
+        if relative not in reviewed_replacement_pins:
+            raise ValueError(f'included reviewed lane lacks resolver approval evidence: {relative}')
+        replacement_sha256, review_manifest_relative, review_manifest_sha256 = reviewed_replacement_pins[relative]
+        output = f'{r}/reviewed-lane-identities/{lane}.turns.jsonl'
+        output_manifest = f'{output}.manifest.json'
+        helper = f'{p}/scripts/namespace_reviewed_turn_identities.py'
+        review_manifest = f'{p}/{review_manifest_relative}'
+        add(f'namespace-reviewed-turn-identities-{lane}', py([
+            helper, '--root', p, '--input', f'{p}/{relative}', '--source-relative', relative,
+            '--lane', lane, '--expected-file-sha256', replacement_sha256,
+            '--review-manifest', review_manifest,
+            '--expected-manifest-sha256', review_manifest_sha256,
+            '--output', output, '--manifest-out', output_manifest]),
+            [helper, f'{p}/{relative}', review_manifest], [output, output_manifest])
+        derived_paths[source_path] = output
+        reviewed_turn_identity_derivations.append({
+            'lane': lane, 'source': relative, 'source_sha256': replacement_sha256,
+            'review_manifest': review_manifest_relative,
+            'review_manifest_sha256': review_manifest_sha256,
+            'output': output, 'output_manifest': output_manifest,
+            'identity': 'lane + review manifest SHA + source file SHA + original turn ID + raw source row SHA',
+        })
+    if derived_paths:
+        verified_turns = [derived_paths.get(path, path) for path in verified_turns]
     default_static = [repo / 'data/teacher/source-backed/static.manifest.json',
                       repo / 'data/teacher/recovered/static.manifest.json',
                       repo / 'data/teacher/directory-expansion/static.manifest.json',
@@ -402,6 +453,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             'existing_teacher_results': teacher_results,
             'generated_failure_candidates': generated_failure_inventory,
             'resolved_training_turn_replacements': resolved_turn_replacements,
+            'reviewed_turn_identity_derivations': reviewed_turn_identity_derivations,
             'coalesced_training_turn_input_aliases': turn_input_aliases,
             'dpo_pair_build': {'stage': 'build-existing-preferences', 'training_started': False,
                               'policy': 'Current-runtime causal pairs only; source/migration holds are not negative labels. Student rendering/split/token audits required before DPO.'} if teacher_results else None,

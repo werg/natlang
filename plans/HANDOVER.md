@@ -1,3 +1,31 @@
+## Legacy lane identity collision fixed in derived training view — 2026-10-01 15:50 UTC
+
+Root independently verified125rows across approved folder-revisions-v4(66) and folder-api-v2(59) replacements. They share25original turn IDs but different model-visible contexts. Downstream rehearsal deduplicates IDs, so original IDs could silently suppress one lane. New `scripts/namespace_reviewed_turn_identities.py` derives lane/source-file/review-manifest/original-ID/raw-row identities; original row payload and lineage remain unchanged except derived ID and explicit metadata. Root round-trip/hash receipt: `runs/data-lineage-20260930/reviewed-lane-identities-proposal-v1/root-identity-review.json`. Both source files and approval manifests remain immutable.
+
+Pipeline adds a derived stage only for these exact included approved lanes, before normalization/rehearsal. Resolver pins apply even to direct approved inputs. All evidence/output paths are checked before mutation; output run dirs can be outside repository. No full pipeline, tests or training run. Existing unrelated improvement lane changes preserved.
+
+Recipe30 remains immutable draft. Two older generated snapshot trajectories lack complete invocation linkage: materializer emits zero turns, retains raw rows; separate materializable attempts exist, so no program-level drop. Invocation IDs already present in modern collector; do not invent missing historical ownership. Pre-render decision mix30.70% includes source overlaps and is not a final deduplicated25% proof.
+
+---
+
+## User correction: collection deadlines must be opt-in — 2026-10-01 15:42 UTC
+
+User asked whether proposed deadlines are language semantics or training collection controls and expressed skepticism about blanket timeouts. They are collector-only, never language semantics. **Do not deploy the proposed default180s request/250s cycle limits.** Source patch is being revised to opt-in configurable deadlines. Preserve phase telemetry, proper cancellation forwarding and fatal-deadline evidence handling when explicitly configured. No updated source/runtime has been deployed; runtime23 staging is provisional and must be refreshed after this revision.
+
+Existing supervisor300s no-checkpoint watchdog is also unable to prove a provider is stuck rather than productive. Do not justify a shorter universal cutoff from partial-only observed timing: those intervals include semaphore waiting and planning/action processing, not isolated provider latency. Continue investigating stalls with phase evidence; retain incomplete attempts without semantic rejection or DPO-negative promotion. Current teachers continue unchanged.
+
+---
+
+## Provider stall investigation and deadline review — 2026-10-01 15:33 UTC
+
+The Luna293 incident is not proven infrastructure failure. Exact saved-prefix replay matches all 17 requests and reaches request18 in354ms; historical logs omit the pending provider phase. Confirmed collector defects are missing provider cancellation/deadlines and optional guidance that these queues never enabled.
+
+Root chose **180s individual Pi request, 250s shared preparation/planning/action cycle, and 15s bounded cleanup**. A pair of separate180s deadlines could exceed the300s supervisor inactivity window, so the shared cycle is necessary. No fake progress heartbeat or Python supervisor change. Deadline errors must bypass planning fallback and implicit whole-case transport retry. Native eval can convert child errors into ordinary tool failures, so collector must retain the first fatal provider deadline and reject before admitting a row or deleting its partial, even if a parent handles that child failure.
+
+These changes are still source/staging work, not deployed. Quality agent's initial runtime23 clone must be refreshed after final cycle/latch source freeze and independently reviewed. Keep20/21/22 immutable. Current teachers392661/483514/483515 and waiting controllers617447/580812 continue unchanged; monitor584649 reports no alerts at15:32. Next actual hourly investigation16:08:45UTC.
+
+---
+
 ## 15:08 sweep; Luna stall and masked prompt bug — 2026-10-01 15:12 UTC
 
 Fullsweep15:08:45.534UTC; next **16:08:45UTC /18:08 Berlin**.0blockingreadererrors, main821savedaggregaterows/788admitted/33reject/6506approveddecisions (notallnewcases). Bonsaidelta9parentbatches/36exactresults:35admitted,1reject,158approveddecisions,0missing/sourceerrors. GPU100%,container2.94GiB/6GiB,60GiBfree. Canonicalevents106finishes/1newnon-success: Lunacase293below. Agentreviewingnewrejections now. Rootremainsactive.

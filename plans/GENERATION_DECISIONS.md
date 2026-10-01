@@ -1519,3 +1519,22 @@ Required default source paths now resolve through strictly approved catalog repl
 - Foundmissingproviderdeadline/cancellationforwarding. Concrete source-onlytimeout/phasepatchbeingreviewed; preserveoriginalfrozenruntimes and delayedtransportretrybehavior, exclude implicitcase retryonnewtypeddeadline. Future23handoffrequiresfullrootreview.
 - Found prior3guidancebulletschangedunusedAPPROACHprompt; supervisorneverenabledoptionalguide. Correct claim andwireminimalguidanceintoactualdefaultprompt in future runtime ratherthantreatingunusedtextasdeployedfix.
 - Hourlysweep15:08deltaBonsai36results/35accepted1reject/158decisions; one newLunastall investigated. Next16:08UTC, continuingactivefollow-through.
+
+## 2026-10-01 15:33 UTC — Bound logical provider cycles and preserve fatal timeout evidence
+
+- Attribute Luna293 cautiously: provider stall suspected, exact historical phase unknown. Missing cancellation/deadline handling is a confirmed system bug.
+- Choose180s request plus250s shared prepare/plan/action cycle and15s cleanup, below300s inactivity watchdog. Do not alter supervisor or fake activity.
+- Explicit typed deadline propagation through planning fallback and a collector fatal-error latch are required: native eval can turn child errors into tool observations. An incomplete deadline attempt must retain its partial and cannot become an admitted success or implicit case retry.
+- Initial runtime23 staging is provisional until cycle/latch source freeze and independent review. Active teachers and frozen20/21/22 remain unchanged.
+
+## 2026-10-01 15:42 UTC — Supersede proposed blanket deadline defaults
+
+- User is skeptical of blanket timeouts and asked about language semantics. These controls belong only to resource management in teacher collection.
+- Supersede15:33 proposed180s/250s defaults before deployment: deadline settings become opt-in, with explicit provenance only when configured. Preserve cancellation, phase logging and terminal handling of configured deadline failures.
+- Existing300s supervisor inactivity limit cannot prove provider stalling. Partial observed intervals are not isolated request latency; do not use them to impose universal cutoffs or semantic rejection labels. Runtime23 staging remains provisional; active generation unchanged.
+
+## 2026-10-01 15:50 UTC — Preserve colliding legacy lanes explicitly
+
+- Two approved legacy replacement lanes reuse25IDs with different contexts. Rehearsal-ID dedup could silently drop examples; derived lane/source/review/row identities preserve both with original lineage.
+- Root verifies125unique derived IDs,25shared original IDs, exact payload round-trips and unchanged source/review hashes. Wire only exact included approved lanes; preserve original artifacts.
+- Two historical unlinked generated trajectories remain linkage-review pending and emit zero training turns; do not drop other attempts of the same program or fabricate ownership. No model/test/training run.
