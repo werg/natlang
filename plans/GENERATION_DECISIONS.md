@@ -1538,3 +1538,10 @@ Required default source paths now resolve through strictly approved catalog repl
 - Two approved legacy replacement lanes reuse25IDs with different contexts. Rehearsal-ID dedup could silently drop examples; derived lane/source/review/row identities preserve both with original lineage.
 - Root verifies125unique derived IDs,25shared original IDs, exact payload round-trips and unchanged source/review hashes. Wire only exact included approved lanes; preserve original artifacts.
 - Two historical unlinked generated trajectories remain linkage-review pending and emit zero training turns; do not drop other attempts of the same program or fabricate ownership. No model/test/training run.
+
+## 2026-10-01 15:58 UTC — Approve runtime23 with opt-in controls only
+
+- Root verified621frozen hashes and1054scripted native references with0reject/unlinked. Future queues use actual minimal default guidance, phase telemetry and cancellation; deadlines disabled by default and in plans.
+- Correct inherited22prompt source/dist mismatch without changing old snapshot:23 preserves existing compiled optional guidance and synchronizes its source. Preserve all unrelated dirty changes.
+- Replace only waiting controllers with671283Luna/671284Bonsai, immutable plans and future23storage approvals. Current20teachers/active recovery approvals unchanged. Exact historical failure exclusions retained, no blind retry.
+- Keep real stream-progress monitoring a separate proposal; no fake activity, universal latency cutoff, tests or model calls.

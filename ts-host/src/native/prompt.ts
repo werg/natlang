@@ -72,13 +72,6 @@ export const TOOLS_PROMPT_AT_NL_DEPTH_LIMIT = TOOLS_PROMPT.split('\n\n').map(par
     'The stopping check runs on the initial state before any step. Initialize completion flags so the initial state is not already finished. ' +
     'For pagination, start with more: true, accumulate each response page, advance the page number, and stop only when the response says there are no more pages.' : paragraph).join('\n\n');
 
-/** Preserve additional application instructions while replacing the standard tool guidance at the limit. */
-export function promptAtNlDepthLimit(prompt: string): string {
-  return prompt.includes(TOOLS_PROMPT) ? prompt.replace(TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT) :
-    prompt + '\n\n' + NL_DEPTH_LIMIT_NOTICE;
-}
-
-
 /**
  * How calls usually go, schematically: the kinds of work a call does and the tool calls each takes. Placeholders in
  * angle brackets stand for whatever a call has, so the shapes carry over without a worked example to copy.
@@ -96,3 +89,25 @@ How a call usually goes (a schematic: <angle brackets> stand for whatever this c
 - Dividing work among helpers: pass each helper the actual item or extracted page slice it should examine, together with the shared criterion and necessary context. Adding different page numbers to the same full input does not give helpers different slices. Reuse results already recorded in transcript.
 - Asking a helper: a function the instructions name for part of the work is awaited like any function. eval({ code: "const part = await <helper>(<question>); part" }).
 - Finishing: return_result({ status: "success", value: <value of the declared type> }), or return the value from an eval and reply done. When something the instructions rely on is absent: return_result({ status: "blocked", reason: "<what is missing>" }); when they ask for the impossible, status "failed". Never write code or the result into your reply instead of calling a tool.`;
+
+/** Small always-on guidance for evidence selection and preserving structured outputs. */
+export const GENERATION_GUIDANCE = `
+
+For a large input, use eval to select the fields or subtree relevant to the question before printing it; read more only when needed.
+When dividing work, pass each helper the actual item or extracted slice it should inspect, with the shared criterion and required context.
+For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path.
+Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
+`;
+const GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT = `
+
+For a large input, use eval to select the fields or subtree relevant to the question before printing it; read more only when needed.
+For a tree edit, deep-copy the input, change only the requested leaf at its existing path, preserve wrappers and siblings, then inspect that path.
+Before returning, check that each value answers the requested predicate and matches its declared type; for booleans, verify whether true or false expresses your conclusion.
+`;
+
+/** Preserve custom instructions while removing both standard prompts' unavailable child-call guidance at the depth limit. */
+export function promptAtNlDepthLimit(prompt: string): string {
+  if (!prompt.includes(TOOLS_PROMPT)) return prompt + '\n\n' + NL_DEPTH_LIMIT_NOTICE;
+  return prompt.replace(TOOLS_PROMPT, TOOLS_PROMPT_AT_NL_DEPTH_LIMIT)
+    .replace(GENERATION_GUIDANCE, GENERATION_GUIDANCE_AT_NL_DEPTH_LIMIT);
+}

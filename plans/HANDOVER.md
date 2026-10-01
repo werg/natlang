@@ -1,3 +1,17 @@
+## Runtime23 approved for next queues; deadlines disabled — 2026-10-01 15:58 UTC
+
+Root independently verified frozen23 manifest **0bdc4ce342cea9ef172e29e0bd8ceceaf223d84add192d95433b7f8dd46ddd03**: all618frozen22 files accounted for, exactly8owned existing source/dist/declaration changes and3new provider helper files;621hashes match. Unrelated fixture/compiler/program-improver changes excluded. Found inherited22 prompt source lacked three optional APPROACH bullets present in compiled JS;23 synchronizes source to existing compiled optional text, preserving compiled TOOLS/FUNCTION/APPROACH strings. Always-used minimal guidance is now actually appended to default collector prompt and removes helper advice at the NL depth limit.
+
+**No request/action-cycle deadline is enabled by default or in either future plan.** They are opt-in collector resource controls, not language semantics. Phase logging and cancellation forwarding are active for Pi collection in23; configured deadline errors remain terminal with first-error latch/partial retention.15s bounded session cleanup is separately identified and best effort; noncooperative SDK work may retain OS handles, supervisor remains process backstop. Stream-progress exposure is a separate read-only proposal, not implemented.
+
+Root scripted native reference replay under the new actual default prompt: **541Luna/5862approved decisions,512freshBonsai/2948,exactoriginal48repair/11;1054reference replays,0reject/unlinked,0model calls**. Source history/golds unchanged; no reference data published as model generation. Receipt `runs/generation-check-20261001-resume/root-runtime23-reference-review.json` SHA **891e0c662495c91286bcdbd1f3826116d7d147587ad052fff55362c59658a4a1**.
+
+Stopped ONLY waiting controllers617447/580812 after exact argv, no successor workers/journals and launch state checks. New **Luna671283** planv8 SHA **23bf8c180777e4a20181d0e64fea7f6e64292ae4174f275624a48177249d0312**; **Bonsai671284** planv2 SHA **14f6cd2288134d5c0b6156862177874dcee08affb05b12c3ea1097224efa28d5**. Both wait; five exact Luna failures and one exact Bonsai storage failure exclusions unchanged. New future storage approvals4/5/6 are23; active approvals1/2/3stay20. All621runtime files/source/reference receipts pinned. Registry updated under authority lock, real controller checks0alerts. Launch/preparation/health receipts under `runs/generation-check-20261001-resume/runtime23-*`.
+
+**Current teachers unchanged: Bonsai392661,Luna483514/483515 remain20.** Monitor584649 and server watcher368408 continue. Next full investigation16:08:45UTC; root remains active. Recipe31 default-input draft is being prepared with lane identity stages, no training/model/GPU run.
+
+---
+
 ## Legacy lane identity collision fixed in derived training view — 2026-10-01 15:50 UTC
 
 Root independently verified125rows across approved folder-revisions-v4(66) and folder-api-v2(59) replacements. They share25original turn IDs but different model-visible contexts. Downstream rehearsal deduplicates IDs, so original IDs could silently suppress one lane. New `scripts/namespace_reviewed_turn_identities.py` derives lane/source-file/review-manifest/original-ID/raw-row identities; original row payload and lineage remain unchanged except derived ID and explicit metadata. Root round-trip/hash receipt: `runs/data-lineage-20260930/reviewed-lane-identities-proposal-v1/root-identity-review.json`. Both source files and approval manifests remain immutable.

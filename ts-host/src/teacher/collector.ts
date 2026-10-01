@@ -8,7 +8,7 @@ import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
 import { TypeScriptEnvironment } from '../environment.js';
 import { NativeToolAgent } from '../native/agent.js';
-import { TOOLS_PROMPT } from '../native/prompt.js';
+import { GENERATION_GUIDANCE, TOOLS_PROMPT } from '../native/prompt.js';
 import { NodeNativeRuntime } from '../node-runtime.js';
 import { Folder } from '../native/scoped-fs.js';
 import { dump } from '../native/values.js';
@@ -25,12 +25,18 @@ import { checkAuthoring, type AuthoringSpec } from './authoring.js';
 import { WorldBridge, type WorldSpec } from './world-bridge.js';
 import { ANSWER_COMPARISON_VERSION } from '../evaluation/oracles.js';
 import type { ModelTurn, ModelTurnRequest } from '../contracts.js';
+import { closeProviderSession, ProviderActionCycleTimeoutError, ProviderRequestTimeoutError,
+  withProviderActionCycle, withProviderRequestDeadline } from './provider-deadline.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
 export const TEACHER_PARTIAL_VERSION = 'natlang.teacher_partial.native/1';
 const TOOL_SCHEMA = 'scope-eval-v1';
 export const EXECUTION_PLAN_VERSION = 'execution-plan-tool/2';
+export const PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION = 'pi-provider-request-timeout/1';
+export const PROVIDER_ACTION_CYCLE_POLICY_VERSION = 'pi-provider-action-cycle/1';
+const PROVIDER_CLEANUP_TIMEOUT_MS = 15_000;
+const MAX_PROVIDER_TIMEOUT_MS = 2_147_483_647;
 // The plan is the turn's training reasoning: it says what decides the step (for a conclusion, the reasons that settle
 // it) before the step, so a concluding turn does not train a conclusion without its reasons.
 export const EXECUTION_PLAN_PROMPT = 'Before taking the next action, make a concise execution plan from the current ' +
@@ -54,6 +60,10 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
    * greedily, can skip their thinking. */
   temperature?: number;
   endpoint?: string; provider?: string; piOptions?: Record<string, unknown>;
+  /** Optional collection-specific maximum wall time for one Pi provider request. */
+  providerRequestTimeoutMs?: number;
+  /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
+  providerActionCycleTimeoutMs?: number;
   request?: Record<string, unknown>; cacheStableTools?: boolean;
   /** Elicit one required execution_plan tool call before every model action and use it as the turn's reasoning. */
   executionPlans?: boolean; executionPlanTokens?: number;
@@ -136,7 +146,14 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     tool_surface_sha256: options.toolSurfaceSha256, seed_policy: { mode: 'derived', root: options.rootSeed },
     system_prompt_sha256: sha256(options.systemPrompt), context_tokens: options.contextTokens,
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
-    ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {} } : {}),
+    ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
+      ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
+        version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
+        retry: 'no-case-retry' } }),
+      ...(options.providerActionCycleTimeoutMs === undefined ? {} : { provider_action_cycle: {
+        version: PROVIDER_ACTION_CYCLE_POLICY_VERSION, timeout_ms: options.providerActionCycleTimeoutMs,
+        retry: 'no-case-retry' } }),
+      provider_cleanup: { timeout_ms: PROVIDER_CLEANUP_TIMEOUT_MS, scope: 'session-close-best-effort' } } : {}),
     ...(options.maxTurns === undefined ? {} : { max_turns: options.maxTurns }),
     ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
     ...(options.cacheStableTools ? { cache_stable_tools: true } : {}),
@@ -148,8 +165,15 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
     ...(options.judgeModel ? { judge: { model: options.judgeModel.modelId,
       ...(options.judgeModel.endpoint ? { endpoint_sha256: sha256(options.judgeModel.endpoint) } : {}),
       transport: options.judgeModel.provider ? 'pi-provider' : 'openai-compatible',
-      ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
-        pi_options: options.judgeModel.piOptions ?? {} } : {}) } } : {}) };
+    ...(options.judgeModel.provider ? { provider: options.judgeModel.provider,
+        pi_options: options.judgeModel.piOptions ?? {},
+        ...(options.providerRequestTimeoutMs === undefined ? {} : { provider_request_timeout: {
+          version: PROVIDER_REQUEST_TIMEOUT_POLICY_VERSION, timeout_ms: options.providerRequestTimeoutMs,
+          retry: 'no-case-retry' } }),
+        ...(options.providerActionCycleTimeoutMs === undefined ? {} : { provider_action_cycle: {
+          version: PROVIDER_ACTION_CYCLE_POLICY_VERSION, timeout_ms: options.providerActionCycleTimeoutMs,
+          retry: 'no-case-retry' } }),
+        provider_cleanup: { timeout_ms: PROVIDER_CLEANUP_TIMEOUT_MS, scope: 'session-close-best-effort' } } : {}) } } : {}) };
 }
 
 export function resultMatches(row: unknown, record: ProgramRecord, expected: Record<string, unknown>): row is TeacherRow {
@@ -302,6 +326,12 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         break;
       } catch (error) {
         if (signal?.aborted) return;
+        if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError) {
+          await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
+            JSON.stringify({ index: item.index, program_id: item.record.id, code: error.code,
+              error: `${error.name}: ${error.message}`, timeout: error.metadata }) + '\n');
+          break;
+        }
         const limited = rateLimited(error);
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 8) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
@@ -480,7 +510,8 @@ export function withExecutionPlans(send: (request: ModelTurnRequest) => Promise<
       } catch (error) {
         // An outage or rate limit fails the job, which resumes from its journal: skipping the plan would leave a
         // training turn without reasoning.
-        if (transportFailure(error)) throw error;
+        if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError ||
+            transportFailure(error)) throw error;
         // Required tool selection is not universal. Otherwise planning is best-effort: the ordinary action still runs.
         break;
       }
@@ -520,6 +551,14 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
   if (config.judgeModel?.modelId === config.modelId) throw new Error('teacher and judge must use distinct model IDs');
   for (const [name, value] of Object.entries({ modelConcurrency: config.modelConcurrency, maxModelRequests: config.maxModelRequests }))
     if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be positive`);
+  if (config.providerRequestTimeoutMs !== undefined &&
+      (!Number.isSafeInteger(config.providerRequestTimeoutMs) || config.providerRequestTimeoutMs < 1 ||
+       config.providerRequestTimeoutMs > MAX_PROVIDER_TIMEOUT_MS))
+    throw new RangeError(`providerRequestTimeoutMs must be an integer from 1 to ${MAX_PROVIDER_TIMEOUT_MS}`);
+  if (config.providerActionCycleTimeoutMs !== undefined &&
+      (!Number.isSafeInteger(config.providerActionCycleTimeoutMs) || config.providerActionCycleTimeoutMs < 1 ||
+       config.providerActionCycleTimeoutMs > MAX_PROVIDER_TIMEOUT_MS))
+    throw new RangeError(`providerActionCycleTimeoutMs must be an integer from 1 to ${MAX_PROVIDER_TIMEOUT_MS}`);
   const slots = config.modelConcurrency ? new KvBudget(config.modelConcurrency) : undefined;
   const kv = config.kvTokens ? new KvBudget(config.kvTokens) : undefined;
   return async (item, expected, signal) => {
@@ -539,52 +578,97 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       model: judgeConfig.modelId, piOptions: judgeConfig.piOptions }) : undefined;
     let ready: Promise<unknown> | undefined;
     let judgeReady: Promise<unknown> | undefined;
-    const send = session ? async (request: ModelTurnRequest) => {
-      await (ready ??= session.prepare());
-      return session.turn(request);
+    let judgeSent = 0;
+    let sent = 0;
+    let fatalProviderDeadline: ProviderRequestTimeoutError | ProviderActionCycleTimeoutError | undefined;
+    const providerFatalAbort = new AbortController();
+    const rememberProviderDeadline = (error: unknown) => {
+      if (!fatalProviderDeadline && (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError)) {
+        fatalProviderDeadline = error;
+        providerFatalAbort.abort(error);
+      }
+      return fatalProviderDeadline ?? error;
+    };
+    const providerParentSignal = () => signal ? AbortSignal.any([signal, providerFatalAbort.signal]) : providerFatalAbort.signal;
+    const providerActionCycle = <T>(options: { role: 'teacher' | 'judge'; provider: string;
+      parentSignal?: AbortSignal; call(signal: AbortSignal): Promise<T> }) =>
+      withProviderActionCycle({ ...options, timeoutMs: config.providerActionCycleTimeoutMs })
+        .catch(error => { throw rememberProviderDeadline(error); });
+    const send = session ? async (request: ModelTurnRequest, parentSignal = signal) => {
+      const requestOrdinal = sent;
+      await (ready ??= withProviderRequestDeadline({ role: 'teacher', provider: config.provider!, phase: 'provider_prepare',
+        requestOrdinal: null, timeoutMs: config.providerRequestTimeoutMs,
+        parentSignal, call: () => session.prepare() }));
+      return withProviderRequestDeadline({ role: 'teacher', provider: config.provider!, phase: 'provider_turn', requestOrdinal,
+        timeoutMs: config.providerRequestTimeoutMs, parentSignal,
+        call: requestSignal => session.turn(request, requestSignal) });
     } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       request: config.request });
     try {
-    let sent = 0, exhausted = false;
-    const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false) => {
-      if (signal?.aborted) throw new Error('collection cancelled');
+    let exhausted = false;
+    const interrupted = (actionSignal?: AbortSignal) => actionSignal?.reason instanceof Error ? actionSignal.reason :
+      new Error('collection cancelled');
+    const admittedSend = async (request: ModelTurnRequest, sender = send, ownsSlot = false,
+      actionSignal = signal) => {
+      if (fatalProviderDeadline) throw fatalProviderDeadline;
+      if (actionSignal?.aborted) throw interrupted(actionSignal);
       if (slots && !ownsSlot) await slots.acquire(1);
       try {
-        if (signal?.aborted) throw new Error('collection cancelled');
+        if (fatalProviderDeadline) throw fatalProviderDeadline;
+        if (actionSignal?.aborted) throw interrupted(actionSignal);
         const need = requestTokens(request);
         if (kv) await kv.acquire(need);
         try {
-          if (signal?.aborted) throw new Error('collection cancelled');
+          if (fatalProviderDeadline) throw fatalProviderDeadline;
+          if (actionSignal?.aborted) throw interrupted(actionSignal);
           // Waiting work has not sent a request. Count only after both capacity gates admit it.
           if (config.maxModelRequests && sent >= config.maxModelRequests) {
             exhausted = true;
             throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
           }
           sent++;
-          return await sender(request);
+          try { return await sender(request); }
+          catch (error) { throw rememberProviderDeadline(error); }
         } finally { if (kv) kv.release(need); }
       } finally { if (slots && !ownsSlot) slots.release(1); }
     };
-    const teacherSend = (request: ModelTurnRequest) => admittedSend(request, send, true);
-    const teacherTurn = config.executionPlans ? withExecutionPlans(teacherSend,
-      { maxTokens: config.executionPlanTokens }) : teacherSend;
+    const teacherSend = (request: ModelTurnRequest, actionSignal = signal) =>
+      admittedSend(request, (value: ModelTurnRequest) => send(value, actionSignal), true, actionSignal);
+    const teacherTurn = (request: ModelTurnRequest, actionSignal = signal) => {
+      const action = config.executionPlans ? withExecutionPlans((value: ModelTurnRequest) => teacherSend(value, actionSignal),
+        { maxTokens: config.executionPlanTokens }) : (value: ModelTurnRequest) => teacherSend(value, actionSignal);
+      return action(request);
+    };
     const transport = async (request: ModelTurnRequest, persist: (response: ModelTurn) => Promise<void>) => {
       // Finish a plan/action pair before admitting another sibling's turn. Otherwise a large
       // Promise.all can spend the entire budget on plans without saving any completed actions.
+      if (fatalProviderDeadline) throw fatalProviderDeadline;
       if (slots) await slots.acquire(1);
       try {
-        const response = await teacherTurn(request);
+        if (fatalProviderDeadline) throw fatalProviderDeadline;
+        const response = await (config.provider ? providerActionCycle({ role: 'teacher', provider: config.provider,
+          parentSignal: providerParentSignal(), call: actionSignal => teacherTurn(request, actionSignal) }) : teacherTurn(request));
         // Keep the pair's slot until its response is durable. Otherwise a waiting sibling can
         // exhaust the request budget and end the run before this completed action is saved.
         await persist(response);
         return response;
       } finally { if (slots) slots.release(1); }
     };
-    const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest) => {
-      await (judgeReady ??= judgeSession.prepare());
-      return judgeSession.turn(request);
+    const judgeTransport = judgeConfig ? judgeSession ? async (request: ModelTurnRequest, parentSignal = signal) => {
+      const requestOrdinal = ++judgeSent;
+      await (judgeReady ??= withProviderRequestDeadline({ role: 'judge', provider: judgeConfig.provider!, phase: 'provider_prepare',
+        requestOrdinal: null, timeoutMs: config.providerRequestTimeoutMs,
+        parentSignal, call: () => judgeSession.prepare() }));
+      return withProviderRequestDeadline({ role: 'judge', provider: judgeConfig.provider!, phase: 'provider_turn', requestOrdinal,
+        timeoutMs: config.providerRequestTimeoutMs, parentSignal,
+        call: requestSignal => judgeSession.turn(request, requestSignal) });
     } : openAICompatibleModelTurn({ endpoint: judgeConfig.endpoint!, model: judgeConfig.modelId }) : undefined;
-    const judge = judgeTransport ? modelOracleJudge(request => admittedSend(request, judgeTransport)) : undefined;
+    const judge = judgeTransport ? async (input: Parameters<ReturnType<typeof modelOracleJudge>>[0]) => {
+      const grade = (actionSignal: AbortSignal | undefined) => modelOracleJudge(request =>
+        admittedSend(request, value => judgeTransport(value, actionSignal), false, actionSignal))(input);
+      return judgeConfig!.provider ? providerActionCycle({ role: 'judge', provider: judgeConfig!.provider,
+        parentSignal: providerParentSignal(), call: actionSignal => grade(actionSignal) }) : grade(signal);
+    } : undefined;
     const trajectory: Record<string, unknown>[] = [];
     const partialPath = join(config.jobs, `${jobKey(item)}.partial.json`);
     const saved = await loadPartial(partialPath, item, expected);
@@ -597,6 +681,7 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     let journalWrites = Promise.resolve();
     for (const turn of partial.turns) unused.set(turn.request_sha256, [...unused.get(turn.request_sha256) ?? [], turn]);
     const driver = async (request: ModelTurnRequest): Promise<ModelTurn> => {
+      if (fatalProviderDeadline) throw fatalProviderDeadline;
       const requestedAt = new Date().toISOString();
       const requestSha256 = sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== "invocation_id"))));
       const recorded = unused.get(requestSha256)?.shift();
@@ -628,7 +713,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       return response;
     };
     const runId = programRunId(item.index, expected);
-    const run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) });
+    let run: ProgramRun;
+    try { run = await executeProgram(item.record, driver, { ...config, runId, signal, ...(judge ? { judge } : {}) }); }
+    catch (error) { throw fatalProviderDeadline ?? error; }
+    if (fatalProviderDeadline) throw fatalProviderDeadline;
     if (exhausted) throw new Error(`whole-case model request budget exceeded (${config.maxModelRequests})`);
     const row = programRow(item.record, config.modelId, runId, expected, run, trajectory,
       handoff ? { handoff: { kind: handoff.kind, source: handoff.source, run_id: runId } } : {});
@@ -636,7 +724,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       run.trace.map(event => JSON.stringify(event)).join('\n') + '\n');
     await removeIfPresent(partialPath);
     return row;
-    } finally { await session?.close(); await judgeSession?.close(); }
+    } finally {
+      await Promise.all([
+        session ? config.provider ? closeProviderSession(session, config.provider) : session.close() : undefined,
+        judgeSession ? judgeConfig?.provider ? closeProviderSession(judgeSession, judgeConfig.provider) : judgeSession.close() : undefined,
+      ]);
+    }
   };
 }
 
@@ -768,4 +861,4 @@ export async function defaultToolSurfaceHash(root = fileURLToPath(new URL('../..
   return sha256(Buffer.concat(chunks.flatMap((chunk, index) => index ? [Buffer.from([0]), chunk] : [chunk])));
 }
 
-export const defaultSystemPrompt = TOOLS_PROMPT;
+export const defaultSystemPrompt = `${TOOLS_PROMPT}${GENERATION_GUIDANCE}`;

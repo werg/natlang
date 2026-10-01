@@ -38,6 +38,8 @@ async function main(): Promise<void> {
       '         --thinking-tokens N --reasoning-effort LEVEL --approach-guide --temperature T (default 0: greedy)\n' +
       '         --execution-plans [--execution-plan-tokens N]  plan before each action and retain it as reasoning\n' +
       '         --transport-retries N --retry-delay-ms N --worker-stagger SECONDS --system-file PATH\n' +
+      '         --provider-request-timeout-ms N --provider-action-cycle-timeout-ms N\n' +
+      '           (optional Pi provider collection resource controls; off by default)\n' +
       '         --model-concurrency N --max-model-requests N  (limits include all child calls)\n' +
       '         --cache-stable-tools --collection-role student|teacher\n' +
       '         --file-tools all|editor|files  (the file tools directory reducers offer; default all)\n' +
@@ -70,6 +72,10 @@ async function main(): Promise<void> {
     ...(flags.has('--temperature') ? { temperature: Number(flags.get('--temperature')) } : {}),
     ...(flags.has('--model-concurrency') ? { modelConcurrency: integer(flags, '--model-concurrency', 2) } : {}),
     ...(flags.has('--max-model-requests') ? { maxModelRequests: integer(flags, '--max-model-requests', 128) } : {}),
+    ...(flags.has('--provider-request-timeout-ms') ?
+      { providerRequestTimeoutMs: integer(flags, '--provider-request-timeout-ms', 0) } : {}),
+    ...(flags.has('--provider-action-cycle-timeout-ms') ?
+      { providerActionCycleTimeoutMs: integer(flags, '--provider-action-cycle-timeout-ms', 0) } : {}),
     transportRetries: integer(flags, '--transport-retries', 8),
     ...(flags.has('--worker-stagger') ? { workerStaggerMs: integer(flags, '--worker-stagger', 0) * 1000 } : {}),
     retryDelayMs: Number(flags.get('--retry-delay-ms') ?? 5000), systemPrompt,
