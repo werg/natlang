@@ -1,3 +1,13 @@
+## Sweep findings — 2026-10-01 12:35 UTC
+
+Bonsai missingmember48 isconfirmedstoragefailure: `batch-0048.collector.log`SHA0383ccf8b2fc678da7fbfb161212b17bf299ea1fb567e8774c42896bbc1380be hasENOSPCwriteAtomic/worker/Promise.all. Batchfinish11:03:22 preserves49/50/51exactresults; only48mayberepaired, aseparateexplicitinfraexceptionin nextqueue. Notproviderstall orsemanticnegative.
+
+RootindependentMuSiQueproposalreview narrows11to9sourcebridgeholdcandidates. Tennis2hop__85865_86706proposalmissedarticle2whichsaysDjokovicbeatFedererinallfourGrandSlams; goldsupported, modelNadalwrong. Goshen3hop1__374907_183029_831331staysreviewonly: multiplenameanchorsdon'taloneprovealternativevalidfullchains. Rootreceipt `source-hold-adjudication-proposal-v4/root-source-review-v1.json`; centralpolicy/staticsnotyetchanged. SourceholdsarenotDPOlabels.
+
+Futureimproververificationguardbugfixedminimallyin **untracked unrelated** `ts-host/scripts/self-improvement/verify-improvement.mjs`: declaredtrain+validationquality1/gatesnowrequired, instead ofmerelyrecordingfailedtrainstatusandcomparingvalidationtohistoricalscore. Syntax-only `node --check`; no modelreplays/testsrun. Roottwoeditsleftuncommittedtoavoidcommittingentireunrelatedfile. Receipt `folder-turn-source-review/verifier-admission-fix.json`pinspatch/beforeafterhash. Existingqualityagentrefreshingcurrentpolicygzip/modelsnapshotanddraftrecipe26, preservingalllanesandindependentlyauditing33held/59retained; source-holdpublication/readinessstillpending.
+
+---
+
 ## Durable storage recovery enabled — 2026-10-01 12:22 UTC
 
 Monitor **490927** supersedes389123 (`hourly-monitor/launch-v3.json`). Root approved future storage-pause recovery for **five specific queues**: bothactiveLunav4queues, currentBonsai256queue, and bothreviewedLunav5successors. Approvals/pinnedhashes are under `runs/generation-check-20261001-resume/storage-recovery/queue-*-approved-v2.json`, configured in authority `storage_pause_recovery`. Recovery is limited to latestrecordedstoragepause onanunfinisheduniquequeuekey, absentPID/exactcommand, unchangedqueue/supervisor/all618frozenruntimefiles/exactauthoritybinding; requiresatleast4GiBfree. Capturespauseevent/journalhash/oldnewPIDs beforeclaim; crashafterclaimrequiresreview. Stops/otherfailures neverauto-resume. Disablethisconfiguration/stopmonitor forintentionalshutdown.
