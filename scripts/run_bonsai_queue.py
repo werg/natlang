@@ -7,6 +7,7 @@ Restart skips attempted entries; use a new journal for an explicitly reviewed re
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import signal
 import time
@@ -14,10 +15,107 @@ import math
 import random
 import shutil
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 
 OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
+OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/1'
+
+
+class ProviderObservations:
+    """Read only this child's appended, content-free provider events. Log writes are not progress."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        info = self.path.stat() if self.path.exists() else None
+        self.offset = info.st_size if info else 0
+        self.identity = (info.st_dev, info.st_ino) if info else None
+        self.pending = b''
+        self.counts = {}
+        self.requests = {}
+        self.latest_delta_at = None
+        self.invalid_events = 0
+
+    def poll(self):
+        delta = False
+        try:
+            with self.path.open('rb') as source:
+                info = os.fstat(source.fileno())
+                identity = (info.st_dev, info.st_ino)
+                if ((self.identity is not None and identity != self.identity)
+                        or info.st_size < self.offset):
+                    # Rotation/truncation cannot turn old lines into current-child evidence.
+                    self.offset = info.st_size
+                    self.pending = b''
+                    self.invalid_events += 1
+                self.identity = identity
+                source.seek(self.offset)
+                payload = source.read(512 * 1024)
+                self.offset = source.tell()
+        except OSError:
+            return False, {'read_error': True, 'pending_requests': list(self.requests.values())}
+        lines = (self.pending + payload).split(b'\n')
+        self.pending = lines.pop()
+        if len(self.pending) > 65536:
+            self.pending = b''
+            self.invalid_events += 1
+        for line in lines:
+            if len(line) > 65536:
+                continue
+            try:
+                event = json.loads(line)
+            except (ValueError, UnicodeError):
+                continue
+            try:
+                if not isinstance(event, dict) or event.get('event') not in {
+                        'provider_request_phase', 'provider_stream_progress'}:
+                    continue
+                role, provider = event.get('role'), event.get('provider')
+                ordinal = event.get('request_ordinal')
+                if (role not in {'teacher', 'judge'} or not isinstance(provider, str)
+                        or len(provider) > 80 or (ordinal is not None and
+                        (type(ordinal) is not int or ordinal < 1))):
+                    raise ValueError('invalid provider observation identity')
+                if event['event'] == 'provider_request_phase':
+                    phase = event.get('phase')
+                    if phase not in {'provider_prepare', 'provider_turn'}:
+                        continue
+                    key = (role, provider, ordinal, phase)
+                    if event.get('status') == 'started':
+                        if len(self.requests) >= 1024 and key not in self.requests:
+                            raise ValueError('too many pending requests')
+                        self.requests[key] = {'role': role, 'provider': provider,
+                                              'request_ordinal': ordinal, 'phase': phase}
+                    elif event.get('status') in {'completed', 'failed', 'deadline_exceeded',
+                                                'action_cycle_deadline_exceeded', 'collection_aborted'}:
+                        self.requests.pop(key, None)
+                    continue
+                events, size = event.get('deltaEvents'), event.get('deltaBytes')
+                if (event.get('status') not in {'progress', 'completed', 'failed'}
+                        or type(events) is not int or type(size) is not int or events < 0 or size < 0):
+                    raise ValueError('invalid delta counters')
+                started = event.get('startedAt')
+                observed = datetime.fromisoformat(event['observedAt'].replace('Z', '+00:00'))
+                began = datetime.fromisoformat(started.replace('Z', '+00:00'))
+                if (observed.utcoffset() is None or began.utcoffset() is None
+                        or observed < began or observed.timestamp() > time.time() + 5):
+                    raise ValueError('invalid observation timestamp')
+                key = (role, provider, ordinal, started)
+                previous_events, previous_size = self.counts.get(key, (0, 0))
+                if events < previous_events or size < previous_size:
+                    raise ValueError('delta counters regressed')
+                if len(self.counts) >= 4096 and key not in self.counts:
+                    raise ValueError('too many observed requests')
+                self.counts[key] = (events, size)
+                if events > previous_events and size > previous_size:
+                    self.latest_delta_at = max(self.latest_delta_at or 0, observed.timestamp())
+                    delta = True
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                self.invalid_events += 1
+        return delta, {'pending_requests': list(self.requests.values()),
+                       'latest_delta_at': self.latest_delta_at,
+                       'invalid_events': self.invalid_events}
 
 
 def sha256_file(path):
@@ -296,7 +394,8 @@ def failure_cooldown(streak):
 
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
-              provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0):
+              provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
+              no_observation_seconds=0):
     if model_concurrency is None:
         model_concurrency = 1 if provider else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
@@ -372,15 +471,23 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             raise ValueError('entry case_seconds must be a positive integer')
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry)
+        previous_poll, unobserved_seconds, was_waiting = start, 0, False
+        observer = ProviderObservations(entry['log']) if provider else None
+        observation = {'pending_requests': []}
+        observations = []
+        limit_reason = None
         previous_decode = None
         record({'event': 'start', 'key': entry['key'], 'time': time.time(), 'budget_seconds': case_seconds,
-                'max_turns': max_turns})
+                'max_turns': max_turns, 'observation_policy': OBSERVATION_POLICY_VERSION,
+                'no_observation_seconds': no_observation_seconds,
+                'budget_semantics': 'collection_resource_limit; not a language deadline or model-negative label'})
         with Path(entry['log']).open('a') as log:
             child = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             try:
                 for tick in range(math.ceil(case_seconds / 30)):
                     remaining = case_seconds - (time.monotonic() - start)
                     if remaining <= 0:
+                        limit_reason = 'case_wall_budget'
                         raise subprocess.TimeoutExpired(command, case_seconds)
                     try:
                         code = child.wait(timeout=min(30, remaining))
@@ -390,20 +497,45 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         decode = local_decode_progress() if not provider else None
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
                         previous_decode = decode
-                        if current['saved_turns'] != previous['saved_turns']:
-                            last_activity, previous = time.monotonic(), current
-                        elif decoding or (provider and retry_waiting(entry)):
-                            last_activity = time.monotonic()
-                        elif time.monotonic() - last_activity >= 300:
-                            raise TimeoutError('no checkpoint or local decode progress for 300 seconds')
+                        stream_delta, observation = observer.poll() if observer else (False, {'pending_requests': []})
+                        waiting = bool(provider and retry_waiting(entry))
+                        now = time.monotonic()
+                        observations = []
+                        if current['saved_turns'] > previous['saved_turns']:
+                            observations.append('durable_checkpoint')
+                        if decoding:
+                            observations.append('local_decode_delta')
+                        if stream_delta:
+                            observations.append('provider_stream_delta')
+                        previous = current
+                        if observations:
+                            # A delayed log read must not present an old delta as current output.
+                            age = max(0, time.time() - observation['latest_delta_at']) if observations == ['provider_stream_delta'] else 0
+                            last_activity = max(last_activity, now - age)
+                            unobserved_seconds = max(0, now - last_activity)
+                        elif not waiting and not was_waiting:
+                            unobserved_seconds += now - previous_poll
+                        previous_poll, was_waiting = now, waiting
+                        state = 'known_retry_wait' if waiting else (
+                            'observed_output' if observations else 'pending_no_observation')
+                        if (no_observation_seconds and not waiting
+                                and unobserved_seconds >= no_observation_seconds):
+                            limit_reason = 'no_observation_limit'
+                            raise TimeoutError('configured collection no-observation limit elapsed; stuckness unknown')
                         record({'event': 'activity', 'key': entry['key'], 'time': time.time(),
                                 'elapsed_seconds': round(time.monotonic() - start, 1),
+                                'observation_policy': OBSERVATION_POLICY_VERSION,
+                                'observation_state': state, 'observations': observations,
+                                'seconds_since_observed_output': round(now - last_activity, 1),
+                                'no_observation_budget_used_seconds': round(unobserved_seconds, 1),
+                                'provider_observation': observation,
                                 'local_decode_total': decode, **partial_metrics(entry)})
                 else:
+                    limit_reason = 'case_wall_budget'
                     raise subprocess.TimeoutExpired(command, case_seconds)
                 status = 'complete' if code == 0 else 'incomplete'
             except (subprocess.TimeoutExpired, TimeoutError) as error:
-                status, code = ('inactivity_timeout' if isinstance(error, TimeoutError) else 'timeout'), None
+                status, code = ('no_observation_limit' if isinstance(error, TimeoutError) else 'timeout'), None
                 child.terminate()
                 try:
                     child.wait(timeout=10)
@@ -419,6 +551,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     child.wait()
                 raise
         try:
+            if observer:
+                _, observation = observer.poll()
             accounting = output_accounting(entry, runtime)
         except Exception as error:
             accounting = {'version': OUTPUT_ACCOUNTING_VERSION, 'complete': False,
@@ -437,6 +571,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         failure_streak = 0 if status in {'complete', 'complete_with_skips', 'skipped'} else failure_streak + 1
         next_allowed_at = max(time.time() + failure_cooldown(failure_streak), retry_deadline(entry)) if failure_streak else 0
         record({'event': 'finish', 'key': entry['key'], 'status': status, 'exit_code': code,
+                'observation_policy': OBSERVATION_POLICY_VERSION,
+                'resource_limit_reason': limit_reason, 'stuckness': 'unknown' if limit_reason else None,
+                'provider_observation': observation,
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(),
                 'output_accounting': accounting, **partial_metrics(entry)})
@@ -457,6 +594,8 @@ if __name__ == '__main__':
     parser.add_argument('--provider')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
     parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
+    parser.add_argument('--no-observation-seconds', type=int, default=0,
+                        help='optional collection silence ceiling; zero (default) disables; never diagnoses stuckness; excludes explicit retry waits')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
@@ -464,10 +603,13 @@ if __name__ == '__main__':
         parser.error('--case-seconds must be positive')
     if args.min_free_mib < 0:
         parser.error('--min-free-mib must not be negative')
+    if args.no_observation_seconds < 0:
+        parser.error('--no-observation-seconds must not be negative')
     if args.model_concurrency is not None and args.model_concurrency < 1:
         parser.error('--model-concurrency must be positive')
     def stop(signum, frame):
         raise KeyboardInterrupt('queue stopped')
     signal.signal(signal.SIGTERM, stop)
     run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
-              args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib)
+              args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
+              args.no_observation_seconds)

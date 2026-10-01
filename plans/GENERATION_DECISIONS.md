@@ -1564,3 +1564,17 @@ Required default source paths now resolve through strictly approved catalog repl
 - Root independently verifies621files and1054native references; actual24providerstream behavior remains to inspect at first live handoff. Waitingcontrollers701232/701233 and future24recoverypins have0healthalerts.
 - Publish recipe31 as inventory draft only after defaultcarryforward/4037positive fullpolicy/gzip/1632nonnegativefailure audit. Finalstudentgates remain pending; no training.
 - Preserve two unlinked historical rows as explicit linkage holds; sourceevidence doesnot support deterministicownership. Other attempts remain available.
+
+## 2026-10-01 16:47 UTC — Keep timeout evidence separate from correctness
+
+- User skepticism of blanket cutoffs is explicit. No default provider timers or language deadline semantics. Existing300s supervisor watchdog remains a collection limitation to investigate, not proof of stuckness; no automatic timeout-negative labels.
+- Preference audit isolated18causal pairs;3replay mismatches held. Do not claim full recipe preference stage executed or final DPO readiness.
+- Reducer share measured by approved learner operations: static23.20%, combined pre-render30.25%; legacy program editing excluded. Final25% gate still pending.
+
+## 2026-10-01 17:38 UTC — Remove blanket silence cutoff; observe actual provider output
+
+- Default no-observation cutoff is disabled; optional `--no-observation-seconds` reports unknown stuckness. Breaking status change for enabled silence ceilings: `no_observation_limit`, replacing `inactivity_timeout`. Wall budgets remain collection resource controls. No deadline enters the language and no timeout alone creates a negative label.
+- Count increasing saved replies, local decoding, and actual nonempty stream bytes; report pending phases and retry waits separately. No fake heartbeat or semantic progress claim. Signals are job-level, not per-request health.
+- Refresh pinned waiting controllers and all six storage-recovery approvals under the authority lock. Keep current running teacher processes and all runtime snapshots unchanged; policy activates at their next approved launch/restart. Preserve exact legacy supervisor bytes for provenance.
+- Source review and Python syntax checks only, no tests. Live runtime24 stream path remains unobserved until handoff. Mutable dependency closure is a separate confirmed reproducibility gap, not proof of the historical stall's cause.
+- Correct the subset audit's copied recipe digest explicitly. Hold three model-visible preview mismatches despite unchanged console outputs; no casual equivalence or pair promotion.
