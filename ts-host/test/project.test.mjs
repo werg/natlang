@@ -39,7 +39,7 @@ export async function handle(ticket: Ticket, style: string): Promise<Report> {
   const priority = await triage(ticket);
   let seen = 0;
   const note: string = await nl\`Write a note for ticket in style; count it in seen.\`(ticket);
-  const improved = await iterateOn(async (draft: string) => draft + '!', note).until(draft => draft.endsWith('!!'));
+  const improved = await iterateOn(async (draft: string) => draft + '!', note).withLimit({maxSteps:2}).until(draft => draft.endsWith('!!'));
   return { id: ticket.id, priority, note: improved + ' seen=' + seen };
 }
 

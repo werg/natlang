@@ -17,3 +17,8 @@ export { nl, iterateOn } from './surface.js';
 export type { NatlangFunction, NlResult, IterationEvent, IterationTrajectory, ProgressVerdict } from './surface.js';
 /** Support functions targeted by compiled modules. Not an application API. */
 export const __natlang = lowered;
+
+export { FolderIteration } from './folder-iteration.js';
+export type { FolderIterationResult } from './folder-iteration.js';
+
+export { Folder, FolderHandle, FileHandle, FolderSnapshot } from '../native/scoped-fs.js';

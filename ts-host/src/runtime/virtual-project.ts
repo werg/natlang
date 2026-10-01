@@ -62,12 +62,12 @@ export type CompiledProject = BuildResult & { require(path: string): Record<stri
  * `@natlang/browser` (and any `runtimeSpecifiers`) resolve to inside the project.
  */
 export function compileVirtualProject(project: VirtualProject, runtime: Record<string, unknown>,
-  options: { programId?: string; guidance?: string; importedGuidancePrograms?: readonly string[];
+  options: { constrained?: boolean; programId?: string; guidance?: string; importedGuidancePrograms?: readonly string[];
     services?: ProgramDescriptor['services']; runtimeSpecifiers?: string[]; target?: 'node' | 'browser'; modules?: Record<string, unknown> } = {}): CompiledProject {
   const root = project.root ?? '/project';
   const files = virtualProjectFiles(project.files, root);
   const specifiers = options.runtimeSpecifiers ?? ['@natlang/browser', '@natlang/node'];
-  const result = compileProject({ project: root, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
+  const result = compileProject({ project: root, constrained: options.constrained, programId: options.programId, files, outDir: `${root}/.natlang/build`, module: 'commonjs',
     guidance: options.guidance, importedGuidancePrograms: options.importedGuidancePrograms, services: options.services,
     target: options.target ?? 'browser', runtimeSpecifier: specifiers[0]!, write: true, surfaceSpecifiers: specifiers });
   const cache = new Map<string, { exports: Record<string, unknown> }>();

@@ -1,5 +1,5 @@
-/** Native search loop derived from Ax GEPA at b780a14a3cb94d5ac572db04038399aef655c76c.
- * Modified for natlang contracts, mandatory native evaluation, budgets and durable runs.
+/** Host lifecycle for the authored component-search application.
+ * Exact GEPA libraries derive from Ax b780a14a3cb94d5ac572db04038399aef655c76c.
  * Apache-2.0 attribution and extraction inventory: vendor/ax-gepa/UPSTREAM.json. */
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -13,12 +13,12 @@ import { trainingFeedback, EvaluationFeedbackError } from '../evaluation/feedbac
 import { UsageGateway, BudgetExhausted } from '../evaluation/usage.js';
 import { pairedChanges, evaluationSummary } from '../evaluation/report.js';
 import { summarize } from '../evaluation/metrics.js';
-import { propose } from './proposer.js';
+import { runAuthoredSearch } from './authored-engine.js';
+import { PROGRAM_PROMPT,PROGRAM_TOOLS,PROGRAM_CONTEXT_TOKENS } from '../improvement/prompt.js';
+import { AUTHORED_IMPROVER } from '../improvement/authored-source.js';
 import { RunStore } from './run-store.js';
 import { ENGINE_VERSION, readCheckpoint, saveCheckpoint } from './checkpoint.js';
-import { frontierParents, mergeCandidates, meanBetter, selectionEligible } from './strategies/gepa.js';
-import { ComponentSelector } from './vendor/ax-gepa/gepaSelection.js';
-import { getUpdateGroup } from './vendor/ax-gepa/gepaDependencies.js';
+import { selectionEligible } from './strategies/gepa.js';
 import { promote } from './promotion.js';
 import { optimizationMarkdown } from './report.js';
 import { exportAdaptationPatch } from './export-patch.js';
@@ -46,7 +46,7 @@ async function search(prepared: PreparedSuite, options: OptimizationOptions, res
   const strategy = options.strategy ?? 'gepa', seed = options.seed ?? 0;
   const limits = options.budget ?? prepared.suite.budget;
   validateBudget(limits);
-  const settings = { strategy, seed, limits, minibatchSize: options.minibatchSize ?? 4, maxPopulation: options.maxPopulation ?? 16,
+  const settings = { strategy, seed, limits, authored: fingerprint(AUTHORED_IMPROVER), opening:fingerprint({prompt:PROGRAM_PROMPT,tools:PROGRAM_TOOLS,contextTokens:PROGRAM_CONTEXT_TOKENS}), minibatchSize: options.minibatchSize ?? 4, maxPopulation: options.maxPopulation ?? 16,
     maxHistory: options.maxHistory ?? 1000,
     maxRepairs: options.maxRepairs ?? 1, dependencies: options.dependencies ?? {}, finalTest: options.finalTest ?? true,
     reflectionIdentity: options.reflectionIdentity ?? null, judgeIdentity: options.judgeIdentity ?? null,
@@ -112,11 +112,7 @@ async function search(prepared: PreparedSuite, options: OptimizationOptions, res
         selector: {}, history: [], ledger: gateway.snapshot(), selected: false };
       saveCheckpoint(store, state);
     }
-    const random = () => { let x = state!.rng; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; state!.rng = x >>> 0; return state!.rng / 4294967296; };
-    const targets = descriptors.map(component => ({ key: component.key, dependsOn: settings.dependencies[component.key] ?? [] }));
-    for (const component of targets) for (const dependency of component.dependsOn) if (!targets.some(target => target.key === dependency)) throw new Error('unknown update dependency: ' + dependency);
-    let selector = new ComponentSelector(targets, state.selector);
-    const checkpoint = () => { state!.selector = selector.snapshot(); state!.ledger = gateway.snapshot(); saveCheckpoint(store, state!); };
+    const checkpoint = () => { state!.ledger = gateway.snapshot(); saveCheckpoint(store, state!); };
     const emit = (event: Record<string, unknown>) => {
       state!.history.push(event);
       if (state!.history.length > settings.maxHistory) {
@@ -127,71 +123,13 @@ async function search(prepared: PreparedSuite, options: OptimizationOptions, res
     };
     if (!state.selected) {
       try {
-        while (gateway.ledger.proposals < limits.maxProposals) {
-          gateway.check(options.signal);
-          const covered = new Set(state.population.flatMap(candidate => candidate.train.results.flatMap(result => [...result.coverage])));
-          const eligible = targets.filter(target => covered.has(target.key));
-          if (!eligible.length) { state.stopReason = 'coverage-gap'; break; }
-          const winners = strategy === 'gepa' ? frontierParents(state.population) : [state.incumbent];
-          const parentId = winners[Math.floor(random() * winners.length)] ?? state.incumbent;
-          const parent = state.population.find(candidate => candidate.id === parentId)!;
-          let selected = selector.pick(state.iteration, random);
-          if (!eligible.some(component => component.key === selected.key)) selected = eligible[Math.floor(random() * eligible.length)]!;
-          const keys = getUpdateGroup(selected, targets).map(component => component.key);
-          gateway.reserve('proposals', 1, options.signal); selector.recordProposal(selected.key);
-          const iteration = state.iteration++;
-          let proposal: Candidate | undefined;
-          try {
-            // Every fourth iteration attempts compatible composition before reflection.
-            if (strategy === 'gepa' && iteration % 4 === 3 && state.population.length > 1) {
-              const partner = state.population[Math.floor(random() * state.population.length)]!;
-              proposal = mergeCandidates(state.baseline.value, parent.value, partner.value) ?? undefined;
-            }
-            proposal ??= await propose({ components: descriptors, candidate: parent.value, keys,
-              feedback: await target.feedback(parent.train, keys), driver: options.reflection, gateway,
-              seed: seed + iteration, signal: options.signal, maxRepairs: settings.maxRepairs });
-            const valid = await target.validate(proposal); if (!valid.valid) throw new Error('invalid candidate: ' + valid.feedback);
-          } catch (error) {
-            if (error instanceof BudgetExhausted || error instanceof EvaluationFeedbackError || options.signal?.aborted) throw error;
-            selector.recordResult(selected.key, false, iteration); emit({ iteration, type: 'invalid-proposal', error: String(error) }); checkpoint(); continue;
-          }
-          const id = fingerprint(proposal);
-          if (state.population.some(candidate => candidate.id === id)) { selector.recordResult(selected.key, false, iteration); checkpoint(); continue; }
-          const shuffled = [...train]; for (let index = shuffled.length - 1; index > 0; index--) {
-            const chosen = Math.floor(random() * (index + 1)); [shuffled[index], shuffled[chosen]] = [shuffled[chosen]!, shuffled[index]!]; }
-          const mini = shuffled.slice(0, settings.minibatchSize).sort();
-          const parentBatch = await batch(parent.value, mini), proposedBatch = await batch(proposal, mini);
-          const accepted = proposedBatch.gatesPassed && proposedBatch.quality! > parentBatch.quality!;
-          selector.recordResult(selected.key, accepted, iteration);
-          if (accepted) {
-            const candidate: SearchCandidate = { id, value: proposal, parents: [parent.id],
-              train: await batch(proposal, train), validation: await batch(proposal, validation) };
-            state.population.push(candidate);
-            const incumbent = state.population.find(item => item.id === state!.incumbent)!;
-            const guidanceChanged = descriptors.some(component => component.kind === 'program.guidance' &&
-              canonical(candidate.value[component.key]) !== canonical(component.baseline));
-            const requiredCoverage = prepared.program.components.filter(component => component.kind === 'lambda.instructions');
-            const missingGuidanceCoverage = guidanceChanged ? requiredCoverage.filter(component =>
-              !candidate.validation.results.some(result => result.coverage.includes(component.key))).map(component => component.key) : [];
-            if (missingGuidanceCoverage.length) emit({ iteration, type: 'insufficient-guidance-coverage', components: missingGuidanceCoverage });
-            else if (meanBetter(candidate, incumbent, prepared.suite.selection)) state.incumbent = candidate.id;
-            // Protect incumbent and baseline while preserving validation case winners.
-            if (state.population.length > settings.maxPopulation) {
-              const frontier = new Set(frontierParents(state.population));
-              const removable = state.population.filter(item => item.id !== state!.incumbent && item.id !== state!.baseline.id)
-                .sort((a, b) => Number(frontier.has(a.id)) - Number(frontier.has(b.id)) || (a.validation.quality ?? 0) - (b.validation.quality ?? 0) || a.id.localeCompare(b.id));
-              const remove = removable[0]; if (remove) state.population = state.population.filter(item => item.id !== remove.id);
-            }
-          }
-          emit({ iteration, type: accepted ? 'accepted' : 'rejected', candidate: id, parent: parent.id, keys,
-            pairedQuality: proposedBatch.quality, parentQuality: parentBatch.quality }); checkpoint();
-        }
+        await runAuthoredSearch({prepared,options,settings,state,target,descriptors,train,validation,gateway,batch,checkpoint,emit,trace:value=>store.event({type:'improver-invocation',trace:store.blob(JSON.parse(JSON.stringify(value)))})});
         state.stopReason ??= 'completed';
       } catch (error) {
         if (options.signal?.aborted || error instanceof BudgetExhausted) {
           // Restore the last complete decision; charged in-flight usage lives in the separate ledger.
           const committed = readCheckpoint(store, prepared.suiteHash, prepared.program.buildHash, optionsHash);
-          Object.assign(state, committed); selector = new ComponentSelector(targets, committed.selector);
+          Object.assign(state, committed);
         }
         if (options.signal?.aborted) state.stopReason = 'cancelled';
         else if (error instanceof BudgetExhausted) state.stopReason = 'budget-exhausted';

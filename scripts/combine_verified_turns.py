@@ -10,10 +10,10 @@ from create_improvement_round import validate_correction_turns
 from run_training_pipeline import atomic_json, digest_file
 
 
-def combine(student, teacher, output):
+def combine(student, teacher, output, additional_teachers=()):
     student, teacher, output = map(Path, (student, teacher, output))
     rows, seen = [], set()
-    for source in (student, teacher):
+    for source in (student, teacher, *map(Path, additional_teachers)):
         for line in source.read_text().splitlines():
             if not line.strip():
                 continue
@@ -44,6 +44,8 @@ def combine(student, teacher, output):
                 'student_sha256': digest_file(student), 'teacher_sha256': digest_file(teacher),
                 'output_sha256': digest_file(output), 'rows': len(rows),
                 'approved_decisions': approved}
+    if additional_teachers:
+        manifest['additional_teachers'] = {str(path): digest_file(path) for path in additional_teachers}
     manifest_path = Path(str(output) + '.manifest.json')
     if manifest_path.exists():
         if json.loads(manifest_path.read_text()) != manifest:
@@ -57,9 +59,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--student', required=True, type=Path)
     parser.add_argument('--teacher', required=True, type=Path)
+    parser.add_argument('--additional-teacher', action='append', type=Path, default=[])
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
-    print(json.dumps(combine(args.student, args.teacher, args.output)))
+    print(json.dumps(combine(args.student, args.teacher, args.output, args.additional_teacher)))
 
 
 if __name__ == '__main__':

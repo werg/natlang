@@ -33,7 +33,7 @@ test('browser local inference drives the native tool loop without a server', asy
   };
   const model = new BrowserLocalModel({ engine: fake });
   assert.equal(model.supportsWebGPU, true);
-  const runtime = createNatlangRuntime({ model: request => model.turn(request), seed: { mode: 'compatibility' } });
+  const runtime = createNatlangRuntime({ model: request => model.turn(request), seed: { mode: 'derived',root:0 } });
   const project = compileVirtualProject({ files: { 'main.ts':
     "import { nl } from '@natlang/browser';\nexport async function main(): Promise<number> { return await nl<number>`Write seven.`(); }\n" } }, api);
   assert.equal(project.ok, true, JSON.stringify(project.diagnostics));
@@ -41,7 +41,7 @@ test('browser local inference drives the native tool loop without a server', asy
     const value = await runtime.run(() => project.require('main.ts').main());
     assert.equal(value, 7);
     assert.equal(requests.length, 2);
-    assert.equal(requests[0].seed, 0);
+    assert.ok(Number.isSafeInteger(requests[0].seed));
     assert.equal(requests[0].max_tokens, 4096, 'a turn may use a quarter of the default 16,384-token window');
     assert.equal(requests[0].tool_choice, 'auto');
     assert.deepEqual(requests[0].tools.map(tool => tool.function.name), ['eval', 'read_page', 'read_code', 'compact_history', 'return_result']);

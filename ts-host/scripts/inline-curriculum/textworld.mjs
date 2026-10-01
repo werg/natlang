@@ -186,7 +186,7 @@ export function textworldIterate(seed, index) {
 const next = nl<(state: Progress) => Progress>\`Take one step toward task in world: look around, then carry out the single most useful command with world.act. Return step increased by one and what happened as last.\`;
 let outcome: string;
 try {
-  await next.iterateOn({ step: 0, last: 'nothing yet' }).until(() => world.certificate() !== null);
+  await next.iterateOn({ step: 0, last: 'nothing yet' }).withLimit({maxSteps: 128}).until(() => world.certificate() !== null);
   outcome = world.certificate()!;
 } catch (error) {
   outcome = 'stopped: ' + String(error);

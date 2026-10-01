@@ -24,6 +24,13 @@ async function installedPackage(root, name, source = 'export const answer = 42;\
 }
 const evalRequest = code => ({ code, body: true, scope: {}, path: 'test' });
 
+test('eval scope preserves absent optional fields without relaxing portable result validation',()=>{
+ const environment=new TypeScriptEnvironment();
+ const request={...evalRequest('return self.evidence[0].optional === undefined;'),scope:{evidence:[{optional:undefined,value:1}]}};
+ assert.equal(environment.execute(request).result,true);
+ environment.close();
+});
+
 test('fresh and retained eval contexts, frozen snapshots, live values, and disposal', () => {
   const request = code => ({ code, scope: { args: { n: 3 } }, body: false, path: 'eval' });
   const fresh = new TypeScriptEnvironment({ mode: 'fresh' });

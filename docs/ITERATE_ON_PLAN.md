@@ -33,7 +33,8 @@ interface Iteration<T> {
   until(done: Done<T>): Promise<T>;
   streamUntil(done: Done<T>): AsyncIterable<IterationEvent<T>>;
   onStep(observer: (event: IterationEvent<T>) => void | Promise<void>): Iteration<T>;
-  checkProgress(judge: ProgressJudge<T>): Iteration<T>;
+  checkProgress(judge: ProgressJudge<T> | "off"): Iteration<T>;
+  withMeasure(remaining: (state: T) => number): Iteration<T>;
   withSiteId(id: string): Iteration<T>;
   withLimit(limit: { maxSteps?: number; deadlineMs?: number }): Iteration<T>;
 }
@@ -51,7 +52,7 @@ An `Iteration<T>` is a single-use plan. `until` and `streamUntil` each start it 
 
 ## One stateful runtime path
 
-This **replaces** the existing `IterateNode` / `$iterate` / `until` path. It is part of removing all bespoke loop primitives: the Map and Fold nodes and the `call` tool's `over`/`init`/`until`/`max` forms are removed at the same time, in favor of `Promise.all` and ordinary loops in TypeScript. The current node has `init`, `step`, `check`, a mandatory `max`, recent states, and a repeated-state hash. Do not keep a parallel public node or compatibility alias. Move useful repeated-state detection and trace events into the library operator, then remove the old parser/type/runtime branches, source generators, docs, and prompt references after their callers migrate. Existing serialized Iterate traces need an explicit IR migration where the step, check, and state transitions are recoverable; regenerate those that are not. No default hard max-iteration count is imposed. A caller can opt into `withLimit({ maxSteps, deadlineMs })`; exceeding it rejects with `IterationLimitError` carrying the last checked state. The model driver's per-call timeout still bounds a single step.
+This **replaces** the existing `IterateNode` / `$iterate` / `until` path. It is part of removing all bespoke loop primitives: the Map and Fold nodes and the `call` tool's `over`/`init`/`until`/`max` forms are removed at the same time, in favor of `Promise.all` and ordinary loops in TypeScript. The current node has `init`, `step`, `check`, a mandatory `max`, recent states, and a repeated-state hash. Do not keep a parallel public node or compatibility alias. Move useful repeated-state detection and trace events into the library operator, then remove the old parser/type/runtime branches, source generators, docs, and prompt references after their callers migrate. Existing serialized Iterate traces need an explicit IR migration where the step, check, and state transitions are recoverable; regenerate those that are not. No implicit gas counter is imposed. Before doing work, a caller supplies a decreasing remaining-work measure or a finite `withLimit({ maxSteps })` workflow allocation; a deadline alone is insufficient. exceeding it rejects with `IterationLimitError` carrying the last checked state. The model driver's per-call timeout still bounds a single step.
 
 The operator runs in the current Natlang task context: the same model driver, scoped callable namespace, live values/handles, folder authority, cancellation signal, and trace sink. A completed step is a normal child invocation and must pass the runtime `T` check before its state becomes current. The step calls are sequential and permitted by the no-recursion policy; a step that calls itself while active is still rejected. Optional directory reducer patch commits follow the existing folder semaphore. An observation callback cannot mutate the committed iteration state behind the operator; any mutation must be part of a step result or authorized folder transaction.
 
@@ -67,7 +68,7 @@ On a new site, use permissive bootstrap thresholds and occasional checks after c
 
 The default progress judge is a library-provided natlang lambda with read-only access to the whole trajectory and an instruction to distinguish meaningful progress from repetition, oscillation, unproductive tool use, and impossible goals. `checkProgress(customJudge)` replaces it for a call; runtime configuration may supply a project default. Include the original step instructions, stopping predicate instructions when natlang-authored, typed state/argument descriptions, statistics, and sampled trajectory index in the judge opening. Avoid repeatedly feeding the judge's warnings back to the step agent: a divergent step should surface as an error to the caller, while a `continue` judgment simply allows another step. This preserves the project's preference not to badger an interpreter into fudging.
 
-Repeated states are evidence, not an unconditional failure: use identity/hash where available, report cycles to the progress judge, and let it account for legitimate revisits with new evidence. If the state is a live object or folder, compare checked observations/revisions rather than attempting a JSON dump. Let the caller optionally specify a stronger progress measure, but do not require one for the basic API.
+Repeated states are evidence, not an unconditional failure: use identity/hash where available, report cycles to the progress judge, and let it account for legitimate revisits with new evidence. If the state is a live object or folder, compare checked observations/revisions rather than attempting a JSON dump. A caller supplies a decreasing numeric measure or a finite step allocation. The semantic progress judge independently assesses whether continuing is useful.
 
 ## Compiler and training integration
 
@@ -80,3 +81,7 @@ Repeated states are evidence, not an unconditional failure: use identity/hash wh
 ## Acceptance
 
 An implementation is ready when the method and free forms produce the same state/check/review sequence apart from their site and invocation IDs; `nl` stopping predicates get `T → boolean` targets; extra arguments reach each step in order; initial-state success takes zero steps; runtime return errors never become new state; and streaming observes exactly the committed sequence. Node/browser parity covers call-site IDs, live objects, folder reducers, cancellation, and optional persistence. Fresh and statistically unusual sites trigger reviews at the intended boundaries; a progress judge can stop a divergent run or permit a slow but improving one. The old Iterate node has no supported public entry path after migration.
+
+## Mechanical termination with semantic guidance
+
+Use `.withMeasure(state => remainingWork)` together with the default or custom semantic judge. The measure is a nonnegative safe integer, strictly decreases on each step, and is never extended by a semantic continue verdict. A measure violation retains the last checked state; exhaustion before the goal raises `IterationLimitError`. Folder measures receive `(state, folder)` and preserve the joint checkpoint. For program improvement use remaining experiments, allowing quality to plateau during exploration. No task-wide instruction gas is charged. An unmeasured iteration requires a finite step allocation; work without either primitive is rejected before the first step.

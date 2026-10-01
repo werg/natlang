@@ -51,7 +51,7 @@ const scan = (state: Scan): Scan => {
   const add = rows.filter(row => row.category === ${JSON.stringify(target)}).reduce((sum, row) => sum + row.amount, 0);
   return { n: state.n + 1, total: state.total + add, done: rows.length === 0 };
 };
-const final = await iterateOn(scan, { n: 1, total: 0, done: false }).until(state => state.done);
+const final = await iterateOn(scan, { n: 1, total: 0, done: false }).withLimit({maxSteps: 128}).until(state => state.done);
 return final.total;`), returnCall(expected)] },
       files: { 'category_total/ledger.ts': module(false) } }),
   ];

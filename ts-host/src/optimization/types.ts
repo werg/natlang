@@ -24,5 +24,3 @@ export type SearchState = { schema: 'natlang.adaptation-run/v1'; engine: string;
   history: Record<string, unknown>[]; historyTruncated?: number; ledger: BudgetLedger; selected: boolean; lockedTest?: EvaluationBatch;
   stopReason?: 'completed' | 'budget-exhausted' | 'cancelled' | 'coverage-gap' | 'infrastructure-error' };
 export type OptimizationResult = { artifact: AdaptationArtifact; report: Record<string, unknown>; state: SearchState; directory: string };
-export type ProposalContext = { components: readonly ComponentDescriptor[]; candidate: Candidate; feedback: readonly unknown[]; keys: readonly string[];
-  signal?: AbortSignal; seed?: number; driver: ModelDriver; gateway: UsageGateway; maxRepairs: number };

@@ -9,6 +9,26 @@ import { optimize, resumeOptimization, revalidateAdaptation } from '../dist/opti
 import { candidateArtifact } from '../dist/evaluation/runner.js';
 import { scriptedModel } from './support/natlang.mjs';
 
+const componentStep = `const plan=await search.plan(state.iteration); let finished;
+if(plan.stopReason){finished=await search.finish({accepted:false,stopReason:plan.stopReason});}
+else {await folder.file("components.json").writeText(JSON.stringify(plan.parent));
+let candidate=plan.compose?await search.merge():null;
+if(!candidate){const proposal=await folder.propose(rewriteComponents,{keys:plan.keys,components:plan.components,feedback:plan.feedback}); candidate=proposal.value; if(JSON.stringify(candidate)!==await proposal.folder.readText("components.json"))throw Error("proposal source mismatch");}
+const checked=await search.check(candidate);
+if(!checked.valid){finished=await search.finish({accepted:false,error:checked.feedback});}
+else if(plan.duplicateIds.includes(checked.id)){finished=await search.finish({accepted:false});}
+else {const before=await search.evaluate(checked.id,"mini",true); const after=await search.evaluate(checked.id,"mini");
+const accepted=after.gatesPassed&&after.quality>before.quality;
+if(accepted){const training=await search.evaluate(checked.id,"train");const validation=await search.evaluate(checked.id,"validation");finished=await search.finish({candidate:checked.id,accepted,train:training.evidence,validation:validation.evidence});}
+else finished=await search.finish({candidate:checked.id,accepted});}}
+await folder.file("components.json").writeText(JSON.stringify(finished.candidate));return finished.state;`;
+function componentModel(rewrite) {
+ return scriptedModel(opening => opening.includes('Perform one component-search experiment') ? componentStep : rewrite(opening));
+}
+function rewriteComponents(text) {
+  return componentModel(() => `const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=[${JSON.stringify(text())}]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return candidate;`).driver;
+}
+
 function fixtureSuite({ disposeFailure = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'natlang-adapt-suite-'));
   const evaluationURL = new URL('../dist/evaluation/index.js', import.meta.url).href;
@@ -30,6 +50,24 @@ export default defineEvaluationSuite({ id: 'test', program: { root: '.', id: 'fi
 });`);
   return { root, path: join(root, 'suite.mjs') };
 }
+
+test('InstructionEditor uses resolved sites and preserves inline interpolation bindings',async()=>{
+ const {Folder,InstructionEditor,SourceEvaluator}=await import('../dist/index.js');
+ const {UsageGateway}=await import('../dist/evaluation/usage.js');
+ const fixture=fixtureSuite();
+ writeFileSync(join(fixture.root,'main.ts'),'import {nl} from "@natlang/node"; export async function run(value:string):Promise<string>{return nl<string>`Return the first word of ${value}.`();}');
+ const prepared=await loadEvaluationSuite(fixture.path),editor=new InstructionEditor(prepared);
+ const before=Folder.fromFiles(Object.fromEntries(Object.entries(prepared.program.sources).filter(([path])=>!path.startsWith('@')))).snapshot();
+ const site=editor.sites().find(site=>site.path==='main.ts');assert.ok(site);
+ const segments=site.value.template.segments.map((text,index)=>index===0?'Extract the leading token of ':text);
+ const after=editor.edit(before,[{site:site.site,segments}]);
+ assert.match(await after.readText('main.ts'),/\$\{value\}/);
+ assert.match(await after.readText('main.ts'),/Extract the leading token/);
+ assert.match(await before.readText('main.ts'),/Return the first word/);
+ assert.throws(()=>editor.edit(before,[{site:site.site,segments:['removed binding']}]),/segment|slot|template/);
+ const evaluator=new SourceEvaluator({entry:'main.ts',exportName:'run',programId:'instruction-editor'},[],()=>{throw Error('no inference');},new UsageGateway({maxModelCalls:0,maxRollouts:0,maxProposals:0}),{executorId:'exact',sourcePolicy:{baseline:Object.fromEntries(before.filePaths().map(path=>[path,new TextDecoder().decode(before.readBytesSync(path))])),mode:'instruction',allowedFiles:['main.ts']}});
+ assert.equal((await evaluator.check(after)).valid,true);
+});
 
 test('suite split leakage and malformed independent metrics are rejected', () => {
   assert.throws(() => validateCases([{ id: 'a', group: 'same', split: 'train' }, { id: 'b', group: 'same', split: 'test' }]), /leakage/);
@@ -115,7 +153,7 @@ test('GEPA and reflection search evaluate real runtime, retain baseline, persist
     const fixture = fixtureSuite(); const suite = await loadEvaluationSuite(fixture.path);
     const model = scriptedModel(opening => opening.includes('first word') ? 'return value.split(" ")[0]' : 'return value');
     const key = suite.components[0];
-    const reflection = () => ({ text: JSON.stringify({ [key]: 'Return the first word of value.' }), prompt_tokens: 5, completion_tokens: 8 });
+    const reflection = rewriteComponents(() => 'Return the first word of value.');
     const options = { executor: model.driver, reflection, strategy, seed: 11, out: join(fixture.root, 'run') };
     const result = await optimize(suite, options);
     assert.equal(result.report.baseline.quality, 0);
@@ -134,7 +172,7 @@ test('GEPA and reflection search evaluate real runtime, retain baseline, persist
 test('orderly interruption after a committed decision resumes the same scripted incumbent and PRNG state', async () => {
   const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path), key = suite.components[0];
   const makeModel = () => scriptedModel(opening => opening.includes('first word') ? 'return value.split(" ")[0]' : 'return value');
-  const reflection = () => ({ text: JSON.stringify({ [key]: 'Return the first word of value.' }), prompt_tokens: 1, completion_tokens: 1 });
+  const reflection = rewriteComponents(() => 'Return the first word of value.');
   const whole = await optimize(suite, { executor: makeModel().driver, reflection, seed: 44, out: join(fixture.root, 'whole') });
   const abort = new AbortController();
   const interrupted = await optimize(suite, { executor: makeModel().driver, reflection, seed: 44, out: join(fixture.root, 'interrupted'), signal: abort.signal,
@@ -198,7 +236,7 @@ test('bounded search history retains a complete hash-indexed event log', async (
   const fixture = fixtureSuite(), suite = await loadEvaluationSuite(fixture.path), key = suite.components[0];
   const model = scriptedModel(opening => /first word|first space/.test(opening) ? 'return value.split(" ")[0]' : 'return value');
   let proposals = 0;
-  const reflection = () => ({ text: JSON.stringify({ [key]: ++proposals === 1 ? 'Return the first word of value.' : 'Return text before the first space.' }), prompt_tokens: 1, completion_tokens: 1 });
+  const reflection = rewriteComponents(() => ++proposals === 1 ? 'Return the first word of value.' : 'Return text before the first space.');
   const result = await optimize(suite, { executor: model.driver, reflection, seed: 19, out: join(fixture.root, 'bounded'),
     maxHistory: 1, finalTest: false });
   assert.ok(result.state.history.length <= 1);
@@ -258,4 +296,27 @@ test('revalidation of changed guidance requires validation coverage of authored 
   const current = await loadEvaluationSuite(fixture.path);
   const model = scriptedModel(() => 'return value.split(" ")[0]');
   await assert.rejects(() => revalidateAdaptation(artifact, current, model.driver), /whole-program guidance coverage/);
+});
+
+test('default optimizer edits typed native component source rather than string-encoded proposals', async()=>{
+  const fixture=fixtureSuite(),suite=await loadEvaluationSuite(fixture.path);
+  const executor=scriptedModel(opening=>opening.includes('first word')?'return value.split(" ")[0]':'return value');
+  const reflection=componentModel(()=> 'const candidate=JSON.parse(await folder.file("components.json").readText()); const key=request.keys[0]; candidate[key].template.segments=["Return the first word of value."]; await folder.file("components.json").writeText(JSON.stringify(candidate)); return candidate;');
+  const result=await optimize(suite,{executor:executor.driver,reflection:reflection.driver,out:join(fixture.root,'native-default'),budget:{...suite.suite.budget,maxModelCalls:100}});
+  assert.equal(result.report.selectedValidation.quality,1);
+  assert.ok(reflection.openings.some(opening=>opening.includes('typed edit')));
+  assert.ok(JSON.parse(readFileSync(join(result.directory,'manifest.json'),'utf8')).settings.authored);
+});
+
+test('source evaluator reuses native fixtures and executes the edited program, not overlays',async()=>{
+ const {SourceEvaluator,Folder,suiteExecution}=await import('../dist/index.js');
+ const {UsageGateway}=await import('../dist/evaluation/usage.js');
+ const fixture=fixtureSuite(),prepared=await loadEvaluationSuite(fixture.path);
+ const files=Object.fromEntries(Object.entries(prepared.program.sources).filter(([path])=>!path.startsWith('@')));
+ const folder=Folder.fromFiles(files),driver=scriptedModel(opening=>opening.includes('first word')?'return value.split(" ")[0]':'return value').driver;
+ const executeCase=suiteExecution(prepared,join(fixture.root,'source-evaluations'),driver);
+ const evaluator=new SourceEvaluator({entry:'main.ts',exportName:'run',programId:'fixture'},prepared.cases.map(row=>({...row,args:[row.input]})),driver,new UsageGateway(prepared.suite.budget),{executorId:'scripted',executeCase});
+ assert.equal((await evaluator.evaluate(folder.snapshot(),{split:'train'})).quality,0);
+ folder.writeText('classify.nl','---\nargs: { value: string }\nreturns: string\n---\nReturn the first word of value.\n');
+ const report=await evaluator.evaluate(folder.snapshot(),{split:'validation'});assert.equal(report.quality,1);assert.equal(report.gatesPassed,true);
 });

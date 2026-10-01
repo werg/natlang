@@ -153,7 +153,7 @@ export default function resolve(schedule: Schedule): Schedule {
   return Object.entries(variants).map(([variant, initial]) => {
     const run = simulate(initial);
     const expected = run.converged ? run.state : null;
-    const iterate = 'const fixed = await resolve.iterateOn(schedule).until(s => conflicts(s) === 0);\nfixed';
+    const iterate = 'const fixed = await resolve.iterateOn(schedule).withLimit({maxSteps: 64}).until(s => conflicts(s) === 0);\nfixed';
     const reference = run.converged ? [evalCall(iterate), returnCall(expected)] :
       [evalCall(iterate), failedCall('The repair step cannot remove every conflict: there are more meetings than slots, so it keeps moving meetings in a cycle.')];
     // The schedule is visible, so a model may see an impossible one at once; no observation is required.

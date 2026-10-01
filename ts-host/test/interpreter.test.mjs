@@ -9,6 +9,14 @@ import { interpreter, lambda, nl, session as open, ts } from './support/natlang.
 
 const run = (body, options) => interpreter(options).run(lambda(body));
 
+test('optional undefined properties in unknown evidence do not poison the next eval',async()=>{
+ const {lam,session}=open({type:'() => number',instructions:'Return one.'});
+ const first=await session.applyAsync('eval',{code:'const evidence:unknown[]=[{optional:undefined,value:1}]; evidence;'});
+ assert.equal(first.kind,'ok',first.text);
+ const second=await session.applyAsync('eval',{code:'const copied = evidence; return 1;'});
+ assert.equal(second.kind,'ok',second.text);assert.equal(lam.return,1);
+});
+
 test('a final expression is only shown; a top-level return stages a value of the declared type', async () => {
   const { lam, session } = open({ type: '() => number', instructions: 'Return nine.' });
   const shown = await session.applyAsync('eval', { code: '9' });
@@ -777,7 +785,7 @@ test('an iteration that was never run says how to run it', async () => {
 
 test('any function runs with .iterateOn(initial), as a natural-language function does', async () => {
   const { session } = open({ type: '() => number', instructions: 'Count up.' });
-  const run = await session.applyAsync('eval', { code: 'const step = (n: number): number => n + 1;\nconst last = await step.iterateOn(0).until(n => n > 3);\nlast' });
+  const run = await session.applyAsync('eval', { code: 'const step = (n: number): number => n + 1;\nconst last = await step.iterateOn(0).withMeasure(n => Math.max(0,4-n)).until(n => n > 3);\nlast' });
   assert.equal(run.kind, 'ok', run.text); assert.equal(run.value, 4);
 });
 
@@ -881,4 +889,38 @@ test('saved inline functions read the current mutable local across eval transact
   assert.equal(second.kind, 'ok', second.text);
   assert.equal(second.value, false);
   assert.deepEqual(seen, [5000, 4000]);
+});
+
+test('eval finish computes and completes a fresh typed result atomically',async()=>{
+ const {session:call,lam}=open({instructions:'Count exactly.',type:'() => number',args:{}});
+ const result=await call.applyAsync('eval',{code:'return [true,false,true].filter(Boolean).length;',finish:true});
+ assert.equal(result.kind,'completed');assert.equal(result.value,2);assert.equal(lam.return,2);assert.equal(call.completed,true);
+});
+
+test('eval finish never publishes an older staged result after inspection, invalid return or failure',async()=>{
+ for(const code of ['const inspection = 99;','return "wrong type";','throw new Error("computation failed");']){
+  const {session:call,lam}=open({instructions:'Return a number.',type:'() => number',args:{}});
+  await call.applyAsync('eval',{code:'return 7;'});
+  const result=await call.applyAsync('eval',{code,finish:true});
+  assert.ok(['rejected','error'].includes(result.kind),result.text);assert.equal(call.completed,false);assert.equal(lam.return,7);
+ }
+ const {session:call}=open({instructions:'Return a number.',type:'() => number',args:{}});
+ const invalid=await call.applyAsync('eval',{code:'return 1;',finish:'yes'});
+ assert.equal(invalid.kind,'rejected');assert.equal(call.completed,false);
+});
+
+test('eval finish accepts a fresh final expression without a redundant return statement',async()=>{
+ const {session:call}=open({instructions:'Judge the statement.',type:'() => boolean',args:{}});
+ const result=await call.applyAsync('eval',{code:'true',finish:true});assert.equal(result.kind,'completed');assert.equal(result.value,true);
+ const {session:next}=open({instructions:'Compute a number.',type:'() => number',args:{}});await next.applyAsync('eval',{code:'return 7;'});
+ const updated=await next.applyAsync('eval',{code:'99',finish:true});assert.equal(updated.kind,'completed');assert.equal(updated.value,99);
+});
+
+test('large record previews retain later fields and direct paths to clipped values',async()=>{
+ const {renderValue}=await import('../dist/native/agent.js');
+ const value={source:'x'.repeat(10000),evidence:[{trace:'y'.repeat(10000),passed:true}],opportunity:'efficiency',status:'ready',history:[]};
+ const shown=renderValue(value,{holder:'context'});
+ assert.match(shown,/opportunity: "efficiency"/);assert.match(shown,/status: "ready"/);assert.match(shown,/context\.source holds all of it/);assert.match(shown,/history: \[\]/);assert.ok(shown.length<4000);
+ const fits={source:'x'.repeat(1100),status:'ready'};assert.equal(renderValue(fits,{holder:'context'}),renderValue(fits,{holder:'context',budget:Infinity}));
+ const full=renderValue(value,{budget:Infinity});assert.doesNotMatch(full,/cut off|not shown/);assert.match(full,/x{10000}/);
 });

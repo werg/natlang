@@ -6,6 +6,7 @@ from pathlib import Path
 
 from create_improvement_round import improvement_recipe
 from run_training_pipeline import atomic_json
+from self_improvement_data import current_improvement_turns
 
 
 def improvement_pipeline(base_recipe, base_run, programs, run, student_server, student_model,
@@ -44,6 +45,8 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
     student_turns = f'{r}/student-success-turns.jsonl'
     teacher_turns = f'{r}/teacher-correction-turns.jsonl'
     combined = f'{r}/verified-turns.jsonl'
+    repo = Path(__file__).resolve().parents[1]
+    native_improvement_turns = current_improvement_turns(repo)
     stages.append(add('collect-student', collect('student', str(programs), student_server, student_model,
                                                  student_rows),
                       [str(programs), runtime_hash, f'{frozen}/dist/teacher/collector.js',
@@ -66,9 +69,9 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
                       [teacher_rows, runtime_hash, f'{frozen}/scripts/build-preference-pairs.mjs'], [preferences]))
     stages.append(add('combine-verified', ['python', f'{p}/scripts/combine_verified_turns.py',
                                            '--student', student_turns, '--teacher', teacher_turns,
-                                           '--output', combined],
+                                           '--output', combined, *[arg for path in native_improvement_turns for arg in ('--additional-teacher', path)]],
                       [f'{p}/scripts/combine_verified_turns.py', f'{p}/scripts/create_improvement_round.py',
-                       student_turns, teacher_turns],
+                       student_turns, teacher_turns, *native_improvement_turns],
                       [combined, f'{combined}.manifest.json']))
     base['stages'] = [*stages, *base['stages']]
     base['collection'] = {'programs': str(programs), 'student_server': student_server,

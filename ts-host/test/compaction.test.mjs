@@ -91,8 +91,8 @@ test('the model may compact on its own, a note over the limit is rejected, and a
   const driver = request => {
     turn++;
     if (turn === 1) return { calls: [['eval', { code: "console.log('z'.repeat(3000)); 1" }]] };
-    if (turn === 2) return { calls: [['compact_history', { note: 'x'.repeat(601) }]] };
-    if (turn === 3) { sawRejection = /1 to 600 characters/.test(request.messages.at(-1).content);
+    if (turn === 2) return { calls: [['compact_history', { note: 'x'.repeat(2001) }]] };
+    if (turn === 3) { sawRejection = /1 to 2000 characters/.test(request.messages.at(-1).content);
       return { calls: [['compact_history', { note: 'Printed a long line; next say hello.' }]] }; }
     return { calls: [['return_result', { status: 'success', value: 'hello' }]] };
   };

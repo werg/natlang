@@ -12,6 +12,7 @@ import { describeProgram, namedDescriptor, inlineDescriptor } from '../adaptatio
 import type { ComponentDescriptor, ProgramDescriptor } from '../adaptation/types.js';
 import { declarationNamespace } from '../native/external.js';
 import { analyzeInlineLambdas, spanOf, type InlineLambdaPlan, type NatlangDiagnostic } from './inline.js';
+import { checkConstrainedSource } from './policy.js';
 import { natlangTransformer } from './lower.js';
 import { typeScriptText } from './eval-check.js';
 import { INTRINSICS_FILE, NATLANG_COMPILE_VERSION, SURFACE_MODULE_FILE } from './intrinsics.js';
@@ -57,6 +58,8 @@ function sourceFiles(files: ProjectFiles, root: string): SourceFiles {
 }
 
 export type BuildOptions = {
+  /** Enforce the finite generated-program profile on every editable application module. */
+  constrained?: boolean;
   services?: ProgramDescriptor['services'];
   programId?: string;
   guidance?: string;
@@ -283,6 +286,7 @@ export function compileProject(options: BuildOptions): BuildResult {
       message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n') });
   }
   const sources = rootNames.map(path => program.getSourceFile(path)).filter((file): file is ts.SourceFile => !!file);
+  if (options.constrained) for (const file of sources) diagnostics.push(...checkConstrainedSource(file, { checker: program.getTypeChecker(), displayPath: source => rel(source.fileName) }));
   const revision = (file: ts.SourceFile) => `${rel(file.fileName)}@${file.text.length}`;
   const plans = new Map<ts.SourceFile, InlineLambdaPlan[]>();
   for (const file of sources) {
@@ -371,10 +375,15 @@ export function compileProject(options: BuildOptions): BuildResult {
       return natlangTransformer({ plans: new Map(filePlans.map(plan => [`${plan.sourceSpan.start}:${plan.sourceSpan.end}`, plan])),
         checker: program.getTypeChecker(), runtime: '__natlang',
         context: contextDir && contextRecords.has(contextDir) ? JSON.stringify(contextRecords.get(contextDir)) : undefined,
-        constrained: false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
+        constrained: options.constrained ?? false, guardPrefix: JSON.stringify([programId, rel(file.fileName)]), modulePath: rel(file.fileName), browser: options.target === 'browser',
         module: { natlangImports: natlangImports(source), rewrite: rewriteFor } })(context)(file);
     };
     const emit = (fileName: string, text: string) => {
+      if (options.constrained && /\.js$/.test(fileName) && !/(?:\b(?:const|let|var)\s+__natlang\b|\bimport\s*\{[^}]*\b__natlang\b)/.test(text)) {
+        const commonjs = compilerOptions.module === ts.ModuleKind.CommonJS || /Object\.defineProperty\(exports/.test(text);
+        text = (commonjs ? `const __natlang = require(${JSON.stringify(specifierFor(true))}).__natlang;\n` :
+          `import { __natlang } from ${JSON.stringify(specifierFor(false))};\n`) + text;
+      }
       outputs[fileName] = text;
       if (options.write !== false) fs.write?.(fileName, text);
     };

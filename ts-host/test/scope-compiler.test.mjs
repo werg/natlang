@@ -28,7 +28,7 @@ test('scope compiler records top-level bindings and preserves final-expression R
     { name: 'label', kind: 'let', mutable: true, annotation: undefined },
   ]);
   assert.deepEqual(compiled.finalExpression, { start: 64, end: 69, line: 3, column: 1 });
-  assert.match(compiled.body, /return __natlang_finish\(label\);/);
+  assert.match(compiled.body, /return __natlang_finish\(\(?label\)?\);/);
   const run = load(compiled);
   assert.deepEqual(await run({ input: 4 }, {}, {}),
     { result: 'v5', returned: false, bindings: { selected: 5, label: 'v5' } });
@@ -138,5 +138,5 @@ test('scope compiler makes parameters const and deeply frozen', async () => {
 test('scope compiler captures only initialized bindings across an early return', () => {
   const compiled = compileScopeSnippet('if (stop) return 1;\nconst later = 2;\nlater', { inputBindings: ['stop'] });
   assert.equal(compiled.ok, true);
-  assert.match(compiled.program, /__natlang_finish\(1, \{\s*\}, true\)/);
+  assert.match(compiled.program, /__natlang_finish\(\(?1\)?, \{\s*\}, true\)/);
 });

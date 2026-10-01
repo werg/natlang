@@ -1,0 +1,525 @@
+{
+  "version": "natlang.api-migration-registry/1",
+  "id": "native-program-improvement",
+  "policy": "Rewrite callers and training data directly. Do not provide compatibility modes or codecs.",
+  "changes": [
+    {
+      "id": "folder-source-and-state",
+      "contracts": [
+        "folder.snapshot",
+        "snapshot.branch",
+        "folder.propose",
+        "folder.accept",
+        "folder.select",
+        "folder.iterateOn"
+      ],
+      "migration": "Rewrite reducer calls that discard edits to folder.propose(reducer, ...args).value, or folder.apply when edits belong in the caller. Rewrite iterative source editing to folder.iterateOn with portable state and source identities.",
+      "families": [
+        "directory-reducer",
+        "program-editing",
+        "source-transformation",
+        "population-selection"
+      ],
+      "builders": [
+        "ts-host/scripts/self-improvement/migrate-folder-api.mjs",
+        "ts-host/scripts/self-improvement/migrate-existing-data.mjs"
+      ],
+      "verification": [
+        "ts-host/test/folder-improvement.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ],
+      "required_cases": [
+        "multi-eval proposal identity",
+        "failed step rollback",
+        "stale proposal",
+        "non-incumbent accepted child remains unselected",
+        "selected full-source snapshot"
+      ]
+    },
+    {
+      "id": "typed-native-proposals",
+      "old": "Text responses and JSON-encoded template arrays",
+      "new": "An authored directory reducer edits typed component values and returns exactly the edited value",
+      "migration": "Remove the string codec. Regenerate proposal contexts, actions and outcomes with rewriteComponents.nl; replay changed traces before admission.",
+      "families": [
+        "lambda-instructions",
+        "interpolated-instructions",
+        "program-guidance",
+        "joint-instructions-guidance"
+      ],
+      "verification": [
+        "ts-host/test/evaluation-optimization.test.mjs"
+      ]
+    },
+    {
+      "id": "flat-source-evaluation",
+      "contracts": [
+        "evaluator.check",
+        "evaluator.evaluate",
+        "evaluator.page",
+        "suiteExecution"
+      ],
+      "migration": "Supply immutable source and use independent native fixtures or exact outcomes. Training evidence is pageable; validation exposes selection scores; test is unavailable to the improver. Update declarations and regenerate observations.",
+      "families": [
+        "compile-repair",
+        "evidence-gathering",
+        "regression-checking",
+        "independent-fixture-scoring"
+      ],
+      "verification": [
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/evaluation-optimization.test.mjs"
+      ]
+    },
+    {
+      "id": "frozen-improver-and-portfolio",
+      "contracts": [
+        "improverSource",
+        "FrozenImprover.improve",
+        "composePortfolio"
+      ],
+      "migration": "Record the executed improver source, freeze it per run, adopt between runs, and pin full portfolio sources with a declared external result type.",
+      "families": [
+        "meta-improvement",
+        "router-specialization",
+        "source-adoption"
+      ],
+      "verification": [
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/improvement-allocation.test.mjs"
+      ]
+    },
+    {
+      "id": "finite-assignment-and-confirmation",
+      "contracts": [
+        "AssignmentBudget",
+        "OperationJournal",
+        "confirm",
+        "confirmPair"
+      ],
+      "migration": "Preserve charged usage and joint checkpoints across retries. Allocate from one persistent assignment ceiling. Freeze one confirmation experiment before exposing test evidence; resumptions may finish that same experiment but may not change its source or claim.",
+      "families": [
+        "interruption-resume",
+        "budget-exhaustion",
+        "coverage-exhaustion",
+        "paired-confirmation"
+      ],
+      "verification": [
+        "ts-host/test/improvement-allocation.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ]
+    },
+    {
+      "id": "mechanical-measure-and-semantic-progress",
+      "contracts": [
+        "Iteration.withMeasure",
+        "FolderIteration.withMeasure",
+        "checkProgress"
+      ],
+      "migration": "Rewrite iterative experiment workflows to remaining-experiment measures. Remove generic computation gas. Keep semantic reviews active independently; replay changed traces and recollect contexts before admission.",
+      "families": [
+        "finite-worklist",
+        "program-improvement",
+        "semantic-progress",
+        "iteration-exhaustion"
+      ],
+      "source_research": [
+        "existing failed iterateOn traces",
+        "finite search and task-planning datasets"
+      ],
+      "verification": [
+        "ts-host/test/iteration-measure.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ],
+      "required_cases": [
+        "quality plateau with decreasing work",
+        "semantic early divergence",
+        "semantic continue cannot replenish measure",
+        "invalid/nondecreasing measure rollback",
+        "nested finite workflows",
+        "numeric rounding stall",
+        "alias-mutated Map/Set domain"
+      ],
+      "builders": [
+        "ts-host/scripts/self-improvement/build-measure-curriculum.mjs"
+      ],
+      "generated_fixtures": "runs/self-improvement-data/folder-api-v1/measure-curriculum"
+    },
+    {
+      "id": "accept-returns-installed-source",
+      "contracts": [
+        "Folder.accept"
+      ],
+      "migration": "Await accept and use its returned immutable snapshot. Read the reducer explanation from proposal.value. Replay historical observations rather than rewriting teacher replies.",
+      "families": [
+        "population-selection",
+        "source-transformation"
+      ],
+      "verification": [
+        "ts-host/test/folder-improvement.test.mjs"
+      ]
+    },
+    {
+      "id": "explicit-service-call-scopes",
+      "contracts": [
+        "serviceScopes"
+      ],
+      "migration": "Scope keys are service names. Bare paths authorize that call only; append /** when descendant calls should inherit authority. Rewrite previously inherited scopes explicitly and replay affected traces. Program edit reducers receive no evaluator or repository authority.",
+      "families": [
+        "delegation",
+        "meta-improvement",
+        "program-editing"
+      ],
+      "verification": [
+        "ts-host/test/runtime.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ]
+    },
+    {
+      "id": "weak-model-continuation-and-local-types",
+      "contracts": [
+        "compact_history",
+        "eval helper return types"
+      ],
+      "migration": "Allow continuation notes up to 2000 characters, resolve ambiguous return aliases at their defining module, and retain readable unambiguous names. Regenerate erroneous historical observations through replay.",
+      "families": [
+        "compaction",
+        "typed-helper",
+        "program-editing"
+      ],
+      "verification": [
+        "ts-host/test/compaction.test.mjs",
+        "ts-host/test/folder-improvement.test.mjs"
+      ]
+    },
+    {
+      "id": "semantic-workflow-applications",
+      "contracts": [
+        "InstructionEditor",
+        "checkTransformation",
+        "admitCounterexamples",
+        "implementBehavior",
+        "repairProgram",
+        "simplifyProgram",
+        "composePortfolio",
+        "adoptSource",
+        "recoverAdoption"
+      ],
+      "migration": "Update fixtures to compare edited files as well as results, expose independently supported obligations, require independent gold, retain protected cohorts and install a named portfolio fallback. Export full source manifests and actual evidence.",
+      "families": [
+        "source-transformation",
+        "counterexamples",
+        "implementation",
+        "repair",
+        "simplification",
+        "portfolio",
+        "source-adoption"
+      ],
+      "verification": [
+        "ts-host/test/semantic-workflows.test.mjs",
+        "ts-host/test/source-adoption.test.mjs"
+      ]
+    },
+    {
+      "id": "automatic-folder-revisions",
+      "contracts": [
+        "Folder.at",
+        "FolderSnapshot.digest"
+      ],
+      "migration": "Remove repository registration. Store immutable snapshot.digest identities and retrieve via folder.at. Replay original teacher actions with current observations. Changed historical data cannot be admitted by text substitution alone.",
+      "families": [
+        "population-parent",
+        "source-selection",
+        "resume-source-storage"
+      ],
+      "builders": [
+        "ts-host/scripts/self-improvement/migrate-revision-code.mjs",
+        "ts-host/scripts/self-improvement/replay-improvement.mjs"
+      ],
+      "verification": [
+        "ts-host/test/folder-improvement.test.mjs",
+        "ts-host/test/source-improvement.test.mjs"
+      ]
+    },
+    {
+      "id": "derived-seeds-and-finite-iteration",
+      "contracts": [
+        "SeedPolicy",
+        "Iteration.until"
+      ],
+      "migration": "Remove the compatibility seed mode. Default to deterministic seeds derived from root, definition/site and call ordinal; runtime task IDs do not change replay. Every working iterateOn requires a remaining-work measure or finite workflow maxSteps. Update reference-program builders and replay changed historical rows.",
+      "families": [
+        "resume-replay",
+        "frontier-search",
+        "finite-worklist",
+        "reactive-control"
+      ],
+      "builders": [
+        "ts-host/scripts/inline-curriculum/actor.mjs",
+        "ts-host/scripts/inline-curriculum/investigate.mjs",
+        "ts-host/scripts/inline-curriculum/composed.mjs",
+        "ts-host/scripts/inline-curriculum/failure.mjs"
+      ],
+      "verification": [
+        "ts-host/test/teacher-collector.test.mjs",
+        "ts-host/test/inline-curriculum.test.mjs",
+        "ts-host/test/iteration-measure.test.mjs"
+      ]
+    },
+    {
+      "id": "small-authored-root",
+      "contracts": [
+        "measureBaseline",
+        "runExperiment",
+        "selectCandidate",
+        "runExperiment.rewriteProgram"
+      ],
+      "migration": "Relocate editing reducer to its experiment companion folder; move exact state and selection helpers into the owning companion folders. Update reducer installation paths and direct callers. Frozen historical trajectories retain their actual authored source; recollect orchestration examples against the new root, never relabel them.",
+      "families": [
+        "typed-directory-composition",
+        "source-transformation",
+        "scope-denial"
+      ],
+      "builders": [
+        "ts-host/scripts/self-improvement/collect-improvement.mjs"
+      ],
+      "verification": [
+        "ts-host/test/source-improvement.test.mjs"
+      ],
+      "executed_case": "runs/self-improvement-data/folder-api-v1/teacher-decomposed-root"
+    },
+    {
+      "id": "stable-assistant-history",
+      "contracts": [
+        "native training renderer",
+        "student serving template"
+      ],
+      "migration": "Use history-preserving reasoning when the selected tokenizer declares preserve_thinking. Training and serving use the same normalizer. Bump renderer fingerprint to transformers-chat-template/3; rerender current data instead of relabeling prior checkpoints.",
+      "verification": [
+        "tests/test_render_training_corpus.py"
+      ],
+      "experiment_disposition": "Post-confirmation refinement; old frozen checkpoints and negative study remain unchanged."
+    },
+    {
+      "id": "separate-model-efficiency-search",
+      "contracts": [
+        "policy.objective=model-calls",
+        "EvaluationReport.modelCalls",
+        "Outcome.failureKind",
+        "executorTimeoutMs"
+      ],
+      "migration": "Replace assumptions that reflection has a fixed 24-call ceiling with declared shared budget validation. Use measured request counts only when present; preserve them across cached replay. Recollect observations for new efficiency decisions and timeout/fixture diagnosis rather than adding cost labels to old traces. Correct the typed shipment ROWS builder and recollect affected fixtures.",
+      "builders": [
+        "ts-host/scripts/self-improvement/run-luna-bonsai.mjs",
+        "ts-host/scripts/inline-curriculum/investigate.mjs"
+      ],
+      "verification": [
+        "ts-host/test/source-improvement.test.mjs"
+      ],
+      "study": "runs/luna-bonsai-improvement-20261001"
+    },
+    {
+      "id": "grounded-student-trace-editing",
+      "contracts": [
+        "Outcome.modelTrace (training only)",
+        "Outcome.serviceDeclarations (training only)",
+        "typed evaluator modelCalls",
+        "rewriteProgram.bookkeeping.finish(folder, summary, preserves)",
+        "sequential action batches stop after failed computation",
+        "runExperiment.bookkeeping.request(policy, hypothesis, evidence)",
+        "optional undefined fields in eval scope",
+        "pinned per-invocation evaluation seed",
+        "runExperiment.bookkeeping.opportunity(policy, evidence)"
+      ],
+      "migration": "Update evaluator declarations to expose measured request counts. Recollect optimization decisions against training feedback containing actual target action traces and public service declarations; never invent missing observations in old trajectories. Migrate authored editor finishing to the exact diff-derived helper and replay it against the current runtime. Historical failure labels alone do not establish failures of a new target model. Preserve old failed/no-op/invented-schema attempts as negative evidence, never positive SFT.",
+      "builders": [
+        "ts-host/scripts/self-improvement/prepare-observed-study.mjs",
+        "ts-host/scripts/self-improvement/run-luna-bonsai.mjs",
+        "ts-host/scripts/self-improvement/index-failures.mjs",
+        "ts-host/scripts/self-improvement/build-observed-decision-cases.mjs"
+      ],
+      "verification": [
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/observed-study.test.mjs",
+        "ts-host/test/interpreter.test.mjs",
+        "ts-host/test/environment.test.mjs"
+      ],
+      "study": "runs/luna-bonsai-improvement-20261001/grounded-objective",
+      "new_training_cases": [
+        "Observed no-op editor claiming changed paths",
+        "Unsupported service fields in a proposed semantic rewrite",
+        "Correct target with redundant finish request",
+        "Repeated inspection or self-repair visible in training actions",
+        "Failed computation followed by finish in the same action batch",
+        "Fixture compile failure versus a bounded target timeout",
+        "Optional evidence field reconstructed as undefined before a child call",
+        "Correct training answers misclassified as an independent fixture failure",
+        "Seed-dependent apparent cost gain that disappears under the pinned comparison"
+      ],
+      "sources": "Use current Bonsai training executions, optimizer proposal diffs and service schemas; retain source groups and independent gold. Search existing generated-data incidents for each listed mechanism and recollect authentic decisions under the current API. Exclude validation/test outputs from teacher diagnosis.",
+      "incident_inventory": "runs/luna-bonsai-improvement-20261001/incident-index",
+      "generated_cases": "runs/luna-bonsai-improvement-20261001/native-decision-cases/cases.jsonl",
+      "generated_cases_disposition": "Two compiled native optimizer-decision repair cases from genuine failed decisions; faulty starting instructions explicitly reconstructed. Requires student reproduction and independently verified collection; not positive SFT.",
+      "results": "docs/LUNA_BONSAI_IMPROVEMENT_RESULTS.md",
+      "verification_result": "708 tests plus focused native helper/data-ingestion checks, 22 conformance cases, browser types/bundle and actual Chromium smoke passed.",
+      "study_result": "Coherent candidate edited and evaluated; rejected at equal validation model-call count. Frozen retained-baseline confirmation 1/2 with one timeout, effect zero; no optimization gain demonstrated."
+    },
+    {
+      "id": "authored-experiment-lifecycle",
+      "contracts": [
+        "lifecycle.step(folder,evaluator,planExperiment,rewriteProgram,state,policy)",
+        "lifecycle supplies measured ExperimentContext",
+        "planExperiment(brief,context,policy) returns string",
+        "Root experiment.test performs exactly one finite edit/check/measurement",
+        "eval {code,finish:true} completes only its fresh typed result"
+      ],
+      "migration": "Remove measureBaseline/selectCandidate semantic reducer invocations; port valuable exact measurement and population selection helpers into the authored lifecycle. Rewrite demonstration source, recollect authentic observations, replay and admit before SFT. No runtime compatibility aliases.",
+      "builders": [
+        "ts-host/scripts/self-improvement/structural-study.mjs",
+        "ts-host/scripts/self-improvement/index-failures.mjs",
+        "ts-host/scripts/self-improvement/migrate-improver-lifecycle.mjs",
+        "ts-host/scripts/self-improvement/run-structural-series.mjs"
+      ],
+      "new_training_cases": [
+        "Batched semantic judgments with exact aggregation",
+        "Mixed sentiment, negation and sarcasm without keyword shortcuts",
+        "Rejected equal-cost edit followed by a distinct structural hypothesis",
+        "Accepted child independently selected from a population branch",
+        "Direct rewrite versus native iteration with the same initial feedback",
+        "Fresh final expression with finish:true versus inspection without finish",
+        "Failed eval and stale staged answer cannot atomically complete",
+        "Planner returns one hypothesis; rejected experiment returns to outer iteration",
+        "Editor reads source and writes rather than solving example via another nl call"
+      ],
+      "sources": "Search existing generated review-count and paginated aggregation incidents and current Luna/Bonsai train traces; source groups and independent labels are retained.",
+      "verification": [
+        "ts-host/test/observed-study.test.mjs",
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/interpreter.test.mjs"
+      ],
+      "study": "runs/luna-bonsai-native-compact-20261001",
+      "positiveSFT": false,
+      "migration_result": {
+        "migratedRows": 13,
+        "output": "runs/self-improvement-data/authored-lifecycle-v1/decomposed-recollection.jsonl",
+        "disposition": "recollect-required; old admission revoked; historical observations preserved",
+        "canonicalSourceAudit": "No retired baseline/selection reducer references in the eight canonical verified-turn files under data/teacher/self-improvement. Original-failure input 69 rows unchanged.",
+        "originalFailureSchemaMigratedRows": 65,
+        "canonicalSchemaCandidates": "runs/self-improvement-data/authored-lifecycle-v1/schema-migration-manifest.json",
+        "canonicalFilesChanged": false
+      }
+    },
+    {
+      "id": "prepared-optimizer-context",
+      "contracts": [
+        "ExperimentContext {parent,sourceFiles,evidence,opportunity,history}",
+        "planExperiment(brief,context,policy): string",
+        "RewriteRequest.sourceFiles required",
+        "evaluator scope: improveStep.nl only",
+        "Latest ExperimentFeedback includes actual candidate source and training traces; validation metrics only",
+        "Cost/size iteration continues after initial gain; empty supported hypothesis stops it"
+      ],
+      "migration": "Replace prior planner templates and demonstrations directly with prepared context; remove model-driven parent/evidence collection. Recollect changed actions and revoke stale admission. Port specialized transformation editor injection to improveStep/rewriteProgram.nl. No aliases.",
+      "builders": [
+        "ts-host/scripts/self-improvement/migrate-improver-lifecycle.mjs",
+        "ts-host/scripts/self-improvement/structural-study.mjs",
+        "ts-host/scripts/self-improvement/build-structural-cases.mjs"
+      ],
+      "dataSources": [
+        "Observed Luna planner tool overhead and repeated evidence inspection in runs/luna-bonsai-native-compact-20261001",
+        "Observed failed first experiment followed by accepted semantic batching rewrite"
+      ],
+      "cases": [
+        "One hypothesis without evaluator access",
+        "Source text and actual train costs supplied directly",
+        "Editor combines complete replacement and fresh finish",
+        "No-op and rejected experiment trigger revised next-iteration hypothesis"
+      ],
+      "comparison": "Frozen preceding optimizer versus prepared-context optimizer on closed train/validation only; retain failed attempts and original cached baseline costs.",
+      "dataGeneration": {
+        "cases": 2,
+        "output": "runs/self-improvement-data/observed-structural-20261001/cases.jsonl",
+        "startingSources": "Actual original and measured literal editor trial linked to native train execution identities",
+        "heldOut": "Fresh independent review cases; original closed confirmation cases excluded",
+        "positiveSFT": false
+      },
+      "recollection": {
+        "templates": 13,
+        "output": "runs/self-improvement-data/prepared-context-v1/decomposed-recollection.jsonl",
+        "observations": "Preserved historical observations; affected admissions revoked pending current recollection"
+      }
+    },
+    {
+      "id": "shared-semantic-answers-and-input-overviews",
+      "contracts": [
+        "Direct declared strings and JSON semantic results; eval finish:true for exact computation/effects",
+        "Bounded per-field structured previews with precise scope paths and intact full values",
+        "planExperiment(brief:string,context:ExperimentContext,policy:ImprovementPolicy): string",
+        "RewriteRequest.brief and complete sourceFiles required",
+        "source-evaluation/13 action/result causality, including terminal actions"
+      ],
+      "migration": "Rewrite authored templates/callers directly; remove ExperimentPlan. Update obsolete source snapshots with migrate-improver-lifecycle v2 and revoke stale admission. Keep original actions and observations historical; recollect changed executions and previews, with current prompt/tool identities. Audit canonical corpora and generate recollection candidates without fabricating model outputs. No compatibility aliases.",
+      "builders": [
+        "ts-host/scripts/self-improvement/migrate-improver-lifecycle.mjs",
+        "ts-host/scripts/self-improvement/build-semantic-result-cases.mjs",
+        "ts-host/scripts/self-improvement/probe-input-views.mjs",
+        "ts-host/scripts/self-improvement/build-structural-cases.mjs"
+      ],
+      "sources": [
+        "Actual Luna context inspection and redundant semantic plumbing in runs/luna-bonsai-prepared-optimizer-20261001/exchanges.ndjson",
+        "Pinned development training observations in runs/luna-bonsai-card-draft-20261001-v3",
+        "Read-only canonical corpus audit: runs/self-improvement-data/semantic-results-20261001/source-audit.json"
+      ],
+      "dataGeneration": {
+        "generalSemanticCases": 3,
+        "generalSemanticOutput": "runs/self-improvement-data/semantic-results-20261001/cases.jsonl",
+        "largeInputCases": 1,
+        "largeInputOutput": "runs/bonsai-input-overview-20261001/cases.jsonl",
+        "structuralCases": 2,
+        "structuralOutput": "runs/self-improvement-data/observed-structural-20261001/cases.jsonl",
+        "positiveSFT": false,
+        "disposition": "New independent train/validation/test cases; reconstructed overhead distinguished from measured failures. Require student reproduction, native collection and independent replay before admission."
+      },
+      "recollection": {
+        "migratedTemplates": 13,
+        "output": "runs/self-improvement-data/semantic-results-20261001/decomposed-recollection.jsonl",
+        "existingFailureRowsAudited": 69,
+        "existingFailureOutput": "runs/self-improvement-data/semantic-results-20261001/original-recollection.jsonl",
+        "reason": "Original generic failure rows have no obsolete planner signature; earlier migration admissions remain revoked. Eight canonical files audited; no obsolete planner references."
+      },
+      "measurements": {
+        "generalBonsaiProbe": "Same source/seed and two train inputs: correct 2/2 in both arms; requests 4 to 2. Reserved cases unopened.",
+        "LunaDraftProbe": "Pinned actual development observations: valid source draft, requests 17 to 6; no new student or held-out execution.",
+        "optimizerAblation": "Prepared context alone increased overhead: 60 Luna requests for three experiments versus 31 for two preceding experiments. Both selected correct validation source with 2 requests."
+      },
+      "verification": [
+        "ts-host/test/interpreter.test.mjs",
+        "ts-host/test/source-improvement.test.mjs",
+        "ts-host/test/compaction.test.mjs",
+        "ts-host/test/observed-study.test.mjs"
+      ],
+      "verificationResult": {
+        "tests": 723,
+        "passed": 723,
+        "conformance": 22,
+        "applicationBuild": true,
+        "browserTypes": true,
+        "browserBundle": true,
+        "actualChromiumSmoke": true,
+        "diffCheck": true,
+        "suiteConcurrency": 4,
+        "timingNote": "Unconstrained run had a cold-start worker timeout before model entry. Timeout test passed isolated; complete bounded-concurrency run passed. No timeout behavior or assertion was weakened."
+      },
+      "incidentInventory": "runs/self-improvement-data/native-compact-incidents"
+    }
+  ],
+  "source_research": "ts-host/scripts/self-improvement/sources.json",
+  "incident_inventory": "runs/self-improvement-data/folder-api-v1/index",
+  "collection": "ts-host/scripts/self-improvement/collect-improvement.mjs",
+  "replay": "ts-host/scripts/self-improvement/replay-improvement.mjs",
+  "admission": [
+    "ts-host/scripts/self-improvement/verify-improvement.mjs",
+    "scripts/validate_correction_turns.py"
+  ],
+  "coverage_status": "Implementation evidence exists; required curriculum quotas and complete migration/recollection are not yet satisfied."
+}

@@ -20,7 +20,7 @@ void loop.dispatch({ id: 'one', kind: 'go' });
 void loop.close();
 void BrowserDomRenderer;
 void nl;
-void iterateOn(async (value: number) => value + 1, 0).until(value => value > 2);
+void iterateOn(async (value: number) => value + 1, 0).withMeasure(value=>Math.max(0,3-value)).until(value => value > 2);
 
 // Portable consumption adds no Node optimizer/evaluation API to this graph.
 const identity: natlang.ExecutorIdentity = { id: 'caller-model', configuration: {} };

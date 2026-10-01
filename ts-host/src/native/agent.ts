@@ -98,7 +98,11 @@ const FOLDER_DECLARATIONS = [
   'interface Folder extends Entry { file(path: string): FileHandle; dir(path: string): Folder; entries(pattern?: string): Promise<Entry[]>;',
   '  files(pattern?: string): Promise<FileHandle[]>; folders(pattern?: string): Promise<Folder[]>; diff(): Promise<unknown>;',
   '  /** Run a directory reducer on this folder and keep the file changes it commits. */',
-  '  apply(reducer: Function, ...args: unknown[]): Promise<unknown>; }',
+  '  apply(reducer: Function, ...args: unknown[]): Promise<unknown>;',
+  '  snapshot(): FolderSnapshot; at(sourceId:string):FolderSnapshot; propose<R>(reducer: Function, ...args: unknown[]): Promise<FolderProposal<R>>;',
+  '  accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot>; select(snapshot: FolderSnapshot): Promise<void>; }',
+  'interface FolderSnapshot extends Folder {readonly digest:string;branch():Folder;}',
+  'interface FolderProposal<R> {readonly folder:FolderSnapshot;readonly value:R;readonly baseRevision:number;readonly diff:unknown;}',
 ];
 
 const DEFAULT_CONTEXT_TOKENS = 16384;
@@ -171,7 +175,11 @@ function referencedTypeAliases(signatures: string[], definitions: Record<string,
  */
 export function renderValue(value: Value | unknown, options: { holder?: string; budget?: number; root?: Folder } = {}): string {
   if (value === undefined) return 'undefined';
-  return scopeExpression(value, options.root, options.holder, options.budget) ?? previewValue(value as Value, options.holder);
+  const full = scopeExpression(value, options.root, options.holder, Infinity);
+  if(full===undefined)return previewValue(value as Value,options.holder);
+  const budget=options.budget??SHOWN_CHARS;
+  if(full.length<=budget)return full;
+  return scopeExpression(value, options.root, options.holder, budget) ?? previewValue(value as Value, options.holder);
 }
 
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
@@ -261,10 +269,24 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
   });
   if (Array.isArray(value)) return sequence(value, '[', ']', 'items', (item, left) => scopeExpression(item, root, holder, left));
   if (!isPlainRecord(value)) return undefined;
-  return sequence(Object.entries(value), '{ ', ' }', 'fields', ([key, item], left) => {
-    const text = scopeExpression(item, root, holder, left);
-    return text === undefined ? undefined : `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)}: ${text}`;
-  });
+  const entries = Object.entries(value);
+  // Give ordinary argument records an overview, rather than allowing a large first field
+  // to hide every later field. Tiny nested records show their keys and a precise holder.
+  if (Number.isFinite(budget) && budget < 128 && entries.length > 2)
+    return `{ ${cutNote('fields: '+entries.slice(0,24).map(([key])=>key).join(', ')+(entries.length>24?', …':'')+'; values not shown', {holder})} }`;
+  const visible = Number.isFinite(budget) ? entries.slice(0,24) : entries;
+  const overhead = visible.reduce((sum,[key])=>sum+key.length+4,0);
+  const fieldBudget = Number.isFinite(budget) ? Math.max(0,Math.floor((budget-overhead)/Math.max(1,visible.length))) : budget;
+  const shown:string[]=[];
+  for(const [key,item] of visible){
+    const identifier=/^[A-Za-z_$][\w$]*$/.test(key),label=identifier?key:JSON.stringify(key);
+    const childHolder=holder?(identifier?holder+'.'+key:holder+'['+JSON.stringify(key)+']'):undefined;
+    const text=scopeExpression(item,root,childHolder,fieldBudget);
+    if(text===undefined)return undefined;
+    shown.push(label+': '+text);
+  }
+  if(visible.length<entries.length)shown.push(cutNote('cut off: '+(entries.length-visible.length)+' of '+entries.length+' fields not shown',{holder}));
+  return '{ '+shown.join(', ')+' }';
 }
 
 /** The native model loop. Program state stays in NativeSession, never in the model history. */
@@ -274,6 +296,7 @@ export class NativeToolAgent {
   constructor(readonly driver: NativeModelDriver,
     readonly options: { maxTurns?: number; maxTokens?: number; turnTokens?: number;
       temperature?: number; maxSeconds?: number; systemPrompt?: string | (() => string); programGuidance?: string;
+      tools?:readonly string[]; standalonePrompt?:boolean;
       review?: NativeReviewOptions;
       maxFailureRepairs?: number;
       /** The file tools a directory reducer offers (prompt.ts FileToolSurface; default all). */
@@ -317,8 +340,8 @@ export class NativeToolAgent {
 
   private toolsScope(session: NativeSession): any[] {
     const tools = [
-      tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A top-level return value of the declared type is staged as the call\'s result; the final expression is only shown.',
-        { code: { type: 'string' }, timeout_ms: { type: 'integer', minimum: 1,
+      tool('eval', 'Run TypeScript in this call\'s persistent scope. Declarations persist. A final expression inspects data. A typed top-level return stages the result; finish:true returns the fresh typed value of the final expression or explicit return in this one action.',
+        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Use false or omit for inspection or staging; never finishes an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1,
           description: 'Optional wall-clock limit, including time waiting for natural-language children. Omit it for large child batches. A timeout does not cancel work already started.' } }, ['code']),
       tool('read_page', 'Read one page of output that a tool result cut off, by the ID and page number that result names.',
         { id: { type: 'string' }, page: { type: 'integer', minimum: 1 } }, ['id', 'page']),
@@ -364,7 +387,7 @@ export class NativeToolAgent {
       tool('bash', 'Run bash over the current folder. Returns exit code, stdout, stderr and changed paths. Use finite for loops; while, until, C-style for and recursive functions are refused.',
         { command: { type: 'string' } }, ['command']),
       tool('python', 'Run a Python cell over the current folder with pathlib, pandas and sqlite3. Returns its last expression, stdout, stderr and changed paths. Use finite for loops; while and recursion are refused.',
-        { code: { type: 'string' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
+        { code: { type: 'string' }, finish: { type: 'boolean', description: 'Finish this function using the fresh typed final expression or explicit return computed in this eval. Use false or omit for inspection or staging; never finishes an older staged value.' }, timeout_ms: { type: 'integer', minimum: 1 } }, ['code']),
       tool('delegate', 'Give one subfolder to a directory reducer child with its own context. Its successful file changes are merged into this folder.',
         { path: { type: 'string' }, instructions: { type: 'string' }, returns: { type: 'string' } },
         ['path', 'instructions']),
@@ -381,7 +404,8 @@ export class NativeToolAgent {
   }
 
   tools(session: NativeSession): unknown[] {
-    return this.toolsScope(session);
+    const tools=this.toolsScope(session);
+    return this.options.tools ? tools.filter(tool=>this.options.tools!.includes(tool.function.name)) : tools;
   }
 
   private scopeOpening(session: NativeSession): string {
@@ -535,8 +559,8 @@ export class NativeToolAgent {
       const base = typeof this.options.systemPrompt === 'function' ? this.options.systemPrompt() : this.options.systemPrompt ?? TOOLS_PROMPT;
       const allowAdHoc = canGenerateNl(session.runtime.frame);
       const composed = (allowAdHoc ? base : promptAtNlDepthLimit(base)) +
-      (Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
-      (session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
+      (!this.options.standalonePrompt && Object.keys(session.lam.codebase).length ? FUNCTION_TOOLS_PROMPT : '') +
+      (!this.options.standalonePrompt && session.lam.projectTransaction ? directoryReducerPrompt(this.options.fileTools, allowAdHoc) : '') +
       programGuidance(this.options.programGuidance ?? '');
       if (this.options.programGuidance !== undefined) adaptedSystem = composed;
       return composed;
@@ -640,7 +664,6 @@ export class NativeToolAgent {
           ...(availableTools !== allTools ? { tool_choice: 'required' as const } : {}),
           ...(this.options.temperature === undefined ? {} : { temperature: this.options.temperature }),
           seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'model-turn', turns),
           max_tokens: limit }, session.runtime.signal);
       } catch (error) {
@@ -712,7 +735,6 @@ export class NativeToolAgent {
         const fork = [...messages, { role: 'user', content: this.reviewPrompt(messages, calls, index) }];
         const answer = await (review.driver ?? this.driver)({ messages: fork, tools: this.reviewTools(),
           temperature: 0, seed: session.runtime.seedPolicy.mode === 'backend' ? null :
-            session.runtime.seedPolicy.mode === 'compatibility' ? 0 :
             deriveSeed(session.runtime.seedPolicy.root!, session.runtime.options.seedId ?? session.runtime.options.runId, session.lam.attempts, 'review', turns),
           max_tokens: budget }, session.runtime.signal);
         turns++; tokens += answer.completion_tokens === undefined ? budget ?? 0 : Math.max(1, answer.completion_tokens);
@@ -757,10 +779,13 @@ export class NativeToolAgent {
       const previousFailureSerial = session.failureSerial;
       for (const [index, [name, args]] of calls.entries()) {
         if (timedOut()) return 'episode wall-clock budget exhausted';
-        const result: NativeResult = await session.applyAsync(name, args);
+        const result: NativeResult = this.options.tools && !this.options.tools.includes(name) ? {kind:'rejected',text:'Tool is not exposed in this call: '+name} : await session.applyAsync(name, args);
         results.push(result);
         if (result.kind === 'blocked') return result.text;
         if (['blocked', 'budget', 'completed'].includes(result.kind)) break;
+        // A later action may depend on this one's result. In particular, never
+        // finish an older staged answer after the computation in this batch failed.
+        if (['error', 'rejected', 'refused'].includes(result.kind) || session.failureSerial > previousFailureSerial) break;
       }
       messages.push({ role: 'assistant', content: '', tool_calls: raw.slice(0, results.length), ...thought(response.reasoning) });
       // Near the end of the turn budget the model is told how many turns are left, so a task that cannot be finished

@@ -13,7 +13,9 @@ const ARGUMENTS_KEY = '__natlang_arguments';
 const prelude = readFileSync(fileURLToPath(new URL('../prelude.js', import.meta.url)), 'utf8');
 
 function snapshot(value: unknown): unknown {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  // Eval scope follows TypeScript: an absent optional property may be undefined.
+  // Published portable results still use the stricter portable() boundary below.
+  if (value === undefined || value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
   if (Array.isArray(value)) return Object.freeze(Array.from(value, snapshot));
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {

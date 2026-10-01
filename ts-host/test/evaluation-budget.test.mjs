@@ -113,9 +113,9 @@ test('checkpoint resume requires the supported engine and exact search fingerpri
     store.write('checkpoint.json', { ...saved, iteration: 999 });
     assert.throws(() => readCheckpoint(store, 'suite-a', 'program-a', 'options-a'), /integrity mismatch/);
     store.write('checkpoint.json', { ...state, engine: 'natlang.ax-gepa/older' });
-    assert.throws(() => readCheckpoint(store, 'suite-a', 'program-a', 'options-a'), /unsupported optimization checkpoint/);
+    assert.throws(() => readCheckpoint(store, 'suite-a', 'program-a', 'options-a'), /different authored engine/);
     store.write('checkpoint.json', { ...state, schema: 'natlang.adaptation-run/v0' });
-    assert.throws(() => readCheckpoint(store, 'suite-a', 'program-a', 'options-a'), /unsupported optimization checkpoint/);
+    assert.throws(() => readCheckpoint(store, 'suite-a', 'program-a', 'options-a'), /different authored engine/);
   } finally { store?.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 

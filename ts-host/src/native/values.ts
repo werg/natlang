@@ -125,6 +125,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value'): 
       else {
         const field = wanted.fields.find(f => f.name === key);
         if (!field) return reject(`${path}/${key}`, 'unknown-field', formatType(wanted));
+        if (value === undefined && field.optional) continue;
         if (value === null && field.optional && !fitsType(parseType('null'), field.type, env)) continue;
         out[key] = coerce(value, field.type, env, `${path}/${key}`);
       }

@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json
+from self_improvement_data import current_improvement_turns
 from reviewed_training_inputs import resolve_reviewed_turn_inputs
 
 
@@ -140,6 +141,8 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
                                  for key in ('helpers', 'imports', 'recursive')):
                     saved_replays.append((tasks_path, captures_path, len(tasks)))
     verified_turns = ([str(Path(path).resolve()) for path in verified_turns_override] if verified_turns_override is not None else compatible_turns)
+    if verified_turns_override is None:
+        verified_turns.extend(current_improvement_turns(repo))
     verified_turns, resolved_turn_replacements, turn_input_aliases = resolve_reviewed_turn_inputs(
         repo, verified_turns, allow_coalesce=verified_turns_override is None)
     for path in verified_turns:

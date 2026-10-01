@@ -39,7 +39,7 @@ export { newPlaygroundProject, assertPlaygroundProject, editPlaygroundProject, v
   validProjectPath, runPlaygroundProject, projectEntry, projectSignature, traceFrame, admitPlaygroundRun } from '../app/playground.js';
 export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame } from '../app/playground.js';
 export { TypeScriptEnvironment } from './environment.js';
-export { Folder, FolderHandle, FileHandle } from '../native/scoped-fs.js';
+export { Folder, FolderSnapshot, FolderHandle, FileHandle } from '../native/scoped-fs.js';
 export { folderFromData, folderToData } from '../native/data-layout.js';
 export type { FolderDataLayout, FolderDataResult } from '../native/data-layout.js';
 export { openArchive } from '../native/archive.js';
@@ -54,3 +54,5 @@ export { TypeEnv, parseType, formatType, fitsType } from '../native/types.js';
 export type { ModelTurn, ModelTurnRequest } from '../contracts.js';
 
 export * from '../adaptation/index.js';
+
+export type { FolderProposal } from '../native/scoped-fs.js';

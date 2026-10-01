@@ -110,7 +110,7 @@ export async function distance(from: string, to: string): Promise<number | null>
     return { frontier: next, seen: [...state.seen, ...next], depth: state.depth + 1, found: next.includes(to) };
   };
   const final = await iterateOn(expand, { frontier: [from], seen: [from], depth: 0, found: from === to })
-    .until(state => state.found || state.frontier.length === 0);
+    .withLimit({maxSteps: 128}).until(state => state.found || state.frontier.length === 0);
   return final.found ? final.depth : null;
 }
 `;

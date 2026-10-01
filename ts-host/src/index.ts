@@ -14,7 +14,7 @@ export type { PlaygroundProject, PlaygroundRun, PlaygroundDiagnostic, TraceFrame
 export type { AppEvent, Transition, Commit, Failure, StepContext, EventLoopOptions } from './app/event-loop.js';
 export { TerminalSessionStore, renderTerminalView, runTerminalShell } from './terminal/index.js';
 export type { TerminalCheckpoint, TerminalBlock, TerminalView, TerminalRenderOptions, TerminalShellOptions } from './terminal/index.js';
-export { Folder, FolderHandle, FileHandle, EntryHandle, FolderTransaction, FolderBusyError, FolderConflictError } from './native/scoped-fs.js';
+export { Folder, FolderSnapshot, FolderHandle, FileHandle, EntryHandle, FolderTransaction, FolderBusyError, FolderConflictError } from './native/scoped-fs.js';
 export type { FolderSource, FolderAccess, FileContents, EntryStat, SearchMatch, Change, ChangeSet, ChangeKind, EntryKind } from './native/scoped-fs.js';
 export { folderFromData, folderToData } from './native/data-layout.js';
 export type { FolderDataLayout, FolderDataResult } from './native/data-layout.js';
@@ -49,3 +49,7 @@ export { compileVirtualProject, virtualProjectFiles, virtualSourceFiles, loadVir
 export type { VirtualProject, CompiledProject } from './runtime/virtual-project.js';
 
 export * from './adaptation/index.js';
+
+export type { FolderProposal } from './native/scoped-fs.js';
+
+export * from './improvement/index.js';

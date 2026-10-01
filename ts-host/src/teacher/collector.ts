@@ -775,6 +775,17 @@ export type ProgramRun = { outcome: Record<string, unknown> & { accepted: boolea
  */
 export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
+  const fixture=record.semantics.evaluation_fixture;
+  if(fixture){
+    if(fixture.kind!=='flat-program-evaluator')throw Error('unsupported improvement evaluation fixture');
+    const {improveProgram}=await import('../improvement/program.js');
+    const traces:import('../runtime/runtime.js').InvocationTrace[]=[];
+    const run=await improveProgram({folder:Folder.fromFiles(fixture.caseDefinition.files),...fixture.caseDefinition,
+      improverSource:Folder.fromFiles(record.semantics.files).snapshot(),improver:driver,executor:driver,executorId:fixture.executorId??'canonical-improvement-fixture',
+      signal:options.signal,seed:options.rootSeed,trace:trace=>traces.push(trace),budget:{maxModelCalls:104,maxRollouts:40,maxProposals:2*fixture.caseDefinition.policy.maxExperiments,maxElapsedMs:600000}});
+    const accepted=!!run.validation&&!!run.baseline&&run.state.done&&run.validation.gatesPassed&&run.validation.quality>=run.baseline.quality&&run.state.incumbent===run.folder.digest;
+    return {outcome:{accepted,kind:accepted?'done':'failed',value:run.state,source:run.sourceManifest,quality:run.validation?.quality??null,baseline:run.baseline?.quality??null,disposition:run.disposition,ledger:run.ledger},trace:traces.flatMap(trace=>trace.events) as Record<string,unknown>[]};
+  }
   const root = programNode(record);
   const folderFiles = record.semantics.folder_files;
   if (folderFiles && (root.nodeKind !== 'lambda' || root.subtype !== 'directory-reducer'))

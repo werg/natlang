@@ -146,15 +146,15 @@ test('iterateOn: method and free forms, zero-step success, streaming, limits, an
   const runtime = createNatlangRuntime();
   const step = async (state, by) => state + by;
   const done = state => state >= 10;
-  assert.equal(await runtime.run(() => iterateOn(step, 1, 3).until(done)), 10);
+  assert.equal(await runtime.run(() => iterateOn(step, 1, 3).withMeasure(n=>Math.max(0,10-n)).until(done)), 10);
   assert.equal(await runtime.run(() => iterateOn(step, 12, 3).until(done)), 12, 'initial-state success takes zero steps');
   const events = [];
-  await runtime.run(async () => { for await (const event of iterateOn(step, 0, 4).streamUntil(done)) events.push(`${event.kind}:${event.state ?? ''}`); });
+  await runtime.run(async () => { for await (const event of iterateOn(step, 0, 4).withMeasure(n=>Math.max(0,10-n)).streamUntil(done)) events.push(`${event.kind}:${event.state ?? ''}`); });
   assert.deepEqual(events, ['initial:0', 'step:4', 'step:8', 'step:12', 'done:12']);
   await assert.rejects(() => runtime.run(() => iterateOn(step, 0, 0).withLimit({ maxSteps: 5 }).until(done)), IterationLimitError);
-  await assert.rejects(() => runtime.run(() => iterateOn(() => { throw new Error('bad step'); }, 0).until(done)),
+  await assert.rejects(() => runtime.run(() => iterateOn(() => { throw new Error('bad step'); }, 0).withLimit({maxSteps:1}).until(done)),
     error => error.name === 'IterationStepError' && error.lastState === 0);
-  const once = iterateOn(step, 0, 1);
+  const once = iterateOn(step, 0, 1).withMeasure(n=>Math.max(0,10-n));
   await runtime.run(() => once.until(done));
   await assert.rejects(() => runtime.run(() => once.until(done)), /only once/);
 });
@@ -162,11 +162,11 @@ test('iterateOn: method and free forms, zero-step success, streaming, limits, an
 test('iterateOn reviews progress on fresh sites and stops only on a divergent verdict', async () => {
   const runtime = createNatlangRuntime({ progressJudge: async trajectory => ({ verdict: trajectory.repeats().length ? 'divergent' : 'continue',
     reason: `${trajectory.repeats().length} repeats` }) });
-  const cycling = runtime.run(() => iterateOn(state => (state + 1) % 5, 0).until(() => false));
+  const cycling = runtime.run(() => iterateOn(state => (state + 1) % 5, 0).withLimit({maxSteps:50}).until(() => false));
   await assert.rejects(cycling, error => error instanceof IterationDivergedError && /repeats/.test(error.reason));
   const reviews = [];
   const progressing = await runtime.run(() => iterateOn(state => state + 1, 0).onStep(event => { if (event.kind === 'review') reviews.push(event.review.verdict); })
-    .until(state => state >= 25));
+    .withLimit({maxSteps:25}).until(state => state >= 25));
   assert.equal(progressing, 25);
   assert.ok(reviews.length >= 1 && reviews.every(verdict => verdict === 'continue'), 'a slow but improving run may continue');
 });
@@ -175,7 +175,7 @@ test('iterateOn keeps per-site statistics when the site has an identity', async 
   const statistics = new MemoryIterationStatistics();
   const runtime = createNatlangRuntime({ statistics });
   for (let run = 0; run < 3; run++)
-    await runtime.run(() => __natlang.site('app.ts#improve', iterateOn(state => state + 1, 0)).until(state => state >= 4));
+    await runtime.run(() => __natlang.site('app.ts#improve', iterateOn(state => state + 1, 0)).withMeasure(n=>4-n).until(state => state >= 4));
   const [key, stats] = Object.entries(statistics.export())[0];
   assert.match(key, /^app\.ts#improve\|/);
   assert.equal(stats.successes, 3); assert.equal(stats.meanSteps, 4);
@@ -262,4 +262,16 @@ test('a runtime shows services by their declarations and limits scoped ones to t
   assert.match(seen.lookup.used, /found x/);
   for (const name of ['answer', 'lookup'])
     assert.match(seen[name].read, /^declare namespace records \{\n {2}\/\*\* Look a question up in the records\. \*\/\n {2}export function find/);
+});
+
+test('service scope is exact unless descendant authority is explicitly requested',async()=>{
+ const {loadVirtualNatlang}=await import('../dist/runtime/virtual-project.js');
+ const step=loadVirtualNatlang({'step.nl':'---\nargs: {}\nreturns: boolean\n---\nAsk child.','step/child.nl':'---\nargs: {}\nreturns: boolean\n---\nInspect own services.'},'step.nl');
+ for(const selector of ['step.nl','step.nl/**']){
+  const seen={};const rt=createNatlangRuntime({services:{records:{read:()=>1}},serviceDeclarations:{records:'export function read():number;'},serviceScopes:{records:[selector]},agent:async session=>{
+   seen[session.lam.functionName]=Object.keys(session.availableServices());
+   const event=await session.applyAsync('eval',{code:session.lam.functionName==='step'?'await child(); return true;':'return true;'});assert.equal(event.kind,'ok',event.text);
+  }});
+  assert.equal(await rt.run(()=>step()),true);assert.deepEqual(seen.step,['records']);assert.deepEqual(seen.child,selector.endsWith('/**')?['records']:[]);
+ }
 });

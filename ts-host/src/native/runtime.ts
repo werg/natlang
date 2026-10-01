@@ -61,7 +61,7 @@ export type NativeRuntimeOptions = { environment: EvalEnvironment; hooks: Native
    */
   serviceScopes?: Record<string, string[]>;
   sharedEpisodeBudget?: { limit?: number; used: number };
-  seedPolicy?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number } };
+  seedPolicy?: { mode: 'derived' | 'backend'; root?: number } };
 
 type Ref = { path: string; type?: Type; env: TypeEnv; deny?: string;
   get(): Value; set(value: Value): void; del(): void };
@@ -178,7 +178,7 @@ export function inferValueType(value: unknown): string {
       const types = [...new Set(entries.map(([, item]) => inferValueType(item)))];
       return `Record<string, ${types.length === 1 ? types[0] : types.join(' | ')}>`;
     }
-    return `{ ${entries.map(([key, item]) => `${key}: ${inferValueType(item)}`).join(', ')} }`;
+    return `{ ${entries.map(([key, item]) => item === undefined ? `${key}?: unknown` : `${key}: ${inferValueType(item)}`).join(', ')} }`;
   }
   throw new Reject([{ path: 'value', code: 'type-mismatch', expected: 'a portable value' }]);
 }
@@ -237,11 +237,18 @@ function returnTypeOf(codebase: Record<string, unknown>, name: string): string |
   const found = findCodebaseItem(codebase, name);
   if (!found || found.path.join('.') !== name.replace(/\//g, '.') && found.record.kind !== 'module') return;
   const record = found.record;
-  if (record.kind === 'natlang') return record.returns;
+  const expanded=(text:string)=>{
+    const aliases:Record<string,Type>={};
+    for(const [name,source]of Object.entries('types' in record ? record.types : {})){try{aliases[name]=parseType(source);}catch{/* TypeScript-only types stay outside portable checking. */}}
+    const shared=callableTypes(codebase);
+    for(const name of Object.keys(aliases))if(shared[name]&&formatType(shared[name]!)===formatType(aliases[name]!))delete aliases[name];
+    return formatType(inlineDeclaredTypes(parseType(text),aliases));
+  };
+  if (record.kind === 'natlang') return expanded(record.returns);
   if (record.kind === 'module') {
     const exportName = name.split('.').at(-1)!;
     const spec = record.exports[exportName === record.name ? 'default' : exportName] ?? record.exports.default;
-    return spec?.kind === 'function' ? spec.returns : undefined;
+    return spec?.kind === 'function' ? expanded(spec.returns) : undefined;
   }
   return;
 }
@@ -250,7 +257,7 @@ export class NativeRuntime {
   readonly events: HostEvent[] = [];
   readonly trace: NativeTraceRecorder;
   readonly options: { maxActions?: number; maxToolCalls?: number; runId: string; seedId?: string };
-  readonly seedPolicy: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
+  readonly seedPolicy: { mode: 'derived' | 'backend'; root?: number };
   readonly environment: EvalEnvironment;
   readonly agent?: NativeAgent;
   readonly episodeBudget: { limit?: number; used: number };
@@ -270,7 +277,8 @@ export class NativeRuntime {
     for (const [name, value] of Object.entries({ maxActions: this.options.maxActions, maxToolCalls: this.options.maxToolCalls }))
       if (value !== undefined && (!Number.isInteger(value) || value < 1)) throw new RangeError(`${name} must be a positive integer`);
     this.episodeBudget = options.sharedEpisodeBudget ?? { used: 0 };
-    this.seedPolicy = options.seedPolicy ?? { mode: 'compatibility' };
+    this.seedPolicy = options.seedPolicy??{mode:'derived',root:0};
+    if(this.seedPolicy.mode==='derived'){this.seedPolicy={...this.seedPolicy,root:this.seedPolicy.root??0};if(!Number.isSafeInteger(this.seedPolicy.root))throw new RangeError('seed root must be a safe integer');}
     if (this.seedPolicy.mode === 'derived' && !Number.isInteger(this.seedPolicy.root))
       throw new TypeError('derived seed policy requires an integer root');
     this.trace = new NativeTraceRecorder({ run_id: this.options.runId, tool_schema: 'scope-eval-v2',
@@ -397,7 +405,7 @@ export type ScopeFailureDebug = {
 };
 
 /** Longest note compact_history accepts. */
-export const COMPACTION_NOTE_CHARS = 600;
+export const COMPACTION_NOTE_CHARS = 2000;
 
 /**
  * One earlier tool call of this call: the reasoning that led to it, its arguments, its outcome (`status`, the result kind: ok, rejected, error,
@@ -659,7 +667,9 @@ export class NativeSession {
         const timeout = args.timeout_ms;
         if (timeout !== undefined && (!Number.isInteger(timeout) || (timeout as number) < 1))
           throw new Reject([{ path: 'timeout_ms', code: 'bad-action', expected: 'a positive whole number of milliseconds' }]);
-        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined));
+        if (args.finish !== undefined && typeof args.finish !== 'boolean')
+          throw new Reject([{ path: 'finish', code: 'bad-action', expected: "a boolean: true completes this eval's fresh typed result" }]);
+        return this.record(name, args, await this.evaluate(String(args.code ?? ''), timeout as number | undefined, args.finish === true));
       }
       if (CODE_TOOLS.includes(name)) return this.record(name, args, this.functionTool(name, args));
       if (name === 'bash') {
@@ -877,7 +887,7 @@ export class NativeSession {
     const chain = currentFrame()?.chain ?? [];
     return Object.fromEntries(Object.entries(this.runtime.services).filter(([name]) => {
       const scope = this.runtime.serviceScopes[name];
-      return !scope || scope.some(path => chain.includes(`nl:${path}`));
+      return !scope || scope.some(path => path.endsWith('/**') ? chain.includes(`nl:${path.slice(0,-3)}`) : chain.at(-1)===`nl:${path}`);
     }));
   }
 
@@ -1064,7 +1074,7 @@ export class NativeSession {
   }
 
   /** Execute one eval action as an atomic scope transaction. */
-  private async evaluate(written: string, timeoutMs?: number): Promise<NativeResult> {
+  private async evaluate(written: string, timeoutMs?: number, complete = false): Promise<NativeResult> {
     if (!written.trim()) throw new Reject([{ path: 'code', code: 'bad-action', expected: 'a TypeScript statement or expression' }]);
     const code = desugarNlCalls(written);
     const scopeBefore = this.scopeSnapshot(), traceMark = this.runtime.trace.events.length;
@@ -1209,7 +1219,7 @@ export class NativeSession {
       }
       // A top-level return proposes the call's result; it is taken only if it has the declared type.
       let functionResult: Value | undefined, notResult = '';
-      if (raw.returned && this.lam.type.kind === 'lambda') try {
+      if ((raw.returned || complete) && this.lam.type.kind === 'lambda') try {
         functionResult = coerce(output.result, this.lam.type.returns, this.env, 'return');
       } catch (error) {
         notResult = `\nThis is not a valid ${formatType(this.lam.type.returns)}, so it is not the result: ` +
@@ -1273,6 +1283,10 @@ export class NativeSession {
           `${formatType(this.lam.type.returns)}, so it is not the result: ${refusal}`, codes: ['type-mismatch'] };
         this.lam.return = staged;
         this.failureDebug = undefined;
+        if (complete) {
+          const done=this.scopeTool('return_result',{status:'success',value:staged});
+          return {...done,text:`${logStatus}${rendered}${storedStatus}${unsetStatus}\n${done.text}`};
+        }
         return { kind: 'ok', text: `${logStatus}${rendered}${storedStatus}${unsetStatus}${stagedMessage(staged)}`, value: staged };
       }
       if (requested) {
@@ -1285,6 +1299,11 @@ export class NativeSession {
           const refused = rejected(error);
           return { ...refused, text: `${shown}\n${requested.tool}: ${refused.text}` };
         }
+      }
+      if (complete) {
+        if (functionResult === undefined) return {kind:'rejected',text:logStatus+rendered+storedStatus+unsetStatus+notResult+'\nfinish:true requires a fresh value of the declared result type from this eval. Use a final expression or explicit return; an older staged result cannot finish this action.',codes:['missing-fresh-result']};
+        const done=this.scopeTool('return_result',{status:'success',value:functionResult});
+        return {...done,text:logStatus+rendered+storedStatus+unsetStatus+'\n'+done.text};
       }
       return { kind: 'ok', text: logStatus + rendered + storedStatus + unsetStatus + status, value: (output.result ?? null) as Value,
         ...(compiled.repairs.length ? { codes: ['coerced-redundant-self-alias'] } : {}) };

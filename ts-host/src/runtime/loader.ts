@@ -262,7 +262,7 @@ export function loadCallableFolder(dir: string, files: SourceFiles, inherited: R
   };
   for (const entry of entries) {
     const path = files.join(dir, entry);
-    if (!files.isFile(path) || !isSource(entry)) continue;
+    if (!files.isFile(path) || !isSource(entry) || entry.endsWith('.d.ts') || entry.endsWith('.d.nl.ts')) continue;
     const text = files.read(path);
     const record = entry.endsWith('.nl') ? parseNatlang(path, text, types, files) : parseModule(path, text, types, files);
     add(record.name, record, path);

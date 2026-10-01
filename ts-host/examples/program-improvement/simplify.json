@@ -1,0 +1,127 @@
+{
+  "files": {
+    "main.ts": "export function solve(value:number[]):number{const first=value.map(x=>x+1);const second=first.map(x=>x-1);return second.reduce((a,b)=>a+b,0);}"
+  },
+  "contract": {
+    "entry": "main.ts",
+    "exportName": "solve",
+    "programId": "example-simplify"
+  },
+  "cases": [
+    {
+      "id": "simplify-0",
+      "group": "simplify-0",
+      "split": "train",
+      "args": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": 3
+    },
+    {
+      "id": "simplify-1",
+      "group": "simplify-1",
+      "split": "train",
+      "args": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "id": "simplify-2",
+      "group": "simplify-2",
+      "split": "train",
+      "args": [
+        [
+          -3,
+          5
+        ]
+      ],
+      "expected": 2
+    },
+    {
+      "id": "simplify-3",
+      "group": "simplify-3",
+      "split": "validation",
+      "args": [
+        [
+          4,
+          5
+        ]
+      ],
+      "expected": 9
+    },
+    {
+      "id": "simplify-4",
+      "group": "simplify-4",
+      "split": "validation",
+      "args": [
+        [
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "id": "simplify-5",
+      "group": "simplify-5",
+      "split": "test",
+      "args": [
+        [
+          6,
+          -1
+        ]
+      ],
+      "expected": 5
+    },
+    {
+      "id": "simplify-6",
+      "group": "simplify-6",
+      "split": "test",
+      "args": [
+        [
+          9,
+          8
+        ]
+      ],
+      "expected": 17
+    }
+  ],
+  "policy": {
+    "maxExperiments": 2,
+    "maxPopulation": 3,
+    "mode": "structural",
+    "strategy": "adaptive",
+    "objective": "source-size",
+    "goal": "Simplify summation while preserving all numeric values.",
+    "allowedFiles": [
+      "main.ts"
+    ]
+  },
+  "budget": {
+    "maxModelCalls": 60,
+    "maxRollouts": 40,
+    "maxProposals": 4,
+    "maxElapsedMs": 300000
+  },
+  "transformation": {
+    "id": "simplify",
+    "intent": "Simplify summation while preserving all numeric values.",
+    "preserves": [
+      "number-array argument and numeric return"
+    ],
+    "changes": [],
+    "checks": [
+      "compile",
+      "external-contract",
+      "validation-regressions"
+    ],
+    "allowedFiles": [
+      "main.ts"
+    ],
+    "mode": "structural"
+  }
+}

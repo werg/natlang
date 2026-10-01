@@ -238,7 +238,7 @@ const expand = (state: Search): Search => {
 };
 const direct = Object.keys(reached).find(cls => entity + ' is a ' + cls === target);
 const final = await iterateOn(expand, { reached, frontier: Object.keys(reached), found: direct ? reached[direct] : null })
-  .until(state => state.found !== null || state.frontier.length === 0);
+  .withLimit({maxSteps: 128}).until(state => state.found !== null || state.frontier.length === 0);
 if (final.found === null) return { status: 'unprovable', certificate: null };
 const checked = proof.verify(final.found);
 return { status: 'proved', certificate: checked.certificate };`;

@@ -50,3 +50,33 @@ when retrying external effects.
 Browser specifics: [`BROWSER_CLIENT.md`](BROWSER_CLIENT.md) and
 [`FRONTEND_APPLICATIONS.md`](FRONTEND_APPLICATIONS.md). Terminal applications:
 [`TERMINAL_APPLICATIONS.md`](TERMINAL_APPLICATIONS.md).
+
+### Native program improvement
+
+`improveProgram` runs an editable natlang directory-reducer program over complete
+source. Its root composes baseline measurement, one experiment and incumbent
+selection. `folder.iterateOn` checkpoints immutable source and portable state
+together; a decreasing work measure and an independent semantic progress judge
+provide finite iteration without instruction-entry gas.
+
+Packaged cases in `examples/program-improvement` exercise implementation, repair
+and simplification with independently supplied expected results:
+
+```sh
+natlang improve examples/program-improvement/repair.json --out repair-run --model MODEL --server http://127.0.0.1:8081
+natlang improve inspect repair-run
+natlang improve export repair-run --out selected-source.json
+```
+
+`resume` and `step` retain recorded source/model/allocation identities. `adopt
+RUN --into PROJECT` installs a completed independently checked result against its
+recorded base; `recover RECORD` and `rollback RECORD` support interrupted
+installation and restoration. The selected result contains all runnable source
+files, validation evidence and a disposition; returning source does not install
+it in the original folder.
+
+Editing helpers cannot evaluate their proposals. The caller owns evaluation,
+acceptance and selection; accepting a population parent's child does not make
+it the incumbent. Locked test confirmation is available only at the top and
+cannot be repeated with a revised candidate. Unknown transformation obligations
+remain unverified, and a requested change requires changed source.

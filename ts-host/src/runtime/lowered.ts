@@ -92,6 +92,17 @@ export function named(name: string, record: NatlangRecord): NatlangCallable { re
 /** A callable folder such as `natlang.d/`, as a record of callables. */
 export function folder(codebase: Record<string, ItemRecord>): Record<string, unknown> { return callableTree(codebase); }
 
+/** Numeric loop bounds are fixed at entry; rounding must never stall the counter. */
+export function numericProgress(initial: number, bound: number, upward: boolean): (current: number) => void {
+  if (!Number.isFinite(initial) || !Number.isFinite(bound)) throw new RangeError('numeric loop requires a finite counter and bound');
+  let previous: number | undefined;
+  return current => {
+    if (!Number.isFinite(current) || (previous !== undefined && !(upward ? current > previous : current < previous)))
+      throw new RangeError('numeric loop counter did not advance toward its bound');
+    previous = current;
+  };
+}
+
 /** Runtime half of the finite-iteration policy: `for (x of y)` becomes `for (x of finite(y, "y"))`. */
 export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
   if (typeof source === 'string') return source;
@@ -110,7 +121,8 @@ export function finite<T>(source: Iterable<T>, label?: string): Iterable<T> {
     const collection = source as unknown as { size: number; [Symbol.iterator](): Iterator<T> };
     const size = collection.size;
     return { [Symbol.iterator]: () => {
-      const inner = collection[Symbol.iterator]();
+      const values = tag === '[object Map]' ? Array.from(Map.prototype.entries.call(source)) : Array.from(Set.prototype.values.call(source));
+      const inner = (values as T[])[Symbol.iterator]();
       return { next: () => {
         if (collection.size > size) throw new RangeError('the collection grew while it was being iterated');
         return inner.next();

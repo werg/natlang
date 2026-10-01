@@ -1,0 +1,10 @@
+{
+  "version": "natlang.improvement-sources/1",
+  "sources": [
+    {"id":"gepa","url":"https://github.com/gepa-ai/gepa","role":"reflective-mutation, frontier selection and source optimization semantics","use":"algorithm reference and native workflow fixtures"},
+    {"id":"swe-bench","url":"https://github.com/SWE-bench/SWE-bench/blob/main/docs/guides/datasets.md","role":"real repository repair incidents","use":"reconstruct independently checkable targets, retain original splits and licenses"},
+    {"id":"agentinstruct","url":"https://www.microsoft.com/en-us/research/wp-content/uploads/2024/07/AgentInstruct.pdf","role":"skill curricula and generated-data failure analysis","use":"native adaptation case design"}
+  ],
+  "primary_source":"all existing generated natlang training artifacts, indexed with source hashes",
+  "rules":["Retain provenance and licenses.","Never use original held-out examples as training failures.","Gold patches belong only to oracle construction, never improver inputs."]
+}

@@ -6,6 +6,7 @@
  * reviews are scheduled from per-site statistics and never stop a run by themselves: only a
  * `divergent` verdict does.
  */
+import { FolderSnapshot } from '../native/scoped-fs.js';
 import { hexDigest } from '../native/hash.js';
 import { isLive, liveId } from '../native/values.js';
 import { currentFrame, runInFrame } from './context.js';
@@ -81,6 +82,7 @@ function stableHash(value: unknown): string {
   const seen = new WeakSet<object>();
   const canonical = (item: unknown): unknown => {
     if (item === null || typeof item !== 'object') return typeof item === 'function' ? `live:${liveId(item)}` : item;
+    if (item instanceof FolderSnapshot) return `source:${item.digest}`;
     if (isLive(item)) return `live:${liveId(item)}`;
     if (seen.has(item)) return '[cycle]';
     seen.add(item);
@@ -140,10 +142,11 @@ export const defaultProgressJudge: ProgressJudgeFunction = async (trajectory, co
 
 export class Iteration<T> {
   private observers: ((event: IterationEvent<T>) => void | Promise<void>)[] = [];
-  private judge?: ProgressJudgeFunction;
+  private judge?: ProgressJudgeFunction | 'off';
   private siteId?: string;
   private compilerSite?: string;
   private limit: { maxSteps?: number; deadlineMs?: number } = {};
+  private measure?: (state: T) => number;
   private started = false;
   private frame?: import('./context.js').Frame;
   readonly [Symbol.toStringTag] = 'Iteration';
@@ -153,12 +156,17 @@ export class Iteration<T> {
   }
 
   onStep(observer: (event: IterationEvent<T>) => void | Promise<void>): this { this.observers.push(observer); return this; }
-  checkProgress(judge: ProgressJudgeFunction): this { this.judge = judge; return this; }
+  checkProgress(judge: ProgressJudgeFunction | 'off'): this { this.judge = judge; return this; }
+  /** A well-founded workflow measure, independent of semantic reviews. */
+  withMeasure(remaining: (state: T) => number): this {
+    if (typeof remaining !== 'function') throw new TypeError('withMeasure requires a function');
+    this.measure = remaining; return this;
+  }
   withSiteId(id: string): this {
     if (!id.trim()) throw new TypeError('withSiteId requires a non-empty identifier');
     this.siteId = id; return this;
   }
-  withLimit(limit: { maxSteps?: number; deadlineMs?: number }): this { this.limit = { ...limit }; return this; }
+  withLimit(limit: { maxSteps?: number; deadlineMs?: number }): this { for (const [name, value] of Object.entries(limit)) { if (!Number.isFinite(value) || value < 0 || (name === 'maxSteps' && !Number.isSafeInteger(value))) throw new RangeError(`invalid iteration limit: ${name}`); } this.limit = { ...limit }; return this; }
   /** Run in a fixed task frame (used when an interpreter session creates the iteration). */
   inFrame(frame: import('./context.js').Frame | undefined): this { this.frame ??= frame; return this; }
   /** Set by compiled code with the call site's stable identity. */
@@ -239,15 +247,31 @@ export class Iteration<T> {
     const traceEvents: Record<string, unknown>[] = [];
     let state = this.initial;
     let outcome = 'done';
+    const measure = (value: T): number | undefined => {
+      if (!this.measure) return undefined;
+      try {
+        const remaining = this.measure(value);
+        if (!Number.isSafeInteger(remaining) || remaining < 0)
+          throw new RangeError('iteration measure must be a nonnegative safe integer');
+        return remaining;
+      } catch (error) {
+        throw new IterationStepError(`iteration measure failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error);
+      }
+    };
+    let remaining: number | undefined;
     const check = async (): Promise<boolean> => {
       try { return await runInFrame(frame, () => done(state)) === true; }
       catch (error) { throw new IterationStepError(`stopping predicate failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error); }
     };
     try {
       await emit({ kind: 'initial', iteration: 0, state });
+      remaining = measure(state);
       if (await check()) { await emit({ kind: 'done', iteration: 0, state }); return state; }
+      if(!this.measure&&this.limit.maxSteps===undefined)throw new IterationLimitError('iteration requires a remaining-work measure or a finite workflow step limit',state,trajectory as never);
       while (true) {
         task.checkOpen();
+        if (remaining === 0)
+          throw new IterationLimitError('iteration exhausted its remaining work measure', state, trajectory as never);
         if (this.limit.maxSteps !== undefined && steps.length >= this.limit.maxSteps)
           throw new IterationLimitError(`iteration reached its limit of ${this.limit.maxSteps} steps`, state, trajectory as never);
         if (this.limit.deadlineMs !== undefined && Date.now() - started >= this.limit.deadlineMs)
@@ -256,6 +280,10 @@ export class Iteration<T> {
         let next: T;
         try { next = await runInFrame(frame, () => this.step(state, ...this.fixed)); }
         catch (error) { throw new IterationStepError(`step ${steps.length + 1} failed: ${(error as Error)?.message ?? error}`, state, trajectory as never, error); }
+        const nextRemaining = measure(next);
+        if (remaining !== undefined && nextRemaining! >= remaining)
+          throw new IterationDivergedError('remaining work measure did not decrease', state, trajectory as never);
+        remaining = nextRemaining;
         const elapsed = Date.now() - before;
         activeMs += elapsed;
         state = next;
@@ -266,7 +294,7 @@ export class Iteration<T> {
         steps.push({ iteration, callId: task.traces.at(-1)?.callId ?? '', elapsedMs: elapsed, stateHash: hash });
         await emit({ kind: 'step', iteration, state });
         if (await check()) { await emit({ kind: 'done', iteration, state }); return state; }
-        if (reviewDue(stats, iteration, activeMs, lastReviewAt)) {
+        if (judge !== 'off' && reviewDue(stats, iteration, activeMs, lastReviewAt)) {
           lastReviewAt = iteration; reviews++;
           const verdict = await runInFrame(frame, () => judge(trajectory, { stepName: stepMeta?.definition.name ?? (this.step.name || 'step'),
             stepInstructions: stepMeta?.definition.body.trim(), predicateInstructions: doneMeta?.definition.body.trim() }));

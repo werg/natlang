@@ -5,7 +5,8 @@ import { EvalFailure, consoleWriter, withinTimeout, type EnvironmentMode, type E
 
 declare const __NATLANG_PRELUDE__: string;
 
-function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown {
+function portable(value: unknown, seen = new Set<object>(), path = '$', scope = false): unknown {
+  if (scope && value === undefined) return value;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return value;
   if (!value || typeof value !== 'object' || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
@@ -15,7 +16,7 @@ function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown
   if (seen.has(value)) throw new TypeError('eval result contains a cycle');
   seen.add(value);
   if (Array.isArray(value)) {
-    const out = value.map((item, index) => portable(item, seen, `${path}[${index}]`));
+    const out = value.map((item, index) => portable(item, seen, `${path}[${index}]`, scope));
     seen.delete(value); return out;
   }
   if (Object.prototype.toString.call(value) !== '[object Object]')
@@ -24,12 +25,12 @@ function portable(value: unknown, seen = new Set<object>(), path = '$'): unknown
   if (proto !== null && (Object.getPrototypeOf(proto) !== null || proto.constructor?.name !== 'Object'))
     throw new TypeError('eval result contains a native class instance');
   const out: Record<string, unknown> = Object.create(null);
-  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen, `${path}.${key}`);
+  for (const [key, child] of Object.entries(value)) out[key] = portable(child, seen, `${path}.${key}`, scope);
   seen.delete(value); return out;
 }
 
 function snapshot(value: unknown): unknown {
-  const copy = portable(value);
+  const copy = portable(value, new Set(), '$', true);
   function freeze(item: unknown): void {
     if (item && typeof item === 'object') { for (const child of Object.values(item)) freeze(child); Object.freeze(item); }
   }

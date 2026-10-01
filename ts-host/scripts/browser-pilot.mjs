@@ -73,7 +73,7 @@ try {
   else {
     await page.goto(`${url}/ts-host/test/browser-smoke.html`, { waitUntil: 'commit' });
     try { await page.getByText('PASS browser interpreter').waitFor({ timeout: 30000 }); }
-    catch (error) { throw new Error(`browser smoke did not complete: ${errors.join('; ')}`, { cause: error }); }
+    catch (error) { throw new Error(`browser smoke did not complete: ${await page.locator('#result').textContent()}; ${errors.join('; ')}`, { cause: error }); }
     console.log('PASS actual Chromium browser interpreter smoke');
     if (errors.length) throw new Error(errors.join('\n'));
   }

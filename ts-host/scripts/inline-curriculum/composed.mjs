@@ -315,7 +315,7 @@ export function composedProcess(seed, index) {
       `Start from ${process.startText}. Repeat one step: ${process.stepText}. Stop as soon as ${process.stopText}, which may already hold at the start. Return ${resultText}.` :
       `1. Start from ${process.startText}.\n2. If ${process.stopText}, stop.\n3. Otherwise ${process.stepText}, and go back to 2.\n4. Return ${resultText}.`;
     const code = `type State = ${process.state};\nconst step = ${process.step.replace(/^s =>/, '(s: State): State =>')};\n` +
-      `const final = await iterateOn(step, ${process.initial} as State).until(${process.stop.replace(/^s =>/, '(s: State) =>')});\nreturn ${resultCode};`;
+      `const final = await iterateOn(step, ${process.initial} as State).withLimit({maxSteps: 64}).until(${process.stop.replace(/^s =>/, '(s: State) =>')});\nreturn ${resultCode};`;
     return [curriculumCase({ family: 'composed_process', shape: `p${index}`, variant: 'v0', splitGroup: `composed-process:p${index}`,
       slice: 'iterate', domain: 'other', mode: 'single_call', inline: 'avoid', iterate: 'required',
       evidence: { world: [], retrieved: [JSON.stringify(expected)], background: [] },

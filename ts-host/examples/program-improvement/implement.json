@@ -1,0 +1,129 @@
+{
+  "files": {
+    "main.ts": "export function solve(value:number[]):number{return 0;}"
+  },
+  "contract": {
+    "entry": "main.ts",
+    "exportName": "solve",
+    "programId": "example-implement"
+  },
+  "cases": [
+    {
+      "id": "implement-0",
+      "group": "implement-0",
+      "split": "train",
+      "args": [
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": 3
+    },
+    {
+      "id": "implement-1",
+      "group": "implement-1",
+      "split": "train",
+      "args": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "id": "implement-2",
+      "group": "implement-2",
+      "split": "train",
+      "args": [
+        [
+          -3,
+          5
+        ]
+      ],
+      "expected": 2
+    },
+    {
+      "id": "implement-3",
+      "group": "implement-3",
+      "split": "validation",
+      "args": [
+        [
+          4,
+          5
+        ]
+      ],
+      "expected": 9
+    },
+    {
+      "id": "implement-4",
+      "group": "implement-4",
+      "split": "validation",
+      "args": [
+        [
+          0,
+          0
+        ]
+      ],
+      "expected": 0
+    },
+    {
+      "id": "implement-5",
+      "group": "implement-5",
+      "split": "test",
+      "args": [
+        [
+          6,
+          -1
+        ]
+      ],
+      "expected": 5
+    },
+    {
+      "id": "implement-6",
+      "group": "implement-6",
+      "split": "test",
+      "args": [
+        [
+          9,
+          8
+        ]
+      ],
+      "expected": 17
+    }
+  ],
+  "policy": {
+    "maxExperiments": 2,
+    "maxPopulation": 3,
+    "mode": "structural",
+    "strategy": "adaptive",
+    "objective": "quality",
+    "goal": "Return the sum of all numbers, including zero for an empty array.",
+    "allowedFiles": [
+      "main.ts"
+    ]
+  },
+  "budget": {
+    "maxModelCalls": 60,
+    "maxRollouts": 40,
+    "maxProposals": 4,
+    "maxElapsedMs": 300000
+  },
+  "transformation": {
+    "id": "implement",
+    "intent": "Return the sum of all numbers, including zero for an empty array.",
+    "preserves": [
+      "number-array argument and numeric return"
+    ],
+    "changes": [
+      "Return the sum of all numbers, including zero for an empty array."
+    ],
+    "checks": [
+      "compile",
+      "external-contract",
+      "validation-regressions"
+    ],
+    "allowedFiles": [
+      "main.ts"
+    ],
+    "mode": "structural"
+  }
+}

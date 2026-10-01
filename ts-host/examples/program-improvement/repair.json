@@ -1,0 +1,121 @@
+{
+  "files": {
+    "main.ts": "export function solve(value:number[]):number{return value.reduce((a,b)=>a+b);}"
+  },
+  "contract": {
+    "entry": "main.ts",
+    "exportName": "solve",
+    "programId": "example-repair"
+  },
+  "cases": [
+    {
+      "id": "repair-0",
+      "group": "repair-0",
+      "split": "train",
+      "args": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "id": "repair-1",
+      "group": "repair-1",
+      "split": "train",
+      "args": [
+        [
+          1
+        ]
+      ],
+      "expected": 1
+    },
+    {
+      "id": "repair-2",
+      "group": "repair-2",
+      "split": "train",
+      "args": [
+        [
+          2,
+          3
+        ]
+      ],
+      "expected": 5
+    },
+    {
+      "id": "repair-3",
+      "group": "repair-3",
+      "split": "validation",
+      "args": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "id": "repair-4",
+      "group": "repair-4",
+      "split": "validation",
+      "args": [
+        [
+          4,
+          5
+        ]
+      ],
+      "expected": 9
+    },
+    {
+      "id": "repair-5",
+      "group": "repair-5",
+      "split": "test",
+      "args": [
+        []
+      ],
+      "expected": 0
+    },
+    {
+      "id": "repair-6",
+      "group": "repair-6",
+      "split": "test",
+      "args": [
+        [
+          -9
+        ]
+      ],
+      "expected": -9
+    }
+  ],
+  "policy": {
+    "maxExperiments": 2,
+    "maxPopulation": 3,
+    "mode": "structural",
+    "strategy": "adaptive",
+    "objective": "quality",
+    "goal": "Repair summation so an empty array returns zero.",
+    "allowedFiles": [
+      "main.ts"
+    ]
+  },
+  "budget": {
+    "maxModelCalls": 60,
+    "maxRollouts": 40,
+    "maxProposals": 4,
+    "maxElapsedMs": 300000
+  },
+  "transformation": {
+    "id": "repair",
+    "intent": "Repair summation so an empty array returns zero.",
+    "preserves": [
+      "number-array argument and numeric return"
+    ],
+    "changes": [
+      "Repair summation so an empty array returns zero."
+    ],
+    "checks": [
+      "compile",
+      "external-contract",
+      "validation-regressions"
+    ],
+    "allowedFiles": [
+      "main.ts"
+    ],
+    "mode": "structural"
+  }
+}

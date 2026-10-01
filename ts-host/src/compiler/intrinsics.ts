@@ -7,7 +7,7 @@
  */
 
 /** Version of generated lowering. A runtime refuses output from another major version. */
-export const NATLANG_COMPILE_VERSION = 2 as const;
+export const NATLANG_COMPILE_VERSION = 4 as const;
 
 /** Names that cannot be used as child attributes of a natlang callable object. */
 export const RESERVED_CALLABLE_PROPERTIES: ReadonlySet<string> = new Set([
@@ -61,7 +61,8 @@ interface Iteration<T> {
   until(done: (state: T) => boolean | Promise<boolean>): Promise<T>;
   streamUntil(done: (state: T) => boolean | Promise<boolean>): AsyncIterable<IterationEvent<T>> & { readonly __natlangIterationStream: true };
   onStep(observer: (event: IterationEvent<T>) => void | Promise<void>): Iteration<T>;
-  checkProgress(judge: ProgressJudge<T>): Iteration<T>;
+  checkProgress(judge: ProgressJudge<T> | "off"): Iteration<T>;
+  withMeasure(remaining: (state: T) => number): Iteration<T>;
   withSiteId(id: string): Iteration<T>;
   withLimit(limit: { maxSteps?: number; deadlineMs?: number }): Iteration<T>;
 }
@@ -82,6 +83,18 @@ type NlResult<F> = [F] extends [NlUnspecified] ? NatlangUntypedFunction :
   [F] extends [(...args: infer A) => infer R] ? NatlangFunction<A, Awaited<R>> : NatlangFunction<any[], F>;
 
 /** A folder handle with directory-reducer authority. */
+interface FolderSnapshot extends Folder { readonly digest: string; branch(): Folder; }
+interface FolderProposal<R> { readonly folder: FolderSnapshot; readonly value: R; readonly baseRevision: number; readonly diff: unknown; }
+interface FolderIterationResult<S> { readonly folder: FolderSnapshot; readonly state: S; }
+interface FolderIteration<S> {
+  until(done: (state: S, folder: FolderSnapshot) => boolean | Promise<boolean>): Promise<FolderIterationResult<S>>;
+  streamUntil(done: (state: S, folder: FolderSnapshot) => boolean | Promise<boolean>): AsyncIterable<IterationEvent<FolderIterationResult<S>>> & { readonly __natlangIterationStream: true };
+  checkProgress(judge: ProgressJudge<FolderIterationResult<S>> | "off"): FolderIteration<S>;
+  withMeasure(remaining: (state: S, folder: FolderSnapshot) => number): FolderIteration<S>;
+  withLimit(limit: { maxSteps?: number; deadlineMs?: number }): FolderIteration<S>;
+  withSiteId(id: string): FolderIteration<S>;
+  onStep(observer: (event: IterationEvent<FolderIterationResult<S>>) => void | Promise<void>): FolderIteration<S>;
+}
 interface Folder {
   readonly path: string;
   readonly name: string;
@@ -94,6 +107,11 @@ interface Folder {
   diff(): Promise<unknown>;
   remove(): Promise<void>;
   moveTo(destination: string): Promise<void>;
+  snapshot(): FolderSnapshot; at(sourceId:string):FolderSnapshot;
+  propose<A extends unknown[], R>(reducer: NatlangFunction<[Folder, ...A], R>, ...inputs: A): Promise<FolderProposal<R>>;
+  accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot>;
+  select(snapshot: FolderSnapshot): Promise<void>;
+  iterateOn<S, A extends unknown[]>(reducer: NatlangFunction<[Folder, S, ...A], S>, initial: S, ...inputs: A): FolderIteration<S>;
   apply<A extends unknown[], R>(reducer: NatlangFunction<[Folder, ...A], R>, ...inputs: A): Promise<R>;
 }
 interface FileHandle {

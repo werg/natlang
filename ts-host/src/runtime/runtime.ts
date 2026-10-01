@@ -13,6 +13,8 @@ import type { IterationStatisticsStore, ProgressJudgeFunction } from './iterate.
 export type ModelDriver = (request: ModelTurnRequest, signal?: AbortSignal) => Promise<ModelTurn> | ModelTurn;
 export type ModelConfig = { driver: ModelDriver; maxTurns?: number; maxTokens?: number; turnTokens?: number;
   temperature?: number; maxSeconds?: number;
+  /** Model-visible tools and a complete replacement opening; neither changes eval capabilities. */
+  tools?:readonly string[]; prompt?:string;
   /** Context budget in prompt tokens before old tool outputs are elided (default 16384; null never compacts). */
   contextTokens?: number | null;
   /** Failed evals or rejected tool calls in a row before the call stops; unlimited unless set. */
@@ -31,6 +33,8 @@ export type NatlangLimits = { maxEpisodes?: number; maxDepth?: number; maxAction
 export type Services = Record<string, object>;
 
 export type NatlangRuntimeOptions = {
+  /** Account for speculative source edits in the current task. */
+  onFolderProposal?: () => void;
   program?: ProgramDescriptor;
   adaptation?: AdaptationBinding | null;
   executorIdentity?: ExecutorIdentity;
@@ -53,7 +57,7 @@ export type NatlangRuntimeOptions = {
   serviceScopes?: Record<string, string[]>;
   trace?: TraceSink;
   limits?: NatlangLimits;
-  seed?: { mode: 'compatibility' | 'derived' | 'backend'; root?: number };
+  seed?: { mode: 'derived' | 'backend'; root?: number };
   /** Evaluator factory; each platform installs a default. */
   environment?: () => EvalEnvironment;
   /** Directory whose node_modules eval imports resolve from (Node; default: the nearest package.json above cwd). */
@@ -121,7 +125,7 @@ export class NatlangTask {
   private callSequence = 0;
   private readonly definitionCalls = new Map<string, number>();
   private readonly taskOrdinal: number;
-  definitionSeedId(key: string): string { const ordinal = (this.definitionCalls.get(key) ?? 0) + 1; this.definitionCalls.set(key, ordinal); return this.taskOrdinal + '/' + key + '/' + ordinal; }
+  definitionSeedId(key: string): string { const ordinal = (this.definitionCalls.get(key) ?? 0) + 1; this.definitionCalls.set(key, ordinal); return key + '/' + ordinal; }
   private closed = false;
   private timer?: ReturnType<typeof setTimeout>;
   private appPromptSnapshot?: string;

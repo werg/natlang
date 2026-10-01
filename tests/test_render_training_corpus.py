@@ -244,3 +244,26 @@ def test_minicpm_closed_target_preserves_reasoning_and_native_tool_arguments():
     assert '<function name="eval"><param name="code">1+1</param></function>' in pair["completion"]
     assert pair["completion"].endswith("<|im_end|>")
     assert pair["completion_masked"] == pair["completion"].index("</think>") + len("</think>")
+
+
+def test_reasoning_history_stays_identical_when_a_new_assistant_target_is_appended():
+    class ForgetfulTokenizer(MockTokenizer):
+        chat_template = 'set preserve_thinking = preserve_thinking | default(false)'
+
+        def apply_chat_template(self, messages, *, preserve_thinking=False, **kwargs):
+            assert preserve_thinking is True
+            rendered = []
+            for message in messages:
+                text = message.get('content', '') + message.get('thinking', '')
+                rendered.append({**message, 'content': text})
+            return super().apply_chat_template(rendered, **kwargs)
+
+    row = {'id': 'reasoning-history', 'messages': [
+        {'role': 'user', 'content': 'Repair.'},
+        {'role': 'assistant', 'content': 'Inspect.', 'reasoning_content': 'Earlier diagnosis.'},
+        {'role': 'tool', 'content': 'Observed failure.'}],
+        'target': {'role': 'assistant', 'content': 'Correct.'},
+        'training_admission': {'approved': True}}
+    pair = render_turn(row, ForgetfulTokenizer(), '<eos>')
+    assert 'Earlier diagnosis.' in pair['prompt']
+    assert pair['completion'] == 'Correct.<eos>'

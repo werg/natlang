@@ -110,7 +110,7 @@ export const returnCall = value => ['return_result', { status: 'success', value 
 export const blockedCall = reason => ['return_result', { status: 'blocked', reason }];
 export const failedCall = reason => ['return_result', { status: 'failed', reason }];
 
-export const ITERATE_HINT = 'Required: solve this with iterateOn, not with evals or loops that you step by hand. Write a step function (it may be an nl function) from the current state to the next state, and run the whole process in one eval with await step.iterateOn(initial).until(done).';
+export const ITERATE_HINT = 'Required: solve this with iterateOn, not with evals or loops that you step by hand. Write a step function (it may be an nl function) from the current state to the next state, and run the whole process in one eval with await step.iterateOn(initial).withLimit({maxSteps: 128}).until(done).';
 export const INLINE_HINT = 'Required: make each judgment about an item with a natural-language function called on that item (await nl`...`(item)), not with keyword or regular-expression matching.';
 /** The hint for a case that requires a technique: the technique's requirement, then the family's sketch if it has one. */
 export function hintFor(curriculum) {

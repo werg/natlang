@@ -102,6 +102,32 @@ export function natlangTransformer(options: LowerOptions): ts.TransformerFactory
               undefined, value))), undefined, [lowered]);
         }
       }
+      // A numeric loop has a fixed finite bound and a strictly advancing counter.
+      if (options.constrained && ts.isForStatement(node) && node.initializer &&
+          ts.isVariableDeclarationList(node.initializer) && node.initializer.declarations.length === 1 &&
+          node.condition && ts.isBinaryExpression(node.condition)) {
+        const declaration = node.initializer.declarations[0]!;
+        if (ts.isIdentifier(declaration.name)) {
+          const counter = declaration.name;
+          const left = ts.isIdentifier(node.condition.left) && node.condition.left.text === counter.text;
+          const bound = f.createUniqueName('__natlang_bound');
+          const progress = f.createUniqueName('__natlang_progress');
+          const kind = node.condition.operatorToken.kind;
+          const upward = left ? kind === ts.SyntaxKind.LessThanToken || kind === ts.SyntaxKind.LessThanEqualsToken :
+            kind === ts.SyntaxKind.GreaterThanToken || kind === ts.SyntaxKind.GreaterThanEqualsToken;
+          const initializer = f.updateVariableDeclarationList(node.initializer, [
+            ts.visitNode(declaration, visit) as ts.VariableDeclaration,
+            f.createVariableDeclaration(bound, undefined, undefined, ts.visitNode(left ? node.condition.right : node.condition.left, visit) as ts.Expression),
+            f.createVariableDeclaration(progress, undefined, undefined,
+              f.createCallExpression(runtime('numericProgress'), undefined, [counter, bound, upward ? f.createTrue() : f.createFalse()]))]);
+          const body = ts.visitNode(node.statement, visit) as ts.Statement;
+          return f.updateForStatement(node, initializer,
+            f.updateBinaryExpression(node.condition, left ? counter : bound, node.condition.operatorToken, left ? bound : counter),
+            ts.visitNode(node.incrementor, visit) as ts.Expression | undefined,
+            f.createBlock([f.createExpressionStatement(f.createCallExpression(progress, undefined, [counter])),
+              ...(ts.isBlock(body) ? body.statements : [body])], true));
+        }
+      }
       // Finite iteration in constrained code.
       if (options.constrained && ts.isForOfStatement(node) && !node.awaitModifier) {
         const expression = ts.visitNode(node.expression, visit) as ts.Expression;

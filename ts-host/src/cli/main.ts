@@ -40,6 +40,7 @@ Usage:
   natlang run [SOURCE] [OPTIONS] [-- ARGS]   Build and run an application or TS entry module.
   natlang adapt inspect PROJECT              Inspect trainable authored components.
   natlang eval SUITE                         Evaluate independent fixtures.
+  natlang improve CASE.json --out DIR        Run the authored source-improvement program.
   natlang optimize SUITE                     Optimize instructions through the runtime.
   natlang check [PROJECT]                    Type-check and natlang-check a project.
   natlang build [PROJECT] [--out DIR]        Compile a project (lowering nl, embedding .nl functions).
@@ -662,6 +663,7 @@ async function modelsCommand(parsed: Parsed, provider?: string): Promise<number>
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
+  if (argv[0] === 'improve') return (await import('./improvement.js')).improvementCommand(argv.slice(1));
   if (['adapt', 'eval', 'optimize'].includes(argv[0] ?? '')) return (await import('./adaptation.js')).adaptationCommand(argv);
   const parsed = parseArgs(argv);
   const json = parsed.options.has('--json');

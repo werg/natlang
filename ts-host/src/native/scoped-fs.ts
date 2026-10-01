@@ -1,5 +1,7 @@
 /** Standalone copy-on-write folder handles for scoped lambda filesystems. */
 
+import { currentFrame } from '../runtime/context.js';
+import { FolderIteration } from '../runtime/folder-iteration.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { folderFromData, type FolderDataLayout } from './data-layout.js';
 
@@ -93,7 +95,7 @@ export class WriterLock {
  * runs it with a private copy of the folder and installs its committed changes.
  */
 export const APPLY_TO_FOLDER: unique symbol = Symbol.for('natlang.applyToFolder') as never;
-type FolderReducer = { [APPLY_TO_FOLDER]?: (folder: FolderHandle, args: unknown[]) => Promise<unknown> };
+export type FolderReducer = { [APPLY_TO_FOLDER]?: (folder: FolderHandle, args: unknown[]) => Promise<unknown> };
 function applyReducer(folder: FolderHandle, reducer: unknown, args: unknown[]): Promise<unknown> {
   const apply = (reducer as FolderReducer | undefined)?.[APPLY_TO_FOLDER];
   if (typeof apply !== 'function') throw new TypeError('folder.apply needs a natlang directory reducer');
@@ -181,11 +183,21 @@ export class FolderHandle extends EntryHandle {
   async files(patternText?: string): Promise<FileHandle[]> { return this.folder.listFiles(this.path, patternText).map(item => new FileHandle(this.folder, item.path)); }
   async folders(patternText?: string): Promise<FolderHandle[]> { return this.folder.listFolders(this.path, patternText).map(item => new FolderHandle(this.folder, item.path)); }
   async *walk(patternText?: string): AsyncIterable<EntryHandle> { const entries = [...this.folder.listFiles(this.path, patternText), ...this.folder.listFolders(this.path, patternText)].sort((left, right) => left.path.localeCompare(right.path)); for (const entry of entries) yield this.folder.entry(entry.path); }
+  snapshot(): FolderSnapshot { return this.folder.snapshot(this.path); }
+  at(sourceId:string):FolderSnapshot{return this.folder.at(sourceId,this.path);}
+  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<FolderProposal<R>>;
+  propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>>;
+  propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>> { return this.folder.proposeAt<R>(this.path, reducer, args); }
+  accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot> { return this.folder.acceptAt(this.path, proposal); }
+  select(snapshot: FolderSnapshot): Promise<void> { return this.folder.selectAt(this.path, snapshot); }
+  iterateOn<S>(reducer: unknown, initial: S, ...args: unknown[]): FolderIteration<S> { return new FolderIteration(this, reducer, initial, args); }
   async diff(): Promise<ChangeSet> { return this.folder.diff(this.path); }
   async beginTransaction(blocking = true): Promise<FolderTransaction> {
     return this.folder.beginTransaction(blocking, this.path);
   }
   /** Run a directory reducer on this folder and install its committed changes; resolves to its typed result. */
+  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<R>;
+  apply(reducer: unknown, ...args: unknown[]): Promise<unknown>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown> { return applyReducer(this, reducer, args); }
 }
 
@@ -268,15 +280,20 @@ export class Folder {
   private readonly moves: Array<[string, string]> = [];
   private readonly writerLock: WriterLock;
   private revisionNumber = 0;
+  private readonly lineage: object;
+  private readonly scope: string;
   private readonly computed: Map<string, (folder: Folder) => Uint8Array>;
 
   constructor(files: Record<string, FileContents> | FolderSource = {}, readonly access: FolderAccess = 'write',
-              options: { writer?: WriterLock; computed?: Map<string, (folder: Folder) => Uint8Array> } = {}) {
+              options: { writer?: WriterLock; computed?: Map<string, (folder: Folder) => Uint8Array>; lineage?: object; scope?: string } = {}) {
     if (!['read', 'write', 'overlay'].includes(access)) throw new RangeError('invalid folder access');
     this.source = isSource(files) ? files :
       new MapSource(new Map(Object.entries(files).map(([path, value]) => [cleanPath(path, false), bytes(value)])));
     this.writerLock = options.writer ?? new WriterLock();
     this.computed = new Map(options.computed);
+    this.lineage = options.lineage ?? {};
+    this.scope = options.scope ?? '';
+    for (const field of ['source', 'overlay', 'moves', 'writerLock', 'revisionNumber', 'computed', 'lineage', 'scope']) Object.defineProperty(this, field, { enumerable: false });
   }
 
   static fromFiles(files: Record<string, FileContents>, access: FolderAccess = 'write'): Folder {
@@ -302,7 +319,66 @@ export class Folder {
     return new FileHandle(this, clean);
   }
   /** Run a directory reducer on the whole folder and install its committed changes. */
+  apply<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<R>;
+  apply(reducer: unknown, ...args: unknown[]): Promise<unknown>;
   apply(reducer: unknown, ...args: unknown[]): Promise<unknown> { return applyReducer(this.root(), reducer, args); }
+  propose<A extends unknown[], R>(reducer: (folder: any, ...args: A) => Promise<R>, ...args: A): Promise<FolderProposal<R>>;
+  propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>>;
+  propose<R = unknown>(reducer: unknown, ...args: unknown[]): Promise<FolderProposal<R>> { return this.proposeAt<R>('', reducer, args); }
+  accept<R>(proposal: FolderProposal<R>): Promise<FolderSnapshot> { return this.acceptAt('', proposal); }
+  select(snapshot: FolderSnapshot): Promise<void> { return this.selectAt('', snapshot); }
+  iterateOn<S>(reducer: unknown, initial: S, ...args: unknown[]): FolderIteration<S> { return new FolderIteration(this.root(), reducer, initial, args); }
+  /** Retrieve an already materialized immutable revision of this authorized folder. */
+  at(sourceId:string,prefix=''):FolderSnapshot {const found=revisions.get(this.lineage)?.get(this.join(this.scope,cleanPath(prefix))+'\0'+sourceId);if(!found)throw new FolderConflictError('unknown source revision in this folder');return found;}
+  /** Materialize immutable bytes: disk-backed sources cannot change this checkpoint afterwards. */
+  snapshot(prefix = ''): FolderSnapshot {
+    const clean = cleanPath(prefix), files: Record<string, Uint8Array> = {};
+    for (const path of this.paths(clean)) files[clean ? path.slice(clean.length + 1) : path] = this.readBytesSync(path);
+    return new FolderSnapshot(files, this.lineage, this.join(this.scope, clean));
+  }
+  async proposeAt<R>(path: string, reducer: unknown, args: unknown[]): Promise<FolderProposal<R>> {
+    this.checkWrite();
+    currentFrame()?.task.runtime.options.onFolderProposal?.();
+    const revision = this.revision(), base = this.snapshot(path), draft = base.branch();
+    const value = await draft.apply(reducer, ...args) as R;
+    const proposal = new FolderProposal(draft.snapshot(), value, revision, draft.diffSync());
+    proposals.set(proposal, { parent: this, path, revision, base: base.digest });
+    return proposal;
+  }
+  async acceptAt<R>(path: string, proposal: FolderProposal<R>): Promise<FolderSnapshot> {
+    this.checkWrite();
+    const authority = proposals.get(proposal);
+    if (!authority || authority.parent !== this || authority.path !== path) throw new FolderConflictError('foreign proposal');
+    const release = await this.writerLock.acquire(true, path);
+    try {
+      if (this.revision() !== authority.revision || this.snapshot(path).digest !== authority.base) throw new FolderConflictError('stale proposal');
+      this.replaceSnapshot(path, proposal.folder);
+      proposals.delete(proposal);
+      return this.snapshot(path);
+    } finally { release(); }
+  }
+  async selectAt(path: string, snapshot: FolderSnapshot): Promise<void> {
+    this.checkWrite();
+    const authority = snapshots.get(snapshot);
+    if (!authority || authority.lineage !== this.lineage || authority.scope !== this.join(this.scope, path)) throw new FolderConflictError('foreign snapshot');
+    const revision = this.revision(), base = this.snapshot(path).digest;
+    const release = await this.writerLock.acquire(true, path);
+    try {
+      if (this.revision() !== revision || this.snapshot(path).digest !== base) throw new FolderConflictError('stale selection');
+      this.replaceSnapshot(path, snapshot);
+    } finally { release(); }
+  }
+  private replaceSnapshot(path: string, snapshot: FolderSnapshot): void {
+    const before = this.snapshot(path), paths = new Set([...before.filePaths(), ...snapshot.filePaths()]);
+    const changes: Change[] = [];
+    for (const relative of paths) {
+      const old = before.isFile(relative) ? before.readBytesSync(relative) : undefined;
+      const next = snapshot.isFile(relative) ? snapshot.readBytesSync(relative) : undefined;
+      if (!equalBytes(old, next)) changes.push({ path: this.join(path, relative), kind: old === undefined ? 'added' : next === undefined ? 'deleted' : 'modified', before: old, after: next });
+    }
+    for (const change of changes) this.checkWritablePath(change.path);
+    this.installLocked({ changes, moves: [] });
+  }
   entry(path: string): EntryHandle { const clean = cleanPath(path); return this.isFile(clean) ? new FileHandle(this, clean) : new FolderHandle(this, clean); }
   join(parent: string, child: string): string { const clean = cleanPath(child); return parent ? (clean ? cleanPath(`${parent}/${clean}`) : parent) : clean; }
 
@@ -427,15 +503,15 @@ export class Folder {
   }
   async diff(path = ''): Promise<ChangeSet> { return this.diffSync(path); }
   /** A copy-on-write fork of the current contents, sharing this folder's writer lock. */
-  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshot(), access, { writer: this.writerLock, computed: this.computed }); }
-  private snapshot(prefix = ''): FolderSource { return new LayeredSource(this.source, new Map(this.overlay), prefix); }
+  fork(access: FolderAccess = 'overlay'): Folder { return new Folder(this.snapshotSource(), access, { writer: this.writerLock, computed: this.computed, lineage: this.lineage, scope: this.scope }); }
+  private snapshotSource(prefix = ''): FolderSource { return new LayeredSource(this.source, new Map(this.overlay), prefix); }
   writer(): WriterLock { return this.writerLock; }
   async beginTransaction(blocking = true, path = ''): Promise<FolderTransaction> {
     const prefix = cleanPath(path);
     const release = this.access === 'read' ? () => {} : await this.writerLock.acquire(blocking, prefix);
     const computed = new Map([...this.computed].filter(([item]) => under(item, prefix)).map(([item, render]) =>
       [prefix ? item.slice(prefix.length + 1) : item, render] as [string, (folder: Folder) => Uint8Array]));
-    return new FolderTransaction(this, new Folder(this.snapshot(prefix), this.access === 'read' ? 'read' : 'overlay', { computed }), prefix, release);
+    return new FolderTransaction(this, new Folder(this.snapshotSource(prefix), this.access === 'read' ? 'read' : 'overlay', { computed, lineage: this.lineage, scope: this.join(this.scope, prefix) }), prefix, release);
   }
   /** A one-file view for a child call. Only the named file exists in its root. */
   async beginFileTransaction(path: string, blocking = true): Promise<FolderTransaction> {
@@ -449,6 +525,8 @@ export class Folder {
   }
   installLocked(changes: ChangeSet, include?: string[], exclude?: string[]): ChangeSet {
     const selectedSet = selectChanges(changes, include, exclude), selected = selectedSet.changes;
+    if (selected.length) this.checkWrite();
+    for (const change of selected) this.checkWritablePath(change.path);
     this.validateInstall(selectedSet);
     for (const change of selected) this.overlay.set(change.path, change.after === undefined ? TOMBSTONE : change.after.slice());
     if (selected.length) this.revisionNumber++;
@@ -468,4 +546,30 @@ export class Folder {
 
 function isSource(value: unknown): value is FolderSource {
   return !!value && typeof (value as FolderSource).paths === 'function' && typeof (value as FolderSource).get === 'function';
+}
+
+/** Proposals are capabilities, not serializable patches. Only their originating folder may accept them. */
+/** Live proposal capability: preserve identity across interpreter eval boundaries. */
+export class FolderProposal<R = unknown> {
+  constructor(readonly folder: FolderSnapshot, readonly value: R, readonly baseRevision: number, readonly diff: ChangeSet) { Object.freeze(this); }
+}
+const proposals = new WeakMap<object, { parent: Folder; path: string; revision: number; base: string }>();
+const revisions=new WeakMap<object,Map<string,FolderSnapshot>>();
+const snapshots = new WeakMap<object, { lineage: object; scope: string }>();
+/** Immutable, content-addressed source. Branching preserves target ownership, never shares a writer lock. */
+export class FolderSnapshot extends Folder {
+  readonly digest: string;
+  constructor(files: Record<string, FileContents>, lineage: object = {}, scope = '') {
+    super(files, 'read', { lineage, scope });
+    snapshots.set(this, { lineage, scope });
+    this.digest = hexDigest(new TextEncoder().encode(JSON.stringify(this.filePaths().sort().map(path => [path, hexDigest(this.readBytesSync(path))]))));
+    let known=revisions.get(lineage);if(!known){known=new Map();revisions.set(lineage,known);}known.set(scope+'\0'+this.digest,this);
+    Object.freeze(this);
+  }
+  branch(): Folder {
+    const authority = snapshots.get(this)!;
+    return new Folder(Object.fromEntries(this.filePaths().map(path => [path, this.readBytesSync(path)])), 'overlay', authority);
+  }
+  override registerComputedFile(): never { throw new Error('snapshot is immutable'); }
+  override fork(access: FolderAccess = 'overlay'): Folder { return access === 'read' ? this : this.branch(); }
 }

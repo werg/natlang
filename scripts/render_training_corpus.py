@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 CHUNK_ROWS = 128
-RENDERER_VERSION = "transformers-chat-template/2"
+RENDERER_VERSION = "transformers-chat-template/3"
 
 
 def _jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
@@ -123,8 +123,12 @@ def _call_template(tokenizer: Any, messages: list[dict[str, Any]], tools: list[d
                 calls.append(normalized_call)
             normalized['tool_calls'] = calls
         template_messages.append(normalized)
+    template = getattr(tokenizer, 'chat_template', '')
+    # Templates that forget earlier reasoning otherwise rewrite the already rendered prompt
+    # when a new assistant target is appended. Use the same policy when serving.
+    template_kwargs = {'preserve_thinking': True} if isinstance(template, str) and 'preserve_thinking' in template else {}
     rendered = tokenizer.apply_chat_template(template_messages, tools=tools or None, tokenize=False,
-                                               add_generation_prompt=add_generation_prompt)
+                                               add_generation_prompt=add_generation_prompt, **template_kwargs)
     if not isinstance(rendered, str):
         raise ValueError("tokenizer chat template did not return text")
     return rendered
@@ -213,7 +217,8 @@ def _tokenizer_info(tokenizer: Any, model: str, revision: str | None) -> tuple[s
                 "tokenizer_name_or_path": getattr(tokenizer, "name_or_path", model),
                 "tokenizer_fingerprint_sha256": tokenizer_fingerprint,
                 "local_tokenizer_artifacts_sha256": local_artifacts,
-                "template_sha256": _sha(template.encode()), "end_token": tokenizer.eos_token}
+                "template_sha256": _sha(template.encode()), "end_token": tokenizer.eos_token,
+                "template_kwargs": {"preserve_thinking": True} if "preserve_thinking" in template else {}}
     return template, renderer
 
 

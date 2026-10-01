@@ -211,7 +211,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
   let runtime: NativeRuntime | undefined;
   const services = recordingServices(task.services, event =>
     runtime?.trace.emit('effect', { call_id: callId, capability: `${event.service}.${event.method}`, ...event }));
-  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => task.systemPrompt(),
+  const agent = model ? new NativeToolAgent(model.driver, { systemPrompt: () => model.prompt ?? task.systemPrompt(), standalonePrompt: model.prompt !== undefined, tools:model.tools,
     programGuidance: eligibleGuidance && (view.binding || view.guidance()) ? view.guidance() : undefined,
     maxTurns: model.maxTurns, maxTokens: model.maxTokens, turnTokens: model.turnTokens, temperature: model.temperature,
     maxSeconds: model.maxSeconds, contextTokens: model.contextTokens,
@@ -220,7 +220,7 @@ async function runDefinition(frame: Frame, definition: CallableDefinition, posit
     agent: task.runtime.options.agent ?? (agent ? session => agent.run(session) : undefined),
     maxActions: limits.maxActions, maxToolCalls: limits.maxToolCalls,
     sharedEpisodeBudget: task.episodeBudget, seedPolicy: task.runtime.options.seed, runId: callId,
-    seedId: task.runtime.options.evaluation ? task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id) : undefined,
+    seedId: task.definitionSeedId(descriptor?.key ?? (owner ?? '') + ':' + definition.id),
     sourceRevision: definition.revision, parentCallId: frame.parentCallId, signal: task.signal,
     frame: childFrame, services, declarations: task.serviceDeclarations, serviceScopes: task.serviceScopes,
     manifest: { definition_id: definition.id, definition_name: definition.name, task_id: task.id,

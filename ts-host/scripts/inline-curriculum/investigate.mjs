@@ -45,7 +45,7 @@ const expand = (state: Search): Search => {
   for (const node of state.frontier) for (const link of graph.links(node)) if (!state.seen.includes(link) && !next.includes(link)) next.push(link);
   return { frontier: next, seen: [...state.seen, ...next], depth: state.depth + 1, found: next.includes(to) };
 };
-const final = await iterateOn(expand, { frontier: [from], seen: [from], depth: 0, found: from === to }).until(state => state.found || state.frontier.length === 0);
+const final = await iterateOn(expand, { frontier: [from], seen: [from], depth: 0, found: from === to }).withLimit({maxSteps: 128}).until(state => state.found || state.frontier.length === 0);
 return final.found ? final.depth : null;`), returnCall(expected)],
         children: [{ match: 'An iterative process', value: { verdict: 'continue', reason: 'Every step reaches new nodes and the search has not repeated a state.' } }] },
       root: { name: 'link_distance', args: { from: 'string', to: 'string' }, returns: 'number | null',
@@ -93,7 +93,7 @@ const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeC
 return ranked[0][0];`), returnCall(best)] },
       root: { name: 'worst_supplier', args: {}, returns: 'string',
         instructions: 'Which supplier had the most late shipments in Q3? A cancelled shipment is not late. Break a tie by the alphabetically first supplier name. The shipments are in shipments.page(n).' },
-      files: { 'worst_supplier/shipments.ts': `const ROWS = ${literal(rows)};
+      files: { 'worst_supplier/shipments.ts': `const ROWS: { id: string; supplier: string; quarter: string; status: "late" | "on_time" | "cancelled" }[] = ${literal(rows)};
 /** Page n of the shipment log (1-based, eight rows per page). */
 export function page(n: number): { id: string, supplier: string, quarter: string, status: "late" | "on_time" | "cancelled" }[] { return ROWS.slice((n - 1) * 8, n * 8); }
 /** The number of pages in the shipment log. */
@@ -173,12 +173,12 @@ const first = greenhouse.read();`;
     const reference = spec.broken ? [
       evalCall(`${loop}
 let outcome: string;
-try { outcome = (await iterateOn(control, { temp: first.temp, certified: null }).until(run => run.certified !== null)).certified!; }
+try { outcome = (await iterateOn(control, { temp: first.temp, certified: null }).withLimit({maxSteps: 128}).until(run => run.certified !== null)).certified!; }
 catch (error) { outcome = String(error) + ' | last reading ' + greenhouse.read().temp; }
 outcome`),
       blockedCall('The greenhouse keeps cooling with the heater on: the heater does not respond, so the temperature cannot be brought into the band.'),
     ] : [evalCall(`${loop}
-const final = await iterateOn(control, { temp: first.temp, certified: null }).until(run => run.certified !== null);
+const final = await iterateOn(control, { temp: first.temp, certified: null }).withLimit({maxSteps: 128}).until(run => run.certified !== null);
 return final.certified;`), returnCall(certificate)];
     const judge = spec.broken ?
       { verdict: 'divergent', reason: 'The temperature falls every step although the heater is on; the run is moving away from the band.' } :
