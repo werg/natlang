@@ -1471,3 +1471,10 @@ Mechanical hourly audits persisted, but root follow-through stopped when its tur
 Preparedruntime21as20clonewithonechangedpromptmodule/threebullets; all618parentfilesverifiedandallotherexecutionsemanticsunchanged. Next541LunaIRsindependentlymaterialize5862decisionson21; rollingplanv5/controller500258activates21onlyaftereachreviewedcurrentqueuefinishes. Currentworkersremain20. Futurestorageapprovalsrebound21; originalsimmutable. NextBonsaipreparation21+modernscopedMarkdowncontracts.
 
 Currentv4improvementlaneevolvedto76rowswith10migratedfalse-positiveaggregationturns. Rootheldwholelaneuntil66-rowcandidatepartitionreview. Versionmigrationdoesnotestablishsemanticcorrectness; earliergoodv4empty-reductionhistorycannotapproveotherproducers. Recipe26draftblockeduntiladjudication/carryforwardpublication.
+
+## 2026-10-01 13:07 UTC — Validate follow-through and automatic carry-forward
+
+- Hourly monitor completed another real sweep: 28 new Bonsai results, 26 admitted, two rejected; both Luna slots progressing. Root remains active to investigate alerts. Next14:07:46 UTC.
+- Approved exact66/10 partition of evolving v4 lane after all producer/case reviews. Across legacy reviews,43 physical turns excluded and289 retained. Recipe27 remains draft and uses explicit overrides; default pipeline automatic inclusion is being investigated separately.
+- Root independent scan rejected Bonsai512 v3 proposal for a previously attempted source; rebuild exclusions rather than weakening freshness checks. Originals/proposals remain preserved.
+- Generic successor now follows authoritative queue/journal across resumed PIDs, allows only reviewed exact failed events, and locks final liveness checks, claims, launch and authority reconciliation together. This prevents storage recovery racing a handoff. Syntax parsed; no tests run.

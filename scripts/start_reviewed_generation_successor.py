@@ -59,54 +59,78 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if record.exists():
             raise ValueError('Successor has already been claimed; review saved launch evidence')
-        while any(running(p['pid']) for p in plan['predecessors']):
+        while True:
+            authority = json.loads(Path(plan['authority']).read_text())
+            active = False
+            for predecessor in plan['predecessors']:
+                pid = predecessor['pid']
+                if not provider:
+                    if authority.get('bonsai_queue') != predecessor['queue'] or authority.get('bonsai_journal') != predecessor['journal']:
+                        raise ValueError('Predecessor Bonsai authority superseded')
+                    pid = authority.get('bonsai_supervisor')
+                active = active or running(pid)
+            if not active:
+                break
             time.sleep(30)
-        for predecessor in plan['predecessors']:
-            if digest(predecessor['queue']) != predecessor['queue_sha256']:
-                raise ValueError('Predecessor queue identity changed')
-            keys = {json.loads(line)['key'] for line in Path(predecessor['queue']).read_text().splitlines() if line.strip()}
-            finishes = {}
-            for line in Path(predecessor['journal']).read_text().splitlines():
-                if line.strip():
-                    event = json.loads(line)
-                    if event.get('event') == 'finish' and not event.get('batch_key'):
-                        finishes[event['key']] = event
-            for key in keys:
-                event = finishes.get(key, {})
-                if event.get('status') not in {'complete', 'complete_with_skips', 'skipped'} or not event.get('output_accounting', {}).get('complete'):
-                    raise ValueError(f'Predecessor is incomplete; agent review required: {key}')
-        for file, expected in plan['artifact_hashes'].items():
-            if digest(file) != expected:
-                raise ValueError(f'Reviewed artifact or admission policy changed: {file}')
-        for worker in plan['workers']:
-            if Path(worker['journal']).exists():
-                raise ValueError('Successor journal already exists; refuse duplicate worker')
-            if not any(Path(worker['queue']).resolve() == Path(p).resolve() for p in plan['artifact_hashes']):
-                raise ValueError('Successor queue lacks an approval hash')
-        with record.open('x') as stream:
-            launch = dict(status='claimed', claimed_at=time.time(), plan=str(args.plan), plan_sha256=args.sha256, workers=[])
-            json.dump(launch, stream)
-            stream.flush()
-            os.fsync(stream.fileno())
-        # A crash after claiming is an explicit review state, never an automatic duplicate launch.
-        for worker in plan['workers']:
-            command = ['python3', plan['supervisor'], worker['queue'], worker['journal'], '--runtime', plan['runtime'],
-                       '--case-seconds', str(plan['case_seconds']), '--model-concurrency', str(plan['model_concurrency']),
-                       '--min-free-mib', '1024']
-            if plan.get('provider'):
-                command += ['--provider', plan['provider'], '--model-id', plan['model_id'], '--execution-plans', '--reasoning-effort', 'low']
-            Path(worker['log']).parent.mkdir(parents=True, exist_ok=True)
-            with Path(worker['log']).open('ab') as log:
-                process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
-                                           stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-            launch['workers'].append({**worker, 'pid': process.pid, 'command': command})
-            atomic_json(record, launch)
-        launch.update(status='running', launched_at=time.time())
-        atomic_json(record, launch)
-        # Reconcile only this provider's authority. The hourly monitor reads these current paths.
         authority_path = Path(plan['authority'])
         with authority_lock(authority_path):
             authority = json.loads(authority_path.read_text())
+            for predecessor in plan['predecessors']:
+                pid = predecessor['pid']
+                if not provider:
+                    if authority.get('bonsai_queue') != predecessor['queue'] or authority.get('bonsai_journal') != predecessor['journal']:
+                        raise ValueError('Predecessor authority changed before handoff')
+                    pid = authority.get('bonsai_supervisor')
+                if running(pid):
+                    raise ValueError('Predecessor resumed before handoff; review required')
+            for predecessor in plan['predecessors']:
+                if digest(predecessor['queue']) != predecessor['queue_sha256']:
+                    raise ValueError('Predecessor queue identity changed')
+                keys = {json.loads(line)['key'] for line in Path(predecessor['queue']).read_text().splitlines() if line.strip()}
+                finishes = {}
+                for line in Path(predecessor['journal']).read_text().splitlines():
+                    if line.strip():
+                        event = json.loads(line)
+                        if event.get('event') == 'finish' and not event.get('batch_key'):
+                            finishes[event['key']] = event
+                for key in keys:
+                    event = finishes.get(key, {})
+                    if event.get('status') in {'complete', 'complete_with_skips', 'skipped'} and event.get('output_accounting', {}).get('complete'):
+                        continue
+                    expected = plan.get('reviewed_failed_finishes', {}).get(key)
+                    actual = hashlib.sha256(json.dumps(event, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                    if event and expected == actual:
+                        continue
+                    raise ValueError(f'Predecessor is incomplete; agent review required: {key}')
+            for file, expected in plan['artifact_hashes'].items():
+                if digest(file) != expected:
+                    raise ValueError(f'Reviewed artifact or admission policy changed: {file}')
+            for worker in plan['workers']:
+                if Path(worker['journal']).exists():
+                    raise ValueError('Successor journal already exists; refuse duplicate worker')
+                if not any(Path(worker['queue']).resolve() == Path(p).resolve() for p in plan['artifact_hashes']):
+                    raise ValueError('Successor queue lacks an approval hash')
+            with record.open('x') as stream:
+                launch = dict(status='claimed', claimed_at=time.time(), plan=str(args.plan), plan_sha256=args.sha256, workers=[])
+                json.dump(launch, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            # A crash after claiming is an explicit review state, never an automatic duplicate launch.
+            for worker in plan['workers']:
+                command = ['python3', plan['supervisor'], worker['queue'], worker['journal'], '--runtime', plan['runtime'],
+                           '--case-seconds', str(plan['case_seconds']), '--model-concurrency', str(plan['model_concurrency']),
+                           '--min-free-mib', '1024']
+                if plan.get('provider'):
+                    command += ['--provider', plan['provider'], '--model-id', plan['model_id'], '--execution-plans', '--reasoning-effort', 'low']
+                Path(worker['log']).parent.mkdir(parents=True, exist_ok=True)
+                with Path(worker['log']).open('ab') as log:
+                    process = subprocess.Popen(command, cwd=plan['cwd'], stdin=subprocess.DEVNULL,
+                                               stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                launch['workers'].append({**worker, 'pid': process.pid, 'command': command})
+                atomic_json(record, launch)
+            launch.update(status='running', launched_at=time.time())
+            atomic_json(record, launch)
+            # Reconcile only this provider's authority. The hourly monitor reads these current paths.
             if plan.get('provider'):
                 authority.update(luna_workers=launch['workers'], luna_runtime=plan['runtime'], luna_status='reviewed_successor_running')
             else:
@@ -120,7 +144,7 @@ def main():
                 state = json.loads(state_path.read_text())
                 state.update(workers=launch['workers'], runtime=plan['runtime'], status='reviewed_successor_running', latest_launch=str(record))
                 atomic_json(state_path, state)
-        print(json.dumps(launch), flush=True)
+            print(json.dumps(launch), flush=True)
 
 
 if __name__ == '__main__':
