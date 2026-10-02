@@ -1898,3 +1898,12 @@ Root independently checked all306correctedselectionrows againstoriginals: onlyhi
 
 ---
 
+
+
+## 2026-10-02 15:07 UTC — inventory scope and infrastructure corrections
+
+Full-training totals must include static, deterministic reference, converted historical and all model-generated teacher lanes. Recipe-v31's Oct1 snapshot is stale; current inventory is isolated from the default recipe and does not publish training-ready data. Distinguish unique programs, unique trajectories, approved decision records and final rendered tokens; never subtract completed batch counts from assigned case counts. Native reference preflight rows are not model-generated outputs.
+
+Luna1's approved successor failed before model request because its output log parent directory was absent. Reverified all659pins, created the missing parents and resumed identical pinned queue/runtime/journal; actual1435328, first complete model trajectory observed15:05. Preserve raw start/crash log. Future launcher preflight must validate/create every output parent, and worker health must require live process/progress rather than a stale launch receipt. Do not mutate supervisor bytes pinned by armed controllers.
+
+Fledge on Zen returned permanent403 FreeTierError country restriction on five zero-reply attempts. Both workers and parent have stopped; no dataset-positive or DPO-negative interpretation. Preserve reviewed plan/runtime/keys ownership and raw errors. Future versioned supervisor should circuit-break clear permanent provider eligibility errors on first observation. Provider eligibility resolution required before relaunch; no paid fallback.
