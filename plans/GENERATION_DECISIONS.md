@@ -2057,3 +2057,11 @@ Source-group audit found two groups in the 309-row pilot training split also bel
 ## Teacher overlap and actual full-run launch
 
 Cross-teacher source-group sharing alone is not a data-quality fault: distinctquestions inoneunderlyingcase and deliberatealternative teachertrajectories may be useful. Keep same-teacheractive/positive dedup, currentnative/sourceholds, explicitoverlap provenance and protectedtrain/heldoutclosure; do notinventglobalcross-teacherdisjointness blockingmeaningfulwork. FullLFMv13Muonrank16LoRAepoch launched underpinnedv3serviceafter root26pin+imagecheck andactualaudit/mix/inventorypreflight. Oldpilotgracefullystoppedstep351; fullbaseline2.2647225933 andfirst10steploss1.9029508 finite. First20stepfulloptimizercheckpointpending; reportactualreadinessonlyafterverified.
+
+
+## 2026-10-03 first 50-minute cadence check
+
+- DGX1024 produced 1,023 exact exports; case717 hit the 384-request collection budget. Preserve its partial/error and incomplete batch status. The existing gate correctly blocks, but future queue handoffs must support explicitly reviewed terminal exceptions so one resource-limited case does not idle the GPU. Separate repair remains required; no positive/DPO-negative relabeling from resource failure.
+- Same-Luna accepted/active suppression leaves seven cases in the 951-source pool; approved and launched those seven rather than padding. Cross-teacher coverage remains allowed.
+- Six answer-only rejections across Luna2 workflow8 and Bunny395 are under evidence review; no blanket numerical tolerance or broad prompt change warranted by the initial review.
+- Supervisor status now reads current checkpoint progress and validates identity (be20d7d); lifecycle status files stay immutable to this observation, and the active pinned trainer/supervisor is unchanged.
