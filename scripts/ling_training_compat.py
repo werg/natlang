@@ -97,7 +97,10 @@ def prepare(source, output):
     source, output = source.resolve(), output.absolute()
     if output.resolve().is_relative_to(source):
         raise ValueError('Output must be outside the original model snapshot')
-    original = (source / MODEL_FILE).read_text()
+    original_bytes = (source / MODEL_FILE).read_bytes()
+    if hashlib.sha256(original_bytes).hexdigest() != SOURCE_SHA256:
+        raise ValueError('Unreviewed Ling source bytes; expected pinned upstream SHA-256')
+    original = original_bytes.decode('utf-8')
     patched = patch_source(original)
     if (sha256_file(source / 'config.json') != CONFIG_SHA256 or
             sha256_file(source / 'configuration_bailing_moe_v3.py') != CONFIGURATION_SHA256):

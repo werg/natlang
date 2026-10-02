@@ -95,6 +95,7 @@ def fixture_snapshot(tmp_path, monkeypatch):
     (source / 'config.json').write_text(json.dumps(config))
     (source / 'configuration_bailing_moe_v3.py').write_text('# configuration\n')
     monkeypatch.setattr(compat, 'patch_source', lambda text: text + '\n# patched\n')
+    monkeypatch.setattr(compat, 'SOURCE_SHA256', compat.sha256_file(source / compat.MODEL_FILE))
     monkeypatch.setattr(compat, 'CONFIG_SHA256', compat.sha256_file(source / 'config.json'))
     monkeypatch.setattr(compat, 'CONFIGURATION_SHA256', compat.sha256_file(source / 'configuration_bailing_moe_v3.py'))
     return source
@@ -138,3 +139,12 @@ def test_mutated_configuration_rejected_before_output(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match='Unreviewed Ling configuration'):
         compat.prepare(source, output)
     assert not output.exists()
+
+
+def test_model_source_hash_checks_original_bytes(tmp_path, monkeypatch):
+    source = fixture_snapshot(tmp_path, monkeypatch)
+    path = source / compat.MODEL_FILE
+    # read_text would normalize CRLF and incorrectly accept the original hash.
+    path.write_bytes(path.read_bytes().replace(b'\n', b'\r\n'))
+    with pytest.raises(ValueError, match='source bytes'):
+        compat.prepare(source, tmp_path / 'prepared')
