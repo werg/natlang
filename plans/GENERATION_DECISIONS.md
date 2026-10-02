@@ -1826,3 +1826,9 @@ Qwen2048 audit1303imports/1205admitted/98wrong_return found zero reasoning-chann
 ## 2026-10-02 11:49 UTC — verified first backup release
 
 Corrected storage checksum returned zero differences; sdkb-runs backup removed11:48:19 with durable exact-path release receipt, path-preserving external symlink verified. Internal47→202GiBfree. Second146GiB bgkit-data-nvme copy now underway; original retained until full checksum/cutover. `.cache` unchanged. No generation interruption.
+
+## 2026-10-02 12:00 UTC — shared pool architecture and export serialization
+
+Investigating process-reserved capacity: live107requests/0waiting while28batchleasespending, so merelyraisingperbatchcaps is insufficient. Preparingonecollectorpool withshared256requestgate/320caseworkers, retainingcaseindices/sourceprovenance/freshuniformseed andpercase40turn384requestbudgets. Active32campaign unchanged. Exportcoordinator removesconcurrentaggregate snapshot race: durablejobsfirst, serialized100mscoalescedmerge, finalflushawaited, stopnewcaseadmission onexporterror. Native8casesoutofordercompletedandallmergedorder/provenance/admission/materializationpassed;0modelcalls/no unit tests. Separatepoolrunner/drainhookunderimplementation, notyetdeployed.
+
+Rejected draft aliasregistry accepting fullprose answers despite answer-only taskcontract. Standaloneexactsourcevariants only; rawproseremainformatrejects. Apparentjazgoldtypo heldpending versionedsource-backedcorrection, notstaticpositive merelyviajazzalternate. This isreviewofunpublisheddrafts, no existingrawartifactwasrewritten.

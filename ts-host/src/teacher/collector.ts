@@ -294,7 +294,7 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   return { ...row, provenance: { ...expected, reused_from: { path, provenance } } };
 }
 
-/** Queue incomplete jobs, publish each result atomically, and rebuild the ordered merge after every job. */
+/** Queue incomplete jobs, publish each result atomically, and coalesce ordered merge exports. */
 export async function collectBatch(records: IndexedRecord[], config: CollectorConfig, runner: JobRunner,
   signal?: AbortSignal): Promise<{ completed: number; missing: number[] }> {
   if (!Number.isInteger(config.workers) || config.workers < 1) throw new RangeError('workers must be positive');
@@ -328,19 +328,52 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   // hint twins together, and running several long cases of one family at once fills the server's shared KV buffer.
   // The order depends only on the job keys, so it is the same on every resume; the merged output stays in shard order.
   pending.sort((a, b) => sha256(jobKey(a)).localeCompare(sha256(jobKey(b))));
-  await mergeCompleted(records, config);
+  let merged = await mergeCompleted(records, config);
+  // Job results are the durable checkpoints. Rebuilding the merged export is O(records), so do not
+  // make each worker wait for its own full scan/write or allow concurrent snapshots to race.
+  // A short coalescing window lets cases completing together share one export. The final flush below
+  // is awaited, so a successful collectBatch still returns only after the ordered merge is current.
+  let mergeDirty = false;
+  let mergeFailure: unknown;
+  let mergeTask: Promise<void> | undefined;
+  const scheduleMerge = () => {
+    mergeDirty = true;
+    if (mergeTask || mergeFailure) return;
+    mergeTask = (async () => {
+      while (mergeDirty && !mergeFailure) {
+        await delay(100);
+        mergeDirty = false;
+        try { merged = await mergeCompleted(records, config); }
+        catch (error) { mergeFailure = error; }
+      }
+    })().finally(() => {
+      mergeTask = undefined;
+      if (mergeDirty && !mergeFailure) scheduleMerge();
+    });
+  };
+  const flushMerge = async () => {
+    scheduleMerge();
+    while (mergeTask) await mergeTask;
+    if (mergeFailure) throw mergeFailure;
+    if (mergeDirty) return flushMerge();
+    return merged;
+  };
+  let durableCompleted = merged.completed;
   let cursor = 0;
   const worker = async (slot: number) => {
     if (slot && config.workerStaggerMs) await delay(slot * config.workerStaggerMs);
-    while (cursor < pending.length && !signal?.aborted) {
+    // Stop admitting cases if the background export fails. Already-running cases may still
+    // write their exact result files; flushMerge below then surfaces the export failure.
+    while (cursor < pending.length && !signal?.aborted && !mergeFailure) {
       const item = pending[cursor++]!, expected = expectedProvenance(item.record, config);
       let attempt = 0;
       while (true) try {
         const row = await runner(item, expected, signal);
         if (!resultMatches(row, item.record, expected)) throw new Error('job returned mismatched provenance');
         await writeAtomic(join(config.jobs, `${jobKey(item)}.result.json`), JSON.stringify(row) + '\n');
-        const progress = await mergeCompleted(records, config);
-        process.stderr.write(`completed ${item.index} ${item.record.id}: accepted=${row.outcome?.accepted ?? false}; ${progress.completed}/${records.length} complete\n`);
+        durableCompleted++;
+        scheduleMerge();
+        process.stderr.write(`completed ${item.index} ${item.record.id}: accepted=${row.outcome?.accepted ?? false}; ${durableCompleted}/${records.length} durable\n`);
         break;
       } catch (error) {
         if (signal?.aborted) return;
@@ -377,7 +410,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     }
   };
   await Promise.all(Array.from({ length: Math.min(config.workers, Math.max(1, pending.length)) }, (_, slot) => worker(slot)));
-  return mergeCompleted(records, config);
+  return flushMerge();
 }
 
 function same(a: unknown, b: unknown): boolean { return canonical(a) === canonical(b); }
