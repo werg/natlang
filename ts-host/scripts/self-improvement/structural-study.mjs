@@ -1,5 +1,6 @@
+import {appendFileSync} from 'node:fs';
 /** Concrete structural headroom, direct-rewrite control, and native iterative search. */
-import {mkdir,readFile,writeFile,appendFile,cp,readdir,symlink} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,cp,readdir,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -53,7 +54,7 @@ const interrupted=new AbortController();
 process.once('SIGTERM',()=>interrupted.abort(new Error('study assignment interrupted')));
 const signal=AbortSignal.any([interrupted.signal,AbortSignal.timeout(Math.max(1,protocol.budget.maxElapsedMs-gateway.ledger.elapsedMs))]);
 const rawStudent=openAICompatibleModelTurn({...protocol.executor,request:{temperature:0.2}});
-const log=async(role,request,turn)=>{await appendFile(join(output,'exchanges.ndjson'),JSON.stringify({at:new Date().toISOString(),command,role,request,turn})+'\n');console.log(JSON.stringify({command,role,calls:turn.calls?.map(call=>call[0]),text:turn.text?.slice(0,80)}));};
+const log=async(role,request,turn)=>{appendFileSync(join(output,'exchanges.ndjson'),JSON.stringify({at:new Date().toISOString(),command,role,request,turn})+'\n');console.log(JSON.stringify({command,role,calls:turn.calls?.map(call=>call[0]),text:turn.text?.slice(0,80)}));};
 const student=async(request,signal)=>{const turn=await rawStudent(request,signal);await log('student',request,turn);return turn;};
 const evaluator=new SourceEvaluator(protocol.contract,protocol.cases,student,gateway,{executorId:protocol.executor.model,timeoutMs:protocol.executorTimeoutMs,signal,sourcePolicy:{baseline:protocol.files,mode:protocol.policy.mode,allowedFiles:protocol.policy.allowedFiles},journal:new OperationJournal(join(output,command+'-journal'))});
 const baseline=Folder.fromFiles(protocol.files);let result;
@@ -102,7 +103,7 @@ if(command==='probe'||command==='flat-probe'){
    result={plan,edit:proposal.value,checked,files:Object.fromEntries(proposal.folder.filePaths().map(path=>[path,new TextDecoder().decode(proposal.folder.readBytesSync(path))])),ledger:gateway.snapshot(),disposition:'draft-diagnostic',studentMeasured:false,interpretation:'Actual optimizer planning/editing with pinned prior development observations; compiler/edit-scope check only. No new student or held-out improvement claim.'};
   }else if(command==='native'||command==='separated'){
    const authoredSource=command==='separated'?protocol.separatedSource:protocol.improverSource;
-   const improved=await improveProgram({folder:baseline,contract:protocol.contract,cases:protocol.cases,policy:protocol.policy,improver:optimizer,executor:student,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs,budget:protocol.budget,gateway,signal,...(authoredSource?{improverSource:Folder.fromFiles(authoredSource).snapshot()}:{}),directory:join(output,command+'-journal'),trace:trace=>{void appendFile(join(output,command+'-traces.ndjson'),JSON.stringify(trace)+'\n');}});
+   const improved=await improveProgram({folder:baseline,contract:protocol.contract,cases:protocol.cases,policy:protocol.policy,improver:optimizer,executor:student,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs,budget:protocol.budget,gateway,signal,...(authoredSource?{improverSource:Folder.fromFiles(authoredSource).snapshot()}:{}),directory:join(output,command+'-journal'),trace:trace=>{appendFileSync(join(output,command+'-traces.ndjson'),JSON.stringify(trace)+'\n');}});
    const {folder,evaluator,...portable}=improved;result={...portable,source:folder.digest};
   }else{
    const train=await evaluator.evaluate(baseline.snapshot(),{split:'train'}),validation=await evaluator.evaluate(baseline.snapshot(),{split:'validation'});

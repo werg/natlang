@@ -66,14 +66,15 @@ def assess(row, tokenizer, end_token, max_len):
     if not reason and (type(masked) is not int or masked < 0 or masked >= len(target)):
         reason = 'invalid_completion_mask'
     if not reason:
-        # Match train_lora.encode exactly, including no implicit BOS/EOS insertion.
+        # Match training and serving: tokenize the already supplied prompt first,
+        # then its completion. BPE may merge across a concatenated text boundary;
+        # that alternative encoding is not the prefix used during generation.
+        # No implicit BOS/EOS insertion or text rewriting.
         x = tokenizer(prompt + target[:masked], add_special_tokens=False)['input_ids']
         y = tokenizer(target[masked:], add_special_tokens=False)['input_ids']
         summary.update(prompt_tokens=len(x), supervised_tokens=len(y), total_tokens=len(x) + len(y))
         if not x or not y:
             reason = 'empty_tokenized_pair'
-        elif tokenizer(prompt + target, add_special_tokens=False)['input_ids'] != x + y:
-            reason = 'tokenization_boundary_mismatch'
         elif len(x) + len(y) > max_len:
             reason = 'over_token_budget'
     summary['reason'] = reason
@@ -201,7 +202,7 @@ def audit_corpus(source, output, *, model, revision=None, max_len=8192, chunk_ro
     end_token = renderer.get('end_token')
     if not isinstance(end_token, str) or not end_token:
         raise ValueError('renderer must declare target end_token')
-    identity = {'version': 'natlang.token_audit/1', 'source_sha256': _file_sha(source),
+    identity = {'version': 'natlang.token_audit/2', 'source_sha256': _file_sha(source),
                 'manifest_sha256': _file_sha(source_manifest_path), 'renderer': renderer,
                 'max_len': max_len, 'chunk_rows': chunk_rows, 'auditor_sha256': _file_sha(Path(__file__)),
                 'rejection_ledgers': {str(Path(path).resolve()): _file_sha(Path(path)) for path in rejection_ledgers},

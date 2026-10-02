@@ -1,5 +1,6 @@
+import {appendFileSync} from 'node:fs';
 /** One frozen weight-learning comparison: Sharp optimizes source; Bonsai still executes it. */
-import {mkdir,readFile,writeFile,appendFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pinReplayRuntime,runtimeModule,digest} from './replay-runtime.mjs';
 const [input,mapPath,endpoint='http://127.0.0.1:18084']=process.argv.slice(2);
@@ -24,14 +25,14 @@ for(const checkpoint of Object.keys(checkpoints)){
   const done=journal.read(key);if(done?.status==='done'){results.push(done.value);continue;}
   const elapsed=Date.now()-started;if(elapsed>=freeze.assignment.elapsedMs){results.push({checkpoint,id:definition.id,disposition:'assignment-exhausted',primary:false});continue;}
   const directory=join(output,key);await mkdir(directory,{recursive:true});
-  const log=role=>async(request,turn)=>{await appendFile(join(directory,'exchanges.ndjson'),JSON.stringify({role,request,turn})+'\n');};
+  const log=role=>async(request,turn)=>{appendFileSync(join(directory,'exchanges.ndjson'),JSON.stringify({role,request,turn})+'\n');};
   const optimizerDriver=openAICompatibleModelTurn({endpoint,model:checkpoint,request:{temperature:0}});
   const optimizer=async(request,signal)=>{const turn=await optimizerDriver(request,signal);await log('optimizer')(request,turn);return turn;};
   const studentDriver=openAICompatibleModelTurn({...definition.executor,request:{temperature:0.2}});
   const student=async(request,signal)=>{const turn=await studentDriver(request,signal);await log('student')(request,turn);return turn;};
   const signal=AbortSignal.timeout(Math.min(freeze.optimizerBudget.maxElapsedMs,freeze.assignment.elapsedMs-elapsed));
   try{
-  const result=await improveProgram({folder:Folder.fromFiles(definition.files),contract:definition.contract,cases:definition.cases,policy:definition.policy,improverSource:Folder.fromFiles(source).snapshot(),improver:optimizer,executor:student,executorId:definition.executor.model,executorTimeoutMs:definition.executorTimeoutMs,budget:freeze.optimizerBudget,signal,directory,trace:trace=>{void appendFile(join(directory,'traces.ndjson'),JSON.stringify(trace)+'\n');}});
+  const result=await improveProgram({folder:Folder.fromFiles(definition.files),contract:definition.contract,cases:definition.cases,policy:definition.policy,improverSource:Folder.fromFiles(source).snapshot(),improver:optimizer,executor:student,executorId:definition.executor.model,executorTimeoutMs:definition.executorTimeoutMs,budget:freeze.optimizerBudget,signal,directory,trace:trace=>{appendFileSync(join(directory,'traces.ndjson'),JSON.stringify(trace)+'\n');}});
   let confirmation=null,confirmationError=null;try{if(result.validation)confirmation=await result.evaluator.confirm(result.folder,{source:result.folder.digest,experiment:digest(JSON.stringify(freeze))+':'+key});}catch(error){confirmationError=String(error);}
   const {folder,evaluator,...portable}=result;
   const record={checkpoint,id:definition.id,primary:!!confirmation&&confirmation.quality===1&&result.state.done,completed:!!result.validation&&result.state.done,sourceAgree:result.state.incumbent===result.sourceManifest.source,falsePromotion:result.sourceDiff.length>0&&(result.validation?.quality??0)<(result.baseline?.quality??0),...portable,confirmation,confirmationError,ledger:evaluator.gateway.snapshot()};

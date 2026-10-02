@@ -674,8 +674,8 @@
     {
       "id": "rich-directory-and-accepted-source-training",
       "old": "Child edit execution success admitted even when its source experiment was rejected; previous helper diagnostics could be clipped; latest reasoning could overflow compacted context",
-      "new": "Accepted-source positive targets, rejected edits retained as correction context, previous helper feedback first, context retains action/observation, Sharp XML transport decodes exact string and boolean literals",
-      "migration": "Reexport independently replayed historical invocations under measured parent source admission; preserve original observations and historical exports. Reexecute context-changed trajectories before admission. No compatibility mode or synthetic corrected teacher response. Merge hash-checked development manifests; exclude transfer families and sealed fixtures.",
+      "new": "Accepted-source positive targets, rejected edits retained as correction context, previous helper feedback first, context retains action/observation, Sharp XML transport decodes exact string and boolean literals; ordered large trace writes and token audit matched to served prompt/completion segmentation",
+      "migration": "Reexport independently replayed historical invocations under measured parent source admission; preserve original observations and historical exports. Reexecute context-changed trajectories before admission. No compatibility mode or synthetic corrected teacher response. Merge hash-checked development manifests; exclude transfer families and sealed fixtures. Rerender Sharp targets with its actual im_end turn terminator and reaudit under token_audit/2; preserve earlier rejected manifests. Recover interleaved trace bytes only by invertible rearrangement with original hash and exact segment receipt; never invent missing continuations.",
       "builders": [
         "ts-host/scripts/self-improvement/build-directory-campaign.mjs",
         "ts-host/scripts/self-improvement/run-directory-campaign.mjs",
@@ -699,7 +699,9 @@
         "ts-host/test/directory-improvement-campaign.test.mjs",
         "ts-host/test/native-improvement-training.test.mjs",
         "ts-host/test/compaction.test.mjs",
-        "tests/test_model_response.py"
+        "tests/test_model_response.py",
+        "tests/test_audit_training_corpus.py",
+        "tests/test_training_readiness.py"
       ],
       "migration_result": {
         "original_positive_turns": 40,

@@ -70,14 +70,16 @@ def test_admission_reasons(change, reason):
     assert result['summary']['reason'] == reason
 
 
-def test_token_boundary_mismatch_is_not_silently_trained():
+def test_completion_encoding_preserves_the_served_prompt_when_bpe_merges_across_boundary():
     class MergingTokenizer(Tokenizer):
         def __call__(self, value, **kwargs):
             result = super().__call__(value, **kwargs)
             if value == 'hiok!':
                 result['input_ids'] = [123]
             return result
-    assert assess(row(), MergingTokenizer(), '!', 100)['summary']['reason'] == 'tokenization_boundary_mismatch'
+    result = assess(row(), MergingTokenizer(), '!', 100)
+    assert result['summary']['reason'] is None
+    assert result['record']['token_counts'] == {'prompt_tokens': 2, 'supervised_tokens': 3, 'total_tokens': 5}
 
 
 def test_stop_resume_reuses_chunks_and_detects_corruption(tmp_path):
@@ -85,12 +87,12 @@ def test_stop_resume_reuses_chunks_and_detects_corruption(tmp_path):
     source = source_file(tmp_path, [row(str(i)) for i in range(3)], tok)
     out = tmp_path / 'out.jsonl'
     assert audit_corpus(source, out, model='mock', tokenizer=tok, chunk_rows=1, should_stop=lambda: True) == 75
-    assert tok.calls == 3
+    assert tok.calls == 2
     assert not out.exists()
     assert audit_corpus(source, out, model='mock', tokenizer=tok, chunk_rows=1) == 0
-    assert tok.calls == 9
+    assert tok.calls == 6
     assert audit_corpus(source, out, model='mock', tokenizer=tok, chunk_rows=1) == 0
-    assert tok.calls == 9
+    assert tok.calls == 6
     chunk = out.with_name(out.name + '.audit-cache') / 'chunk-00000000.jsonl'
     chunk.write_text('corrupt')
     with pytest.raises(ValueError, match='cache corruption'):
