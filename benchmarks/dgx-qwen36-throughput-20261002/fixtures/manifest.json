@@ -1,0 +1,82 @@
+{
+  "version": "natlang.qwen_throughput_fixture_manifest/1",
+  "training_discovery": "excluded: fixture directory is outside runs/ and files contain prompts/tools only; no captured responses or gold/reference fields",
+  "source_roots": [
+    "runs/dgx-qwen36-nvfp4-pilot-20261002/imports/jobs",
+    "runs/dgx-qwen36-nvfp4-mixed256-20261002/imports/jobs"
+  ],
+  "fixtures": [
+    {
+      "version": "natlang.qwen_throughput_captured_request/1",
+      "fixture_id": "captured-5k",
+      "source_result_file": "runs/dgx-qwen36-nvfp4-pilot-20261002/imports/jobs/bbb6a665d921b9504a73d8115d0d7d26870686c484d9ea7bef52fe2828ee2054/result.result.json",
+      "source_result_sha256": "bbb6a665d921b9504a73d8115d0d7d26870686c484d9ea7bef52fe2828ee2054",
+      "source_result_id": "teacher-program:0e465e23f0c41801e77c",
+      "program_id": "inline-curriculum:workflow_invoice-processing:576f34ffd2cd517e87ff0db53e143e16fba7ab4d8c5d16928a2155a8c2efb4d6:question-v1",
+      "trajectory_index": 1,
+      "source_request_sha256": "ef9c6328d56a80ae42bb82e4d6a8dd9540516315a4d54a585eb11ec60cdd8da4",
+      "original_prompt_tokens": 5201,
+      "original_context_messages": 6,
+      "original_tool_count": 5,
+      "benchmark_output_cap_tokens": 400,
+      "captured_model_response_included": false,
+      "source_gold_or_reference_included": false,
+      "fixture_file": "fixtures/captured-5k.json",
+      "fixture_sha256": "773aafa2e5b7dbdf1b04ecc6225ab5d76fb256cd22465620b0ef91d5838a3c75"
+    },
+    {
+      "version": "natlang.qwen_throughput_captured_request/1",
+      "fixture_id": "captured-7_5k",
+      "source_result_file": "runs/dgx-qwen36-nvfp4-mixed256-20261002/imports/jobs/c8563baf5465ae1777a62057524103ee8ffe1ee990b0f3386c28c45467f149b2/result.result.json",
+      "source_result_sha256": "c8563baf5465ae1777a62057524103ee8ffe1ee990b0f3386c28c45467f149b2",
+      "source_result_id": "teacher-program:df103567fa04bd5f95fa",
+      "program_id": "inline-curriculum:workflow_security-incidents:0957788326eb34d053a682edf9d5fc149bcf2c11502989d0f27415f62c9bb78a:question-v1",
+      "trajectory_index": 7,
+      "source_request_sha256": "ca12143c9cd60e8d9a91d0ed33a7ea6b1b2d737b60212126fc3a4b142bc85559",
+      "original_prompt_tokens": 7499,
+      "original_context_messages": 18,
+      "original_tool_count": 5,
+      "benchmark_output_cap_tokens": 400,
+      "captured_model_response_included": false,
+      "source_gold_or_reference_included": false,
+      "fixture_file": "fixtures/captured-7_5k.json",
+      "fixture_sha256": "11522c222b9c0c931252e78c67d0116b82e5d8d84240470a71280cf1b9fca347"
+    },
+    {
+      "version": "natlang.qwen_throughput_captured_request/1",
+      "fixture_id": "captured-10_5k",
+      "source_result_file": "runs/dgx-qwen36-nvfp4-mixed256-20261002/imports/jobs/bb76b6f79009d7d10642a587d4fc7fab8242afa6800fef28ba6f16f7247a534e/result.result.json",
+      "source_result_sha256": "bb76b6f79009d7d10642a587d4fc7fab8242afa6800fef28ba6f16f7247a534e",
+      "source_result_id": "teacher-program:231016c8e8cbe576abd0",
+      "program_id": "inline-curriculum:workflow_security-incidents:00b189101b375b9fed7217517e09f998c4b1768af314da7b4fc7792f66d79b74:question-v1",
+      "trajectory_index": 8,
+      "source_request_sha256": "4e3aec7ffffe940445be8e7138eecb1629ef8e8d9b61ba35aa0fbc4f88689344",
+      "original_prompt_tokens": 10501,
+      "original_context_messages": 22,
+      "original_tool_count": 5,
+      "benchmark_output_cap_tokens": 400,
+      "captured_model_response_included": false,
+      "source_gold_or_reference_included": false,
+      "fixture_file": "fixtures/captured-10_5k.json",
+      "fixture_sha256": "ddd5b206c590b18b5ec6cc81d3912a7923c77ffd7de2e870cb6f8aadfa128d86"
+    },
+    {
+      "version": "natlang.qwen_throughput_captured_request/1",
+      "fixture_id": "captured-15k",
+      "source_result_file": "runs/dgx-qwen36-nvfp4-pilot-20261002/imports/jobs/baa6cf5ce9307aea7d50d664978a8a5d0b0988096670d32aafea5f59ee43d429/result.result.json",
+      "source_result_sha256": "baa6cf5ce9307aea7d50d664978a8a5d0b0988096670d32aafea5f59ee43d429",
+      "source_result_id": "teacher-program:2ad9e8fa604f52c429f0",
+      "program_id": "inline-curriculum:source_treedst:a1754b149189dfa45df0:v1",
+      "trajectory_index": 18,
+      "source_request_sha256": "3e1a070ded901d33efdda8020076ded0a5df50df40238443f75a558a647797b1",
+      "original_prompt_tokens": 15709,
+      "original_context_messages": 19,
+      "original_tool_count": 5,
+      "benchmark_output_cap_tokens": 400,
+      "captured_model_response_included": false,
+      "source_gold_or_reference_included": false,
+      "fixture_file": "fixtures/captured-15k.json",
+      "fixture_sha256": "3f1962f2495542f1b567a2e9a96eaf94189887f4fcfa6e4b08ae8415a80de348"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "version": "natlang.qwen_throughput_prepared_bundle/1",
+  "status": "root_executed_20261002",
+  "training_discovery": "outside runs/; raw captured model responses omitted; output telemetry-only",
+  "files": {
+    "README.md": "4095f96be7ccb011ceca7c5e9de858dae67d54783e998c9b2311f32e3cf4b2d7",
+    "benchmark_client.py": "9ac9a47890c9f3bdb14539f6bb099c0fa36a25206d5dc49976d3f07c4dcc8d13",
+    "comparison-context.json": "fd94529c22dbdfe7faa0535ecc3cf3947cee813433ce900390dbaf58245b0518",
+    "fixtures/captured-10_5k.json": "ddd5b206c590b18b5ec6cc81d3912a7923c77ffd7de2e870cb6f8aadfa128d86",
+    "fixtures/captured-15k.json": "3f1962f2495542f1b567a2e9a96eaf94189887f4fcfa6e4b08ae8415a80de348",
+    "fixtures/captured-5k.json": "773aafa2e5b7dbdf1b04ecc6225ab5d76fb256cd22465620b0ef91d5838a3c75",
+    "fixtures/captured-7_5k.json": "11522c222b9c0c931252e78c67d0116b82e5d8d84240470a71280cf1b9fca347",
+    "fixtures/manifest.json": "0cdfc64e92fa79cf9290f95d7d559c1e1c480fb1e232ddfe25a5a527dcf71b8c"
+  }
+}

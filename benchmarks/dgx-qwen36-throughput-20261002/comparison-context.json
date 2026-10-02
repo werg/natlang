@@ -1,0 +1,83 @@
+{
+  "version": "natlang.qwen_nvfp4_throughput_context/1",
+  "created_at": "2026-10-02T09:30:00Z",
+  "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+  "model_revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5",
+  "current_server_recipe": "Qwen NVFP4 on vLLM; aggregate model concurrency 16; observed while 1024-case assignment was active; no model/server changes by this audit",
+  "synthetic_baseline": {
+    "source": "root-reported from remote artifact /home/werg/natlang-remote/throughput-20261002/results/qwen-throughput-20261002T092939Z.json",
+    "concurrency": 16,
+    "requests": 32,
+    "completed": 32,
+    "failures": 0,
+    "prompt_tokens_recipe": 1500,
+    "completion_tokens_per_request": 400,
+    "completion_tokens_total": 12800,
+    "wall_seconds": 37.3157,
+    "aggregate_output_tokens_per_second": 343.019,
+    "ttft": "null for all requests in original report; original delta observer omitted vLLM delta.reasoning. Updated client recognizes this field."
+  },
+  "current_real_teacher_assignment_partial": {
+    "assignment_file": "runs/dgx-qwen36-generation-successor1024-20261002/assignment.json",
+    "assignment_sha256": "5de4c67d9565837a373095b23a75b9de3ba90f2584f008305fc1d490af5b8737",
+    "assignment_cases": 1024,
+    "completion_cutoff": "2026-10-02T09:23:58.715Z",
+    "completed_batches": 23,
+    "completed_cases": 368,
+    "unfinished_cases_at_cutoff": "assignment remained running; denominator excludes unfinished batches",
+    "aggregate_concurrency": 16,
+    "batch_wall_start_utc": "2026-10-02T09:05:09.486200+00:00",
+    "batch_wall_end_utc": "2026-10-02T09:23:44.369014+00:00",
+    "batch_wall_seconds": 1114.8828139305115,
+    "prompt_tokens_for_completed_cases": 7410424,
+    "completion_tokens_for_completed_cases": 226529,
+    "request_turns": 1388,
+    "aggregate_prompt_tokens_per_second": 6646.81875745721,
+    "aggregate_output_tokens_per_second": 203.1863772313196,
+    "interpretation": "Real multi-turn/tool teacher contexts; partial assignment, excluding startup. Not directly comparable with the 1,500-input/400-output synthetic baseline."
+  },
+  "historical_pilot_from_root_message": {
+    "cases": 64,
+    "completed": 64,
+    "admitted": 55,
+    "rejected": 9,
+    "aggregate_completion_tokens": 95418,
+    "wall_seconds": 569.58,
+    "aggregate_output_tokens_per_second": 167.5234383229748,
+    "note": "Root-reported pilot aggregate; not independently recomputed here."
+  },
+  "evidence_sha256": {
+    "assignment": "5de4c67d9565837a373095b23a75b9de3ba90f2584f008305fc1d490af5b8737",
+    "import_ledger": "78cc6d08d9f2914e2bebf4eec0c02a83d0b43210c79abd1d0b91ad0843feda8c",
+    "worker_status": "7b6bae40cd00b37c4de055fd0201b748ccd3828932f54175f703aa0293c83f7d",
+    "journal-worker-3.jsonl": "c26f93299d418227545196e52ca0cfd130d7ceb8e774d9b5a091c3ec901557dd",
+    "journal-worker-0.jsonl": "632aa8c6c2a9a9d133f33439c7000e7258605109136b1e186f3035c511901347",
+    "journal-worker-1.jsonl": "d38532f0d69aeda6af4192bf3dccfff64639ef07b034ab1656592b64051da14d",
+    "journal-worker-2.jsonl": "3da58cd2ed4b903b63ae6dfa52382a14aadf7e5542f97e477411137c969e8b58"
+  },
+  "ttft_for_real_assignment": "unavailable in collected import artifacts; new benchmark client records it from stream deltas",
+  "quick_baseline_before_server_restart": {
+    "source": "root-reported result file",
+    "remote_file": "/home/werg/natlang-remote/throughput-20261002/results/qwen-throughput-20261002T092939Z.json",
+    "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+    "concurrency": 16,
+    "requests": 32,
+    "completed": 32,
+    "failures": 0,
+    "prompt_tokens_each": 1500,
+    "completion_tokens_each": 400,
+    "output_tokens": 12800,
+    "wall_seconds": 37.3157,
+    "output_tokens_per_second": 343.019,
+    "ttft_in_original_run": null,
+    "ttft_note": "Original parser missed the Qwen vLLM delta.reasoning field. The local client was updated to detect it; its TTFT should be measured in the next sweep."
+  },
+  "planned_post_restart_profile": {
+    "source": "root instruction, not independently applied",
+    "server_image": "pinned eugr0.29.1rc image unchanged",
+    "gpu_memory_utilization": 0.65,
+    "max_num_seqs": 256,
+    "max_model_len": 65536,
+    "other_configuration": "Use root-approved full post settings; local review does not guess or change flags."
+  }
+}
