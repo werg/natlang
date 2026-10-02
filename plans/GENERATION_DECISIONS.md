@@ -2047,3 +2047,8 @@ The 500-step local LFM run was a bounded experiment chosen by the agent, not a u
 ## Muon and full-state resumability
 
 User requests Muon preference and emergency checkpoint/automaticresumption likebgkit. Newtrainingphase uses nativeTorchMuon forhidden2Dtrainablematrices with match_rms_adamw LR scaling and auxiliaryAdamW forremainingparameters. Serialize both completeoptimizers plus parameterpartitionidentity; mismatches failclosed. ExistingAdamWrun/optimizer history staysintact; newMuonphase intentionally startsfreshoptimizerstate fromadapterweights. SIGTERM/Ctrl-C checkpointatcompleteoptimizerstep; hardkill/powerfailure recoverslatestcompletedperiodiccheckpoint. Durablelauncher implementation/test remainsinprogress untilverified.
+
+
+## Full-corpus initialization correction
+
+Source-group audit found two groups in the 309-row pilot training split also belong to full-v13 heldout (`inline-curriculum:s5:child_sufficiency:refund0:undetermined`, `s5:child_sufficiency:refund0`). All subsequent pilot-derived adapters inherit that exposure. Full-v13 Muon training therefore starts from the pinned base with freshoptimizerstate; keep protectedheldout unchanged and preservepilotadapters for their originalscoped evaluations. This is a necessary evaluation-integrity correction, not a requirement that fullcorpus training alwaysstartfresh.
