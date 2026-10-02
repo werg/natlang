@@ -35,7 +35,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
            teacher_execution_plans=False, teacher_execution_plan_tokens=512,
-           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None):
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None, self_improvement_variants=12, optimizer_provider="openai-codex", optimizer_model="gpt-6-luna"):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -281,6 +281,26 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
              f'{p}/ts-host/scripts/code-corpus/workspace-pilot.mjs', f'{p}/ts-host/scripts/code-corpus/replay.mjs'],
             [f'{case_out}/manifest.json', f'{case_out}/native-replay.jsonl.turns.jsonl'])
         verified_turns.append(f'{case_out}/native-replay.jsonl.turns.jsonl')
+    # Native program optimization is a first-class source of the general coding corpus.
+    if not isinstance(self_improvement_variants, int) or not 1 <= self_improvement_variants <= 256:
+        raise ValueError("self-improvement variants must be in [1,256]")
+    improvement_tasks = f'{r}/optimizer-curriculum/tasks'
+    improvement_generation = f'{r}/optimizer-curriculum/generation'
+    improvement_turns = f'{improvement_generation}/verified-turns.jsonl'
+    improvement_scripts = f'{r}/runtime-host/scripts/self-improvement'
+    add('build-optimizer-curriculum', ['node', f'{improvement_scripts}/build-training-slate.mjs',
+        improvement_tasks, str(self_improvement_variants), '20261002'],
+        [f'{r}/runtime-host/frozen-runtime.json', f'{improvement_scripts}/build-training-slate.mjs'],
+        [f'{improvement_tasks}/cases.jsonl', f'{improvement_tasks}/manifest.json'])
+    add('generate-optimizer-curriculum', ['node', f'{improvement_scripts}/run-training-slate.mjs',
+        '--repo', p, '--cases', f'{improvement_tasks}/cases.jsonl', '--output', improvement_generation,
+        '--optimizer-provider', optimizer_provider, '--optimizer-model', optimizer_model,
+        '--executor-endpoint', teacher_server, '--executor-model', teacher_model],
+        [f'{improvement_tasks}/cases.jsonl', f'{r}/runtime-host/frozen-runtime.json',
+         *[f'{improvement_scripts}/{name}.mjs' for name in ('run-training-slate', 'structural-study',
+              'replay-followup-study', 'export-followup-training', 'publish-optimizer-training')]],
+        [improvement_turns, f'{improvement_generation}/manifest.json'])
+    verified_turns.append(improvement_turns)
     add("teacher-seeds", ["node", f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl", str(teacher_programs), "42", failure_cases],
         [f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{p}/ts-host/dist/teacher/synthetic-generator.js", f"{r}/synthetic/teacher-programs.jsonl", failure_cases],
         [f"{r}/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl.manifest.jsonl"])
@@ -500,6 +520,9 @@ def main():
                         help="elicit a required-tool execution plan before each teacher action")
     parser.add_argument("--teacher-execution-plan-tokens", type=int, default=512,
                         help="maximum tokens for each optional execution plan")
+    parser.add_argument("--self-improvement-variants", type=int, default=12, help="variants per native optimizer family; default 192 tasks across 16 families")
+    parser.add_argument("--optimizer-provider", default="openai-codex")
+    parser.add_argument("--optimizer-model", default="gpt-6-luna")
     parser.add_argument("--inline-shapes", type=int, default=2, help="generated cases per inline curriculum family")
     parser.add_argument("--token-file", type=Path)
     parser.add_argument("--init-adapter", type=Path)
@@ -519,6 +542,7 @@ def main():
                     teacher_model=args.teacher_model, teacher_server=args.teacher_server, teacher_provider=args.teacher_provider,
                     teacher_execution_plans=args.teacher_execution_plans,
                     teacher_execution_plan_tokens=args.teacher_execution_plan_tokens,
+                    self_improvement_variants=args.self_improvement_variants, optimizer_provider=args.optimizer_provider, optimizer_model=args.optimizer_model,
                     inline_shapes=args.inline_shapes, token_file=args.token_file,
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,

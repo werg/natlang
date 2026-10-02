@@ -1,5 +1,5 @@
 /** Pin one current SDK for an offline migration batch, including exporter workers. */
-import {cp,mkdir,readFile,writeFile,readdir,symlink} from 'node:fs/promises';
+import {cp,mkdir,readFile,writeFile,readdir,symlink,realpath} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -8,6 +8,10 @@ export async function pinReplayRuntime(output){
  const directory=resolve(output,'runtime'),manifest=join(directory,'replay-runtime.json');
  try{return JSON.parse(await readFile(manifest,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
  await mkdir(output,{recursive:true});
+ // Workspace dependencies live at both package and repository levels. Preserve both
+ // when an SDK is replayed outside the checkout, as well as inside a frozen recipe.
+ const packageModules=await realpath(new URL('../../node_modules/',import.meta.url));
+ await symlink(resolve(packageModules,'../../node_modules'),join(resolve(output),'node_modules')).catch(error=>{if(error.code!=='EEXIST')throw error;});
  await cp(new URL('../../dist/',import.meta.url),directory,{recursive:true});
  await symlink(new URL('../../node_modules/',import.meta.url).pathname,join(directory,'node_modules')).catch(error=>{if(error.code!=='EEXIST')throw error;});
  await cp(new URL('../../prelude.js',import.meta.url),join(resolve(output),'prelude.js'));

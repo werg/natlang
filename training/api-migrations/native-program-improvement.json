@@ -738,5 +738,19 @@
     "ts-host/scripts/self-improvement/verify-improvement.mjs",
     "scripts/validate_correction_turns.py"
   ],
-  "coverage_status": "Implementation evidence exists; required curriculum quotas and complete migration/recollection are not yet satisfied."
+  "coverage_status": "Implementation evidence exists; required curriculum quotas and complete migration/recollection are not yet satisfied.",
+  "general_optimizer_curriculum": {
+    "builder": "ts-host/scripts/self-improvement/build-training-slate.mjs",
+    "collector": "ts-host/scripts/self-improvement/run-training-slate.mjs",
+    "default_tasks": 192,
+    "families": 16,
+    "cases": 960,
+    "recipe": "scripts/create_training_pipeline.py",
+    "stages": [
+      "build-optimizer-curriculum",
+      "generate-optimizer-curriculum"
+    ],
+    "positive_admission": "Pinned SDK replay, independently checked invocation effects and accepted source experiment; automatically published into current-manifest.json",
+    "failure_retention": "Original attempts and admission receipts retained for subsequent curriculum; reconstructed mechanisms are explicitly labelled"
+  }
 }

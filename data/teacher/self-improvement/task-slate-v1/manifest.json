@@ -1,0 +1,27 @@
+{
+  "schema": "natlang.optimizer-training-slate/1",
+  "tasks": 192,
+  "families": [
+    "active-urgency",
+    "explicit-consent",
+    "completed-delivery",
+    "active-license",
+    "final-cancellation",
+    "overall-recommendation",
+    "authorized-access",
+    "resolved-support",
+    "confirmed-attendance",
+    "final-renewal",
+    "identity-join",
+    "latest-revision",
+    "ranked-selection",
+    "exact-multi-edit",
+    "corrected-extraction",
+    "semantic-routing"
+  ],
+  "variants": 12,
+  "seed": 20261002,
+  "sha256": "4bbf63a7fef07166586b3c18594b3c6e6e63bf69892ccf34856907c88e99b546",
+  "positiveSFT": false,
+  "design": "Development-only native source optimization; independent gold and source groups; no existing transfer/confirmation cases reused."
+}
