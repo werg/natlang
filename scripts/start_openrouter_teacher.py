@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 
 MODEL = 'stealth/space-bunny-alpha'
+status_reporter = None
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -45,6 +46,7 @@ def get_json(url, key=None):
         raise ValueError('OpenRouter metadata/authentication unavailable') from None
 
 def main():
+    global status_reporter
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('plan', type=Path)
     parser.add_argument('--key-file', type=Path, default=Path.home() / '.config/natlang/openrouter.env')
@@ -62,6 +64,7 @@ def main():
             tmp = root / 'worker-status.json.tmp'
             tmp.write_text(json.dumps(value, indent=2) + '\n')
             tmp.replace(root / 'worker-status.json')
+        status_reporter = status
         if plan.get('approved') is not True or plan.get('model') != MODEL or plan.get('model_concurrency') != 1:
             raise ValueError('expected a reviewed single-request Space Bunny plan')
         for path, sha in plan['pins'].items():
@@ -124,6 +127,13 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
+        if status_reporter is not None:
+            # Only a launcher that acquired the lock may publish failure status.
+            # Diagnostic bodies/credentials are deliberately absent.
+            try:
+                status_reporter('paused_setup_failure', error_type=type(error).__name__)
+            except OSError:
+                pass
         # Provider response bodies and credential values never enter diagnostics.
         if isinstance(error, ValueError):
             print(str(error), file=sys.stderr)

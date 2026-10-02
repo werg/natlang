@@ -30,8 +30,23 @@ def atomic_json(path, value):
 
 
 def running(pid):
+    """Fail closed while a PID is live, regardless of versioned script name.
+
+    The reviewed queue/journal binding establishes ownership separately. A
+    basename check incorrectly treated versioned supervisors and provider
+    launchers as absent and could allow overlapping handoffs.
+    """
+    if pid is None:
+        return False
     try:
-        return b'run_bonsai_queue.py' in Path(f'/proc/{int(pid)}/cmdline').read_bytes()
+        process_id = int(pid)
+        if process_id <= 0:
+            return False
+        stat = Path(f'/proc/{process_id}/stat').read_text()
+        state = stat.rsplit(')', 1)[1].split()[0]
+        return state not in {'Z', 'X'}
+    except ProcessLookupError:
+        return False
     except FileNotFoundError:
         return False
 
