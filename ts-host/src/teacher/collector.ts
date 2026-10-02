@@ -81,6 +81,10 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
   transportRetries?: number; retryDelayMs?: number;
   modelConcurrency?: number; maxModelRequests?: number;
+  /** Optional append-only per-case lease/terminal journal used by reviewed pool supervisors. */
+  caseEventsFile?: string;
+  /** For large pools, keep exact per-case result files live and write the merged export only at final flush. */
+  finalExportOnly?: boolean;
   /** Worker n starts its first job n times this later, so a rate-limited provider does not see them all at once. */
   workerStaggerMs?: number;
   /** Result files of earlier runs whose finished rows stand in for jobs of the same program (see reusedRow). */
@@ -296,20 +300,38 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
 
 /** Queue incomplete jobs, publish each result atomically, and coalesce ordered merge exports. */
 export async function collectBatch(records: IndexedRecord[], config: CollectorConfig, runner: JobRunner,
-  signal?: AbortSignal): Promise<{ completed: number; missing: number[] }> {
+  signal?: AbortSignal, admissionSignal?: AbortSignal): Promise<{ completed: number; missing: number[] }> {
   if (!Number.isInteger(config.workers) || config.workers < 1) throw new RangeError('workers must be positive');
   await mkdir(config.jobs, { recursive: true });
+  if (config.caseEventsFile) await mkdir(dirname(config.caseEventsFile), { recursive: true });
+  let caseEventFailure: unknown;
+  let caseEventQueue = Promise.resolve();
+  const caseEvent = (item: IndexedRecord, event: string, details: Record<string, unknown> = {}) => {
+    if (!config.caseEventsFile || caseEventFailure) return Promise.resolve();
+    caseEventQueue = caseEventQueue.then(async () => {
+      const handle = await open(config.caseEventsFile!, 'a');
+      try {
+        await handle.writeFile(JSON.stringify({ event, at: new Date().toISOString(), index: item.index,
+          program_id: item.record.id, program_ir_sha256: recordDigest(item.record), key: jobKey(item), ...details }) + '\n');
+        await handle.sync();
+      } finally { await handle.close(); }
+    }).catch(error => { caseEventFailure = error; });
+    return caseEventQueue;
+  };
   const pending: IndexedRecord[] = [];
   const reusable = config.reuse?.length ? await reusableRows(config.reuse) :
     new Map<string, Array<{ row: TeacherRow; path: string }>>();
   let reused = 0, resumed = 0, incompatible = 0;
   for (const item of records) {
     const expected = expectedProvenance(item.record, config), path = join(config.jobs, `${jobKey(item)}.result.json`);
-    if (await readMatching(path, item.record, expected)) { resumed++; continue; }
+    if (await readMatching(path, item.record, expected)) {
+      resumed++; await caseEvent(item, 'case_checkpoint', { disposition: 'already_complete' }); continue;
+    }
     const hold = config.collectionRole === 'reference' ? undefined : generationHoldReason(item.record);
     if (hold) {
       await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
         JSON.stringify({ index: item.index, program_id: item.record.id, generation_hold: hold, error: `generation held: ${hold}` }) + '\n');
+      await caseEvent(item, 'case_held', { reason: hold });
       continue;
     }
     try { await readFile(path, 'utf8'); incompatible++; } catch (error) {
@@ -318,7 +340,10 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     // The last listed file with a qualifying row wins; a row that does not qualify never hides an earlier one.
     const row = (reusable.get(expected.program_ir_sha256 as string) ?? []).map(found => reusedRow(found, expected, config.reuseSurfaces))
       .filter(Boolean).at(-1);
-    if (row) { await writeAtomic(path, JSON.stringify(row) + '\n'); reused++; continue; }
+    if (row) {
+      await writeAtomic(path, JSON.stringify(row) + '\n'); reused++;
+      await caseEvent(item, 'case_checkpoint', { disposition: 'reused' }); continue;
+    }
     pending.push(item);
   }
   process.stderr.write(`queue: ${records.length} selected, ${resumed} already complete, ${reused} reused, ${pending.length} pending; ${config.workers} workers\n`);
@@ -328,7 +353,11 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
   // hint twins together, and running several long cases of one family at once fills the server's shared KV buffer.
   // The order depends only on the job keys, so it is the same on every resume; the merged output stays in shard order.
   pending.sort((a, b) => sha256(jobKey(a)).localeCompare(sha256(jobKey(b))));
-  let merged = await mergeCompleted(records, config);
+  // The final-only pool mode relies on per-case files during collection and deliberately
+  // leaves the aggregate absent until the final flush. The prepass has already validated
+  // these resumed/reused per-case rows, so it can initialize progress without an export.
+  let merged = config.finalExportOnly ? { completed: resumed + reused, missing: [] } :
+    await mergeCompleted(records, config);
   // Job results are the durable checkpoints. Rebuilding the merged export is O(records), so do not
   // make each worker wait for its own full scan/write or allow concurrent snapshots to race.
   // A short coalescing window lets cases completing together share one export. The final flush below
@@ -364,15 +393,19 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     if (slot && config.workerStaggerMs) await delay(slot * config.workerStaggerMs);
     // Stop admitting cases if the background export fails. Already-running cases may still
     // write their exact result files; flushMerge below then surfaces the export failure.
-    while (cursor < pending.length && !signal?.aborted && !mergeFailure) {
+    while (cursor < pending.length && !signal?.aborted && !admissionSignal?.aborted &&
+        !mergeFailure && !caseEventFailure) {
       const item = pending[cursor++]!, expected = expectedProvenance(item.record, config);
+      await caseEvent(item, 'case_start');
+      if (caseEventFailure) break;
       let attempt = 0;
       while (true) try {
         const row = await runner(item, expected, signal);
         if (!resultMatches(row, item.record, expected)) throw new Error('job returned mismatched provenance');
         await writeAtomic(join(config.jobs, `${jobKey(item)}.result.json`), JSON.stringify(row) + '\n');
         durableCompleted++;
-        scheduleMerge();
+        await caseEvent(item, 'case_finish', { status: 'result', accepted: row.outcome?.accepted ?? null });
+        if (!config.finalExportOnly) scheduleMerge();
         process.stderr.write(`completed ${item.index} ${item.record.id}: accepted=${row.outcome?.accepted ?? false}; ${durableCompleted}/${records.length} durable\n`);
         break;
       } catch (error) {
@@ -381,6 +414,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
             JSON.stringify({ index: item.index, program_id: item.record.id, code: error.code,
               error: `${error.name}: ${error.message}`, timeout: error.metadata }) + '\n');
+          await caseEvent(item, 'case_finish', { status: 'error', code: error.code });
           break;
         }
         const limited = rateLimited(error);
@@ -389,12 +423,14 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
             JSON.stringify({ index: item.index, program_id: item.record.id,
               retry_not_before: Date.now() + retryAfterMs(error),
               error: `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : String(error)}` }) + '\n');
+          await caseEvent(item, 'case_finish', { status: 'error', error_type: error instanceof Error ? error.name : 'Error' });
           break;
         }
         const wait = retryWaitMs(error, attempt++, config.retryDelayMs ?? 5_000);
         const retryPath = join(config.jobs, `${jobKey(item)}.retry.json`);
         const event = { index: item.index, program_id: item.record.id, attempt,
           reason: limited ? 'rate_limit' : 'transport_failure', wait_ms: wait, until: Date.now() + wait };
+        await caseEvent(item, 'case_retry', { attempt, reason: event.reason, wait_ms: wait, until: event.until });
         await writeAtomic(retryPath, JSON.stringify(event) + '\n');
         process.stderr.write(`retry: ${JSON.stringify(event)}\n`);
         try {
@@ -410,6 +446,8 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     }
   };
   await Promise.all(Array.from({ length: Math.min(config.workers, Math.max(1, pending.length)) }, (_, slot) => worker(slot)));
+  await caseEventQueue;
+  if (caseEventFailure) throw caseEventFailure;
   return flushMerge();
 }
 

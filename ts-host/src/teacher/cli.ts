@@ -3,7 +3,7 @@ import { chatRequestControls } from './chat-request-controls.js';
 import { providerRequestControls } from './provider-request-controls.js';
 import { APPROACH_PROMPT, FILE_TOOL_SURFACES, type FileToolSurface } from '../native/prompt.js';
 import { readFile } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -52,6 +52,9 @@ async function main(): Promise<void> {
       '         --judge-model-id ID (--judge-server URL | --judge-provider PI_ID) for judged oracles\n' +
       '         --reuse RESULTS.jsonl[,RESULTS.jsonl...]  (finished rows of earlier runs stand in for the same programs)\n' +
       '         --reuse-surfaces HASH[,HASH...]  (earlier tool surfaces declared equivalent for reuse)\n' +
+      '         --drain-file PATH  (stop admitting new cases when present; let active cases finish)\n' +
+      '         --case-events-file PATH  (append-only per-case lease and terminal journal)\n' +
+      '         --final-export-only  (write merged output at final flush; per-case result files remain live)\n' +
       '         --kv-tokens N  (the server\'s shared KV buffer; requests wait to fit, default 53248, 0 = off)\n');
     return;
   }
@@ -102,6 +105,8 @@ async function main(): Promise<void> {
     ...(flags.has('--file-tools') ? { fileTools: fileToolSurface(flags.get('--file-tools')!) } : {}),
     ...(flags.has('--execution-plan-tokens') ?
       { executionPlanTokens: integer(flags, '--execution-plan-tokens', 512) } : {}),
+    ...(flags.has('--case-events-file') ? { caseEventsFile: resolve(flags.get('--case-events-file')!) } : {}),
+    ...(flags.has('--final-export-only') ? { finalExportOnly: true } : {}),
     ...(flags.has('--reuse') ? { reuse: flags.get('--reuse')!.split(',').filter(Boolean).map(path => resolve(path)) } : {}),
     // The Bonsai server's default buffer (serve_bonsai.sh: 53,248 tokens); 0 turns admission off.
     ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
@@ -132,7 +137,18 @@ async function main(): Promise<void> {
   const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
   const controller = new AbortController();
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
-  const result = await collectBatch(records, config, nativeJobRunner(config), controller.signal);
+  const admissionController = new AbortController();
+  const drainFile = flags.has('--drain-file') ? resolve(flags.get('--drain-file')!) : undefined;
+  let drainPoll: NodeJS.Timeout | undefined;
+  if (drainFile) {
+    const pollDrain = () => { if (existsSync(drainFile)) admissionController.abort(); };
+    pollDrain();
+    drainPoll = setInterval(pollDrain, 250);
+    drainPoll.unref();
+  }
+  let result: Awaited<ReturnType<typeof collectBatch>>;
+  try { result = await collectBatch(records, config, nativeJobRunner(config), controller.signal, admissionController.signal); }
+  finally { if (drainPoll) clearInterval(drainPoll); }
   const source = await readFile(ir);
   const outputHash = createHash('sha256');
   for await (const chunk of createReadStream(output)) outputHash.update(chunk);

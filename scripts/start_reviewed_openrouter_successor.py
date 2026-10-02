@@ -34,7 +34,15 @@ def main():
             predecessor = plan['predecessor']
             if (current['queue'], current['journal']) != (predecessor['queue'], predecessor['journal']):
                 raise ValueError('Predecessor authority superseded')
-            state = json.loads(Path(current['status_file']).read_text())
+            try:
+                state = json.loads(Path(current['status_file']).read_text())
+            except FileNotFoundError:
+                # A reviewed launcher may still be checking pins/authentication
+                # before writing its first status. Its live PID owns this wait.
+                if running(current.get('launcher_pid')):
+                    time.sleep(5)
+                    continue
+                raise ValueError('Predecessor exited without status; agent review required')
             if state['state'] == 'finished' and not running(state.get('launcher_pid')):
                 break
             if state['state'].startswith('paused') or state['state'] == 'stopped':
