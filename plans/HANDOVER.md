@@ -1,3 +1,91 @@
+# Autonomous student experiments authorized — 2026-10-02
+
+User approved the proposed local 350M-first / later DGX Ling approach and explicitly asked autonomous execution. Local experiment owner luna_quality_sweep: pinned real LFM2.5-350M BF16 LoRA, no gradient checkpointing initially, representative approved data, source-group-heldout baseline/after evaluation, memory/throughput and resumable reports. Existing-data full SFT DAG owner luna_source_oracle_audit: final strict positive-vs-provenance gates, full tests, bounded data-only build. Ling compatibility owner luna_oct2_rejection_review: pinned actual custom architecture reduced-config forward/backward, adapter coverage and formatting; preserve Qwen DGX generation until complete.
+
+Root pinned Ling metadata/code at revision9a98e35fe1c9ee255f78dd64771c7ae15a799481 under runs/ling-student-compatibility-20261002/source-manifest.json. No full Ling weights or production training launched. Short-sequence training mode assertion in upstream custom code is a candidate bug under investigation, not a proven installed-runtime failure yet. Do not conflate prior tiny random diagnostic with the authorized real pretrained-model experiment.
+
+---
+
+# Student experiment direction — 2026-10-02
+
+User proposes a local LiquidAI/LFM2.5-350M experiment and likely targets inclusionAI/Ling-3.0-tiny for DGX student training after generation finishes. Ling is a preference, not a finalized training configuration; no production training has started and DGX remains on Qwen teacher generation.
+
+Recommended local experiment: bounded, source-group-separated approved-data SFT with before/after runtime task evaluation, representative primitive/file/directory/delegation cases and the 25% reducer target. Start BF16 LoRA with gradient checkpointing disabled, then measure real memory/throughput across sequence lengths. Do not truncate or discard long trajectories silently to achieve a fit. Periodic disk recovery checkpoints remain distinct from activation/gradient checkpointing. A 350M quality ceiling must not be treated as evidence that Ling cannot learn the tasks.
+
+Ling-3.0-tiny official model card reports 7.9B total/1.3B active parameters, hybrid KDA/MLA and routed MoE. Active parameter count does not determine full training weight/optimizer memory. Verify differentiable kernels, adapter coverage, template/tool/reasoning formatting and heldout runtime evaluation before a DGX training commitment. Keep model-neutral approved data and render separately for each student tokenizer/template. User discussion does not authorize stopping current DGX generation early.
+
+---
+
+# Storage block removed — 2026-10-02 18:53 UTC
+
+User authorized freeing/reorganizing storage. Reclaimed aged unused Docker build cache and untagged images unused by containers (older than168hours). Actual filesystem available space rose from10.63GiB to153.48GiB, increase142.85GiB. Receipt runs/storage-reorganization-20261002/receipt.json; raw Docker accounting totals include shared layers and are NOT the actual free-space increase. Tagged natlang-train image remains exact eabc88d83cba79860c368bd2c7758e0e6914f602e7de6b9e20446fb624de1cdc. No training data/model files, containers or volumes were removed/moved. Remote DGX external has544GiB free; no storage transfer was necessary for this block.
+
+Bunny current256 completed256 exact exports,252 raw accepted4 rejected. Its follow-on is now running PID1796554/supervisor1796566, last38 exact accepted results. A gated launcher first failed BEFORE model calls because canonical runner lacked --provider-request-config; preserved setup failure and retry uses pinned compatible v35 helper. Canonical runner support is now ported and tested16/16, commite728e95; future launch plans should use its updated SHA rather than rely on hidden run-local feature patches. Luna1 fixedx64 active PID1767281 (firstcase70turns, correctfalse andcurrentadmitted), Luna2 remains active1383567; DGX generation continues. Old Bunny211 stays unresolved/raw and covered by existing recovery assignments.
+
+Standalone and workspace dependency lock fixes are committed46fb511 and2702b7e. Workspace adds only25 exact optional esbuild0.28.2 platform records, keeping existing locked entries; clean offline installs validate x64 and LinuxARM64 dependency resolution. Main node_modules/live worker runtimes were not installed into.
+
+Full-data SFT v33 DAG now exists under runs/data-lineage-20261002/recipe-v33-current-policy-existing-data-only/pipeline.json. Historical resource guard recorded55,014,686,843bytes required versus11,410,812,928available and stopped beforematerialization; this storage block is now resolved. Final inventory/role classification and CLI graph validation remain in progress: source/hold metadata hashes must be carried visibly without being marked positive training inputs. Do NOT bypass required-default/quality gates or claim a full production run complete yet. DPO61 unique causal pairs are explicitly tracked in a separate pending-render/split/audit lane acrossfourphysical files, not SFT inputs or automatic negatives.
+
+---
+
+# Active generation and infrastructure repairs — 2026-10-02 18:32 UTC
+
+Controlling instruction is unchanged: only Bonsai is disabled; keep Luna and Space Bunny generating and use this machine for training-pipeline testing. DGX Qwen generation remains active with the951 fixed-v38 successor gate waiting for predecessor completion.
+
+Actual local workers: Space Bunny PID1754718 on the256 current quality-v4 workflow queue; Luna1 PID1767281 on20 reviewed current workflow recovery cases using fixed x64v38; Luna2 PID1383567 continues306 prior reviewed cases. Luna1 first launch1765401 failed before model calls because collector log parents were absent; creating parents allowed restart of the same uncompleted key. Canonical runner now creates jobs/output/log parents before recording/starting the attempt, commit2343bb6;14 queue tests pass. No setup failure is a model negative. The old Luna2 runner has no graceful drain marker: don't terminate an active healthy case to change runtime or fabricate completion journal records; fixed runtime can be used for its reviewed successor.
+
+Space Bunny's fixed v38 runtime was blocked by a hidden npm lock mutation caused by a private build hardlink clone. Preserve corrupt bytes/receipt at runs/runtime-integrity-investigation-v38/. Exact DGX copy restored LOCAL v38 only, with full20,179-file/22-link verification. v37-r3 remains integrity-invalid and quarantined. Safe physical clone helper and five regression tests committedcca6938; incident audit runs/runtime-hardlink-isolation-audit-20261002/audit-v2.json. Never run package managers in a hardlinked sealed runtime derivative. New fixed x64 v38 closure independently root-verified20,180 files,22 internal symlinks,all hashes/modes,zero hardlinks; manifest e16ded63d78e023ff2e49b0ffcc92fab7baeed2eb90349fc1e02911f4c1afc86.
+
+Full Python suite229 tests passed in63.28s (eight existing warnings), receipt runs/training-pipeline-preflight-20261002/python-suite-229-review.json; subsequent helper/queue focused tests also passed. The standalone ts-host package lock now matches unchanged package.json and preserves all original locked versions plus25 cross-platform esbuild optional entries. Clean offline npm ci succeeded in a private clone; root promotion46fb511, lock SHA85380ae3ef7e5cfb0b3c450e00b5e6991959ef8063eb38348ebfd1005ab8c6b6. Main dependencies/live frozen runtime trees were not installed into or rebuilt.
+
+The first new Bunny rejection is a semantic invoice-rule error, not demonstrated infrastructure or formatting failure. It ignored an explicit single-unit lump-sum exclusion; raw attempt remains rejected and no oracle weakening/gold injection/DPO assumption is made. Receipt runs/space-bunny-qualityv4-next-v38-20261002/result-review/first-rejection-review.json.
+
+Current full-data recipe is moving to recipe-v33-current-policy-existing-data-only with a physically independent current-source runtime. Initial v32 runtime clone also had source/lineage hardlinks and must not be treated as isolated. New seal verifier rejects aliases and hashes nested lineage manifests. Executable DAG/resource guard evidence still pending at this timestamp; local disk about11GiB means full materialization must wait for storage. Do not claim production corpus/student training is complete.
+
+---
+
+# Current controlling scope and verified progress — 2026-10-02 18:15 UTC
+
+Stop only local Bonsai generation; continue Luna and Space Bunny locally or on DGX. Test and fix the training pipeline locally. Do not restart Bonsai without an explicit user instruction. Its durable disable marker remains active.
+
+Luna2 PID1383567 continues its306-case queue (case135 active at this check). Luna1 short32 finished32 exact exports,23 admitted9 rejected. Space Bunny short33 finished33 exact exports,28 admitted5 rejected. The old300 Bunny queue has only299 exact exports: index211 is an unresolved incomplete attempt, not a completed training positive or DPO negative. Its fresh recovery is already covered by DGX/Luna2 assignments.
+
+Prepared successor packets: Bunny256 and Luna1 20 current workflow quality-v4 cases, with exact gold/admission/conversion/native proofs and zero source holds/unlinked decisions. They have NOT launched: launcher correctly detected a changed hidden node_modules lockfile in the local sealed v38 candidate. Preserve changed bytes and trace provenance, restore only an independently verified matching file, then verify the entire closure before launching. Luna also needs a sealed fixed x64 derivative. Do not bypass integrity checks or claim idle slots are running. Keep Luna2 active until a safe boundary transition can use the fixed runtime.
+
+DGX current1024 queue remains active; latest verified525 exact results,307 partials,0 errors. The fixed successor951 gate IS armed, enabled and waiting: natlang-bonsai-qwen-successor-gate-v38.service, PID969013, receipt runs/dgx-bonsai-qwen-handoff-20261002/gate-v38/gate-arm-receipt-v38.json. Old v37 gate disabled. Fixed ARM v38-r2 was fully verified on DGX;951 exact native/current-policy compatibility proofs pass. Gate must wait for all predecessor exports and process/lock drainage before launch; no951 model calls yet.
+
+Published current static directory v26:1212 raw cases,1199 eligible13 explicit holds;4556 decisions3596 approved960 held. Qasper reference evals now visibly expose UTF-16-correct original source spans; annotation-directed scripted construction is explicitly recorded,300 unsupported direct returns remain held. Seven persistent tests pass. Publication/source fix commit9820f58. Prior raw data and superseded manifests remain preserved.
+
+Historical repair selection was repeating work:30 of32 Luna repair cases already have current eligible-positive results. Current-version guard and four tests committedecedf40; it reproduces registered transformations and preserves source/files/golds before history checks. Never relabel old trajectories as new versions or suppress from unvalidated raw acceptance alone.
+
+Training checks: full Python222 tests passed;413 actual approved examples rendered/audited with2,376,629 total and64,855 supervised tokens; tiny random diagnostic CUDA training/checkpoint smoke passed. This is not production student training. Serving had an additional stop-token mismatch: generic MiniCPM EOS differs from closed-template im_end130073. Commit35cbf4f binds generation to the validated template token, strips only its final occurrence, preserves tool syntax/token usage and tests finish reasons;10 focused tests pass.
+
+Full existing-data executable DAG and isolated current runtime/dependency closure are being completed. The initial v32 JSON spec was declarative, not executable. Campaign v38 differs from current repository policy in5/7 modules and is NOT a substitute for an all-corpus current runtime. Current package.json/package-lock mismatch breaks clean npm ci and must be repaired in an isolated coherent clone before canonical lock promotion. Local disk about11GiB free; full-data preflight must run first and fail with a durable resource-wait receipt before large materialization. Do not call the full training corpus ready or delete bound raw snapshots to free space.
+
+---
+
+# Confirmed runtime cleanup fix and continuation — 2026-10-02
+
+Controlling user correction: stop only local Bonsai; continue Luna and Space Bunny, and test/fix training locally. Bonsai disable marker remains active. Luna1 repair32 exported32/32 exact, Luna2 exported95/306 at latest root check and continues. Prepare reviewed next Luna1 supply; do not describe an exhausted queue as running.
+
+Confirmed delegate lease leak is fixed in canonical source, commit80c78f5. Kernel now aborts every supplied/acquired folder transaction on any invocation setup/preflight failure; delegate schema explains valid Natlang result types. Isolated typecheck and90 runtime/interpreter/tool-surface tests pass; earlier full Python222 tests and real413-row renderer/audit plus tiny GPU gradient/checkpoint smoke passed. Runtime deployment must use a newly hash-reviewed sealed snapshot; no old frozen tree is changed.
+
+First newv38 candidate was accidentally based on unsealed630-file scratch, not approved ARM37r3. Rejected BEFORE deployment/model calls; receipt runs/space-bunny-directory-v7-20261002/runtime-v38-candidate-rejection.json. Correct replacement must derive exact ARM37r3 manifest0778802aa821e018c8d4a3c1b5e81e84ba45b9ab32d551d53d8096481398894c, retaining20,179-file dependency closure and ARMNode/esbuild. Bunny33 credential-preflight failures are retained as zero-model setup failures; actual authenticated launch waits corrected snapshot. Existing owner-only OpenRouter env file is used, never print key.
+
+DGX current1024 inference remains active; latest463 result files,303 partials,0 errors. Its951 waiting successor gate is deliberately inactive pending new reviewed runtime; pause receipt runs/dgx-bonsai-qwen-handoff-20261002/gate/gate-pause-receipt-runtime-fix.json. Preserve old approvals and trees, reprove951 on actual ARM then rearm a versioned gate after review. Old Bunny211 partial stays unresolved and is already assigned to active DGX1024 and Luna2306, so no duplicate new attempt now; no SFT positive/DPO negative for incomplete infrastructure output.
+
+Static directory publication v26 is installed with canonical pointer SHA d51ad1c64f26f093c55c6f7ef45f689cf08f3ddaef23dd63001dcaa83bb22367:1,199 eligible cases +13 explicit source holds,4,556 turns/3,596 approved/960 held. All300 Qasper references show original cited text,300 direct returns remain held. Previousv25 and all source records/golds retained; catalog merge/receipt finalization ongoing. Full final student corpus is NOT training-ready; full data-only recipe refresh and disk capacity remain required (local~14GiBfree). No production student training launched.
+
+---
+
+# Space Bunny completion correction — 2026-10-02 16:42 UTC
+
+Root independently inspected all300 aggregate outputs and found **299 results (292 raw accepted, 7 raw rejected), plus index211 incomplete_export**, not300 exact results. Earlier last-job-based completion statements below are superseded. Supervisor correctly recorded index211 partial_without_terminal_result (exit0, no final manifest, two saved model responses); process ending does not prove campaign completion. Authority now records stopped_incomplete_export with retained211partial, no positive/DPOnegative for it.
+
+Index211 second reply invokes two `delegate` calls on the same `jobs` folder; there are no child provider request observations before Node exits0. Confirmed folder-lease leak: delegate acquires its transaction, then malformed prose returns fails type parsing before kernel cleanup; the next same-path delegate blocks. Deterministic no-provider reproduction: runs/delegate-deadlock-audit-20261002/audit.md. Source cleanup/schema regression fix is in progress; frozen versions must stay immutable. Do not blindly resume/mutate frozen36 or claim a successful handoff. New source-valid disjoint failed-only cohorts are prepared: Bunny33, Luna1 32; current Luna2 and DGX generation remain live. Explicit transfer/recovery accounting is required before substituting a completed predecessor claim.
+
+---
+
 # Final streaming regression pass — 2026-10-02 16:37 UTC
 
 Recipe now defaults to memory-bounded data stages; `--in-memory-data` is a diagnostic opt-out. Stable rehearsal tie ordering matches the old builder even for repeated IDs with different content/difficulty. Full Python suite **222 passed** in57.38s (8 existing deprecation warnings). Streaming token audit's storage guard passed too. Canonical production files are committed; static catalog refresh and local generation successor preparation remain active.

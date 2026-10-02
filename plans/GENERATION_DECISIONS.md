@@ -1,4 +1,67 @@
+# Autonomous student experiments authorized — 2026-10-02
+
+User approved the proposed local 350M-first / later DGX Ling approach and explicitly asked autonomous execution. Local experiment owner luna_quality_sweep: pinned real LFM2.5-350M BF16 LoRA, no gradient checkpointing initially, representative approved data, source-group-heldout baseline/after evaluation, memory/throughput and resumable reports. Existing-data full SFT DAG owner luna_source_oracle_audit: final strict positive-vs-provenance gates, full tests, bounded data-only build. Ling compatibility owner luna_oct2_rejection_review: pinned actual custom architecture reduced-config forward/backward, adapter coverage and formatting; preserve Qwen DGX generation until complete.
+
+Root pinned Ling metadata/code at revision9a98e35fe1c9ee255f78dd64771c7ae15a799481 under runs/ling-student-compatibility-20261002/source-manifest.json. No full Ling weights or production training launched. Short-sequence training mode assertion in upstream custom code is a candidate bug under investigation, not a proven installed-runtime failure yet. Do not conflate prior tiny random diagnostic with the authorized real pretrained-model experiment.
+
+---
+
+# Student experiment direction — 2026-10-02
+
+User proposes a local LiquidAI/LFM2.5-350M experiment and likely targets inclusionAI/Ling-3.0-tiny for DGX student training after generation finishes. Ling is a preference, not a finalized training configuration; no production training has started and DGX remains on Qwen teacher generation.
+
+Recommended local experiment: bounded, source-group-separated approved-data SFT with before/after runtime task evaluation, representative primitive/file/directory/delegation cases and the 25% reducer target. Start BF16 LoRA with gradient checkpointing disabled, then measure real memory/throughput across sequence lengths. Do not truncate or discard long trajectories silently to achieve a fit. Periodic disk recovery checkpoints remain distinct from activation/gradient checkpointing. A 350M quality ceiling must not be treated as evidence that Ling cannot learn the tasks.
+
+Ling-3.0-tiny official model card reports 7.9B total/1.3B active parameters, hybrid KDA/MLA and routed MoE. Active parameter count does not determine full training weight/optimizer memory. Verify differentiable kernels, adapter coverage, template/tool/reasoning formatting and heldout runtime evaluation before a DGX training commitment. Keep model-neutral approved data and render separately for each student tokenizer/template. User discussion does not authorize stopping current DGX generation early.
+
+---
+
+# Storage and provider continuity — 2026-10-02 18:53 UTC
+
+- User authorized storage cleanup. Reclaimed unused aged Docker build cache and dangling images rather than move bound data; actualavailable153.48GiB (+142.85GiB), current training image retained. No data/model/volume/container deletion. See storage receipt for actual filesystem figures, not Docker shared-layer accounting.
+- A run-local OpenRouter supervisor feature had never reached canonical code, causing successor CLI rejection. Ported provider request-config handling to canonical runner with explicit provider/JSON validation and forwardingtests; commite728e95,16 queue tests. Preserve no-call setup failure, retry same unattempted queue with known compatible helper; futureplanspin canonicalnewversion.
+- Existing-data SFT recipe must hash source/hold/DPO metadata for provenance without interpreting it as admitted training content. Maintain explicit roles, carry-forward resolutions and standard required-default/quality checks; no blanket inventory override.
+- DPO61 distinct causal pairs stay visibly pending student rendering/dedup/sourcegroup split/token audit. Raw failure inventories do not automatically become DPO negatives.
+
+---
+
+# Continuity repairs — 2026-10-02 18:32 UTC
+
+- Resume real Luna/Bunny work after finite queues, with current proof and history suppression. Bunny256 now runs; Luna20 runs on private fixed x64v38. Preserve setup attempts and distinguish no-model infrastructure failures from teacher negatives.
+- Create collector output/log/jobs directories in the supervisor before attempt start; fresh queues must not rely on manual directory setup. Commit2343bb6,14 tests.
+- Root independently verified private x64 v38 closure and Node24 pin; don't interrupt healthy Luna2 work to deploy a fix without a genuine drain mechanism. Use fixed runtime for subsequent reviewed work.
+- The npm corruption was caused by this task's hardlinked build clone, not a model/provider failure. Local v38 was atomically restored from exact DGX bytes and fully audited; v37 remains quarantined. Physical clone/inode-isolation helper committedcca6938; seal verifier now refuses multi-link files. Preserve old receipts and correct misleading claims of isolation.
+- Restore complete standalone host dependency lock without package.json changes or resolved upgrades. Preserve cross-platform optional entries, including DGX ARM esbuild, rather than publish a Linux x64-only lock. Commit46fb511; root workspace lock optional coverage separately under review.
+
+---
+
+# Course changes — 2026-10-02 18:15 UTC
+
+- User correction controls: only Bonsai stops; Luna and Space Bunny must continue. Queue preparation alone is not worker continuity; report actual processes and boundary transitions.
+- Refuse launching from a modified sealed dependency tree. Hidden npm lock mutation blocked the new Bunny queue; preserve evidence, restore only exact independently verified bytes and permissions, re-audit full closure. Do not silently alter frozen manifests to admit corruption.
+- Separate all-corpus current policy runtime from campaign-frozen v38 (five of seven policy modules differ). Generate coherent current dependency lock in private clone, compile current source there; never mix frozen physical dependencies with a different lock or mutate live main dependencies.
+- Fix model serving termination as well as corpus rendering: derive the assistant end token from the closed chat template, require one reversible token ID, explicitly pass generation EOS, retain tool markers and count the final terminator in usage. Commit35cbf4f;10 focused tests pass.
+- Published Qasper/static v26 is scripted annotation-directed reference construction, not independent model reasoning. Preserve source/gold identities and prior raw records; unsupported direct-answer decisions remain held.
+- Before history suppression, map old case IDs through approved current transformations and verify current admission/materialization. Thirty previous short repair cases already had valid Luna positives; unknown/ambiguous transformations stay blocked rather than guessed.
+
+---
+
 # Generation decisions — 2026-09-27 continuation
+
+## 2026-10-02 campaign runtime versus full-corpus policy
+
+- The fixed v38-r2 runtime is a derivative of the sealed ARM37 campaign runtime; it is approved for its reviewed queues, but five admission/source-conversion/collector modules differ from current canonical training policy. Do not label campaign-policy checks as full current-repository policy checks. A full-corpus training runtime must be compiled from current canonical source in an isolated directory; leave live/frozen trees unchanged.
+- Root initially suggested reusing v38 for the data-only DAG, then retracted this after comparing module hashes. Retain the course change: current static v26 policy pins and source holds must be checked in the training runtime. The DGX951 successor also needs a separate current-source-policy compatibility sidecar before gate rearm.
+- All32 recent Luna repair sources already have current canonical task variants. Old:v1 historical repair selection bypassed existing TATQA numeric/evidence-scale instructions; preserve attempts, use a guarded current-case preference/lineage check before future assignment. No silent trajectory or gold migration.
+- Workflow availability census pins4803 current workflow tasks, admitted snapshot plus730 recursive recent results and1024/951/306 active or pending assignments. After source-level active overlap and same-teacher successes,531 Bunny and20 Luna candidate IDs remain before final historical/native/source review. Receipt runs/teacher-supply-availability-20261002/workflow-availability.json; availability is not generation authorization.
+
+## 2026-10-02 delegate lock cleanup and continuation
+
+- Confirmed infrastructure bug, not an answer-quality rejection: malformed delegate returns type throws during child setup while retaining a previously acquired folder transaction. A later same-path delegate waits; Node can exit0 without a terminal result. Preserve old Space Bunny index211 partial; no SFT positive or DPO negative. Audit: runs/delegate-deadlock-audit-20261002/audit.md.
+- Fix all supplied/acquired child invocation leases on preflight/setup errors; clarify returns type expressions in tool schema. Frozen runtimes stay immutable; deploy a new reviewed version to future queues.
+- Luna1 repair continuation32 is active; Luna2 continues. Bunny33 credential preflight fixed via owner-only existing OpenRouter env file, launch waits fixed runtime. Index211 is already assigned to current DGX1024 and Luna2306, so do not add a duplicate fresh attempt.
+- Static v26 visible-Qasper candidate independently hash/partition/native reviewed and publication authorized; source-held13 remain explicit, unsupported Qasper final returns300 remain unapproved. Full training data build remains resource-limited; actual local smoke and222tests passed.
+
 
 ## 2026-09-30 20:04 UTC quality hold and coverage correction
 
@@ -1921,3 +1984,5 @@ User corrected earlier all-generation transfer: only Bonsai stops, Luna/Bunnycon
 
 - Training preparation, assembly, rendering, and audit now have opt-in memory-bounded modes with source-group/dedup/order parity. Disk guards fail before creating large scratch outputs; full-production-build readiness remains explicit rather than inferred from successful representative smoke.
 - Qasper static exploration must expose read evidence in tool output. Repair scripted references using attributed original human evidence; preserve old trajectories, golds and holds, version changed actions, and do not describe oracle-selected navigation as generated model reasoning.
+
+- Root campaign completion audit corrected Space Bunny300-entry queue to299results+oneincomplete. Lastjob/processcompletion is insufficient: inspect every entry's exact output accounting. Retain interrupted model traces as infrastructure/runtime evidence, not answer failures or preference negatives.
