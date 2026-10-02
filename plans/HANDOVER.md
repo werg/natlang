@@ -1,3 +1,33 @@
+# Current handover — 2026-10-03
+
+## Check-in cadence
+
+The user requests an ongoing active-session loop: finish work, sleep 50 minutes, check training and generation, review failures and training progress, fix or restart what needs attention, then repeat. The current deadline is recorded in `runs/monitor-cadence-20261003/state.json`. This is an assistant sleep loop, not a background assistant scheduler. Routine agent progress notifications should not reset the deadline.
+
+## Current training
+
+The main full-corpus LFM2.5-350M run is active under the enabled user service `natlang-lfm25-full-v13-muon-epoch1.service`. Its immutable plan is `runs/lfm25-350m-broad-20261002/full-v13-muon-epoch1/training-plan-v3.json` (SHA `fcae226e198429c82134212f19e6a89d7a84a806bf58df0beb94dfe97d770733`). It trains rank-16 LoRA on a BF16 base, using Muon for all 184 trainable tensors. This is a full-corpus epoch, not full-weight finetuning. There are 105,317 train examples and 5,410 heldout examples; target 13,165 optimizer steps. Early throughput suggests roughly 44 hours, subject to sequence lengths.
+
+The first full checkpoint was independently loaded on CPU: all 184 Muon momentum buffers, scheduler step 20, RNG, weights and data cursor were present. Baseline heldout loss was 2.26472; step-20 loss was 1.80621. A later check found 50 finite steps and a durable step-40 checkpoint. Read `trainer-output/checkpoint/state.json` for actual progress; `supervisor-v3-status.json` retains a stale startup `checkpoint_step:null` until a lifecycle transition. Do not mistake it for a missing checkpoint.
+
+The previous 500-step pilot stopped gracefully at step 351 and is preserved. The full run starts from the base because two pilot training groups occur in full-v13 heldout. Model, trainer code and inventory policy are physically frozen; future repository edits must not alter this active run. The supervisor retries trainer failures with backoff and the enabled service resumes after reboot. Its service has `Restart=no`; a killed supervisor or orphan container requires inspection before restart. Operator stop uses the private supervisor's persistent stop latch. SIGTERM checkpoints at a complete optimizer-step boundary; power loss recovers the latest durable periodic checkpoint.
+
+## Current generation
+
+DGX Qwen generation remains active, with the reviewed 951-case successor gate armed after the 1,024-case predecessor. Local Bonsai remains disabled by user request. Luna1 workflow-9, Luna2 workflow-8 and Space Bunny-395 have been root approved and launched under `runs/generation-continuity-20261003/`. Bunny-395 has already produced exact exports with fresh provider replies. Its predecessor 128 and Luna1 recovery-10 finished normally; all raw outputs are preserved. These short API queues may drain before the next check: refill from current native/source-reviewed cases, keeping same-teacher positive and active-ID suppression.
+
+Cross-teacher source-group overlap is allowed for deliberate coverage and distinct task shapes. Keep truthful parent source IDs/groups, deduplicate redundant targets, and protect the train/heldout source closure. It is not a reason to invent a global freshness restriction.
+
+## Outstanding work
+
+Growing-data intake is requested but is not yet supported by the active frozen trainer. A design and CPU validator are staged in `scripts/prepare_training_append_intake.py` and the epoch directory. The append-aware consumer still needs a tested identity transition and continuous learning-rate extension while preserving optimizer state, RNG and consumed sample order. Do not edit the active dataset or silently bypass corpus identity checks. Prepare new admitted batches as immutable candidates meanwhile.
+
+The rejection agent is preparing source-valid cases from the DGX 951 backlog for Luna, excluding same-Luna successes and active IDs. Four legacy Luna2 TatQA mismatches involve representation or scale; re-admit against current reviewed contracts before labeling them true negatives. Numerical computational correctness must remain exact. Preserve rejected data and migration evidence.
+
+---
+
+The following entries are historical; newer controlling instructions above take precedence.
+
 # Training efficiency audit — 2026-10-02, latest controlling work
 
 **Main training is now running:** Enabled userunit `natlang-lfm25-full-v13-muon-epoch1.service`, plan `runs/lfm25-350m-broad-20261002/full-v13-muon-epoch1/training-plan-v3.json` SHA fcae226e198429c82134212f19e6a89d7a84a806bf58df0beb94dfe97d770733. Rootverified26artifactpins/image; exactcontainerpreflight audit/mix/inventorypassed. Physicalclosedtraincode/privatepolicyROoverlay, writableTritoncache, frozen supervisorv3 expectedplanhash. Fullcorpus105317train/5410heldout,13165stepsoneepoch; BF16base withrank16LoRA (5996544trainable),184Muon tensors/0AdamWaux, freshbase becauseearlierpilottrainedon2fullheldoutgroups. Baseline2.2647225933;step10finite1.9029508,~12.3sec/step,100%GPU. First20checkpointpending. Prior500stepAdamWpilot cleanlypausedstep351/2808examples,checkpointpreserved. Maininitialthroughputimplies~45h/epoch provisional,previous35h estimatecamefromsubset. Userunitenabled+Linger; crashretry5/backoff30-600s, checkpointalloptimizer/scheduler/RNG/cursor+fsync. Systemdservice itselfhasRestart=no; wrapperretriestrainerfailures, rebootautostart works; deliberatepersistentpauseusesprivateSupervisor stopPLAN. Suddenkillofsupervisor mayrequirecheck-in restart/orphanreview.
