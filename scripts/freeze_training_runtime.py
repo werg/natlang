@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import tempfile
@@ -16,6 +17,18 @@ def tree_identity(root):
     return {str(path.relative_to(root)): digest_file(path)
             for folder in ("dist", "scripts", "src") for path in sorted((root / folder).rglob("*")) if path.is_file()} | {
                 name: digest_file(root / name) for name in ("prelude.js", "package.json", "package-lock.json") if (root / name).exists()}
+
+
+def check_prompt_features(root):
+    """Refuse a new snapshot whose prompt advertises an absent eval feature."""
+    native = root / 'dist/native'
+    prompt = (native / 'prompt.js').read_text()
+    if re.search(r'\bfinish\s*:\s*true\b', prompt):
+        agent = (native / 'agent.js').read_text()
+        runtime = (native / 'runtime.js').read_text()
+        if (not re.search(r"\bfinish\s*:\s*\{\s*type\s*:\s*['\"]boolean['\"]", agent)
+                or not re.search(r'\bargs\.finish\s*===\s*true\b', runtime)):
+            raise ValueError('Prompt advertises eval finish:true without its compiled tool schema and runtime implementation')
 
 
 def freeze(source, output):
@@ -37,6 +50,7 @@ def freeze(source, output):
             raise ValueError("frozen runtime changed")
         # Reuse the frozen revision even if the developer subsequently changes the source tree.
         return data
+    check_prompt_features(source)
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="runtime-building-", dir=output.parent))
     for name in ("dist", "scripts", "src"):

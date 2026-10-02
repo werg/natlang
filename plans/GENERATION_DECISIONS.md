@@ -1777,3 +1777,5 @@ Successor1024 =256reducers+768workflow, no ID/source-group overlap with832priorQ
 
 
 Runtime32 follow-through08:58UTC: Luna2 successor is actually running worker1177972 on32 after256complete predecessor; SpaceBunny next4 controller1177984 armed32. DGX old512 has exactly1missing export: CommitPack374711bc9d6ebaf124c1 malformedtoolJSONunterminatedstring after2attempts, rawpartial preserved. Exactterminaleventreviewed; noSFT/automaticDPOpromotion. Replaced onlywaitingDGXcontroller(nochildren/successorlogs), v2controller1177045 / plane596f11ff4fc0e4df34c03e77528fe6afee9f241300af9e9295d35511de34a10 expects511exports plus exactmissingID/eventproof. Old512finishing; noactiveattemptinterruption. Bonsai/Luna1v32backlogpreparationcontinues.
+
+Future snapshot prevention: `scripts/freeze_training_runtime.py` now refuses a new snapshot whose compiled prompt advertises finish:true without compiled agent boolean schema and runtime dispatch support. This is a static feature consistency guard, not proof of semantic correctness; existing historical manifests remain reusable. Syntax parsed; no tests run.
