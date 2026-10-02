@@ -66,6 +66,17 @@ def fingerprints(paths):
     return result
 
 
+def validate_stage_postconditions(stage, root, repo):
+    """Check explicit semantic output contracts before committing a stage."""
+    for value in stage.get("nonempty_jsonl", []):
+        path = Path(expand(value, root, repo))
+        if not path.is_file():
+            raise ValueError(f"{stage['id']}: expected nonempty JSONL output is missing: {path}")
+        with path.open(encoding="utf-8") as stream:
+            if not any(line.strip() for line in stream):
+                raise ValueError(f"{stage['id']}: JSONL output has no records: {path}")
+
+
 def exec_stage(lock_path, argv):
     """Hold an inherited lock across exec, including the parent spawn/journal crash window."""
     descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
@@ -118,6 +129,7 @@ def run_pipeline(config_path, root, *, until=None):
                 raise RuntimeError(f"stage process {entry['pid']} still exists; let it finish or stop its process group before resuming")
         stopped = False
         child = None
+        active_stage_id = None
 
         def stop(signum, frame):
             nonlocal stopped
@@ -164,6 +176,7 @@ def run_pipeline(config_path, root, *, until=None):
                     entry = {"status": "running", "inputs": before, "started": time.time(),
                              "attempts": entry.get("attempts", 0) + 1, "log": str(log_path)}
                     state["stages"][name] = entry
+                    active_stage_id = name
                     state["status"] = "running"
                     # Persist intent before spawning; an interrupted stage must itself be resumable.
                     atomic_json(state_path, state)
@@ -188,6 +201,13 @@ def run_pipeline(config_path, root, *, until=None):
                         return 130 if stopped else (code if code > 0 else 1)
                     if fingerprints(inputs) != before:
                         raise ValueError(f"{name}: input changed during execution")
+                    try:
+                        validate_stage_postconditions(stage, root, repo)
+                    except BaseException as error:
+                        entry["status"] = "failed"
+                        entry["postcondition_error"] = type(error).__name__ + ": " + str(error)
+                        atomic_json(state_path, state)
+                        raise
                     entry["outputs"] = fingerprints(outputs)
                     # Trainer exits 0 after a graceful checkpoint too; never advance on partial training.
                     if stage.get("training_state"):
@@ -198,6 +218,7 @@ def run_pipeline(config_path, root, *, until=None):
                             return 75
                     entry["status"] = "complete"
                     atomic_json(state_path, state)
+                    active_stage_id = None
                 if name == until:
                     state["status"] = "ready"
                     atomic_json(state_path, state)
@@ -206,6 +227,13 @@ def run_pipeline(config_path, root, *, until=None):
             atomic_json(state_path, state)
             return 130 if stopped else 0
         except BaseException as error:
+            if active_stage_id is not None:
+                active_entry = state["stages"].get(active_stage_id, {})
+                if active_entry.get("status") == "running":
+                    active_entry.pop("pid", None)
+                    active_entry.pop("process_start", None)
+                    active_entry.update(status="failed", finished=time.time(),
+                                        postcondition_error=type(error).__name__ + ": " + str(error))
             state["status"] = "failed"
             state["error"] = type(error).__name__ + ": " + str(error)
             atomic_json(state_path, state)

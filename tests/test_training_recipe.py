@@ -1,10 +1,31 @@
 from pathlib import Path
 import hashlib
 import json
+import shutil
 
 import pytest
 
 from scripts.create_training_pipeline import recipe
+
+
+def isolated_repo(tmp_path):
+    """Give recipe tests a minimal isolated repository without touching the real catalog."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    host = tmp_path / 'ts-host'
+    if not host.exists():
+        host.symlink_to(Path(__file__).resolve().parents[1] / 'ts-host', target_is_directory=True)
+    (tmp_path / 'training').mkdir(exist_ok=True)
+    (tmp_path / 'runs').mkdir(exist_ok=True)
+    (tmp_path / 'data/teacher').mkdir(parents=True, exist_ok=True)
+    shutil.copy2(Path(__file__).resolve().parents[1] / 'training/data_sources.json',
+                 tmp_path / 'training/data_sources.json')
+    policy_path = tmp_path / 'training/data_sources.json'
+    policy = json.loads(policy_path.read_text())
+    policy['required_default_inputs'] = []
+    policy['replacements'] = {}
+    policy['decisions'] = []
+    policy_path.write_text(json.dumps(policy))
+    return tmp_path
 
 
 def stages_by_id(config):
@@ -12,15 +33,18 @@ def stages_by_id(config):
 
 
 def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
-    config = recipe(tmp_path, python='.venv/bin/python', image='natlang-train-kernels')
+    config = recipe(isolated_repo(tmp_path), python='.venv/bin/python', image='natlang-train-kernels')
     stages = stages_by_id(config)
 
     assert config['version'] == 'natlang.training_pipeline/1'
-    assert [stage['id'] for stage in config['stages']] == [
-        'acquire', 'assemble', 'freeze-runtime', 'freeze-failure-corpus', 'observe-source', 'synthetic', 'teacher-seeds', 'prepare',
-        'training-readiness', 'render-general', 'audit-general', 'train-general', 'render-coding', 'audit-coding', 'train-coding',
-        'teacher', 'materialize-teacher', 'prepare-teacher', 'render-teacher', 'audit-teacher', 'train-teacher',
-    ]
+    ids = [stage['id'] for stage in config['stages']]
+    assert ids[:4] == ['acquire', 'assemble', 'freeze-runtime', 'freeze-failure-corpus']
+    assert ids.index('prepare') < ids.index('render-general') < ids.index('audit-general') < ids.index('train-general')
+    assert ids.index('teacher') < ids.index('materialize-teacher') < ids.index('prepare-teacher')
+    assert ids.index('assemble-joint') < ids.index('render-joint') < ids.index('audit-joint') < ids.index('train-joint')
+    for stage in config['stages']:
+        if stage['id'].startswith('render-'):
+            assert stage['nonempty_jsonl'] == [stage['outputs'][0]]
     assert '--execute' in stages['observe-source']['command']
     assert '${run}/runtime-host/frozen-runtime.json' in stages['freeze-runtime']['outputs']
     assert '${run}/runtime-host/dist' in stages['freeze-runtime']['outputs']
@@ -51,17 +75,18 @@ def test_default_recipe_is_one_sequential_lora_curriculum(tmp_path):
     assert train_general['command'][0:3] == ['docker', 'run', '--rm']
     assert 'natlang-train-kernels' in train_general['command']
     assert train_general['min_free_vram_mib'] == 2048
-    for name in ('train-general', 'train-coding', 'train-teacher'):
+    for name in ('train-general', 'train-coding', 'train-joint'):
         command = stages[name]['command']
         assert '--epochs' in command and command[command.index('--epochs') + 1] == '1'
         assert '--no-merge' in command and '--skip-heldout-loss' in command
         assert '--require-audit' in command
-        assert '--data-order' in command and command[command.index('--data-order') + 1] == 'source'
+        expected_order = 'shuffle' if name == 'train-joint' else 'source'
+        assert '--data-order' in command and command[command.index('--data-order') + 1] == expected_order
         assert not any('baseline' in value or 'benchmark' in value or 'compare' in value for value in command)
 
 
 def test_recipe_applies_model_teacher_docker_and_training_overrides(tmp_path):
-    config = recipe(tmp_path, model='org/student-v2', revision='immutable-commit',
+    config = recipe(isolated_repo(tmp_path), model='org/student-v2', revision='immutable-commit',
                     image='natlang-train-kernels', teacher_model='org/teacher-27b',
                     teacher_server='http://127.0.0.1:8181', train_args=['--load-in-4bit', '--rank', '64', '--max-len', '4096'],
                     min_free_vram_mib=6144)
@@ -80,7 +105,7 @@ def test_recipe_applies_model_teacher_docker_and_training_overrides(tmp_path):
 
 
 def test_execution_plan_collection_is_opt_in_and_reaches_every_teacher_track(tmp_path):
-    repo = Path(__file__).resolve().parents[1]
+    repo = isolated_repo(tmp_path)
     ordinary = stages_by_id(recipe(repo))
     assert '--execution-plans' not in ordinary['teacher']['command']
     planned = stages_by_id(recipe(repo, teacher_execution_plans=True,
@@ -97,8 +122,8 @@ def test_execution_plan_collection_is_opt_in_and_reaches_every_teacher_track(tmp
 @pytest.mark.parametrize('model', ['LiquidAI/LFM2.5-350M', 'org/8B-A1B', '/models/local-student'])
 def test_student_selection_propagates_to_every_render_and_training_stage(tmp_path, model):
     revision = 'a' * 40
-    stages = stages_by_id(recipe(tmp_path, model=model, revision=revision))
-    for phase in ('general', 'coding', 'teacher'):
+    stages = stages_by_id(recipe(isolated_repo(tmp_path), model=model, revision=revision))
+    for phase in ('general', 'coding', 'joint'):
         for kind, revision_flag in [('render', '--revision'), ('audit', '--revision'), ('train', '--model-revision')]:
             command = stages[f'{kind}-{phase}']['command']
             assert command[command.index('--model') + 1] == model
@@ -109,9 +134,9 @@ def test_student_selection_propagates_to_every_render_and_training_stage(tmp_pat
 
 
 def test_lora_stages_chain_checkpoint_adapters_in_order(tmp_path):
-    stages = stages_by_id(recipe(tmp_path, image='natlang-train-kernels'))
+    stages = stages_by_id(recipe(isolated_repo(tmp_path), image='natlang-train-kernels'))
     coding = stages['train-coding']
-    teacher = stages['train-teacher']
+    teacher = stages['train-joint']
 
     assert coding['command'][coding['command'].index('--init-adapter') + 1] == '${run}/train-general/checkpoint/weights'
     assert teacher['command'][teacher['command'].index('--init-adapter') + 1] == '${run}/train-coding/checkpoint/weights'
@@ -122,18 +147,18 @@ def test_lora_stages_chain_checkpoint_adapters_in_order(tmp_path):
 
 def test_recipe_rejects_full_weight_stage_chaining(tmp_path):
     with pytest.raises(ValueError, match='chains LoRA adapters'):
-        recipe(tmp_path, train_args=['--full'])
+        recipe(isolated_repo(tmp_path), train_args=['--full'])
 
 
 @pytest.mark.parametrize('args', [[], ['--max-len', '2048'], ['--max-len=2048']])
 def test_audit_precedes_training_and_uses_effective_context_budget(tmp_path, args):
-    config = recipe(tmp_path, train_args=args)
+    config = recipe(isolated_repo(tmp_path), train_args=args)
     stages = stages_by_id(config)
     ids = list(stages)
-    for phase in ('general', 'coding', 'teacher'):
+    for phase in ('general', 'coding', 'joint'):
         audit, train = stages[f'audit-{phase}'], stages[f'train-{phase}']
         assert ids.index(f'render-{phase}') < ids.index(f'audit-{phase}') < ids.index(f'train-{phase}')
-        assert audit['command'][audit['command'].index('--max-len') + 1] == ('2048' if args else '8192')
+        assert audit['command'][audit['command'].index('--max-len') + 1] == ('2048' if args else '16384')
         assert f'${{run}}/{phase}.ready.jsonl' in train['command']
         assert '${run}/training-readiness.json' in train['inputs']
         assert '--gpus' not in stages['training-readiness']['command']
@@ -141,18 +166,19 @@ def test_audit_precedes_training_and_uses_effective_context_budget(tmp_path, arg
 
 def test_student_cannot_be_changed_only_for_training(tmp_path):
     with pytest.raises(ValueError, match='render, audit and trainer agree'):
-        recipe(tmp_path, train_args=['--model=other'])
+        recipe(isolated_repo(tmp_path), train_args=['--model=other'])
 
 
 def test_existing_test_captures_are_inputs_to_observation(tmp_path):
     captured = tmp_path / 'data/direct-code-2026-09-23/fixture/captures.jsonl'
     captured.parent.mkdir(parents=True)
     captured.write_text('')
-    observer = stages_by_id(recipe(tmp_path))['observe-source']
+    observer = stages_by_id(recipe(isolated_repo(tmp_path)))['observe-source']
     assert str(captured) in observer['inputs']
     assert observer['command'][observer['command'].index('--captures') + 1] == str(captured)
+    second_repo = isolated_repo(tmp_path / 'second')
     explicit = tmp_path / 'explicit-calls.jsonl'
-    observer = stages_by_id(recipe(tmp_path, captures_override=[explicit]))['observe-source']
+    observer = stages_by_id(recipe(second_repo, captures_override=[explicit]))['observe-source']
     assert str(explicit) in observer['inputs']
     assert str(captured) not in observer['inputs']
 
@@ -161,14 +187,27 @@ def test_legacy_unit_test_turns_require_explicit_override(tmp_path):
     turns = tmp_path / 'data/direct-code-2026-09-23/d3-transpose-pilot-final/native-replay.jsonl.turns.jsonl'
     turns.parent.mkdir(parents=True)
     turns.write_text('')
-    prepared = stages_by_id(recipe(tmp_path))['prepare']
+    prepared = stages_by_id(recipe(isolated_repo(tmp_path)))['prepare']
     assert str(turns) not in prepared['inputs']
     command = prepared['command']
     assert str(turns) not in command
     explicit = tmp_path / 'extra/native-turns.jsonl'
-    prepared = stages_by_id(recipe(tmp_path, verified_turns_override=[explicit]))['prepare']
+    prepared = stages_by_id(recipe(isolated_repo(tmp_path), verified_turns_override=[explicit]))['prepare']
     assert str(explicit) in prepared['inputs']
     assert str(turns) not in prepared['inputs']
+
+
+def test_streaming_data_mode_is_pinned_into_prepare_and_render_commands(tmp_path):
+    stages = stages_by_id(recipe(isolated_repo(tmp_path), streaming_data=True))
+    assert '--streaming' in stages['prepare']['command']
+    assert '--streaming' in stages['prepare-teacher']['command']
+    assert '--streaming' in stages['assemble-joint']['command']
+    assert '--streaming' in stages['render-general']['command']
+    assert '--streaming' in stages['render-joint']['command']
+    assert '--streaming' in stages['audit-general']['command']
+    assert '--streaming' in stages['audit-joint']['command']
+    plain = stages_by_id(recipe(isolated_repo(tmp_path), streaming_data=False))
+    assert '--streaming' not in plain['prepare']['command']
 
 
 def test_workspace_unit_test_capture_runs_before_coding_and_uses_frozen_runtime(tmp_path):
@@ -182,7 +221,7 @@ def test_workspace_unit_test_capture_runs_before_coding_and_uses_frozen_runtime(
     case.write_text(json.dumps({'workspace': str(workspace), 'source': 'src/main.mjs',
                                 'test': 'test/main.test.mjs', 'functions': ['main', 'other'],
                                 'instruction': 'Return one.'}))
-    stages = stages_by_id(recipe(tmp_path, workspace_cases=[case]))
+    stages = stages_by_id(recipe(isolated_repo(tmp_path), workspace_cases=[case]))
     capture = stages['capture-unit-test-0000']
     assert capture['command'][:2] == ['node', '${run}/runtime-host/scripts/code-corpus/workspace-pilot.mjs']
     assert '--execute' in capture['command']
@@ -203,7 +242,7 @@ def test_workspace_unit_test_case_cannot_escape_project(tmp_path):
     case.write_text(json.dumps({'workspace': str(workspace), 'source': '../outside.mjs',
                                 'test': '../outside.mjs', 'function': 'main'}))
     with pytest.raises(ValueError, match='workspace-relative'):
-        recipe(tmp_path, workspace_cases=[case])
+        recipe(isolated_repo(tmp_path), workspace_cases=[case])
 
 
 def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
@@ -211,7 +250,7 @@ def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
     accepted = corpus / 'accepted'
     accepted.mkdir(parents=True)
     turns = accepted / 'native-replay.jsonl.turns.jsonl'
-    turns.write_text('{"id":"accepted"}\n')
+    turns.write_text(json.dumps({'task': {'program_ir': {'version': 'natlang.program/2'}}}) + '\n')
     (accepted / 'manifest.json').write_text(json.dumps({'native_replay': {
         'accepted': 1, 'turns_sha256': hashlib.sha256(turns.read_bytes()).hexdigest(),
     }}))
@@ -221,7 +260,7 @@ def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
     rejected.mkdir()
     (rejected / 'native-replay.jsonl.turns.jsonl').write_text('')
     (rejected / 'manifest.json').write_text(json.dumps({'native_replay': {'accepted': 0}}))
-    prepared = stages_by_id(recipe(tmp_path))['prepare']
+    prepared = stages_by_id(recipe(isolated_repo(tmp_path)))['prepare']
     assert str(turns) in prepared['inputs']
     assert str(rejected / 'native-replay.jsonl.turns.jsonl') not in prepared['inputs']
     inlined = corpus / 'inlined'
@@ -237,9 +276,9 @@ def test_only_verified_workspace_captures_enter_default_coding_inputs(tmp_path):
         'task': {'program_ir': {'semantics': {'root': {'$lambda': {}}}}},
     }
     (inlined / 'native-replay.jsonl').write_text(json.dumps(inlined_replay) + '\n')
-    config = recipe(tmp_path)
+    config = recipe(isolated_repo(tmp_path))
     assert str(inlined_turns) not in stages_by_id(config)['prepare']['inputs']
     assert config['unit_test_corpus']['excluded'][0]['reason'] == 'local subfunctions were inlined or imported'
     turns.write_text('tampered\n')
     with pytest.raises(ValueError, match='do not match capture manifest'):
-        recipe(tmp_path)
+        recipe(isolated_repo(tmp_path))

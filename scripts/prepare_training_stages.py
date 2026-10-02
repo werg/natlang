@@ -8,7 +8,11 @@ import hashlib
 import json
 from pathlib import Path
 import random
+import shutil
+import sqlite3
 import sys
+import tempfile
+import os
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_training_pipeline import atomic_json, digest_file
@@ -151,6 +155,206 @@ def prepare(output, code_paths=(), native_paths=(), teacher_paths=(), split_path
     return manifest
 
 
+def prepare_streaming(output, code_paths=(), native_paths=(), teacher_paths=(), split_paths=(), registry=None, seed=42):
+    """Out-of-core equivalent of prepare(); stores source/normalized rows in SQLite.
+
+    Only group identifiers and counters remain in Python memory. JSONL ordering,
+    first-row deduplication, split policy, and output serialization match prepare().
+    """
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    lanes = [("code", list(code_paths)), ("native", list(native_paths)),
+             ("teacher", list(teacher_paths)), ("split", list(split_paths))]
+    inputs = [p for _, paths in lanes for p in paths]
+    identity = {"version": "natlang.training_curriculum/1", "seed": seed,
+                "inputs": {str(Path(p).resolve()): digest_file(p) for p in inputs},
+                "lanes": {name: list(map(str, paths)) for name, paths in lanes},
+                "registry": digest_file(registry) if registry else None,
+                "builder_sha256": digest_file(__file__),
+                "split_policy_sha256": digest_file(Path(__file__).with_name("corpus.py")),
+                "execution_mode": "sqlite-streaming/1"}
+    manifest_path = output / "manifest.json"
+    if manifest_path.exists():
+        old = json.loads(manifest_path.read_text())
+        if old["identity"] != identity:
+            raise ValueError("curriculum inputs/settings changed; choose a new output directory")
+        if any(digest_file(output / name) != value for name, value in old["outputs"].items()):
+            raise ValueError("committed curriculum was modified")
+        return old
+
+    input_bytes = sum(Path(path).stat().st_size for path in inputs)
+    free_bytes = shutil.disk_usage(output.parent).free
+    required_bytes = input_bytes * 5 + 2 * 1024 ** 3
+    if free_bytes < required_bytes:
+        raise OSError(f"streaming curriculum requires about {required_bytes} free bytes "
+                      f"(5x {input_bytes} input bytes plus 2 GiB reserve); only {free_bytes} available")
+
+    fd, db_name = tempfile.mkstemp(prefix="training-curriculum-", suffix=".sqlite", dir=output)
+    os.close(fd)
+    db_path = Path(db_name)
+    parent: dict[str, str] = {}
+    def find(key):
+        parent.setdefault(key, key)
+        if parent[key] != key:
+            parent[key] = find(parent[key])
+        return parent[key]
+    def union(a, b):
+        a, b = find(a), find(b)
+        parent[max(a, b)] = min(a, b)
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA journal_mode=OFF")
+    conn.execute("PRAGMA synchronous=OFF")
+    conn.execute("PRAGMA temp_store=FILE")
+    conn.execute("PRAGMA cache_size=-32768")
+    conn.executescript("CREATE TABLE raw(seq INTEGER PRIMARY KEY, lane TEXT, body TEXT); CREATE TABLE normalized(seq INTEGER PRIMARY KEY, lane TEXT, body TEXT, difficulty INTEGER, sortkey TEXT, split TEXT, reserved INTEGER);")
+    seq = 0
+    implementation = {}
+    try:
+        for lane, paths in lanes:
+            for path in paths:
+                with Path(path).open(encoding="utf-8") as stream:
+                    for number, line in enumerate(stream, 1):
+                        if not line.strip():
+                            continue
+                        try:
+                            row = json.loads(line)
+                        except json.JSONDecodeError as exc:
+                            raise ValueError(f"{path}:{number}: invalid JSON: {exc}") from exc
+                        if not isinstance(row, dict):
+                            raise ValueError(f"{path}:{number}: expected JSON object")
+                        keys = groups(row)
+                        for key in keys:
+                            find(key)
+                        for key in keys[1:]:
+                            union(keys[0], key)
+                        fingerprint = row.get("implementation_sha256")
+                        if fingerprint:
+                            prior = implementation.get(fingerprint)
+                            if prior is not None:
+                                union(keys[0], prior)
+                            implementation[fingerprint] = keys[0]
+                        conn.execute("INSERT INTO raw VALUES(?,?,?)", (seq, lane, line.strip()))
+                        seq += 1
+                        if seq % 1000 == 0:
+                            conn.commit()
+        conn.commit()
+
+        frozen = json.loads(Path(registry).read_text())["groups"] if registry else {}
+        held, fixed = set(), {}
+        for key, label in frozen.items():
+            root = find(key)
+            if root in fixed and fixed[root] != label:
+                raise ValueError("new links connect conflicting frozen splits")
+            fixed[root] = label
+        for (body,) in conn.execute("SELECT body FROM raw ORDER BY seq"):
+            row = json.loads(body)
+            root = find(groups(row)[0])
+            if reserved_evaluation(row) or row.get("split") in ("test", "validation", "valid", "dev"):
+                held.add(root)
+        for root in held:
+            if fixed.get(root) == "train":
+                raise ValueError("new holdout overlaps previously frozen training group")
+        roots = set(map(find, list(parent)))
+        splits = {root: ("test" if root in held else fixed.get(root,
+                  "test" if int(hash_value([seed, root])[:8], 16) % 100 < 5 else "train")) for root in roots}
+        for (body,) in conn.execute("SELECT body FROM raw ORDER BY seq"):
+            row = json.loads(body)
+            root = find(groups(row)[0])
+            if row.get("split") == "train" and root not in held and root not in fixed:
+                splits[root] = "train"
+
+        conn.execute("CREATE TABLE seen(lane TEXT, pairhash TEXT, PRIMARY KEY(lane,pairhash))")
+        conn.execute("CREATE TABLE firstseq(lane TEXT, pairhash TEXT, seq INTEGER, PRIMARY KEY(lane,pairhash))")
+        for raw_seq, lane, body in conn.execute("SELECT seq,lane,body FROM raw WHERE lane != 'split' ORDER BY seq"):
+            row = json.loads(body)
+            if row.get("training_admission", {}).get("approved") is False:
+                continue
+            pairhash = hash_value([row.get("prompt", row.get("messages")), row.get("completion", row.get("target"))])
+            try:
+                conn.execute("INSERT INTO seen VALUES(?,?)", (lane, pairhash))
+            except sqlite3.IntegrityError:
+                continue
+            root = find(groups(row)[0])
+            normalized = {**row, "program_id": root,
+                          "source_groups": sorted(set([root, *groups(row)])), "split": splits[root],
+                          "curriculum_lane": {"code": "general_code", "native": "native_coding",
+                                              "teacher": "teacher_distillation"}[lane],
+                          "difficulty": difficulty(row)}
+            sortkey = hash_value([seed, row["id"]])
+            conn.execute("INSERT INTO normalized VALUES(?,?,?,?,?,?,?)",
+                         (raw_seq, lane, json.dumps(normalized, ensure_ascii=False), normalized["difficulty"],
+                          sortkey, normalized["split"], int(reserved_evaluation(row))))
+            conn.execute("INSERT INTO firstseq VALUES(?,?,?)", (lane, pairhash, raw_seq))
+        conn.commit()
+
+        outputs, counts = {}, {}
+        def row_for(seq_value):
+            body = conn.execute("SELECT body FROM normalized WHERE seq=?", (seq_value,)).fetchone()[0]
+            return json.loads(body)
+        def write_query(name, query, args=()):
+            target = output / f"{name}.jsonl"
+            temp = target.with_suffix(".pending")
+            count = Counter(); n = 0
+            with temp.open("w", encoding="utf-8") as stream:
+                for (body,) in conn.execute(query, args):
+                    row = json.loads(body)
+                    stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    n += 1; count[row["split"]] += 1
+                stream.flush(); os.fsync(stream.fileno())
+            temp.replace(target)
+            outputs[target.name] = digest_file(target)
+            counts[name] = {"rows": n, "splits": dict(count), "difficulty": dict(Counter(
+                json.loads(body)["difficulty"] for (body,) in conn.execute(query, args)))}
+
+        sort = "ORDER BY difficulty,sortkey"
+        write_query("general", f"SELECT body FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name') IS NOT 'xlam-function-calling-60k' {sort}")
+        write_query("teacher", f"SELECT body FROM normalized WHERE lane='teacher' {sort}")
+        native_count = conn.execute("SELECT COUNT(*) FROM normalized WHERE lane='native'").fetchone()[0]
+        calls_count = conn.execute("SELECT COUNT(*) FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name')='xlam-function-calling-60k'").fetchone()[0]
+        rehearsal_n = (native_count + calls_count) // 4
+        # Rehearsal membership follows the same deterministic prefix ordering as the in-memory builder.
+        conn.execute("CREATE TABLE rehearsal(seq INTEGER PRIMARY KEY)")
+        if rehearsal_n:
+            general_rows = ((seqno, body) for seqno, body in conn.execute(
+                "SELECT seq,body FROM normalized WHERE lane='code' AND json_extract(body,'$.source.name') IS NOT 'xlam-function-calling-60k'"))
+            ranked = []
+            for seqno, body in general_rows:
+                row = json.loads(body)
+                ranked.append((hash_value([seed, "rehearsal", row["id"]]), seqno))
+            for _, seqno in sorted(ranked)[:rehearsal_n]:
+                conn.execute("INSERT INTO rehearsal VALUES(?)", (seqno,))
+        conn.commit()
+        conn.execute("CREATE TABLE coding(body TEXT, difficulty INTEGER, sortkey TEXT)")
+        conn.execute("INSERT INTO coding SELECT body,difficulty,sortkey FROM normalized WHERE lane='native' OR "
+                     "(lane='code' AND json_extract(body,'$.source.name')='xlam-function-calling-60k')")
+        conn.execute("INSERT INTO coding SELECT normalized.body,normalized.difficulty,normalized.sortkey FROM normalized JOIN rehearsal USING(seq)")
+        conn.commit()
+        coding_path = output / "coding.jsonl"
+        coding_count = Counter(); coding_n = 0
+        with coding_path.with_suffix(".pending").open("w", encoding="utf-8") as stream:
+            for (body,) in conn.execute("SELECT body FROM coding ORDER BY difficulty,sortkey"):
+                row = json.loads(body)
+                stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+                coding_n += 1; coding_count[row["split"]] += 1
+            stream.flush(); os.fsync(stream.fileno())
+        coding_path.with_suffix(".pending").replace(coding_path)
+        outputs[coding_path.name] = digest_file(coding_path)
+        counts["coding"] = {"rows": coding_n, "splits": dict(coding_count),
+                            "difficulty": {d: n for d, n in conn.execute("SELECT difficulty,COUNT(*) FROM coding GROUP BY difficulty")}}
+        registry_out = output / "splits.json"
+        atomic_json(registry_out, {"version": "natlang.split_registry/1",
+                                   "groups": {key: splits[find(key)] for key in sorted(parent)}})
+        outputs[registry_out.name] = digest_file(registry_out)
+        manifest = {"identity": identity, "outputs": outputs, "counts": counts,
+                    "reserved_evaluation_input_rows": sum(reserved_evaluation(json.loads(row[0])) for row in conn.execute("SELECT body FROM raw ORDER BY seq"))}
+        atomic_json(manifest_path, manifest)
+        return manifest
+    finally:
+        conn.close()
+        db_path.unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
@@ -158,8 +362,10 @@ def main():
         parser.add_argument("--" + lane, nargs="*", default=[])
     parser.add_argument("--registry", type=Path)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--streaming", action="store_true", help="use SQLite-backed out-of-core preparation")
     args = parser.parse_args()
-    print(json.dumps(prepare(args.output, args.code, args.native, args.teacher, args.split_records, args.registry, args.seed)["counts"]))
+    builder = prepare_streaming if args.streaming else prepare
+    print(json.dumps(builder(args.output, args.code, args.native, args.teacher, args.split_records, args.registry, args.seed)["counts"]))
 
 
 if __name__ == "__main__":

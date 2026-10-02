@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -202,3 +203,38 @@ def test_duplicate_pairs_keep_the_more_restrictive_reasoning_mask(tmp_path):
     result = json.loads(out.read_text())
     assert result['id'] == 'masked'
     assert result['completion_masked'] == 12
+
+
+@pytest.mark.parametrize('items', [
+    [row(), row('large', completion='x' * 300 + '!'), row('held', split='test', completion='y!')],
+    [row('one', source_groups=['a'], license='MIT'), row('two', source_groups=['b'], license='CC0')],
+    [row('train', source_groups=['group']), row('held', split='test'),
+     row('linked', source_groups=['group'], completion='other!')],
+    [row('unmasked', completion='note</think>ok!'),
+     row('masked', completion='note</think>ok!', completion_masked=12)],
+])
+def test_streaming_audit_matches_full_records_reports_and_resume(tmp_path, items):
+    source = source_file(tmp_path, items)
+    ordinary, streamed = tmp_path / 'ordinary.jsonl', tmp_path / 'streamed.jsonl'
+    expected = audit_corpus(source, ordinary, model='mock', tokenizer=Tokenizer(), max_len=100, chunk_rows=1)
+    assert audit_corpus(source, streamed, model='mock', tokenizer=Tokenizer(), max_len=100,
+                        chunk_rows=1, streaming=True, should_stop=lambda: True) == 75
+    assert not streamed.exists()
+    assert audit_corpus(source, streamed, model='mock', tokenizer=Tokenizer(), max_len=100,
+                        chunk_rows=1, streaming=True) == expected
+    for suffix in ('', '.audit.json', '.rejected.jsonl'):
+        assert Path(str(streamed) + suffix).read_bytes() == Path(str(ordinary) + suffix).read_bytes()
+    assert audit_corpus(source, streamed, model='mock', tokenizer=Tokenizer(), max_len=100,
+                        chunk_rows=1, streaming=True) == expected
+
+
+def test_streaming_audit_rejects_insufficient_disk_before_cache(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    source = source_file(tmp_path, [row()])
+    output = tmp_path / 'out.jsonl'
+    monkeypatch.setattr('scripts.audit_training_corpus.shutil.disk_usage',
+                        lambda path: SimpleNamespace(free=0))
+    with pytest.raises(OSError, match='streaming audit requires'):
+        audit_corpus(source, output, model='mock', tokenizer=Tokenizer(), streaming=True)
+    assert not output.exists()
+    assert not output.with_name(output.name + '.audit-cache').exists()

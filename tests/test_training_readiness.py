@@ -92,6 +92,34 @@ def test_audit_validation_binds_loaded_tokenizer_fingerprint():
         validate_training_audit_tokenizer(manifest, Tokenizer(), "org/model", "abc123")
 
 
+def test_tokenizer_audit_accepts_chat_terminator_and_rejects_generic_eos_override():
+    from scripts.render_training_corpus import _tokenizer_info
+
+    class Tokenizer:
+        chat_template = "assistant message ends with im_end"
+        eos_token = "</s>"
+        all_special_tokens = ["</s>"]
+        name_or_path = "mock-dual-eos"
+
+        def get_added_vocab(self):
+            return {"<|im_end|>": 130073}
+
+        def get_vocab(self):
+            return {"</s>": 1, "<|im_end|>": 130073}
+
+        def apply_chat_template(self, messages, **kwargs):
+            return "closed assistant message<|im_end|>\n"
+
+    tokenizer = Tokenizer()
+    _, renderer = _tokenizer_info(tokenizer, "mock-dual-eos", None)
+    assert renderer["end_token"] == "<|im_end|>"
+    manifest = {"renderer": renderer}
+    validate_training_audit_tokenizer(manifest, tokenizer, "mock-dual-eos", None)
+    renderer["end_token"] = "</s>"
+    with pytest.raises(ValueError, match="closed assistant template"):
+        validate_training_audit_tokenizer(manifest, tokenizer, "mock-dual-eos", None)
+
+
 def test_cpu_readiness_cli_writes_immutable_report(tmp_path):
     report = tmp_path / "readiness.json"
     script = Path(__file__).resolve().parents[1] / "scripts" / "training_readiness.py"

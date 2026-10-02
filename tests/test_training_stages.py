@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.prepare_training_stages import prepare
+from scripts.prepare_training_stages import prepare, prepare_streaming
 
 
 def write_rows(path, rows):
@@ -79,3 +79,28 @@ def test_curriculum_source_rows_have_deterministic_easy_to_hard_order(tmp_path):
     second = (tmp_path / 'second' / 'general.jsonl').read_bytes()
     assert first == second
     assert [row['difficulty'] for row in output_rows(tmp_path / 'first' / 'general.jsonl')] == [0, 1, 1, 3]
+
+
+def test_streaming_curriculum_matches_in_memory_bytes_and_counts(tmp_path):
+    code = write_rows(tmp_path / 'code.jsonl', [
+        {'id': 'a', 'program_id': 'same', 'split': 'train', 'completion': 'return 1;',
+         'source_groups': ['src-a']},
+        {'id': 'duplicate', 'program_id': 'same', 'completion': 'return 1;',
+         'source_groups': ['src-b']},
+        {'id': 'hard', 'program_id': 'hard', 'completion': 'await fetch(url);'},
+        {'id': 'held', 'program_id': 'held', 'split': 'test', 'completion': 'if (x) return x;'},
+        {'id': 'not-admitted', 'program_id': 'skip', 'completion': 'return 2;',
+         'training_admission': {'approved': False}},
+    ])
+    native = write_rows(tmp_path / 'native.jsonl', [
+        {'id': 'n1', 'program_id': 'native', 'completion': 'for (const x of xs) use(x);'}])
+    teacher = write_rows(tmp_path / 'teacher.jsonl', [
+        {'id': 't1', 'program_id': 'teacher', 'completion': 'await finish();'}])
+    registry = tmp_path / 'splits.json'
+    registry.write_text(json.dumps({'groups': {'frozen': 'train'}}))
+    expected = prepare(tmp_path / 'memory', [code], [native], [teacher], registry=registry, seed=9)
+    actual = prepare_streaming(tmp_path / 'stream', [code], [native], [teacher], registry=registry, seed=9)
+    assert actual['counts'] == expected['counts']
+    assert actual['reserved_evaluation_input_rows'] == expected['reserved_evaluation_input_rows']
+    for name in ('general.jsonl', 'coding.jsonl', 'teacher.jsonl', 'splits.json'):
+        assert (tmp_path / 'stream' / name).read_bytes() == (tmp_path / 'memory' / name).read_bytes()

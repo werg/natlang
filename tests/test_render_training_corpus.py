@@ -34,6 +34,56 @@ class NoEndTokenizer(MockTokenizer):
     eos_token = None
 
 
+class DualEndTokenizer(MockTokenizer):
+    eos_token = "</s>"
+    all_special_tokens = ["</s>", "<|im_end|>"]
+
+    def apply_chat_template(self, messages, **kwargs):
+        return super().apply_chat_template(messages, **kwargs).replace("<eos>", "<|im_end|>")
+
+
+def test_chat_terminator_is_resolved_from_template_instead_of_generic_eos(tmp_path):
+    from scripts.render_training_corpus import _tokenizer_info
+
+    tokenizer = DualEndTokenizer()
+    _, renderer = _tokenizer_info(tokenizer, "mock-dual-eos", None)
+    assert renderer["end_token"] == "<|im_end|>"
+    with pytest.raises(ValueError, match="closed assistant template"):
+        _tokenizer_info(tokenizer, "mock-dual-eos", None, end_token="</s>")
+    source = tmp_path / "turns.jsonl"
+    source.write_text(json.dumps({"id": "dual-end", "messages": [{"role": "user", "content": "Hello"}],
+        "target": {"role": "assistant", "content": "Hi"}, "training_admission": {"approved": True}}) + "\n")
+    output = tmp_path / "rendered.jsonl"
+    render_corpus([source], output, model="mock-dual-eos", tokenizer=tokenizer)
+    assert json.loads(output.read_text())["completion"] == "Hi<|im_end|>"
+    assert json.loads(output.with_suffix(".jsonl.manifest.json").read_text())["rows"] == 1
+
+
+def test_added_chat_terminator_does_not_require_special_flag():
+    from scripts.render_training_corpus import _tokenizer_info
+
+    class AddedEndTokenizer(DualEndTokenizer):
+        all_special_tokens = ["</s>"]
+
+        def get_added_vocab(self):
+            return {"<|im_end|>": 130073}
+
+    assert _tokenizer_info(AddedEndTokenizer(), "mock-added-eos", None)[1]["end_token"] == "<|im_end|>"
+
+
+def test_all_invalid_rendering_fails_and_preserves_evidence_on_resume(tmp_path):
+    source, output = tmp_path / "invalid.jsonl", tmp_path / "rendered.jsonl"
+    source.write_text(json.dumps({"id": "bad", "messages": [{"role": "user", "content": "Hi"}],
+        "target": {"role": "assistant", "content": "lost<eos>tail"},
+        "training_admission": {"approved": True}}) + "\n")
+    for _ in range(2):
+        with pytest.raises(ValueError, match="no training decisions could be rendered"):
+            render_corpus([source], output, model="mock", tokenizer=MockTokenizer())
+    assert output.read_text() == ""
+    assert output.with_suffix(".jsonl.manifest.json").exists()
+    assert json.loads(output.with_name(output.name + ".rejected.jsonl").read_text())["reason"] == "invalid_training_view"
+
+
 def test_render_native_turn_preserves_provenance_and_uses_assistant_generation_prefix():
     row = {"id": "turn-1", "program_id": "program-1", "source_groups": ["source-group"],
            "split": "train", "family": "fixture", "skill": "write", "quality": {"score": 0.9},
@@ -45,6 +95,58 @@ def test_render_native_turn_preserves_provenance_and_uses_assistant_generation_p
     assert pair["completion"] == "Hello<eos>"
     for key in ("source_groups", "split", "family", "skill", "quality", "training_admission"):
         assert pair[key] == row[key]
+
+
+def test_streaming_render_matches_batch_output_and_resumes_from_cached_chunks(tmp_path):
+    rows = [
+        {"id": f"turn-{i}", "program_id": "p", "source_groups": ["src"], "split": "train",
+         "family": "fixture", "messages": [{"role": "user", "content": f"Say {i}"}], "tools": [],
+         "target": {"role": "assistant", "content": f"Answer {i}"},
+         "training_admission": {"approved": True}}
+        for i in range(5)
+    ]
+    source = tmp_path / "input.jsonl"
+    source.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    batch, streaming = tmp_path / "batch.jsonl", tmp_path / "streaming.jsonl"
+    assert render_corpus([source], batch, model="fixture", tokenizer=MockTokenizer(), chunk_rows=2) == 0
+    tokenizer = MockTokenizer()
+    assert render_corpus([source], streaming, model="fixture", tokenizer=tokenizer,
+                         chunk_rows=2, streaming=True) == 0
+    assert streaming.read_bytes() == batch.read_bytes()
+    assert streaming.with_name(streaming.name + ".rejected.jsonl").read_bytes() == batch.with_name(batch.name + ".rejected.jsonl").read_bytes()
+    calls = tokenizer.calls
+    assert render_corpus([source], streaming, model="fixture", tokenizer=tokenizer,
+                         chunk_rows=2, streaming=True) == 0
+    assert tokenizer.calls == calls
+
+
+def test_streaming_render_interrupt_preserves_chunks_and_resumes_only_missing_work(tmp_path):
+    rows = [{"id": f"turn-{i}", "messages": [{"role": "user", "content": str(i)}], "tools": [],
+             "target": {"role": "assistant", "content": str(i)},
+             "training_admission": {"approved": True}} for i in range(5)]
+    source, output = tmp_path / "input.jsonl", tmp_path / "resumable.jsonl"
+    source.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    tokenizer = MockTokenizer()
+    assert render_corpus([source], output, model="fixture", tokenizer=tokenizer,
+                         chunk_rows=2, streaming=True, should_stop=lambda: True) == 75
+    cache_manifest = json.loads((output.with_name(output.name + ".cache") / "manifest.json").read_text())
+    assert len(cache_manifest["chunks"]) == 1
+    calls_after_first = tokenizer.calls
+    assert render_corpus([source], output, model="fixture", tokenizer=tokenizer,
+                         chunk_rows=2, streaming=True) == 0
+    assert tokenizer.calls > calls_after_first
+    assert len([line for line in output.read_text().splitlines() if line]) == 5
+
+
+def test_streaming_all_invalid_render_preserves_rejection_and_empty_manifest(tmp_path):
+    source, output = tmp_path / "invalid.jsonl", tmp_path / "streaming.jsonl"
+    source.write_text(json.dumps({"id": "bad", "messages": [], "target": {"role": "assistant", "content": "x<eos>"},
+                                  "training_admission": {"approved": True}}) + "\n")
+    with pytest.raises(ValueError, match="no training decisions could be rendered"):
+        render_corpus([source], output, model="fixture", tokenizer=MockTokenizer(), streaming=True)
+    assert output.exists() and output.read_bytes() == b""
+    assert output.with_suffix(".jsonl.manifest.json").exists()
+    assert json.loads(output.with_name(output.name + ".rejected.jsonl").read_text())["reason"] == "invalid_training_view"
 
 
 def test_render_decodes_tool_arguments_for_templates_without_changing_ir():

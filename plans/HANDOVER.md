@@ -1,3 +1,13 @@
+# Memory-bounded training pipeline — 2026-10-02 16:30 UTC
+
+Implemented opt-in `--streaming-data` in the training recipe: SQLite-backed preparation and joint assembly, chunked rendering, and shard-backed token audit with lightweight dedup/split metadata. Default semantics are preserved; full bodies remain on disk. Focused parity/resume tests pass, actual 413-record MiniCPM rendering and ready corpus are byte-identical to ordinary paths. Full Python suite **220 passed** in58.51s; a subsequent audit disk-guard regression also passed (24 audit tests). Existing8 Spark/Transformers deprecation warnings remain.
+
+Storage guards fail before large scratch work: preparation5x input+2GiB, assembly2x+1GiB, rendering3x+1GiB, audit4x+1GiB. These are conservative planning bounds, not guaranteed upper bounds under arbitrary expansion or concurrent disk consumers. About12GiB local free remains; full existing-data production build not launched yet. Smaller real-data renderer/audit/gradient/checkpoint paths have completed. Full data-only DAG is being pinned; static publication also waits the Qasper visible-evidence repair/replay. Preserve raw input corpora and prior pinned proofs.
+
+DGX current1024 pool continues; 951-case successor gate armed/waiting as recorded below. Space Bunny finished all300 exact queue entries around16:23:44UTC, Luna1 finished256; successor preparation is active, Luna2 remains running. Do not claim both local slots/Bunny running during normal queue completion gaps. User requested these continue; feed reviewed successors without restarting Bonsai.
+
+---
+
 # Local training pipeline fixes and generation continuity — 2026-10-02 16:11 UTC
 
 The user's correction remains controlling: only local Bonsai is disabled. Luna2 and Space Bunny remain live locally, DGX Qwen remains live. Luna1 completed all 256 exact exports normally; authority now records completed rather than stale running. Bonsai disable marker/watcher/server guards remain in force; local GPU is reserved for training work.

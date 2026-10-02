@@ -232,6 +232,49 @@ def test_config_drift_requires_a_new_run_directory(tmp_path):
     assert 'pipeline config changed' in resumed.stderr
 
 
+@pytest.mark.parametrize(('content', 'should_pass'), [('', False), ('{}\\n', True)])
+def test_nonempty_jsonl_contract_rejects_zero_row_success(tmp_path, content, should_pass):
+    run_dir = tmp_path / 'run'
+    output = run_dir / 'rendered.jsonl'
+    script = f"from pathlib import Path; Path({str(output)!r}).write_text({content!r})"
+    config = config_file(tmp_path, [{
+        'id': 'render', 'command': command(script), 'outputs': [str(output)],
+        'nonempty_jsonl': [str(output)],
+    }])
+
+    result = run(config, run_dir)
+    state = json.loads((run_dir / 'pipeline-state.json').read_text())
+
+    if should_pass:
+        assert result.returncode == 0, result.stderr
+        assert state['stages']['render']['status'] == 'complete'
+    else:
+        assert result.returncode != 0
+        assert 'JSONL output has no records' in result.stderr
+        assert state['stages']['render']['status'] == 'failed'
+        assert 'postcondition_error' in state['stages']['render']
+
+
+def test_input_drift_during_child_marks_stage_failed_not_running(tmp_path):
+    run_dir = tmp_path / 'run'
+    source, output = tmp_path / 'input.txt', run_dir / 'out'
+    source.write_text('before')
+    script = (f"from pathlib import Path; Path({str(source)!r}).write_text('after'); "
+              f"Path({str(output)!r}).write_text('ok')")
+    config = config_file(tmp_path, [{
+        'id': 'mutate', 'command': command(script), 'inputs': [str(source)],
+        'outputs': [str(output)],
+    }])
+
+    result = run(config, run_dir)
+    state = json.loads((run_dir / 'pipeline-state.json').read_text())
+
+    assert result.returncode != 0
+    assert 'input changed during execution' in result.stderr
+    assert state['stages']['mutate']['status'] == 'failed'
+    assert 'postcondition_error' in state['stages']['mutate']
+
+
 def test_until_stops_after_requested_stage_and_can_resume(tmp_path):
     run_dir = tmp_path / 'run'
     calls = run_dir / 'calls'
@@ -283,7 +326,7 @@ def test_gpu_resource_wait_does_not_start_stage_and_resumes_when_available(tmp_p
     bin_dir.mkdir()
     memory_file = tmp_path / 'free-memory'
     fake_smi = bin_dir / 'nvidia-smi'
-    fake_smi.write_text(f"#!/bin/sh\ncat {str(memory_file)!r}\n")
+    fake_smi.write_text(f"#!{sys.executable}\nfrom pathlib import Path\nprint(Path({str(memory_file)!r}).read_text(), end=\"\")\n")
     fake_smi.chmod(0o755)
     memory_file.write_text('100\n99999\n')
     calls, output = run_dir / 'calls', run_dir / 'output'

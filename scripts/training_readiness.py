@@ -63,8 +63,8 @@ def validate_training_audit_tokenizer(manifest, tokenizer, model, revision):
     """Bind audited token counts to the tokenizer actually loaded by training."""
     from scripts.render_training_corpus import _tokenizer_info
 
-    _, actual = _tokenizer_info(tokenizer, model, revision)
     expected = manifest["renderer"]
+    _, actual = _tokenizer_info(tokenizer, model, revision, end_token=expected.get("end_token"))
     for key in ("model", "revision", "template_sha256", "tokenizer_fingerprint_sha256",
                 "local_tokenizer_artifacts_sha256", "end_token"):
         if expected.get(key) != actual.get(key):

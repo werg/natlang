@@ -35,7 +35,7 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
            source_limit=25000, synthetic=1000, teacher_programs=1000,
            teacher_model="Ternary-Bonsai-2-27B", teacher_server="http://127.0.0.1:8081", teacher_provider=None,
            teacher_execution_plans=False, teacher_execution_plan_tokens=512,
-           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None, self_improvement_variants=12, optimizer_provider="openai-codex", optimizer_model="gpt-6-luna"):
+           inline_shapes=2, token_file=None, train_args=(), init_adapter=None, min_free_vram_mib=2048, inventories_override=None, captures_override=None, verified_turns_override=None, workspace_cases=(), static_bundle=None, teacher_results_override=None, self_improvement_variants=12, optimizer_provider="openai-codex", optimizer_model="gpt-6-luna", streaming_data=False):
     repo = Path(repo).resolve()
     sources = sources or ["codesearchnet", "magicoder", "mceval", "tiny-codes", "xlam"]
     if "--full" in train_args:
@@ -304,9 +304,10 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     add("teacher-seeds", ["node", f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{r}/synthetic/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl", str(teacher_programs), "42", failure_cases],
         [f"{p}/ts-host/scripts/code-corpus/teacher-seeds.mjs", f"{p}/ts-host/dist/teacher/synthetic-generator.js", f"{r}/synthetic/teacher-programs.jsonl", failure_cases],
         [f"{r}/teacher-programs.jsonl", f"{r}/teacher-programs.jsonl.manifest.jsonl"])
+    streaming_args = ["--streaming"] if streaming_data else []
     add("prepare", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared", "--code", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl",
                        "--native", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns,
-                       "--split-records", f"{r}/teacher-programs.jsonl"]),
+                       "--split-records", f"{r}/teacher-programs.jsonl", *streaming_args]),
         [f"{p}/scripts/prepare_training_stages.py", f"{p}/scripts/corpus.py", f"{r}/bundle/train.jsonl", f"{r}/bundle/test.jsonl", f"{r}/synthetic/verified-turns.jsonl", f"{r}/synthetic/code-proposals.jsonl", *verified_turns, f"{r}/teacher-programs.jsonl"],
         [f"{r}/prepared/manifest.json", f"{r}/prepared/general.jsonl", f"{r}/prepared/coding.jsonl", f"{r}/prepared/splits.json"])
     model_args = ["--model", model] + (["--revision", revision] if revision else [])
@@ -316,13 +317,14 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
     def render(name, source):
         ledgers = [f'{r}/{name}.sft.jsonl.rejected.jsonl'] + ([f'{r}/bundle/rejected.jsonl'] if name == 'general' else
                    [f'{r}/synthetic/projection-rejected.jsonl', f'{r}/synthetic/replay-errors.jsonl'] if name == 'coding' else [])
-        add(f"render-{name}", py([f"{p}/scripts/render_training_corpus.py", "--inputs", source, "--output", f"{r}/{name}.sft.jsonl", *model_args]),
-            [f"{p}/scripts/render_training_corpus.py", source], [f"{r}/{name}.sft.jsonl", f"{r}/{name}.sft.jsonl.manifest.json", f'{r}/{name}.sft.jsonl.rejected.jsonl'])
+        add(f"render-{name}", py([f"{p}/scripts/render_training_corpus.py", "--inputs", source, "--output", f"{r}/{name}.sft.jsonl", *model_args, *streaming_args]),
+            [f"{p}/scripts/render_training_corpus.py", source], [f"{r}/{name}.sft.jsonl", f"{r}/{name}.sft.jsonl.manifest.json", f'{r}/{name}.sft.jsonl.rejected.jsonl'],
+            nonempty_jsonl=[f"{r}/{name}.sft.jsonl"])
         add(f'audit-{name}', py([f'{p}/scripts/audit_training_corpus.py', '--input', f'{r}/{name}.sft.jsonl',
                                 '--output', f'{r}/{name}.ready.jsonl', '--max-len', str(budget.max_len), *model_args,
                                 *([arg for track in ['seed-teacher', *(item['id'] for item in tracks)]
                                    for arg in ('--require-track', track)] if name == 'joint' else []),
-                                *[arg for ledger in ledgers for arg in ('--rejection-ledger', ledger)]]),
+                                *[arg for ledger in ledgers for arg in ('--rejection-ledger', ledger)], *streaming_args]),
             [f'{p}/scripts/audit_training_corpus.py', f'{p}/scripts/render_training_corpus.py',
              f'{r}/{name}.sft.jsonl', f'{r}/{name}.sft.jsonl.manifest.json', *ledgers],
             [f'{r}/{name}.ready.jsonl', f'{r}/{name}.ready.jsonl.manifest.json',
@@ -445,13 +447,13 @@ def recipe(repo, model="LiquidAI/LFM2.5-350M", revision=None, image=None, python
             [*teacher_results, variants, admitted, f'{p}/ts-host/scripts/build-preference-pairs.mjs'],
             [preference_pairs, f'{preference_pairs}.manifest.json', f'{preference_pairs}.audit.jsonl'])
     turn_paths = [path for _, path in teacher_tracks]
-    add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json"]),
+    add("prepare-teacher", py([f"{p}/scripts/prepare_training_stages.py", "--output", f"{r}/prepared-teacher", "--teacher", *turn_paths, "--registry", f"{r}/prepared/splits.json", *streaming_args]),
         [f"{p}/scripts/prepare_training_stages.py", f"{p}/scripts/corpus.py", *turn_paths, f"{r}/prepared/splits.json"],
         [f"{r}/prepared-teacher/manifest.json", f"{r}/prepared-teacher/teacher.jsonl"])
     add('assemble-joint', py([f'{p}/scripts/assemble_joint_curriculum.py', '--output', f'{r}/joint.jsonl',
                               '--general', f'{r}/prepared/general.jsonl', '--coding', f'{r}/prepared/coding.jsonl',
                               '--teacher', f'{r}/prepared-teacher/teacher.jsonl',
-                              *[arg for name, path in teacher_tracks for arg in ('--track', name, path)]]),
+                              *[arg for name, path in teacher_tracks for arg in ('--track', name, path)], *streaming_args]),
         [f'{p}/scripts/assemble_joint_curriculum.py', f'{r}/prepared/general.jsonl', f'{r}/prepared/coding.jsonl',
          f'{r}/prepared-teacher/teacher.jsonl', *turn_paths],
         [f'{r}/joint.jsonl', f'{r}/joint.jsonl.manifest.json'])
@@ -534,6 +536,7 @@ def main():
     parser.add_argument('--no-static-bundle', action='store_true', help='omit the static source bundle from this recipe')
     parser.add_argument('--teacher-results', action='append', type=Path, help='existing curriculum result snapshots (repeatable); defaults to the two static reference sets')
     parser.add_argument('--no-existing-teacher-results', action='store_true', help='omit existing curriculum snapshots')
+    parser.add_argument('--streaming-data', action='store_true', help='use SQLite-backed preparation and chunk-streamed rendering')
     parser.add_argument("--min-free-vram-mib", type=int, default=2048, help="GPU 0 availability gate; raise this for larger models")
     parser.add_argument("--train-arg", action="append", default=[], help="repeat as --train-arg=--load-in-4bit or --train-arg=VALUE to pass trainer options")
     args = parser.parse_args()
@@ -547,7 +550,8 @@ def main():
                     train_args=args.train_arg, init_adapter=args.init_adapter, min_free_vram_mib=args.min_free_vram_mib,
                     inventories_override=args.inventory, captures_override=args.captures, verified_turns_override=args.verified_turns,
                     workspace_cases=args.workspace_case, static_bundle=False if args.no_static_bundle else args.static_bundle,
-                    teacher_results_override=[] if args.no_existing_teacher_results else args.teacher_results)
+                    teacher_results_override=[] if args.no_existing_teacher_results else args.teacher_results,
+                    streaming_data=args.streaming_data)
     if args.output.exists():
         if json.loads(args.output.read_text()) != config:
             raise ValueError("refusing to replace a different recipe")
