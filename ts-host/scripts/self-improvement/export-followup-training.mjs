@@ -131,5 +131,7 @@ if(process.argv[1]===new URL(import.meta.url).pathname){
  }
  const text=rows.map(JSON.stringify).join('\n')+'\n';await writeFile(join(output,'training-turns.jsonl'),text);
  await writeFile(join(output,'manifest.json'),JSON.stringify({schema:'natlang.native-improvement-training/1',rows:rows.length,sha256:createHash('sha256').update(text).digest('hex'),cases,providerCalls:0,source:input,contextMigration:'Provider replies preserved; each exported current-context invocation independently reexecuted against exact value and file oracles. No newly sampled teacher responses.'},null,2)+'\n');
- console.log(JSON.stringify({rows:rows.length,cases:cases.length}));
+ const {publish}=await import('./publish-optimizer-training.mjs');
+ const publication=await publish(resolve(new URL('../../../',import.meta.url).pathname),[join(output,'manifest.json')]);
+ console.log(JSON.stringify({rows:rows.length,cases:cases.length,publication}));
 }

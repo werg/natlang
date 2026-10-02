@@ -682,7 +682,8 @@
         "ts-host/scripts/self-improvement/export-followup-training.mjs",
         "ts-host/scripts/self-improvement/prepare-optimizer-training.mjs",
         "ts-host/scripts/self-improvement/run-optimizer-distillation.mjs",
-        "ts-host/scripts/self-improvement/evaluate-optimizer-checkpoints.mjs"
+        "ts-host/scripts/self-improvement/evaluate-optimizer-checkpoints.mjs",
+        "ts-host/scripts/self-improvement/publish-optimizer-training.mjs"
       ],
       "source_research": "Observed generated failures: wrong file depth, joins, superseded decisions, exact whitespace effects, rejected edits, excess semantic calls and oversized reasoning. Fresh six-family curriculum with independent gold and preserved source groups.",
       "required_cases": [
@@ -703,7 +704,8 @@
         "ts-host/test/compaction.test.mjs",
         "tests/test_model_response.py",
         "tests/test_audit_training_corpus.py",
-        "tests/test_training_readiness.py"
+        "tests/test_training_readiness.py",
+        "ts-host/test/optimizer-training-publication.test.mjs"
       ],
       "migration_result": {
         "original_positive_turns": 40,
@@ -716,7 +718,15 @@
         "campaign": "runs/native-directory-campaign-corrected-20261002",
         "disposition": "Historical reexport complete; fresh source campaign and optimizer distillation in progress, no new learning claim.",
         "first_directory_editor_turns": 21,
-        "genuine_rejection_context_turns": 6
+        "genuine_rejection_context_turns": 6,
+        "general_training_publication": {
+          "rows": 94,
+          "registry": "data/teacher/self-improvement/current-manifest.json",
+          "lane": "native-program-improvement",
+          "sha256": "5ba80bf15c8eca60e59e8b0a2092fbac514bda2b3b4a1b24883f6c0335f9627d",
+          "future_exports": "automatically published; prior decisions and unrelated lanes retained",
+          "frozen_recipes": "unchanged; new default recipes include this corpus"
+        }
       }
     }
   ],
