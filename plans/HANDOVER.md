@@ -1,3 +1,19 @@
+# Metadata proof corrected; actual sleep starts — 2026-10-02 14:00 UTC
+
+Root independently checked all306correctedselectionrows againstoriginals: onlyhistoryflags/membershipmetadata changed, all3,584referencedmembershipfiles agree withactualsavedIR. Exactlyonepriorprogramoverlap (authorizedfailedretry); all306havehistoricalsource/groupoverlap. Correctedv2proofSHA3bcb8f8482c7b00e4a2e803b2bb17ea887e8b55bfb95c2202b8a524ff37933e0; rootaddendumSHAdb232c760e3e3acdcdf4892dfea26fbf87e99a14bf18726cf2debc14c79717c2 nowboundactualLuna2authorityworker/launchrecord. Originalpinnedproof/IR/runtime/queue preserved. No publicationcausalDPOclaim. Prior13:58sleepentrywaspreparedbeforeurgentcorrectionarrived; ACTUAL50minuteclock.sleepstartsnowdeadline **2026-10-02 14:50:37 UTC**, active-sleep.jsonupdated. Resumeabsolutedeadlineafterurgentinterruptions.
+
+---
+
+# Worker supply restored; next active50-minute check — 2026-10-02 13:58 UTC
+
+- Actual Luna2worker1383567 nowrunning306 reviewed36cases; controller1383562/rootplanSHA77de00963d722fdfd265bf18703304f345f77a4eaefb56e86a735c4c3b5d35c3; all659pins/native306IRexact/allaccepted/6047decisions verified. Runtime/program/goldsunchanged. Agent's per-rowselectionproof defaultedbothpriorLunaID/sourceoverlaptofalse; aggregatereportcorrectlyrecords1explicitretry/596sharedpairsourceIDs/5sharedTATQAsources. Rootlaunchedbeforeagent'slatewarningarrived. Metadata correction requiredbeforepublication/inventoryuse: agentpreparingseparatev2proof, originalapprovedpins/rawworkerpreserved. Do notinterpretoldproofasfreshsourceclaim orautomaticcausalDPOpair.
+- Allteacherscurrentlysupplied: DGX256requestgate/320activecases; Bonsai778887 long513queue+armedreviewed256successor; Luna1actual1376317/new256queue; Luna2actual1383567/new306queue; SpaceBunnyactual1379568/new300queue. Verifiedlatest-worker-supply.jsonreceipt.
+- Production70.59secondssample333.46outputtokens/s,6736prompttokens/s countedbyvLLM (promptcounterincludescacheuse; notphysicalprefillthroughput). Earlier110seconds475.23outputtokens/s. Workloadvarying; do notclaim475sustained/fullcampaign. KV57.2%,251active atnewsample, no reportedresourcefailure. Completedartifactmixstillmostlyprimitives, reducerqualityconclusionspending.
+- DGXnextbacklogconservative723candidate=687freshunheld+36explicitreviewedrepairretries,376reducers52%; countssupersedeearlier853afteradditionalactual/plannedLunacohorthistoryfilters. Stillpreparingnativeproof, notqueued/deployed. Future37completeclosure+supportedARMNode preparationonly, live34unchanged.
+- Startingactual50minuteclock.sleep now; absoluteUTCdeadline **2026-10-02 14:48:42 UTC** persistedruns/generation-check-20261002/active-sleep.json. Handleurgentnotificationsthenresume SAMEdeadline. No independentagentwakeschedulerclaim. Onwake checkservices/imports/resourcepressure/newrejections/workerqueues/correctionproof/nextqueue.
+
+---
+
 # Space Bunny300 launched and Luna history correction — 2026-10-02 13:50 UTC
 
 - Actual newSpaceBunny300directory-v7 worker isrunning: launcher1379473/supervisor1379568, immutable36. Rootreviewall630runtimefilehashes/659preparedpins/3284providerdependencyfiles and exact256actualpredecessor result/output/IR/trace comparisons. ActualrootrolloverSHAfa406adb4c83f39f08916a2bdb292bd58ff15509e0dfc685f6f0527034a1a1b3; workerSHAe8c7420a452f4f76bff20ca579c89ab56bf11d282688dc96ccee852d29c7a260;665rolloverpins. Firstnewcaseaccepted,8turns; capturedcontextcontainsnewclaim-to-evaluateprompt, provenancefreeStealthonly/no distillationflag. Currentprior256was255accepted/1reject, notolder188/68. Actualpredecessorplanv35-v2 used inrootrollover (agentdraftnamedv1). SourceID/programoverlap0;9sourcegrouplabelsoverlapexplicit. Preservedwrongdrafts review-history. Local36doesnotsealallNodepackages; knownparent-dependencylimitation recorded, verifiedprovider3284pins only.
