@@ -1,134 +1,238 @@
 import json
+import hashlib
+import io
+from pathlib import Path
 import subprocess
 import pytest
+import scripts.run_bonsai_queue as queue_module
 from scripts.run_bonsai_queue import run_queue, local_decode_progress as read_local_decode_progress
+
+ROOT = Path(__file__).resolve().parents[1]
+TS_HOST = ROOT / 'ts-host'
 
 
 @pytest.fixture(autouse=True)
 def no_live_server_queries(monkeypatch):
-    monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda: None)
+    monkeypatch.setattr(queue_module, 'local_decode_progress', lambda: None)
+    original = queue_module.urllib.request.urlopen
+    class Healthy:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    def fixture_urlopen(url, *args, **kwargs):
+        if str(url).endswith('/health'):
+            return Healthy()
+        return original(url, *args, **kwargs)
+    monkeypatch.setattr(queue_module.urllib.request, 'urlopen', fixture_urlopen)
+
+
+def source_rows(path, count=1):
+    rows = []
+    for index in range(count):
+        root = f'case-{index}.nl'
+        rows.append({
+            'version': 'natlang.program/2', 'id': f'case-{index}', 'kind': 'lambda_source',
+            'source_layout': {'root': root, 'subfunctions': {}},
+            'semantics': {'root': root, 'files': {root: f'export default ({index})'}},
+        })
+    Path(path).write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    return rows
+
+
+def queue_entry(tmp_path, *, key='case', index=0, count=1, source=None, output=None, max_turns=20):
+    source = Path(source or (tmp_path / 'source.ir.jsonl'))
+    if not source.exists():
+        source_rows(source, max(1, index + count))
+    return dict(key=key, source=str(source), jobs=str(tmp_path / 'jobs'),
+                output=str(output or (tmp_path / 'teacher.results.jsonl')), index=index,
+                count=count, seed=1, log=str(tmp_path / f'{key}.log'), max_turns=max_turns)
+
+
+def write_exact_export(command):
+    """Emit fixture artifacts matching current collector identity/accounting checks."""
+    source, jobs_dir, output = map(Path, command[3:6])
+    start = int(command[command.index('--start') + 1])
+    count = int(command[command.index('--limit') + 1])
+    entry = {'source': str(source), 'jobs': str(jobs_dir), 'output': str(output),
+             'index': start, 'count': count}
+    jobs = queue_module.resolve_entry_jobs(entry, TS_HOST)
+    source_data = [json.loads(line) for line in source.read_text().splitlines() if line.strip()]
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for job in jobs:
+        result = {
+            'task': {'program_ir': source_data[job['index']]},
+            'provenance': {'program_ir_sha256': job['digest']},
+            'outcome': {'status': 'done', 'accepted': True},
+            'trajectory': [],
+        }
+        (jobs_dir / f"{job['key']}.result.json").write_text(json.dumps(result))
+        rows.append(result)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    manifest = {
+        'version': 'natlang.teacher_batch.native/1',
+        'range': {'start': start, 'count': count}, 'completed': count, 'missing': [],
+        'output_sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
+        'source': str(source),
+        'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+    }
+    Path(str(output) + '.manifest.json').write_text(json.dumps(manifest))
+
+
+def install_child(monkeypatch, child_class):
+    real_subprocess = queue_module.subprocess
+    class SubprocessProxy:
+        Popen = child_class
+        TimeoutExpired = real_subprocess.TimeoutExpired
+        STDOUT = real_subprocess.STDOUT
+        check_output = real_subprocess.check_output
+    monkeypatch.setattr(queue_module, 'subprocess', SubprocessProxy)
+
+
+def successful_child(monkeypatch, return_codes=None, timeout_first=False):
+    """Fake process that writes the exact current collector result/export contract on success."""
+    created = []
+    codes = list(return_codes or [])
+    class Child:
+        def __init__(self, command, **kwargs):
+            self.command = command
+            self.index = len(created)
+            self.terminated = self.killed = False
+            self.wait_calls = 0
+            created.append(self)
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if timeout_first and self.index == 0:
+                if self.wait_calls == 1 or (self.terminated and not self.killed):
+                    raise subprocess.TimeoutExpired(self.command, timeout)
+            if self.terminated or self.killed:
+                return 0
+            code = codes[self.index] if self.index < len(codes) else 0
+            if code == 0:
+                self._write_exact_export()
+            return code
+        def terminate(self): self.terminated = True
+        def kill(self): self.killed = True
+        def _write_exact_export(self):
+            write_exact_export(self.command)
+    install_child(monkeypatch, Child)
+    return created
 
 
 def test_timeout_kills_stuck_child_advances_and_resume_skips_finished(tmp_path, monkeypatch):
+    monkeypatch.setattr(queue_module, 'failure_cooldown', lambda streak: 0)
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    entries = [dict(key=str(i), source='input', jobs='jobs', output='output', index=i,
-                    seed=1, log=str(tmp_path / f'{i}.log')) for i in range(2)]
+    source = tmp_path / 'source.ir.jsonl'
+    source_rows(source, 2)
+    entries = [queue_entry(tmp_path, key=str(i), index=i, source=source,
+                           output=tmp_path / 'out.jsonl') for i in range(2)]
     queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
-    processes = []
-    class Child:
-        def __init__(self, command, **kwargs):
-            self.index = len(processes)
-            self.killed = self.terminated = False
-            processes.append(self)
-        def wait(self, timeout=None):
-            if self.index == 0 and not self.killed:
-                raise subprocess.TimeoutExpired('fixture', timeout)
-            return 0
-        def terminate(self):
-            self.terminated = True
-        def kill(self):
-            self.killed = True
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, seconds=1)
+    processes = successful_child(monkeypatch, timeout_first=True)
+    run_queue(queue, journal, TS_HOST, seconds=1)
     assert processes[0].terminated and processes[0].killed
     assert len(processes) == 2
     finished = [json.loads(row) for row in journal.read_text().splitlines() if json.loads(row)['event'] == 'finish']
     assert [row['status'] for row in finished] == ['timeout', 'complete']
-    run_queue(queue, journal, tmp_path, seconds=1)
+    run_queue(queue, journal, TS_HOST, seconds=1)
     assert len(processes) == 2
 
 
 def test_entry_turn_budget_is_passed_and_recorded(tmp_path, monkeypatch):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    entry = dict(key='world', source='input', jobs=str(tmp_path / 'jobs'), output='output', index=0,
-                 seed=1, log=str(tmp_path / 'case.log'), max_turns=48)
+    entry = queue_entry(tmp_path, key='world', max_turns=48)
     queue.write_text(json.dumps(entry) + '\n')
-    commands = []
-    class Child:
-        def __init__(self, command, **kwargs):
-            commands.append(command)
-        def wait(self, timeout=None):
-            return 0
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, seconds=1)
-    assert commands[0][commands[0].index('--max-turns') + 1] == '48'
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1)
+    command = commands[0].command
+    assert command[command.index('--max-turns') + 1] == '48'
     assert json.loads(journal.read_text().splitlines()[0])['max_turns'] == 48
     for value in [True, 0, -1, '48']:
         entry['max_turns'] = value
         queue.write_text(json.dumps(entry) + '\n')
         with pytest.raises(ValueError, match='max_turns'):
-            run_queue(queue, tmp_path / 'fresh.jsonl', tmp_path, seconds=1)
+            run_queue(queue, tmp_path / 'fresh.jsonl', TS_HOST, seconds=1)
 
 
 def test_repeated_action_shapes_do_not_imply_repeated_requests(tmp_path):
     from scripts.run_bonsai_queue import partial_metrics
+    entry = queue_entry(tmp_path, key='fixture')
+    job = queue_module.resolve_entry_jobs(entry, TS_HOST)[0]
     turns = [dict(request_sha256=digest, response=dict(raw_response={"provider": "fixture"},
              calls=[["return_result", {"status": "success", "value": False}]], completion_tokens=2))
              for digest in ["input-a", "input-b"]]
-    path = tmp_path / '000000-fixture.partial.json'
-    path.write_text(json.dumps(dict(turns=turns)))
-    entry = dict(index=0, jobs=str(tmp_path))
+    path = tmp_path / 'jobs' / f"{job['key']}.partial.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(program_id=job['program_id'],
+                                    provenance={'program_ir_sha256': job['digest']}, turns=turns)))
     metrics = partial_metrics(entry)
     assert metrics['repeated_action_sets'] == 1
     assert metrics['repeated_request_hashes'] == 0
     assert metrics['unique_request_hashes'] == 2
     turns.append(turns[0])
-    path.write_text(json.dumps(dict(turns=turns)))
+    path.write_text(json.dumps(dict(program_id=job['program_id'],
+                                    provenance={'program_ir_sha256': job['digest']}, turns=turns)))
     assert partial_metrics(entry)['repeated_request_hashes'] == 1
 
 
 def test_local_pair_shares_one_collector_and_one_global_two_request_cap(tmp_path, monkeypatch):
     from scripts.run_bonsai_queue import partial_metrics
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    entry = dict(key='pair', source='input', jobs=str(tmp_path), output='output', index=0, count=2,
-                 members=[{'key': 'one'}, {'key': 'two'}], seed=1, log=str(tmp_path / 'case.log'))
+    source = tmp_path / 'source.ir.jsonl'; source_rows(source, 2)
+    entry = queue_entry(tmp_path, key='pair', count=2, source=source,
+                        output=tmp_path / 'out.jsonl')
+    entry['members'] = [{'key': 'one'}, {'key': 'two'}]
     queue.write_text(json.dumps(entry) + '\n')
-    commands = []
-    class Child:
-        def __init__(self, command, **kwargs): commands.append(command)
-        def wait(self, timeout=None): return 0
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, seconds=1, model_concurrency=2)
-    command = commands[0]
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, model_concurrency=2)
+    command = commands[0].command
     assert command[command.index('--workers') + 1] == '2'
     assert command[command.index('--limit') + 1] == '2'
     assert command[command.index('--model-concurrency') + 1] == '2'
     assert [json.loads(line)['key'] for line in journal.read_text().splitlines()
             if json.loads(line)['event'] == 'finish'] == ['pair', 'one', 'two']
-    for i in range(2):
-        (tmp_path / f'{i:06d}-fixture.partial.json').write_text(json.dumps({'turns': [
-            {'request_sha256': str(i), 'response': {'raw_response': {'fixture': True}, 'calls': [], 'completion_tokens': 3}}]}))
+    jobs = queue_module.resolve_entry_jobs(entry, TS_HOST)
+    for i, job in enumerate(jobs):
+        (tmp_path / 'jobs' / f"{job['key']}.partial.json").write_text(json.dumps({
+            'program_id': job['program_id'], 'provenance': {'program_ir_sha256': job['digest']},
+            'turns': [{'request_sha256': str(i), 'response': {'raw_response': {'fixture': True}, 'calls': [], 'completion_tokens': 3}}]}))
     assert partial_metrics(entry)['fresh_model_replies'] == 2
     with pytest.raises(ValueError, match='single-case'):
-        run_queue(queue, tmp_path / 'provider.jsonl', tmp_path, provider='openai-codex', model_id='gpt-6-luna', model_concurrency=1)
+        run_queue(queue, tmp_path / 'provider.jsonl', TS_HOST, provider='openai-codex', model_id='gpt-6-luna', model_concurrency=1)
 
 
 @pytest.mark.parametrize('count', [4, 5])
 def test_larger_batches_use_one_global_cap(tmp_path, monkeypatch, count):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    queue.write_text(json.dumps(dict(key='batch', source='input', jobs=str(tmp_path), output='output',
-        index=0, count=count, seed=1, log=str(tmp_path / 'case.log'))) + '\n')
-    commands = []
-    class Child:
-        def __init__(self, command, **kwargs): commands.append(command)
-        def wait(self, timeout=None): return 0
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, seconds=1, model_concurrency=4)
+    source = tmp_path / 'source.ir.jsonl'; source_rows(source, count)
+    queue.write_text(json.dumps(queue_entry(tmp_path, key='batch', source=source,
+        output=tmp_path / 'out.jsonl', count=count)) + '\n')
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, model_concurrency=4)
     assert len(commands) == 1
-    command = commands[0]
+    command = commands[0].command
     assert command[command.index('--workers') + 1] == str(count)
     assert command[command.index('--model-concurrency') + 1] == '4'
     with pytest.raises(ValueError, match='single-case'):
-        run_queue(queue, tmp_path / 'provider.jsonl', tmp_path, provider='openai-codex', model_concurrency=1)
+        run_queue(queue, tmp_path / 'provider.jsonl', TS_HOST, provider='openai-codex', model_concurrency=1)
 
 
 def test_batch_metrics_include_completed_and_running_roots(tmp_path):
     from scripts.run_bonsai_queue import partial_metrics
-    (tmp_path / '000000-fixture.result.json').write_text(json.dumps({'trajectory': [
-        {'request_sha256': 'done', 'raw_response_sha256': 'hash', 'model_response': {'calls': [], 'completion_tokens': 7}}]}))
-    (tmp_path / '000001-fixture.partial.json').write_text(json.dumps({'turns': [
-        {'request_sha256': 'running', 'response': {'raw_response': {'fixture': True}, 'calls': [], 'completion_tokens': 3}}]}))
-    metrics = partial_metrics(dict(index=0, count=2, jobs=str(tmp_path)))
+    source = tmp_path / 'source.ir.jsonl'; source_rows(source, 2)
+    entry = queue_entry(tmp_path, key='batch', count=2, source=source)
+    jobs = queue_module.resolve_entry_jobs(entry, TS_HOST)
+    jobs_dir = Path(entry['jobs']); jobs_dir.mkdir(parents=True, exist_ok=True)
+    (jobs_dir / f"{jobs[0]['key']}.result.json").write_text(json.dumps({
+        'task': {'program_ir': json.loads(source.read_text().splitlines()[0])},
+        'provenance': {'program_ir_sha256': jobs[0]['digest']},
+        'trajectory': [{'request_sha256': 'done', 'raw_response_sha256': 'hash',
+                        'model_response': {'calls': [], 'completion_tokens': 7}}]}))
+    (jobs_dir / f"{jobs[1]['key']}.partial.json").write_text(json.dumps({
+        'program_id': jobs[1]['program_id'], 'provenance': {'program_ir_sha256': jobs[1]['digest']},
+        'turns': [{'request_sha256': 'running', 'response': {'raw_response': {'fixture': True},
+                  'calls': [], 'completion_tokens': 3}}]}))
+    metrics = partial_metrics(entry)
     assert metrics['fresh_model_replies'] == 2
     assert metrics['completion_tokens'] == 10
 
@@ -144,23 +248,26 @@ def test_local_decode_metrics_are_finite_and_parse_failures_are_ignored(monkeypa
 @pytest.mark.parametrize('decoding', [True, False])
 def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_path, monkeypatch, decoding):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    queue.write_text(json.dumps(dict(key='long', source='input', jobs=str(tmp_path), output='output',
-        index=0, seed=1, log=str(tmp_path / 'case.log'))) + '\n')
+    entry = queue_entry(tmp_path, key='long')
+    queue.write_text(json.dumps(entry) + '\n')
     clock = [0]
     monkeypatch.setattr('scripts.run_bonsai_queue.time.monotonic', lambda: clock[0])
     monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda: clock[0] if decoding else None)
     class Child:
-        def __init__(self, *args, **kwargs): self.terminated = False; self.calls = 0
+        def __init__(self, command, **kwargs): self.terminated = False; self.calls = 0; self.command = command
         def wait(self, timeout=None):
             if self.terminated: return 0
             clock[0] += 30; self.calls += 1
-            if self.calls <= 12: raise subprocess.TimeoutExpired('fixture', timeout)
+            if self.calls <= 12: raise subprocess.TimeoutExpired(self.command, timeout)
+            # The successful test path must provide the exact native result/output proof.
+            write_exact_export(self.command)
             return 0
         def terminate(self): self.terminated = True
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, seconds=600)
+    install_child(monkeypatch, Child)
+    run_queue(queue, journal, TS_HOST, seconds=600, no_observation_seconds=360)
     finish = json.loads(journal.read_text().splitlines()[-1])
-    assert finish['status'] == ('complete' if decoding else 'inactivity_timeout')
+    assert finish['status'] == ('complete' if decoding else 'no_observation_limit')
+    assert finish['resource_limit_reason'] == (None if decoding else 'no_observation_limit')
 
 
 def test_provider_failure_cooldown_doubles_caps_and_does_not_delay_rejections(tmp_path, monkeypatch):
@@ -175,20 +282,16 @@ def test_provider_failure_cooldown_doubles_caps_and_does_not_delay_rejections(tm
         now[0] += seconds
     monkeypatch.setattr(module.time, 'sleep', sleep)
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
-    entries = [dict(key=str(i), source='input', jobs=str(tmp_path), output='output', index=i,
-                    seed=1, log=str(tmp_path / f'{i}.log')) for i in range(4)]
+    source = tmp_path / 'source.ir.jsonl'; source_rows(source, 4)
+    entries = [queue_entry(tmp_path, key=str(i), index=i, source=source,
+                           output=tmp_path / 'out.jsonl') for i in range(4)]
     queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
     commands = []
-    class Child:
-        def __init__(self, command, **kwargs):
-            self.code = [2, 1, 0, 0][len(commands)]
-            commands.append(command)
-        def wait(self, timeout=None): return self.code
-    monkeypatch.setattr(subprocess, 'Popen', Child)
-    run_queue(queue, journal, tmp_path, provider='fixture')
+    commands = successful_child(monkeypatch, return_codes=[2, 1, 0, 0])
+    run_queue(queue, journal, TS_HOST, provider='fixture')
     assert sum(waits) == 90
     assert len(commands) == 4
-    assert commands[0][commands[0].index('--retry-delay-ms') + 1] == '15000'
+    assert commands[0].command[commands[0].command.index('--retry-delay-ms') + 1] == '15000'
     finishes = [json.loads(line) for line in journal.read_text().splitlines() if json.loads(line)['event'] == 'finish']
     assert [row['failure_streak'] for row in finishes] == [1, 2, 0, 0]
     # Restart still observes the original deadline, rather than resetting the failure streak.
@@ -198,19 +301,22 @@ def test_provider_failure_cooldown_doubles_caps_and_does_not_delay_rejections(tm
     entries = entries[:2]
     queue.write_text(''.join(json.dumps(row) + '\n' for row in entries))
     waits.clear()
-    run_queue(queue, journal, tmp_path, provider='fixture')
+    commands = successful_child(monkeypatch, return_codes=[2])
+    run_queue(queue, journal, TS_HOST, provider='fixture')
     assert sum(waits) == 20
     assert json.loads(journal.read_text().splitlines()[-1])['failure_streak'] == 2
 
 
 def test_provider_retry_deadline_is_not_a_stall(tmp_path, monkeypatch):
     from scripts.run_bonsai_queue import retry_waiting
-    entry = dict(index=0, jobs=str(tmp_path))
-    path = tmp_path / '000000-fixture.retry.json'
+    entry = queue_entry(tmp_path)
+    job = queue_module.resolve_entry_jobs(entry, TS_HOST)[0]
+    path = Path(entry['jobs']) / f"{job['key']}.retry.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr('scripts.run_bonsai_queue.time.time', lambda: 1000)
-    path.write_text(json.dumps(dict(until=1001000)))
+    path.write_text(json.dumps(dict(until=1001000, program_id=job['program_id'])))
     assert retry_waiting(entry)
-    path.write_text(json.dumps(dict(until=999000)))
+    path.write_text(json.dumps(dict(until=999000, program_id=job['program_id'])))
     assert not retry_waiting(entry)
     path.write_text('broken')
     assert not retry_waiting(entry)
@@ -218,6 +324,9 @@ def test_provider_retry_deadline_is_not_a_stall(tmp_path, monkeypatch):
 
 def test_exhausted_provider_retry_keeps_minimum_delay(tmp_path):
     from scripts.run_bonsai_queue import retry_deadline
-    entry = dict(index=0, jobs=str(tmp_path))
-    (tmp_path / '000000.error.json').write_text(json.dumps(dict(retry_not_before=1234567890)))
+    entry = queue_entry(tmp_path)
+    job = queue_module.resolve_entry_jobs(entry, TS_HOST)[0]
+    error_path = Path(entry['jobs']) / f"{job['index']:06d}.error.json"
+    error_path.parent.mkdir(parents=True, exist_ok=True)
+    error_path.write_text(json.dumps(dict(retry_not_before=1234567890, program_id=job['program_id'])))
     assert retry_deadline(entry) == 1234567.89

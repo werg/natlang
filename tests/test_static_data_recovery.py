@@ -2,16 +2,34 @@ import hashlib
 import json
 import pytest
 
-from scripts.create_training_pipeline import recipe, file_project_has_subfunctions
+from scripts.create_training_pipeline import recipe as build_recipe, file_project_has_subfunctions
 
 
-def registry(monkeypatch):
-    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda *a, **k:
-                        json.dumps([{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
+def recipe(repo, **kwargs):
+    # These fixtures exercise static/reference wiring, not generated-job discovery.
+    kwargs.setdefault('teacher_results_override', [path for path in
+        (repo / 'runs/inline-curriculum').glob('*.results.jsonl')])
+    return build_recipe(repo, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def isolated_catalog(tmp_path):
+    (tmp_path / 'training').mkdir()
+    (tmp_path / 'training/data_sources.json').write_text(json.dumps({
+        'decisions': [], 'replacements': {}, 'required_default_inputs': []}))
+
+
+def registry(monkeypatch, tmp_path):
+    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda argv, **k:
+                        json.dumps({'results': str(tmp_path / 'empty.results.jsonl'),
+                                    'failure_candidates': str(tmp_path / 'empty.failures.jsonl'),
+                                    'failure_manifest': str(tmp_path / 'empty.failures.manifest.json')}
+                                   if 'snapshot-generated-training.mjs' in argv[1] else
+                                   [{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
 
 
 def test_existing_references_are_admitted_materialized_and_joined(tmp_path, monkeypatch):
-    registry(monkeypatch)
+    registry(monkeypatch, tmp_path)
     path = tmp_path / 'runs/inline-curriculum/ref-v1.results.jsonl'
     path.parent.mkdir(parents=True)
     path.write_text('{}\n')
@@ -37,7 +55,7 @@ def test_helper_project_requires_current_files():
 
 
 def test_retired_default_turn_snapshots_are_quarantined(tmp_path, monkeypatch):
-    registry(monkeypatch)
+    registry(monkeypatch, tmp_path)
     path = tmp_path / 'data/direct-code-2026-09-23/chunk-native-final.jsonl.turns.jsonl'
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({'task': {'program_ir': {'version': 'natlang.program/1'}}}) + '\n')
@@ -53,7 +71,7 @@ def test_retired_default_turn_snapshots_are_quarantined(tmp_path, monkeypatch):
 
 
 def test_current_helper_capture_enters_recipe(tmp_path, monkeypatch):
-    registry(monkeypatch)
+    registry(monkeypatch, tmp_path)
     folder = tmp_path / 'data/direct-code-2026-09-23/unit-test-corpus/helper'
     folder.mkdir(parents=True)
     turns = folder / 'native-replay.jsonl.turns.jsonl'
@@ -70,7 +88,7 @@ def test_current_helper_capture_enters_recipe(tmp_path, monkeypatch):
 
 
 def test_saved_self_contained_capture_is_replayed_before_preparation(tmp_path, monkeypatch):
-    registry(monkeypatch)
+    registry(monkeypatch, tmp_path)
     folder = tmp_path / 'data/direct-code-2026-09-23/unit-test-corpus/fixture'
     folder.mkdir(parents=True)
     turns = folder / 'native-replay.jsonl.turns.jsonl'

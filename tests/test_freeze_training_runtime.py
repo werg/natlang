@@ -8,6 +8,7 @@ from scripts.freeze_training_runtime import freeze
 def make_runtime(root):
     files = {
         'dist/native/runtime.js': 'export const runtimeVersion = 1;\n',
+        'dist/native/prompt.js': 'export const prompt = "Fixture runtime instructions";\n',
         'dist/teacher/collector.js': 'export const collectorVersion = 1;\n',
         'src/native/runtime.ts': 'export const runtimeVersion = 1;\n',
         'scripts/code-corpus/replay.mjs': 'export const replayVersion = 1;\n',
@@ -59,3 +60,22 @@ def test_existing_freeze_rejects_snapshot_content_drift(tmp_path):
 
     with pytest.raises(ValueError, match='frozen runtime changed'):
         freeze(source, output)
+
+
+def test_freeze_rejects_advertised_finish_without_compiled_support(tmp_path):
+    source, output = tmp_path / 'ts-host', tmp_path / 'runtime-host'
+    make_runtime(source)
+    (source / 'dist/native/prompt.js').write_text('export const prompt = "eval({finish:true})";\n')
+    (source / 'dist/native/agent.js').write_text('export const schema = {};\n')
+    with pytest.raises(ValueError, match='without its compiled tool schema'):
+        freeze(source, output)
+    assert not (output / 'frozen-runtime.json').exists()
+
+
+def test_freeze_accepts_finish_when_schema_and_runtime_both_support_it(tmp_path):
+    source, output = tmp_path / 'ts-host', tmp_path / 'runtime-host'
+    make_runtime(source)
+    (source / 'dist/native/prompt.js').write_text('export const prompt = "eval({finish:true})";\n')
+    (source / 'dist/native/agent.js').write_text('export const schema = {finish: {type: "boolean"}};\n')
+    (source / 'dist/native/runtime.js').write_text('export const isFinish = args => args.finish === true;\n')
+    assert 'dist/native/agent.js' in freeze(source, output)['files']

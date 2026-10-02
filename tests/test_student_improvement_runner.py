@@ -44,9 +44,11 @@ def server(replies):
     return http, thread, Handler
 
 
-def test_frozen_round_collects_and_admits_teacher_repair(tmp_path):
+def test_frozen_round_collects_and_admits_teacher_repair(tmp_path, monkeypatch):
+    monkeypatch.setattr('scripts.create_student_improvement_pipeline.current_improvement_turns', lambda repo: [])
     repo = Path(__file__).resolve().parents[1]
-    base_config = recipe(repo, python=sys.executable)
+    base_config = recipe(repo, python=sys.executable, teacher_results_override=[],
+                         verified_turns_override=[], static_bundle=False)
     base_recipe = tmp_path / 'base-recipe.json'
     base_recipe.write_text(json.dumps(base_config))
     base_run = tmp_path / 'base-run'

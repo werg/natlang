@@ -1907,3 +1907,14 @@ Full-training totals must include static, deterministic reference, converted his
 Luna1's approved successor failed before model request because its output log parent directory was absent. Reverified all659pins, created the missing parents and resumed identical pinned queue/runtime/journal; actual1435328, first complete model trajectory observed15:05. Preserve raw start/crash log. Future launcher preflight must validate/create every output parent, and worker health must require live process/progress rather than a stale launch receipt. Do not mutate supervisor bytes pinned by armed controllers.
 
 Fledge on Zen returned permanent403 FreeTierError country restriction on five zero-reply attempts. Both workers and parent have stopped; no dataset-positive or DPO-negative interpretation. Preserve reviewed plan/runtime/keys ownership and raw errors. Future versioned supervisor should circuit-break clear permanent provider eligibility errors on first observation. Provider eligibility resolution required before relaunch; no paid fallback.
+
+
+## 2026-10-02 15:27 UTC — Bonsai-only stop and local training pipeline tests
+
+User corrected earlier all-generation transfer: only Bonsai stops, Luna/Bunnycontinuehere;DGXQwencontinues. Stop watcherbeforeDockerbecausewatcherrestoresmissingcontainer. Durablegeneration-disablemarker applieswatcher/serverstartup, twoBonsai-onlyrecoveryapprovalsretired. UnfinishedBonsai work transfersasfreshQwenattempts withunchangedIR/golds;partialcross-modelcontinuationforbidden. LocalGPU nowavailable foruser-authorizedpipeline tests/fixes. ExistingDockertrainingenvironment chosenbecausevenvlacksTorch. Currentstaticinventorycorrected32,615approvedvs32,952rawlabelcount;heldrowsnottrainingpositives.
+
+## 2026-10-02 — Template boundaries and full-data memory use
+
+- Resolve the assistant terminator from the actual tokenizer chat template, including registered added tokens, rather than assuming generic EOS. Explicit terminator overrides must agree with the template. All-invalid render attempts fail after preserving evidence; required pipeline renders cannot commit empty corpora.
+- Full current-data builds must use memory-bounded preparation/rendering on this host; measured workflow input alone projects ~6.3 GiB decoded RAM. Preserve source groups, dedup and deterministic split behavior while changing storage strategy.
+- DGX successor gate must read actual final runner accounting (final status lacks progress/collector_pid) and wait through normal final-status/process-exit/lock-release races. No concurrent second request gate.

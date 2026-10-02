@@ -10,7 +10,14 @@ from scripts.create_training_pipeline import recipe
 
 def fixture(tmp_path, image=None):
     base_recipe = tmp_path / 'base-recipe.json'
-    config = recipe(Path(__file__).resolve().parents[1], image=image, python='python')
+    fixture_repo = tmp_path / 'fixture-repo'
+    fixture_repo.mkdir()
+    (fixture_repo / 'ts-host').symlink_to(Path(__file__).resolve().parents[1] / 'ts-host', target_is_directory=True)
+    (fixture_repo / 'training').mkdir()
+    (fixture_repo / 'training/data_sources.json').write_text(json.dumps({
+        'decisions': [], 'replacements': {}, 'required_default_inputs': []}))
+    config = recipe(fixture_repo, image=image, python='python',
+                    teacher_results_override=[], verified_turns_override=[], static_bundle=False)
     config['repository'] = str(tmp_path)
     base_recipe.write_text(json.dumps(config))
     base_run = tmp_path / 'base-run'

@@ -9,7 +9,16 @@ from scripts.run_training_pipeline import run_pipeline
 
 
 def base(tmp_path):
-    config = recipe(Path(__file__).resolve().parents[1], python='python')
+    # Recipe discovery writes inventory snapshots. Keep those effects inside
+    # the test repository rather than scanning and modifying the real corpus.
+    fixture_repo = tmp_path / 'fixture-repo'
+    fixture_repo.mkdir()
+    (fixture_repo / 'ts-host').symlink_to(Path(__file__).resolve().parents[1] / 'ts-host', target_is_directory=True)
+    (fixture_repo / 'training').mkdir()
+    (fixture_repo / 'training/data_sources.json').write_text(json.dumps({
+        'decisions': [], 'replacements': {}, 'required_default_inputs': []}))
+    config = recipe(fixture_repo, python='python', teacher_results_override=[],
+                    verified_turns_override=[], static_bundle=False)
     base_recipe = tmp_path / 'base-recipe.json'
     config['repository'] = str(tmp_path)
     base_recipe.write_text(json.dumps(config))
@@ -55,3 +64,32 @@ def test_round_is_single_durable_pipeline_with_frozen_runtime(tmp_path):
     config_path.write_text(json.dumps(config))
     with pytest.raises(ValueError, match='different run directory'):
         run_pipeline(config_path, tmp_path / 'wrong-run', until='freeze-runtime')
+
+
+def test_round_reuses_approved_legacy_identity_stages(tmp_path, monkeypatch):
+    base_recipe, run, programs = base(tmp_path)
+    config = json.loads(base_recipe.read_text())
+    source = 'data/teacher/reviewed-lane/verified-turns.jsonl'
+    derived = '${run}/reviewed-lane-identities/reviewed-lane.turns.jsonl'
+    config['reviewed_turn_identity_derivations'] = [
+        {'source': source, 'lane': 'reviewed-lane', 'output': derived}]
+    stage = {'id': 'namespace-reviewed-turn-identities-reviewed-lane',
+             'command': ['python', 'namespace.py'], 'inputs': [source], 'outputs': [derived]}
+    config['stages'].insert(0, stage)
+    base_recipe.write_text(json.dumps(config))
+    state_path = run / 'pipeline-state.json'
+    state = json.loads(state_path.read_text())
+    state['config_sha256'] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+    state_path.write_text(json.dumps(state))
+    observed = []
+    def historical(repo):
+        observed.append(repo)
+        return [str((repo / source).resolve())]
+    monkeypatch.setattr('scripts.create_student_improvement_pipeline.current_improvement_turns', historical)
+    result = improvement_pipeline(base_recipe, run, programs, tmp_path / 'next',
+                                  'http://student', 'student', 'http://teacher', 'teacher')
+    assert observed == [tmp_path.resolve()]
+    stages = {s['id']: s for s in result['stages']}
+    assert stages[stage['id']] == stage
+    assert derived in stages['combine-verified']['command']
+    assert str((tmp_path / source).resolve()) not in stages['combine-verified']['command']

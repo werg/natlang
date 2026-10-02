@@ -3,14 +3,32 @@ import json
 
 import pytest
 
-from scripts.create_training_pipeline import recipe
+from scripts.create_training_pipeline import recipe as build_recipe
 from scripts.render_training_corpus import render_turn
 from scripts.audit_training_corpus import assess
 
 
+def recipe(repo, **kwargs):
+    # These fixtures exercise static/reference wiring, not generated-job discovery.
+    kwargs.setdefault('teacher_results_override', [path for path in
+        (repo / 'runs/inline-curriculum').glob('*.results.jsonl')])
+    return build_recipe(repo, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def isolated_catalog(tmp_path):
+    (tmp_path / 'training').mkdir()
+    (tmp_path / 'training/data_sources.json').write_text(json.dumps({
+        'decisions': [], 'replacements': {}, 'required_default_inputs': []}))
+
+
 def test_recipe_connects_a_checked_static_bundle_without_teacher_collection(tmp_path, monkeypatch):
-    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda *a, **k:
-                        json.dumps([{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
+    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda argv, **k:
+                        json.dumps({'results': str(tmp_path / 'empty.results.jsonl'),
+                                    'failure_candidates': str(tmp_path / 'empty.failures.jsonl'),
+                                    'failure_manifest': str(tmp_path / 'empty.failures.manifest.json')}
+                                   if 'snapshot-generated-training.mjs' in argv[1] else
+                                   [{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
     folder = tmp_path / 'data/teacher/source-backed'
     folder.mkdir(parents=True)
     manifest = {'version': 'natlang.source_static_bundle/1', 'cases': 1}
@@ -79,8 +97,12 @@ def test_token_audit_counts_masked_notes_as_context_not_supervision():
 
 
 def test_recipe_includes_all_default_static_bundles(tmp_path, monkeypatch):
-    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda *a, **k:
-                        json.dumps([{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
+    monkeypatch.setattr('scripts.create_training_pipeline.subprocess.check_output', lambda argv, **k:
+                        json.dumps({'results': str(tmp_path / 'empty.results.jsonl'),
+                                    'failure_candidates': str(tmp_path / 'empty.failures.jsonl'),
+                                    'failure_manifest': str(tmp_path / 'empty.failures.manifest.json')}
+                                   if 'snapshot-generated-training.mjs' in argv[1] else
+                                   [{'id': 'fixture', 'generated_families': ['fixture'], 'source_families': []}]))
     for name in ('source-backed', 'recovered', 'directory-expansion'):
         folder = tmp_path / 'data/teacher' / name
         folder.mkdir(parents=True)

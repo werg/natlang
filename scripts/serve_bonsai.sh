@@ -7,6 +7,10 @@
 # Usage: scripts/serve_bonsai.sh [PORT] [CTX] [NGL] [SLOTS]  (collectors: --workers to match SLOTS)  stop: docker stop natlang-bonsai
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$ROOT/runs/bonsai-generation-disabled.json" ]; then
+  echo "Bonsai generation is disabled. Remove runs/bonsai-generation-disabled.json only when explicitly resuming it." >&2
+  exit 1
+fi
 # Four concurrent requests share the collector semaphore, including nested calls.
 # Retain the 52k-token shared KV buffer and a bounded host cache.
 PORT="${1:-8081}"; CTX="${2:-53248}"; NGL="${3:-99}"; SLOTS="${4:-${BONSAI_SLOTS:-4}}"

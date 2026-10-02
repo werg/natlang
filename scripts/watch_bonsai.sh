@@ -8,6 +8,10 @@ exec 9>"$ROOT/runs/bonsai-watch.lock"
 flock -n 9 || exit 1
 RETRY_SECONDS=30
 while true; do
+  if [ -f "$ROOT/runs/bonsai-generation-disabled.json" ]; then
+    echo "Bonsai generation is disabled; watcher exiting." >&2
+    exit 0
+  fi
   if curl --max-time 5 -sf "localhost:$PORT/health" >/dev/null; then
     RETRY_SECONDS=30
   elif ! docker inspect natlang-bonsai >/dev/null 2>&1; then

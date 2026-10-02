@@ -45,8 +45,21 @@ def improvement_pipeline(base_recipe, base_run, programs, run, student_server, s
     student_turns = f'{r}/student-success-turns.jsonl'
     teacher_turns = f'{r}/teacher-correction-turns.jsonl'
     combined = f'{r}/verified-turns.jsonl'
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(base['repository']).resolve()
     native_improvement_turns = current_improvement_turns(repo)
+    original_recipe = json.loads(Path(base_recipe).read_text())
+    derivations = original_recipe.get('reviewed_turn_identity_derivations', [])
+    derived = {str((repo / item['source']).resolve()): item['output'] for item in derivations}
+    needed = {path for path in native_improvement_turns if path in derived}
+    required_stages = {f"namespace-reviewed-turn-identities-{item['lane']}"
+                       for item in derivations if str((repo / item['source']).resolve()) in needed}
+    namespace_stages = [stage for stage in original_recipe['stages'] if stage['id'] in required_stages]
+    if {stage['id'] for stage in namespace_stages} != required_stages:
+        raise ValueError('base recipe lacks reviewed legacy identity derivation stages')
+    # Carry the same approval-bound identities into correction rounds. Raw legacy
+    # row IDs can collide across separately reviewed runtime API lanes.
+    stages.extend(namespace_stages)
+    native_improvement_turns = [derived.get(path, path) for path in native_improvement_turns]
     stages.append(add('collect-student', collect('student', str(programs), student_server, student_model,
                                                  student_rows),
                       [str(programs), runtime_hash, f'{frozen}/dist/teacher/collector.js',
