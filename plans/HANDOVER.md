@@ -1,3 +1,15 @@
+# Full training inventory — 2026-10-02 15:18 UTC
+
+Independent current admission snapshot `runs/training-inventory-20261002-1508/generated-snapshot/b8deb585-b207-48dd-9a59-eea8793f5b4f.manifest.json` (cutoff15:09:13) selects14,332teachertrajectories/6,428exactprogramIDs: Luna5,716/Qwen3,922/Bunny2,914/Bonsai1,499/Horizon147/older134. Native materialization measured14,323accepted,9rejected (2unlinked),74,666approveddecisions/5,280held; sourceagent auditing9, preserve selection/materialization distinction. Teacherfamilycounts9,951workflow/3,616source-backed/765other.
+
+Generation-target coverage uses6,138canonicalsource/workflowcases:5,069everattempted,4,833witheligibleteachertrajectory,236onlyrejected,873unattemptedunheld,196unattemptedheld. Additional2,192inline reference-onlycases already have deterministictrajectories and5,174approveddecisions; includingtheminnever-teacherattempt count gives3,065unheld, but873is the actualsource-generation backlog. Variants/pairedreducers outsidecanonicalexactIDs and cross-teacherretries are separate, notfreshsourceclaims.
+
+Provisionalcurrentstream inventory112,792approveddecisioninstances +125reviewedlegacyprogram-editingrecords, beforecross-lanededup. Roughchars/4 tokens: generated507.8M/static204.3M/reference15.9M≈728M prompt-plus-target. Teacheranswers+reasoning≈12.5M targettokens. NOTtokenizer-exact/finaltrainingready. Staticpublishedrawfiles6228cases/32952approveddecisionlabels differcanonical6138 (directory1302vs1212);90extras needexplicitcatalogalignment, agentreviewpending. Rootinterim receipt `root-interim-inventory.json`; detailedagentreportpending. Recipe-v31 old4037-teacher snapshot is stale; no newdefaultrecipe/finaltrainingpublication made bythisinventory.
+
+At15:18DGXimportledger309=305admitted4rejected;GPUpreviouslive96%;Bonsai/Luna1recovered/Luna2/Bunnyactive. Fledgeblockedproviderregion (permanent403), no usableoutput. Next907DGXreviewedqueuepreparednotlaunched. Prior50minsleep interruptedbyuserwork; resumeactualsleepafterinventoryquestionandurgentchecks, neverclaimdurablechatwakescheduler.
+
+---
+
 # Live inventory sweep and worker corrections — 2026-10-02 15:07 UTC
 
 - Full inventory/unique coverage/token estimate is being reconciled against current results; recipe-v31 generated snapshot is Oct1 15:58 and must not represent all current generation. Its audited pre-render inputs total64,384 approved decisions before final dedup, including6,138staticcases/32,652staticdecisions. New DGX/local outputs require current admission and a new snapshot; native reference proofs are not additional model generations. Inventory reports pending from Luna auditors.
