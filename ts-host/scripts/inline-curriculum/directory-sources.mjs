@@ -8,6 +8,7 @@ import { buildBroaderSources } from './broader-sources.mjs';
 import { reviewedMusiqueAliasFor, reviewedMusiqueAliasRemovalFor } from './musique-reviewed-aliases.mjs';
 import { applyReviewedMusiqueOutputEquivalence, reviewedOutputEquivalenceEntry } from './musique-reviewed-output-equivalences.mjs';
 import { applyRecentMusiqueOutputEquivalences } from './musique-recent-output-equivalences.mjs';
+import { applyReviewedMusiqueOutputEquivalenceV3 } from './musique-reviewed-output-equivalences-v3.mjs';
 import { applyMinimumAgeReviewedContract } from './musique-minimum-age-reviewed.mjs';
 import { applyReviewedOklahomaAnnualEventContract } from './musique-oklahoma-annual-event-reviewed.mjs';
 import { markdownTerminalNewlineBody } from '../../dist/evaluation/oracles.js';
@@ -527,6 +528,7 @@ return result;`;
         const outputEquivalence = reviewedOutputEquivalenceEntry(row.id);
         if (outputEquivalence) record = applyReviewedMusiqueOutputEquivalence(record, outputEquivalence.accepted);
         record = applyRecentMusiqueOutputEquivalences(record);
+        record = applyReviewedMusiqueOutputEquivalenceV3(record);
         return applyMinimumAgeReviewedContract(record);
       });
     }

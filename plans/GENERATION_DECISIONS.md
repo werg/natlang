@@ -1836,3 +1836,7 @@ Rejected draft aliasregistry accepting fullprose answers despite answer-only tas
 ## 2026-10-02 12:03 UTC — current source admission holds
 
 Root approved ten exact source-pinned MuSiQue holds after reviewing source/question/gold conflicts and matchingreceipt. ID-only pendinglookup stillenumeratesreview; actualrecords requireexactrevision/snapshot/fullprompt/gold, so separatelycorrectedcontracts arenotblanketheld. LadyGaga2017modifier ambiguous,notdefinite contradiction. jaztypoheld topreventstaticbadlabel. Raw/historypreserved/noDPOnegatives. Frozen32/33unchanged; futurequeues currentpolicyrechecked. Five standalonealiases stillunderfinalproofreview; explanatoryprose remainsrejected.
+
+## 2026-10-02 12:09 UTC — narrow answer forms and independent slot controllers
+
+Five exactsource-backed standaloneanswer forms approved;5nativeaccepted/4capturedprose rejected/1rawfulldateaccepted/5idempotent. Capturedteacherhashes separatedfromacceptedanswerhashes. Builderintegration versioned, nooldraw/frozenrewrite. WeakNiger/Jaznotaliases. Sourceholdreceiptrootapproved. SingleorpairedLuna controllerplans supportedwithdistinctnumber1/2monitorbindings, preservingauthorityslot/terminal/hashguards. Repairrepeatsofrejectedsource-validcases explicitlyallowed; nofakefreshness/noautomaticcrosspromptDPO. Ninecase repairdrafttoo short, largerbacklogpreparation requested. Local33 sourcehash630doesnotprove mutableworkspace dependencies; runtime34poolmustincludeactualimmutabledependencyclosure.

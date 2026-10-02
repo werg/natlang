@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Roll each of two reviewed Luna slots forward as its own queue finishes."""
+"""Roll reviewed Luna slots forward independently as their own queues finish."""
 import argparse
 import hashlib
 import fcntl
@@ -48,8 +48,12 @@ def main():
     plan = json.loads(args.plan.read_text())
     if (plan.get('root_approved') is not True or plan.get('provider') != 'openai-codex'
             or plan.get('model_id') != 'gpt-6-luna' or plan.get('model_concurrency') != 1
-            or len(plan['workers']) != 2 or len(plan['predecessors']) != 2):
-        raise ValueError('Requires two root-reviewed one-request Luna slots')
+            or not 1 <= len(plan['workers']) <= 2
+            or len(plan['predecessors']) != len(plan['workers'])):
+        raise ValueError('Requires one or two root-reviewed one-request Luna slots')
+    numbers = [worker.get('number') for worker in plan['workers']]
+    if any(number not in (1, 2) for number in numbers) or len(set(numbers)) != len(numbers):
+        raise ValueError('Each reviewed Luna worker requires a distinct number, one or two')
     record = Path(plan['launch_record'])
     authority_path = Path(plan['authority'])
     with record.with_suffix('.lock').open('a') as lock:
@@ -63,7 +67,7 @@ def main():
             stream.flush()
             os.fsync(stream.fileno())
         started = set()
-        while len(started) < 2:
+        while len(started) < len(plan['workers']):
             for index, (predecessor, worker) in enumerate(zip(plan['predecessors'], plan['workers'])):
                 if index in started:
                     continue
@@ -99,7 +103,7 @@ def main():
                     active = {**worker, 'pid': process.pid, 'command': command, 'status': 'running'}
                     launch['workers'].append(active)
                     started.add(index)
-                    launch.update(status='running' if len(started) == 2 else 'partial_handoff', updated_at=time.time())
+                    launch.update(status='running' if len(started) == len(plan['workers']) else 'partial_handoff', updated_at=time.time())
                     atomic_json(record, launch)
                     old[matches[0]] = active
                     authority.update(luna_workers=old, luna_runtime=plan['runtime'], luna_status=launch['status'])
@@ -110,8 +114,8 @@ def main():
                     state.update(workers=old, runtime=plan['runtime'], status=launch['status'], latest_launch=str(record),
                                  active_campaigns=sorted({str(Path(w['queue']).parent) for w in old}))
                     atomic_json(state_path, state)
-                    print(json.dumps(dict(event='slot_handoff', slot=index+1, worker=active)), flush=True)
-            if len(started) < 2:
+                    print(json.dumps(dict(event='slot_handoff', slot=worker['number'], worker=active)), flush=True)
+            if len(started) < len(plan['workers']):
                 time.sleep(30)
 
 

@@ -1,0 +1,595 @@
+{
+  "version": "musique-reviewed-output-equivalence/2026-10-02-v3",
+  "review": "root-requested-source-pinned-candidate-review",
+  "source_catalog": "data/teacher/directory-expansion/quality-v23.train.ir.jsonl",
+  "source_snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+  "matching": "sourceConversionDigest exact full IR; exact source ID, revision, snapshot, prompt hash, full folder file hashes, reference hash, original primary gold, and exact raw teacher output",
+  "primary_gold_mutation": false,
+  "global_normalization": false,
+  "entries": [
+    {
+      "source_id": "2hop__41723_88472",
+      "base_ir_id": "inline-curriculum:source_musique:d645f0444b38075fbb64:v1",
+      "base_ir_sha256": "fbfe54423b9ac79dfeefa5c4bff5f3b970089d6fe944321166e72a5a52f812a6",
+      "primary": "1,318 - kilometre",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": []
+      },
+      "accepted": "1,318 kilometres (819 mi)",
+      "prompt_sha256": "5e7da6cc2790561c92adf07e1d70559ae41df1ba1900555697cc5abf145e4ca0",
+      "reference_sha256": "b234b1eb902446c4655f319706db5685c8f21f94b984be8d5867c6db9b2be593",
+      "folder_file_sha256": {
+        "articles/0.md": "61b3d7d1b8fb9bdf0e645e1a4b362fe725ce6f0f4fd334cb793cdcf70627c455",
+        "articles/1.md": "cccd22aa093df50b2756b78ac468062cf8fc2ea35b0464dbc8153a9a314505b8",
+        "articles/10.md": "6a1844e22b2b1a7743523e28f6357533eb387a2e097b9474274afefbe6662ef7",
+        "articles/11.md": "e8e3b4ca77d378d4061f0fbede00dc9d29ae0470656310d0a10cac536b1588b6",
+        "articles/12.md": "eeee13fc5aa447fa198d3bda0b35cb6dd49b21257006f4d448b9f675307cad6f",
+        "articles/13.md": "7a77d26efd357ccbfc9989aa43db7eb7c439ba1e3e187262a319282eb463dc66",
+        "articles/14.md": "f8fc3db6e7b333000b4613338e23ec32fa15566ffb70f60fa62582ba142e9254",
+        "articles/15.md": "71ec9857d4f9a487452e30836041b971f096cabcbcd3e4c22526ef5597098671",
+        "articles/16.md": "9e103907d7a5f0f3d4f59fc1f5aed7a73640bb1b648376afd4708b690231f59a",
+        "articles/17.md": "61d82fb8df5336ebe28ba857186e38afa546ecce30949f3ccbdcf1731cf677d5",
+        "articles/18.md": "8ae751bf4847b35e5c644a971052211163370d60ac4612fcc6b1c5abc13679de",
+        "articles/19.md": "59846e066187dd505ec1287880eefe0543d92dd2db1ed0e5c2aef3d8027c03ee",
+        "articles/2.md": "7cb93829cb2307ca795122fa702d07f836d45ece4713b388dfae6d90f6f58cb3",
+        "articles/3.md": "73b446d79d49867fc46929125c77a14935456fb90e317b951d023cb8bf3e3a02",
+        "articles/4.md": "c217698d5ee68859ba37e0382978e2e78d8bb53e556e554340af9a8be890b9c3",
+        "articles/5.md": "2a0b772cb5318fe79515b00abc1dffa3ab04157ad1f3d0727cff52323d214a29",
+        "articles/6.md": "c5c51711cc565458a966b88b34255babcd1178a4e74b50904aa3947c63476905",
+        "articles/7.md": "d1ab52a52650ed6bc7fb091e7b989696f4eaa68d83b25685270db3356395c5b6",
+        "articles/8.md": "ebfe5ffc61be8de902043c1d8438231bc9bde0f08ed2e5220988cd8745610ec1",
+        "articles/9.md": "52a10fb6c2280f0007eb30196b3195368e3ca30b528f45a2c4a68093a159ff1a"
+      },
+      "source_pin": {
+        "source_ids": [
+          "2hop__41723_88472"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:41723",
+          "musique:seed:88472",
+          "document:08a4e7023e3c6ec2b3586cdd61ef5350d2f7f1209ad93814964f50b59c43f4c7",
+          "document:7c3895b4bb56826dd93d0ae8ded2629135b83ac63c5c67e095169e1c82f63e67",
+          "document:8b3cbfca510c1c81017e5ad1241ab1aa448df562c3cc949414d3b866e7103804",
+          "document:b4016a27ab0573a6c44b3dadf1be6beb8e9e6328cc6739d88fde73fb622d18ff",
+          "document:9590f341f35c4df7f44d2925c436b5a1e1bd1070c1280b5dcae06e712744514a",
+          "document:42aa4c463372974f29375d4993ff711a9d5c2c01377cd68126a3e746538a4e9f",
+          "document:84108f5c596c834d7748260ed9ab3aa32255d6135d31c03cb253660dee0c0db7",
+          "document:54692e1bcaa98b4687d4afc2936ff4f2a18b2e26952aeaa55f8bb39a52723c67",
+          "document:cb95fc87c756f7da1ac59f1d7d68dfc81e7459901aaa1dfa8480dc5740cb37b4",
+          "document:b1536807a6bad5eff45f7e73dfefd0f24447de2047c06dc155fca8752d0aa613",
+          "document:532352015b2a6b15fd197726a111cf22a140142a2200d6383db178d5851240c9",
+          "document:5ce75f98766c1caf1228262c22637bfb1ea6a209ca10bcd41062c55e5ccc917f",
+          "document:3860643aa11ab3cbdcf4eaa118579e159a1e2a9c8998f9b0def0877e00915a7e",
+          "document:5fa942927eb208cfe00b595897b69bbb1f222e608bf7e933f8d175b8b279dccf",
+          "document:d200e69ef65b00832b485eb19a9377641885b6d6f27538e29a4a5ff08ea05ee8",
+          "document:807f2ffe992570692c03350b0524eba9d294cb1a7cc549ed0182c47aaf94c6b8",
+          "document:83eaaba8bbfbdb91ccf1ab81caa7b9ada3a2c08ad047a7bf0c5c204920ff5667",
+          "document:14f41663d975bfde7701fe4d3403f414614ce0451030305bfe673ebbd02d861e",
+          "document:7177141d9f1e6459652d1a25e589223bed8e22304fffa2439023c1fb1119ace6",
+          "document:a91e4424e432bf895e6dc6e1db5b596ebb64e444dca80597d19b428867c2e329"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "2hop__41723_88472",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        },
+        "license": "CC-BY-4.0"
+      },
+      "evidence": [
+        {
+          "path": "articles/17.md",
+          "paragraph": "The Beijing -- Shanghai High - Speed Railway (or Jinghu High - Speed Railway from its Chinese name) is a 1,318 - kilometre (819 mi) long high - speed railway that connects two major economic zones in the People's Republic of China, the Bohai Economic Rim and the Yangtze River Delta. Construction began on April 18, 2008, and a ceremony to mark the completion of track laying was held on November 15, 2010. The line opened to the public for commercial service on June 30, 2011. This rail line is the world's longest high - speed line ever constructed in a single phase. It is China's most profitable high speed rail line, reporting a 6.6 billion yuan net operational profit in 2015.\n",
+          "paragraph_sha256": "45e3527fdbdf76fdbc2a36a06c40be04fd6cd39ff2deb91aa4deb1def6d64806",
+          "supplied_file_sha256": "61d82fb8df5336ebe28ba857186e38afa546ecce30949f3ccbdcf1731cf677d5",
+          "claim_supported": true
+        }
+      ],
+      "teacher_artifact_sha256": "ed2731133a662c520d80d79bcadeac5a6adc258cb14302f7f7acb402ee89d2a9",
+      "teacher_program_id": "inline-curriculum:source_musique:d645f0444b38075fbb64:v1",
+      "review_conclusion": "This exact standalone answer string is supported by the pinned supplied source. The captured teacher_output remains raw evidence and is not admitted unless it exactly equals an accepted answer form; no extraction from verbose prose, substring matching, or fuzzy matching is permitted. Preserve the original primary gold and source record.",
+      "captured_teacher_output": "The distance by bullet train between Shanghai and Beijing (formerly Khanbaliq) is **1,318 kilometres (819 mi)**.",
+      "captured_teacher_output_sha256": "82879c66cfc49523f72524bdfefa7dd93afac609b47e06fdcf26f182410221ac",
+      "accepted_answer_sha256": "177f31f179b899de53bbe8e7800059b4fc52562ae8bd006d8e13e2589b2e124a"
+    },
+    {
+      "source_id": "4hop1__366739_106790_158589_67700",
+      "base_ir_id": "inline-curriculum:source_musique:f7d029b1832030bf033a:v1",
+      "base_ir_sha256": "fd81c3b3dd9f0adebf4cdd367252d6566ce1107f380bec9f5559d3206656978f",
+      "primary": "4 April",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": []
+      },
+      "accepted": "4 April 2017",
+      "prompt_sha256": "82b3d27bcc35a4517c99f008df9230e9f6731f5c4d81544d5f18ac1b8d87773c",
+      "reference_sha256": "f84bd3b6e9a99079f10238a36c2b3c1a99f8b3df02781143b2e245599a27dfd7",
+      "folder_file_sha256": {
+        "articles/0.md": "58225c72033cf86fd82bd981429f80b084352b65ee6c45c18deb5c38d859b9a7",
+        "articles/1.md": "4189e21230e90446a30b0714aa1a42e7a2dd2c03d52aa5c30a1a59fd0d0816e2",
+        "articles/10.md": "68cb62624a446f68df1cafaf7338c13abf82265465dbf73cd8688a0ea9428d83",
+        "articles/11.md": "c016da5bb695c3d467d01bf1a0d7361605514518328e63a3a1cfe0c40d73c7e6",
+        "articles/12.md": "71854af3dfdc8ca6efbecdcb1f1fb062199ddfcef6a9ee8801d3f0fc7fbbd37d",
+        "articles/13.md": "165660b8427a0aecfeb9fc23cfa89facd9ab32a139c6855b2c12d1b364ddfbc4",
+        "articles/14.md": "b6a6210aac716f88afc2cb9df0bb655b9d4fb5ae596d66b00890ef54aeea4710",
+        "articles/15.md": "d06e7b67adabf4f06cd544f27e714da68324dfabe41877626362ebc292162946",
+        "articles/16.md": "d0b43f849cf1d89b1f55b96c11025702799ea855df47dc2575adc63056467acf",
+        "articles/17.md": "69abd7b30692577a09071482f7c4596fd8f5b6f4e911325eb116471fc16aa009",
+        "articles/18.md": "30a84d8c162b2a2c8067c112cbdebb846527c034b34da61082515ca8018e280c",
+        "articles/19.md": "5fbb176295eaccc85ed6abac04fe8ecea3dafa6999582c768554ed66a040f52e",
+        "articles/2.md": "b223a8e0a524f23e0135aa7800e1231dbdee0f6acd26c7e928df69c9e9c4e356",
+        "articles/3.md": "cd463ad8d4299741064bc71ea016d2fc78b4a4899e1c0b09e9da36973b8a1350",
+        "articles/4.md": "d8bae331c921000e0533f11255675eaa286a53f00a884299d833bfe5c94b14a6",
+        "articles/5.md": "8a97d951de973ced7cde8aa7ef472086935b69688b297a02c0f82316190af747",
+        "articles/6.md": "724d5bf6ce3514b0f9af5845467e987a7a781f7091597253f5c79d90ce80a549",
+        "articles/7.md": "0ab4faffb00f093cb08085bbe08de8e137b8b776dfb2d0cdf55fbae10f7a1107",
+        "articles/8.md": "4a0db975b9f7b8d882649832cc2155d3a293826ea2b24864781a62fcc4768c34",
+        "articles/9.md": "069a25aa7a67c6ae75324fff9c312d641d835bd625e908ce15cdb77c0b5833dc"
+      },
+      "source_pin": {
+        "source_ids": [
+          "4hop1__366739_106790_158589_67700"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:366739",
+          "musique:seed:106790",
+          "musique:seed:158589",
+          "musique:seed:67700",
+          "document:1e6e6429410991b74c2c22e82b688a76c0db068a29718f7350525197117f92e0",
+          "document:3361a37bb45ee988c30209640c1701cab81cf9798ca050b85cb8195e7f3f792a",
+          "document:db54775715a46db7463c209f41e37d2147e309c76228635ada3f3785b00b71e8",
+          "document:11c614edcd38f1533a71498783c3c013e151f4358493673392ba91260dd16af4",
+          "document:8a86061766ca132d1433e5f052caa4dbb9d839981a86f7c9f004f78bdbc18f29",
+          "document:31e2dd874e0a50036eb3e4c55d01cf34d4053cce03264999466979a905432c53",
+          "document:5244a64f5f250b80cea2d1f8ebb45528b05b60d0aab62eca2a411adfb520a617",
+          "document:b7d09417028ec045934853fe2c5ec05a2154ed821eaa8ac75a1cccc868b547f0",
+          "document:646032a8add70a1b2a85ed0a4b54f4fccb39ce72af271602e063eb968a351386",
+          "document:46957d19aecb755ada0a797f7f77992c43eb487f275fc12afc89e1bdc577f7f4",
+          "document:6b049f19242bb9bd757b5d3c7023515b6df4700a4b1cb3768b10dabe10646a38",
+          "document:bd8bcccfb6b1e3695de92bf128e8c439fb8ed3659553bbab19cfcd341bf57509",
+          "document:836ed9bc9c378f0ae15f44942d601e11fea47c3010b67612153a2566b9082d07",
+          "document:3f1cd600d2e1818c24ba9bbee9b5d798dba46b27196ccf1486eb55c3b1e28f1b",
+          "document:e865d5aad13172179cb5db96879cd2b3aefe22eaaf46e4e6bde18d35b74bd684",
+          "document:0e6d15ae4c677b9dadfa6db6801b5fe72975db0195035dc28dc2bbd3ab88ad45",
+          "document:68283522ec2f25436dd8edc6dcba09440b30c3fcce605f34452aaacb5fb7503b",
+          "document:fd75cfae463ed79ed171056bebeba020e667ee835453c3b5845764509456b356",
+          "document:26510ba7c5d8a74f79ff5582668977f57ac1fb75ba50b794cf8fe555dafc7db1",
+          "document:6022ffe90d5c077a11e8ce34ee550560876b6c0f96178acbe38545f17ff4675d"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "4hop1__366739_106790_158589_67700",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        },
+        "license": "CC-BY-4.0"
+      },
+      "evidence": [
+        {
+          "path": "articles/0.md",
+          "paragraph": "The Khan Shaykhun chemical attack took place on 4 April 2017 on the town of Khan Shaykhun in the Idlib Governorate of Syria. At the time of the attack, the town was under the control of Tahrir al - Sham, previously known as the al - Nusra Front.\n",
+          "paragraph_sha256": "4b840b9f1850c790824ad4c0ebf3a2c7656e0ba307a5e5458e03134dfa4cd796",
+          "supplied_file_sha256": "58225c72033cf86fd82bd981429f80b084352b65ee6c45c18deb5c38d859b9a7",
+          "claim_supported": true
+        }
+      ],
+      "teacher_artifact_sha256": "ee25b7374f8b1f39645e532e9e55a418e0363aa7109ddd7216b6b27ca21a1f09",
+      "teacher_program_id": "inline-curriculum:source_musique:f7d029b1832030bf033a:v1",
+      "review_conclusion": "This exact standalone answer string is supported by the pinned supplied source. The captured teacher_output remains raw evidence and is not admitted unless it exactly equals an accepted answer form; no extraction from verbose prose, substring matching, or fuzzy matching is permitted. Preserve the original primary gold and source record.",
+      "captured_teacher_output": "4 April 2017",
+      "captured_teacher_output_sha256": "d84a0a619db5229d5cc3286b09a1ab3f32637c18c2d0d57fe62a3c7f5482b971",
+      "accepted_answer_sha256": "d84a0a619db5229d5cc3286b09a1ab3f32637c18c2d0d57fe62a3c7f5482b971"
+    },
+    {
+      "source_id": "2hop__721756_36839",
+      "base_ir_id": "inline-curriculum:source_musique:b560984a01f7cacea873:v1",
+      "base_ir_sha256": "5fa104a87b600ec826619e08337d0907b5e072b7fda7eac92307990d6c88763e",
+      "primary": "First Sino-Japanese",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": [
+          "First Sino-Japanese War"
+        ]
+      },
+      "accepted": "First Sino-Japanese War",
+      "prompt_sha256": "6a4f5c09779703173fa89052251f0bc166c13c0a5edeb4a3a0a0839dc2b0b6d1",
+      "reference_sha256": "b392acaf52579362bc1415e53b64f58766c3578434b4fc8ada774bccc5e05a33",
+      "folder_file_sha256": {
+        "articles/0.md": "00d9cfadc1f7f6b94c4e6d04dfc0465f1b9644a2bf269c58e1086457d4c49080",
+        "articles/1.md": "9caf62604dc991b999c36cea0c2679a050b810472d8acfcb8630d4abcc6c824e",
+        "articles/10.md": "f367a87dd866fc7ecc07774c198307d845acd570b189c07a63104ee54e1bb126",
+        "articles/11.md": "6cfabc5f95869a086e7f567bde4bcaa4ce3d592583872ff7e858e2b6ee80e89e",
+        "articles/12.md": "6507252c2861fdba97f3c82aa80e02fa922271260ab76700ce638c326a5ce186",
+        "articles/13.md": "ce9423fae68d13c5ac000e7c03b9b2551bb708f013f8816fa3e5dc0e0ed10a3c",
+        "articles/14.md": "3153ed0345e0c1b5e1c662d9ada778f5001452091e181aced3f9af9bbcee7300",
+        "articles/15.md": "33812d8104056a94fbeae2d406c9526506bc4bb37bce28900e42d95c4924cb07",
+        "articles/16.md": "b3b975ce30dbc9e3478b87dcd24d65d286ff1db824f638d68fc21cc505b2a40d",
+        "articles/17.md": "9c2f0a152301c202f7554cdc9ce8f842a1a0621ec66f202b8e87c116443bb5a4",
+        "articles/18.md": "45aa192753cc42dcac2ccc913cb737f48e0791071f9b60c53f3cfd9603fa2b2a",
+        "articles/19.md": "c9c60d6ae9b382ddab8f0a5216397255e229c4f344930a37ae27efd7f215449a",
+        "articles/2.md": "62b489572f25379830f308427c58fd6e41c78122963396d52b6b90f0c7005b87",
+        "articles/3.md": "15523176672ecac5c210691e4bb5b17980f4f75b829d785136865523779d3fb1",
+        "articles/4.md": "9c27b7cc69f5b18231d7811b5d431cbcc9665245aaf71a81899426999dafe917",
+        "articles/5.md": "ed77ccfcbfcdafd8523c545275acaca4cc929aaa44bdc122bb899db9a59727ab",
+        "articles/6.md": "c2d3662de920e17c02ec193254ad5c8cae15a7b8d11ecf42639d6a307ecc65a6",
+        "articles/7.md": "2374cfad3070c2872b22df03d4813a97160fbe216f552f39cff99adb41d496e3",
+        "articles/8.md": "db080dd6bab3fad4b234070fbbe7803e6dd42e9b26da1c7c5c839b5b51b45c83",
+        "articles/9.md": "f4edf9cb91c7e2df4e16424a1de8494a3b2068bc7eeaa3f9f20954640cb5f315"
+      },
+      "source_pin": {
+        "source_ids": [
+          "2hop__721756_36839"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:721756",
+          "musique:seed:36839",
+          "document:dc82028e575355405c5852fb3c2b649d88e8a25f8a03370e0d2be3484b4bea1e",
+          "document:e961f44a3b8aa33bad0fd895dcd6f445ddbbf6aebeb7d19016a7ed531a82e4a8",
+          "document:14d19ffd036b433efae455672e0fce941b2c3cc2c531a843e4e78112fa58d693",
+          "document:07ad0a7b0c7bd5044ee6d0855d487e88cc7395f9883ab763ccecf20d49c15874",
+          "document:e909d059455bb55402b58b32f8076ef4140dbb7b173f7bf1a45596fdb0783d9f",
+          "document:d1f7d94cc8a924b7fcb23b722a65a55529370d13e6479d82b812288d16e508df",
+          "document:416c2f36afd0115649aca39858a029d94d002651fcd5d517651ca647237f353f",
+          "document:ded7a28c7d846e7d57ce25947c7423ff85cc37fd652a70b9e53c54f85a2a701d",
+          "document:8ff832afa6f33edcb1430b296698584351b2491413d3f45764dfc78a136d749b",
+          "document:a5f282f0b9b8ea0cafaf3133ee9b6dc7d8a56b30449b02e5555072db1368ff68",
+          "document:9e6c83148bfa39441011dc305fb95b90b5da9fa1ac18705fc04cee51cab9cb8b",
+          "document:a69fb261d6b2407ac2adbdb51b4fe3a522f69ffbe8c382f26b54114d49aef6fd",
+          "document:453d3405176f07c95f5c023b7afa5306867d5ff6f280380e875996e43fe3765e",
+          "document:02e0f32c3d98d51d011695da0935d31ec8e5c59c320ad4bc931e27b8ab42fcf1",
+          "document:4625411f5d17b3b66e890634d5544eaa5792c732e66436a5259f2f96ceae8d5d",
+          "document:0102653327f340026ebc01d510333b734348f9adc4a9f1bd9dd18993f87cf792",
+          "document:bef8906a668bfad59e2cf6e1e3fbdd904038bcb89c52850946d17756f6a9c357",
+          "document:3825ab6b432ed770820f26eecc7671a86343757fb8ddfa8ebfc90807b1ba3c6b",
+          "document:78405b99a5c8c5334123f9213920fe927b7ff0f89332b52fa2b98c00f60699a0",
+          "document:bb3827949145bbc81dfcfe0f359f2e4fb43ad8b2862d9c997382109578a1d6bb"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "2hop__721756_36839",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        },
+        "license": "CC-BY-4.0"
+      },
+      "evidence": [
+        {
+          "path": "articles/13.md",
+          "paragraph": "Qing China reached its largest extent during the 18th century, when it ruled China proper (eighteen provinces) as well as the areas of present-day Northeast China, Inner Mongolia, Outer Mongolia, Xinjiang and Tibet, at approximately 13 million km2 in size. There were originally 18 provinces, all of which in China proper, but later this number was increased to 22, with Manchuria and Xinjiang being divided or turned into provinces. Taiwan, originally part of Fujian province, became a province of its own in the late 19th century, but was ceded to the Empire of Japan in 1895 following the First Sino-Japanese War. In addition, many surrounding countries, such as Korea (Joseon dynasty), Vietnam frequently paid tribute to China during much of this period. Khanate of Kokand were forced to submit as protectorate and pay tribute to the Qing dynasty in China between 1774 and 1798.\n",
+          "paragraph_sha256": "fbe7192b31daeea3b9b9b619e160815dcfbdfc51e7a80d3be697f2f4ebf883a1",
+          "supplied_file_sha256": "ce9423fae68d13c5ac000e7c03b9b2551bb708f013f8816fa3e5dc0e0ed10a3c",
+          "claim_supported": true
+        }
+      ],
+      "teacher_artifact_sha256": "9e99ddd09a70203c72f83c7df3176b8efeea0b64f73511129d11b72843347544",
+      "teacher_program_id": "inline-curriculum:source_musique:b560984a01f7cacea873:v1",
+      "review_conclusion": "This exact standalone answer string is supported by the pinned supplied source. The captured teacher_output remains raw evidence and is not admitted unless it exactly equals an accepted answer form; no extraction from verbose prose, substring matching, or fuzzy matching is permitted. Preserve the original primary gold and source record.",
+      "captured_teacher_output": "Based on the articles, Nan'ao is located in Taiwan. Japan won Taiwan following the **First Sino-Japanese War** in 1895, when Qing China ceded Taiwan to the Empire of Japan.",
+      "captured_teacher_output_sha256": "9cb8394f43fb32e2f987a3e21171ce91e006afc7a6c193e9a02965c2a55e7304",
+      "accepted_answer_sha256": "0ca07e081f9109ba7c93a6545393454ca70f7e46a00b048a3a3978df9d011434"
+    },
+    {
+      "source_id": "3hop1__104385_77757_753032",
+      "base_ir_id": "inline-curriculum:source_musique:4aec318040e106ef9232:v1",
+      "base_ir_sha256": "7462a7353cbb3dc1580e3d3020dd5bcb0c5e8c8c86fb7095c168f5648c4d96a2",
+      "primary": "Khagan",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": [
+          "Great Khan"
+        ]
+      },
+      "accepted": "Great Khan",
+      "prompt_sha256": "a271b4ad5650cb16887cd57bb6e543c856802f7e6434e886e267ce163dc78953",
+      "reference_sha256": "b07f824ca14854cabce8d450218ae085cf648458a9c5365888b7227ea9fa2402",
+      "folder_file_sha256": {
+        "articles/0.md": "4bc99b199bbf77b97cdc87f15b711669ec24de4cbab5b3be0a426d44f4a79766",
+        "articles/1.md": "4a0db975b9f7b8d882649832cc2155d3a293826ea2b24864781a62fcc4768c34",
+        "articles/10.md": "e757f18ec43d2c9aff0a39fb4f1410689ad8effa97f53da58959cc6273bbd9fd",
+        "articles/11.md": "86000b8ec748da7aa610e6dfcb3c94b9f1e509fd1d7932e18536679d30b87c07",
+        "articles/12.md": "6b4f300aeb54fbaafc06e7382723a67123cb3baa002a4b13b1d3ceff796a69d5",
+        "articles/13.md": "2d52ba980707c83d7a79aa994ff00cb14e10757b36ee9295d879499a17a34869",
+        "articles/14.md": "29ffa844bff088962949160e28feec6371d7eaccba7b9eb9267d5ba07a46fca1",
+        "articles/15.md": "37e740a49a8d13171dde621672cd2da77da81d2d4944cb200addb0bd502b52f6",
+        "articles/16.md": "06079763a44aa6f5a70d9d5689a2e87c90b785759a1f89de0dedd37544859eb5",
+        "articles/17.md": "f48e2e27dbec89f574b1e687d5d01d8aadfc439066ea0eb572595806d62c88b0",
+        "articles/18.md": "4e7884020d899d721637a222df2c21b481161877c345c78f04a598ad6274e3ac",
+        "articles/19.md": "f5b8a6311493aa57eca9c5e7251c65e4aa0834772b0d855ae47a01c2570471d7",
+        "articles/2.md": "177e60c115aaf10e6840ed04abfa958ad25d969bdf9cbb713552b5534e016872",
+        "articles/3.md": "4073aa5e666d2aeef39318da0a9bfd10bd255a51d8e0d83837d2032b020a9ca1",
+        "articles/4.md": "041a5526008b7025e2adce564912613d1c2020a8229c4afc65e1881bbd9c3241",
+        "articles/5.md": "6ea40cb00d7f7107beabd3e2d09b52c576abca11d89949ca57bddda510907586",
+        "articles/6.md": "1c650356fbabd4ec2d1f595051522b7b0c64d76871e2dd83e873bfa504e6c33d",
+        "articles/7.md": "e112cb16130341b2ce0fb589d68320afaf13b0653dbaafa5a1c1195da7ca26cb",
+        "articles/8.md": "f6090ab4586237b1249fa5577cfb5241da599e0f76401167eb5b6fd730e9b078",
+        "articles/9.md": "871d34593b63f9c6e747c9994cdd71d140da1cbe3be5d38d34970dabd1f1fe43"
+      },
+      "source_pin": {
+        "source_ids": [
+          "3hop1__104385_77757_753032"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:104385",
+          "musique:seed:77757",
+          "musique:seed:753032",
+          "document:af97ec32daaaeaaa8c1698d60005fa0188cb6772917205b00c5ba781a6cc1b42",
+          "document:646032a8add70a1b2a85ed0a4b54f4fccb39ce72af271602e063eb968a351386",
+          "document:35b209ab166583e3e48bb5afe7d5b3bd7f2b6dc449be475963d24b522f6ba61e",
+          "document:77c68d83aa916e71a369cc42d26bb5d0fad3793604fd7617a0e15c18b7a55e9b",
+          "document:12378cb5916abeea1ce24a595c5211f8423d40aa07916c1e78b71491983fc8fc",
+          "document:a17c9f07a3674080b54d6e223f8523b75d460bef02dbb5b5544d0cc2f09e9f85",
+          "document:b84db24c7645321dc67080211c3a82c9683355ed6e0431c63babe0871c44ef62",
+          "document:a231e4cef2370877924e59af55190f6536397951a3141f3b45816a20722b3dc8",
+          "document:21512f86c0bf897d3b477d759c47e40e11d6eccf44d5f69719f5e694caa9ef10",
+          "document:bef6ea319ea921d85107c662364a5c465635b97c465442621f7b9330da437c66",
+          "document:0986c7906dbbde4fc658b74661f6afb72f0665658265c8c28d00cd1b051ac4b7",
+          "document:9cb5cc7e23c1073efd9c28e8866ba3c0004c58d05e26b1a4fd9260b7759e96e5",
+          "document:64a53c0f5a1269bc7c1412da7c27b8e287d7281d90f79a6507a069d5ee6102fd",
+          "document:a705af9c670c4b767bca524fd766e9c215a4b0ec8a9028829827675eee003ab8",
+          "document:9068c27150b9ea1aa07dccd0b24c731a02c3dbd9f5ecc5e243486e0db0ca9c0f",
+          "document:6d167caf7c1235b285fd51b8ef8e330d89ef784d69cda74ce28e954daf76fae7",
+          "document:1693ff8ec684461af8d23a5c3d746711f2c7ad64885df3c52dd88a819ae863ba",
+          "document:bb95f6d86f9248415635719000d1d783f0499c1f18b6f6b0909a0f0d605617ef",
+          "document:6c202f18da5eb3796df244e77173795f00ec733edf2e9748157c9347965976ff",
+          "document:57fd0d92a962e8c5d699b1134cf704288fbcfa8fd9f309bb27bfd7979606935e"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "3hop1__104385_77757_753032",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        },
+        "license": "CC-BY-4.0"
+      },
+      "evidence": [
+        {
+          "path": "articles/12.md",
+          "paragraph": "Kublai (; ; ) was the fifth Khagan (Great Khan) of the Mongol Empire (\"Ikh Mongol Uls\"), reigning from 1260 to 1294 (although due to the division of the empire this was a nominal position). He also founded the Yuan dynasty in China as a conquest dynasty in 1271, and ruled as the first Yuan emperor until his death in 1294.\n",
+          "paragraph_sha256": "ab9dfdd2ecdaaf01995f91e3ce552a4c719ec653be38b4610a4873dfcd10b68d",
+          "supplied_file_sha256": "6b4f300aeb54fbaafc06e7382723a67123cb3baa002a4b13b1d3ceff796a69d5",
+          "claim_supported": true
+        }
+      ],
+      "teacher_artifact_sha256": "44457061e4b1adcd524612b30ffa28b323a7b0c41eb27702352dc52aa84a5b38",
+      "teacher_program_id": "inline-curriculum:source_musique:4aec318040e106ef9232:v1",
+      "review_conclusion": "This exact standalone answer string is supported by the pinned supplied source. The captured teacher_output remains raw evidence and is not admitted unless it exactly equals an accepted answer form; no extraction from verbose prose, substring matching, or fuzzy matching is permitted. Preserve the original primary gold and source record.",
+      "captured_teacher_output": "Based on the articles:\n\n1. **Rao Shushi** was a senior leader of the Communist Party of China (CPC) — so the country is **China**.\n2. The **last Song emperor** was defeated when Kublai Khan's armies conquered the Song dynasty in 1279 (Article 2).\n3. **Kublai Khan's** position was **Khagan (Great Khan) of the Mongol Empire** and he was the first Yuan emperor (Article 13).\n\nThe position held by Kublai Khan was **Great Khan** (or Khagan).\n\nAnswer: **Great Khan**",
+      "captured_teacher_output_sha256": "97ddff86b80df0ce53057c3a5978b9632b46603f93a1f104bf329642eb409a8f",
+      "accepted_answer_sha256": "2b41b56927f6071a69ed030450982cea635eaf497a32c1b8c53734b9192d80f3"
+    },
+    {
+      "source_id": "3hop1__33286_22372_8184",
+      "base_ir_id": "inline-curriculum:source_musique:bdc2dbf8f6e45350a1dc:v1",
+      "base_ir_sha256": "e7f5c8627f5b73ded12fe9949d44a6ef40ca0f657389fa8bd59840e3b10206bf",
+      "primary": "Switzerland was neutral",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": [
+          "Switzerland",
+          "CH"
+        ]
+      },
+      "accepted": "Neutral",
+      "prompt_sha256": "dfa3a3aa1245a5fa894c855bffc8b1f23b090d4de4cd8c1480a7b981d8d63a52",
+      "reference_sha256": "2566518fd8bf76c1919eff6851c0a4bc557314d76f509956372afaccd492d2c7",
+      "folder_file_sha256": {
+        "articles/0.md": "9d3287a1ac6fcb86ee93d1ed31ddbf30d91d07ca4ab7929c6fb7605f21065010",
+        "articles/1.md": "4836eae25924ebf1e79afd0970519cf3528bffebda29099469e44a1ba886c9b8",
+        "articles/10.md": "4ba50bc0984e3505c232fb941570018f9cf63f44d9771808e1dfc83ac9e301cb",
+        "articles/11.md": "52c3d4296e3bdbc60f140a2b2a4110847732a7eba4dc43688517739048ad8a2c",
+        "articles/12.md": "223f21039a16c81abd68f0f06dde24f2b3e0d000064956972f999f0ee9a9f3f2",
+        "articles/13.md": "12cb9e7a6853543d69bdd08ff2f02bc82c8aa1ba057f41ac29d8972cb092c508",
+        "articles/14.md": "1c0facc32f47c5a00f247e5abd8351c7f2c862f77b07b42a40c6ee00f1a784e0",
+        "articles/15.md": "868dbd4bef4eb00abe42ff79ccc55ebebaf1642040c5525cbe405315f6d5c464",
+        "articles/16.md": "2d8f8ca017ebf30005ebde6184822699eb1389549ea287cccce04883c2075aaf",
+        "articles/17.md": "9aa445b02f8b4e210f6bb19757f548bebb27776814ac94755e69e4566b5daa19",
+        "articles/18.md": "d9668460ba2624a7a4b08dcedf64bc099c9ce2aab28508cd628f5965e3a53e2b",
+        "articles/19.md": "53c141ff7c80b887c7c59b81775764b124d06c4e933e0d549f305e71b47d3251",
+        "articles/2.md": "aeeaac9dee72caf83aec904d1283285236bbd9778728245ca5a932deeba2344d",
+        "articles/3.md": "d1261b2c3783e4b833fe400c74cf2405783874febbfafe154acdbc9f45685ed4",
+        "articles/4.md": "f4f9f49dc8616cdf3f9d324688c563693dc857bea8eb73bbfca2ad3e097c5d1c",
+        "articles/5.md": "e96862a9e2e2243c1cb5e2e73077a5d22328a814548908629cf8e81896bea31b",
+        "articles/6.md": "d2b0a67254baa6934aa469a1d49ed8ad23995bff58b05f87e9bd99186c688238",
+        "articles/7.md": "36af50bce978a56b54ec37e915d74c84f4d61b810d4fbaa4e3455e93d34f5a91",
+        "articles/8.md": "5c332ed37917f12f8698dec790598aaaf31aea5acedc7f246e9b666819dca9b6",
+        "articles/9.md": "6a712ec602ece7775085ae61fee2d425c236a9c8b4b64db7c48e7821cf6476ca"
+      },
+      "source_pin": {
+        "source_ids": [
+          "3hop1__33286_22372_8184"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:33286",
+          "musique:seed:22372",
+          "musique:seed:8184",
+          "document:256de47728b7ac5714f3cba0e6579edbe05d871581ea2b6ddd139d699b44b150",
+          "document:52d16ee85dbc16632e0e33104fe6ca936ed5f55dd4ad49e6754502d17fb219c1",
+          "document:572667a5532504b50cdf0d01d386a0f9ccb036b21bfa30730ff75a07d49005cc",
+          "document:bfc4afde9ec5431d90383cd2dc298974fba2564915a78ce61e7d470c583a0c16",
+          "document:00654c1a1ce9db3f97d8d0d0d07130e5d908037f6adac774d6bc9a5f03f3bf4a",
+          "document:9a12d28f5563dff995fab49cd0c675466ae75f0df7215ea372e516987193f236",
+          "document:84ce0b8367a915403112b6ecc6fbba291f92d229249b55b8340b8bb87af2d175",
+          "document:36fc3e262234141e1f41a90cff439e3689229e9bfec1db5802ce2c35e619d104",
+          "document:af47ea2dfcb4a36973b0a9f8dcdaf1a348e32c8955458b619f3a1a3fbe815d9a",
+          "document:33680c19aec705b5b72ab2b700e5e85aacafa8f0376679de36887a9051ad6a90",
+          "document:030a07b7b8ddc70294c0cf44ed536f4da91aa9136d030cf8b6f19ab4882ce78f",
+          "document:f4779bbe55242fb3d8b89b83b6d143e7abad44929ae9caf91ce7ed864e578943",
+          "document:607116d4c8e04e3ce84b0e015fbbc94ed19222a7ad59c156013025b7398fcd68",
+          "document:927409c02e9fbc769efb0b913eaa89bb06b8a471faf00505c7bf99237afe9228",
+          "document:62583d9e3eed9466cd53b79e88ea9b7063e4fcabd53310913e6e275f44744dfe",
+          "document:e44d501fe81005bac169838b5e14106d83d058f1188c50c491a755356be7b8f2",
+          "document:fe02f83bfd7b4e6e6acfa3649745a6b7bb90f55405263a9545f369781e4d14ee",
+          "document:a587b709d3fcb6c3240565f3e69f5eacaf2c080d92692bda33dccbe9f3e9b674",
+          "document:c3f4a60ab10f74ed8dfa7408d45fda561c876127869fb8bdc1d09573f141e802",
+          "document:f0255009af02a30f6c71b66842925fc258671c9b85f412a36355c415a6974200"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "3hop1__33286_22372_8184",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        },
+        "license": "CC-BY-4.0"
+      },
+      "evidence": [
+        {
+          "path": "articles/9.md",
+          "paragraph": "A large number of international institutions have their seats in Switzerland, in part because of its policy of neutrality. Geneva is the birthplace of the Red Cross and Red Crescent Movement and the Geneva Conventions and, since 2006, hosts the United Nations Human Rights Council. Even though Switzerland is one of the most recent countries to have joined the United Nations, the Palace of Nations in Geneva is the second biggest centre for the United Nations after New York, and Switzerland was a founding member and home to the League of Nations.\n",
+          "paragraph_sha256": "aa0325047d1accbb8c38038eff7763838a956677228dc134c1c96fe4e031a7bf",
+          "supplied_file_sha256": "6a712ec602ece7775085ae61fee2d425c236a9c8b4b64db7c48e7821cf6476ca",
+          "claim_supported": true
+        }
+      ],
+      "teacher_artifact_sha256": "fe174aebfe94cca013bb7128b117d639f01fa7455aa730813a3eca94bbfcc7c2",
+      "teacher_program_id": "inline-curriculum:source_musique:bdc2dbf8f6e45350a1dc:v1",
+      "review_conclusion": "This exact standalone answer string is supported by the pinned supplied source. The captured teacher_output remains raw evidence and is not admitted unless it exactly equals an accepted answer form; no extraction from verbose prose, substring matching, or fuzzy matching is permitted. Preserve the original primary gold and source record.",
+      "captured_teacher_output": "The institution that was meant to bring stability is the League of Nations, which was located in Switzerland. According to the articles, Switzerland maintained a policy of **neutrality** during World War I.\n\n**Neutral**",
+      "captured_teacher_output_sha256": "8fd38a65100367b10393cf88ed7c961a6bb43a586507371c236ebf92d6e89324",
+      "accepted_answer_sha256": "1c6ac69f1e5db9c36e9f549d72ef77d23ceab19c557a7eb3a27c7f06f4484b44"
+    }
+  ],
+  "pending_review": [
+    {
+      "source_id": "2hop__103771_135703",
+      "base_ir_id": "inline-curriculum:source_musique:288913845faaa1c15818:v1",
+      "base_ir_sha256": "17dbc97ac2e3b0567f9106cde75a0172b3260048fda6b40f071fe29978a06dc9",
+      "primary": "Niger River",
+      "accepted": "Niger",
+      "question": "---\nargs: {}\nreturns: \"string\"\nkind: directory-reducer\n---\nThe country having Harrysong was named for what river?\nRead the articles to answer. Return only the answer text. Preserve the workspace.\n",
+      "prompt_sha256": "3974fd5121a03e2e2954137608555cc5fbc0504e3631bb7f887304a12e2018eb",
+      "reference_sha256": "7311e2859bbc45be72f6756ff5ed28662772d92409ab2833e66777943b638056",
+      "source_pin": {
+        "source_ids": [
+          "2hop__103771_135703"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:103771",
+          "musique:seed:135703",
+          "document:45925d2789d861794b70f8766b0ad7f3cb7d53184f073e63fbd3c3ebf5a853c0",
+          "document:bfae54a6d432a9c46574057449ae37bcae88dce1a3de0a80d555a5ddbbe7c8c6",
+          "document:36d15a70594191db1dc6ea1c73523153f9c2ddb19b33062b35108a821d3628d6",
+          "document:a23c77eba49c236eaec462c20b0034f39c494367fe17f21d6041c79e2cfa2fea",
+          "document:366d4dbf13cebfb0ba7a950d805b9e933255dfcbaa24f04e495b9caefd9464b2",
+          "document:0a3856b5490f701250868a35c7d02fba5234032c185b5f9108dae955bc4bf203",
+          "document:4fa727d5b6059ed5a73aaff10bee3145f24ec87c6c4f8660e8e2fad9c87affa8",
+          "document:ad307e2955849ad2dd413071c8b7e3911a19a284805134494258d04fb139f5ed",
+          "document:cca420005e4b89e53e05f3c5d33fc1d419fdd71f10339ee849b48712a8006816",
+          "document:294f7e1ca3777d157221003bd768b88f70bb270ee2fd362bc00cb53b5d30d28d",
+          "document:80f53c61646e5810a55a43377afc43a5e67c382553b3a891c7df86bb6152e693",
+          "document:be62f163d90a408c764f15bcd628642b2283d5d53f6b5c7393b71cad3379bdeb",
+          "document:3497ea0ff4a34995474241c56f69467727ad1a6449418844764439304d87f44c",
+          "document:8819380ea11571a03200457bb8953c0dd42f74c9c15d4ed32e488ad507500f16",
+          "document:250c8a1fb985fcd432f9b0e76344cec3d92e70782b2db84fee9fb7a5093fd955",
+          "document:5bf4c4b4778254129b0356967021b4713f6a0e4ef037e87c3f13f5274601e508",
+          "document:32789ebe38368228c011ebca669eec19f1893b94db067d86eaf1bb6662afcc67",
+          "document:6caf8f707a9ebbe458bd3cbfb80f3c6b3cfa0a261e6ff40e04e4d4b12dd73705",
+          "document:e4ff0170b7b152ff80bf97eecbfb8b1141345d558b68a8d2ec270df2ca3ec369",
+          "document:f69aea97916c062cb5041b7807f18dc6af1b300b0636125c2b226100f34862a4"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "2hop__103771_135703",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        }
+      },
+      "evidence": {
+        "path": "articles/0.md",
+        "paragraph": "The name \"\" was taken from the Niger River running through the country. This name was coined in the late 19th century by British journalist Flora Shaw, who later married Lord Lugard, a British colonial administrator. The origin of the name \"Niger\", which originally applied only to the middle reaches of the Niger River, is uncertain. The word is likely an alteration of the Tuareg name \"egerew n-igerewen\" used by inhabitants along the middle reaches of the river around Timbuktu prior to 19th-century European colonialism.\n",
+        "paragraph_sha256": "d527ad274a2461c39a3d6c35c4b7b73f9ca6353ac90d74c9adb2c33e2708f919",
+        "supplied_file_sha256": "75569b85fe1fdaa3d0d88cf353fd5d5f67c1bed87321a566bf6237d721c35357"
+      },
+      "teacher_artifact_sha256": "c69b650b3d10361826b9e3723016063c6472ef3c2ec442d3be6f9147197d31db",
+      "teacher_program_id": "inline-curriculum:source_musique:288913845faaa1c15818:v1",
+      "teacher_output": "Niger",
+      "review_status": "pending",
+      "reason": "The supplied article says Nigeria was named after the Niger River, while the prompt asks for a river and the model returns Niger. This is plausible shorthand but weaker than the six accepted source forms; keep exact candidate held until whether this bare form denotes the required hydronym is reviewed."
+    }
+  ],
+  "review_note": "Only exact standalone strings in accepted are eligible. Captured teacher_output is retained as evidence and is not itself necessarily admissible."
+}
