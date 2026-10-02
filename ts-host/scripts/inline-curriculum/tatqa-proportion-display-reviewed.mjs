@@ -22,6 +22,15 @@ const pins = [
     baseRecordSha256: '332db94d9961e9aa9eec04ae7cbf91c68132abc638dd5e18a7078dfb6276edea',
     referenceValue: '{"answer":"0.14","scale":""}',
   },
+  {
+    baseId: 'inline-curriculum:source_tatqa:3b55f1b7b2b99a7e5399:v1:evidence-scale-v2:numeric-answer-v1',
+    sourceId: '2f301235-1aca-4c3e-b9ab-819c3c94e529',
+    sourceRevision: '870accc41953dcde885aabeb963d94aabdc0fbc3',
+    sourceSnapshotSha256: '9404a53bb8f0088e58e9113ed41f6e42cd9d07dd5d0e757bd2dd650fd07bbdfa',
+    sourceFileSha256: '2df6e722cdbaaa37efcbfb280f5c9a15be29a6ec18f618ef936fe63cc6d07c69',
+    baseRecordSha256: '2d03c108b47dcfb78ab39f30be7af9e2f89c82cff7824c64c5d5f8c792d6789d',
+    referenceValue: '{"answer":"0.97","scale":""}',
+  },
 ];
 
 const instruction = 'For this requested share or proportion, express the dimensionless fraction as a decimal rounded to two decimal places; put only the numeric value in answer and leave scale empty. This formatting instruction applies only to the requested share or proportion in this task.';
