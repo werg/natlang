@@ -1809,3 +1809,10 @@ Staged2048fresh cases,538reducers26.27%,1510primitives,12035native/current-admit
 Rejection sweep found six correct saved files with malformed final strings. Added generic canonical prompt clarification, awaiting a new immutable runtime deployment; no parser/schema relaxation. Source-unit conflict for TATQA13d32af1-1901-4340-b9b8-023ed52ec0ec is now centrally held pending adjudication, including current compiled policy;48/million gold preserved, no DPO negative. Other reasoning mistakes remain rejects.
 
 Restarted authorized disk relocation recovery at low CPU/IO priority with2GiB MemoryHigh; guard refuses nested mounts before exact-backup deletion. It verifies the retained backup as a byte-identical subset of external copy, releases only that verified backup via a single Docker bind, then moves the second authorized tree using checksum-before-cutover. `.cache` stays; no completion/space-reclamation claim until receipts.
+
+
+## 2026-10-02 11:19 hourly sweep
+
+Actual50-minute tool sleep completed. Reviewed successor automatic handoff succeeded after592exactimports (573admitted/19rejected). Next2048has1020saved/927admitted/93rejected at11:19;32slots×8requests configured,56clean batches/no failed batch completions at11:23. New rejection audit delegated; no semantic gates relaxed.
+
+Storage subset validation had two operational false-alarm causes: repeated itemization (`-i` plus long flag) lists unchanged files; backup-directory timestamp changes after partial cleanup are not byte-content differences. Corrected to one itemization, excluding only directory mtimes for retained subset verification; exact full checksum and regular-file/link checks remain. Fresh checksum restarted before any deletion. Cheap metadata-only corrected check emitted no differences; not a substitute for checksum. Luna2 had actually finished rather thanfailed; nextqueue supply was missing/staleauthority and is being repaired.

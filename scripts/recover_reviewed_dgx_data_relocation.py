@@ -195,14 +195,16 @@ def verify_backup_subset(name: str, backup: Path, target: Path) -> dict:
     if open_writers:
         raise RuntimeError(f'open writable descriptors under backup/destination: {open_writers[:20]}')
     # No --delete: every backup entry must match the destination; extra live destination entries are allowed.
-    args = ['rsync', '-aHnci', '--itemize-changes', '--out-format=%i %n%L', str(backup) + '/', str(target) + '/']
+    # One -i only: repeated itemization emits unchanged files too. Partial deletion
+    # changes backup directory mtimes; preserve strict file/link/content checks.
+    args = ['rsync', '-aHnciO', '--out-format=%i %n%L', str(backup) + '/', str(target) + '/']
     result = run(args, capture=True)
     output = result.stdout + result.stderr
     if output.strip():
         raise RuntimeError(f'backup is not a byte-identical subset of destination; first differences: {output[:4000]}')
     if writers_under((backup, target)):
         raise RuntimeError('writable descriptors appeared during subset verification')
-    return {'method': 'rsync archive+hardlink+checksum dry-run, no --delete (subset semantics)',
+    return {'method': 'rsync archive+hardlink+checksum dry-run, no --delete; directory mtimes ignored because partial cleanup changes them (subset semantics)',
             'command': args, 'matched': True, 'difference_output_sha256': sha256(output.encode()),
             'difference_output_bytes': len(output.encode()), 'verified_at': now()}
 
@@ -325,7 +327,7 @@ def copy_and_switch(name: str, source: Path, backup: Path, target: Path, *, exec
     append_event(name, 'copying', source=str(source), destination=str(target), cache_touched=False)
     target.mkdir(parents=True, exist_ok=True)
     run(['rsync', '-aH', '--stats', str(source) + '/', str(target) + '/'])
-    verify = run(['rsync', '-aHnci', '--delete', '--itemize-changes', '--out-format=%i %n%L', str(source) + '/', str(target) + '/'], capture=True)
+    verify = run(['rsync', '-aHnci', '--delete', '--out-format=%i %n%L', str(source) + '/', str(target) + '/'], capture=True)
     differences = verify.stdout + verify.stderr
     if differences.strip():
         atomic_json(state_path(name), {**state, 'phase': 'paused_copy_mismatch', 'difference_output_sha256': sha256(differences.encode()), 'difference_output_prefix': differences[:4000], 'updated_at': now()})

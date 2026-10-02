@@ -1,3 +1,13 @@
+# Hourly check — 2026-10-02 11:25 UTC
+
+- Actual50-minute active sleep completed; check performed11:19UTC. DGX592 remainder finished592unique artifacts,573admitted/19rejected. Automatic2048handoff succeeded; controller1245179recordrunning, sync1253498, remote dispatcher633031/service `natlang-qwen36-shared-next2048-20261002`. The first two clean batches ramped32collector slots×8requests to256 ceiling at10:54. Current512 active-case ceiling;11:23 has56clean batches/0failed,88of128batchesleased. At11:19:1020saved/927admitted/93rejected, actual130runningrequests/0waiting, KV23.9%,21GiB available,624MiBswap. Raw counts and decisions are not publication claims. Luna rejection review is investigating new93.
+- Runtime remainsv32; canonical JSON-return prompt improvement is awaiting immutablev33. Exact48-million sourcehold active in currentcompiled admission; frozen32 untouched.
+- Storage recovery failed10:53 BEFORE deletion because it specified itemization twice (`-i` plus `--itemize-changes`), which makes rsync print unchanged files. Backup root directory mtime also changed during earlier partial deletion. Corrected helper uses ONE itemization and ignores only directory mtimes for a retained-backup subset check, retaining checksum/file/link tests; second-tree full comparison remains strict. Metadata-only corrected check was empty; fresh full checksum is running under `natlang-storage-recovery-v2-20261002`,PID637976 since11:21. No reclaimed-space claim; two original/external copies still retained. `.cache` unchanged.
+- Local continuity check: Bonsai778887 andLuna1 1159952alive. Luna2finishedall256cases around10:02, authoritywasstale; Luna agent preparing its successor and inspecting SpaceBunny next4starting status. Do not describe two active Luna workers until restarted and verified.
+- Next immediate work: restart suppliedLuna2/armitsnextqueue, frozen33minimalprompt+exactsourcehold review, complete93rejectaudit, fixSpaceBunnyifneeded, verifydisk recoveryreceipts and keepDGXnextbacklogprepared. Continue50-minute active sleep/check convention once urgentcontinuity work is supplied.
+
+---
+
 # Current handover — 2026-10-02 10:26 UTC
 
 - **DGX throughput reconfiguration is deployed.** Server `natlang-qwen36-nvfp4-server` retains pinned Qwen NVFP4 revision and compatible `eugr` ARM64 vLLM image; now max sequences256, GPU memory utilization0.65, context65536, FP8 KV, Marlin MoE, prefix caching/chunked prefill and8192 batch tokens. Explicit `/usr/local/bin/vllm` entrypoint is required. Initial restart omitted that override and failed before model initialization; failed container retained, corrected server healthy since09:37. Old16-slot container is retained stopped for rollback.
