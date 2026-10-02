@@ -19,6 +19,14 @@ export function successfulTurn(trace,exchange,turn){
  if(!calls.length)return trace.outcome==='done';
  return calls.length===actions.length&&actions.every((action,index)=>action.name===calls[index][0]&&isDeepStrictEqual(action.arguments,calls[index][1])&&['ok','completed'].includes(action.outcome));
 }
+/** A completed write can still be part of a rejected source experiment. Keep it as failure context. */
+export function sourceEditAdmission(parentTrace,before,after){
+ if(isDeepStrictEqual(before,after))return {approved:true,reason:'Honest unchanged editor result.'};
+ const state=parentTrace?.events.findLast(event=>event.kind==='state'&&event.phase==='final')?.value?.$lambda?.return;
+ const experiment=state?.history?.at(-1);
+ if(!experiment)throw Error('Edited source has no independently measured parent experiment.');
+ return {approved:experiment.accepted===true,reason:experiment.reason};
+}
 export async function verifyInvocation(program,replay,callId){
  const runImprovementFixture=(await runtimeModule(replay.runtime,'improvement/teacher.js')).run;
  const ids=new Set([callId]);
@@ -45,7 +53,7 @@ export async function exportCase(replayPath){
  const byCall=new Map(replay.traces.map(trace=>[trace.callId,trace]));
  const groups=new Map();
  for(const exchange of replay.exchanges){const id=exchange.request.invocation_id;const group=groups.get(id)??[];group.push(exchange);groups.set(id,group);}
- const rows=[],invocations=[];
+ const rows=[],invocations=[],failureInvocations=[];
  for(const [callId,exchanges] of groups){
   const trace=byCall.get(callId);
   if(!trace||trace.outcome!=='done')continue;
@@ -76,6 +84,10 @@ export async function exportCase(replayPath){
    evaluation_fixture:{kind:'flat-program-evaluator',scope:'invocation',caseDefinition,populationSources,executorId:protocol.executor.model,executorTimeoutMs:protocol.executorTimeoutMs}};
   const program={version:'natlang.program/2',id:invocationId,kind:'lambda_source',family:'native-program-improvement',split:'train',source_groups:[...new Set(['improvement-target:'+replay.id,...(protocol.sourceGroups??[])])],source_ids:(protocol.incidents??[]).map(incident=>incident.id),source:'generated-failure-corpus',license:'project-generated',semantics};
   const verification=await verifyInvocation(program,replay,callId);
+  if(root==='improveStep/rewriteProgram.nl'){
+   const admission=sourceEditAdmission(byCall.get(trace.parentCallId),before,after);
+   if(!admission.approved){failureInvocations.push({id:invocationId,root,turns:exchanges.length,reason:admission.reason,verification,source:replayPath,disposition:'rejected-source-edit-context-only'});continue;}
+  }
   let admitted=0;
   for(const [index,exchange] of exchanges.entries()){
    if(!successfulTurn(trace,exchange,index+1))continue;
@@ -88,7 +100,7 @@ export async function exportCase(replayPath){
   }
   invocations.push({id:invocationId,root,turns:exchanges.length,admitted,folderChanged:!isDeepStrictEqual(before,after),verification});
  }
- return {rows,invocations,id:replay.id};
+ return {rows,invocations,failureInvocations,id:replay.id};
 }
 if(process.argv[1]===new URL(import.meta.url).pathname){
  const input=resolve(process.argv[2]),output=resolve(process.argv[3]);await mkdir(output,{recursive:true});

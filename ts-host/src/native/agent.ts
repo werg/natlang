@@ -646,6 +646,17 @@ export class NativeToolAgent {
         // A request never exceeds the budget: if the model has not compacted, the conversation is shortened for it,
         // with a note saying where the earlier turns are.
         const removed = pinNote(null) + collapseHistory(messages, protectedLength);
+        // Keep the latest action and observation. Its reasoning is already in transcript and
+        // can itself make that otherwise irreducible exchange exceed the context window.
+        if (estimate(availableTools) > budget - reply) {
+          for (let index = protectedLength; index < messages.length; index++) {
+            const message = messages[index]!;
+            if (message.role === 'assistant' && 'reasoning_content' in message) {
+              const { reasoning_content, ...withoutReasoning } = message;
+              messages[index] = withoutReasoning;
+            }
+          }
+        }
         compactedAt = estimate(allTools);
         session.runtime.trace.emit('compaction', { call_id: session.runtime.currentCallId ?? null, turn: turns + 1,
           elided: removed, note: null, estimated_tokens: Math.round(estimate(availableTools)) });

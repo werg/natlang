@@ -3,9 +3,18 @@ import assert from 'node:assert/strict';
 import {Folder} from '../dist/index.js';
 import {AUTHORED_IMPROVER} from '../dist/improvement/authored-source.js';
 import {run} from '../dist/improvement/teacher.js';
-import {observedActions,successfulTurn} from '../scripts/self-improvement/export-followup-training.mjs';
+import {observedActions,successfulTurn,sourceEditAdmission} from '../scripts/self-improvement/export-followup-training.mjs';
 import {recordedDriver} from '../scripts/self-improvement/replay-followup-study.mjs';
 import {migrateSystemPrompts,migrateServiceOpenings,migrateCaseContexts} from '../scripts/self-improvement/replay-runtime.mjs';
+
+test('rejected source edits remain context rather than positive file-edit targets',()=>{
+ const before={'solve.nl':'original'},after={'solve.nl':'candidate'};
+ const parent=accepted=>({events:[{kind:'state',phase:'final',value:{$lambda:{return:{history:[{accepted,reason:'Measured against independent cases.'}]}}}}]});
+ assert.equal(sourceEditAdmission(parent(false),before,after).approved,false);
+ assert.equal(sourceEditAdmission(parent(true),before,after).approved,true);
+ assert.equal(sourceEditAdmission(parent(false),before,before).approved,true);
+ assert.throws(()=>sourceEditAdmission(undefined,before,after),/independently measured parent/);
+});
 
 test('fixture declaration migration retains case identity when public openings become identical',async()=>{
  const source={'solve.nl':'---\nargs: {}\nreturns: number\n---\nReturn store.read().'};

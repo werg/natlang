@@ -343,6 +343,8 @@ def main():
     ap.add_argument("--model-revision", help="immutable Hugging Face commit or tag for the base model")
     ap.add_argument("--device", choices=("cuda", "cpu"), default="cuda",
                     help="execution device; CPU is useful for small pipeline smoke runs")
+    ap.add_argument("--cuda-memory-fraction", type=float, default=1.0,
+                    help="fraction of CUDA device memory available to this training process")
     schedule = ap.add_mutually_exclusive_group()
     schedule.add_argument("--steps", type=int, help="optimizer steps in total (default: 300)")
     schedule.add_argument("--epochs", type=float,
@@ -582,6 +584,10 @@ def main():
     device = a.device
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is unavailable")
+    if not 0 < a.cuda_memory_fraction <= 1:
+        raise ValueError("CUDA memory fraction must lie in (0, 1]")
+    if device == "cuda":
+        torch.cuda.set_per_process_memory_fraction(a.cuda_memory_fraction)
     if device == "cpu" and (a.load_in_4bit or use_unsloth):
         raise ValueError("4-bit and Unsloth training require CUDA")
 

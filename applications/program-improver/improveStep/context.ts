@@ -1,14 +1,20 @@
-import type {ImprovementPolicy,RewriteRequest,TrainingEvidence,SourceFile,ExperimentOutcome} from '../types';
+import type {ImprovementPolicy,RewriteRequest,TrainingEvidence,SourceFile,ExperimentOutcome,ExperimentFeedback} from '../types';
 
 /** Pass the actual training evidence through unchanged; the model chooses only its hypothesis. */
 export function request(policy:ImprovementPolicy,hypothesis:string,evidence:unknown[],sourceFiles:SourceFile[],history:ExperimentOutcome[]=[],lastExperiment?:unknown):RewriteRequest {
-  return {history,...(lastExperiment?{lastExperiment}:{}),brief:brief(policy,evidence as TrainingEvidence[],sourceFiles,hypothesis),objective:policy.objective??'quality',goal:policy.goal,mode:policy.mode,hypothesis,sourceFiles,evidence,allowedFiles:policy.allowedFiles};
+  return {history,...(lastExperiment?{lastExperiment}:{}),brief:brief(policy,evidence as TrainingEvidence[],sourceFiles,hypothesis,lastExperiment as ExperimentFeedback|undefined),objective:policy.objective??'quality',goal:policy.goal,mode:policy.mode,hypothesis,sourceFiles,evidence,allowedFiles:policy.allowedFiles};
 }
 
 /** A small first read; complete source and observations remain available in the typed context. */
-export function brief(policy:ImprovementPolicy,evidence:TrainingEvidence[],sourceFiles:SourceFile[],hypothesis:string=''):string {
+export function brief(policy:ImprovementPolicy,evidence:TrainingEvidence[],sourceFiles:SourceFile[],hypothesis:string='',lastExperiment?:ExperimentFeedback):string {
   const lines=['Goal: '+policy.goal,'Mode: '+policy.mode+'; objective: '+(policy.objective??'quality'),'Allowed source edits: '+policy.allowedFiles.join(', '),'Execution output files belong to the target runtime folder; implement their behavior in source, not in this draft.'];
   if(hypothesis)lines.push('Hypothesis: '+hypothesis);
+  if(lastExperiment){
+    lines.push('Previous experiment: '+lastExperiment.reason);
+    for(const diagnostic of lastExperiment.diagnostics??[])lines.push('Previous diagnostic: '+diagnostic.slice(0,700));
+    for(const file of lastExperiment.sourceFiles.filter(file=>!sourceFiles.some(current=>current.path===file.path&&current.text===file.text)))lines.push('Previous candidate '+file.path+':\n'+file.text.slice(0,900));
+    lines.push('Use a different evidenced edit when the previous candidate failed. Full previous source and training observations remain in lastExperiment.');
+  }
   for(const file of sourceFiles)lines.push('Source '+file.path+':\n'+file.text.slice(0,1200)+(file.text.length>1200?'\n[clipped; full text in sourceFiles]':''));
   for(const row of evidence){
     lines.push('Training '+(row.caseId??'case')+': '+(row.passed?'passed':'failed')+'; model requests '+(row.modelCalls??'unknown')+(row.failureKind?'; '+row.failureKind:'')+(row.error?'; '+row.error.slice(0,400):''));

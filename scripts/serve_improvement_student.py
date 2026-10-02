@@ -1,37 +1,28 @@
 #!/usr/bin/env python3
 """Serve a pinned CPU student and optional LoRA checkpoint without altering other model servers."""
-import argparse,ast,json,re,time,uuid,contextlib
+import argparse,json,time,uuid,contextlib
 from http.server import BaseHTTPRequestHandler,HTTPServer
 import torch
 from transformers import AutoTokenizer,AutoModelForCausalLM
 if __package__:
     from .render_training_corpus import _call_template, RENDERER_VERSION
+    from .model_response import parse_response, tool_calls
 else:
     from render_training_corpus import _call_template, RENDERER_VERSION
-
-def literal(node):
-    if isinstance(node,ast.Name) and node.id in ('true','false','null'):
-        return {'true':True,'false':False,'null':None}[node.id]
-    if isinstance(node,ast.List):return [literal(x) for x in node.elts]
-    if isinstance(node,ast.Dict):return {literal(k):literal(v) for k,v in zip(node.keys,node.values)}
-    return ast.literal_eval(node)
-
-def tool_calls(text):
-    match=re.search(r'<\|tool_call_start\|>(.*?)<\|tool_call_end\|>',text,re.S)
-    if not match:return []
-    nodes=ast.parse(match.group(1),mode='eval').body
-    if not isinstance(nodes,ast.List):raise ValueError('tool calls must form a list')
-    calls=[]
-    for node in nodes.elts:
-        if not isinstance(node,ast.Call) or not isinstance(node.func,ast.Name) or node.args or any(k.arg is None for k in node.keywords):raise ValueError('invalid tool-call syntax')
-        calls.append({'id':'call_'+uuid.uuid4().hex,'type':'function','function':{'name':node.func.id,'arguments':json.dumps({k.arg:literal(k.value) for k in node.keywords})}})
-    return calls
+    from model_response import parse_response, tool_calls
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--model',default='LiquidAI/LFM2.5-350M');parser.add_argument('--revision',required=True);parser.add_argument('--adapter');parser.add_argument('--checkpoint-map');parser.add_argument('--port',type=int,default=8082);parser.add_argument('--max-context',type=int,default=8192);parser.add_argument('--threads',type=int,default=2);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--model',default='LiquidAI/LFM2.5-350M');parser.add_argument('--revision',required=True);parser.add_argument('--adapter');parser.add_argument('--checkpoint-map');parser.add_argument('--port',type=int,default=8082);parser.add_argument('--max-context',type=int,default=8192);parser.add_argument('--threads',type=int,default=2);parser.add_argument('--device',choices=['cpu','cuda'],default='cpu');parser.add_argument('--load-in-4bit',action='store_true');parser.add_argument('--cuda-memory-fraction',type=float,default=1.0);args=parser.parse_args()
     torch.set_num_threads(args.threads)
     tokenizer=AutoTokenizer.from_pretrained(args.model,revision=args.revision,local_files_only=True)
-    model=AutoModelForCausalLM.from_pretrained(args.model,revision=args.revision,dtype=torch.float32,local_files_only=True)
+    if args.load_in_4bit and args.device!='cuda':raise ValueError('4-bit loading requires CUDA')
+    if args.device=='cuda':torch.cuda.set_per_process_memory_fraction(args.cuda_memory_fraction)
+    options={'dtype':torch.bfloat16 if args.device=='cuda' else torch.float32}
+    if args.load_in_4bit:
+        from transformers import BitsAndBytesConfig
+        options.update(device_map={'':0},quantization_config=BitsAndBytesConfig(load_in_4bit=True,bnb_4bit_quant_type='nf4',bnb_4bit_use_double_quant=True,bnb_4bit_compute_dtype=torch.bfloat16))
+    model=AutoModelForCausalLM.from_pretrained(args.model,revision=args.revision,local_files_only=True,**options)
+    if not args.load_in_4bit:model=model.to(args.device)
     if args.adapter:
         from peft import PeftModel
         model=PeftModel.from_pretrained(model,args.adapter)
@@ -59,15 +50,15 @@ def main():
                     selected['name']=name;self.send(200,{'checkpoint':name});return
                 messages=request['messages']
                 prompt=_call_template(tokenizer,messages,request.get('tools') or [],True)
-                inputs=tokenizer(prompt,return_tensors='pt');length=inputs.input_ids.shape[1]
+                inputs=tokenizer(prompt,return_tensors='pt').to(model.device);length=inputs.input_ids.shape[1]
                 output_limit=min(request.get('max_tokens',request.get('max_completion_tokens',2048)),2048)
                 if length+output_limit>args.max_context:raise ValueError('context allowance exceeded; input was not truncated')
                 with torch.inference_mode(),(model.disable_adapter() if checkpoints and selected['name']=='starting' else contextlib.nullcontext()):output=model.generate(**inputs,max_new_tokens=output_limit,do_sample=False,pad_token_id=tokenizer.eos_token_id)
                 tokens=output[0,length:];text=tokenizer.decode(tokens,skip_special_tokens=False)
-                try:calls=tool_calls(text)
-                except (ValueError,SyntaxError):calls=[]
-                content=re.sub(r'<\|.*?\|>','',re.sub(r'<\|tool_call_start\|>.*?<\|tool_call_end\|>','',text,flags=re.S)).strip()
-                self.send(200,{'id':'student_'+uuid.uuid4().hex,'object':'chat.completion','created':int(time.time()),'model':args.adapter or args.model,'choices':[{'index':0,'message':{'role':'assistant','content':content or None,**({'tool_calls':calls} if calls else {})},'finish_reason':'length' if len(tokens)>=output_limit else 'tool_calls' if calls else 'stop'}],'usage':{'prompt_tokens':length,'completion_tokens':len(tokens),'total_tokens':length+len(tokens)}})
+                try:decoded=parse_response(text,request.get('tools') or [])
+                except (ValueError,SyntaxError):decoded={'content':text,'tool_calls':[],'reasoning_content':None}
+                calls=decoded['tool_calls'];content=decoded['content']
+                self.send(200,{'id':'student_'+uuid.uuid4().hex,'object':'chat.completion','created':int(time.time()),'model':args.adapter or args.model,'choices':[{'index':0,'message':{'role':'assistant','content':content or None,**({'reasoning_content':decoded['reasoning_content']} if decoded['reasoning_content'] else {}),**({'tool_calls':calls} if calls else {})},'finish_reason':'length' if len(tokens)>=output_limit else 'tool_calls' if calls else 'stop'}],'usage':{'prompt_tokens':length,'completion_tokens':len(tokens),'total_tokens':length+len(tokens)}})
             except Exception as error:self.send(400,{'error':{'message':str(error)}})
     print(json.dumps({'ready':True,'renderer':RENDERER_VERSION,'port':args.port,'model':args.model,'revision':args.revision,'adapter':args.adapter}),flush=True)
     HTTPServer(('0.0.0.0',args.port),Handler).serve_forever()
