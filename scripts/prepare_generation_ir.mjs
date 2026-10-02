@@ -6,6 +6,7 @@ import {open,rename,unlink} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {applyEvidenceScaleContract,applyTatqaNumericContract,applyReviewedTatqaUnitContract} from '../ts-host/scripts/inline-curriculum/directory-sources.mjs';
+import {applyTatqaProportionDisplay,tatqaProportionDisplayPins} from '../ts-host/scripts/inline-curriculum/tatqa-proportion-display-reviewed.mjs';
 import {sourceConversionDigest} from '../ts-host/dist/teacher/source-conversion.js';
 
 const [inputArg,outputArg]=process.argv.slice(2);
@@ -35,6 +36,8 @@ try{
     const ir=JSON.parse(line),before=sourceConversionDigest(ir),fixed=invariants(ir);
     if(!preservedDerivedContracts.has(before))
       applyReviewedTatqaUnitContract(applyTatqaNumericContract(applyEvidenceScaleContract(ir)));
+    if(tatqaProportionDisplayPins().some(pin=>pin.sourceId===ir.source_ids?.[0]))
+      Object.assign(ir,applyTatqaProportionDisplay(ir));
     if(invariants(ir)!==fixed)throw Error('Contract migration changed gold, input, reference or source lineage');
     const next=sourceConversionDigest(ir);if(next!==before)changed++;
     const bytes=JSON.stringify(ir)+'\n';outputHash.update(bytes);await stream.writeFile(bytes);cases++;
@@ -43,7 +46,7 @@ try{
   await rename(temporary,output);
   console.log(JSON.stringify({version:'natlang.generation_ir_preparation/1',input,output,cases,changed,
     normalized_input_lines_sha256:sourceHash.digest('hex'),output_sha256:outputHash.digest('hex'),
-    changes:'Existing reviewed TATQA scale/numeric/source-unit contracts; versioned IDs',
+    changes:'Existing reviewed TATQA scale/numeric/source-unit and two pinned proportion-display contracts; versioned IDs',
     gold_input_reference_lineage_preserved:true,ready_for_generation:false,
     next_step:'Review native gold replay, current admission/materialization, selection lineage and frozen runtime pins before launch.'}));
 }catch(error){

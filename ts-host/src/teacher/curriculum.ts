@@ -110,10 +110,16 @@ export { openingLength } from './opening.js';
 const isInline = (name: string) => name.startsWith('nl@');
 const TERMINAL = new Set(['return_result']);
 /** A top-level `return` in an eval stages a result: a decision as much as return_result is. */
-/** Whether the root's eval at this turn failed: its result (shown in the root's next turn) kept nothing. */
-function evalFailed(trajectory: Turn[], index: number, rootName: string): boolean {
+/** Whether this eval staged no result, including a recoverable result-type refusal.
+ * A type refusal may keep readings/bindings; it still is not a submitted decision. */
+function evalDidNotStageResult(trajectory: Turn[], index: number, rootName: string): boolean {
   const next = trajectory.slice(index + 1).find(turn => callName(turn.context ?? []) === rootName);
-  return !!next && text(next.context.at(-1)?.content).includes('Nothing else from this eval was kept.');
+  const observation = next?.context.at(-1);
+  if (observation?.role !== 'tool') return false;
+  const output = text(observation.content);
+  return output.includes('Nothing else from this eval was kept.') ||
+    /^This is not a valid [^\n]+, so it is not the result: /m.test(output) ||
+    /^return_result: this is not a valid /m.test(output);
 }
 const stagesResult = (code: string) => /^return\b/m.test(code) || /\breturn_result\s*\(/.test(code);
 
@@ -160,7 +166,7 @@ export function runFacts(record: CurriculumRecord, trajectory: Turn[]): RunFacts
       if (call.tool === 'edit_code' || call.tool === 'edit_file' || call.tool === 'write_file') edits++;
       if (call.tool === 'read_page') pageReads++;
       if (firstDecision === -1 && (TERMINAL.has(call.tool) || (call.tool === 'eval' && stagesResult(String(args.code ?? '')) &&
-          !evalFailed(trajectory, index, rootName))))
+          !evalDidNotStageResult(trajectory, index, rootName))))
         firstDecision = index;
     }
   });

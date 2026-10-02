@@ -1,5 +1,6 @@
 /** Source-backed directory tasks. Gold and reference metadata never enter the visible workspace. */
 import { createHash } from 'node:crypto';
+import { applyTatqaProportionDisplay, isReviewedTatqaProportionDisplay, PROPORTION_DISPLAY_SUFFIX, tatqaProportionDisplayPins } from './tatqa-proportion-display-reviewed.mjs';
 import { readFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
@@ -69,6 +70,10 @@ const TATQA_NUMERIC_TEXT = /^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?|\.\d+)
 /** Add the evidence-bounded scale rule to future TATQA tasks and saved IR variants. */
 export function applyEvidenceScaleContract(record) {
   if (record.source !== 'tatqa') return record;
+  if (record.id?.endsWith(PROPORTION_DISPLAY_SUFFIX)) {
+    if (!isReviewedTatqaProportionDisplay(record)) throw new Error('tatqa_proportion_display_variant_mismatch');
+    return record;
+  }
   if (record.id?.endsWith(TATQA_LAKH_VARIANT_SUFFIX)) {
     if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_mismatch:${record.source_ids?.[0]}`);
     return record;
@@ -117,6 +122,10 @@ export function applyEvidenceScaleContract(record) {
 /** Give numeric-only TaTQA rows the versioned numeric display contract. */
 export function applyTatqaNumericContract(record) {
   if (record.source !== 'tatqa') return record;
+  if (record.id?.endsWith(PROPORTION_DISPLAY_SUFFIX)) {
+    if (!isReviewedTatqaProportionDisplay(record)) throw new Error('tatqa_proportion_display_variant_mismatch');
+    return record;
+  }
   if (record.id?.endsWith(TATQA_LAKH_VARIANT_SUFFIX)) {
     if (!isReviewedTatqaLakhVariant(record)) throw new Error(`tatqa_lakh_contract_variant_mismatch:${record.source_ids?.[0]}`);
     return record;
@@ -483,6 +492,8 @@ return result;`;
         applyEvidenceScaleContract(record);
         applyTatqaNumericContract(record);
         applyReviewedTatqaUnitContract(record);
+        if (tatqaProportionDisplayPins().some(pin => pin.sourceId === record.source_ids?.[0]))
+          Object.assign(record, applyTatqaProportionDisplay(record));
         return record;
       });
     }
