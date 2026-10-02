@@ -330,3 +330,28 @@ def test_exhausted_provider_retry_keeps_minimum_delay(tmp_path):
     error_path.parent.mkdir(parents=True, exist_ok=True)
     error_path.write_text(json.dumps(dict(retry_not_before=1234567890, program_id=job['program_id'])))
     assert retry_deadline(entry) == 1234567.89
+
+
+def test_fresh_queue_creates_collector_parents_before_launch(tmp_path, monkeypatch):
+    entry = queue_entry(tmp_path, key='fresh', output=tmp_path / 'outputs' / 'nested' / 'result.jsonl')
+    entry['jobs'] = str(tmp_path / 'jobs-parent' / 'nested' / 'jobs')
+    entry['log'] = str(tmp_path / 'logs' / 'nested' / 'collector.log')
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+
+    class Child:
+        def __init__(self, command, **kwargs):
+            self.command = command
+            assert Path(entry['jobs']).is_dir()
+            assert Path(entry['output']).parent.is_dir()
+            assert Path(entry['log']).parent.is_dir()
+        def wait(self, timeout=None):
+            write_exact_export(self.command)
+            return 0
+
+    install_child(monkeypatch, Child)
+    run_queue(queue, journal, TS_HOST, seconds=1, provider='openai-codex')
+    events = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert events[-1]['event'] == 'finish'
+    assert events[-1]['status'] == 'complete'
+    assert Path(entry['log']).is_file()

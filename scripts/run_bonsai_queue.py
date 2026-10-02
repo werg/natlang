@@ -484,6 +484,11 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         case_seconds = entry.get('case_seconds', seconds)
         if not isinstance(case_seconds, int) or case_seconds < 1:
             raise ValueError('entry case_seconds must be a positive integer')
+        # Fresh reviewed queues need no manually precreated collector directories.
+        # Prepare them before recording an attempt or opening its log.
+        Path(entry['jobs']).mkdir(parents=True, exist_ok=True)
+        Path(entry['output']).parent.mkdir(parents=True, exist_ok=True)
+        Path(entry['log']).parent.mkdir(parents=True, exist_ok=True)
         start = time.monotonic()
         last_activity, previous = start, partial_metrics(entry)
         previous_poll, unobserved_seconds, was_waiting = start, 0, False
