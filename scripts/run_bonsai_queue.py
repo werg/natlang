@@ -403,10 +403,17 @@ def failure_cooldown(streak):
 
 def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-27B',
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
-              no_observation_seconds=0, max_batch_cases=5):
+              no_observation_seconds=0, max_batch_cases=5, provider_request_config=None):
     if model_concurrency is None:
         model_concurrency = 1 if provider else 4
     queue, journal, runtime = map(Path, (queue, journal, runtime))
+    if provider_request_config is not None:
+        if not provider:
+            raise ValueError('provider request config requires an explicit provider')
+        provider_request_config = Path(provider_request_config).resolve()
+        controls = json.loads(provider_request_config.read_text())
+        if not isinstance(controls, dict):
+            raise ValueError('provider request config must be a JSON object')
     entries = [json.loads(line) for line in queue.read_text().splitlines() if line.strip()]
     # Validate every batch before starting a collector, including later queue entries.
     for entry in entries:
@@ -479,6 +486,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
             '--server', 'http://127.0.0.1:8081', '--kv-tokens', '40000']
         if provider:
             command += ['--retry-delay-ms', '15000']
+            if provider_request_config is not None:
+                command += ['--provider-request-config', str(provider_request_config)]
         if execution_plans:
             command.append('--execution-plans')
         case_seconds = entry.get('case_seconds', seconds)
@@ -612,6 +621,7 @@ if __name__ == '__main__':
     parser.add_argument('--case-seconds', type=int, default=600)
     parser.add_argument('--model-id', default='Ternary-Bonsai-2-27B')
     parser.add_argument('--provider')
+    parser.add_argument('--provider-request-config', type=Path, help='explicit provider request controls passed unchanged to the collector')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
     parser.add_argument('--min-free-mib', type=int, default=0, help='stop before a case if filesystem free space falls below this floor; zero disables')
     parser.add_argument('--no-observation-seconds', type=int, default=0,
@@ -635,4 +645,4 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, stop)
     run_queue(args.queue, args.journal, args.runtime, args.case_seconds, args.model_id, args.provider,
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
-              args.no_observation_seconds, args.max_batch_cases)
+              args.no_observation_seconds, args.max_batch_cases, args.provider_request_config)

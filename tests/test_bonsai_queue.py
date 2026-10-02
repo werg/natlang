@@ -355,3 +355,40 @@ def test_fresh_queue_creates_collector_parents_before_launch(tmp_path, monkeypat
     assert events[-1]['event'] == 'finish'
     assert events[-1]['status'] == 'complete'
     assert Path(entry['log']).is_file()
+
+
+def test_provider_request_controls_are_forwarded_by_canonical_runner(tmp_path, monkeypatch):
+    entry = queue_entry(tmp_path)
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+    config = tmp_path / 'provider-request-config.json'
+    config.write_text(json.dumps({'piPayload': {'tool_choice': 'auto'}, 'omitPayloadKeys': ['seed']}))
+    commands = successful_child(monkeypatch)
+    run_queue(queue, journal, TS_HOST, seconds=1, provider='openrouter',
+              provider_request_config=config)
+    command = commands[0].command
+    assert command[command.index('--provider-request-config') + 1] == str(config.resolve())
+    assert json.loads(journal.read_text().splitlines()[-1])['status'] == 'complete'
+
+    help_result = subprocess.run([__import__('sys').executable, str(ROOT / 'scripts/run_bonsai_queue.py'), '--help'],
+                                 text=True, capture_output=True)
+    assert help_result.returncode == 0
+    assert '--provider-request-config' in help_result.stdout
+
+
+def test_invalid_provider_controls_fail_before_attempt_start(tmp_path, monkeypatch):
+    entry = queue_entry(tmp_path)
+    queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
+    queue.write_text(json.dumps(entry) + '\n')
+    config = tmp_path / 'provider-request-config.json'
+    config.write_text('[]')
+    commands = successful_child(monkeypatch)
+    with pytest.raises(ValueError, match='explicit provider'):
+        run_queue(queue, journal, TS_HOST, provider_request_config=config)
+    with pytest.raises(ValueError, match='JSON object'):
+        run_queue(queue, journal, TS_HOST, provider='openrouter', provider_request_config=config)
+    config.write_text('{invalid')
+    with pytest.raises(json.JSONDecodeError):
+        run_queue(queue, journal, TS_HOST, provider='openrouter', provider_request_config=config)
+    assert not commands
+    assert not journal.exists()
