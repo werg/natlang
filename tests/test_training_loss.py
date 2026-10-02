@@ -93,6 +93,30 @@ def test_partial_layer_checkpointing_retains_sparse_activations():
     assert not model.is_gradient_checkpointing
 
 
+def test_custom_checkpointing_does_not_silently_ignore_partial_request():
+    from scripts.train_lora import set_layer_checkpointing
+
+    class NativeCheckpointModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.enabled = False
+
+        def gradient_checkpointing_enable(self):
+            self.enabled = True
+
+        def gradient_checkpointing_disable(self):
+            self.enabled = False
+
+    model = NativeCheckpointModel()
+    with pytest.raises(ValueError, match='per-layer'):
+        set_layer_checkpointing(model, True, retain_every_n_layers=2)
+    assert not model.enabled
+    assert set_layer_checkpointing(model, True) == (0, 0)
+    assert model.enabled
+    set_layer_checkpointing(model, False)
+    assert not model.enabled
+
+
 def test_adapter_coverage_names_linear_layers_left_without_an_adapter():
     import pytest
     import torch.nn as nn
@@ -146,7 +170,34 @@ def test_adapter_coverage_counts_lora_on_stacked_expert_parameters():
     model.feed_forward.experts.base_layer = ParamWrapper("gate_up_proj")
     require_adapter_coverage(model, ["gate_up_proj", "down_proj"])
     assert re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.feed_forward.experts.gate_up_proj")
+    assert re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.feed_forward.experts.12.gate_proj")
+    assert not re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.feed_forward.shared_experts.gate_proj")
     assert not re.match(rf"(.*\.)?({EXPERTS})$", "model.layers.3.self_attn.q_proj")
+
+
+def test_expert_rank_applies_to_individual_experts_with_peft():
+    from peft import LoraConfig, get_peft_model
+    from scripts.train_lora import EXPERTS
+
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.experts = torch.nn.ModuleList([torch.nn.Module() for _ in range(2)])
+            for expert in self.experts:
+                expert.gate_proj = torch.nn.Linear(4, 8)
+            self.shared_experts = torch.nn.Module()
+            self.shared_experts.gate_proj = torch.nn.Linear(4, 8)
+
+    model = get_peft_model(Model(), LoraConfig(
+        r=4, lora_alpha=8, target_modules=['gate_proj'],
+        rank_pattern={EXPERTS: 2}, alpha_pattern={EXPERTS: 4},
+    ))
+    for expert in model.base_model.model.experts:
+        assert expert.gate_proj.r['default'] == 2
+        assert expert.gate_proj.lora_alpha['default'] == 4
+    shared = model.base_model.model.shared_experts.gate_proj
+    assert shared.r['default'] == 4
+    assert shared.lora_alpha['default'] == 8
 
 
 def test_split_targets_separates_linear_layers_from_stacked_expert_weights():

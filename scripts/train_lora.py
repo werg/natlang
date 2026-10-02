@@ -31,9 +31,10 @@ from scripts.training_readiness import (clip_finite_grad_norm_, require_finite_l
 import torch
 
 
-# A MoE's stacked expert parameters, as PEFT names them when matching rank patterns: the experts module, or one of
-# its parameters ("…experts.gate_up_proj").
-EXPERTS = r"experts(\.\w+)?"
+# Routed experts can be stacked parameters ("…experts.gate_up_proj") or
+# individual linear modules ("…experts.12.gate_proj", as in Ling).
+# Shared experts keep the ordinary adapter rank.
+EXPERTS = r"experts(?:\.\d+)?(?:\.\w+)?"
 
 
 def split_targets(model, targets):
@@ -299,10 +300,17 @@ def set_layer_checkpointing(model, enabled, retain_every_n_layers=0):
     the other three.
     """
     if enabled:
-        model.gradient_checkpointing_enable()
         from transformers.modeling_layers import GradientCheckpointingLayer
         layers = [module for module in model.modules()
                   if isinstance(module, GradientCheckpointingLayer)]
+        if retain_every_n_layers and not layers:
+            raise ValueError(
+                "Selective activation checkpointing requires per-layer "
+                "GradientCheckpointingLayer support; this model uses a different "
+                "checkpointing implementation. Use --retain-every-n-layers 0 "
+                "for its native full checkpointing."
+            )
+        model.gradient_checkpointing_enable()
         if retain_every_n_layers:
             for index, layer in enumerate(layers):
                 layer.gradient_checkpointing = index % retain_every_n_layers != 0
@@ -391,7 +399,8 @@ def main():
                     help="load through Transformers but with Unsloth's MoE support: stacked experts quantized to 4 "
                          "bits, run as one grouped matmul, and adaptable by LoRA (for models Unsloth cannot load)")
     ap.add_argument("--expert-rank", type=int,
-                    help="LoRA rank for a MoE's stacked expert parameters (default: --rank); they hold most weights")
+                    help="LoRA rank for routed MoE experts, stacked or individual (default: --rank); shared experts "
+                         "keep --rank")
     ap.add_argument("--moe-backend", choices=("grouped_mm", "unsloth_triton", "native_torch"),
                     help="with --unsloth-moe, the expert matmul backend (default: Unsloth's choice, grouped_mm when "
                          "torch has it; it loops over experts below sm90, where unsloth_triton runs one kernel)")
@@ -864,7 +873,7 @@ def main():
                 running += loss.detach()
                 padded_tokens += encoded["input_ids"].numel()
                 batches += 1
-            clip_finite_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+            clip_finite_grad_norm_(trained, 1.0)
             optimizer_started = True
             opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
             state["step"] += 1
