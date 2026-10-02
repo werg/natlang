@@ -14,6 +14,7 @@ import time
 import math
 import random
 import shutil
+import tempfile
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -143,13 +144,17 @@ def frozen_record_digests(records, runtime=None):
     code = """
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-const [collector] = process.argv.slice(1);
+const [collector, inputPath] = process.argv.slice(1);
 const { recordDigest } = await import(pathToFileURL(collector).href);
-const records = JSON.parse(readFileSync(0, 'utf8'));
+const records = JSON.parse(readFileSync(inputPath, 'utf8'));
 process.stdout.write(JSON.stringify(records.map(record => recordDigest(record))));
 """
-    output = subprocess.check_output(['node', '--input-type=module', '-e', code,
-        str(runtime / 'dist/teacher/collector.js')], input=json.dumps(records), text=True)
+    # Imported modules can make stdin nonblocking; large piped JSON then fails EAGAIN.
+    with tempfile.NamedTemporaryFile(mode='w+', suffix='.json') as payload:
+        json.dump(records, payload)
+        payload.flush()
+        output = subprocess.check_output(['node', '--input-type=module', '-e', code,
+            str(runtime / 'dist/teacher/collector.js'), payload.name], text=True)
     return json.loads(output)
 
 
@@ -208,6 +213,9 @@ def output_accounting(entry, runtime=None):
     states_by_job = {(state['index'], state['digest']): state for state in states}
     for position, (job, row, result_path) in enumerate(candidate_result_rows):
         state = states_by_job[(job['index'], job['digest'])]
+        if embedded_digest_error is not None:
+            state['state'] = 'accounting_error'
+            continue
         if position >= len(embedded_digests) or embedded_digests[position] != job['digest']:
             state['state'] = 'invalid_result_ir_digest'
             continue
@@ -246,7 +254,7 @@ def output_accounting(entry, runtime=None):
     unresolved = [state['state'] for state in states if state['state'] not in {'result', 'generation_held'}]
     if not manifest_ok or not all_accounted:
         disposition = next((value for value in ('transport_failed', 'partial_without_terminal_result',
-            'invalid_result_ir_digest', 'invalid_generation_hold', 'invalid_result', 'invalid_partial',
+            'accounting_error', 'invalid_result_ir_digest', 'invalid_generation_hold', 'invalid_result', 'invalid_partial',
             'failed', 'missing_terminal_result') if value in unresolved),
             'export_validation_failed')
         complete = False

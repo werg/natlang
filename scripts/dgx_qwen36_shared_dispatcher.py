@@ -360,7 +360,7 @@ def dispatch(args):
                 finished.append((slot, item, code))
         for slot, item, code in finished:
             del active[slot]
-            key = item['entry']['key']
+            key = item['entry']['entry']['key']
             # One-entry run_queue journal has the terminal exact queue-key event.
             terminal = None
             for journal_path in [slot_journals[slot]]:
@@ -466,7 +466,15 @@ def main():
     if args.max_slots < 1 or args.case_seconds < 1 or args.min_free_mib < 0 or args.max_failure_streak < 1:
         parser.error('slot, time, storage, and failure limits must be positive/nonnegative')
     args.stage = [stage for profile in args.stage for stage in profile]
-    dispatch(args)
+    try:
+        dispatch(args)
+    except Exception as error:
+        # A crashed coordinator must not leave a misleading running status.
+        if args.status_file:
+            atomic_json(args.status_file, {'state': 'paused', 'reason': 'dispatcher_exception',
+                'exception_type': type(error).__name__, 'dispatcher_pid': os.getpid(),
+                'updated_at': utc_now()})
+        raise
 
 
 if __name__ == '__main__':
