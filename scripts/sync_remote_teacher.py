@@ -15,6 +15,8 @@ def main():
     parser.add_argument('campaign', type=Path)
     parser.add_argument('--loop', action='store_true')
     parser.add_argument('--authority', type=Path)
+    parser.add_argument('--teacher-key', default='dgx_horizon',
+                        help='Authority entry for this teacher (default preserves Horizon assignments)')
     args = parser.parse_args()
     root = args.campaign.resolve()
     assignment = json.loads((root / 'assignment.json').read_text())
@@ -59,7 +61,7 @@ def main():
             if args.authority and args.authority.exists():
                 with authority_lock(args.authority):
                     authority = json.loads(args.authority.read_text())
-                    teacher = authority.get('additional_teachers', {}).get('dgx_horizon')
+                    teacher = authority.get('additional_teachers', {}).get(args.teacher_key)
                     if teacher and teacher.get('assignment') == str(root / 'assignment.json'):
                         teacher['state'] = state
                         teacher['last_sync'] = report
