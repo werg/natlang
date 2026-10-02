@@ -1,0 +1,230 @@
+{
+  "version": "musique-reviewed-output-equivalence/2026-10-02-v2",
+  "review": "root-reviewed-exact-source-and-supplied-evidence",
+  "draft_sha256": "d9bee0e17713cd626cc5df6136e976fcb1dc4ccac1cfa18dade233b3228d460b",
+  "entries": [
+    {
+      "source_id": "3hop1__103721_52584_79479",
+      "base_ir_id": "inline-curriculum:source_musique:6c9201acacfe59dbfe84:v1",
+      "base_ir_sha256": "45cbf311ab82797ce982f7894b8a7adc5501cfb3f25774bd032666005c354e58",
+      "primary": "380",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": []
+      },
+      "accepted": [
+        "380 AD",
+        "In 380 AD, with the Edict of Thessalonica."
+      ],
+      "prompt_sha256": "3b18e88fe99be14c5b5b98818b23b5b9413587356f2b0ef8e936c8f29194854d",
+      "reference_sha256": "e33077ece7067f64c502762bf186505972742fffcf808a299335537e94231ee7",
+      "folder_file_sha256": {
+        "articles/0.md": "f6b2b0cd0bb0b02e5fc030fc11c44fcba7a32a46ee37a6327aad383fa748aa8b",
+        "articles/1.md": "29b654bf62d2a15e74a42faf35d49363f4477ed21b0916eff4c7e4775cd07b16",
+        "articles/10.md": "f20e3f589dcfbb4c00df67ba50372cef4e3d564e257ccb58b70675794c36cbad",
+        "articles/11.md": "a8e095a92701f686e917bb1d568d69e0f40369460f71de7d6df142f8810bbcbd",
+        "articles/12.md": "629bfe3bcbe19c236f1efb214f5c6453ce409ae06e3ff68cea1f88cbd324463e",
+        "articles/13.md": "39c30af788543fba72ac129d6a2611369458511a582da6737680a2dd2fdb6c14",
+        "articles/14.md": "0f48728625fe2f860c6f74d71fe010e195f43eaf4dea2006045a7ebd208f083b",
+        "articles/15.md": "9c80c5859a488f0b5c9448f4d0b6a70e4b9807781864f5a2499483be180f98e8",
+        "articles/16.md": "db8aaf6a4e4acb026ffaf8578e6aaf12c8d98bde5754a150090cbdebee7afb09",
+        "articles/17.md": "91cecac4a76093c6c5c6c92db8ceb669b447308b90f74c1c511e1f614bfdc409",
+        "articles/18.md": "6c0354d45c317883b6b25c30495010f8006ff250994073aec4a98aa18ddc82f6",
+        "articles/19.md": "18fea5e905ed93909646f084bc25e5b466a41e0a3fbf30ef4b40198db643f062",
+        "articles/2.md": "7ccce4b30782b37297194e07f60ac5ac7597e1a43529d0890c46f4679ef2c681",
+        "articles/3.md": "505fcfcf0a64ec4ea72b147b74fddf25d0cb5d72c0035e19ef1bd935c6ff85c4",
+        "articles/4.md": "ef8a7246d41b401490a9a7b9db6f94a57b258d4522936a67ba6babe406403917",
+        "articles/5.md": "67bfce1309bd6b2441496d5ab6838dce92e73b933711c3a00791b1abced7bb52",
+        "articles/6.md": "6e788bc90cf0429182a390b31826ed88905315d7569a9ad87ac4ec0e63c78080",
+        "articles/7.md": "b01eaf81aa53a5081611cd4535ea04d78d706c495e8644a0e5a21f41352cea1b",
+        "articles/8.md": "6fa60251a50b413e52206d62024cfc4e45d3ac3d5487decbe374f75c7cd35b52",
+        "articles/9.md": "06ee6eca97efe3f2fea176123c722cb70321845054a96aaf18708b28f4fd646a"
+      },
+      "source_pin": {
+        "source_ids": [
+          "3hop1__103721_52584_79479"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:103721",
+          "musique:seed:52584",
+          "musique:seed:79479",
+          "document:da0c35552afba2e4a618eec387f4718e3a8fdf7a6e205e2e35e312ae73c576ed",
+          "document:8541e2a5f5a7c5f27fd8bfa2674d663f8f999040769837f733f37797141b50b6",
+          "document:962435fc1e3e6c3e12778be90e97eb1e04b69dca52895517bff9acb9a0050635",
+          "document:82091dbcaeb872bf12fcf989b3636581957d2b3a76db629ee55d81d7cb676466",
+          "document:f5e44415c5f1c2bbd9f7a24c0d23e6f0909a92cab65865eaff7424daefb112e3",
+          "document:69b7be6ac86abdff9c8a6d306da9499b4779e6f85fb04ca8b501c119cc3276e9",
+          "document:55c476025a024728d0ece093ab8a738e629d632242d3e70f3efe8dc7398de27c",
+          "document:05754acf2ca9db4144e3f0f81b9408626956891f3e6557c19c06ae4a819ed6af",
+          "document:6f0a0326a5000ca5d5466c31b07f9e94c4ce1713e9771e2136ff4ca542bbec0b",
+          "document:683e95b8d66524bdd79b990212eca03645881e436d3111e774a10e940615c204",
+          "document:b8b3461499cbee29d5ca2985ceede01466de6fd0016611815c8c396354f5f96c",
+          "document:35ea4f545a84edbe78049508f44947c6333eb3ea55fa0b71892ca0989cf91d42",
+          "document:c5b86d3fd506a236b3571bc2ada44002c6ecd293658752c50cce9a65880d7850",
+          "document:f2334b76be60e7f1c4f346dd10eae089d66a1c9dece6e5f9212df02f9a4e59a1",
+          "document:c7c8c460a5db8027bee0e80a64cfd2235feefe5e94f995736ad86c3d874b664b",
+          "document:79f52c29e8467a8e1849d415a8a4e31fb4bb97df1eaabf0c9b6b258bc4e89584",
+          "document:24f60d5c21dd8aa7c68b23aac5b50ebafcf9f880908fc7d2dcc191f6f83329dd",
+          "document:e20b3b29174d229e541c9bf09dec0ca8eb00b43774ef73705cd195bd03188938",
+          "document:fdd6677887b4514bad8b4f721fc95ea86d98f89c279624266cf52c7e0fafbb73",
+          "document:167e88a7b74bc179348a22127b9bff1ae7723497e412110fe643ca01db7d01fe"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "3hop1__103721_52584_79479",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        }
+      },
+      "evidence": [
+        {
+          "path": "articles/7.md",
+          "paragraph": "Belal Fadl () (born 1974) is a screenplay writer, ex-journalist and a column writer at Almasry Alyoum born and raised in Cairo, Egypt. Fadl has roots from Alexandria.",
+          "paragraph_sha256": "ac53c98d04a3c47e0d2691b02ffd173783a4fff3340820e965d68bbb0338568b",
+          "supplied_file_sha256": "0c2cfa2d6c4000cc137fdc6f6e00469981d3668ec29e3953ff4de8edc75dae38",
+          "claim_supported": true
+        },
+        {
+          "path": "articles/5.md",
+          "paragraph": "In 332 BC, Macedonian ruler Alexander the Great conquered Egypt as he toppled the Achaemenids and established the Hellenistic Ptolemaic Kingdom, whose first ruler was one of Alexander's former generals, Ptolemy I Soter. The Ptolemies had to fight native rebellions and were involved in foreign and civil wars that led to the decline of the kingdom and its final annexation by Rome. The death of Cleopatra ended the nominal independence of Egypt resulting in Egypt becoming one of the provinces of the Roman Empire.",
+          "paragraph_sha256": "d453ea0290235b59a04ab125b8ad1fa29781f118036084f9e323e43fe4abec9c",
+          "supplied_file_sha256": "44f2cc918fbdf9bb836edfdcb8c8fc77ab03499832294ad8f4d848d92872c759",
+          "claim_supported": true
+        },
+        {
+          "path": "articles/3.md",
+          "paragraph": "Nicene Christianity became the state church of the Roman Empire with the Edict of Thessalonica in 380 AD, when Emperor Theodosius I made it the Empire's sole authorized religion. The Eastern Orthodox Church, Oriental Orthodoxy, and the Catholic Church each claim to be the historical continuation of this church in its original form, but do not identify with it in the caesaropapist form that it took later. Unlike Constantine I, who with the Edict of Milan of 313 AD had established tolerance for Christianity without placing it above other religions and whose involvement in matters of the Christian faith extended to convoking councils of bishops who were to determine doctrine and to presiding at their meetings, but not to determining doctrine himself, Theodosius established a single Christian doctrine (specified as that professed by Pope Damasus I of Rome and Pope Peter II of Alexandria) as the Empire's official religion.",
+          "paragraph_sha256": "d1ad2aa30056916378187b8c64f2fe63fe69f0e1e9662df11d8b73973c1b66ba",
+          "supplied_file_sha256": "2e5c7a7f7a8d8851af61b8a09734038effae138774330c01b61721263cc01853",
+          "claim_supported": true
+        },
+        {
+          "path": "articles/10.md",
+          "paragraph": "The predominant religion is southern Europe is Christianity. Christianity spread throughout Southern Europe during the Roman Empire, and Christianity was adopted as the official religion of the Roman Empire in the year 380 AD. Due to the historical break of the Christian Church into the western half based in Rome and the eastern half based in Constantinople, different branches of Christianity are prodominent in different parts of Europe. Christians in the western half of Southern Europe — e.g., Portugal, Spain, Italy — are generally Roman Catholic. Christians in the eastern half of Southern Europe — e.g., Greece, Macedonia — are generally Greek Orthodox.",
+          "paragraph_sha256": "4b34cc3df325faab94ae0ad3217844a1bb2299dec42c0d1c680b91979aa4360c",
+          "supplied_file_sha256": "bb1ddeac286008e0c789eabaaa6ad54c5e4b920795ef19a12d1b27a7de76b373",
+          "claim_supported": true
+        }
+      ],
+      "review_conclusion": "The phrase “with the Edict of Thessalonica” is directly supported by articles/3.md: the paragraph states Christianity became the Roman Empire state church “with the Edict of Thessalonica in 380 AD.” The numeric/year expansion is also supported by articles/10.md. The chain from Belal Fadl to Egypt to Roman rule is supported by articles/7.md and articles/5.md."
+    },
+    {
+      "source_id": "2hop__132382_42292",
+      "base_ir_id": "inline-curriculum:source_musique:c3f48ad562e5d5a6b48b:v1",
+      "base_ir_sha256": "79f0f0ca92ce81809af9b5a4c45268b9e2502711a59ba6b99fac9d5df052b435",
+      "primary": "Warsaw City Council",
+      "base_oracle": {
+        "level": "normalized",
+        "alternates": []
+      },
+      "accepted": [
+        "The Warsaw City Council (Rada Miasta)",
+        "The Warsaw City Council (Rada Miasta)."
+      ],
+      "prompt_sha256": "5eb223e26f31288914970b57730bee9e6f331e2208f1baa7a40b261c3057a769",
+      "reference_sha256": "a926b947eb8488611e5e2c7199e7bd41b9bc98ecf9f2efcb7675cb55b0ae9bc1",
+      "folder_file_sha256": {
+        "articles/0.md": "b76b774e3e44843be48eb609499fa3a020ebdc79e80d00904808acdcede62b85",
+        "articles/1.md": "b88cd307d7c3cfa6c79585b2a2568502b4b1b12ef6045a7d8daa9af5f3c2ee77",
+        "articles/10.md": "321b3b6224789b45a03c03f3a94aa1d8b4d0bac08e4d7d9830e891542cee75e3",
+        "articles/11.md": "093202d419a8ebd9e2c30ea6102c567df3d596835f3461658ea279b99090a5a4",
+        "articles/12.md": "095ab3fbe3bcd32ef9184e6e53d9b34ff6d855ae8b6d1ff414db8185b7964741",
+        "articles/13.md": "047626283bdde164db5d3b8ca4cf4e6041bb5d8702b44290d8066eda1eaa9f4b",
+        "articles/14.md": "13cbab23cdcfa451451da12dfb7fb2c8cd75a85a29106cb3159dce44a12788a0",
+        "articles/15.md": "91f5663da8cd6ddc1481aee1686973c7a33fb36f0643c106b6b006d27f0d7d9e",
+        "articles/16.md": "01fc0975701d1ff423f51ce3205732b4a9af2e5a0f5baca4fb691b66808444e6",
+        "articles/17.md": "574e389d8a036573cea646f6de9a3308012f01b76098df0a7c98e1ff5d05119c",
+        "articles/18.md": "e3a59bffb1cea9bfd8edb52d4b3ca7184951e019f28f2b89d80415a13339871e",
+        "articles/19.md": "6e523fda193d478230a4229848c42b75d8e1f6335a0718311140c1eb0576f3eb",
+        "articles/2.md": "07638199eb88993a7d521105192de859f55afce6438e29a4e5ecd3a75fd41a5e",
+        "articles/3.md": "b5f026ea809ddbeb6febc6294de611fedf19eda1921dcc50af3cecb5d61012ee",
+        "articles/4.md": "f96dd2b40fdd956675f42f02b0095d3785cca6d059d7883fed135c65517473f8",
+        "articles/5.md": "829383ca5c2338d335c4d6f583050d3ff4448072f9e1eb14fa609f3f77ffd15f",
+        "articles/6.md": "9df4116ef1622f0f073cb05951b886b544987b56f51e325c9e2671800837a125",
+        "articles/7.md": "45af3893ba6d5dc403ea7d1223758db44c676499c2d65500d4c979f9ca10e8f6",
+        "articles/8.md": "dfcf7325d3ee2b6885652ee457bf6ce7bc1e80af24e5a81175ed0cdf7cec4c28",
+        "articles/9.md": "5c9136374fb01f9ad4b196b596923f83819e4a3527ec1ae89f99308e84e14c25"
+      },
+      "source_pin": {
+        "source_ids": [
+          "2hop__132382_42292"
+        ],
+        "source_groups": [
+          "musique:train-v1.0-pilot",
+          "musique:seed:132382",
+          "musique:seed:42292",
+          "document:1cb468c9db3d05adcadbdc3344465b0ec4a9795619e7dad3650190b15894810a",
+          "document:0ba533269527c4539feb404685588edbcd74b167b116ed5d132bac724a71ab41",
+          "document:d1cfefe65f79f36cd2de933f85bd38275880607d7f0fb8db9a2155d9dd4a437f",
+          "document:df5878c0557eb5914baa5b59197e7e6c6cb0a628ca2b5968855f2ac110198bb3",
+          "document:3ead8749f1df31239ae997b0bc50bd6131ebe40acab3a1fdefcc0033399097b5",
+          "document:4b389cfb490f05c0fd236db8989d9dfd7bafe86e548ad1b029eaac5d93d2829e",
+          "document:572d8efdeeea3ce96ff198303cd129c8b4a74b4ee84c13674dad6cbf7595707a",
+          "document:628629083dc714df4012189492ac576cfde20e5cc832850ce1c82364a7ab9560",
+          "document:479381bb4f97cac5dcf98fd83c2d1d728b2d628b6b35795b4bcb3687d9bd45bb",
+          "document:11a625ef76932d62caf933b91b30879036d45d0b02e8d77142928830b3b51d3a",
+          "document:09dfeb0892664f33c6c9d0efb1444bc766d996d4affd4082587eed7b36b17561",
+          "document:988074a2471730572dae7eabf34f6727a0f91974d9571c0849371ed000d444a6",
+          "document:0a803d7172eb3b74388de80296d3eb7e431a044f342b09fbc147854ed2e7c34d",
+          "document:713f62547d338f34c7d9200e3987f9af499b27f16eadc69303685302d5417bec",
+          "document:6fc62a00686fb46cdbbfc678bea3e5c54cbe741750bf082fa16dea0ca6325752",
+          "document:df3c8416ff81550a3427d5e00db110803051bce331b0a8cde96d2761fcab3d1e",
+          "document:bc4e36d6aa71c5d310375b38a3d01dfce70d8702ca5d7d970bd4ab8e1bb939ea",
+          "document:1472330775389dad2fc1df8598466e76d02338867225554996d6d2ec45c9d468",
+          "document:465813eb3b7e22bbc46f3cb3af77861f7eef2f7e6e75640d30e282f94f68ef1a",
+          "document:379eca99775127b6a2628f8d9c86ccb27e0724b21678f27a52aca1ac0dcd20a1"
+        ],
+        "source_revisions": [
+          "musique-v1.0"
+        ],
+        "external_source": {
+          "source": "musique",
+          "source_id": "2hop__132382_42292",
+          "original_split": "train",
+          "revision": "musique-v1.0",
+          "snapshot_sha256": "cb4c55dfe2de2daa36a567771e862d8575ce4fa64e68631d7055b09351de28e5",
+          "license": "CC-BY-4.0",
+          "files": [
+            {
+              "url": "https://drive.usercontent.google.com/download?id=1tGdADlNjWFaHLeZZGShh2IRcpO6Lv24h&export=download&confirm=t",
+              "sha256": "98f839bf2fd5319f5c688aed77901a6d5c30b3b9f9f691ab9a8ecafb045ee0cd",
+              "member": "data/musique_full_v1.0_train.jsonl"
+            }
+          ],
+          "adaptation": "original-train-question; all supplied paragraphs; no generated evidence"
+        }
+      },
+      "evidence": [
+        {
+          "path": "articles/7.md",
+          "paragraph": "After some ten years of development, which Zamenhof spent translating literature into Esperanto as well as writing original prose and verse, the first book of Esperanto grammar was published in Warsaw on July 26, 1887. The number of speakers grew rapidly over the next few decades, at first primarily in the Russian Empire and Central Europe, then in other parts of Europe, the Americas, China, and Japan. In the early years, speakers of Esperanto kept in contact primarily through correspondence and periodicals, but in 1905 the first World Congress of Esperanto speakers was held in Boulogne-sur-Mer, France. Since then world congresses have been held in different countries every year, except during the two World Wars. Since the Second World War, they have been attended by an average of more than 2000 people and up to 6000 people.",
+          "paragraph_sha256": "d291c1e27dc3708f844eb32e89f9400d98a6840a404811151ab87461db637350",
+          "supplied_file_sha256": "f604d40d55a125c8f261e2716bb85d85ca0e30c76652bb0edf882a22a7eb533d",
+          "claim_supported": true
+        },
+        {
+          "path": "articles/3.md",
+          "paragraph": "Legislative power in Warsaw is vested in a unicameral Warsaw City Council (Rada Miasta), which comprises 60 members. Council members are elected directly every four years. Like most legislative bodies, the City Council divides itself into committees which have the oversight of various functions of the city government. Bills passed by a simple majority are sent to the mayor (the President of Warsaw), who may sign them into law. If the mayor vetoes a bill, the Council has 30 days to override the veto by a two-thirds majority vote.",
+          "paragraph_sha256": "1ccdc3ecc98f2ce8281960f061b48c4e568a881f46f589eec7f333b13afb85de",
+          "supplied_file_sha256": "234d5a869dbad90c74eb59972bf067ca6051d853ee184aa71b241378fd2e83a7",
+          "claim_supported": true
+        }
+      ],
+      "review_conclusion": "The question chain is supported: articles/7.md says Esperanto grammar was first published in Warsaw; articles/3.md states legislative power there is vested in the Warsaw City Council (Rada Miasta). Both outputs preserve the gold entity and only add a definite article, local name, and (in the Space Bunny output) final punctuation."
+    }
+  ]
+}

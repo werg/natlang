@@ -73,7 +73,8 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>): Promi
     if (choice.finish_reason != null) finish = choice.finish_reason;
     const delta = (choice.delta ?? {}) as Json;
     if (typeof delta.content === 'string') { content += delta.content; sawContent = true; }
-    if (typeof delta.reasoning_content === 'string') { reasoning += delta.reasoning_content; sawReasoning = true; }
+    const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
+    if (typeof reasoningDelta === 'string') { reasoning += reasoningDelta; sawReasoning = true; }
     for (const part of (delta.tool_calls ?? []) as Json[]) {
       const index = typeof part.index === 'number' ? part.index : calls.length;
       const call = calls[index] ??= { type: 'function', function: { name: '', arguments: '' } };

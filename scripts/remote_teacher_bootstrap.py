@@ -107,6 +107,25 @@ def main():
             status('waiting_for_model_server', container=plan['server_container'])
             time.sleep(15)
         verify()
+        if plan.get('template_preflight'):
+            # Tokenization exercises the actual deployed chat template without inference.
+            # Include synthetic tool histories, not only a single plain user message.
+            payload = Path(plan['template_preflight']).read_bytes()
+            request = urllib.request.Request(plan['endpoint'] + '/tokenize', data=payload,
+                                             headers={'Content-Type': 'application/json'})
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    rendered = json.load(response)
+                if not isinstance(rendered.get('count'), int) or rendered['count'] < 1:
+                    raise ValueError('tokenization did not return a positive token count')
+            except Exception as error:
+                status('paused_template_preflight_failed', error_type=type(error).__name__)
+                return
+            (root / 'template-preflight-receipt.json').write_text(json.dumps({
+                'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'request_sha256': hashlib.sha256(payload).hexdigest(),
+                'token_count': rendered['count'], 'model_calls': 0,
+            }, indent=2) + '\n')
         children = []
         with (root / 'supervisor.log').open('a') as log:
             for command in plan.get('worker_commands', [plan.get('worker_command')]):
