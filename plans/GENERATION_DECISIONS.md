@@ -2042,3 +2042,8 @@ User corrected earlier all-generation transfer: only Bonsai stops, Luna/Bunnycon
 ## Full student-training scope correction
 
 The 500-step local LFM run was a bounded experiment chosen by the agent, not a user limit. It sees4000examples from a7993-row subset and must not be represented as full training. User asks for full training: prepare the complete v13 corpus for the LFM tokenizer/audit while the GPU keeps training, then run a full audited epoch with recoverable checkpoints and evaluate heldout results to select further epochs/checkpoints. Preserve existing run identities and receipts; no silent scheduler or corpus mutation.
+
+
+## Muon and full-state resumability
+
+User requests Muon preference and emergency checkpoint/automaticresumption likebgkit. Newtrainingphase uses nativeTorchMuon forhidden2Dtrainablematrices with match_rms_adamw LR scaling and auxiliaryAdamW forremainingparameters. Serialize both completeoptimizers plus parameterpartitionidentity; mismatches failclosed. ExistingAdamWrun/optimizer history staysintact; newMuonphase intentionally startsfreshoptimizerstate fromadapterweights. SIGTERM/Ctrl-C checkpointatcompleteoptimizerstep; hardkill/powerfailure recoverslatestcompletedperiodiccheckpoint. Durablelauncher implementation/test remainsinprogress untilverified.

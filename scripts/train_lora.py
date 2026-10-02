@@ -393,8 +393,10 @@ def main():
                     help="enable Unsloth torch.compile paths (off by default for BitsAndBytes compatibility)")
     ap.add_argument("--target-modules",
                     help="comma-separated LoRA module suffixes; LFM uses its architecture-specific linear layers")
-    ap.add_argument("--optimizer", choices=("adamw", "paged-adamw-8bit"), default="adamw",
+    ap.add_argument("--optimizer", choices=("adamw", "paged-adamw-8bit", "muon"), default="adamw",
                     help="paged-adamw-8bit keeps optimizer state in 8 bits and pages it to CPU memory under pressure")
+    ap.add_argument("--muon-momentum", type=float, default=0.95)
+    ap.add_argument("--muon-ns-steps", type=int, default=5)
     ap.add_argument("--unsloth-moe", action="store_true",
                     help="load through Transformers but with Unsloth's MoE support: stacked experts quantized to 4 "
                          "bits, run as one grouped matmul, and adaptable by LoRA (for models Unsloth cannot load)")
@@ -535,6 +537,11 @@ def main():
             identity["unsloth_moe"] = True
         if a.optimizer != "adamw":
             identity["optimizer"] = a.optimizer
+        if a.optimizer == "muon":
+            if not 0 <= a.muon_momentum < 1 or a.muon_ns_steps < 1:
+                ap.error("Muon requires momentum in [0,1) and positive Newton-Schulz steps")
+            identity["muon"] = {"momentum": a.muon_momentum, "ns_steps": a.muon_ns_steps,
+                                "adjust_lr_fn": "match_rms_adamw", "partition_version": 1}
         if a.retain_every_n_layers:
             identity["retain_every_n_layers"] = a.retain_every_n_layers
         if a.device != "cuda":
@@ -764,7 +771,14 @@ def main():
         return tot / n if n else None
 
     trained = [p for p in model.parameters() if p.requires_grad]
-    if a.optimizer == "paged-adamw-8bit":
+    if a.optimizer == "muon":
+        from scripts.training_optimizers import make_muon_optimizer
+        opt = make_muon_optimizer(model, lr=a.lr, momentum=a.muon_momentum,
+                                  ns_steps=a.muon_ns_steps)
+        print("Muon parameter partition: " + json.dumps({
+            kind: sum(item["optimizer"] == kind for item in opt.schema)
+            for kind in ("muon", "adamw")}), flush=True)
+    elif a.optimizer == "paged-adamw-8bit":
         import bitsandbytes as bnb
         opt = bnb.optim.PagedAdamW8bit(trained, lr=a.lr, weight_decay=0.0)
     else:
